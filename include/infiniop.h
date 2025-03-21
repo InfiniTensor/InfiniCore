@@ -9,6 +9,7 @@
 #include "infiniop/ops/conv.h"
 #include "infiniop/ops/gemm.h"
 #include "infiniop/ops/mul.h"
+#include "infiniop/ops/quantize_gptq.h"
 #include "infiniop/ops/random_sample.h"
 #include "infiniop/ops/rearrange.h"
 #include "infiniop/ops/relu.h"
