@@ -19,3 +19,4 @@ class InfiniDtype:
     C32 = 17
     C64 = 18
     BF16 = 19
+    I4 = 20
