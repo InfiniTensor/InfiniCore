@@ -1,3 +1,4 @@
+add_requires("lapack", {configs = {shared = true}})
 target("infiniop-cpu")
     set_kind("static")
     add_deps("infini-utils")
@@ -12,9 +13,12 @@ target("infiniop-cpu")
         end
     else
         add_cxflags("-fPIC", "-Wno-unknown-pragmas")
+        add_packages("lapack")
+        add_links("lapacke", "lapack", "blas", "gfortran")
         if has_config("omp") then
             add_cxflags("-fopenmp")
             add_ldflags("-fopenmp")
+            add_links("gomp")
         end
     end
 
