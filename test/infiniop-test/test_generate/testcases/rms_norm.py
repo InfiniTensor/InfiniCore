@@ -2,11 +2,20 @@ from ast import List
 import numpy as np
 import gguf
 from typing import Optional
+from numpy.lib.stride_tricks import as_strided
 
 from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides
 
+def create_non_contiguous(shape, dtype, stride_scale=2):
+    expanded_shape = (shape[0] * stride_scale,) + shape[1:]
+    buffer = np.random.uniform(-1.0, 1.0, expanded_shape).astype(dtype) * 0.001
+
+    new_strides = (buffer.strides[0] * stride_scale,) + buffer.strides[1:]
+    
+    return as_strided(buffer, shape=shape, strides=new_strides)
+
 def random_tensor(shape: tuple, dtype: np.dtype) -> np.ndarray:
-    return np.random.uniform(-1, 1, size=shape).astype(dtype)
+    return np.random.uniform(-1.0, 1.0, shape).astype(dtype) * 0.001
 
 def rms_norm(input: np.ndarray, weight: np.ndarray, epsilon: float) -> np.ndarray:
     """
@@ -30,14 +39,21 @@ class RMSNormTestCase(InfiniopTestCase):
         self,
         input_shape: tuple,
         weight_shape: tuple,
-        dtype: np.dtype,
+        atype: np.dtype,
+        wtype: np.dtype,
         epsilon: float = 1e-5,
+        input_non_contiguous: bool = False,
+        input_stride_scale: int = 2,
     ):
         super().__init__("rms_norm")
-        self.input = random_tensor(input_shape, dtype)
-        self.weight = random_tensor(weight_shape, dtype)
+        if input_non_contiguous:
+            self.input = create_non_contiguous(input_shape, atype, input_stride_scale)
+        else:
+            self.input = random_tensor(input_shape, atype)
+        self.weight = random_tensor(weight_shape, wtype)
         self.epsilon = epsilon
-        self.ans = rms_norm(self.input, self.weight, self.epsilon)
+        self.result = np.zeros_like(self.input)
+        self.ans = rms_norm(self.input, self.weight, self.epsilon).astype(atype)
 
     def write_test(self, test_writer: "InfiniopTestWriter"):
         super().write_test(test_writer)
@@ -57,11 +73,10 @@ class RMSNormTestCase(InfiniopTestCase):
             self.ans,
             raw_dtype=np_dtype_to_ggml(self.ans.dtype),
         )
-        result = np.zeros_like(self.ans)
         test_writer.add_tensor(
             test_writer.gguf_key("result"),
-            result,
-            raw_dtype=np_dtype_to_ggml(result.dtype),
+            self.result,
+            raw_dtype=np_dtype_to_ggml(self.result.dtype),
         )
 
 if __name__ == "__main__":
@@ -71,48 +86,116 @@ if __name__ == "__main__":
         RMSNormTestCase(
             input_shape=(2, 256), 
             weight_shape=(256,),
-            dtype=np.float32,
-            epsilon=1e-5,
+            atype=np.float32,
+            wtype=np.float32,
         ),
         RMSNormTestCase(
             input_shape=(4, 512),
             weight_shape=(512,),
-            dtype=np.float32,
-            epsilon=1e-6,
+            atype=np.float32,
+            wtype=np.float32,
         ),
         RMSNormTestCase(
             input_shape=(8, 1024),
             weight_shape=(1024,),
-            dtype=np.float32,
+            atype=np.float32,
+            wtype=np.float32,
         ),
         RMSNormTestCase(
             input_shape=(1, 768),
             weight_shape=(768,),
-            dtype=np.float32,
+            atype=np.float32,
+            wtype=np.float32,
         ),
         RMSNormTestCase(
             input_shape=(8, 256), 
             weight_shape=(256,),
-            dtype=np.float32,
-            epsilon=1e-3,
+            atype=np.float32,
+            wtype=np.float32,
+        ),
+        RMSNormTestCase(
+            input_shape=(500, 4096), 
+            weight_shape=(4096,),
+            atype=np.float32,
+            wtype=np.float32,
         ),
         RMSNormTestCase(
             input_shape=(2, 256),
             weight_shape=(256,),
-            dtype=np.float16,
-            epsilon=1e-3,
+            atype=np.float16,
+            wtype=np.float16,
         ),
         RMSNormTestCase(
             input_shape=(4, 512),
             weight_shape=(512,),
-            dtype=np.float16,
-            epsilon=1e-3,
+            atype=np.float16,
+            wtype=np.float16,
         ),
         RMSNormTestCase(
-            input_shape=(2, 256),
-            weight_shape=(256,),
-            dtype=np.float32,
-            epsilon=1e-12,
+            input_shape=(500, 4096), 
+            weight_shape=(4096,),
+            atype=np.float16,
+            wtype=np.float16,
+        ),
+        RMSNormTestCase(
+            input_shape=(4, 512),
+            weight_shape=(512,),
+            atype=np.float16,
+            wtype=np.float32,
+        ),
+        RMSNormTestCase(
+            input_shape=(500, 4096), 
+            weight_shape=(4096,),
+            atype=np.float16,
+            wtype=np.float32,
+        ),
+        RMSNormTestCase(
+            input_shape=(4, 512),
+            weight_shape=(512,),
+            atype=np.float32,
+            wtype=np.float32,
+            input_non_contiguous=True,
+            input_stride_scale=2,
+        ),
+        RMSNormTestCase(
+            input_shape=(500, 4096),
+            weight_shape=(4096,),
+            atype=np.float32,
+            wtype=np.float32,
+            input_non_contiguous=True,
+            input_stride_scale=2,
+        ),
+        RMSNormTestCase(
+            input_shape=(4, 512),
+            weight_shape=(512,),
+            atype=np.float16,
+            wtype=np.float16,
+            input_non_contiguous=True,
+            input_stride_scale=2,
+        ),
+        RMSNormTestCase(
+            input_shape=(500, 4096),
+            weight_shape=(4096,),
+            atype=np.float16,
+            wtype=np.float16,
+            input_non_contiguous=True,
+            input_stride_scale=2,
+        ),
+        RMSNormTestCase(
+            input_shape=(4, 512),
+            weight_shape=(512,),
+            atype=np.float16,
+            wtype=np.float32,
+            input_non_contiguous=True,
+            input_stride_scale=2,
+        ),
+        RMSNormTestCase(
+            input_shape=(500, 4096),
+            weight_shape=(4096,),
+            atype=np.float16,
+            wtype=np.float32,
+            input_non_contiguous=True,
+            input_stride_scale=2,
         ),
     ]
     

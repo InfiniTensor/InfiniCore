@@ -20,7 +20,11 @@ std::shared_ptr<Test> Test::build(
     auto test = std::shared_ptr<Test>(new Test(rtol, atol));
     test->_attributes = new Attributes();
 
-    if (attributes.find("epsilon") == attributes.end() || tensors.find("input") == tensors.end() || tensors.find("weight") == tensors.end() || tensors.find("ans") == tensors.end() || tensors.find("result") == tensors.end()) {
+    if (attributes.find("epsilon") == attributes.end()
+        || tensors.find("input") == tensors.end()
+        || tensors.find("weight") == tensors.end()
+        || tensors.find("ans") == tensors.end()
+        || tensors.find("result") == tensors.end()) {
         throw std::runtime_error("Invalid Test: Missing attributes or tensors");
     }
 
