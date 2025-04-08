@@ -1,6 +1,6 @@
 import torch
 import ctypes
-from ctypes import POINTER, Structure, c_int32, c_size_t, c_uint64, c_void_p, c_float
+from ctypes import POINTER, Structure, c_int32, c_uint64, c_void_p
 from libinfiniop import (
     InfiniDtype,
     infiniopHandle_t,
@@ -30,7 +30,7 @@ _TEST_CASES = [
     # 昇腾暂不满足这个用例，最后一维度 <=32 会有问题，可能与其核心
     # 接口 GatherMask 的内部实现相关，目前 48 64 128 都可以支持
     ((4, 1, 32), None),
-    ((1, 32, 128), None),
+    ((11, 33, 128), None),
     ((3, 32, 128), (8000, 200, 1)),
 ]
 
@@ -55,23 +55,13 @@ class RoPEDescriptor(Structure):
 infiniopRoPEDescriptor_t = POINTER(RoPEDescriptor)
 
 
-def reshape_for_broadcast(freqs_cis: torch.Tensor, x: torch.Tensor):
-    ndim = x.ndim
-    assert 0 <= 1 < ndim
-    assert freqs_cis.shape == (x.shape[0], x.shape[-1])
-    shape = [d if i == 0 or i == ndim - 1 else 1 for i, d in enumerate(x.shape)]
-    return freqs_cis.view(*shape)
-
-
-def rotary_embedding(t, pos, theta, torch_device):
+def rotary_embedding(t, sin, cos, torch_device):
     dh = t.shape[2]
     assert dh % 2 == 0, "Embedding dimension must be even."
     t_even = t[..., 0::2]  # [seq_len, n_head, dh // 2]
     t_odd = t[..., 1::2]  # [seq_len, n_head, dh // 2]
-    freqs = (1.0 / (theta ** (torch.arange(0, dh, 2).float() / dh))).to(torch_device)
-    freqs = torch.outer(pos, freqs)  # [seq_len, dh // 2]
-    cos = torch.cos(freqs).unsqueeze(1)  # [seq_len, 1, dh // 2]
-    sin = torch.sin(freqs).unsqueeze(1)  # [seq_len, 1, dh // 2]
+    cos = cos.unsqueeze(1)  # [seq_len, 1, dh // 2]
+    sin = sin.unsqueeze(1)  # [seq_len, 1, dh // 2]
 
     t_out_even = t_even * cos - t_odd * sin
     t_out_odd = t_even * sin + t_odd * cos
@@ -80,18 +70,14 @@ def rotary_embedding(t, pos, theta, torch_device):
     t_out[..., 0::2] = t_out_even
     t_out[..., 1::2] = t_out_odd
 
-    return t_out
+    return t_out.to(torch_device)
 
 
-def sin_cos_table(max_seq_len, dim, torch_device, theta):
-    pos = torch.arange(
-        0, max_seq_len, dtype=torch.float32, device=torch.device(torch_device)
-    )
+def sin_cos_table(pos, dim, torch_device, theta):
+    assert dim % 2 == 0, "Embedding dimension must be even."
     freqs = (1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))).to(
         torch_device
     )
-    # (a0, a1, a2) -> (a0, a0, a1, a1, a2, a2)
-    freqs = torch.repeat_interleave(freqs, repeats=2)
     angles = torch.outer(pos, freqs)
     return torch.sin(angles), torch.cos(angles)
 
@@ -101,30 +87,20 @@ def test(lib, handle, torch_device, shape, strides=None, dtype=torch.float16):
         f"Testing Rotary Positional Embedding on {torch_device} with shape:{shape} strides:{strides} and dtype:{dtype}"
     )
 
-    t = torch.rand(shape, dtype=dtype)
-
+    t = torch.rand(shape, dtype=dtype).to(torch_device)
     t = rearrange_if_needed(t, strides)
-
-    posTmp = torch.arange(0, t.shape[0]).to(torch_device)
-    pos = torch.zeros(2 * posTmp.shape[0], dtype=torch.int32)
-    for i in range(posTmp.shape[0]):
-        pos[2 * i] = posTmp[i]
-        pos[2 * i + 1] = 0
-    pos = pos.to(torch_device)
     theta = 1e4
+    pos = (
+        torch.arange(0, t.shape[0], dtype=torch.int32).to(torch_device).to(torch.uint32)
+    )
+    sin_table, cos_table = sin_cos_table(pos, t.shape[2], t.device, theta)
 
-    ans = rotary_embedding(t, posTmp, theta, torch_device)
+    ans = rotary_embedding(t, sin_table, cos_table, torch_device)
 
     descriptor = infiniopRoPEDescriptor_t()
-    # 2x table length for test
-    sin_table, cos_table = sin_cos_table(t.shape[0] * 2, t.shape[2], t.device, theta)
-
-    t_tensor, sin_table_tensor, cos_table_tensor = [
-        to_tensor(tensor, lib) for tensor in [t, sin_table, cos_table]
+    t_tensor, pos_tensor, sin_table_tensor, cos_table_tensor = [
+        to_tensor(tensor, lib) for tensor in [t, pos, sin_table, cos_table]
     ]
-
-    pos_tensor = to_tensor(pos[: t.shape[0]], lib)
-    pos_tensor.descriptor.contents.dtype = InfiniDtype.U64
 
     if torch_device == "npu":
         synchronize_device(torch_device)
@@ -142,7 +118,7 @@ def test(lib, handle, torch_device, shape, strides=None, dtype=torch.float16):
 
     # Invalidate the shape and strides in the descriptor to prevent them from being directly used by the kernel
     for tensor in [t_tensor, pos_tensor, sin_table_tensor, cos_table_tensor]:
-        tensor.descriptor.contents.invalidate()
+        tensor.destroyDesc(lib)
 
     workspace_size = c_uint64(0)
     check_error(
@@ -174,7 +150,7 @@ def test(lib, handle, torch_device, shape, strides=None, dtype=torch.float16):
     if PROFILE:
         profile_operation(
             "PyTorch",
-            lambda: rotary_embedding(t, posTmp, theta, torch_device),
+            lambda: rotary_embedding(t, pos, theta, torch_device),
             torch_device,
             NUM_PRERUN,
             NUM_ITERATIONS,
@@ -232,5 +208,5 @@ if __name__ == "__main__":
     # Execute tests
     for device in get_test_devices(args):
         test_operator(lib, device, test, _TEST_CASES, _TENSOR_DTYPES)
-        
+
     print("\033[92mTest passed!\033[0m")

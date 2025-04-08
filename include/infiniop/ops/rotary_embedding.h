@@ -20,9 +20,9 @@ __C __export infiniStatus_t infiniopRoPE(
     void *workspace,
     size_t workspace_size,
     void *t,
-    void const *pos_ids,
-    void const *sin_table,
-    void const *cos_table,
+    const void *pos_ids,
+    const float *sin_table,
+    const float *cos_table,
     void *stream);
 
 __C __export infiniStatus_t infiniopDestroyRoPEDescriptor(infiniopRoPEDescriptor_t desc);
