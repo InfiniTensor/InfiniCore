@@ -8,6 +8,11 @@
 #define CHECK_MCBLAS(API) CHECK_INTERNAL(API, HCBLAS_STATUS_SUCCESS)
 #define CHECK_MCDNN(API) CHECK_INTERNAL(API, HCDNN_STATUS_SUCCESS)
 
+#define INFINIOP_MACA_KERNEL __global__ void
+
+#define MACA_BLOCK_SIZE_1024 1024
+#define MACA_BLOCK_SIZE_512 512
+
 namespace device::maca {
 
 class Handle::Internal {
@@ -17,9 +22,24 @@ class Handle::Internal {
     template <typename T>
     using Fn = std::function<infiniStatus_t(T)>;
 
+    int _warp_size,
+        _max_threads_per_block,
+        _block_size[3],
+        _grid_size[3];
+
 public:
+    Internal(int);
     infiniStatus_t useMcblas(hcStream_t stream, const Fn<hcblasHandle_t> &f) const;
     infiniStatus_t useMcdnn(hcStream_t stream, const Fn<hcdnnHandle_t> &f) const;
+
+    int warpSize() const;
+    int maxThreadsPerBlock() const;
+    int blockSizeX() const;
+    int blockSizeY() const;
+    int blockSizeZ() const;
+    int gridSizeX() const;
+    int gridSizeY() const;
+    int gridSizeZ() const;
 };
 
 hcdnnDataType_t getHcdnnDtype(infiniDtype_t dt);
