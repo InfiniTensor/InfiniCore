@@ -15,6 +15,7 @@ target("infiniop-cpu")
         if has_config("omp") then
             add_cxflags("-fopenmp")
             add_ldflags("-fopenmp")
+            add_links("gomp")  --寒武纪平台必须强制链接 libgomp
         end
     end
 

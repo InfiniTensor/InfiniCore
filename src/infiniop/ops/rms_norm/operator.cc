@@ -11,6 +11,9 @@
 #ifdef ENABLE_ASCEND_API
 #include "ascend/rms_norm_aclnn.h"
 #endif
+#ifdef ENABLE_CAMBRICON_API
+#include "bang/rms_norm_bang.h"
+#endif
 
 __C infiniStatus_t infiniopCreateRMSNormDescriptor(
     infiniopHandle_t handle,
@@ -37,10 +40,8 @@ __C infiniStatus_t infiniopCreateRMSNormDescriptor(
 #ifdef ENABLE_CUDA_API
         CREATE(INFINI_DEVICE_NVIDIA, cuda)
 #endif
-#ifdef ENABLE_CAMBRICON_MLU
-    case DevCambriconMlu: {
-        return bangCreateRMSNormDescriptor((BangHandle_t)handle, (RMSNormBangDescriptor_t *)desc_ptr, y_desc, x_desc, w_desc, epsilon);
-    }
+#ifdef ENABLE_CAMBRICON_API
+        CREATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
 #ifdef ENABLE_ASCEND_API
         CREATE(INFINI_DEVICE_ASCEND, ascend)
@@ -76,10 +77,8 @@ __C infiniStatus_t infiniopGetRMSNormWorkspaceSize(infiniopRMSNormDescriptor_t d
 #ifdef ENABLE_CUDA_API
         GET(INFINI_DEVICE_NVIDIA, cuda)
 #endif
-#ifdef ENABLE_CAMBRICON_MLU
-    case DevCambriconMlu: {
-        return bangGetRMSNormWorkspaceSize((RMSNormBangDescriptor_t)desc, size);
-    }
+#ifdef ENABLE_CAMBRICON_API
+        GET(INFINI_DEVICE_CAMBRICON, bang);
 #endif
 #ifdef ENABLE_ASCEND_API
         GET(INFINI_DEVICE_ASCEND, ascend)
@@ -116,10 +115,8 @@ __C infiniStatus_t infiniopRMSNorm(infiniopRMSNormDescriptor_t desc, void *works
 #ifdef ENABLE_CUDA_API
         CALCULATE(INFINI_DEVICE_NVIDIA, cuda)
 #endif
-#ifdef ENABLE_CAMBRICON_MLU
-    case DevCambriconMlu: {
-        return bangRMSNorm((RMSNormBangDescriptor_t)desc, workspace, workspace_size, y, x, w, stream);
-    }
+#ifdef ENABLE_CAMBRICON_API
+        CALCULATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
 #ifdef ENABLE_ASCEND_API
         CALCULATE(INFINI_DEVICE_ASCEND, ascend)
@@ -155,10 +152,8 @@ __C infiniStatus_t infiniopDestroyRMSNormDescriptor(infiniopRMSNormDescriptor_t 
 #ifdef ENABLE_CUDA_API
         DESTROY(INFINI_DEVICE_NVIDIA, cuda)
 #endif
-#ifdef ENABLE_CAMBRICON_MLU
-    case DevCambriconMlu: {
-        return bangDestroyRMSNormDescriptor((RMSNormBangDescriptor_t)desc);
-    }
+#ifdef ENABLE_CAMBRICON_API
+        DESTROY(INFINI_DEVICE_CAMBRICON, bang);
 #endif
 #ifdef ENABLE_ASCEND_API
         DESTROY(INFINI_DEVICE_ASCEND, ascend)
