@@ -34,3 +34,14 @@ target("infiniop-test")
 
     set_installdir(INFINI_ROOT)
 target_end()
+
+target("infinirt-test")
+    set_kind("binary")
+    add_deps("infinirt")
+    on_install(function (target) end)
+
+    set_languages("cxx17")
+    set_warnings("all", "error")
+
+    add_files(os.projectdir().."/src/infinirt-test/*.cc")
+target_end()
