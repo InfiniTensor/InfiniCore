@@ -1,6 +1,7 @@
 #ifndef INFINIUTILS_CHECK_H
 #define INFINIUTILS_CHECK_H
 #include <iostream>
+#include <tuple>
 
 #define CHECK_API_OR(API, EXPECT, ACTION)                                       \
     do {                                                                        \
@@ -29,5 +30,18 @@
         CHECK_API_OR(found_supported_dtype, true,            \
                      return INFINI_STATUS_BAD_TENSOR_DTYPE); \
     } while (0)
+
+#define CHECK_SAME_VEC(ERR, FIRST, ...)              \
+    do {                                             \
+        for (const auto &shape___ : {__VA_ARGS__}) { \
+            if (FIRST != shape___) {                 \
+                return ERR;                          \
+            }                                        \
+        }                                            \
+    } while (0)
+
+#define CHECK_SAME_SHAPE(FIRST, ...) CHECK_SAME_VEC(INFINI_STATUS_BAD_TENSOR_SHAPE, FIRST, __VA_ARGS__)
+
+#define CHECK_SAME_STRIDES(FIRST, ...) CHECK_SAME_VEC(INFINI_STATUS_BAD_TENSOR_STRIDES, FIRST, __VA_ARGS__)
 
 #endif // INFINIUTILS_CHECK_H

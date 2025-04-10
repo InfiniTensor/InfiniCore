@@ -4,8 +4,9 @@ local GREEN = '\27[0;32m'
 local YELLOW = '\27[1;33m'
 local NC = '\27[0m'  -- No Color
 
-add_includedirs("include")
 set_encodings("utf-8")
+
+add_includedirs("include")
 
 if is_mode("debug") then
     add_defines("DEBUG_MODE")
@@ -89,7 +90,8 @@ option("moore-gpu")
 option_end()
 
 if has_config("moore-gpu") then
-    add_defines("ENABLE_MUSA_API")
+    add_defines("ENABLE_MOORE_API")
+    includes("xmake/musa.lua")
 end
 
 -- 海光
@@ -120,8 +122,23 @@ target("infini-utils")
     set_kind("static")
     on_install(function (target) end)
     set_languages("cxx17")
+
+    set_warnings("all", "error")
+
+    if is_plat("windows") then
+        add_cxflags("/wd4068")
+        if has_config("omp") then
+            add_cxflags("/openmp")
+        end
+    else
+        add_cxflags("-fPIC", "-Wno-unknown-pragmas")
+        if has_config("omp") then
+            add_cxflags("-fopenmp")
+            add_ldflags("-fopenmp")
+        end
+    end
+
     add_files("src/utils/*.cc")
-    add_cxflags("-Wno-unknown-pragmas")
 target_end()
 
 target("infinirt")
@@ -139,13 +156,16 @@ target("infinirt")
     if has_config("metax-gpu") then
         add_deps("infinirt-metax")
     end
+    if has_config("moore-gpu") then
+        add_deps("infinirt-moore")
+    end
     if has_config("kunlun-xpu") then
         add_deps("infinirt-kunlun")
     end
     set_languages("cxx17")
     set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
     add_files("src/infinirt/*.cc")
-    add_installfiles("include/infinirt.h")
+    add_installfiles("include/infinirt.h", {prefixdir = "include"})
 target_end()
 
 target("infiniop")
@@ -181,6 +201,9 @@ target("infiniop")
     end
     if has_config("metax-gpu") then
         add_deps("infiniop-metax")
+    end
+    if has_config("moore-gpu") then
+        add_deps("infiniop-moore")
     end
     if has_config("kunlun-xpu") then
         add_deps("infiniop-kunlun")

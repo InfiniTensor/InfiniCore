@@ -20,45 +20,35 @@ jobs:
     - name: checkout code
       uses: actions/checkout@v4
 
-    - name: install black
-      run: pip install black
-
-    - name: check format
-      run: python3 scripts/format.py --path src --check
+    - name: Check Format
+      run: |
+        pip install black
+        python3 scripts/format.py --path src --check
 
     - name: install xmake
       uses: xmake-io/github-action-setup-xmake@v1
       with:
         xmake-version: latest
 
-    - name: configure xmake
-      run: xmake f -cv
+    - name: Build & Install
+      run: python scripts/install.py --omp=y
 
-    - name: build with xmake
-      run: xmake build
-
-    - name: install to INFINI_ROOT
-      if: matrix.os != 'windows-latest'
-      run: xmake install
-
-    - name: build infiniop-test
-      if: matrix.os != 'windows-latest'
-      run: xmake build infiniop-test
-      
-    - name: build infinirt-test
-      if: matrix.os != 'windows-latest'
-      run: xmake build infinirt-test
-
-    - name: python test
-      if: matrix.os != 'windows-latest'
+    - name: run infinirt-test --cpu on Linux
+      if: matrix.os == 'ubuntu-latest'
       run: |
-        pip install torch
-        LD_LIBRARY_PATH=$HOME/.infini/lib python test/infiniop/matmul.py --cpu
-        LD_LIBRARY_PATH=$HOME/.infini/lib python test/infiniop/rms_norm.py --cpu
-        LD_LIBRARY_PATH=$HOME/.infini/lib python test/infiniop/random_sample.py --cpu
+        echo "Running infinirt-test with --cpu on Linux"
+        ./build/linux/x86_64/release/infinirt-test --cpu
+
+    - name: run infinirt-test --cpu on Windows
+      if: matrix.os == 'windows-latest'
+      run: |
+        echo "Running infinirt-test with --cpu on Windows"
+        .\build\windows\x64\release\infinirt-test.exe --cpu
         
-    - name: run infinirt-test --cpu
-      if: matrix.os != 'windows-latest'
+    - name: install python packages
       run: |
-        echo "Running infinirt-test with --cpu"
-        LD_LIBRARY_PATH=$HOME/.infini/lib build/linux/x86_64/release/infinirt-test --cpu
+        pip install numpy
+        pip install torch
+
+    - name: Python Test
+      run: python scripts/python_test.py --cpu
