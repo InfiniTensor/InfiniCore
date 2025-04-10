@@ -2,24 +2,29 @@
 #include <infinirt.h>
 
 struct ParsedArgs {
-    infiniDevice_t device_type = INFINI_DEVICE_CPU; // 默认 CPU
+    infiniDevice_t device_type = INFINI_DEVICE_CPU;
 };
 
 void printUsage() {
-    std::cout << "Usage:\n"
-              << "  infinirt-test [--<device>]\n\n"
-              << "  --<device>   Specify device type.\n"
-              << "               Available devices: cpu, nvidia, cambricon, ascend,\n"
-              << "               metax, moore, iluvatar, kunlun, sugon\n"
-              << "               Default is CPU.\n"
+    std::cout << "Usage:" << std::endl
+              << "  infinirt-test [--<device>]" << std::endl
+              << std::endl
+              << "Options:" << std::endl
+              << "  --<device>   Specify the device type." << std::endl
+              << std::endl
+              << "Available devices:" << std::endl
+              << "  cpu         - Default" << std::endl
+              << "  nvidia" << std::endl
+              << "  cambricon" << std::endl
+              << "  ascend" << std::endl
+              << "  metax" << std::endl
+              << "  moore" << std::endl
+              << "  iluvatar" << std::endl
+              << "  kunlun" << std::endl
+              << "  sugon" << std::endl
               << std::endl;
     exit(EXIT_FAILURE);
 }
-
-#define PARSE_DEVICE(FLAG, DEVICE) \
-    else if (arg == FLAG) {        \
-        args.device_type = DEVICE; \
-    }
 
 ParsedArgs parseArgs(int argc, char *argv[]) {
     ParsedArgs args;
@@ -34,26 +39,32 @@ ParsedArgs parseArgs(int argc, char *argv[]) {
     }
 
     try {
-        if (arg == "--cpu") {
-            args.device_type = INFINI_DEVICE_CPU;
-        }
-        PARSE_DEVICE("--nvidia", INFINI_DEVICE_NVIDIA)
-        PARSE_DEVICE("--cambricon", INFINI_DEVICE_CAMBRICON)
-        PARSE_DEVICE("--ascend", INFINI_DEVICE_ASCEND)
-        PARSE_DEVICE("--metax", INFINI_DEVICE_METAX)
-        PARSE_DEVICE("--moore", INFINI_DEVICE_MOORE)
-        PARSE_DEVICE("--iluvatar", INFINI_DEVICE_ILUVATAR)
-        PARSE_DEVICE("--kunlun", INFINI_DEVICE_KUNLUN)
-        PARSE_DEVICE("--sugon", INFINI_DEVICE_SUGON)
+#define PARSE_DEVICE(FLAG, DEVICE) \
+    if (arg == FLAG) {             \
+        args.device_type = DEVICE; \
+    }
+        // clang-format off
+        PARSE_DEVICE("--cpu", INFINI_DEVICE_CPU)
+        else PARSE_DEVICE("--nvidia", INFINI_DEVICE_NVIDIA)
+        else PARSE_DEVICE("--cambricon", INFINI_DEVICE_CAMBRICON)
+        else PARSE_DEVICE("--ascend", INFINI_DEVICE_ASCEND)
+        else PARSE_DEVICE("--metax", INFINI_DEVICE_METAX)
+        else PARSE_DEVICE("--moore", INFINI_DEVICE_MOORE)
+        else PARSE_DEVICE("--iluvatar", INFINI_DEVICE_ILUVATAR)
+        else PARSE_DEVICE("--kunlun", INFINI_DEVICE_KUNLUN)
+        else PARSE_DEVICE("--sugon", INFINI_DEVICE_SUGON)
         else {
             printUsage();
         }
+        // clang-format on
+#undef PARSE_DEVICE
     } catch (const std::exception &) {
         printUsage();
     }
 
     return args;
 }
+
 int main(int argc, char *argv[]) {
 
     ParsedArgs args = parseArgs(argc, argv);
@@ -71,18 +82,21 @@ int main(int argc, char *argv[]) {
     std::cout << "Device Type: " << device << " | Available Devices: " << numDevices << std::endl;
 
     if (numDevices == 0) {
-        std::cerr << "Device type " << device << " has no available devices." << std::endl;
-        return 1;
+        std::cout << "Device type " << device << " has no available devices." << std::endl;
+        return 0;
     }
 
     for (int deviceId = 0; deviceId < numDevices; ++deviceId) {
-        if (!test_setDevice(device, deviceId)) {
+        if (!testSetDevice(device, deviceId)) {
             return 1;
         }
-        // test_memcpy
-        size_t dataSize = 1024;
-        if (!test_memcpy(device, deviceId, dataSize)) {
-            return 1;
+
+        size_t dataSize[] = {1 << 10, 4 << 10, 2 << 20, 1L << 30};
+
+        for (size_t size : dataSize) {
+            if (!testMemcpy(device, deviceId, size)) {
+                return 1;
+            }
         }
     }
 

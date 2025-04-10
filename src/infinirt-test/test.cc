@@ -3,11 +3,11 @@
 #include <infinirt.h>
 #include <iostream>
 
-bool test_memcpy(infiniDevice_t device, int deviceId, size_t dataSize) {
+bool testMemcpy(infiniDevice_t device, int deviceId, size_t dataSize) {
 
-    std::cout << "==============================================" << std::endl;
-    std::cout << "Testing memcpy on Device ID: " << deviceId << std::endl;
-    std::cout << "==============================================" << std::endl;
+    std::cout << "==============================================\n"
+              << "Testing memcpy on Device ID: " << deviceId << "\n"
+              << "==============================================" << std::endl;
 
     // 分配主机内存
     std::cout << "[Device " << deviceId << "] Allocating host memory: " << dataSize * sizeof(float) << " bytes" << std::endl;
@@ -78,7 +78,7 @@ bool test_memcpy(infiniDevice_t device, int deviceId, size_t dataSize) {
     return true;
 }
 
-bool test_setDevice(infiniDevice_t device, int deviceId) {
+bool testSetDevice(infiniDevice_t device, int deviceId) {
 
     std::cout << "Setting device " << device << " with ID: " << deviceId << std::endl;
 
