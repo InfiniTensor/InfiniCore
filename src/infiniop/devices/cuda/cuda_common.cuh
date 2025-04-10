@@ -16,6 +16,8 @@
 #define CUDA_BLOCK_SIZE_1024 1024
 #define CUDA_BLOCK_SIZE_512 512
 
+#define CHECK_CUDA(API) CHECK_INTERNAL(API, cudaSuccess)
+
 namespace device::cuda {
 
 cudnnDataType_t getCudnnDtype(infiniDtype_t dt);
