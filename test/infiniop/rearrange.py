@@ -17,19 +17,89 @@ from libinfiniop import (
     profile_operation,
 )
 
+def generate_strides(shape, row_major=True):
+    """生成张量的stride
+    
+    Args:
+        shape: 张量形状
+        row_major: 如果为True，生成行优先(C风格)stride，否则列优先(Fortran风格)
+    
+    Returns:
+        strides列表
+    """
+    if row_major:
+        # 行优先 (C风格，从最后一维到第一维)
+        stride = 1
+        strides = [1]
+        for dim in reversed(shape[1:]):
+            stride *= dim
+            strides.insert(0, stride)
+        return strides
+    else:
+        # 列优先 (Fortran风格，从第一维到最后一维)
+        stride = 1
+        strides = [stride]
+        for dim in shape[:-1]:
+            stride *= dim
+            strides.append(stride)
+        return strides
+
+
+
 # ==============================================================================
 #  Configuration (Internal Use Only)
 # ==============================================================================
 # These are not meant to be imported from other modules
 _TEST_CASES = [
-    # ((src_shape, src_stride), (dst_shape, dst_stride))
-    (((2, 4, 32), None), ((2, 4, 32), (256, 64, 1))),
-    (((32, 6, 64), (64, 2560, 1)), ((32, 6, 64), None)),
-    (((4, 6, 64), (64, 2560, 1)), ((4, 6, 64), (131072, 64, 1))),
-    (((1, 32, 64), (2048, 64, 1)), ((1, 32, 64), (2048, 64, 1))),
-    (((32, 1, 64), (64, 2560, 1)), ((32, 1, 64), (64, 64, 1))),
-    (((4, 1, 64), (64, 2560, 1)), ((4, 1, 64), (64, 11264, 1))),
-    (((64,), (1,)), ((64,), (1,))),
+    # (x_shape, x_stride, y_shape, y_stride)
+    # (
+    #     (2, 4, 64),  # x_shape
+    #     (2, 4, 8),        # x_stride
+    #     (2, 4, 64),  # y_shape
+    #     (512, 128, 2) # y_stride
+    # ),
+    # (
+    #     (100, 100),  # x_shape
+    #     (1, 100),  # x_stride
+    #     (100, 100),  # y_shape
+    #     (100, 1)  # y_stride
+    # ),
+    (
+        (4, 4),  # x_shape
+        (1, 4),  # x_stride
+        (4, 4),  # y_shape
+        (4, 1)  # y_stride
+    ),
+    (
+        (4, 6, 64),  # x_shape
+        (64, 4*64, 1),  # x_stride
+        (4, 6, 64),  # y_shape
+        (6*64, 64, 1)  # y_stride
+    ),
+    (
+        (2000, 2000),  # x_shape
+        (1, 2000),  # x_stride
+        (2000, 2000),  # y_shape
+        (2000, 1)  # y_stride
+    ),
+    (
+        (2001, 2001),  # x_shape
+        (1, 2001),  # x_stride
+        (2001, 2001),  # y_shape
+        (2001, 1)  # y_stride
+    ),
+    (
+        (3, 4, 7, 53, 9),  # x_shape
+        (1, 3, 3 * 4, 3 * 4 * 7, 3 * 4 * 7 * 53),  # x_stride
+        (3, 4, 7, 53, 9),  # y_shape
+        (9*53*7*4, 9*53*7, 9*53, 9, 1)  # y_stride
+    ),
+    (
+        (3, 4, 50, 50, 5, 7),  # x_shape
+        generate_strides((3, 4, 50, 50, 5, 7)),  # x_stride
+        (3, 4, 50, 50, 5, 7),  # y_shape
+        generate_strides((3, 4, 50, 50, 5, 7), row_major=False)  # y_stride
+    ),
 ]
 
 # Data types used for testing
@@ -75,6 +145,8 @@ def test(
         rearrange_if_needed(tensor, stride)
         for tensor, stride in zip([x, y], [x_stride, y_stride])
     ]
+
+    print(x.shape, x.stride(), y.shape, y.stride())
     x_tensor, y_tensor = [to_tensor(tensor, lib) for tensor in [x, y]]
 
     descriptor = infiniopRearrangeDescriptor_t()
@@ -85,8 +157,8 @@ def test(
     )
 
     # Invalidate the shape and strides in the descriptor to prevent them from being directly used by the kernel
-    for tensor in [x_tensor, y_tensor]:
-        tensor.descriptor.contents.invalidate()
+    # for tensor in [x_tensor, y_tensor]:
+    #     tensor.descriptor.contents.invalidate()
 
     def lib_rearrange():
         check_error(

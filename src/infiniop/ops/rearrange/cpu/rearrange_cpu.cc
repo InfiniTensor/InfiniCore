@@ -15,21 +15,21 @@ infiniStatus_t Descriptor::create(
     auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
     auto dtype = y_desc->dtype();
     auto ndim = y_desc->ndim();
-    auto shape = y_desc->shape().data();
 
+    auto shape = y_desc->shape();
     CHECK_API_OR(x_desc->dtype(), dtype, return INFINI_STATUS_BAD_TENSOR_DTYPE);
     CHECK_API_OR(x_desc->ndim(), ndim, return INFINI_STATUS_BAD_TENSOR_SHAPE);
-
     for (size_t i = 0; i < ndim; ++i) {
         CHECK_API_OR(x_desc->shape()[i], shape[i], return INFINI_STATUS_BAD_TENSOR_SHAPE);
     }
-
-    auto dst_strides = y_desc->strides().data();
-    auto src_strides = x_desc->strides().data();
+    auto dst_strides = y_desc->strides();
+    auto src_strides = x_desc->strides();
     auto element_size = infiniSizeOf(dtype);
-
-    auto result = utils::RearrangeMeta::create(shape, dst_strides, src_strides, ndim, element_size);
-    CHECK_RESULT(result);
+  
+    auto meta = utils::RearrangeMeta::create(shape.data(), dst_strides.data(), src_strides.data(), ndim, element_size);
+    if (!meta) {
+        return INFINI_STATUS_BAD_TENSOR_STRIDES;
+    }
 
     *desc_ptr = new Descriptor(
         result.take(),
