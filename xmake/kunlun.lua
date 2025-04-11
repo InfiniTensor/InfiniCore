@@ -69,6 +69,7 @@ target("infiniop-kunlun")
     add_files("$(projectdir)/src/infiniop/devices/kunlun/*.cc", "$(projectdir)/src/infiniop/ops/*/kunlun/*.cc")
     -- compile handwriting kernel
     local xpu_files = os.files(src_dir .. "/ops/*/kunlun/*.xpu")
+    table.join2(xpu_files, os.files(src_dir .. "/binary/kunlun/*.xpu"))
     if #xpu_files > 0 then
         add_files(xpu_files, {rule = "xpu"})
     end
