@@ -1,0 +1,28 @@
+#include "binary_kunlun.h"
+
+namespace op::kunlun_common {
+
+namespace binary_op {
+
+void host2device(const kunlun_size_t *c_shape, const kunlun_ptrdiff_t *c_strides, const kunlun_size_t *a_shape, const kunlun_ptrdiff_t *a_strides,
+                 const kunlun_size_t *b_shape, const kunlun_ptrdiff_t *b_strides,
+                 kunlun_size_t *xpu_c_shape, kunlun_ptrdiff_t *xpu_c_strides, kunlun_size_t *xpu_a_shape, kunlun_ptrdiff_t *xpu_a_strides,
+                 kunlun_size_t *xpu_b_shape, kunlun_ptrdiff_t *xpu_b_strides,
+                 kunlun_size_t  ndim) {
+    int ret = 0;
+    ret = xpu_memcpy(xpu_c_shape, c_shape, ndim * sizeof(kunlun_size_t), XPU_HOST_TO_DEVICE);
+    assert(ret == 0);
+    ret = xpu_memcpy(xpu_a_shape, a_shape, ndim * sizeof(kunlun_size_t), XPU_HOST_TO_DEVICE);
+    assert(ret == 0);
+    ret = xpu_memcpy(xpu_b_shape, b_shape, ndim * sizeof(kunlun_size_t), XPU_HOST_TO_DEVICE);
+    assert(ret == 0);
+    ret = xpu_memcpy(xpu_c_strides, c_strides, ndim * sizeof(long), XPU_HOST_TO_DEVICE);
+    assert(ret == 0);
+    ret = xpu_memcpy(xpu_a_strides, a_strides, ndim * sizeof(long), XPU_HOST_TO_DEVICE);
+    assert(ret == 0);
+    ret = xpu_memcpy(xpu_b_strides, b_strides, ndim * sizeof(long), XPU_HOST_TO_DEVICE);
+    assert(ret == 0);
+}
+
+} // namespace binary_op
+} // namespace op::kunlun_common
