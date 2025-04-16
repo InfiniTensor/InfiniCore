@@ -1,10 +1,9 @@
 import torch
 import ctypes
-from ctypes import POINTER, Structure, c_int32, c_size_t, c_uint64, c_void_p, c_float
-from libinfiniop import (
-    infiniopHandle_t,
-    infiniopTensorDescriptor_t,
-    open_lib,
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+from pyinfini import (
     to_tensor,
     get_test_devices,
     check_error,
@@ -15,6 +14,8 @@ from libinfiniop import (
     debug,
     get_tolerance,
     profile_operation,
+    lib,
+    infiniopCausalSoftmaxDescriptor_t
 )
 from enum import Enum, auto
 
@@ -61,13 +62,6 @@ DEBUG = False
 PROFILE = False
 NUM_PRERUN = 10
 NUM_ITERATIONS = 1000
-
-
-class CausalSoftmaxDescriptor(Structure):
-    _fields_ = [("device", c_int32)]
-
-
-infiniopCausalSoftmaxDescriptor_t = POINTER(CausalSoftmaxDescriptor)
 
 
 def causal_softmax(x):
@@ -118,7 +112,7 @@ def test(
     # Invalidate the shape and strides in the descriptor to prevent them from being directly used by the kernel
     x_tensor.destroyDesc(lib)
 
-    workspace_size = c_uint64(0)
+    workspace_size = ctypes.c_uint64(0)
     check_error(
         lib.infiniopGetCausalSoftmaxWorkspaceSize(
             descriptor, ctypes.byref(workspace_size)
@@ -157,34 +151,6 @@ def test(
 
 if __name__ == "__main__":
     args = get_args()
-    lib = open_lib()
-
-    lib.infiniopCreateCausalSoftmaxDescriptor.restype = c_int32
-    lib.infiniopCreateCausalSoftmaxDescriptor.argtypes = [
-        infiniopHandle_t,
-        POINTER(infiniopCausalSoftmaxDescriptor_t),
-        infiniopTensorDescriptor_t,
-    ]
-
-    lib.infiniopGetCausalSoftmaxWorkspaceSize.restype = c_int32
-    lib.infiniopGetCausalSoftmaxWorkspaceSize.argtypes = [
-        infiniopCausalSoftmaxDescriptor_t,
-        POINTER(c_uint64),
-    ]
-
-    lib.infiniopCausalSoftmax.restype = c_int32
-    lib.infiniopCausalSoftmax.argtypes = [
-        infiniopCausalSoftmaxDescriptor_t,
-        c_void_p,
-        c_uint64,
-        c_void_p,
-        c_void_p,
-    ]
-
-    lib.infiniopDestroyCausalSoftmaxDescriptor.restype = c_int32
-    lib.infiniopDestroyCausalSoftmaxDescriptor.argtypes = [
-        infiniopCausalSoftmaxDescriptor_t,
-    ]
 
     # Configure testing options
     DEBUG = args.debug

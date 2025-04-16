@@ -1,12 +1,10 @@
-from ctypes import POINTER, Structure, c_int32, c_uint64, c_void_p, c_float
-import ctypes
+
 import torch
 import ctypes
-from ctypes import POINTER, Structure, c_int32, c_uint64, c_void_p, c_float
-from libinfiniop import (
-    infiniopHandle_t,
-    infiniopTensorDescriptor_t,
-    open_lib,
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+from pyinfini import (
     to_tensor,
     get_test_devices,
     check_error,
@@ -17,6 +15,8 @@ from libinfiniop import (
     debug,
     get_tolerance,
     profile_operation,
+    lib,
+    infiniopRMSNormDescriptor_t
 )
 
 # ==============================================================================
@@ -45,21 +45,12 @@ PROFILE = False
 NUM_PRERUN = 10
 NUM_ITERATIONS = 1000
 
-
-class RMSNormDescriptor(Structure):
-    _fields_ = [("device", c_int32)]
-
-
-infiniopRMSNormDescriptor_t = POINTER(RMSNormDescriptor)
-
-
 def rms_norm(x, w, eps):
     input_dtype = x.dtype
     hidden_states = x.to(torch.float32)
     variance = hidden_states.pow(2).mean(-1, keepdim=True)
     hidden_states = hidden_states * torch.rsqrt(variance + eps)
     return (w * hidden_states).to(input_dtype)
-
 
 def test(
     lib,
@@ -109,7 +100,7 @@ def test(
     for tensor in [x_tensor, y_tensor, w_tensor]:
         tensor.destroyDesc(lib)
 
-    workspace_size = c_uint64(0)
+    workspace_size = ctypes.c_uint64(0)
     check_error(
         lib.infiniopGetRMSNormWorkspaceSize(descriptor, ctypes.byref(workspace_size))
     )
@@ -146,39 +137,6 @@ def test(
 
 if __name__ == "__main__":
     args = get_args()
-    lib = open_lib()
-
-    lib.infiniopCreateRMSNormDescriptor.restype = c_int32
-    lib.infiniopCreateRMSNormDescriptor.argtypes = [
-        infiniopHandle_t,
-        POINTER(infiniopRMSNormDescriptor_t),
-        infiniopTensorDescriptor_t,
-        infiniopTensorDescriptor_t,
-        infiniopTensorDescriptor_t,
-        c_float,
-    ]
-
-    lib.infiniopGetRMSNormWorkspaceSize.restype = c_int32
-    lib.infiniopGetRMSNormWorkspaceSize.argtypes = [
-        infiniopRMSNormDescriptor_t,
-        POINTER(c_uint64),
-    ]
-
-    lib.infiniopRMSNorm.restypes = c_int32
-    lib.infiniopRMSNorm.argtypes = [
-        infiniopRMSNormDescriptor_t,
-        c_void_p,
-        c_uint64,
-        c_void_p,
-        c_void_p,
-        c_void_p,
-        c_void_p,
-    ]
-
-    lib.infiniopDestroyRMSNormDescriptor.restype = c_int32
-    lib.infiniopDestroyRMSNormDescriptor.argtypes = [
-        infiniopRMSNormDescriptor_t,
-    ]
 
     # Configure testing options
     DEBUG = args.debug

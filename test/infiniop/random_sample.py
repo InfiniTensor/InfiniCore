@@ -1,11 +1,10 @@
 import torch
 import ctypes
-from ctypes import POINTER, Structure, c_int32, c_uint64, c_void_p, c_float
-from libinfiniop import (
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+from pyinfini import (
     InfiniDtype,
-    infiniopHandle_t,
-    infiniopTensorDescriptor_t,
-    open_lib,
     to_tensor,
     get_test_devices,
     check_error,
@@ -16,6 +15,8 @@ from libinfiniop import (
     get_tolerance,
     profile_operation,
     synchronize_device,
+    lib,
+    infiniopRandomSampleDescriptor_t
 )
 
 # ==============================================================================
@@ -48,14 +49,6 @@ DEBUG = False
 PROFILE = False
 NUM_PRERUN = 10
 NUM_ITERATIONS = 1000
-
-
-class RandomSampleDescriptor(Structure):
-    _fields_ = [("device", c_int32)]
-
-
-infiniopRandomSampleDescriptor_t = POINTER(RandomSampleDescriptor)
-
 
 def random_sample(data, random_val, topp, topk, voc, temperature):
     if topp > 0 and topk > 1:
@@ -136,7 +129,7 @@ def test(
     for tensor in [x_tensor, indices_tensor]:
         tensor.destroyDesc(lib)
 
-    workspace_size = c_uint64(0)
+    workspace_size = ctypes.c_uint64(0)
     check_error(
         lib.infiniopGetRandomSampleWorkspaceSize(
             descriptor, ctypes.byref(workspace_size)
@@ -189,39 +182,6 @@ def test(
 
 if __name__ == "__main__":
     args = get_args()
-    lib = open_lib()
-
-    lib.infiniopCreateRandomSampleDescriptor.restype = c_int32
-    lib.infiniopCreateRandomSampleDescriptor.argtypes = [
-        infiniopHandle_t,
-        POINTER(infiniopRandomSampleDescriptor_t),
-        infiniopTensorDescriptor_t,
-    ]
-
-    lib.infiniopGetRandomSampleWorkspaceSize.restype = c_int32
-    lib.infiniopGetRandomSampleWorkspaceSize.argtypes = [
-        infiniopRandomSampleDescriptor_t,
-        POINTER(c_uint64),
-    ]
-
-    lib.infiniopRandomSample.restype = c_int32
-    lib.infiniopRandomSample.argtypes = [
-        infiniopRandomSampleDescriptor_t,
-        c_void_p,
-        c_uint64,
-        c_uint64,
-        c_void_p,
-        c_float,
-        c_float,
-        c_int32,
-        c_float,
-        c_void_p,
-    ]
-
-    lib.infiniopDestroyRandomSampleDescriptor.restype = c_int32
-    lib.infiniopDestroyRandomSampleDescriptor.argtypes = [
-        infiniopRandomSampleDescriptor_t,
-    ]
 
     DEBUG = args.debug
     PROFILE = args.profile

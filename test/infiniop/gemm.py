@@ -1,10 +1,9 @@
 import torch
 import ctypes
-from ctypes import POINTER, Structure, c_int32, c_size_t, c_uint64, c_void_p, c_float
-from libinfiniop import (
-    infiniopHandle_t,
-    infiniopTensorDescriptor_t,
-    open_lib,
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+from pyinfini import (
     to_tensor,
     get_test_devices,
     check_error,
@@ -15,6 +14,8 @@ from libinfiniop import (
     debug,
     get_tolerance,
     profile_operation,
+    lib,
+    infiniopGemmDescriptor_t
 )
 
 # ==============================================================================
@@ -48,17 +49,6 @@ DEBUG = False
 PROFILE = False
 NUM_PRERUN = 10
 NUM_ITERATIONS = 1000
-
-
-# ==============================================================================
-#  Definitions
-# ==============================================================================
-class GemmDescriptor(Structure):
-    _fields_ = [("device", c_int32)]
-
-
-infiniopGemmDescriptor_t = POINTER(GemmDescriptor)
-
 
 # PyTorch implementation for matrix multiplication
 def gemm(_c, beta, _a, _b, alpha):
@@ -120,7 +110,7 @@ def test(
         tensor.destroyDesc(lib)
 
     # Get workspace size and create workspace
-    workspace_size = c_uint64(0)
+    workspace_size = ctypes.c_uint64(0)
     check_error(
         lib.infiniopGetGemmWorkspaceSize(descriptor, ctypes.byref(workspace_size))
     )
@@ -164,41 +154,7 @@ def test(
 # ==============================================================================
 if __name__ == "__main__":
     args = get_args()
-    lib = open_lib()
-
-    lib.infiniopCreateGemmDescriptor.restype = c_int32
-    lib.infiniopCreateGemmDescriptor.argtypes = [
-        infiniopHandle_t,
-        POINTER(infiniopGemmDescriptor_t),
-        infiniopTensorDescriptor_t,
-        infiniopTensorDescriptor_t,
-        infiniopTensorDescriptor_t,
-    ]
-
-    lib.infiniopGetGemmWorkspaceSize.restype = c_int32
-    lib.infiniopGetGemmWorkspaceSize.argtypes = [
-        infiniopGemmDescriptor_t,
-        POINTER(c_size_t),
-    ]
-
-    lib.infiniopGemm.restype = c_int32
-    lib.infiniopGemm.argtypes = [
-        infiniopGemmDescriptor_t,
-        c_void_p,
-        c_uint64,
-        c_void_p,
-        c_void_p,
-        c_void_p,
-        c_float,
-        c_float,
-        c_void_p,
-    ]
-
-    lib.infiniopDestroyGemmDescriptor.restype = c_int32
-    lib.infiniopDestroyGemmDescriptor.argtypes = [
-        infiniopGemmDescriptor_t,
-    ]
-
+    
     # Configure testing options
     DEBUG = args.debug
     PROFILE = args.profile

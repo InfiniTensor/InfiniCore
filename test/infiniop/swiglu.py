@@ -1,10 +1,9 @@
 import torch
 import ctypes
-from ctypes import POINTER, Structure, c_int32, c_void_p, c_uint64
-from libinfiniop import (
-    infiniopHandle_t,
-    infiniopTensorDescriptor_t,
-    open_lib,
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+from pyinfini import (
     to_tensor,
     get_test_devices,
     check_error,
@@ -14,7 +13,9 @@ from libinfiniop import (
     debug,
     get_tolerance,
     profile_operation,
-    create_workspace
+    create_workspace,
+    lib,
+    infiniopSwiGLUDescriptor_t
 )
 from enum import Enum, auto
 
@@ -69,17 +70,8 @@ PROFILE = False
 NUM_PRERUN = 10
 NUM_ITERATIONS = 1000
 
-
-class SwiGLUDescriptor(Structure):
-    _fields_ = [("device", c_int32)]
-
-
-infiniopSwiGLUDescriptor_t = POINTER(SwiGLUDescriptor)
-
-
 def swiglu(a, b):
     return a * b / (1 + torch.exp(-b.float()).to(b.dtype))
-    
 
 
 def process_tensors(c, c_strides, a, a_stride, b, b_stride, inplace):
@@ -161,7 +153,7 @@ def test(
     for tensor in [a_tensor, b_tensor, c_tensor]:
         tensor.destroyDesc(lib)
 
-    workspace_size = c_uint64(0)
+    workspace_size = ctypes.c_uint64(0)
     check_error(
         lib.infiniopGetSwiGLUWorkspaceSize(descriptor, ctypes.byref(workspace_size))
     )
@@ -195,38 +187,6 @@ def test(
 
 if __name__ == "__main__":
     args = get_args()
-    lib = open_lib()
-
-    lib.infiniopCreateSwiGLUDescriptor.restype = c_int32
-    lib.infiniopCreateSwiGLUDescriptor.argtypes = [
-        infiniopHandle_t,
-        POINTER(infiniopSwiGLUDescriptor_t),
-        infiniopTensorDescriptor_t,
-        infiniopTensorDescriptor_t,
-        infiniopTensorDescriptor_t,
-    ]
-
-    lib.infiniopGetSwiGLUWorkspaceSize.restype = c_int32
-    lib.infiniopGetSwiGLUWorkspaceSize.argtypes = [
-        infiniopSwiGLUDescriptor_t,
-        POINTER(c_uint64),
-    ]
-
-    lib.infiniopSwiGLU.restype = c_int32
-    lib.infiniopSwiGLU.argtypes = [
-        infiniopSwiGLUDescriptor_t,
-        c_void_p,
-        c_uint64,
-        c_void_p,
-        c_void_p,
-        c_void_p,
-        c_void_p,
-    ]
-
-    lib.infiniopDestroySwiGLUDescriptor.restype = c_int32
-    lib.infiniopDestroySwiGLUDescriptor.argtypes = [
-        infiniopSwiGLUDescriptor_t,
-    ]
 
     # Configure testing options
     DEBUG = args.debug
