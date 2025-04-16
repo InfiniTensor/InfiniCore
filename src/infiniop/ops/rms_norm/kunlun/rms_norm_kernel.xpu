@@ -85,7 +85,7 @@ __global__ void rmsNormKernelF32(float *y, long stride_y, const float *x, long s
 
             // do reduce
             float ss = op::common_kunlun::reduce_op::sumSquaredF32(x_local, curr_nn);
-            atomicAddF32(&sm_output[curr_m - m_start], ss);
+            op::common_kunlun::reduce_op::atomicAddF32(&sm_output[curr_m - m_start], ss);
         }
         mfence();
         sync_cluster();
