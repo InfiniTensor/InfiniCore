@@ -43,7 +43,7 @@ __C infiniStatus_t infiniopCreateSwiGLUDescriptor(
     }
 #endif
 #ifdef ENABLE_ASCEND_API
-        CREATE(INFINI_DEVICE_ASCEND, ascend)
+        CREATE(INFINI_DEVICE_ASCEND, ascend);
 #endif
 #ifdef ENABLE_METAX_GPU
     case DevMetaxGpu: {
@@ -132,7 +132,7 @@ __C infiniStatus_t infiniopSwiGLU(
     }
 #endif
 #ifdef ENABLE_ASCEND_API
-        CALCULATE(INFINI_DEVICE_ASCEND, ascend)
+        CALCULATE(INFINI_DEVICE_ASCEND, ascend);
 #endif
 #ifdef ENABLE_METAX_GPU
     case DevMetaxGpu:
@@ -172,7 +172,7 @@ infiniopDestroySwiGLUDescriptor(infiniopSwiGLUDescriptor_t desc) {
     }
 #endif
 #ifdef ENABLE_ASCEND_API
-        DESTROY(INFINI_DEVICE_ASCEND, ascend)
+        DELETE(INFINI_DEVICE_ASCEND, ascend)
 #endif
 #ifdef ENABLE_METAX_GPU
     case DevMetaxGpu:
