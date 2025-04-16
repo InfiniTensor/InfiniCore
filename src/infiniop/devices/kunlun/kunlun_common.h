@@ -15,17 +15,6 @@ inline __device__ float lowerBitMask(int i) {
     return (1 << (i + 1)) - 1;
 }
 
-// Atomic add for reduce
-inline __device__ void atomicAddF32(__shared_ptr__ float *ptr, float value) {
-    int success = 1;
-    while (success) {
-        // SM2REG read 32bit data to register
-        float a = SM2REG_atomic(ptr);
-        a = a + value;
-        success = REG2SM_atomic(ptr, a);
-    }
-}
+#define INF 1e30f
 
-// TODO: atomicAddF16
-// TODO: atomicAddI8
 #endif
