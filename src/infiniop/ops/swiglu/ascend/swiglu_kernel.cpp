@@ -26,7 +26,6 @@ private:
     GlobalTensor<T> cGm, aGm, bGm;
     TQue<QuePosition::VECIN, BUFFER_NUM> inQueueA, inQueueB;
     TQue<QuePosition::VECOUT, BUFFER_NUM> outQueueC;
-    // TBuf<TPosition::VECCALC> calcBufs;
 
     TPipe pipe;
     uint32_t _data_size = 0;
@@ -53,11 +52,10 @@ __aicore__ inline void SwigluKernel<T>::Init(GM_ADDR c, GM_ADDR a, GM_ADDR b, in
     strideSeqC = stride_seq_c;
 
     _block_idx = GetBlockIdx();
-    AscendC::printf("batch = %d, seq_len = %d, hidden_size = %d, strideBatchA = %d, strideBatchB = %d, strideBatchC = %d, strideSeqA = %d, strideSeqB = %d, strideSeqC = %d\n",
-                    batch, seq_len, hidden_size, strideBatchA, strideBatchB, strideBatchC, strideSeqA, strideSeqB, strideSeqC);
+    // AscendC::printf("batch = %d, seq_len = %d, hidden_size = %d, strideBatchA = %d, strideBatchB = %d, strideBatchC = %d, strideSeqA = %d, strideSeqB = %d, strideSeqC = %d\n",
+    //                 batch, seq_len, hidden_size, strideBatchA, strideBatchB, strideBatchC, strideSeqA, strideSeqB, strideSeqC);
     _tile_len = _block_idx < (hidden_size % BLOCK_NUM) ? (hidden_size / BLOCK_NUM) + 1 : (hidden_size / BLOCK_NUM);
     _copy_len = (_tile_len * sizeof(T)) % BYTE_ALIGN == 0 ? _tile_len : (_tile_len * sizeof(T) + (BYTE_ALIGN - _tile_len * sizeof(T) % BYTE_ALIGN)) / sizeof(T);
-    // AscendC::printf("_tile_len = %d, _copy_len = %d\n", _tile_len, _copy_len);
 
     // Set global tensor
     aGm.SetGlobalBuffer((__gm__ T *)a);
@@ -68,7 +66,6 @@ __aicore__ inline void SwigluKernel<T>::Init(GM_ADDR c, GM_ADDR a, GM_ADDR b, in
     pipe.InitBuffer(inQueueA, BUFFER_NUM, _copy_len * sizeof(T));
     pipe.InitBuffer(inQueueB, BUFFER_NUM, _copy_len * sizeof(T));
     pipe.InitBuffer(outQueueC, BUFFER_NUM, _copy_len * sizeof(T));
-    // pipe.InitBuffer(calcBufs, batch * seq_len * hidden_size * (sizeof(float) / sizeof(uint8_t)) * 3);
 }
 
 template <typename T>
@@ -85,8 +82,6 @@ __aicore__ inline void SwigluKernel<T>::CopyIn(int32_t i) {
     // Copy process_th tile from global tensor to local tensor
     DataCopy(aLocal, aGm[idxa], _copy_len);
     DataCopy(bLocal, bGm[idxb], _copy_len);
-    // DumpTensor(aLocal, 1, _copy_len);
-    // DumpTensor(bLocal, 2, _copy_len);
 
     // Enque input tensor to VECIN queue
     inQueueA.EnQue(aLocal);
@@ -100,11 +95,7 @@ __aicore__ inline void SwigluKernel<T>::Compute(int32_t i) {
     LocalTensor<T> bLocal = inQueueB.DeQue<T>();
     LocalTensor<T> cLocal = outQueueC.AllocTensor<T>();
     // Call SwiGLU ascend api
-    // LocalTensor<uint8_t> tmpLocal;
-    // tmpLocal = calcBufs.Get<uint8_t>();
-    // SwiGLU<T, false>(cLocal, aLocal, bLocal, _beta_value, tmpLocal, _copy_len);
     SwiGLU<T, false>(cLocal, aLocal, bLocal, _beta_value, _copy_len);
-    // DumpTensor(cLocal, 3, _copy_len);
     // Enque result and free input
     outQueueC.EnQue<T>(cLocal);
     inQueueA.FreeTensor(aLocal);
@@ -119,15 +110,12 @@ __aicore__ inline void SwigluKernel<T>::CopyOut(int32_t i) {
     auto seqIdx = batch == 1 ? i : i % seq_len;
     int32_t idxc = batchIdx * strideBatchC + seqIdx * strideSeqC + _block_idx * _tile_len;
     // Copy progress_th tile from local tensor to global tensor
-    // Use Gather mask if _tile_len * sizeof(T) % 32 != 0
-    // DataCopy(cGm[idxc], cLocal, _tile_len);
     if (_tile_len * sizeof(T) % BYTE_ALIGN != 0) {
         DataCopyExtParams dcep = {1, static_cast<uint32_t>(_tile_len * sizeof(T)), 0, 0, 0};
         DataCopyPad(cGm[idxc], cLocal, dcep);
     } else {
         DataCopy(cGm[idxc], cLocal, _tile_len);
     }
-    // DumpTensor(cGm[idxc], 1, _tile_len);
     // Free output Local tensor
     outQueueC.FreeTensor(cLocal);
 }

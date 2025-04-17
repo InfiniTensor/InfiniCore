@@ -45,8 +45,8 @@ class Inplace(Enum):
 # Inplace options applied for each test case in _TEST_CASES_
 _INPLACE = [
     Inplace.OUT_OF_PLACE,
-    # Inplace.INPLACE_A,
-    # Inplace.INPLACE_B,
+    Inplace.INPLACE_A,
+    Inplace.INPLACE_B,
 ]
 
 # Form the test cases by appending each element of _INPLACE to each tuple in _TEST_CASES_
@@ -57,9 +57,7 @@ _TEST_CASES = [
 ]
 
 # Data types used for testing
-# _TENSOR_DTYPES = [torch.float16, torch.float32]
-# _TENSOR_DTYPES = [torch.float16]
-_TENSOR_DTYPES = [torch.float32]
+_TENSOR_DTYPES = [torch.float16, torch.float32]
 
 # Tolerance map for different data types
 _TOLERANCE_MAP = {
@@ -132,7 +130,6 @@ def test(
         f"dtype:{dtype} inplace:{inplace}"
     )
 
-    torch.manual_seed(42) 
     a = torch.rand(shape, dtype=dtype).to(torch_device)
     b = torch.rand(shape, dtype=dtype).to(torch_device)
     c = torch.rand(shape, dtype=dtype).to(torch_device)

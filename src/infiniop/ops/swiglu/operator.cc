@@ -7,6 +7,7 @@
 #endif
 #ifdef ENABLE_CUDA_API
 #include "cuda/swiglu_cuda.cuh"
+#endif
 #ifdef ENABLE_ASCEND_API
 #include "ascend/swiglu_aclnn.h"
 #endif
