@@ -28,6 +28,9 @@ public:
     const ptrdiff_t *src_strides() const;
 
     void launch(void *dst, const void *src) const;
+
+    // 拆分 unit 到更小的规模以利于并行
+    std::optional<RearrangeMeta> distribute_unit(const std::vector<size_t> &candidates) const;
 };
 
 void rearrange(
