@@ -12,6 +12,7 @@ os.chdir(PROJECT_DIR)
 def run_tests(args):
     failed = []
     for test in [
+        "add.py",
         "gemm.py",
         "rms_norm.py",
         "causal_softmax.py",
