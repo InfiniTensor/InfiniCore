@@ -5,13 +5,14 @@
 #include "../../operator.h"
 #include "../../tensor.h"
 #include <algorithm>
+#include <utility> 
 
 namespace op::gemm {
 
 class BlasMatrix {
+public: 
     BlasMatrix() = default;
 
-public:
     size_t ndim;
     size_t batch;
     ptrdiff_t stride;
@@ -70,9 +71,9 @@ enum class MatrixLayout : char {
 };
 
 class MatmulInfo {
+public: 
     MatmulInfo() = default;
 
-public:
     BlasMatrix a_matrix;
     BlasMatrix b_matrix;
     BlasMatrix c_matrix;
@@ -80,53 +81,70 @@ public:
     size_t m, n, k, batch;
     bool is_transed;
 
+private: 
+    MatmulInfo(BlasMatrix a, BlasMatrix b, BlasMatrix c, size_t m_val, size_t n_val, size_t k_val, size_t batch_val, bool transed)
+        : a_matrix(std::move(a)),
+          b_matrix(std::move(b)),
+          c_matrix(std::move(c)),
+          m(m_val),
+          n(n_val),
+          k(k_val),
+          batch(batch_val),
+          is_transed(transed) {}
+
+public:
     static utils::Result<MatmulInfo> create(
         infiniopTensorDescriptor_t c_desc,
         infiniopTensorDescriptor_t a_desc,
         infiniopTensorDescriptor_t b_desc,
         MatrixLayout layout) {
 
-        auto a_matrix = BlasMatrix::create(a_desc);
-        CHECK_RESULT(a_matrix);
+        auto a_matrix_res = BlasMatrix::create(a_desc);
+        CHECK_RESULT(a_matrix_res);
+        BlasMatrix a_matrix = a_matrix_res.take(); 
 
-        auto b_matrix = BlasMatrix::create(b_desc);
-        CHECK_RESULT(b_matrix);
+        auto b_matrix_res = BlasMatrix::create(b_desc);
+        CHECK_RESULT(b_matrix_res);
+        BlasMatrix b_matrix = b_matrix_res.take(); 
 
-        auto c_matrix = BlasMatrix::create(c_desc);
-        CHECK_RESULT(c_matrix);
+        auto c_matrix_res = BlasMatrix::create(c_desc);
+        CHECK_RESULT(c_matrix_res);
+        BlasMatrix c_matrix = c_matrix_res.take(); 
 
-        if (c_matrix->rows != a_matrix->rows || c_matrix->cols != b_matrix->cols || a_matrix->cols != b_matrix->rows) {
-            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+     
+        if (c_matrix.rows != a_matrix.rows || c_matrix.cols != b_matrix.cols || a_matrix.cols != b_matrix.rows) {
+             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
 
-        auto batch = c_matrix->batch;
-        if (!a_matrix->match_batch(batch) || !b_matrix->match_batch(batch)) {
-            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        auto batch_val = c_matrix.batch; 
+        if (!a_matrix.match_batch(batch_val) || !b_matrix.match_batch(batch_val)) {
+             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
 
-        auto is_transed = false;
-        if ((layout == MatrixLayout::COL_MAJOR && c_matrix->col_stride == 1)
-            || (layout == MatrixLayout::ROW_MAJOR && c_matrix->row_stride == 1)) {
-            c_matrix->transpose();
-            b_matrix->transpose();
-            a_matrix->transpose();
-            std::swap(a_matrix, b_matrix);
-            is_transed = true;
+        auto is_transed_val = false;
+        if ((layout == MatrixLayout::COL_MAJOR && c_matrix.col_stride == 1)
+            || (layout == MatrixLayout::ROW_MAJOR && c_matrix.row_stride == 1)) {
+            c_matrix.transpose();
+            b_matrix.transpose();
+            a_matrix.transpose();
+            std::swap(a_matrix, b_matrix); 
+            is_transed_val = true;
         }
 
-        auto m = c_matrix->rows;
-        auto n = c_matrix->cols;
-        auto k = a_matrix->cols;
+        auto m_val = c_matrix.rows; 
+        auto n_val = c_matrix.cols; 
+        auto k_val = a_matrix.cols; 
+
 
         return utils::Result<MatmulInfo>(MatmulInfo{
-            a_matrix.take(),
-            b_matrix.take(),
-            c_matrix.take(),
-            m,
-            n,
-            k,
-            batch,
-            is_transed});
+            std::move(a_matrix), 
+            std::move(b_matrix),
+            std::move(c_matrix),
+            m_val,
+            n_val,
+            k_val,
+            batch_val,
+            is_transed_val});
     }
 };
 

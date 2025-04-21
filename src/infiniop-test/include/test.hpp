@@ -99,7 +99,7 @@ public:
                                                                               \
         std::string toString() const override;                                \
                                                                               \
-        ~Test();                                                              \
+        virtual ~Test();                                                              \
                                                                               \
     private:                                                                  \
         struct Attributes;                                                    \

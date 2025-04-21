@@ -51,36 +51,51 @@ class InfiniLib:
             raise AttributeError(f"Attribute {name} not found in library")
 
 
-# Open operators library
 def open_lib():
-    def find_library_in_ld_path(subdir, library_name):
-        ld_library_path = os.path.join(INFINI_ROOT, subdir)
-        paths = ld_library_path.split(os.pathsep)
-        for path in paths:
-            full_path = os.path.join(path, library_name)
-            if os.path.isfile(full_path):
-                return full_path
+  
+    libop_path = None
+    librt_path = None
+
+    def find_library_in_infini_root(subdir, library_name):
+        full_path = os.path.join(INFINI_ROOT, subdir, library_name)
+        print(f"[Debug] Checking for library at: {full_path}") 
+        if os.path.isfile(full_path):
+            return full_path
         return None
+    # --- End Helper ---
 
     system_name = platform.system()
-    # Load the library
+    print(f"[Debug] Detected system: {system_name}")
+    print(f"[Debug] Using INFINI_ROOT: {INFINI_ROOT}") 
+
+
     if system_name == "Windows":
-        libop_path = find_library_in_ld_path("bin", "infiniop.dll")
-        librt_path = find_library_in_ld_path("bin", "infinirt.dll")
+        libop_path = find_library_in_infini_root("bin", "infiniop.dll")
+        librt_path = find_library_in_infini_root("bin", "infinirt.dll")
     elif system_name == "Linux":
-        libop_path = find_library_in_ld_path("lib", "libinfiniop.so")
-        librt_path = find_library_in_ld_path("lib", "libinfinirt.so")
+        libop_path = find_library_in_infini_root("lib", "libinfiniop.so")
+        librt_path = find_library_in_infini_root("lib", "libinfinirt.so")
+    elif system_name == "Darwin":  # <--- Added macOS ("Darwin") case
+        libop_path = find_library_in_infini_root("lib", "libinfiniop.dylib")
+        librt_path = find_library_in_infini_root("lib", "libinfinirt.dylib")
+    else:
+        raise RuntimeError(f"Unsupported operating system: {system_name}")
 
     assert (
         libop_path is not None
-    ), f"Cannot find infiniop.dll or libinfiniop.so. Check if INFINI_ROOT is set correctly."
+    ), f"Cannot find the InfiniOP library ({'infiniop.dll' if system_name == 'Windows' else 'libinfiniop.so' if system_name == 'Linux' else 'libinfiniop.dylib'}). Searched in {os.path.join(INFINI_ROOT, 'bin' if system_name == 'Windows' else 'lib')}. Check if INFINI_ROOT is set correctly and the library exists."
     assert (
         librt_path is not None
-    ), f"Cannot find infinirt.dll or libinfinirt.so. Check if INFINI_ROOT is set correctly."
+    ), f"Cannot find the InfiniRT library ({'infinirt.dll' if system_name == 'Windows' else 'libinfinirt.so' if system_name == 'Linux' else 'libinfinirt.dylib'}). Searched in {os.path.join(INFINI_ROOT, 'bin' if system_name == 'Windows' else 'lib')}. Check if INFINI_ROOT is set correctly and the library exists."
+
+    print(f"[Info] Loading InfiniRT from: {librt_path}")
+    print(f"[Info] Loading InfiniOP from: {libop_path}") 
 
     librt = ctypes.CDLL(librt_path)
     libop = ctypes.CDLL(libop_path)
     lib = InfiniLib(librt, libop)
+
+
     lib.infiniopCreateTensorDescriptor.argtypes = [
         POINTER(infiniopTensorDescriptor_t),
         c_uint64,
