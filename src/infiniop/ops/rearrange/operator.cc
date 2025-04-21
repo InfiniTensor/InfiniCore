@@ -5,6 +5,9 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/rearrange_cpu.h"
 #endif
+#ifdef ENABLE_ASCEND_API
+#include "ascend/rearrange_ascend.h"
+#endif
 
 __C infiniStatus_t infiniopCreateRearrangeDescriptor(
     infiniopHandle_t handle,
@@ -24,6 +27,9 @@ __C infiniStatus_t infiniopCreateRearrangeDescriptor(
 
 #ifdef ENABLE_CPU_API
         CREATE(INFINI_DEVICE_CPU, cpu);
+#endif
+#ifdef ENABLE_ASCEND_API
+        CREATE(INFINI_DEVICE_ASCEND, ascend);
 #endif
 
     default:
@@ -49,6 +55,9 @@ __C infiniStatus_t infiniopRearrange(
 #ifdef ENABLE_CPU_API
         CALCULATE(INFINI_DEVICE_CPU, cpu);
 #endif
+#ifdef ENABLE_ASCEND_API
+        CALCULATE(INFINI_DEVICE_ASCEND, ascend);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -69,6 +78,9 @@ __C infiniStatus_t infiniopDestroyRearrangeDescriptor(
 
 #ifdef ENABLE_CPU_API
         DELETE(INFINI_DEVICE_CPU, cpu);
+#endif
+#ifdef ENABLE_ASCEND_API
+        DELETE(INFINI_DEVICE_ASCEND, ascend);
 #endif
 
     default:
