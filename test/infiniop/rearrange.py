@@ -22,14 +22,14 @@ from libinfiniop import (
 # ==============================================================================
 # These are not meant to be imported from other modules
 _TEST_CASES = [
-    # ((src_shape, src_stride), (dst_shape, dst_stride))
-    (((2, 4, 32), None), ((2, 4, 32), (256, 64, 1))),
-    (((32, 6, 64), (64, 2560, 1)), ((32, 6, 64), None)),
-    (((4, 6, 64), (64, 2560, 1)), ((4, 6, 64), (131072, 64, 1))),
-    (((1, 32, 64), (2048, 64, 1)), ((1, 32, 64), (2048, 64, 1))),
-    (((32, 1, 64), (64, 2560, 1)), ((32, 1, 64), (64, 64, 1))),
-    (((4, 1, 64), (64, 2560, 1)), ((4, 1, 64), (64, 11264, 1))),
-    (((64,), (1,)), ((64,), (1,))),
+    # (src_shape, src_stride, dst_shape, dst_stride)
+    ((2, 4, 32), None, (2, 4, 32), (256, 64, 1)),
+    ((32, 6, 64), (64, 2560, 1), (32, 6, 64), None),
+    ((4, 6, 64), (64, 2560, 1), (4, 6, 64), (131072, 64, 1)),
+    ((1, 32, 64), (2048, 64, 1), (1, 32, 64), (2048, 64, 1)),
+    ((32, 1, 64), (64, 2560, 1), (32, 1, 64), (64, 64, 1)),
+    ((4, 1, 64), (64, 2560, 1), (4, 1, 64), (64, 11264, 1)),
+    ((64,), (1,), (64,), (1,)),
 ]
 
 # Data types used for testing
@@ -86,7 +86,7 @@ def test(
 
     # Invalidate the shape and strides in the descriptor to prevent them from being directly used by the kernel
     for tensor in [x_tensor, y_tensor]:
-        tensor.descriptor.contents.invalidate()
+        tensor.destroyDesc(lib)
 
     def lib_rearrange():
         check_error(
