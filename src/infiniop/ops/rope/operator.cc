@@ -17,6 +17,9 @@
 #ifdef ENABLE_METAX_API
 #include "metax/rope_metax.h"
 #endif
+#ifdef ENABLE_KUNLUN_API
+#include "kunlun/rope_kunlun.h"
+#endif
 
 __C infiniStatus_t infiniopCreateRoPEDescriptor(
     infiniopHandle_t handle,
@@ -54,6 +57,9 @@ __C infiniStatus_t infiniopCreateRoPEDescriptor(
 #ifdef ENABLE_ASCEND_API
         CREATE(INFINI_DEVICE_ASCEND, ascend);
 #endif
+#ifdef ENABLE_KUNLUN_API
+        CREATE(INFINI_DEVICE_KUNLUN, kunlun);
+#endif
 #ifdef ENABLE_CAMBRICON_API
         CREATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
@@ -90,6 +96,9 @@ __C infiniStatus_t infiniopGetRoPEWorkspaceSize(infiniopRoPEDescriptor_t desc,
 #endif
 #ifdef ENABLE_METAX_API
         GET(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_KUNLUN_API
+        GET(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
 #ifdef ENABLE_CAMBRICON_API
         GET(INFINI_DEVICE_CAMBRICON, bang);
@@ -138,6 +147,9 @@ __C infiniStatus_t infiniopRoPE(
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
+#ifdef ENABLE_KUNLUN_API
+        CALCULATE(INFINI_DEVICE_KUNLUN, kunlun);
+#endif
 #ifdef ENABLE_CAMBRICON_API
         CALCULATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
@@ -177,6 +189,9 @@ infiniopDestroyRoPEDescriptor(infiniopRoPEDescriptor_t desc) {
 #endif
 #ifdef ENABLE_METAX_API
         DELETE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_KUNLUN_API
+        DELETE(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
 #ifdef ENABLE_CAMBRICON_API
         DELETE(INFINI_DEVICE_CAMBRICON, bang);
