@@ -15,20 +15,26 @@ infiniStatus_t Descriptor::create(
     auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
     auto dtype = y_desc->dtype();
     auto ndim = y_desc->ndim();
-    auto shape = y_desc->shape().data();
+
+    auto y_shape_vec = y_desc->shape();
+
 
     CHECK_API_OR(x_desc->dtype(), dtype, return INFINI_STATUS_BAD_TENSOR_DTYPE);
     CHECK_API_OR(x_desc->ndim(), ndim, return INFINI_STATUS_BAD_TENSOR_SHAPE);
 
+    auto x_shape_vec = x_desc->shape();
     for (size_t i = 0; i < ndim; ++i) {
-        CHECK_API_OR(x_desc->shape()[i], shape[i], return INFINI_STATUS_BAD_TENSOR_SHAPE);
+        CHECK_API_OR(x_shape_vec.data()[i], y_shape_vec.data()[i], return INFINI_STATUS_BAD_TENSOR_SHAPE);
     }
 
-    auto dst_strides = y_desc->strides().data();
-    auto src_strides = x_desc->strides().data();
-    auto element_size = infiniSizeOf(dtype);
+    auto y_strides_vec = y_desc->strides();
 
-    auto result = utils::RearrangeMeta::create(shape, dst_strides, src_strides, ndim, element_size);
+
+    auto x_strides_vec = x_desc->strides();
+  
+
+    auto element_size = infiniSizeOf(dtype);
+    auto result = utils::RearrangeMeta::create(y_shape_vec.data(), y_strides_vec.data(), x_strides_vec.data(), ndim, element_size);
     CHECK_RESULT(result);
 
     *desc_ptr = new Descriptor(

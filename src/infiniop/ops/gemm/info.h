@@ -70,7 +70,16 @@ enum class MatrixLayout : char {
 };
 
 class MatmulInfo {
-    MatmulInfo() = default;
+private:
+    MatmulInfo(BlasMatrix a, BlasMatrix b, BlasMatrix c, size_t m_val, size_t n_val, size_t k_val, size_t batch_val, bool transed)
+        : a_matrix(std::move(a)),
+          b_matrix(std::move(b)),
+          c_matrix(std::move(c)),
+          m(m_val),
+          n(n_val),
+          k(k_val),
+          batch(batch_val),
+          is_transed(transed) {}
 
 public:
     BlasMatrix a_matrix;
