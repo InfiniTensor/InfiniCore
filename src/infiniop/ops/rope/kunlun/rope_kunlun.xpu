@@ -76,7 +76,7 @@ void RoPE(void *destination, const void *source,
                 kunlun_ptrdiff_t x_stride_seqlen, kunlun_ptrdiff_t x_stride_nhead,
                 kunlun_ptrdiff_t y_stride_seqlen, kunlun_ptrdiff_t y_stride_nhead,
                 XPUStream stream){
-    RoPEKernel<T, Tindex><<<8, 64, stream>>>((T *)destination, (T *)source, 
+    RoPEKernel<T, Tindex, Tangle><<<8, 64, stream>>>((T *)destination, (T *)source, 
                 (Tindex *)pos_ids, (Tangle *)sin_table, (Tangle *)cos_table, 
                 seqlen,  nhead, dhead,
                 x_stride_seqlen, x_stride_nhead,
