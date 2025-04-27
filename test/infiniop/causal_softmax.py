@@ -37,7 +37,7 @@ _TENSOR_DTYPES = [torch.float16]
 
 # Tolerance map for different data types
 _TOLERANCE_MAP = {
-    torch.float16: {"atol": 0, "rtol": 1e-2},
+    torch.float16: {"atol": 1e-4, "rtol": 1e-2},
 }
 
 

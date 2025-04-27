@@ -1,0 +1,161 @@
+#ifndef __CAUSAL_SOFTMAX_KERNEL_XPU__
+#define __CAUSAL_SOFTMAX_KERNEL_XPU__
+
+#include "../../../devices/kunlun/kunlun_common.h"
+#include "../../../reduce/kunlun/reduce_kunlun.h"
+
+static __device__ void elementwiseMulScaler(__local__ float *x, __local__ float *y, float s, int len) {
+    __local__ float acc_buf[16];
+    int remain = len % 16;
+    int offset_last = len - remain;
+    // y[i] - s for remainer
+    for (int i = offset_last; i < len; i++) {
+        *(y + i) = *(x + i) * s;
+    }
+    mfence();
+    float32x16_t v_x;
+    // for every 16 float data
+    for (int i = 0; i < offset_last; i += 16) {
+        v_x = vload_lm_float32x16_mz(x + i);
+        v_x = svmul_float32x16(s, v_x);
+        vstore_lm_float32x16((y + i), v_x);
+        mfence();
+    }
+}
+
+// softmax global function for tensor[m, n]
+__global__ void causalSoftmaxKernelF32(float *y, int y_stride_m,
+                                       const float *x, int x_stride_m,
+                                       float *workspace,
+                                       int m, int n) {
+    int ncores = core_num();
+    int cid = core_id();
+    if (cid >= ncores) {
+        return;
+    }
+    // Divide m rows into all clusters equally
+    // if m % cluster_num() != 0, cluster_id < m % cluster_num() do 1 row more
+    // [m_start, m_end) is the range of m dim in current cluster
+    int m_start = m / cluster_num() * cluster_id() + min(m % cluster_num(), cluster_id());
+    int m_end = m_start + (m / cluster_num()) + (cluster_id() < (m % cluster_num()));
+    // max_nn is the max number of elements calculated on one core
+    const int max_nn = 512;
+    // max_mm is the max number of rows calculated on one cluster
+    const int max_mm = 512;
+
+    __local__ float x_local[max_nn];
+    __local__ float y_local[max_nn];
+    __shared__ float sm_max[max_mm];
+
+    while (m_start < m_end) {
+        for (int i = cid; i < m_end - m_start; i += ncores) {
+            sm_max[i] = -INF;
+        }
+        mfence();
+        sync_cluster();
+
+        int mm = min(max_mm, m_end - m_start);
+        int total_block = mm * roundup_div(n, max_nn);
+
+        // Reduce max for every line
+        for (int blk = cid; blk < total_block; blk += ncores) {
+            int m_ = blk % mm + m_start;
+            int n_start = (blk / mm) * max_nn;
+            int nn = min(max_nn, n - n_start);
+
+            auto x_ptr = x + m_ * x_stride_m + n_start;
+            GM2LM(x_ptr, x_local, nn * sizeof(float));
+
+            float mmax = op::common_kunlun::reduce_op::maxF32(x_local, nn);
+            op::common_kunlun::reduce_op::atomicMaxF32(&sm_max[m_ - m_start], mmax);
+        }
+        mfence();
+        sync_cluster();
+
+        // [Elementwise] Subtract max value from each element and apply causal mask
+        for (int blk = cid; blk < total_block; blk += ncores) {
+            int m_ = blk % mm + m_start;
+            int n_start = (blk / mm) * max_nn;
+            int nn = min(max_nn, n - n_start);
+
+            auto x_ptr = x + m_ * x_stride_m + n_start;
+            GM2LM(x_ptr, x_local, nn * sizeof(float));
+
+            auto max_ = SM2REG_atomic(sm_max + m_ - m_start);
+            for (int j = 0; j < nn; j++) {
+                //        m ↓ |<-     n       ->|
+                //          0 | * * * ... *     |
+                //          1 | * * * ... * *   |
+                //          2 | * * * ... * * * |
+                //  height: 3  col_id->
+                if (n_start + j <= n - m + m_) {
+                    y_local[j] = exp(x_local[j] - max_);
+                } else {
+                    y_local[j] = 0.f;
+                }
+                mfence();
+            }
+
+            // write to gm
+            auto workspace_ptr = workspace + m_ * n + n_start;
+            LM2GM(y_local, workspace_ptr, nn * sizeof(float));
+        }
+        mfence();
+        sync_cluster();
+
+        for (int i = cid; i < m_end - m_start; i += ncores) {
+            sm_max[i] = 0.0f;
+        }
+        mfence();
+        sync_cluster();
+
+        // Reduce sum for each line
+        for (int blk = cid; blk < total_block; blk += ncores) {
+            int m_ = blk % mm + m_start;
+            int n_start = (blk / mm) * max_nn;
+            int nn = min(max_nn, n - n_start);
+
+            auto workspace_ptr = workspace + m_ * n + n_start;
+            GM2LM(workspace_ptr, x_local, nn * sizeof(float));
+
+            float ss = op::common_kunlun::reduce_op::sumF32(x_local, nn);
+            op::common_kunlun::reduce_op::atomicAddF32(&sm_max[m_ - m_start], ss);
+        }
+        mfence();
+        sync_cluster();
+
+        // Divide sum for every element
+        for (int blk = cid; blk < total_block; blk += ncores) {
+            int m_ = blk % mm + m_start;
+            int n_start = (blk / mm) * max_nn;
+            int nn = min(max_nn, n - n_start);
+
+            auto workspace_ptr = workspace + m_ * n + n_start;
+            GM2LM(workspace_ptr, y_local, nn * sizeof(float));
+
+            float ss = SM2REG_atomic(sm_max + m_ - m_start);
+            float rss = 1.0f / ss;
+            elementwiseMulScaler(y_local, x_local, rss, nn);
+
+            auto y_ptr = y + m_ * y_stride_m + n_start;
+            LM2GM(x_local, y_ptr, nn * sizeof(float));
+        }
+
+        mfence();
+        sync_cluster();
+        m_start += max_mm;
+    }
+}
+
+void causalSoftmaxF32(void *y, const void *x, void *workspace, int batch, int seq_len, int total_seq_len,
+                      int y_stride_b, int y_stride_i, int x_stride_b, int x_stride_i, XPUStream stream) {
+    for (int b = 0; b < batch; b++) {
+        auto bx = (float *)x + b * x_stride_b;
+        auto by = (float *)y + b * y_stride_b;
+        auto workspace_ = (float *)workspace;
+        causalSoftmaxKernelF32<<<8, 64, stream>>>(by, y_stride_i, bx, x_stride_i, workspace_, seq_len, total_seq_len);
+        xpu_wait(stream);
+    }
+}
+
+#endif
