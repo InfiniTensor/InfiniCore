@@ -2,6 +2,7 @@
 #define __INFINIOP_KUNLUN_COMMON_H__
 
 // This header file will only be include by .xpu file
+#include "kunlun_type.h"
 #include "xpu/kernel/xtdk.h"
 #include "xpu/kernel/xtdk_math.h"
 #include "xpu/kernel/xtdk_simd.h"
