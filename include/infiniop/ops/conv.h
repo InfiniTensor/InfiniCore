@@ -17,7 +17,7 @@ __C __export infiniStatus_t infiniopCreateConvDescriptor(infiniopHandle_t handle
 
 __C __export infiniStatus_t infiniopGetConvWorkspaceSize(infiniopConvDescriptor_t desc, size_t *size);
 
-__C __export infiniStatus_t infiniopConv(infiniopConvDescriptor_t desc, void *workspace, size_t workspace_size, void *y, void const *x, void const *w, void *stream);
+__C __export infiniStatus_t infiniopConv(infiniopConvDescriptor_t desc, void *workspace, size_t workspace_size, void *y, const void *x, const void *w, void *stream);
 
 __C __export infiniStatus_t infiniopDestroyConvDescriptor(infiniopConvDescriptor_t desc);
 
