@@ -10,6 +10,7 @@
 #include "infiniop/ops/expand.h"
 #include "infiniop/ops/gemm.h"
 #include "infiniop/ops/global_avg_pool.h"
+#include "infiniop/ops/matmul_gptq.h"
 #include "infiniop/ops/max_pool.h"
 #include "infiniop/ops/mlp.h"
 #include "infiniop/ops/mul.h"
