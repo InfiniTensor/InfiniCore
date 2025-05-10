@@ -110,3 +110,4 @@ __C infiniStatus_t infiniopDestroyRandomSampleDescriptor(
 
 #undef DELETE
 }
+

@@ -3,9 +3,21 @@ cmake_minimum_required(VERSION 3.16.0)
 # project information
 project(Ascend_C)
 set(SOC_VERSION "Ascend910B3" CACHE STRING "system on chip type")
-set(ASCEND_CANN_PACKAGE_PATH $ENV{ASCEND_HOME} CACHE PATH "ASCEND CANN package installation directory")
+if(DEFINED ENV{USER} AND "$ENV{ASCEND_HOME}" STREQUAL "root")
+    set(DEFAULT_ASCEND_CANN_PACKAGE_PATH "/usr/local/Ascend/ascend-toolkit/latest" CACHE PATH "ASCEND CANN package default installation directory for root user")
+else()
+    set(DEFAULT_ASCEND_CANN_PACKAGE_PATH "$ENV{HOME}/Ascend/ascend-toolkit/latest" CACHE PATH "ASCEND CANN package default installation directory for other user")
+endif()
+
+if(DEFINED ASCEND_CANN_PACKAGE_PATH)
+elseif(DEFINED ENV{ASCEND_HOME_PATH})
+    set(ASCEND_CANN_PACKAGE_PATH "$ENV{ASCEND_HOME_PATH}" CACHE PATH "ASCEND CANN package installation directory" FORCE)
+else()
+    set(ASCEND_CANN_PACKAGE_PATH "${DEFAULT_ASCEND_CANN_PACKAGE_PATH}" CACHE PATH "ASCEND CANN package installation directory")
+endif()
+
 set(RUN_MODE "npu" CACHE STRING "run mode: npu")
-set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build type Release/Debug (default Debug)" FORCE)
+set(CMAKE_BUILD_TYPE "Debug" CACHE STRING "Build type Release/Debug (default Debug)" FORCE)
 set(CMAKE_INSTALL_PREFIX "${CMAKE_CURRENT_LIST_DIR}/out" CACHE STRING "path for install()" FORCE)
 
 if(EXISTS ${ASCEND_CANN_PACKAGE_PATH}/tools/tikcpp/ascendc_kernel_cmake)
@@ -20,9 +32,11 @@ endif()
 
 include(${ASCENDC_CMAKE_DIR}/ascendc.cmake)
 
+
 ascendc_library(ascend_kernels STATIC
-    ../../ops/swiglu/ascend/swiglu_kernel.cpp
-    ../../ops/rotary_embedding/ascend/rotary_embedding_kernel.cpp
-    ../../ops/random_sample/ascend/random_sample_kernel.cpp
+# ../../ops/swiglu/ascend/swiglu_kernel.cpp
+# ../../ops/rotary_embedding/ascend/rotary_embedding_kernel.cpp
+../../ops/random_sample/ascend/random_sample_kernel.cpp
 )
 
+target_include_directories(ascend_kernels PRIVATE ../../../../include)
