@@ -27,10 +27,10 @@ infiniStatus_t Descriptor::create(
     if (dtype != INFINI_DTYPE_F16 && dtype != INFINI_DTYPE_F32) {
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
-    
+
     auto result = ConvInfo::create(handle_, y_desc, x_desc, w_desc,
                                    pads, strides, dilations, n);
-    
+
     CHECK_RESULT(result);
 
     *desc_ptr = new Descriptor(
@@ -47,66 +47,93 @@ infiniStatus_t Descriptor::calculate(
     const void *x,
     const void *w,
     void *stream) const {
-        int requestedAlgoCount = 1;
-        CHECK_STATUS(_opaque->internal->useCudnn(
-            (cudaStream_t)stream, [&](cudnnHandle_t handle) {
-                CHECK_CUDNN(cudnnGetConvolutionForwardAlgorithmMaxCount(handle, &requestedAlgoCount));
-                return INFINI_STATUS_SUCCESS;
+    int maxAlgoCount = 0;
+    CHECK_STATUS(_opaque->internal->useCudnn(
+        (cudaStream_t)stream, [&](cudnnHandle_t handle) {
+            if (!handle) {
+                return INFINI_STATUS_BAD_PARAM;
             }
-        ));
-        int algoCounts = 0;
-        int chosenAlgoIndex = 0;
-        bool chosen = false;
-        size_t workspace_size = 0;
-        std::vector<cudnnConvolutionFwdAlgoPerf_t> perf_results_(requestedAlgoCount);
-        auto perf_results = perf_results_.data();
-        CHECK_STATUS(_opaque->internal->useCudnn(
-            (cudaStream_t)stream, [&](cudnnHandle_t handle) {
-                CHECK_CUDNN(cudnnFindConvolutionForwardAlgorithm(handle,
-                    _info.handler->x_desc,
-                    _info.handler->w_desc,
-                    _info.handler->conv_desc,
-                    _info.handler->y_desc,
-                    requestedAlgoCount,
-                    &algoCounts,
-                    perf_results));
-                return INFINI_STATUS_SUCCESS;
+            CHECK_CUDNN(cudnnGetConvolutionForwardAlgorithmMaxCount(
+                handle, &maxAlgoCount));
+            return INFINI_STATUS_SUCCESS;
+        }));
+    if (maxAlgoCount <= 0) {
+        maxAlgoCount = 8;
+    }
+    std::vector<cudnnConvolutionFwdAlgoPerf_t> perf_results(maxAlgoCount);
+    int algoCounts = 0;
+    CHECK_STATUS(_opaque->internal->useCudnn(
+        (cudaStream_t)stream, [&](cudnnHandle_t handle) {
+            CHECK_CUDNN(cudnnFindConvolutionForwardAlgorithm(
+                handle,
+                _info.handler->x_desc,
+                _info.handler->w_desc,
+                _info.handler->conv_desc,
+                _info.handler->y_desc,
+                maxAlgoCount,
+                &algoCounts,
+                perf_results.data()));
+            return INFINI_STATUS_SUCCESS;
+        }));
+    cudnnConvolutionFwdAlgo_t chosenAlgo;
+    size_t chosenWs = 0;
+    if (_info.ndim == 1) {
+        chosenAlgo = CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM;
+        chosenWs = 0;
+    } else {
+        bool found = false;
+        for (int i = 0; i < algoCounts; ++i) {
+            if (perf_results[i].status != CUDNN_STATUS_SUCCESS) {
+                continue;
             }
-        ));
-        if (algoCounts < 1) {
-            return INFINI_STATUS_BAD_PARAM;
-        }
-        for (int i = 0; i < algoCounts; i++) {
-            if (_opaque->internal->useCudnn((cudaStream_t)stream, [&](cudnnHandle_t handle) {CHECK_CUDNN(cudnnGetConvolutionForwardWorkspaceSize(handle, _info.handler->x_desc, _info.handler->w_desc, _info.handler->conv_desc, _info.handler->y_desc, perf_results[i].algo, &workspace_size)); return INFINI_STATUS_SUCCESS;})) {
-                chosenAlgoIndex = i;
-                chosen = true;
+            size_t ws = 0;
+            if (!_opaque->internal->useCudnn(
+                    (cudaStream_t)stream,
+                    [&](cudnnHandle_t handle) {
+                        cudnnStatus_t st = cudnnGetConvolutionForwardWorkspaceSize(
+                            handle,
+                            _info.handler->x_desc, _info.handler->w_desc, _info.handler->conv_desc, _info.handler->y_desc,
+                            perf_results[i].algo,
+                            &ws);
+                        return st == CUDNN_STATUS_SUCCESS
+                                 ? INFINI_STATUS_SUCCESS
+                                 : INFINI_STATUS_BAD_PARAM; // 根据cuDNN返回状态判断
+                    })) {
+                continue;
+            }
+            if (ws <= workspace_size) {
+                chosenAlgo = perf_results[i].algo;
+                chosenWs = ws;
+                found = true;
                 break;
             }
         }
-        if (!chosen) {
-            return INFINI_STATUS_BAD_PARAM;
+        if (!found) {
+            chosenAlgo = CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM;
+            chosenWs = 0;
         }
-        const float alpha = 1.0f;
-        const float beta = 0.0f;
-        CHECK_STATUS(_opaque->internal->useCudnn(
-            (cudaStream_t)stream, [&](cudnnHandle_t handle) {
-                CHECK_CUDNN(cudnnConvolutionForward(handle,
-                    &alpha,
-                    _info.handler->x_desc,
-                    x,
-                    _info.handler->w_desc,
-                    w,
-                    _info.handler->conv_desc,
-                    perf_results[chosenAlgoIndex].algo,
-                    workspace,
-                    workspace_size,
-                    &beta,
-                    _info.handler->y_desc,
-                    y));
-                return INFINI_STATUS_SUCCESS;
-            }
-        ));
-        return INFINI_STATUS_SUCCESS;
     }
-    
+
+    const float alpha = 1.0f, beta = 0.0f;
+    CHECK_STATUS(_opaque->internal->useCudnn(
+        (cudaStream_t)stream, [&](cudnnHandle_t handle) {
+            CHECK_CUDNN(cudnnConvolutionForward(
+                handle,
+                &alpha,
+                _info.handler->x_desc,
+                x,
+                _info.handler->w_desc,
+                w,
+                _info.handler->conv_desc,
+                chosenAlgo,
+                workspace,
+                chosenWs,
+                &beta,
+                _info.handler->y_desc,
+                y));
+            return INFINI_STATUS_SUCCESS;
+        }));
+
+    return INFINI_STATUS_SUCCESS;
 }
+} // namespace op::conv::cuda

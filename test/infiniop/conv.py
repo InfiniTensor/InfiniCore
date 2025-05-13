@@ -5,18 +5,22 @@ import os
 import time
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
-from operatorspy import (
-    open_lib,
-    to_tensor,
-    DeviceEnum,
+from libinfiniop import (
     infiniopHandle_t,
     infiniopTensorDescriptor_t,
-    create_handle,
-    destroy_handle,
+    open_lib,
+    to_tensor,
+    get_test_devices,
     check_error,
+    rearrange_if_needed,
+    test_operator,
+    get_args,
+    debug,
+    get_tolerance,
+    profile_operation,
+    create_workspace,
 )
 
-from operatorspy.tests.test_utils import get_args
 import torch
 import math
 import ctypes
@@ -26,6 +30,70 @@ from typing import List, Tuple
 # constant for control whether profile the pytorch and lib functions
 # NOTE: need to manually add synchronization function to the lib function,
 #       e.g., cudaDeviceSynchronize() for CUDA
+PROFILE = False
+NUM_PRERUN = 10
+NUM_ITERATIONS = 1000
+_TEST_CASES = [
+    # x_shape, w_shape, pads, strides, dilations, x_strides
+    (
+        (32, 3, 4),
+        (32, 3, 5),
+        (1,),
+        (1,),
+        (1,),
+        None,
+    ),
+    (
+        (1, 3, 4, 4),
+        (2, 3, 3, 3),
+        (1, 1),
+        (1, 2),
+        (2, 1),
+        None,
+    ),
+    (
+        (32, 3, 128, 128),
+        (64, 3, 5, 5),
+        (2, 2),
+        (2, 2),
+        (1, 1),
+        None,
+    ),
+    (
+        (1, 1, 4, 4, 4),
+        (1, 1, 5, 5, 5),
+        (1, 1, 1),
+        (1, 1, 1),
+        (1, 1, 1),
+        None,
+    ),
+    (
+        (32, 3, 32, 32, 32),
+        (64, 3, 5, 5, 5),
+        (3, 2, 2),
+        (4, 3, 3),
+        (2, 2, 1),
+        None,
+    ),
+]
+
+
+class ConvDescriptor(Structure):
+    _fields_ = [("device", c_int32)]
+
+
+infiniopConvDescriptor_t = POINTER(ConvDescriptor)
+
+# Data types used for testing
+_TENSOR_DTYPES = [torch.float16, torch.float32]
+
+# Tolerance map for different data types
+_TOLERANCE_MAP = {
+    torch.float16: {"atol": 1e-3, "rtol": 1e-3},
+    torch.float32: {"atol": 1e-7, "rtol": 1e-7},
+}
+
+DEBUG = False
 PROFILE = False
 NUM_PRERUN = 10
 NUM_ITERATIONS = 1000
@@ -95,7 +163,7 @@ def test(
     dilations,
     tensor_stride=None,
     tensor_dtype=torch.float16,
-    sync=None
+    sync=None,
 ):
     assert len(pads) == len(strides) == len(dilations)
     print(
@@ -119,7 +187,7 @@ def test(
     x_tensor = to_tensor(x, lib)
     w_tensor = to_tensor(w, lib)
     y_tensor = to_tensor(y, lib)
-    
+
     if sync is not None:
         sync()
 
@@ -139,134 +207,42 @@ def test(
     )
 
     # Invalidate the shape and strides in the descriptor to prevent them from being directly used by the kernel
-    x_tensor.descriptor.contents.invalidate()
-    w_tensor.descriptor.contents.invalidate()
-    y_tensor.descriptor.contents.invalidate()
+    for tensor in [x_tensor, y_tensor, w_tensor]:
+        tensor.destroyDesc(lib)
 
-    workspaceSize = ctypes.c_uint64(0)
+    workspace_size = ctypes.c_uint64(0)
     check_error(
-        lib.infiniopGetConvWorkspaceSize(descriptor, ctypes.byref(workspaceSize))
+        lib.infiniopGetConvWorkspaceSize(descriptor, ctypes.byref(workspace_size))
     )
-    workspace = torch.zeros(int(workspaceSize.value), dtype=torch.uint8).to(
-        torch_device
-    )
-    workspace_ptr = ctypes.cast(workspace.data_ptr(), ctypes.POINTER(ctypes.c_uint8))
+    workspace = create_workspace(workspace_size.value, y.device)
 
-    for i in range(NUM_PRERUN if PROFILE else 1):
+    def lib_conv():
         check_error(
             lib.infiniopConv(
                 descriptor,
-                workspace_ptr,
-                workspaceSize,
+                workspace.data_ptr() if workspace is not None else None,
+                workspace_size,
                 y_tensor.data,
                 x_tensor.data,
                 w_tensor.data,
                 None,
             )
         )
+
+    for i in range(NUM_PRERUN if PROFILE else 1):
+        lib_conv()
     if PROFILE:
         start_time = time.time()
         for i in range(NUM_ITERATIONS):
-            check_error(
-                lib.infiniopConv(
-                    descriptor,
-                    workspace_ptr,
-                    workspaceSize,
-                    y_tensor.data,
-                    x_tensor.data,
-                    w_tensor.data,
-                    None,
-                )
-            )
+            lib_conv()
         elapsed = (time.time() - start_time) / NUM_ITERATIONS
         print(f"    lib time: {elapsed :6f}")
 
-    if tensor_dtype == torch.float16:
-        assert torch.allclose(y, ans, atol=0, rtol=1e-2)
-    else:
-        assert torch.allclose(y, ans, atol=0, rtol=1e-3)
+    atol, rtol = get_tolerance(_TOLERANCE_MAP, tensor_dtype)
     check_error(lib.infiniopDestroyConvDescriptor(descriptor))
 
 
-def test_cpu(lib, test_cases):
-    device = DeviceEnum.DEVICE_CPU
-    handle = create_handle(lib, device)
-    for x_shape, w_shape, pads, strides, dilations, x_strides in test_cases:
-        # fmt: off
-        test(lib, handle, "cpu", x_shape, w_shape, pads, strides, dilations, x_strides, tensor_dtype=torch.float16)
-        test(lib, handle, "cpu", x_shape, w_shape, pads, strides, dilations, x_strides, tensor_dtype=torch.float32)
-        # fmt: on
-    destroy_handle(lib, handle)
-
-
-def test_cuda(lib, test_cases):
-    device = DeviceEnum.DEVICE_CUDA
-    handle = create_handle(lib, device)
-    for x_shape, w_shape, pads, strides, dilations, x_strides in test_cases:
-        # fmt: off
-        test(lib, handle, "cuda", x_shape, w_shape, pads, strides, dilations, x_strides, tensor_dtype=torch.float16)
-        test(lib, handle, "cuda", x_shape, w_shape, pads, strides, dilations, x_strides, tensor_dtype=torch.float32)
-        # fmt: on
-    destroy_handle(lib, handle)
-
-
-def test_bang(lib, test_cases):
-    import torch_mlu
-
-    device = DeviceEnum.DEVICE_BANG
-    handle = create_handle(lib, device)
-    for x_shape, w_shape, pads, strides, dilations, x_strides in test_cases:
-        # fmt: off
-        test(lib, handle, "mlu", x_shape, w_shape, pads, strides, dilations, x_strides, tensor_dtype=torch.float16)
-        test(lib, handle, "mlu", x_shape, w_shape, pads, strides, dilations, x_strides, tensor_dtype=torch.float32)
-        # fmt: on
-    destroy_handle(lib, handle)
-
-
 if __name__ == "__main__":
-    test_cases = [
-        # x_shape, w_shape, pads, strides, dilations, x_strides
-        (
-            (32, 3, 4),
-            (32, 3, 5),
-            (1,),
-            (1,),
-            (1,),
-            None,
-        ),
-        (
-            (1, 3, 4, 4),
-            (2, 3, 3, 3),
-            (1, 1),
-            (1, 2),
-            (2, 1),
-            None,
-        ),
-        (
-            (32, 3, 128, 128),
-            (64, 3, 5, 5),
-            (2, 2),
-            (2, 2),
-            (1, 1),
-            None,
-        ),
-        (
-            (1, 1, 4, 4, 4),
-            (1, 1, 5, 5, 5),
-            (1, 1, 1),
-            (1, 1, 1),
-            (1, 1, 1),
-            None,
-        ),
-        (
-            (32, 3, 32, 32, 32),
-            (64, 3, 5, 5, 5),
-            (3, 2, 2),
-            (4, 3, 3),
-            (2, 2, 1),
-            None,
-        ),
-    ]
     args = get_args()
     lib = open_lib()
     lib.infiniopCreateConvDescriptor.restype = c_int32
@@ -295,13 +271,11 @@ if __name__ == "__main__":
     lib.infiniopDestroyConvDescriptor.argtypes = [
         infiniopConvDescriptor_t,
     ]
+    DEBUG = args.debug
+    PROFILE = args.profile
+    NUM_PRERUN = args.num_prerun
+    NUM_ITERATIONS = args.num_iterations
+    for device in get_test_devices(args):
+        test_operator(lib, device, test, _TEST_CASES, _TENSOR_DTYPES)
 
-    if args.cpu:
-        test_cpu(lib, test_cases)
-    if args.cuda:
-        test_cuda(lib, test_cases)
-    if args.bang:
-        test_bang(lib, test_cases)
-    if not (args.cpu or args.cuda or args.bang):
-        test_cpu(lib, test_cases)
     print("\033[92mTest passed!\033[0m")
