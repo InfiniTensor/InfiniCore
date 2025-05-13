@@ -2,14 +2,21 @@
 #define __CONV_INFO_H__
 
 #include "../../../utils.h"
-#include "../../devices/cuda/cuda_handle.cuh"
 #include "../../operator.h"
 #include "../../tensor.h"
-#include <algorithm>
+
+#ifdef ENABLE_CUDA_API
+#include "../../devices/cuda/cuda_handle.cuh"
+#endif
 
 namespace op::conv {
-class CudnnConvHandler;
 class ConvInfo;
+#ifdef ENABLE_CUDA_API
+class CudnnConvHandler;
+#endif
+} // namespace op::conv
+
+namespace op::conv {
 
 class ConvInfo {
     ConvInfo() = default;
@@ -25,8 +32,9 @@ public:
     std::vector<size_t> pads_info;
     std::vector<size_t> strides_info;
     std::vector<size_t> dilations_info;
+#ifdef ENABLE_CUDA_API
     std::shared_ptr<CudnnConvHandler> handler = nullptr;
-
+#endif
     static utils::Result<ConvInfo> create(
         infiniopHandle_t handle_,
         infiniopTensorDescriptor_t y_desc,
@@ -37,6 +45,7 @@ public:
         const void *dilations,
         size_t n);
 };
+
 #ifdef ENABLE_CUDA_API
 class CudnnConvHandler {
 public:
@@ -70,6 +79,7 @@ public:
         cudnnDataType_t compute_type);
 };
 #endif
+
 inline utils::Result<ConvInfo> ConvInfo::create(
     infiniopHandle_t handle_,
     infiniopTensorDescriptor_t y_desc,
@@ -125,12 +135,12 @@ inline utils::Result<ConvInfo> ConvInfo::create(
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
     }
-
+#ifdef ENABLE_CUDA_API
     if (handle_->device == INFINI_DEVICE_NVIDIA) {
         info.handler = std::make_shared<CudnnConvHandler>();
-
         CHECK_STATUS(CudnnConvHandler::GenHandler(info, dtype, CUDNN_DATA_FLOAT));
     }
+#endif
     return utils::Result<ConvInfo>(info);
 }
 
@@ -261,7 +271,7 @@ inline infiniStatus_t CudnnConvHandler::GenHandler(
 
     return INFINI_STATUS_SUCCESS;
 }
-#endif 
+#endif
 
 } // namespace op::conv
 

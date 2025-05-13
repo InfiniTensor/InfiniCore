@@ -113,7 +113,9 @@ infiniStatus_t Descriptor::calculate(
             chosenWs = 0;
         }
     }
-
+    if (_info.ndim == 3) {
+        chosenAlgo = CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM;
+    }
     const float alpha = 1.0f, beta = 0.0f;
     CHECK_STATUS(_opaque->internal->useCudnn(
         (cudaStream_t)stream, [&](cudnnHandle_t handle) {

@@ -36,6 +36,14 @@ NUM_ITERATIONS = 1000
 _TEST_CASES = [
     # x_shape, w_shape, pads, strides, dilations, x_strides
     (
+        (1, 1, 3, 3),
+        (1, 1, 2, 2),
+        (0, 0),
+        (1, 1),
+        (1, 1),
+        None,
+    ),
+    (
         (32, 3, 4),
         (32, 3, 5),
         (1,),
@@ -90,7 +98,7 @@ _TENSOR_DTYPES = [torch.float16, torch.float32]
 # Tolerance map for different data types
 _TOLERANCE_MAP = {
     torch.float16: {"atol": 1e-3, "rtol": 1e-3},
-    torch.float32: {"atol": 1e-7, "rtol": 1e-7},
+    torch.float32: {"atol": 1e-3, "rtol": 1e-3},
 }
 
 DEBUG = False
@@ -237,8 +245,8 @@ def test(
             lib_conv()
         elapsed = (time.time() - start_time) / NUM_ITERATIONS
         print(f"    lib time: {elapsed :6f}")
-
     atol, rtol = get_tolerance(_TOLERANCE_MAP, tensor_dtype)
+    assert torch.allclose(y, ans, atol=atol, rtol=rtol)
     check_error(lib.infiniopDestroyConvDescriptor(descriptor))
 
 

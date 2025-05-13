@@ -1,5 +1,6 @@
 #include "conv_cpu.h"
 #include "../../../devices/cpu/common_cpu.h"
+#include <algorithm>
 
 namespace op::conv::cpu {
 
@@ -87,8 +88,7 @@ void fillPaddedInput(
     Tdata *padded_x,
     size_t x_index,
     size_t padded_x_index,
-    size_t ndim
-) {
+    size_t ndim) {
     size_t x_shape_val;
     if (ndim == 0) {
         x_shape_val = info.batch;
@@ -113,7 +113,7 @@ void fillPaddedInput(
             padded_x[padded_x_base_index + i] = x[x_base_index + i];
         } else {
             fillPaddedInput(info, x, padded_x_shape, padded_x,
-                           x_base_index + i, padded_x_base_index + i, ndim + 1);
+                            x_base_index + i, padded_x_base_index + i, ndim + 1);
         }
     }
 }
@@ -128,8 +128,7 @@ void _applyConv(
     size_t x_index,
     size_t w_index,
     size_t y_index,
-    size_t ndim
-) {
+    size_t ndim) {
 
     size_t dim_size, kernel_size;
     size_t dilation, stride;
@@ -142,12 +141,9 @@ void _applyConv(
         dilation = info.dilations_info[ndim - 2];
         stride = info.strides_info[ndim - 2];
     }
-
     const auto steps = (dim_size - dilation * (kernel_size - 1) - 1) / stride + 1;
-
     x_index *= dim_size;
     w_index *= kernel_size;
-
     size_t y_stride;
     if (ndim == 0) {
         y_stride = info.out_channels;
@@ -157,21 +153,19 @@ void _applyConv(
         y_stride = info.output_dims[ndim - 2];
     }
     y_index *= y_stride;
-
     for (size_t i = 0; i < steps; ++i, ++y_index) {
-
         for (size_t k = 0; k < kernel_size; ++k) {
-
             const auto curr_x_index = x_index + i * stride + k * dilation;
             const auto curr_w_index = w_index + k;
-
             if (ndim == info.ndim + 1) {
-                y[y_index] += x[curr_x_index] * w[curr_w_index];
-            }
-
-            else {
+                if constexpr (std::is_same<Xdata, fp16_t>::value) {
+                    y[y_index] += utils::cast<float>(x[curr_x_index]) * utils::cast<float>(w[curr_w_index]);
+                } else {
+                    y[y_index] += x[curr_x_index] * w[curr_w_index];
+                }
+            } else {
                 _applyConv(info, y, x, w, x_shape, curr_x_index, curr_w_index,
-                         y_index, ndim + 1);
+                           y_index, ndim + 1);
             }
         }
     }
@@ -183,11 +177,10 @@ void applyConv(
     Ydata *y,
     const Xdata *x,
     const Xdata *w,
-    const size_t *x_shape
-) {
-    #pragma omp parallel for collapse(2)
-    for (size_t i = 0; i < info.batch; ++i) {
-        for (size_t j = 0; j < info.out_channels; ++j) {
+    const size_t *x_shape) {
+#pragma omp parallel for
+    for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(info.batch); ++i) {
+        for (ptrdiff_t j = 0; j < static_cast<ptrdiff_t>(info.out_channels); ++j) {
             size_t y_index = i * info.out_channels + j;
             for (size_t k = 0; k < info.in_channels; ++k) {
                 size_t x_index = i * info.in_channels + k;
@@ -205,8 +198,7 @@ void _conv_cpu(
     size_t workspace_size,
     Ydata *y,
     const Xdata *x,
-    const Xdata *w
-) {
+    const Xdata *w) {
     if (needsPadding(info)) {
         auto padded_x = reinterpret_cast<Xdata *>(workspace);
         std::vector<size_t> padded_shape(info.ndim + 2);
@@ -215,8 +207,14 @@ void _conv_cpu(
         for (size_t i = 0; i < info.ndim; ++i) {
             padded_shape[i + 2] = info.input_dims[i] + 2 * info.pads_info[i];
         }
-        std::fill(padded_x, padded_x + calculatePaddedInputSize(info), 0);
-
+        if constexpr (std::is_same<Xdata, fp16_t>::value) {
+            fp16_t zero_val = utils::cast<fp16_t>(0.0f);
+            std::fill(padded_x, padded_x + calculatePaddedInputSize(info), zero_val);
+        } else if constexpr (std::is_same<Xdata, float>::value) {
+            std::fill(padded_x, padded_x + calculatePaddedInputSize(info), 0.0f);
+        } else {
+            std::fill(padded_x, padded_x + calculatePaddedInputSize(info), static_cast<Xdata>(0));
+        }
         fillPaddedInput(info, x, padded_shape.data(), padded_x, 0, 0, 0);
 
         applyConv(info, y, padded_x, w, padded_shape.data());
@@ -238,43 +236,46 @@ infiniStatus_t conv_cpu(
     size_t workspace_size,
     void *y,
     const void *x,
-    const void *w
-) {
+    const void *w) {
     auto y_ptr = reinterpret_cast<Tdata *>(y);
     auto x_ptr = reinterpret_cast<const Tdata *>(x);
     auto w_ptr = reinterpret_cast<const Tdata *>(w);
-
-    std::fill(y_ptr, y_ptr + calculateOutputSize(info), 0);
-
+    if constexpr (std::is_same<Tdata, float>::value) {
+        std::fill(y_ptr, y_ptr + calculateOutputSize(info), 0.0f);
+    } else if constexpr (std::is_same<Tdata, fp16_t>::value) {
+        fp16_t zero_val = utils::cast<fp16_t>(0.0f);
+        std::fill(y_ptr, y_ptr + calculateOutputSize(info), zero_val);
+    } else {
+        std::fill(y_ptr, y_ptr + calculateOutputSize(info), static_cast<Tdata>(0));
+    }
     _conv_cpu<Tdata, Tdata>(info, workspace, workspace_size, y_ptr, x_ptr, w_ptr);
 
     return INFINI_STATUS_SUCCESS;
 }
 
 template <>
-infiniStatus_t conv_cpu<uint16_t>(
+infiniStatus_t conv_cpu<fp16_t>(
     const ConvInfo &info,
     void *workspace,
     size_t workspace_size,
     void *y,
     const void *x,
-    const void *w
-) {
+    const void *w) {
     auto y_float = reinterpret_cast<float *>(workspace);
-    auto x_half = reinterpret_cast<const uint16_t *>(x);
-    auto w_half = reinterpret_cast<const uint16_t *>(w);
+    auto x_half = reinterpret_cast<const fp16_t *>(x);
+    auto w_half = reinterpret_cast<const fp16_t *>(w);
 
     std::fill(y_float, y_float + calculateOutputSize(info), 0.0f);
 
-    void* conv_workspace = y_float + calculateOutputSize(info);
+    void *conv_workspace = y_float + calculateOutputSize(info);
     size_t conv_workspace_size = workspace_size - calculateOutputSize(info) * sizeof(float);
 
-    _conv_cpu<uint16_t, float>(info, conv_workspace, conv_workspace_size, y_float, x_half, w_half);
+    _conv_cpu<fp16_t, float>(info, conv_workspace, conv_workspace_size, y_float, x_half, w_half);
 
-    auto y_half = reinterpret_cast<uint16_t *>(y);
-    #pragma omp parallel for
-    for (size_t i = 0; i < calculateOutputSize(info); ++i) {
-        y_half[i] = utils::cast<fp16_t>(y_float[i])._v;
+    auto y_half = reinterpret_cast<fp16_t *>(y);
+#pragma omp parallel for
+    for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(calculateOutputSize(info)); ++i) {
+        y_half[i] = utils::cast<fp16_t>(y_float[i]);
     }
 
     return INFINI_STATUS_SUCCESS;
@@ -291,12 +292,12 @@ infiniStatus_t Descriptor::calculate(
         return INFINI_STATUS_BAD_PARAM;
     }
     switch (_dtype) {
-        case INFINI_DTYPE_F16:
-            return conv_cpu<uint16_t>(_info, workspace, workspace_size, y, x, w);
-        case INFINI_DTYPE_F32:
-            return conv_cpu<float>(_info, workspace, workspace_size, y, x, w);
-        default:
-            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    case INFINI_DTYPE_F16:
+        return conv_cpu<fp16_t>(_info, workspace, workspace_size, y, x, w);
+    case INFINI_DTYPE_F32:
+        return conv_cpu<float>(_info, workspace, workspace_size, y, x, w);
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
 }
 
