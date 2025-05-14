@@ -26,9 +26,11 @@ public:
     size_t batch;
     size_t in_channels;
     size_t out_channels;
+    size_t spatial_sizes;
     std::vector<size_t> input_dims;
     std::vector<size_t> kernel_dims;
     std::vector<size_t> output_dims;
+    std::vector<size_t> bias_dims;
     std::vector<size_t> pads_info;
     std::vector<size_t> strides_info;
     std::vector<size_t> dilations_info;
@@ -40,6 +42,7 @@ public:
         infiniopTensorDescriptor_t y_desc,
         infiniopTensorDescriptor_t x_desc,
         infiniopTensorDescriptor_t w_desc,
+        infiniopTensorDescriptor_t b_desc,
         const void *pads,
         const void *strides,
         const void *dilations,
@@ -50,7 +53,7 @@ public:
 class CudnnConvHandler {
 public:
     CudnnConvHandler() = default;
-    ~CudnnConvHandler() { // 添加析构函数
+    ~CudnnConvHandler() {
         if (x_desc) {
             cudnnDestroyTensorDescriptor(x_desc);
             x_desc = nullptr;
@@ -63,17 +66,30 @@ public:
             cudnnDestroyFilterDescriptor(w_desc);
             w_desc = nullptr;
         }
+        if (b_desc) {
+            cudnnDestroyTensorDescriptor(b_desc);
+            b_desc = nullptr;
+        }
+        if (act_desc) {
+            cudnnDestroyActivationDescriptor(act_desc);
+            act_desc = nullptr;
+        }
         if (conv_desc) {
             cudnnDestroyConvolutionDescriptor(conv_desc);
             conv_desc = nullptr;
         }
     }
-    cudnnTensorDescriptor_t x_desc = nullptr;
-    cudnnTensorDescriptor_t y_desc = nullptr;
-    cudnnFilterDescriptor_t w_desc = nullptr;
-    cudnnConvolutionDescriptor_t conv_desc = nullptr;
+    cudnnTensorDescriptor_t x_desc;
+    cudnnTensorDescriptor_t y_desc;
+    cudnnFilterDescriptor_t w_desc;
+    cudnnTensorDescriptor_t b_desc;
+    cudnnActivationDescriptor_t act_desc;
+    cudnnConvolutionDescriptor_t conv_desc;
+    cudnnConvolutionFwdAlgo_t algo = CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM;
+    std::shared_ptr<device::cuda::Handle::Internal> internal;
+    size_t workspace_size = 0;
 
-    static infiniStatus_t GenHandler(
+    infiniStatus_t GenHandler(
         ConvInfo &info,
         infiniDtype_t data_type,
         cudnnDataType_t compute_type);
@@ -85,6 +101,7 @@ inline utils::Result<ConvInfo> ConvInfo::create(
     infiniopTensorDescriptor_t y_desc,
     infiniopTensorDescriptor_t x_desc,
     infiniopTensorDescriptor_t w_desc,
+    infiniopTensorDescriptor_t b_desc,
     const void *pads,
     const void *strides,
     const void *dilations,
@@ -123,6 +140,7 @@ inline utils::Result<ConvInfo> ConvInfo::create(
     const size_t *strides_ptr = reinterpret_cast<const size_t *>(strides);     // Renamed
     const size_t *dilations_ptr = reinterpret_cast<const size_t *>(dilations); // Renamed
 
+    info.spatial_sizes = 1;
     for (size_t i = 0; i < info.ndim; i++) {
         info.input_dims[i] = x_desc->shape()[i + 2];
         info.kernel_dims[i] = w_desc->shape()[i + 2];
@@ -130,22 +148,30 @@ inline utils::Result<ConvInfo> ConvInfo::create(
         info.pads_info[i] = pads_ptr == nullptr ? 0 : pads_ptr[i];
         info.strides_info[i] = strides_ptr == nullptr ? 1 : strides_ptr[i];
         info.dilations_info[i] = dilations_ptr == nullptr ? 1 : dilations_ptr[i];
+        info.spatial_sizes = info.spatial_sizes * info.output_dims[i];
         size_t expected_output = (info.input_dims[i] + info.pads_info[i] * 2 - info.dilations_info[i] * (info.kernel_dims[i] - 1) - 1) / info.strides_info[i] + 1;
         if (info.output_dims[i] != expected_output) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
     }
+    if (b_desc != nullptr) {
+        info.bias_dims.resize(x_desc->ndim());
+        std::fill(info.bias_dims.begin(), info.bias_dims.end(), 1);
+        info.bias_dims[1] = b_desc->shape()[0];
+    }
+
 #ifdef ENABLE_CUDA_API
     if (handle_->device == INFINI_DEVICE_NVIDIA) {
         info.handler = std::make_shared<CudnnConvHandler>();
-        CHECK_STATUS(CudnnConvHandler::GenHandler(info, dtype, CUDNN_DATA_FLOAT));
+        auto handle = reinterpret_cast<device::cuda::Handle *>(handle_);
+        info.handler->internal = handle->internal();
+        CHECK_STATUS(info.handler->GenHandler(info, dtype, CUDNN_DATA_FLOAT));
     }
 #endif
     return utils::Result<ConvInfo>(info);
 }
 
 #ifdef ENABLE_CUDA_API
-// CudnnConvHandler::GenHandler 的实现
 inline infiniStatus_t CudnnConvHandler::GenHandler(
     ConvInfo &info,
     infiniDtype_t data_type,
@@ -192,7 +218,6 @@ inline infiniStatus_t CudnnConvHandler::GenHandler(
         dilations_arr[0] = 1;
         dilations_arr[1] = static_cast<int>(info.dilations_info[0]);
     } else {
-
         for (size_t i = 0; i < info.ndim; ++i) {
             input_dims_arr[i + 2] = static_cast<int>(info.input_dims[i]);
             output_dims_arr[i + 2] = static_cast<int>(info.output_dims[i]);
@@ -220,35 +245,132 @@ inline infiniStatus_t CudnnConvHandler::GenHandler(
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
     CudnnConvHandler &handler_ref = *info.handler;
-    cudnnStatus_t status = CUDNN_STATUS_SUCCESS;
+    infiniStatus_t status;
 
     auto create_and_set_descriptors = [&]() {
-        cudnnCreateTensorDescriptor(&handler_ref.x_desc);
-        cudnnCreateTensorDescriptor(&handler_ref.y_desc);
-        cudnnCreateFilterDescriptor(&handler_ref.w_desc);
-        cudnnCreateConvolutionDescriptor(&handler_ref.conv_desc);
+        CHECK_CUDNN(cudnnCreateTensorDescriptor(&handler_ref.x_desc));
+        CHECK_CUDNN(cudnnCreateTensorDescriptor(&handler_ref.y_desc));
+        CHECK_CUDNN(cudnnCreateFilterDescriptor(&handler_ref.w_desc));
+        CHECK_CUDNN(cudnnCreateConvolutionDescriptor(&handler_ref.conv_desc));
 
-        cudnnSetTensorNdDescriptor(
-            handler_ref.x_desc, cudnn_data_type, actual_tensor_ndim, input_dims_arr.data(), input_strides_arr.data());
-        cudnnSetTensorNdDescriptor(
-            handler_ref.y_desc, cudnn_data_type, actual_tensor_ndim, output_dims_arr.data(), output_strides_arr.data());
-        cudnnSetFilterNdDescriptor(
-            handler_ref.w_desc, cudnn_data_type, CUDNN_TENSOR_NCHW, actual_tensor_ndim, filter_dims_arr.data());
-
-        cudnnSetConvolutionNdDescriptor(
+        CHECK_CUDNN(cudnnSetTensorNdDescriptorEx(
+            handler_ref.x_desc, CUDNN_TENSOR_NCHW, cudnn_data_type, actual_tensor_ndim, input_dims_arr.data()));
+        CHECK_CUDNN(cudnnSetTensorNdDescriptorEx(
+            handler_ref.y_desc, CUDNN_TENSOR_NCHW, cudnn_data_type, actual_tensor_ndim, output_dims_arr.data()));
+        CHECK_CUDNN(cudnnSetFilterNdDescriptor(
+            handler_ref.w_desc, cudnn_data_type, CUDNN_TENSOR_NCHW, actual_tensor_ndim, filter_dims_arr.data()));
+        if (info.bias_dims.empty()) {
+            handler_ref.b_desc = nullptr;
+            handler_ref.act_desc = nullptr;
+        } else {
+            std::vector<int> bias_dims_arr(actual_tensor_ndim);
+            bias_dims_arr[0] = 1;
+            bias_dims_arr[1] = static_cast<int>(info.out_channels);
+            for (int i = 2; i < actual_tensor_ndim; ++i) {
+                bias_dims_arr[i] = 1;
+            }
+            std::vector<int> bias_strides_arr(actual_tensor_ndim);
+            if (actual_tensor_ndim == 4) {
+                bias_strides_arr[0] = static_cast<int>(info.out_channels);
+                bias_strides_arr[1] = 1;
+                bias_strides_arr[2] = 1;
+                bias_strides_arr[3] = 1;
+            } else {
+                bias_strides_arr[actual_tensor_ndim - 1] = 1;
+                for (int d = actual_tensor_ndim - 2; d >= 0; --d) {
+                    bias_strides_arr[d] = bias_strides_arr[d + 1] * bias_strides_arr[d + 1];
+                }
+            }
+            CHECK_CUDNN(cudnnCreateTensorDescriptor(&handler_ref.b_desc));
+            CHECK_CUDNN(cudnnSetTensorNdDescriptor(
+                handler_ref.b_desc, cudnn_data_type, bias_dims_arr.size(), bias_dims_arr.data(), bias_strides_arr.data()));
+            CHECK_CUDNN(cudnnCreateActivationDescriptor(&handler_ref.act_desc));
+            CHECK_CUDNN(cudnnSetActivationDescriptor(
+                handler_ref.act_desc, CUDNN_ACTIVATION_IDENTITY, CUDNN_NOT_PROPAGATE_NAN, 0.0));
+        }
+        CHECK_CUDNN(cudnnSetConvolutionNdDescriptor(
             handler_ref.conv_desc,
             spatial_ndim_for_conv_desc,
             pads_arr.data(),
             strides_arr.data(),
             dilations_arr.data(),
             CUDNN_CROSS_CORRELATION,
-            compute_type);
-        return CUDNN_STATUS_SUCCESS;
+            compute_type));
+        if (info.bias_dims.empty()) {
+            algo = CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM;
+            CHECK_STATUS(internal->useCudnn(
+                nullptr,
+                [&](cudnnHandle_t handle) {
+                    CHECK_CUDNN(cudnnGetConvolutionForwardWorkspaceSize(
+                        handle,
+                        x_desc,
+                        w_desc,
+                        conv_desc,
+                        y_desc,
+                        algo,
+                        &handler_ref.workspace_size));
+                        return INFINI_STATUS_SUCCESS;
+                    }
+            ));
+        } else {
+            int maxAlgoCount = 0;
+            CHECK_STATUS(internal->useCudnn(
+                nullptr,
+                [&](cudnnHandle_t handle) {
+                    CHECK_CUDNN(cudnnGetConvolutionForwardAlgorithmMaxCount(handle, &maxAlgoCount));
+                    return INFINI_STATUS_SUCCESS;
+                }));
+            if (maxAlgoCount <= 0) {
+                maxAlgoCount = 8;
+            }
+            std::vector<cudnnConvolutionFwdAlgoPerf_t> perf_results(maxAlgoCount);
+            int algoCounts = 0;
+            int chosenAlgoIndex = 0;
+            bool chosen = false;
+            CHECK_STATUS(internal->useCudnn(
+                nullptr, [&](cudnnHandle_t handle) {
+                    CHECK_CUDNN(cudnnFindConvolutionForwardAlgorithm(
+                        handle,
+                        x_desc,
+                        w_desc,
+                        conv_desc,
+                        y_desc,
+                        maxAlgoCount,
+                        &algoCounts,
+                        perf_results.data()));
+                    return INFINI_STATUS_SUCCESS;
+                }));
+            if (algoCounts < 1) {
+                return INFINI_STATUS_BAD_PARAM;
+            }        
+            for (int i = 0; i < algoCounts; ++i) {
+                CHECK_STATUS(internal->useCudnn(
+                    nullptr,
+                    [&](cudnnHandle_t handle) {
+                        CHECK_CUDNN(cudnnGetConvolutionForwardWorkspaceSize(
+                            handle,
+                            x_desc,
+                            w_desc,
+                            conv_desc,
+                            y_desc,
+                            perf_results[i].algo,
+                            &handler_ref.workspace_size));
+                        return INFINI_STATUS_SUCCESS;
+                    }));
+                chosenAlgoIndex = i;
+                chosen = true;
+                break;
+            }
+            if (!chosen) {
+                return INFINI_STATUS_BAD_PARAM;
+            }
+            algo = perf_results[chosenAlgoIndex].algo;
+        }
+        return INFINI_STATUS_SUCCESS;
     };
 
     status = create_and_set_descriptors();
-
-    if (status != CUDNN_STATUS_SUCCESS) {
+    if (status != INFINI_STATUS_SUCCESS) {
         // 清理已创建的描述符
         if (handler_ref.x_desc) {
             cudnnDestroyTensorDescriptor(handler_ref.x_desc);
@@ -266,9 +388,16 @@ inline infiniStatus_t CudnnConvHandler::GenHandler(
             cudnnDestroyConvolutionDescriptor(handler_ref.conv_desc);
             handler_ref.conv_desc = nullptr;
         }
+        if (handler_ref.act_desc) {
+            cudnnDestroyActivationDescriptor(handler_ref.act_desc);
+            handler_ref.act_desc = nullptr;
+        }
+        if (handler_ref.b_desc) {
+            cudnnDestroyTensorDescriptor(handler_ref.b_desc);
+            handler_ref.b_desc = nullptr;
+        }
         return INFINI_STATUS_BAD_PARAM;
     }
-
     return INFINI_STATUS_SUCCESS;
 }
 #endif

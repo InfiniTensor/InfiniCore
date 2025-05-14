@@ -38,6 +38,7 @@
             infiniopTensorDescriptor_t y,                        \
             infiniopTensorDescriptor_t x,                        \
             infiniopTensorDescriptor_t w,                        \
+            infiniopTensorDescriptor_t b,                        \
             const void *pads,                                    \
             const void *strides,                                 \
             const void *dilations,                               \
@@ -48,6 +49,7 @@
             void *y,                                             \
             const void *x,                                       \
             const void *w,                                       \
+            const void *bias,                                    \
             void *stream) const;                                 \
     };                                                           \
     }

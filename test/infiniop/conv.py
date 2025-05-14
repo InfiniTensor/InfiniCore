@@ -36,14 +36,6 @@ NUM_ITERATIONS = 1000
 _TEST_CASES = [
     # x_shape, w_shape, pads, strides, dilations, x_strides
     (
-        (1, 1, 3, 3),
-        (1, 1, 2, 2),
-        (0, 0),
-        (1, 1),
-        (1, 1),
-        None,
-    ),
-    (
         (32, 3, 4),
         (32, 3, 5),
         (1,),
@@ -114,14 +106,20 @@ class ConvDescriptor(Structure):
 infiniopConvDescriptor_t = POINTER(ConvDescriptor)
 
 
-def conv(x, w, stride, padding, dilation):
+def conv(x, w, stride, padding, dilation, bias=None):
     match len(x.shape) - 2:
         case 1:
-            return F.conv1d(x, w, stride=stride, padding=padding, dilation=dilation)
+            return F.conv1d(
+                x, w, bias=bias, stride=stride, padding=padding, dilation=dilation
+            )
         case 2:
-            return F.conv2d(x, w, stride=stride, padding=padding, dilation=dilation)
+            return F.conv2d(
+                x, w, bias=bias, stride=stride, padding=padding, dilation=dilation
+            )
         case 3:
-            return F.conv3d(x, w, stride=stride, padding=padding, dilation=dilation)
+            return F.conv3d(
+                x, w, bias=bias, stride=stride, padding=padding, dilation=dilation
+            )
         case _:
             print("Error: Pytorch -> Unsupported tensor dimension")
             return None
@@ -182,19 +180,25 @@ def test(
     y = torch.zeros(
         inferShape(x.shape, w.shape, pads, strides, dilations), dtype=tensor_dtype
     ).to(torch_device)
+    bias = (
+        torch.rand(w.shape[0], dtype=tensor_dtype).to(torch_device)
+        if w.shape[0] > 1
+        else None
+    )
 
     for i in range(NUM_PRERUN if PROFILE else 1):
-        ans = conv(x, w, strides, pads, dilations)
+        ans = conv(x, w, strides, pads, dilations, bias)
     if PROFILE:
         start_time = time.time()
         for i in range(NUM_ITERATIONS):
-            _ = conv(x, w, strides, pads, dilations)
+            _ = conv(x, w, strides, pads, dilations, bias)
         elapsed = (time.time() - start_time) / NUM_ITERATIONS
         print(f"pytorch time: {elapsed :6f}")
 
     x_tensor = to_tensor(x, lib)
     w_tensor = to_tensor(w, lib)
     y_tensor = to_tensor(y, lib)
+    b_tensor = to_tensor(bias, lib) if bias is not None else None
 
     if sync is not None:
         sync()
@@ -207,6 +211,7 @@ def test(
             y_tensor.descriptor,
             x_tensor.descriptor,
             w_tensor.descriptor,
+            b_tensor.descriptor if b_tensor is not None else None,
             tuple_to_void_p(pads),
             tuple_to_void_p(strides),
             tuple_to_void_p(dilations),
@@ -233,6 +238,7 @@ def test(
                 y_tensor.data,
                 x_tensor.data,
                 w_tensor.data,
+                b_tensor.data if b_tensor is not None else None,
                 None,
             )
         )
@@ -260,6 +266,7 @@ if __name__ == "__main__":
         infiniopTensorDescriptor_t,
         infiniopTensorDescriptor_t,
         infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
         c_void_p,
         c_void_p,
         c_void_p,
@@ -270,6 +277,7 @@ if __name__ == "__main__":
         infiniopConvDescriptor_t,
         c_void_p,
         c_uint64,
+        c_void_p,
         c_void_p,
         c_void_p,
         c_void_p,

@@ -47,6 +47,7 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t y_desc,
     infiniopTensorDescriptor_t x_desc,
     infiniopTensorDescriptor_t w_desc,
+    infiniopTensorDescriptor_t b_desc,
     const void *pads,
     const void *strides,
     const void *dilations,
@@ -58,7 +59,7 @@ infiniStatus_t Descriptor::create(
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
 
-    auto result = ConvInfo::create(handle_, y_desc, x_desc, w_desc,
+    auto result = ConvInfo::create(handle_, y_desc, x_desc, w_desc, b_desc,
                                    pads, strides, dilations, n);
     CHECK_RESULT(result);
 
@@ -236,7 +237,8 @@ infiniStatus_t conv_cpu(
     size_t workspace_size,
     void *y,
     const void *x,
-    const void *w) {
+    const void *w,
+    const void *bias) {
     auto y_ptr = reinterpret_cast<Tdata *>(y);
     auto x_ptr = reinterpret_cast<const Tdata *>(x);
     auto w_ptr = reinterpret_cast<const Tdata *>(w);
@@ -249,7 +251,14 @@ infiniStatus_t conv_cpu(
         std::fill(y_ptr, y_ptr + calculateOutputSize(info), static_cast<Tdata>(0));
     }
     _conv_cpu<Tdata, Tdata>(info, workspace, workspace_size, y_ptr, x_ptr, w_ptr);
-
+    if (bias != nullptr) {
+        auto bias_ptr = reinterpret_cast<const Tdata *>(bias);
+#pragma omp parallel for
+        for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(calculateOutputSize(info)); ++i) {
+            size_t channel_idx = (i / info.spatial_sizes) % info.out_channels;
+            y_ptr[i] += bias_ptr[channel_idx];
+        }
+    }
     return INFINI_STATUS_SUCCESS;
 }
 
@@ -260,7 +269,8 @@ infiniStatus_t conv_cpu<fp16_t>(
     size_t workspace_size,
     void *y,
     const void *x,
-    const void *w) {
+    const void *w,
+    const void *bias) {
     auto y_float = reinterpret_cast<float *>(workspace);
     auto x_half = reinterpret_cast<const fp16_t *>(x);
     auto w_half = reinterpret_cast<const fp16_t *>(w);
@@ -273,9 +283,20 @@ infiniStatus_t conv_cpu<fp16_t>(
     _conv_cpu<fp16_t, float>(info, conv_workspace, conv_workspace_size, y_float, x_half, w_half);
 
     auto y_half = reinterpret_cast<fp16_t *>(y);
+    if (bias != nullptr) {
+        auto bias_half = reinterpret_cast<const fp16_t *>(bias);
 #pragma omp parallel for
-    for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(calculateOutputSize(info)); ++i) {
-        y_half[i] = utils::cast<fp16_t>(y_float[i]);
+        for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(calculateOutputSize(info)); ++i) {
+            size_t channel_idx = (i / info.spatial_sizes) % info.out_channels;
+            float bias_value = utils::cast<float>(bias_half[channel_idx]);
+            y_float[i] += bias_value;
+            y_half[i] = utils::cast<fp16_t>(y_float[i]);
+        }
+    } else {
+#pragma omp parallel for
+        for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(calculateOutputSize(info)); ++i) {
+            y_half[i] = utils::cast<fp16_t>(y_float[i]);
+        }
     }
 
     return INFINI_STATUS_SUCCESS;
@@ -287,15 +308,16 @@ infiniStatus_t Descriptor::calculate(
     void *y,
     const void *x,
     const void *w,
+    const void *bias,
     void *stream) const {
     if (workspace_size < _workspace_size) {
         return INFINI_STATUS_BAD_PARAM;
     }
     switch (_dtype) {
     case INFINI_DTYPE_F16:
-        return conv_cpu<fp16_t>(_info, workspace, workspace_size, y, x, w);
+        return conv_cpu<fp16_t>(_info, workspace, workspace_size, y, x, w, bias);
     case INFINI_DTYPE_F32:
-        return conv_cpu<float>(_info, workspace, workspace_size, y, x, w);
+        return conv_cpu<float>(_info, workspace, workspace_size, y, x, w, bias);
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }

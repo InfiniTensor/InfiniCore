@@ -17,6 +17,7 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t y_desc,
     infiniopTensorDescriptor_t x_desc,
     infiniopTensorDescriptor_t w_desc,
+    infiniopTensorDescriptor_t b_desc,
     const void *pads,
     const void *strides,
     const void *dilations,
@@ -28,7 +29,7 @@ infiniStatus_t Descriptor::create(
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
 
-    auto result = ConvInfo::create(handle_, y_desc, x_desc, w_desc,
+    auto result = ConvInfo::create(handle_, y_desc, x_desc, w_desc, b_desc,
                                    pads, strides, dilations, n);
 
     CHECK_RESULT(result);
@@ -46,95 +47,51 @@ infiniStatus_t Descriptor::calculate(
     void *y,
     const void *x,
     const void *w,
+    const void *bias,
     void *stream) const {
-    int maxAlgoCount = 0;
-    CHECK_STATUS(_opaque->internal->useCudnn(
-        (cudaStream_t)stream, [&](cudnnHandle_t handle) {
-            if (!handle) {
-                return INFINI_STATUS_BAD_PARAM;
-            }
-            CHECK_CUDNN(cudnnGetConvolutionForwardAlgorithmMaxCount(
-                handle, &maxAlgoCount));
-            return INFINI_STATUS_SUCCESS;
-        }));
-    if (maxAlgoCount <= 0) {
-        maxAlgoCount = 8;
-    }
-    std::vector<cudnnConvolutionFwdAlgoPerf_t> perf_results(maxAlgoCount);
-    int algoCounts = 0;
-    CHECK_STATUS(_opaque->internal->useCudnn(
-        (cudaStream_t)stream, [&](cudnnHandle_t handle) {
-            CHECK_CUDNN(cudnnFindConvolutionForwardAlgorithm(
-                handle,
-                _info.handler->x_desc,
-                _info.handler->w_desc,
-                _info.handler->conv_desc,
-                _info.handler->y_desc,
-                maxAlgoCount,
-                &algoCounts,
-                perf_results.data()));
-            return INFINI_STATUS_SUCCESS;
-        }));
-    cudnnConvolutionFwdAlgo_t chosenAlgo;
-    size_t chosenWs = 0;
-    if (_info.ndim == 1) {
-        chosenAlgo = CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM;
-        chosenWs = 0;
-    } else {
-        bool found = false;
-        for (int i = 0; i < algoCounts; ++i) {
-            if (perf_results[i].status != CUDNN_STATUS_SUCCESS) {
-                continue;
-            }
-            size_t ws = 0;
-            if (!_opaque->internal->useCudnn(
-                    (cudaStream_t)stream,
-                    [&](cudnnHandle_t handle) {
-                        cudnnStatus_t st = cudnnGetConvolutionForwardWorkspaceSize(
-                            handle,
-                            _info.handler->x_desc, _info.handler->w_desc, _info.handler->conv_desc, _info.handler->y_desc,
-                            perf_results[i].algo,
-                            &ws);
-                        return st == CUDNN_STATUS_SUCCESS
-                                 ? INFINI_STATUS_SUCCESS
-                                 : INFINI_STATUS_BAD_PARAM; // 根据cuDNN返回状态判断
-                    })) {
-                continue;
-            }
-            if (ws <= workspace_size) {
-                chosenAlgo = perf_results[i].algo;
-                chosenWs = ws;
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
-            chosenAlgo = CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM;
-            chosenWs = 0;
-        }
-    }
-    if (_info.ndim == 3) {
-        chosenAlgo = CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM;
-    }
     const float alpha = 1.0f, beta = 0.0f;
-    CHECK_STATUS(_opaque->internal->useCudnn(
-        (cudaStream_t)stream, [&](cudnnHandle_t handle) {
-            CHECK_CUDNN(cudnnConvolutionForward(
-                handle,
-                &alpha,
-                _info.handler->x_desc,
-                x,
-                _info.handler->w_desc,
-                w,
-                _info.handler->conv_desc,
-                chosenAlgo,
-                workspace,
-                chosenWs,
-                &beta,
-                _info.handler->y_desc,
-                y));
-            return INFINI_STATUS_SUCCESS;
-        }));
+    if (bias != nullptr) {
+        CHECK_STATUS(_opaque->internal->useCudnn(
+            (cudaStream_t)stream, [&](cudnnHandle_t handle) {
+                CHECK_CUDNN(cudnnConvolutionBiasActivationForward(
+                    handle,
+                    &alpha,
+                    _info.handler->x_desc,
+                    x,
+                    _info.handler->w_desc,
+                    w,
+                    _info.handler->conv_desc,
+                    _info.handler->algo,
+                    workspace, _info.handler->workspace_size,
+                    &beta,
+                    _info.handler->y_desc,
+                    y,
+                    _info.handler->b_desc,
+                    bias,
+                    _info.handler->act_desc,
+                    _info.handler->y_desc,
+                    y));
+                return INFINI_STATUS_SUCCESS;
+            }));
+    } else {
+        CHECK_STATUS(_opaque->internal->useCudnn(
+            (cudaStream_t)stream, [&](cudnnHandle_t handle) {
+                CHECK_CUDNN(cudnnConvolutionForward(
+                    handle,
+                    &alpha,
+                    _info.handler->x_desc,
+                    x,
+                    _info.handler->w_desc,
+                    w,
+                    _info.handler->conv_desc,
+                    _info.handler->algo,
+                    workspace, _info.handler->workspace_size,
+                    &beta,
+                    _info.handler->y_desc,
+                    y));
+                return INFINI_STATUS_SUCCESS;
+            }));
+    }
 
     return INFINI_STATUS_SUCCESS;
 }

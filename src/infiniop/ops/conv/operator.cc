@@ -14,6 +14,7 @@ __C __export infiniStatus_t infiniopCreateConvDescriptor(infiniopHandle_t handle
                                                          infiniopTensorDescriptor_t y_desc,
                                                          infiniopTensorDescriptor_t x_desc,
                                                          infiniopTensorDescriptor_t w_desc,
+                                                         infiniopTensorDescriptor_t b_desc,
                                                          void *pads,
                                                          void *strides,
                                                          void *dilations,
@@ -26,6 +27,7 @@ __C __export infiniStatus_t infiniopCreateConvDescriptor(infiniopHandle_t handle
             y_desc,                                                         \
             x_desc,                                                         \
             w_desc,                                                         \
+            b_desc,                                                         \
             pads,                                                           \
             strides,                                                        \
             dilations,                                                      \
@@ -75,6 +77,7 @@ __C infiniStatus_t infiniopConv(
     void *y,
     const void *x,
     const void *w,
+    const void *bias,
     void *stream) {
 #define CALCULATE(CASE, NAMESPACE)                                             \
     case CASE:                                                                 \
@@ -83,6 +86,7 @@ __C infiniStatus_t infiniopConv(
                         y,                                                     \
                         x,                                                     \
                         w,                                                     \
+                        bias,                                                  \
                         stream)
     switch (desc->device_type) {
 #ifdef ENABLE_CPU_API
