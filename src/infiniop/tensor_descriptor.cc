@@ -12,7 +12,7 @@ __C __export infiniStatus_t infiniopCreateTensorDescriptor(infiniopTensorDescrip
         std::vector<ptrdiff_t> strides(ndim);
         ptrdiff_t dsize = 1;
         if (ndim > 0) {
-            for (size_t i = ndim - 1; i >= 0; i--) {
+            for (int i = (int)ndim - 1; i >= 0; i--) {
                 strides[i] = dsize;
                 dsize *= shape_[i];
             }
