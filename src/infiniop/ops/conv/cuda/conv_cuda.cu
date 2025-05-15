@@ -35,7 +35,7 @@ infiniStatus_t Descriptor::create(
     CHECK_RESULT(result);
 
     *desc_ptr = new Descriptor(
-        dtype, result.take(), 0,
+        dtype, result.take(), result->handler->workspace_size,
         new Opaque{handle->internal()},
         handle->device, handle->device_id);
     return INFINI_STATUS_SUCCESS;

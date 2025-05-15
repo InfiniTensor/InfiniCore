@@ -35,7 +35,7 @@ public:
     std::vector<size_t> strides_info;
     std::vector<size_t> dilations_info;
 #ifdef ENABLE_CUDA_API
-    std::shared_ptr<CudnnConvHandler> handler = nullptr;
+    std::shared_ptr<CudnnConvHandler> bhandler = nullptr;
 #endif
     static utils::Result<ConvInfo> create(
         infiniopHandle_t handle_,
@@ -309,9 +309,8 @@ inline infiniStatus_t CudnnConvHandler::GenHandler(
                         y_desc,
                         algo,
                         &handler_ref.workspace_size));
-                        return INFINI_STATUS_SUCCESS;
-                    }
-            ));
+                    return INFINI_STATUS_SUCCESS;
+                }));
         } else {
             int maxAlgoCount = 0;
             CHECK_STATUS(internal->useCudnn(
@@ -342,7 +341,7 @@ inline infiniStatus_t CudnnConvHandler::GenHandler(
                 }));
             if (algoCounts < 1) {
                 return INFINI_STATUS_BAD_PARAM;
-            }        
+            }
             for (int i = 0; i < algoCounts; ++i) {
                 CHECK_STATUS(internal->useCudnn(
                     nullptr,
