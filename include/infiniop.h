@@ -13,6 +13,7 @@
 #include "infiniop/ops/max_pool.h"
 #include "infiniop/ops/mlp.h"
 #include "infiniop/ops/mul.h"
+#include "infiniop/ops/quantize_gptq.h"
 #include "infiniop/ops/random_sample.h"
 #include "infiniop/ops/rearrange.h"
 #include "infiniop/ops/relu.h"
