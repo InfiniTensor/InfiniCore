@@ -6,8 +6,9 @@
  * Declare all the tests here
  */
 DECLARE_INFINIOP_TEST(gemm)
-DECLARE_INFINIOP_TEST(random_sample)
 DECLARE_INFINIOP_TEST(mul)
+DECLARE_INFINIOP_TEST(random_sample)
+DECLARE_INFINIOP_TEST(sub)
 DECLARE_INFINIOP_TEST(swiglu)
 
 #define REGISTER_INFINIOP_TEST(name)                      \
@@ -25,8 +26,9 @@ DECLARE_INFINIOP_TEST(swiglu)
 #define TEST_BUILDER_MAPPINGS                 \
     {                                         \
         REGISTER_INFINIOP_TEST(gemm)          \
-        REGISTER_INFINIOP_TEST(random_sample) \
         REGISTER_INFINIOP_TEST(mul)           \
+        REGISTER_INFINIOP_TEST(random_sample) \
+        REGISTER_INFINIOP_TEST(sub)           \
         REGISTER_INFINIOP_TEST(swiglu)        \
     }
 
