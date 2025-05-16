@@ -1,6 +1,6 @@
 
 local NEUWARE_HOME = os.getenv("NEUWARE_HOME") or "/usr/local/neuware"
-add_includedirs(path.join(NEUWARE_HOME, "include"))
+add_includedirs(path.join(NEUWARE_HOME, "include"), {public = true})
 add_linkdirs(path.join(NEUWARE_HOME, "lib64"))
 add_linkdirs(path.join(NEUWARE_HOME, "lib"))
 add_links("libcnrt.so")
