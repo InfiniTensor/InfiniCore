@@ -37,7 +37,7 @@ for _, layers in MODELS.items():
     for layer in layers:
         for batch in [1, 16]:
             _TEST_CASES.append(((batch, layer[0], layer[1])))
-
+print(_TEST_CASES)
 
 # Data types used for testing
 _TENSOR_DTYPES = [torch.float16]
@@ -348,15 +348,7 @@ def quantize_gptq(a, b):
 
 # The argument list should be (lib, handle, torch_device, <param list>, dtype)
 # The <param list> should keep the same order as the one specified in _TEST_CASES
-def test(
-    lib,
-    handle,
-    torch_device,
-    M,
-    K,
-    N,
-    dtype=torch.float16,
-):
+def test(lib, handle, torch_device, M, K, N, dtype=torch.float16, sync=None):
     print(
         f"Testing QuantizeGPTQ on {torch_device}" f" M:{M}, K:{K}, N:{N}, dtype:{dtype}"
     )
