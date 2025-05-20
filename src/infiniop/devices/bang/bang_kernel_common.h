@@ -16,7 +16,6 @@ inline __mlu_device__ size_t indexToReducedOffset(
     for (size_t i = 0; i < ndim; ++i) {
         res += flat_index / broadcasted_strides[i] * target_strides[i];
         flat_index %= broadcasted_strides[i];
-        __sync_all();
     }
     return res;
 }
@@ -31,7 +30,6 @@ inline __mlu_device__ size_t indexToOffset(
     for (size_t i = ndim; i-- > 0;) {
         res += (flat_index % shape[i]) * strides[i];
         flat_index /= shape[i];
-        __sync_all();
     }
     return res;
 }

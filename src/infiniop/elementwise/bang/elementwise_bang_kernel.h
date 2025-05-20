@@ -118,36 +118,36 @@ __mlu_device__ void launchOp(
 
             if (input_contiguous[i]) {
                 // Contiguous case - can use bulk copy
-                __memcpy(input_buffers[i],
-                         typed_inputs[i] + input_indexes[i] + processed,
-                         curr_batch * sizeof(Tdata),
-                         GDRAM2NRAM);
+                __memcpy_async(input_buffers[i],
+                               typed_inputs[i] + input_indexes[i] + processed,
+                               curr_batch * sizeof(Tdata),
+                               GDRAM2NRAM);
             } else {
                 // Non-contiguous case - copy element by element
                 for (size_t j = 0; j < curr_batch; j++) {
                     size_t element_offset = indexer(i, j + processed);
-                    __memcpy(input_buffers[i] + j,
-                             typed_inputs[i] + element_offset,
-                             sizeof(Tdata),
-                             GDRAM2NRAM);
+                    __memcpy_async(input_buffers[i] + j,
+                                   typed_inputs[i] + element_offset,
+                                   sizeof(Tdata),
+                                   GDRAM2NRAM);
                 }
             }
         }
-        __asm__ volatile("sync;");
+        __sync_io();
 
         // 2. Execute operation
         Tdata *output_buffer = aligned_buf + N * max_batch;
         Op op;
         op(output_buffer, input_buffers[0], input_buffers[1], curr_batch, args...);
-        __asm__ volatile("sync;");
+        __sync_compute();
 
         // 3. Write back results
         if (output_contiguous) {
             // Contiguous output - bulk copy
-            __memcpy(output + output_index + processed,
-                     output_buffer,
-                     curr_batch * sizeof(Tdata),
-                     NRAM2GDRAM);
+            __memcpy_async(output + output_index + processed,
+                           output_buffer,
+                           curr_batch * sizeof(Tdata),
+                           NRAM2GDRAM);
         } else {
             // Non-contiguous output - copy element by element
             for (size_t j = 0; j < curr_batch; j++) {
@@ -156,13 +156,12 @@ __mlu_device__ void launchOp(
                                                    ndim,
                                                    output_shape_gm,
                                                    output_strides_gm);
-                __memcpy(output + out_offset,
-                         output_buffer + j,
-                         sizeof(Tdata),
-                         NRAM2GDRAM);
+                __memcpy_async(output + out_offset,
+                               output_buffer + j,
+                               sizeof(Tdata),
+                               NRAM2GDRAM);
             }
         }
-        __asm__ volatile("sync;");
 
         processed += curr_batch;
     }
@@ -248,8 +247,6 @@ __mlu_global__ void elementwiseKernel(
                            output_index, num_elements, output_contiguous,
                            input_contiguous_gm, ndim, output_shape_gm,
                            output_strides_gm, indexer, start_idx, args...);
-
-    __sync_all();
 }
 
 /**
