@@ -253,7 +253,7 @@ void clear_lower_triangle(float *A, int n) {
 void cholesky_inverse_then_upper_cholesky(float *Hess, int K) {
     cholesky_decompose(Hess, K, false);
 
-    float *temp = (float *)aligned_alloc(32, sizeof(float) * K * K);
+    float *temp = (float *)malloc(sizeof(float) * K * K); // 内存要求和32字节对齐
     invert_symmetric_from_cholesky(Hess, K, temp);
     free(temp);
 
