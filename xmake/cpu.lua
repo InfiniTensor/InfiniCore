@@ -11,6 +11,7 @@ target("infiniop-cpu")
             add_cxflags("/openmp")
         end
     else
+        add_cxxflags("-mavx2", "-mfma", "-O3", "-fopenmp")
         add_cxflags("-fPIC", "-Wno-unknown-pragmas")
         if has_config("omp") then
             add_cxflags("-fopenmp")

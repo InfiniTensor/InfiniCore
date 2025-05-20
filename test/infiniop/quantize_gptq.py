@@ -37,7 +37,6 @@ for _, layers in MODELS.items():
     for layer in layers:
         for batch in [1, 16]:
             _TEST_CASES.append(((batch, layer[0], layer[1])))
-print(_TEST_CASES)
 
 # Data types used for testing
 _TENSOR_DTYPES = [torch.float16]

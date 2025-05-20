@@ -2,6 +2,11 @@
 #include "../../../devices/cpu/common_cpu.h"
 #include "../../../handle.h"
 #include <cassert>
+// 防止 __C 与 AVX512 冲突
+#pragma push_macro("__C")
+#undef __C
+#include <immintrin.h>
+#pragma pop_macro("__C")
 #include <cfloat>
 #ifdef NDEBUG
 #define SAFE_ASSERT(x) ((void)(x))
@@ -136,13 +141,33 @@ void add_batch(const T *inp, float *Hess, float nsamples, int M, int K) { // Hes
 }
 
 // Cholesky 分解 (in-place)，只支持 lower (第一步) 或 upper (第三步)
+// dot product with AVX
+inline float dot_product(const float *a, const float *b, int len) {
+    __m256 sum = _mm256_setzero_ps();
+    int i = 0;
+    for (; i + 8 <= len; i += 8) {
+        __m256 va = _mm256_loadu_ps(a + i);
+        __m256 vb = _mm256_loadu_ps(b + i);
+        sum = _mm256_fmadd_ps(va, vb, sum);
+    }
+    float result[8];
+    _mm256_storeu_ps(result, sum);
+    float total = result[0] + result[1] + result[2] + result[3] + result[4] + result[5] + result[6] + result[7];
+
+    for (; i < len; ++i) {
+        total += a[i] * b[i];
+    }
+    return total;
+}
+
+// Cholesky decomposition (lower or upper)
 bool cholesky_decompose(float *A, int n, bool upper) {
-    if (!upper) {
+    if (upper) {
         for (int i = 0; i < n; ++i) {
             for (int j = 0; j <= i; ++j) {
                 float sum = A[i * n + j];
-                for (int k = 0; k < j; ++k) {
-                    sum -= A[i * n + k] * A[j * n + k];
+                if (j > 0) {
+                    sum -= dot_product(&A[i * n], &A[j * n], j);
                 }
                 if (i == j) {
                     if (sum <= 0.0f) {
@@ -153,7 +178,7 @@ bool cholesky_decompose(float *A, int n, bool upper) {
                     A[i * n + j] = sum / A[j * n + j];
                 }
             }
-            // 清零上三角
+#pragma omp parallel for
             for (int j = i + 1; j < n; ++j) {
                 A[i * n + j] = 0.0f;
             }
@@ -161,83 +186,78 @@ bool cholesky_decompose(float *A, int n, bool upper) {
     } else {
         for (int i = 0; i < n; ++i) {
             for (int j = 0; j <= i; ++j) {
-                float sum = A[j * n + i];
-                for (int k = 0; k < j; ++k) {
-                    sum -= A[k * n + i] * A[k * n + j];
+                float sum = A[i * n + j];
+                if (j > 0) {
+                    sum -= dot_product(&A[i * n], &A[j * n], j);
                 }
                 if (i == j) {
                     if (sum <= 0.0f) {
                         return false;
                     }
-                    A[j * n + i] = std::sqrt(sum);
+                    A[i * n + j] = std::sqrt(sum);
                 } else {
-                    A[j * n + i] = sum / A[j * n + j];
+                    A[i * n + j] = sum / A[j * n + j];
                 }
             }
-            // 清零下三角
+#pragma omp parallel for
             for (int j = i + 1; j < n; ++j) {
-                A[j * n + i] = 0.0f;
+                A[i * n + j] = 0.0f;
             }
         }
     }
     return true;
 }
 
-// 计算 A^{-1} = (L * L^T)^{-1} = L^{-T} * L^{-1}
-// 利用 inplace Hess 做 L，结果也写入 Hess 中，重用内存
-void invert_symmetric_from_cholesky(float *A, int n) {
-    // A 是 Cholesky 后的下三角 L，求 A^{-1}
+// Compute A^{-1} from Cholesky(L)
+void invert_symmetric_from_cholesky(float *A, int n, float *temp_row) {
 #pragma omp parallel for
     for (int col = 0; col < n; ++col) {
-        float *temp_row = new float[n];
-        // 解 L y = e_col，得到 y
+        float *row_buf = temp_row + col * n;
+        // Forward: L y = e
         for (int i = 0; i < n; ++i) {
             float sum = (i == col) ? 1.0f : 0.0f;
-            for (int j = 0; j < i; ++j) {
-                sum -= A[i * n + j] * temp_row[j];
+            if (i > 0) {
+                sum -= dot_product(&A[i * n], row_buf, i);
             }
-            temp_row[i] = sum / A[i * n + i];
+            row_buf[i] = sum / A[i * n + i];
         }
-
-        // 解 L^T x = y，得到 x，写入 A 的对称位置
+        // Backward: L^T x = y
         for (int i = n - 1; i >= 0; --i) {
-            float sum = temp_row[i];
+            float sum = row_buf[i];
             for (int j = i + 1; j < n; ++j) {
                 sum -= A[j * n + i] * A[j * n + col];
             }
             A[i * n + col] = sum / A[i * n + i];
         }
-
-        // 对称写入 A[col][i] = A[i][col]
         for (int row = 0; row < col; ++row) {
             A[col * n + row] = A[row * n + col];
         }
-        delete[] temp_row;
     }
 }
 
-// 清除下三角
+// Clear lower triangle for upper triangular result
 void clear_lower_triangle(float *A, int n) {
+    __m256 zero = _mm256_setzero_ps();
 #pragma omp parallel for
     for (int i = 0; i < n; ++i) {
-        for (int j = 0; j < i; ++j) {
+        int j = 0;
+        for (; j + 7 < i; j += 8) {
+            _mm256_storeu_ps(&A[i * n + j], zero);
+        }
+        for (; j < i; ++j) {
             A[i * n + j] = 0.0f;
         }
     }
 }
 
-void cholesky(float *Hess, int K) {
-    // Step 1: Cholesky(Lower)
-    SAFE_ASSERT(cholesky_decompose(Hess, K, false));
+void cholesky_inverse_then_upper_cholesky(float *Hess, int K) {
+    cholesky_decompose(Hess, K, false);
 
-    // Step 2: Invert (L * L^T)^{-1}
+    float *temp = (float *)aligned_alloc(32, sizeof(float) * K * K);
+    invert_symmetric_from_cholesky(Hess, K, temp);
+    free(temp);
 
-    invert_symmetric_from_cholesky(Hess, K);
-
-    // Step 3: Cholesky(Upper)
-    SAFE_ASSERT(cholesky_decompose(Hess, K, true));
-
-    // Step 4: 清除下三角
+    cholesky_decompose(Hess, K, true);
     clear_lower_triangle(Hess, K);
 }
 
@@ -280,7 +300,8 @@ void fasterquant(T *weight, T *Q, T *Err, T *b_scale, T *zero, float *Hess,
     for (int dead = 0; dead < K; dead++) {
         Hess[dead * K + dead] += damp;
     }
-    cholesky(Hess, K);
+    cholesky_inverse_then_upper_cholesky(Hess, K);
+
     for (int index = 0; index < K / block_size; index++) {
         for (int i = 0; i < block_size; i++) {
             float d = Hess[(index * block_size + i) * K + index * block_size + i];
