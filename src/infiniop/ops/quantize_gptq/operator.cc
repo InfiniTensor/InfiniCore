@@ -8,6 +8,9 @@
 #ifdef ENABLE_CUDA_API
 #include "cuda/quantize_gptq_cuda.cuh"
 #endif
+#ifdef ENABLE_ASCEND_API
+#include "ascend/quantize_gptq_ascend.h"
+#endif
 
 __C infiniStatus_t infiniopCreateQuantizeGPTQDescriptor(infiniopHandle_t handle,
                                                         infiniopQuantizeGPTQDescriptor_t *desc_ptr,
@@ -33,6 +36,9 @@ __C infiniStatus_t infiniopCreateQuantizeGPTQDescriptor(infiniopHandle_t handle,
 #ifdef ENABLE_CUDA_API
         CREATE(INFINI_DEVICE_NVIDIA, cuda)
 #endif
+#ifdef ENABLE_ASCEND_API
+        CREATE(INFINI_DEVICE_ASCEND, ascend)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -49,6 +55,9 @@ __C infiniStatus_t infiniopGetQuantizeGPTQWorkspaceSize(infiniopQuantizeGPTQDesc
 #endif
 #ifdef ENABLE_CUDA_API
         GET(INFINI_DEVICE_NVIDIA, cuda)
+#endif
+#ifdef ENABLE_ASCEND_API
+        GET(INFINI_DEVICE_ASCEND, ascend)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -76,6 +85,9 @@ __C infiniStatus_t infiniopQuantizeGPTQ(infiniopQuantizeGPTQDescriptor_t desc,
 #ifdef ENABLE_CUDA_API
         QUANT(INFINI_DEVICE_NVIDIA, cuda)
 #endif
+#ifdef ENABLE_ASCEND_API
+        QUANT(INFINI_DEVICE_ASCEND, ascend)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -102,6 +114,9 @@ __C infiniStatus_t infiniopQuantizeLinearGPTQ(infiniopQuantizeGPTQDescriptor_t d
 #ifdef ENABLE_CUDA_API
         CACULATE(INFINI_DEVICE_NVIDIA, cuda)
 #endif
+#ifdef ENABLE_ASCEND_API
+        CACULATE(INFINI_DEVICE_ASCEND, ascend)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -119,6 +134,9 @@ __C infiniStatus_t infiniopDestroyQuantizeGPTQDescriptor(infiniopQuantizeGPTQDes
 #endif
 #ifdef ENABLE_CUDA_API
         DESTROY(INFINI_DEVICE_NVIDIA, cuda)
+#endif
+#ifdef ENABLE_ASCEND_API
+        DESTROY(INFINI_DEVICE_ASCEND, ascend)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

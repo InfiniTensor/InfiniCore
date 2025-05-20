@@ -38,6 +38,7 @@ for _, layers in MODELS.items():
         for batch in [1, 16]:
             _TEST_CASES.append(((batch, layer[0], layer[1])))
 
+
 # Data types used for testing
 _TENSOR_DTYPES = [torch.float16]
 
@@ -248,9 +249,12 @@ class GPTQ:
         damp = percdamp * torch.mean(torch.diag(H))
         diag = torch.arange(self.columns, device=self.dev)
         H[diag, diag] += damp
-        H = torch.linalg.cholesky(H.to("cpu")).to(
-            H.device
-        )  # 对于CUDA来说，这个地方直接在CUDA上做cholesky分解可能会失败
+        if H.device == "cuda":
+            H = torch.linalg.cholesky(H.to("cpu")).to(
+                H.device
+            )  # 对于CUDA来说，这个地方直接在CUDA上做cholesky分解可能会失败
+        else:
+            H = torch.linalg.cholesky(H)
         H = torch.cholesky_inverse(H)
         H = torch.linalg.cholesky(H, upper=True)
         Hinv = H
@@ -347,7 +351,16 @@ def quantize_gptq(a, b):
 
 # The argument list should be (lib, handle, torch_device, <param list>, dtype)
 # The <param list> should keep the same order as the one specified in _TEST_CASES
-def test(lib, handle, torch_device, M, K, N, dtype=torch.float16, sync=None):
+def test(
+    lib,
+    handle,
+    torch_device,
+    M,
+    K,
+    N,
+    dtype=torch.float16,
+    sync=None
+):
     print(
         f"Testing QuantizeGPTQ on {torch_device}" f" M:{M}, K:{K}, N:{N}, dtype:{dtype}"
     )
@@ -373,7 +386,10 @@ def test(lib, handle, torch_device, M, K, N, dtype=torch.float16, sync=None):
         b_ref, s, z = get_scale_zero(b, a, c, group_size)
         z = torch.zeros_like(s)
         packed_weights = pack(b_ref, s, z)
-        # print(s)
+
+    if torch_device == "npu":
+        b_ref, s, z = get_scale_zero(b, a, c, group_size)
+        packed_weights = pack(b_ref, s, z)
 
     a_tensor, b_tensor, c_tensor, s_tensor, z_tensor, packed_weights_tensor = (
         to_tensor(a.t(), lib),
