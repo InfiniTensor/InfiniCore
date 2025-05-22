@@ -58,6 +58,59 @@ getOutputIndex(size_t idx,
 }
 
 /**
+ * @brief Calculates optimal chunk size for memory operations based on tensor contiguity.
+ *
+ *        This function doesn't handle tensors with non-standard strides, which require
+ *        require more general optimizations not specific to Cambricon.
+ *
+ * @param global_idx_    Starting global index.
+ * @param ndim           Number of dimensions.
+ * @param shape          Tensor shape.
+ * @param strides        Tensor strides.
+ * @param max_len        Maximum allowed chunk size.
+ * @return size_t        Optimal chunk size for memory operations.
+ */
+__mlu_device__ size_t calculateChunkSize(
+    size_t global_idx_,
+    size_t ndim,
+    const size_t *shape,
+    const ptrdiff_t *strides,
+    size_t max_len) {
+    // Find the last dimension that is contiguous
+    int last_contiguous_dim = -1;
+    ptrdiff_t expected_stride = 1;
+
+    for (int i = (int)ndim - 1; i >= 0; --i) {
+        if (strides[i] != expected_stride) {
+            break;
+        }
+        last_contiguous_dim = i;
+        if (i > 0) {
+            expected_stride *= shape[i];
+        }
+    }
+
+    if (last_contiguous_dim < 0) {
+        return 1;
+    }
+
+    // Calculate position in the contiguous block
+    size_t global_idx = global_idx_;
+    size_t pos_in_block = 0;
+    size_t block_size = 1;
+
+    for (int i = (int)ndim - 1; i >= last_contiguous_dim; --i) {
+        size_t dim_idx = global_idx % shape[i];
+        pos_in_block += dim_idx * block_size;
+        block_size *= shape[i];
+        global_idx /= shape[i];
+    }
+
+    size_t remaining_in_block = block_size - pos_in_block;
+    return std::min(max_len, remaining_in_block);
+}
+
+/**
  * @brief Core elementwise operation implementation for BANG device.
  *
  * @tparam N              Number of input tensors.
@@ -74,27 +127,32 @@ getOutputIndex(size_t idx,
  * @param output_contiguous Whether output is contiguous.
  * @param input_contiguous Array indicating input contiguity.
  * @param ndim           Number of dimensions.
- * @param output_shape_gm Output shape in global memory.
- * @param output_strides_gm Output strides in global memory.
+ * @param input_shape Input shape in global memory.
+ * @param input_strides Input strides in global memory.
+ * @param output_shape Output shape in global memory.
+ * @param output_strides Output strides in global memory.
  * @param indexer        Input indexer helper.
  * @param start_idx      Starting index for this task.
  * @param args           Additional arguments for operator.
  */
 template <size_t N, typename Op, typename Tdata, typename... Args>
 __mlu_device__ void launchOp(
-    Tdata **typed_inputs,               // global memory pointers
-    Tdata *output,                      // global memory output
-    Tdata *nram_buf,                    // NRAM buffer for inputs and output
-    size_t *input_indexes,              // input indexes for each operand
-    size_t output_index,                // output index
-    size_t num_elements,                // number of elements to process
-    bool output_contiguous,             // whether output is contiguous
-    const bool *input_contiguous,       // whether each input is contiguous
-    size_t ndim,                        // number of dimensions
-    const size_t *output_shape_gm,      // output shape
-    const ptrdiff_t *output_strides_gm, // output strides
-    InputIndexer indexer,               // input indexer
-    size_t start_idx,                   // starting index for this task
+    Tdata **typed_inputs,
+    Tdata *output,
+    Tdata *nram_buf,
+    size_t *input_indexes,
+    size_t output_index,
+    size_t num_elements,
+    bool output_contiguous,
+    const bool *input_contiguous,
+    const bool *input_broadcasted,
+    size_t ndim,
+    const size_t *input_shapes,
+    const ptrdiff_t *input_strides,
+    const size_t *output_shape,
+    const ptrdiff_t *output_strides,
+    InputIndexer indexer,
+    size_t start_idx,
     Args... args) {
 
     static_assert(N == Op::num_inputs, "template N is not equal to Op::num_inputs!");
@@ -117,19 +175,31 @@ __mlu_device__ void launchOp(
             input_buffers[i] = aligned_buf + i * max_batch;
 
             if (input_contiguous[i]) {
-                // Contiguous case - can use bulk copy
+                // Contiguous case - bulk copy
                 __memcpy_async(input_buffers[i],
                                typed_inputs[i] + input_indexes[i] + processed,
                                curr_batch * sizeof(Tdata),
                                GDRAM2NRAM);
             } else {
-                // Non-contiguous case - copy element by element
-                for (size_t j = 0; j < curr_batch; j++) {
-                    size_t element_offset = indexer(i, j + processed);
-                    __memcpy_async(input_buffers[i] + j,
+                // Non-contiguous case - copy in contiguous chunks
+                size_t remaining = curr_batch;
+                size_t current_pos = 0;
+
+                while (remaining > 0) {
+                    size_t element_offset = indexer(i, processed + current_pos);
+                    size_t chunk_size = calculateChunkSize(start_idx + processed + current_pos,
+                                                           ndim,
+                                                           input_shapes + i * ndim,
+                                                           input_strides + i * ndim,
+                                                           remaining);
+
+                    __memcpy_async(input_buffers[i] + current_pos,
                                    typed_inputs[i] + element_offset,
-                                   sizeof(Tdata),
+                                   chunk_size * sizeof(Tdata),
                                    GDRAM2NRAM);
+
+                    current_pos += chunk_size;
+                    remaining -= chunk_size;
                 }
             }
         }
@@ -149,17 +219,31 @@ __mlu_device__ void launchOp(
                            curr_batch * sizeof(Tdata),
                            NRAM2GDRAM);
         } else {
-            // Non-contiguous output - copy element by element
-            for (size_t j = 0; j < curr_batch; j++) {
-                size_t out_offset = getOutputIndex(start_idx + j + processed,
-                                                   output_contiguous,
-                                                   ndim,
-                                                   output_shape_gm,
-                                                   output_strides_gm);
+            // Non-contiguous output - copy in contiguous chunks
+            size_t remaining = curr_batch;
+            size_t current_pos = 0;
+
+            while (remaining > 0) {
+                size_t chunk_size = calculateChunkSize(start_idx + processed + current_pos,
+                                                       ndim,
+                                                       output_shape,
+                                                       output_strides,
+                                                       remaining);
+
+                size_t out_offset = getOutputIndex(
+                    start_idx + processed + current_pos,
+                    output_contiguous,
+                    ndim,
+                    output_shape,
+                    output_strides);
+
                 __memcpy_async(output + out_offset,
-                               output_buffer + j,
-                               sizeof(Tdata),
+                               output_buffer + current_pos,
+                               chunk_size * sizeof(Tdata),
                                NRAM2GDRAM);
+
+                current_pos += chunk_size;
+                remaining -= chunk_size;
             }
         }
 
@@ -178,12 +262,12 @@ __mlu_device__ void launchOp(
  * @param output_size         Total output elements.
  * @param ndim                Number of dimensions.
  * @param output_contiguous   Whether output is contiguous.
- * @param input_contiguous_gm Input contiguity flags in global memory.
- * @param input_broadcasted_gm Input broadcast flags in global memory.
- * @param output_shape_gm     Output shape in global memory.
- * @param input_shapes_gm     Input shapes in global memory.
- * @param output_strides_gm   Output strides in global memory.
- * @param input_strides_gm    Input strides in global memory.
+ * @param input_contiguous Input contiguity flags in global memory.
+ * @param input_broadcasted Input broadcast flags in global memory.
+ * @param output_shape     Output shape in global memory.
+ * @param input_shapes     Input shapes in global memory.
+ * @param output_strides   Output strides in global memory.
+ * @param input_strides    Input strides in global memory.
  * @param output             Output tensor pointer.
  * @param inputs             Array of input pointers.
  * @param args               Additional arguments for operator.
@@ -193,12 +277,12 @@ __mlu_global__ void elementwiseKernel(
     size_t output_size,
     size_t ndim,
     bool output_contiguous,
-    const bool *input_contiguous_gm,
-    const bool *input_broadcasted_gm,
-    const size_t *output_shape_gm,
-    const size_t *input_shapes_gm,
-    const ptrdiff_t *output_strides_gm,
-    const ptrdiff_t *input_strides_gm,
+    const bool *input_contiguous,
+    const bool *input_broadcasted,
+    const size_t *output_shape,
+    const size_t *input_shapes,
+    const ptrdiff_t *output_strides,
+    const ptrdiff_t *input_strides,
     Tdata *output,
     const void *const *inputs,
     Args... args) {
@@ -224,17 +308,17 @@ __mlu_global__ void elementwiseKernel(
 
     // Get output index
     size_t output_index = getOutputIndex(start_idx, output_contiguous,
-                                         ndim, output_shape_gm, output_strides_gm);
+                                         ndim, output_shape, output_strides);
 
     // Create input indexer
     InputIndexer indexer{
         static_cast<size_t>(start_idx),
         ndim,
-        input_contiguous_gm,
-        input_broadcasted_gm,
-        input_shapes_gm,
-        input_strides_gm,
-        output_strides_gm};
+        input_contiguous,
+        input_broadcasted,
+        input_shapes,
+        input_strides,
+        output_strides};
 
     // Get index offsets for each operand
     size_t input_indexes[N];
@@ -245,12 +329,15 @@ __mlu_global__ void elementwiseKernel(
     // Launch the operation with all required parameters
     launchOp<N, Op, Tdata>(typed_inputs, output, nram_buf, input_indexes,
                            output_index, num_elements, output_contiguous,
-                           input_contiguous_gm, ndim, output_shape_gm,
-                           output_strides_gm, indexer, start_idx, args...);
+                           input_contiguous, input_broadcasted, ndim,
+                           input_shapes, input_strides, output_shape,
+                           output_strides, indexer, start_idx, args...);
 }
 
 /**
  * @brief Determines optimal kernel launch configuration based on input size and hardware.
+ *
+ *        Details of this function may require further investigations.
  *
  * @param output_size Total number of output elements.
  * @return cnrtDim3_t Optimal kernel launch dimensions.
