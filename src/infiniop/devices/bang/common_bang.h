@@ -2,6 +2,7 @@
 #define __COMMON_BANG_H__
 
 #include "../../../utils.h"
+#include "../../tensor.h"
 #include "../pool.h"
 #include "bang_handle.h"
 #include "cnnl.h"
