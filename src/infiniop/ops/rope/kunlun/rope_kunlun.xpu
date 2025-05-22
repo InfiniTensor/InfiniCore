@@ -1,0 +1,100 @@
+#ifndef __ROPE_KUNLUN_KERNEL_XPU__
+#define __ROPE_KUNLUN_KERNEL_XPU__
+
+#include "../../../devices/kunlun/kunlun_kernel_common.h"
+
+template <typename T, typename Tindex, typename Tangle>
+__global__ void RoPEKernel(T *destination, const T *source, 
+                const Tindex *pos_ids, const Tangle *sin_table, const Tangle *cos_table, 
+                size_t seqlen,  size_t nhead, size_t dhead,
+                long x_stride_seqlen, long x_stride_nhead,
+                long y_stride_seqlen, long y_stride_nhead,
+                XPUStream stream){
+    //ndim = 3
+    size_t other_size = seqlen * nhead;
+
+    int cid = core_id();
+    int ncores = core_num();
+    if (cid >= ncores) {
+        return;
+    }
+    int thread_id = ncores * cluster_id() + cid;
+    int nthreads = ncores * cluster_num();
+
+    int remain = other_size % nthreads;
+    int step_easy = (other_size - remain) / nthreads;
+    int step_hard = step_easy + 1;
+    int step = (thread_id < remain ? step_hard : step_easy);
+    int ind_start = (thread_id < remain ? thread_id * step_hard : remain * step_hard + (thread_id - remain) * step_easy);
+
+    constexpr int buf_size = 256;
+    __local__ T x_local[buf_size];//昆仑芯不支持bf16到f32的转换，只能默认T=float
+    __local__ T y_local[buf_size];
+    __local__ Tangle sin_local[buf_size];
+    __local__ Tangle cos_local[buf_size];
+    __local__ Tindex pos_local[1];
+
+    int remain_dhead = dhead % buf_size;
+    int repeat = (dhead - remain_dhead) / buf_size;
+
+    for(int i = ind_start; i < ind_start + step; i++){
+        int ind_i = i;
+        int ind_d = 0;
+        int ind_s = 0;
+        ind_d += (ind_i % nhead) * y_stride_nhead;
+        ind_s += (ind_i % nhead) * x_stride_nhead;
+        ind_i /= nhead;
+        ind_d += (ind_i % seqlen) * y_stride_seqlen;
+        ind_s += (ind_i % seqlen) * x_stride_seqlen;
+        GM2LM(pos_ids + (ind_i % seqlen), pos_local, 1 * sizeof(Tindex));
+        int index = static_cast<int>(pos_local[0]) * dhead / 2;
+        for(int r = 0; r < repeat + (remain_dhead > 0 ? 1 : 0); r++){
+            int read_len = (r < repeat ? buf_size : remain_dhead);
+            int dk = read_len / 2;
+            int start_d = ind_d + r * buf_size;
+            int start_s = ind_s + r * buf_size;
+            int sin_cos_index = index + r * buf_size / 2;
+            GM2LM(source + start_s, x_local, read_len * sizeof(T));
+            GM2LM(sin_table + sin_cos_index, sin_local, dk * sizeof(Tangle));
+            GM2LM(cos_table + sin_cos_index, cos_local, dk * sizeof(Tangle));
+            for(int k = 0; k < dk; k++){
+                if constexpr (xpu_std::is_same<T, float>::value && xpu_std::is_same<Tangle, float>::value) {
+                    y_local[2 * k] = x_local[2 * k] * cos_local[k] - x_local[2 * k + 1] * sin_local[k];
+                    y_local[2 * k + 1] = x_local[2 * k] * sin_local[k] + x_local[2 * k + 1] * cos_local[k];
+                }
+            }
+            mfence();
+            LM2GM(y_local, destination + start_d, read_len * sizeof(T));
+        }
+    }
+}
+
+template <typename T, typename Tindex, typename Tangle>
+void RoPE(void *destination, const void *source, 
+                const void *pos_ids, const void *sin_table, const void *cos_table, 
+                size_t seqlen,  size_t nhead, size_t dhead,
+                long x_stride_seqlen, long x_stride_nhead,
+                long y_stride_seqlen, long y_stride_nhead,
+                XPUStream stream){
+    RoPEKernel<T, Tindex, Tangle><<<8, 64, stream>>>((T *)destination, (T *)source, 
+                (Tindex *)pos_ids, (Tangle *)sin_table, (Tangle *)cos_table, 
+                seqlen,  nhead, dhead,
+                x_stride_seqlen, x_stride_nhead,
+                y_stride_seqlen, y_stride_nhead, stream);           
+    xpu_wait(stream); 
+    
+}
+void RoPEF32I32F32(void *destination, const void *source, 
+                const void *pos_ids, const void *sin_table, const void *cos_table, 
+                size_t seqlen,  size_t nhead, size_t dhead,
+                long x_stride_seqlen, long x_stride_nhead,
+                long y_stride_seqlen, long y_stride_nhead,
+                XPUStream stream){
+    RoPE<float, uint32_t, float>(destination, source, 
+                pos_ids, sin_table, cos_table, 
+                seqlen,  nhead, dhead,
+                x_stride_seqlen, x_stride_nhead,
+                y_stride_seqlen, y_stride_nhead, stream); 
+}
+
+#endif
