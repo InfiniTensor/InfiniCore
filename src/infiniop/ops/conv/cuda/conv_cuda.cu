@@ -33,9 +33,9 @@ infiniStatus_t Descriptor::create(
                                    pads, strides, dilations, n);
 
     CHECK_RESULT(result);
-
+    size_t workspace_size = result->handler->workspace_size;
     *desc_ptr = new Descriptor(
-        dtype, result.take(), result->handler->workspace_size,
+        dtype, result.take(), workspace_size,
         new Opaque{handle->internal()},
         handle->device, handle->device_id);
     return INFINI_STATUS_SUCCESS;

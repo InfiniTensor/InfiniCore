@@ -90,7 +90,7 @@ _TENSOR_DTYPES = [torch.float16, torch.float32]
 # Tolerance map for different data types
 _TOLERANCE_MAP = {
     torch.float16: {"atol": 1e-3, "rtol": 1e-3},
-    torch.float32: {"atol": 1e-3, "rtol": 1e-3},
+    torch.float32: {"atol": 1e-6, "rtol": 1e-6},
 }
 
 DEBUG = False
@@ -175,13 +175,13 @@ def test(
     print(
         f"Testing Conv on {torch_device} with x_shape: {x_shape}, w_shape: {w_shape}, b_shape: {w_shape[0]}, pads: {pads}, strides: {strides}, dilations: {dilations}, x_stride: {tensor_stride} dtype:{tensor_dtype}"
     )
-    x = torch.rand(x_shape, dtype=tensor_dtype).to(torch_device)
-    w = torch.rand(w_shape, dtype=tensor_dtype).to(torch_device)
+    x = torch.rand(x_shape, dtype=tensor_dtype).to(torch_device) * 0.01
+    w = torch.rand(w_shape, dtype=tensor_dtype).to(torch_device) * 0.01
     y = torch.zeros(
         inferShape(x.shape, w.shape, pads, strides, dilations), dtype=tensor_dtype
     ).to(torch_device)
     bias = (
-        torch.rand(w.shape[0], dtype=tensor_dtype).to(torch_device)
+        torch.rand(w.shape[0], dtype=tensor_dtype).to(torch_device) * 0.01
         if w.shape[0] > 1
         else None
     )

@@ -35,7 +35,7 @@ public:
     std::vector<size_t> strides_info;
     std::vector<size_t> dilations_info;
 #ifdef ENABLE_CUDA_API
-    std::shared_ptr<CudnnConvHandler> bhandler = nullptr;
+    std::shared_ptr<CudnnConvHandler> handler = nullptr;
 #endif
     static utils::Result<ConvInfo> create(
         infiniopHandle_t handle_,
