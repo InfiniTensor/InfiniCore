@@ -45,6 +45,8 @@ class AddTestCase(InfiniopTestCase):
         shape_b: List[int] | None,
         c: np.ndarray,
         stride_c: List[int] | None,
+        shape_c: List[int] | None,
+
     ):
         super().__init__("add")
         self.a = a
@@ -57,6 +59,7 @@ class AddTestCase(InfiniopTestCase):
         self.shape_b = shape_b
         self.c = c
         self.stride_c = stride_c
+        self.shape_c = shape_c
 
 
     def write_test(self, test_writer: "InfiniopTestWriter"):
@@ -71,6 +74,8 @@ class AddTestCase(InfiniopTestCase):
             test_writer.add_array(test_writer.gguf_key("a.shape"), self.shape_a)
         if self.shape_b is not None:
             test_writer.add_array(test_writer.gguf_key("b.shape"), self.shape_b)
+        if self.shape_c is not None:
+            test_writer.add_array(test_writer.gguf_key("c.shape"), self.shape_c)
         test_writer.add_tensor(
             test_writer.gguf_key("a"), self.a, raw_dtype=np_dtype_to_ggml(self.a.dtype)
         )
@@ -98,23 +103,24 @@ if __name__ == "__main__":
     # These are not meant to be imported from other modules
     _TEST_CASES_ = [
         # shape, a_stride, b_stride, c_stride
-        ((13, 4), None, None, None),
+        ((13, 4), None, None, gguf_strides(20, 1)),
         ((13, 4), gguf_strides(10, 1), gguf_strides(10, 1), gguf_strides(10, 1)),
-        ((13, 4), gguf_strides(0, 1), None, None),
-        ((13, 4, 4), None, None, None),
+        ((13, 4), gguf_strides(0, 1), None, gguf_strides(4, 1)),
+        ((13, 4, 4), None, None, gguf_strides(20, 4, 1)),
         ((13, 4, 4), gguf_strides(20, 4, 1), gguf_strides(20, 4, 1), gguf_strides(20, 4, 1)),
-        ((13, 4, 4), gguf_strides(4, 0, 1), gguf_strides(0, 4, 1), None),
-        ((16, 5632), None, None, None),
+        ((13, 4, 4), gguf_strides(4, 0, 1), gguf_strides(0, 4, 1), gguf_strides(16, 4, 1)),
+        ((16, 5632), None, None, gguf_strides(13312, 1)),
         ((16, 5632), gguf_strides(13312, 1), gguf_strides(13312, 1), gguf_strides(13312, 1)),
-        ((4, 4, 5632), None, None, None),
+        ((4, 4, 5632), None, None, gguf_strides(22528, 5632, 1)),
         ((4, 4, 5632), gguf_strides(45056, 5632, 1), gguf_strides(45056, 5632, 1), gguf_strides(45056, 5632, 1)),
     ]
-    _TENSOR_DTYPES_ = [np.float32] # np.float16
+    _TENSOR_DTYPES_ = [np.float32, np.float16]
     for dtype in _TENSOR_DTYPES_:
         for shape, stride_a, stride_b, stride_c in _TEST_CASES_:
             a = np.random.rand(*shape).astype(dtype)
             b = np.random.rand(*shape).astype(dtype)
-            c = np.random.rand(*shape).astype(dtype)
+            zero_shape = tuple(0 for _ in shape)
+            c = np.empty(zero_shape, dtype=dtype)
 
             # Reverse strides to match internal layout expectations
             reversed_stride_a = tuple(reversed(stride_a)) if stride_a else None
@@ -143,6 +149,7 @@ if __name__ == "__main__":
                 shape_b=shape,
                 c=c,
                 stride_c=stride_c,
+                shape_c=shape,
             )
             test_cases.append(test_case)
     test_writer.add_tests(test_cases)
