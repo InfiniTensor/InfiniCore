@@ -60,7 +60,7 @@ getOutputIndex(size_t idx,
 /**
  * @brief Calculates optimal chunk size for memory operations based on tensor contiguity.
  *
- *        This function doesn't handle tensors with non-standard strides, which require
+ *        This function doesn't handle tensors with non-standard strides, which
  *        require more general optimizations not specific to Cambricon.
  *
  * @param global_idx_    Starting global index.
@@ -113,27 +113,27 @@ __mlu_device__ size_t calculateChunkSize(
 /**
  * @brief Core elementwise operation implementation for BANG device.
  *
- * @tparam N              Number of input tensors.
- * @tparam Op            Operator functor type.
- * @tparam Tdata         Data type for inputs and output.
- * @tparam Args          Additional arguments for operator.
+ * @tparam N                Number of input tensors.
+ * @tparam Op               Operator functor type.
+ * @tparam Tdata            Data type for inputs and output.
+ * @tparam Args             Additional arguments for operator.
  *
- * @param typed_inputs    Array of typed input pointers.
- * @param output         Output tensor pointer.
- * @param nram_buf       NRAM buffer for temporary storage.
- * @param input_indexes  Precomputed input indexes.
- * @param output_index   Starting output index.
- * @param num_elements   Number of elements to process.
+ * @param typed_inputs      Array of typed input pointers.
+ * @param output            Output tensor pointer.
+ * @param nram_buf          NRAM buffer for temporary storage.
+ * @param input_indexes     Precomputed input indexes.
+ * @param output_index      Starting output index.
+ * @param num_elements      Number of elements to process.
  * @param output_contiguous Whether output is contiguous.
- * @param input_contiguous Array indicating input contiguity.
- * @param ndim           Number of dimensions.
- * @param input_shape Input shape in global memory.
- * @param input_strides Input strides in global memory.
- * @param output_shape Output shape in global memory.
- * @param output_strides Output strides in global memory.
- * @param indexer        Input indexer helper.
- * @param start_idx      Starting index for this task.
- * @param args           Additional arguments for operator.
+ * @param input_contiguous  Array indicating input contiguity.
+ * @param ndim              Number of dimensions.
+ * @param input_shape       Input shape in global memory.
+ * @param input_strides     Input strides in global memory.
+ * @param output_shape      Output shape in global memory.
+ * @param output_strides    Output strides in global memory.
+ * @param indexer           Input indexer helper.
+ * @param start_idx         Starting index for this task.
+ * @param args              Additional arguments for operator.
  */
 template <size_t N, typename Op, typename Tdata, typename... Args>
 __mlu_device__ void launchOp(
@@ -262,15 +262,15 @@ __mlu_device__ void launchOp(
  * @param output_size         Total output elements.
  * @param ndim                Number of dimensions.
  * @param output_contiguous   Whether output is contiguous.
- * @param input_contiguous Input contiguity flags in global memory.
- * @param input_broadcasted Input broadcast flags in global memory.
- * @param output_shape     Output shape in global memory.
- * @param input_shapes     Input shapes in global memory.
- * @param output_strides   Output strides in global memory.
- * @param input_strides    Input strides in global memory.
- * @param output             Output tensor pointer.
- * @param inputs             Array of input pointers.
- * @param args               Additional arguments for operator.
+ * @param input_contiguous    Input contiguity flags in global memory.
+ * @param input_broadcasted   Input broadcast flags in global memory.
+ * @param output_shape        Output shape in global memory.
+ * @param input_shapes        Input shapes in global memory.
+ * @param output_strides      Output strides in global memory.
+ * @param input_strides       Input strides in global memory.
+ * @param output              Output tensor pointer.
+ * @param inputs              Array of input pointers.
+ * @param args                Additional arguments for operator.
  */
 template <size_t N, typename Op, typename Tdata, typename... Args>
 __mlu_global__ void elementwiseKernel(
