@@ -28,7 +28,7 @@ infiniStatus_t Descriptor::create(infiniopHandle_t handle_, Descriptor **desc_pt
     CHECK_RESULT(result);
     MatmulGptqInfo info = result.take();
     size_t min_workspace_size
-        = info.k * info.k * sizeof(float) + (2 * info.n * info.k + info.n * info.block_size) * infiniSizeOf(info.atype);
+        = (info.k * info.k + info.n * info.block_size) * sizeof(float) + (2 * info.n * info.k) * infiniSizeOf(info.atype);
 
     *desc_ptr = new Descriptor(info, nullptr, min_workspace_size, handle->device, handle->device_id);
     return INFINI_STATUS_SUCCESS;
@@ -113,34 +113,6 @@ void find_params(T *x, T *b_scale, T *zero, int N, int K,
     }
 }
 
-template <typename T>
-void add_batch(const T *inp, float *Hess, float nsamples, int M, int K) { // Hess, nsamples默认是0
-    int tmp = 1;
-#pragma omp parallel for
-    for (int index = 0; index < K * K; index++) {
-        Hess[index] = nsamples / (nsamples + tmp) * Hess[index];
-    }
-    nsamples += tmp;
-#pragma omp parallel for
-    for (int index = 0; index < K * K; index++) {
-        int j = index % K;
-        int i = index / K;
-        float s = 0.0f;
-        for (int m = 0; m < M; m++) {
-            if constexpr (std::is_same<T, fp16_t>::value) {
-                s += utils::cast<float>(inp[i * M + m]) * utils::cast<float>(inp[j * M + m]) * static_cast<float>(std::pow(nsamples / (nsamples + tmp), 2));
-            } else if constexpr (std::is_same<T, float>::value) {
-                s += inp[i * M + m] * inp[j * M + m] * static_cast<float>(std::pow(nsamples / (nsamples + tmp), 2));
-            }
-        }
-        Hess[i * K + j] = s;
-        if (i != j) {
-            Hess[j * K + i] = s;
-        }
-    }
-}
-
-// Cholesky 分解 (in-place)，只支持 lower (第一步) 或 upper (第三步)
 // dot product with AVX
 inline float dot_product(const float *a, const float *b, int len) {
     __m256 sum = _mm256_setzero_ps();
@@ -159,6 +131,50 @@ inline float dot_product(const float *a, const float *b, int len) {
     }
     return total;
 }
+
+template <typename T>
+void add_batch(const T *inp, float *Hess, float nsamples, int M, int K) { // Hess, nsamples默认是0
+    const int tmp = M;
+    const float ns_new = nsamples + tmp;
+    const float w_old = nsamples / ns_new;
+    const float w_new = 2.0f / ns_new;
+
+    // 1. Scale existing Hessian
+#pragma omp parallel for
+    for (int i = 0; i < K * K; ++i) {
+        Hess[i] *= w_old;
+    }
+
+    // 2. Cast input to float buffer
+    std::vector<float> buffer(K * M);
+#pragma omp parallel for
+    for (int i = 0; i < K * M; ++i) {
+        if constexpr (std::is_same<T, fp16_t>::value) {
+            buffer[i] = utils::cast<float>(inp[i]);
+        } else {
+            buffer[i] = inp[i];
+        }
+    }
+
+    // 3. Compute upper triangle of Hessian (without collapse)
+#pragma omp parallel for schedule(dynamic)
+    for (int i = 0; i < K; ++i) {
+        for (int j = i; j < K; ++j) {
+            float s = dot_product(buffer.data() + i * M, buffer.data() + j * M, M);
+            Hess[i * K + j] += s * w_new;
+        }
+    }
+
+    // 4. Mirror to lower triangle (no collapse)
+#pragma omp parallel for
+    for (int i = 0; i < K; ++i) {
+        for (int j = i + 1; j < K; ++j) {
+            Hess[j * K + i] = Hess[i * K + j];
+        }
+    }
+}
+
+// Cholesky 分解 (in-place)，只支持 lower (第一步) 或 upper (第三步)
 
 // Cholesky decomposition (lower or upper)
 bool cholesky_decompose(float *A, int n, bool upper) {
@@ -262,7 +278,7 @@ void cholesky_inverse_then_upper_cholesky(float *Hess, int K) {
 }
 
 template <typename T>
-void fasterquant(T *weight, T *Q, T *Err, T *b_scale, T *zero, float *Hess,
+void fasterquant(T *weight, T *Q, float *Err, T *b_scale, T *zero, float *Hess,
                  int M, int K, int N,
                  int block_size = 128, float percdamp = 0.01, int group_size = -1,
                  int bits = 4, bool sym = false, bool mse = false,
@@ -336,11 +352,7 @@ void fasterquant(T *weight, T *Q, T *Err, T *b_scale, T *zero, float *Hess,
                     }
                 }
 
-                if constexpr (std::is_same<T, fp16_t>::value) {
-                    Err[n * block_size + i] = utils::cast<fp16_t>(err);
-                } else if constexpr (std::is_same<T, float>::value) {
-                    Err[n * block_size + i] = err;
-                }
+                Err[n * block_size + i] = err;
             }
         }
         int i_2 = std::min((index + 1) * block_size, K);
@@ -348,7 +360,7 @@ void fasterquant(T *weight, T *Q, T *Err, T *b_scale, T *zero, float *Hess,
             for (int j = i_2; j < K; j++) {
                 float s = 0.0f;
                 for (int b = 0; b < block_size; b++) {
-                    s += utils::cast<float>(Err[n * block_size + b]) * Hess[(index * block_size + b) * K + j];
+                    s += Err[n * block_size + b] * Hess[(index * block_size + b) * K + j];
                 }
                 if constexpr (std::is_same<T, fp16_t>::value) {
                     weight[n * K + j] = utils::cast<fp16_t>(utils::cast<float>(weight[n * K + j]) - s);
@@ -445,11 +457,12 @@ void quantWeights(void *workspace, int32_t *packed_weights,
     float maxshrink = 0.8f;
     float nsamples = 0.0f;
 
-    char *tmp = (char *)workspace + K * K * sizeof(float);
+    char *tmp = (char *)workspace + (K * K + N * block_size) * sizeof(float);
     float *Hess = (float *)workspace; //[K, K]
+    float *Err = Hess + K * K;        //[N, block_size=128]
     fp16_t *Q = (fp16_t *)tmp;        //[N, K]
     fp16_t *weight = Q + N * K;       //[N, K]
-    fp16_t *Err = weight + N * K;     //[N, block_size=128]
+
     memset(Hess, 0, sizeof(float) * K * K);
 
     memcpy(weight, B, N * K * sizeof(fp16_t));
