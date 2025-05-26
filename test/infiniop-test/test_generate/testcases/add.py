@@ -55,7 +55,6 @@ class AddTestCase(InfiniopTestCase):
         self.stride_b = stride_b
         self.shape_b = shape_b
         self.c = c
-
         self.stride_c = stride_c
         self.shape_c = shape_c
 
@@ -112,7 +111,7 @@ if __name__ == "__main__":
         ((4, 4, 5632), None, None, gguf_strides(22528, 5632, 1)),
         ((4, 4, 5632), gguf_strides(45056, 5632, 1), gguf_strides(45056, 5632, 1), gguf_strides(45056, 5632, 1)),
     ]
-    _TENSOR_DTYPES_ = [np.float32, np.float16] #, 
+    _TENSOR_DTYPES_ = [np.float32, np.float16]
     for dtype in _TENSOR_DTYPES_:
         for shape, stride_a, stride_b, stride_c in _TEST_CASES_:
             a = np.random.rand(*shape).astype(dtype)

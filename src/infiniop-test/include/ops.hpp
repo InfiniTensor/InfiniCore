@@ -18,19 +18,19 @@ DECLARE_INFINIOP_TEST(add)
             infiniop_test::name::Test::build,             \
             infiniop_test::name::Test::attribute_names(), \
             infiniop_test::name::Test::tensor_names(),    \
+            infiniop_test::name::Test::output_name(),     \
         }},
 
 /*
  * Register all the tests here
  */
-#define TEST_BUILDER_MAPPINGS                 \
-    {                                         \
-        REGISTER_INFINIOP_TEST(gemm)          \
-        REGISTER_INFINIOP_TEST(random_sample) \
-        REGISTER_INFINIOP_TEST(add)           \
-        REGISTER_INFINIOP_TEST(mul)           \
-        REGISTER_INFINIOP_TEST(swiglu)        \
-    }
+#define TEST_BUILDER_MAPPINGS                     \
+    {                                             \
+        REGISTER_INFINIOP_TEST(gemm)              \
+            REGISTER_INFINIOP_TEST(random_sample) \
+                REGISTER_INFINIOP_TEST(add)       \
+                    REGISTER_INFINIOP_TEST(mul)   \
+                        REGISTER_INFINIOP_TEST(swiglu)}
 
 namespace infiniop_test {
 

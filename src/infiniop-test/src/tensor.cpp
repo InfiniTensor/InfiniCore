@@ -99,7 +99,9 @@ void *Tensor::data() const {
 Tensor::Tensor(const GGUFTensorInfo *info,
                const void *ggml_ptr,
                const GGUFKeyValue *strides_meta,
-               const GGUFKeyValue *shapes_meta) {
+               const GGUFKeyValue *shapes_meta,
+               bool isOutput) {
+
     _ggml_type = info->ggml_type;
     _offset = 0;
     size_t ndim = static_cast<size_t>(info->ndim);
@@ -112,6 +114,9 @@ Tensor::Tensor(const GGUFTensorInfo *info,
             contiguous_strides[ndim - 1] = (ptrdiff_t)1;
         } else {
             contiguous_strides[ndim - 1 - i] = (ptrdiff_t)info->shape[i - 1] * contiguous_strides[ndim - i];
+        }
+        if (isOutput) {
+            contiguous_strides[i] = (ptrdiff_t)0;
         }
     }
 
@@ -133,7 +138,7 @@ Tensor::Tensor(const GGUFTensorInfo *info,
         }
     }
 
-    if (_shape[0] == 0) {
+    if (isOutput) {
         for (size_t i = 0; i < ndim; i++) {
 
             if (shapes_meta->gguf_type == GGUF_TYPE_INT64) {
