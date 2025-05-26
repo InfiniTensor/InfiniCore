@@ -133,7 +133,6 @@ Tensor::Tensor(const GGUFTensorInfo *info,
         }
     }
 
-    bool isOutput = false;
     if (_shape[0] == 0) {
         for (size_t i = 0; i < ndim; i++) {
 
@@ -148,18 +147,12 @@ Tensor::Tensor(const GGUFTensorInfo *info,
                 throw std::runtime_error("Error Creating Tensor: Unsupported shape type");
             }
         }
-        isOutput = true;
     }
 
     infiniopCreateTensorDescriptor(&_desc, ndim, _shape.data(), _strides.data(), ggmlTypeToInfiniType(_ggml_type));
     size_t size;
     calculateTensorMemory(size, _offset, _shape, _strides, ggmlTypeSize(_ggml_type));
     _memory = std::make_shared<Memory>(size, INFINI_DEVICE_CPU, 0);
-    if (isOutput) {
-        void *temp = (char *)ggml_ptr + info->data_offset;
-        temp = static_cast<void *>((char *)_memory->ptr() + _offset);
-        (void)temp;
-    }
 
     utils::rearrange(
         (char *)_memory->ptr() + _offset,
