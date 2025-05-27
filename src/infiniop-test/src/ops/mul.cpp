@@ -88,7 +88,7 @@ std::vector<std::string> Test::tensor_names() {
 }
 
 std::vector<std::string> Test::output_name() {
-    return {};
+    return {"c"};
 }
 
 std::string Test::toString() const {

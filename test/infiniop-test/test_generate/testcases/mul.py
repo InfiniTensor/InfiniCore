@@ -20,18 +20,25 @@ class MulTestCase(InfiniopTestCase):
         self,
         a: np.ndarray,
         stride_a: List[int] | None,
+        shape_a: List[int] | None,        
         b: np.ndarray,
         stride_b: List[int] | None,
+        shape_b: List[int] | None,       
         c: np.ndarray,
         stride_c: List[int] | None,
+        shape_c: List[int] | None,    
     ):
         super().__init__("mul")
         self.a = a
         self.stride_a = stride_a
+        self.shape_a = shape_a
         self.b = b
         self.stride_b = stride_b
+        self.shape_b = shape_b
         self.c = c
         self.stride_c = stride_c
+        self.shape_c = shape_c
+
 
     def write_test(self, test_writer: "InfiniopTestWriter"):
         super().write_test(test_writer)
@@ -50,6 +57,12 @@ class MulTestCase(InfiniopTestCase):
         test_writer.add_tensor(
             test_writer.gguf_key("c"), self.c, raw_dtype=np_dtype_to_ggml(self.c.dtype)
         )
+        if self.shape_a is not None:
+            test_writer.add_array(test_writer.gguf_key("a.shape"), self.shape_a)
+        if self.shape_b is not None:
+            test_writer.add_array(test_writer.gguf_key("b.shape"), self.shape_b)
+        if self.shape_c is not None:
+            test_writer.add_array(test_writer.gguf_key("c.shape"), self.shape_c)
         a_fp64 = self.a.astype(np.float64)
         b_fp64 = self.b.astype(np.float64)
         ans_fp64 = np.multiply(a_fp64, b_fp64)
@@ -69,90 +82,123 @@ if __name__ == '__main__':
         MulTestCase(
             random_tensor((2, 3), np.float32),
             gguf_strides(3, 1),  
+            (2, 3),
             random_tensor((2, 3), np.float32),
             gguf_strides(1, 2),  
-            random_tensor((2, 3), np.float32),
+            (2, 3),
+            np.empty(tuple(0 for _ in (2, 3)), dtype=np.float32),
             gguf_strides(3, 1),  
+            (2, 3),
         ),
         MulTestCase(
             random_tensor((2, 3), np.float16),
-            gguf_strides(1, 2),  
+            gguf_strides(1, 2), 
+            (2, 3), 
             random_tensor((2, 3), np.float16),
             gguf_strides(3, 1), 
-            random_tensor((2, 3), np.float16),
+            (2, 3),
+            np.empty(tuple(0 for _ in (2, 3)), dtype=np.float16),
             gguf_strides(1, 2),  
+            (2, 3),
         ),
         MulTestCase(
             random_tensor((2, 3), np.float64),
-            gguf_strides(3, 1),  
+            gguf_strides(3, 1),
+            (2, 3),
             random_tensor((2, 3), np.float64),
-            gguf_strides(3, 1),  
-            random_tensor((2, 3), np.float64),
+            gguf_strides(3, 1), 
+            (2, 3),
+            np.empty(tuple(0 for _ in (2, 3)), dtype=np.float64),
             gguf_strides(1, 2),  
+            (2, 3),
         ),
         MulTestCase(
             random_tensor((4, 6), np.float16),
-            gguf_strides(1, 4),  
+            gguf_strides(1, 4),
+            (4, 6),  
             random_tensor((4, 6), np.float16),
             gguf_strides(1, 5),  
-            random_tensor((4, 6), np.float16),
-            gguf_strides(6, 1),  
+            (4, 6),
+            np.empty(tuple(0 for _ in (4, 6)), dtype=np.float32),
+            gguf_strides(6, 1), 
+            (4, 6), 
         ),
         MulTestCase(
             random_tensor((1, 2048), np.float16),
-            gguf_strides(1, 1),  
+            gguf_strides(1, 1),
+            (1, 2048),  
             random_tensor((1, 2048), np.float16),
             gguf_strides(2048, 1),  
+            (1, 2048),
             random_tensor((1, 2048), np.float16),
             gguf_strides(1, 1),  
+            (1, 2048),
         ),
         MulTestCase(
             random_tensor((2048, 2048), np.float32),
             None,  
+            (2048, 2048),
             random_tensor((2048, 2048), np.float32),
             gguf_strides(1, 2048),  
-            random_tensor((2048, 2048), np.float32),
-            None,  
+            (2048, 2048),
+            np.empty(tuple(0 for _ in (2048, 2048)), dtype=np.float32),
+            gguf_strides(1, 2048), 
+            (2048, 2048),
         ),
         MulTestCase(
             random_tensor((2, 4, 2048), np.float16),
             gguf_strides(4 * 2048, 2048, 1),  
+            (2, 4, 2048),
             random_tensor((2, 4, 2048), np.float16),
             gguf_strides(1, 2, 2 * 4),  
-            random_tensor((2, 4, 2048), np.float16),
+            (2, 4, 2048),
+            np.empty(tuple(0 for _ in (2, 4, 2048)), dtype=np.float16),
             gguf_strides(4 * 2048, 2048, 1),  
+            (2, 4, 2048),
         ),
         MulTestCase(
             random_tensor((2, 4, 2048), np.float32),
             gguf_strides(1, 2, 2 * 4),  
+            (2, 4, 2048),
             random_tensor((2, 4, 2048), np.float32),
             None,  
-            random_tensor((2, 4, 2048), np.float32),
+            (2, 4, 2048),
+            np.empty(tuple(0 for _ in (2, 4, 2048)), dtype=np.float32),
             gguf_strides(1, 2, 2 * 4),  
+            (2, 4, 2048),
         ),
         MulTestCase(
             random_tensor((2048, 2560), np.float32),
             gguf_strides(2560, 1),  
+            (2048, 2560),
             random_tensor((2048, 2560), np.float32),
             gguf_strides(1, 2048),  
-            random_tensor((2048, 2560), np.float32),
+            (2048, 2560),
+            np.empty(tuple(0 for _ in (2048, 2560)), dtype=np.float32),
             gguf_strides(2560, 1),  
+            (2048, 2560),
         ),
         MulTestCase(
             random_tensor((4, 48, 64), np.float16),
-            gguf_strides(64 * 48, 64, 1),  
+            gguf_strides(64 * 48, 64, 1),
+            (4, 48, 64),  
             random_tensor((4, 48, 64), np.float16),
-            gguf_strides(1, 4, 4 * 48),  
-            random_tensor((4, 48, 64), np.float16),
-            None  
+            gguf_strides(1, 4, 4 * 48), 
+            (4, 48, 64),  
+            np.empty(tuple(0 for _ in (4, 48, 64)), dtype=np.float16),
+            gguf_strides(1, 4, 4 * 48),
+            (4, 48, 64),  
         ),
         MulTestCase(
             random_tensor((4, 48, 64), np.float32),
             None,  
+            (4, 48, 64),
             random_tensor((4, 48, 64), np.float32),
-            gguf_strides(1, 4, 4 * 48),  
-            random_tensor((4, 48, 64), np.float32),
+            gguf_strides(1, 4, 4 * 48), 
+            (4, 48, 64), 
+            np.empty(tuple(0 for _ in (4, 48, 64)), dtype=np.float32),
             gguf_strides(48 * 64, 64, 1),  
+            (4, 48, 64),
         )
     ]
     test_writer.add_tests(test_cases)
