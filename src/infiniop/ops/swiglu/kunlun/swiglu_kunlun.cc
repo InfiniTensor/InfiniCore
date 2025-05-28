@@ -1,8 +1,5 @@
 #include "swiglu_kunlun.h"
 
-// Op interface declare
-LAUNCH_ELEMENTWISE_KERNEL(SwiGLU)
-
 namespace op::swiglu::kunlun {
 
 typedef struct SwiGLUOp {
