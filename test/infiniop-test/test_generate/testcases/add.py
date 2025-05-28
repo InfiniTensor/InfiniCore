@@ -63,8 +63,10 @@ class AddTestCase(InfiniopTestCase):
             test_writer.add_array(test_writer.gguf_key("a.strides"), gguf_strides(*self.stride_a))
         if self.stride_b is not None:
             test_writer.add_array(test_writer.gguf_key("b.strides"), gguf_strides(*self.stride_b))
-        if self.stride_c is not None:
-            test_writer.add_array(test_writer.gguf_key("c.strides"), gguf_strides(*self.stride_c))
+        test_writer.add_array(
+            test_writer.gguf_key("c.strides"),
+            gguf_strides(*self.stride_c if self.stride_c is not None else contiguous_gguf_strides(self.shape_c))
+        )
         test_writer.add_tensor(
             test_writer.gguf_key("a"), self.a, raw_dtype=np_dtype_to_ggml(self.a.dtype)
         )

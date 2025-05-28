@@ -52,9 +52,11 @@ class MulTestCase(InfiniopTestCase):
             test_writer.add_array(test_writer.gguf_key("a.strides"), gguf_strides(*self.stride_a))
         if self.stride_b is not None:
             test_writer.add_array(test_writer.gguf_key("b.strides"), gguf_strides(*self.stride_b))
-        if self.stride_c is not None:
-            test_writer.add_array(test_writer.gguf_key("c.strides"), gguf_strides(*self.stride_c))
-        
+        test_writer.add_array(
+            test_writer.gguf_key("c.strides"),
+            gguf_strides(*self.stride_c if self.stride_c is not None else contiguous_gguf_strides(self.shape_c))
+        )
+
         test_writer.add_tensor(
             test_writer.gguf_key("a"), self.a, raw_dtype=np_dtype_to_ggml(self.a.dtype)
         )
@@ -102,8 +104,7 @@ if __name__ == '__main__':
             a = random_tensor(shape, dtype)
             b = random_tensor(shape, dtype)
             c = np.empty(tuple(0 for _ in shape), dtype=dtype)
-            if stride_c is None:
-                stride_c = contiguous_gguf_strides(shape)
+
                 
             test_cases.append(
                 MulTestCase(
