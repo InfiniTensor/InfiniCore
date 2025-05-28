@@ -91,20 +91,18 @@ std::shared_ptr<Result> runTest(const GGUFFileReader &gguf_reader,
                 attrs[attr_name] = attr->second->value;
             }
         }
-        std::unordered_set<std::string> output_set(builder.output_name.begin(), builder.output_name.end());
 
         for (auto tensor_name : builder.tensor_names) {
             auto info = tensor_info.find("test." + std::to_string(test_id) + "." + tensor_name);
             if (info != tensor_info.end()) {
-                auto strides = meta.find("test." + std::to_string(test_id) + "." + tensor_name + ".strides");
                 auto shape = meta.find("test." + std::to_string(test_id) + "." + tensor_name + ".shape");
-                bool is_output = output_set.count(tensor_name) > 0;
-
+                auto strides = meta.find("test." + std::to_string(test_id) + "." + tensor_name + ".strides");
+                bool is_output = std::find(builder.output_name.begin(), builder.output_name.end(), tensor_name) != builder.output_name.end();
                 tensors[tensor_name] = std::make_shared<Tensor>(
                     info->second.get(),
                     gguf_reader.getGgmlStart(),
-                    strides != meta.end() ? strides->second.get() : nullptr,
                     shape != meta.end() ? shape->second.get() : nullptr,
+                    strides != meta.end() ? strides->second.get() : nullptr,
                     is_output);
             }
         }

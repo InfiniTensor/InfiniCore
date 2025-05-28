@@ -98,18 +98,19 @@ void *Tensor::data() const {
 
 Tensor::Tensor(const GGUFTensorInfo *info,
                const void *ggml_ptr,
-               const GGUFKeyValue *strides_meta,
                const GGUFKeyValue *shape_meta,
+               const GGUFKeyValue *strides_meta,
                bool isOutput) {
 
     _ggml_type = info->ggml_type;
     _offset = 0;
     size_t ndim = static_cast<size_t>(info->ndim);
     _shape = std::vector<size_t>(ndim);
+    std::vector<size_t> temp_shape(ndim);
     _strides = std::vector<ptrdiff_t>(ndim);
     std::vector<ptrdiff_t> contiguous_strides(ndim);
     for (size_t i = 0; i < ndim; i++) {
-        _shape[i] = static_cast<size_t>(info->shape[ndim - 1 - i]);
+        temp_shape[i] = static_cast<size_t>(info->shape[ndim - 1 - i]);
         if (i == 0) {
             contiguous_strides[ndim - 1] = (ptrdiff_t)1;
         } else {
@@ -141,18 +142,23 @@ Tensor::Tensor(const GGUFTensorInfo *info,
     if (isOutput) {
         for (size_t i = 0; i < ndim; i++) {
             if (shape_meta->gguf_type == GGUF_TYPE_INT64) {
-                _shape[i] = (ptrdiff_t)(reinterpret_cast<const int64_t *>(
-                    shape_meta->value.data())[i]);
-
+                int64_t val = reinterpret_cast<const int64_t *>(shape_meta->value.data())[i];
+                if (val < 0) {
+                    throw std::runtime_error("Shape must be non-negative");
+                }
+                temp_shape[i] = static_cast<size_t>(val);
             } else if (shape_meta->gguf_type == GGUF_TYPE_INT32) {
-                _shape[i] = (ptrdiff_t)(reinterpret_cast<const int32_t *>(
-                    shape_meta->value.data())[i]);
+                int32_t val = reinterpret_cast<const int32_t *>(shape_meta->value.data())[i];
+                if (val < 0) {
+                    throw std::runtime_error("Shape must be non-negative");
+                }
+                temp_shape[i] = static_cast<size_t>(val);
             } else {
                 throw std::runtime_error("Error Creating Tensor: Unsupported shape type");
             }
         }
     }
-
+    _shape = temp_shape;
     infiniopCreateTensorDescriptor(&_desc, ndim, _shape.data(), _strides.data(), ggmlTypeToInfiniType(_ggml_type));
     size_t size;
     calculateTensorMemory(size, _offset, _shape, _strides, ggmlTypeSize(_ggml_type));
@@ -168,14 +174,18 @@ Tensor::Tensor(const GGUFTensorInfo *info,
 
     if (shape_meta != nullptr) {
         for (size_t i = 0; i < ndim; i++) {
-
             if (shape_meta->gguf_type == GGUF_TYPE_INT64) {
-                _shape[i] = (ptrdiff_t)(reinterpret_cast<const int64_t *>(
-                    shape_meta->value.data())[i]);
-
+                int64_t val = reinterpret_cast<const int64_t *>(shape_meta->value.data())[i];
+                if (val < 0) {
+                    throw std::runtime_error("Shape must be non-negative");
+                }
+                _shape[i] = static_cast<size_t>(val);
             } else if (shape_meta->gguf_type == GGUF_TYPE_INT32) {
-                _shape[i] = (ptrdiff_t)(reinterpret_cast<const int32_t *>(
-                    shape_meta->value.data())[i]);
+                int32_t val = reinterpret_cast<const int32_t *>(shape_meta->value.data())[i];
+                if (val < 0) {
+                    throw std::runtime_error("Shape must be non-negative");
+                }
+                _shape[i] = static_cast<size_t>(val);
             } else {
                 throw std::runtime_error("Error Creating Tensor: Unsupported shape type");
             }
