@@ -6,19 +6,19 @@ namespace op::conv::cpu {
 
 inline size_t calculatePaddedInputSize(const ConvInfo &info) {
     std::vector<size_t> shape(info.ndim() + 2);
-    shape[0] = info.batch();      
-    shape[1] = info.in_channels();  
+    shape[0] = info.batch();
+    shape[1] = info.in_channels();
     for (size_t i = 0; i < info.ndim(); ++i) {
-        shape[i + 2] = info.input_dim(i);  
+        shape[i + 2] = info.input_dim(i);
     }
 
     return op::common_cpu::getPaddedSize(info.ndim() + 2, shape.data(), info.getPadsInfo());
 }
 
 inline size_t calculateOutputSize(const ConvInfo &info) {
-    size_t size = info.batch() * info.out_channels();  
+    size_t size = info.batch() * info.out_channels();
     for (size_t i = 0; i < info.ndim(); ++i) {
-        size *= info.output_dim(i);  
+        size *= info.output_dim(i);
     }
     return size;
 }
@@ -26,7 +26,9 @@ inline size_t calculateOutputSize(const ConvInfo &info) {
 inline bool needsPadding(const ConvInfo &info) {
     const size_t *pads = info.getPadsInfo();
     for (size_t i = 0; i < info.ndim(); ++i) {
-        if (pads[i] > 0) return true;
+        if (pads[i] > 0) {
+            return true;
+        }
     }
     return false;
 }
@@ -86,7 +88,7 @@ void fillPaddedInput(
     } else if (ndim == 1) {
         x_shape_val = info.in_channels();
     } else {
-        x_shape_val = info.input_dim(ndim - 2);  
+        x_shape_val = info.input_dim(ndim - 2);
     }
 
     const auto padded_x_shape_val = padded_x_shape[ndim];
@@ -94,7 +96,7 @@ void fillPaddedInput(
 
     size_t pad_offset = 0;
     if (ndim >= 2 && x_shape_val != padded_x_shape_val) {
-        pad_offset = info.pad_info(ndim - 2);  
+        pad_offset = info.pad_info(ndim - 2);
     }
 
     const auto padded_x_base_index = padded_x_index * padded_x_shape_val + pad_offset;
@@ -129,8 +131,8 @@ void _applyConv(
     } else {
         dim_size = x_shape[ndim];
         kernel_size = info.kernel_dim(ndim - 2);
-        dilation = info.dilation_info(ndim - 2); 
-        stride = info.stride_info(ndim - 2);  
+        dilation = info.dilation_info(ndim - 2);
+        stride = info.stride_info(ndim - 2);
     }
     const auto steps = (dim_size - dilation * (kernel_size - 1) - 1) / stride + 1;
     x_index *= dim_size;
@@ -293,7 +295,7 @@ infiniStatus_t Descriptor::calculate(
     const void *bias,
     void *stream) const {
     if (workspace_size < _workspace_size) {
-        return INFINI_STATUS_INSUFFICIENT_WORKSPACE ;
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
     switch (_dtype) {
     case INFINI_DTYPE_F16:

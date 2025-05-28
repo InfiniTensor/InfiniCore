@@ -185,7 +185,7 @@ inline utils::Result<ConvInfo> ConvInfo::create(
     const void *strides,
     const void *dilations,
     size_t n) {
-    
+
     auto dtype = y_desc->dtype();
     if (dtype != x_desc->dtype() || dtype != w_desc->dtype()) {
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
@@ -209,7 +209,7 @@ inline utils::Result<ConvInfo> ConvInfo::create(
 
     // 计算bias_dims大小
     size_t bias_dims_size = (b_desc != nullptr) ? x_desc->ndim() : 0;
-    
+
     // 计算padded_shape大小
     const size_t *pads_ptr = reinterpret_cast<const size_t *>(pads);
     bool has_padding = false;
@@ -241,7 +241,7 @@ inline utils::Result<ConvInfo> ConvInfo::create(
     const size_t *dilations_ptr = reinterpret_cast<const size_t *>(dilations);
 
     size_t spatial_sizes = 1;
-    
+
     // 填充数据
     for (size_t i = 0; i < ndim; i++) {
         input_dims[i] = x_desc->shape()[i + 2];
@@ -251,7 +251,7 @@ inline utils::Result<ConvInfo> ConvInfo::create(
         strides_info[i] = strides_ptr == nullptr ? 1 : strides_ptr[i];
         dilations_info[i] = dilations_ptr == nullptr ? 1 : dilations_ptr[i];
         spatial_sizes = spatial_sizes * output_dims[i];
-        
+
         size_t expected_output = (input_dims[i] + pads_info[i] * 2 - dilations_info[i] * (kernel_dims[i] - 1) - 1) / strides_info[i] + 1;
         if (output_dims[i] != expected_output) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
@@ -273,7 +273,7 @@ inline utils::Result<ConvInfo> ConvInfo::create(
         }
     }
 
-    ConvInfo info(std::move(meta), ndim, batch, in_channels, out_channels, 
+    ConvInfo info(std::move(meta), ndim, batch, in_channels, out_channels,
                   spatial_sizes, bias_dims_size, padded_shape_size);
 
 #ifdef ENABLE_CUDA_API

@@ -6,10 +6,10 @@
 typedef struct InfiniopDescriptor *infiniopSoftMaxDescriptor_t;
 
 __C __export infiniStatus_t infiniopCreateSoftMaxDescriptor(infiniopHandle_t handle,
-                                                         infiniopSoftMaxDescriptor_t *desc_ptr,
-                                                         infiniopTensorDescriptor_t y_desc,
-                                                         infiniopTensorDescriptor_t x_desc,
-                                                         int axis);
+                                                            infiniopSoftMaxDescriptor_t *desc_ptr,
+                                                            infiniopTensorDescriptor_t y_desc,
+                                                            infiniopTensorDescriptor_t x_desc,
+                                                            int axis);
 
 __C __export infiniStatus_t infiniopGetSoftMaxWorkspaceSize(infiniopSoftMaxDescriptor_t desc, size_t *size);
 
