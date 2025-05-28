@@ -105,6 +105,7 @@ Tensor::Tensor(const GGUFTensorInfo *info,
     _ggml_type = info->ggml_type;
     _offset = 0;
     size_t ndim = static_cast<size_t>(info->ndim);
+    // `_shape`存储真实的tensor形状（来自shape_meta），`temp_shape`存储用于rearrange和计算内存的tensor形状
     _shape = std::vector<size_t>(ndim);
     std::vector<size_t> temp_shape(ndim);
     _strides = std::vector<ptrdiff_t>(ndim);
@@ -140,6 +141,9 @@ Tensor::Tensor(const GGUFTensorInfo *info,
     }
 
     if (isOutput) {
+        if (shape_meta == nullptr) {
+            throw std::runtime_error("Error Creating Tensor: shape_meta cannot be null for output tensor");
+        }
         for (size_t i = 0; i < ndim; i++) {
             if (shape_meta->gguf_type == GGUF_TYPE_INT64) {
                 int64_t val = reinterpret_cast<const int64_t *>(shape_meta->value.data())[i];
