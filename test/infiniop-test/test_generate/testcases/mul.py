@@ -2,7 +2,7 @@ import numpy as np
 import gguf
 from typing import List
 
-from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_strides
+from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides
 
 def mul(
     a: np.ndarray,
@@ -49,11 +49,12 @@ class MulTestCase(InfiniopTestCase):
         if self.shape_c is not None:
             test_writer.add_array(test_writer.gguf_key("c.shape"), self.shape_c)
         if self.stride_a is not None:
-            test_writer.add_array(test_writer.gguf_key("a.strides"), self.stride_a)
+            test_writer.add_array(test_writer.gguf_key("a.strides"), gguf_strides(*self.stride_a))
         if self.stride_b is not None:
-            test_writer.add_array(test_writer.gguf_key("b.strides"), self.stride_b)
+            test_writer.add_array(test_writer.gguf_key("b.strides"), gguf_strides(*self.stride_b))
         if self.stride_c is not None:
-            test_writer.add_array(test_writer.gguf_key("c.strides"), self.stride_c)
+            test_writer.add_array(test_writer.gguf_key("c.strides"), gguf_strides(*self.stride_c))
+        
         test_writer.add_tensor(
             test_writer.gguf_key("a"), self.a, raw_dtype=np_dtype_to_ggml(self.a.dtype)
         )
@@ -65,6 +66,7 @@ class MulTestCase(InfiniopTestCase):
         )
         a_fp64 = self.a.astype(np.float64)
         b_fp64 = self.b.astype(np.float64)
+        
         ans_fp64 = np.multiply(a_fp64, b_fp64)
         ans = mul(self.a, self.b)
         test_writer.add_tensor(
@@ -81,17 +83,17 @@ if __name__ == '__main__':
     test_cases = []
 
     _TEST_CASES_ = [
-        ((2, 3), gguf_strides(3, 1), gguf_strides(1, 2), gguf_strides(3, 1)),
-        ((2, 3), gguf_strides(1, 2), gguf_strides(3, 1), gguf_strides(1, 2)),
-        ((2, 3), gguf_strides(3, 1), gguf_strides(3, 1), gguf_strides(1, 2)),
-        ((4, 6), gguf_strides(1, 4), gguf_strides(1, 5), gguf_strides(6, 1)),
-        ((1, 2048), gguf_strides(1, 1), gguf_strides(2048, 1), gguf_strides(1, 1)),
-        ((2048, 2048), None, gguf_strides(1, 2048), None),
-        ((2, 4, 2048), gguf_strides(4 * 2048, 2048, 1), gguf_strides(1, 2, 8), gguf_strides(4 * 2048, 2048, 1)),
-        ((2, 4, 2048), gguf_strides(1, 2, 8), None, gguf_strides(1, 2, 8)),
-        ((2048, 2560), gguf_strides(2560, 1), gguf_strides(1, 2048), gguf_strides(2560, 1)),
-        ((4, 48, 64), gguf_strides(64 * 48, 64, 1), gguf_strides(1, 4, 192), None),
-        ((4, 48, 64), None, gguf_strides(1, 4, 192), gguf_strides(48 * 64, 64, 1)),
+        ((2, 3), (3, 1), (1, 2), (3, 1)),
+        ((2, 3), (1, 2), (3, 1), (1, 2)),
+        ((2, 3), (3, 1), (3, 1), (1, 2)),
+        ((4, 6), (1, 4), (1, 5), (6, 1)),
+        ((1, 2048), (1, 1), (2048, 1), (1, 1)),
+        ((2048, 2048), None, (1, 2048), None),
+        ((2, 4, 2048), (4 * 2048, 2048, 1), (1, 2, 8), (4 * 2048, 2048, 1)),
+        ((2, 4, 2048), (1, 2, 8), None, (1, 2, 8)),
+        ((2048, 2560), (2560, 1), (1, 2048), (2560, 1)),
+        ((4, 48, 64), (64 * 48, 64, 1), (1, 4, 192), None),
+        ((4, 48, 64), None, (1, 4, 192), (48 * 64, 64, 1)),
     ]   
     _TENSOR_DTYPES_ = [np.float32, np.float16]
     
@@ -101,7 +103,8 @@ if __name__ == '__main__':
             b = random_tensor(shape, dtype)
             c = np.empty(tuple(0 for _ in shape), dtype=dtype)
             if stride_c is None:
-                stride_c = gguf_strides(*contiguous_strides(shape))
+                stride_c = contiguous_gguf_strides(shape)
+                
             test_cases.append(
                 MulTestCase(
                     a=a,

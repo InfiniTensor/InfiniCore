@@ -2,7 +2,7 @@ import numpy as np
 import gguf
 from typing import List
 
-from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_strides
+from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides
 
 
 def swiglu(
@@ -49,11 +49,11 @@ class SwiGLUTestCase(InfiniopTestCase):
         if self.shape_c is not None:
             test_writer.add_array(test_writer.gguf_key("c.shape"), self.shape_c)  
         if self.stride_a is not None:
-            test_writer.add_array(test_writer.gguf_key("a.strides"), self.stride_a)
+            test_writer.add_array(test_writer.gguf_key("a.strides"), gguf_strides(*self.stride_a))
         if self.stride_b is not None:
-            test_writer.add_array(test_writer.gguf_key("b.strides"), self.stride_b)
+            test_writer.add_array(test_writer.gguf_key("b.strides"), gguf_strides(*self.stride_b))
         if self.stride_c is not None:
-            test_writer.add_array(test_writer.gguf_key("c.strides"), self.stride_c)
+            test_writer.add_array(test_writer.gguf_key("c.strides"), gguf_strides(*self.stride_c))
         test_writer.add_tensor(
             test_writer.gguf_key("a"), self.a, raw_dtype=np_dtype_to_ggml(self.a.dtype)
         )
@@ -81,25 +81,25 @@ if __name__ == "__main__":
         ((64, 121), None, None, None),
         ((15, 512), None, None, None),
         ((13, 4), None, None, None),
-        ((13, 4), gguf_strides(10, 1), gguf_strides(10, 1), gguf_strides(10, 1)),
+        ((13, 4), (10, 1), (10, 1), (10, 1)),
         ((13, 4, 4), None, None, None),
-        ((13, 4, 4), gguf_strides(20, 4, 1), gguf_strides(20, 4, 1), gguf_strides(20, 4, 1)),
+        ((13, 4, 4), (20, 4, 1), (20, 4, 1), (20, 4, 1)),
         ((16, 5632), None, None, None),
-        ((16, 5632), gguf_strides(13312, 1), gguf_strides(13312, 1), gguf_strides(13312, 1)),
-        ((16, 5632), gguf_strides(5632, 1), gguf_strides(5632, 1), gguf_strides(1, 16)),
-        ((2, 3, 400), gguf_strides(1200, 400, 1), gguf_strides(1200, 400, 1), gguf_strides(1, 2, 6)),
+        ((16, 5632), (13312, 1), (13312, 1), (13312, 1)),
+        ((16, 5632), (5632, 1), (5632, 1), (1, 16)),
+        ((2, 3, 400), (1200, 400, 1), (1200, 400, 1), (1, 2, 6)),
         ((4, 4, 5632), None, None, None),
-        ((4, 4, 5632), gguf_strides(45056, 5632, 1), gguf_strides(45056, 5632, 1), gguf_strides(45056, 5632, 1)),
+        ((4, 4, 5632), (45056, 5632, 1), (45056, 5632, 1), (45056, 5632, 1)),
     ]
     _TENSOR_DTYPES_ = [np.float32, np.float16]
-    
+
     for dtype in _TENSOR_DTYPES_:
         for shape, stride_a, stride_b, stride_c in _TEST_CASES_:
             a = np.random.rand(*shape).astype(dtype)
             b = np.random.rand(*shape).astype(dtype)
             c = np.empty(tuple(0 for _ in shape), dtype=dtype)
             if stride_c is None:
-                stride_c = gguf_strides(*contiguous_strides(shape))
+                stride_c = contiguous_gguf_strides(shape)
             test_case = SwiGLUTestCase(
                 a=a,
                 shape_a=list(shape),

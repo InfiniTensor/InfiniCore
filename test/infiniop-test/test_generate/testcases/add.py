@@ -4,7 +4,7 @@ import gguf
 from typing import List
 from numpy.lib.stride_tricks import as_strided
 
-from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_strides
+from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides
 
 
 def add(
@@ -16,8 +16,7 @@ def add(
 def process_tensor(a, b, stride_a=None, stride_b=None):
     def normalize_stride(tensor, stride):
         if stride:
-            rev_stride = tuple(reversed(stride))
-            slices = tuple(slice(0, 1) if s == 0 else slice(None) for s in rev_stride)
+            slices = tuple(slice(0, 1) if s == 0 else slice(None) for s in stride)
             return tensor[slices]
         else:
             return tensor
@@ -61,11 +60,11 @@ class AddTestCase(InfiniopTestCase):
         if self.shape_c is not None:
             test_writer.add_array(test_writer.gguf_key("c.shape"), self.shape_c)
         if self.stride_a is not None:
-            test_writer.add_array(test_writer.gguf_key("a.strides"), self.stride_a)
+            test_writer.add_array(test_writer.gguf_key("a.strides"), gguf_strides(*self.stride_a))
         if self.stride_b is not None:
-            test_writer.add_array(test_writer.gguf_key("b.strides"), self.stride_b)
+            test_writer.add_array(test_writer.gguf_key("b.strides"), gguf_strides(*self.stride_b))
         if self.stride_c is not None:
-            test_writer.add_array(test_writer.gguf_key("c.strides"), self.stride_c)
+            test_writer.add_array(test_writer.gguf_key("c.strides"), gguf_strides(*self.stride_c))
         test_writer.add_tensor(
             test_writer.gguf_key("a"), self.a, raw_dtype=np_dtype_to_ggml(self.a.dtype)
         )
@@ -94,15 +93,15 @@ if __name__ == "__main__":
     _TEST_CASES_ = [
         # shape, a_stride, b_stride, c_stride
         ((13, 4), None, None, None),
-        ((13, 4), gguf_strides(10, 1), gguf_strides(10, 1), gguf_strides(10, 1)),
-        ((13, 4), gguf_strides(0, 1), None, None),
+        ((13, 4), (10, 1), (10, 1), (10, 1)),
+        ((13, 4), (0, 1), None, None),
         ((13, 4, 4), None, None, None),
-        ((13, 4, 4), gguf_strides(20, 4, 1), gguf_strides(20, 4, 1), gguf_strides(20, 4, 1)),
-        ((13, 4, 4), gguf_strides(4, 0, 1), gguf_strides(0, 4, 1), None),
+        ((13, 4, 4), (20, 4, 1), (20, 4, 1), (20, 4, 1)),
+        ((13, 4, 4), (4, 0, 1), (0, 4, 1), None),
         ((16, 5632), None, None, None),
-        ((16, 5632), gguf_strides(13312, 1), gguf_strides(13312, 1), gguf_strides(13312, 1)),
+        ((16, 5632), (13312, 1), (13312, 1), (13312, 1)),
         ((4, 4, 5632), None, None, None),
-        ((4, 4, 5632), gguf_strides(45056, 5632, 1), gguf_strides(45056, 5632, 1), gguf_strides(45056, 5632, 1)),
+        ((4, 4, 5632), (45056, 5632, 1), (45056, 5632, 1), (45056, 5632, 1)),
     ]
     _TENSOR_DTYPES_ = [np.float32, np.float16]
     for dtype in _TENSOR_DTYPES_:
@@ -112,7 +111,7 @@ if __name__ == "__main__":
             c = np.empty(tuple(0 for _ in shape), dtype=dtype)
             a, b = process_tensor(a, b, stride_a, stride_b)
             if stride_c is None:
-                stride_c = gguf_strides(*contiguous_strides(shape))
+                stride_c = contiguous_gguf_strides(shape)
             test_case = AddTestCase(
                 a=a,
                 shape_a=shape,

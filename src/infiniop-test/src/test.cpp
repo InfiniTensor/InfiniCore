@@ -6,7 +6,6 @@
 #include <infinirt.h>
 #include <iostream>
 #include <numeric>
-#include <unordered_set>
 
 namespace infiniop_test {
 std::unordered_map<std::string, const TestBuilder> TEST_BUILDERS = TEST_BUILDER_MAPPINGS;
@@ -97,7 +96,7 @@ std::shared_ptr<Result> runTest(const GGUFFileReader &gguf_reader,
             if (info != tensor_info.end()) {
                 auto shape = meta.find("test." + std::to_string(test_id) + "." + tensor_name + ".shape");
                 auto strides = meta.find("test." + std::to_string(test_id) + "." + tensor_name + ".strides");
-                bool is_output = std::find(builder.output_name.begin(), builder.output_name.end(), tensor_name) != builder.output_name.end();
+                bool is_output = std::find(builder.output_names.begin(), builder.output_names.end(), tensor_name) != builder.output_names.end();
                 tensors[tensor_name] = std::make_shared<Tensor>(
                     info->second.get(),
                     gguf_reader.getGgmlStart(),

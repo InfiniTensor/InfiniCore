@@ -162,21 +162,22 @@ Tensor::Tensor(const GGUFTensorInfo *info,
             }
         }
     }
-    _shape = temp_shape;
-    infiniopCreateTensorDescriptor(&_desc, ndim, _shape.data(), _strides.data(), ggmlTypeToInfiniType(_ggml_type));
+    infiniopCreateTensorDescriptor(&_desc, ndim, temp_shape.data(), _strides.data(), ggmlTypeToInfiniType(_ggml_type));
     size_t size;
-    calculateTensorMemory(size, _offset, _shape, _strides, ggmlTypeSize(_ggml_type));
+    calculateTensorMemory(size, _offset, temp_shape, _strides, ggmlTypeSize(_ggml_type));
     _memory = std::make_shared<Memory>(size, INFINI_DEVICE_CPU, 0);
     utils::rearrange(
         (char *)_memory->ptr() + _offset,
         (char *)ggml_ptr + info->data_offset,
-        _shape.data(),
+        temp_shape.data(),
         _strides.data(),
         contiguous_strides.data(),
         ndim,
         ggmlTypeSize(_ggml_type));
 
-    if (shape_meta != nullptr) {
+    if (shape_meta == nullptr) {
+        _shape = temp_shape;
+    } else {
         for (size_t i = 0; i < ndim; i++) {
             if (shape_meta->gguf_type == GGUF_TYPE_INT64) {
                 int64_t val = reinterpret_cast<const int64_t *>(shape_meta->value.data())[i];

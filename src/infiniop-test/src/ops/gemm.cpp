@@ -113,7 +113,7 @@ std::vector<std::string> Test::tensor_names() {
     return {"a", "b", "c", "ans"};
 }
 
-std::vector<std::string> Test::output_name() {
+std::vector<std::string> Test::output_names() {
     return {};
 }
 
