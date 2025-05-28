@@ -15,11 +15,11 @@ struct Descriptor::Opaque {
     cudnnConvolutionFwdAlgo_t algo = CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM;
     size_t workspace_size = 0;
 
-    Opaque(std::shared_ptr<device::cuda::Handle::Internal> internal_ptr, 
-            ConvInfo& info, 
-            infiniDtype_t data_type) 
+    Opaque(std::shared_ptr<device::cuda::Handle::Internal> internal_ptr,
+           ConvInfo &info,
+           infiniDtype_t data_type)
         : internal(internal_ptr) {
-        
+
         auto status = GenHandler(info, data_type, CUDNN_DATA_FLOAT);
         if (status != INFINI_STATUS_SUCCESS) {
             throw std::runtime_error("Failed to generate CUDNN descriptors");
@@ -57,7 +57,7 @@ struct Descriptor::Opaque {
         ConvInfo &info,
         infiniDtype_t data_type,
         cudnnDataType_t compute_type) {
-        
+
         bool is_1d_conv = (info.ndim() == 1);
         int actual_tensor_ndim = is_1d_conv ? 4 : static_cast<int>(info.ndim() + 2);
         int spatial_ndim_for_conv_desc = static_cast<int>(info.ndim());
@@ -270,13 +270,13 @@ infiniStatus_t Descriptor::create(
     CHECK_RESULT(result);
     auto conv_info = result.take();
     auto opaque = new Opaque(handle->internal(), conv_info, dtype);
-        
+
     *desc_ptr = new Descriptor(
-        dtype, 
-        std::move(conv_info), 
-        opaque->workspace_size, 
+        dtype,
+        std::move(conv_info),
+        opaque->workspace_size,
         opaque,
-        handle->device, 
+        handle->device,
         handle->device_id);
     return INFINI_STATUS_SUCCESS;
 }

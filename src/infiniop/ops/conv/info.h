@@ -171,7 +171,7 @@ inline utils::Result<ConvInfo> ConvInfo::create(
     size_t padded_shape_size = has_padding ? (ndim + 2) : 0;
 
     // 计算meta总大小
-    size_t meta_size = ndim * 6 + bias_dims_size + padded_shape_size; 
+    size_t meta_size = ndim * 6 + bias_dims_size + padded_shape_size;
     std::vector<size_t> meta(meta_size);
 
     size_t *input_dims = meta.data();
