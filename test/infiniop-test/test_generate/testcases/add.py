@@ -109,8 +109,7 @@ if __name__ == "__main__":
         for shape, stride_a, stride_b, stride_c in _TEST_CASES_:
             a = np.random.rand(*shape).astype(dtype)
             b = np.random.rand(*shape).astype(dtype)
-            zero_shape = tuple(0 for _ in shape)
-            c = np.empty(zero_shape, dtype=dtype)
+            c = np.empty(tuple(0 for _ in shape), dtype=dtype)
             a, b = process_tensor(a, b, stride_a, stride_b)
             if stride_c is None:
                 stride_c = gguf_strides(*contiguous_strides(shape))
