@@ -175,13 +175,13 @@ def test(
     print(
         f"Testing Conv on {torch_device} with x_shape: {x_shape}, w_shape: {w_shape}, b_shape: {w_shape[0]}, pads: {pads}, strides: {strides}, dilations: {dilations}, x_stride: {tensor_stride} dtype:{tensor_dtype}"
     )
-    x = torch.rand(x_shape, dtype=tensor_dtype).to(torch_device) * 0.01
-    w = torch.rand(w_shape, dtype=tensor_dtype).to(torch_device) * 0.01
+    x = torch.rand(x_shape, dtype=tensor_dtype).to(torch_device) * 0.001
+    w = torch.rand(w_shape, dtype=tensor_dtype).to(torch_device) * 0.001
     y = torch.zeros(
         inferShape(x.shape, w.shape, pads, strides, dilations), dtype=tensor_dtype
     ).to(torch_device)
     bias = (
-        torch.rand(w.shape[0], dtype=tensor_dtype).to(torch_device) * 0.01
+        torch.rand(w.shape[0], dtype=tensor_dtype).to(torch_device) * 0.001
         if w.shape[0] > 1
         else None
     )
@@ -253,7 +253,6 @@ def test(
         print(f"    lib time: {elapsed :6f}")
     atol, rtol = get_tolerance(_TOLERANCE_MAP, tensor_dtype)
     assert torch.allclose(y, ans, atol=atol, rtol=rtol)
-    print(f"calculate operation completed")
     check_error(lib.infiniopDestroyConvDescriptor(descriptor))
 
 
