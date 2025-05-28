@@ -253,6 +253,7 @@ def test(
         print(f"    lib time: {elapsed :6f}")
     atol, rtol = get_tolerance(_TOLERANCE_MAP, tensor_dtype)
     assert torch.allclose(y, ans, atol=atol, rtol=rtol)
+    print(f"calculate operation completed")
     check_error(lib.infiniopDestroyConvDescriptor(descriptor))
 
 

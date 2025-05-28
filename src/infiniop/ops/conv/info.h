@@ -19,24 +19,103 @@ class CudnnConvHandler;
 namespace op::conv {
 
 class ConvInfo {
-    ConvInfo() = default;
+private:
+    std::vector<size_t> _meta;
+    size_t _ndim;
+    size_t _batch;
+    size_t _in_channels;
+    size_t _out_channels;
+    size_t _spatial_sizes;
+    size_t _bias_dims_size;
+    size_t _padded_shape_size;
+
+    ConvInfo(std::vector<size_t> meta,
+             size_t ndim,
+             size_t batch,
+             size_t in_channels,
+             size_t out_channels,
+             size_t spatial_sizes,
+             size_t bias_dims_size,
+             size_t padded_shape_size)
+        : _meta(std::move(meta)),
+          _ndim(ndim),
+          _batch(batch),
+          _in_channels(in_channels),
+          _out_channels(out_channels),
+          _spatial_sizes(spatial_sizes),
+          _bias_dims_size(bias_dims_size),
+          _padded_shape_size(padded_shape_size) {}
 
 public:
-    size_t ndim;
-    size_t batch;
-    size_t in_channels;
-    size_t out_channels;
-    size_t spatial_sizes;
-    std::vector<size_t> input_dims;
-    std::vector<size_t> kernel_dims;
-    std::vector<size_t> output_dims;
-    std::vector<size_t> bias_dims;
-    std::vector<size_t> pads_info;
-    std::vector<size_t> strides_info;
-    std::vector<size_t> dilations_info;
+    inline size_t ndim() const { return _ndim; }
+    inline size_t batch() const { return _batch; }
+    inline size_t in_channels() const { return _in_channels; }
+    inline size_t out_channels() const { return _out_channels; }
+    inline size_t spatial_sizes() const { return _spatial_sizes; }
+    inline size_t bias_dims_size() const { return _bias_dims_size; }
+    inline size_t padded_shape_size() const { return _padded_shape_size; }
+
+    inline size_t getMetaMemSize() const {
+        return _meta.size() * sizeof(size_t);
+    }
+    inline const int8_t *getMetaStart() const {
+        return reinterpret_cast<const int8_t *>(_meta.data());
+    }
+
+    inline const size_t *getInputDims() const {
+        return _meta.data();
+    }
+    inline const size_t *getKernelDims() const {
+        return getInputDims() + _ndim;
+    }
+    inline const size_t *getOutputDims() const {
+        return getKernelDims() + _ndim;
+    }
+    inline const size_t *getBiasDims() const {
+        return getOutputDims() + _ndim;
+    }
+    inline const size_t *getPadsInfo() const {
+        return getBiasDims() + _bias_dims_size;
+    }
+    inline const size_t *getStridesInfo() const {
+        return getPadsInfo() + _ndim;
+    }
+    inline const size_t *getDilationsInfo() const {
+        return getStridesInfo() + _ndim;
+    }
+    inline const size_t *getPaddedShape() const {
+        return getDilationsInfo() + _ndim;
+    }
+
+    inline size_t input_dim(size_t i) const {
+        return i < _ndim ? getInputDims()[i] : 0;
+    }
+    inline size_t kernel_dim(size_t i) const {
+        return i < _ndim ? getKernelDims()[i] : 0;
+    }
+    inline size_t output_dim(size_t i) const {
+        return i < _ndim ? getOutputDims()[i] : 0;
+    }
+    inline size_t bias_dim(size_t i) const {
+        return i < _bias_dims_size ? getBiasDims()[i] : 0;
+    }
+    inline size_t pad_info(size_t i) const {
+        return i < _ndim ? getPadsInfo()[i] : 0;
+    }
+    inline size_t stride_info(size_t i) const {
+        return i < _ndim ? getStridesInfo()[i] : 0;
+    }
+    inline size_t dilation_info(size_t i) const {
+        return i < _ndim ? getDilationsInfo()[i] : 0;
+    }
+    inline size_t padded_shape_dim(size_t i) const {
+        return i < _padded_shape_size ? getPaddedShape()[i] : 0;
+    }
+
 #ifdef ENABLE_CUDA_API
     std::shared_ptr<CudnnConvHandler> handler = nullptr;
 #endif
+
     static utils::Result<ConvInfo> create(
         infiniopHandle_t handle_,
         infiniopTensorDescriptor_t y_desc,
@@ -106,59 +185,96 @@ inline utils::Result<ConvInfo> ConvInfo::create(
     const void *strides,
     const void *dilations,
     size_t n) {
+    
     auto dtype = y_desc->dtype();
     if (dtype != x_desc->dtype() || dtype != w_desc->dtype()) {
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
     CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32);
 
-    ConvInfo info;
-
-    info.ndim = n;
+    size_t ndim = n;
     size_t new_dims = n + 2;
 
     if (x_desc->ndim() < new_dims || y_desc->ndim() < new_dims || w_desc->ndim() < new_dims) {
         return INFINI_STATUS_BAD_TENSOR_SHAPE;
     }
 
-    info.batch = x_desc->shape()[0];
-    info.in_channels = x_desc->shape()[1];
-    info.out_channels = w_desc->shape()[0];
+    size_t batch = x_desc->shape()[0];
+    size_t in_channels = x_desc->shape()[1];
+    size_t out_channels = w_desc->shape()[0];
 
-    if (y_desc->shape()[0] != info.batch || y_desc->shape()[1] != info.out_channels || w_desc->shape()[1] != info.in_channels) {
+    if (y_desc->shape()[0] != batch || y_desc->shape()[1] != out_channels || w_desc->shape()[1] != in_channels) {
         return INFINI_STATUS_BAD_TENSOR_SHAPE;
     }
 
-    info.input_dims.resize(info.ndim);
-    info.kernel_dims.resize(info.ndim);
-    info.output_dims.resize(info.ndim);
-    info.pads_info.resize(info.ndim);
-    info.strides_info.resize(info.ndim);
-    info.dilations_info.resize(info.ndim);
+    // 计算bias_dims大小
+    size_t bias_dims_size = (b_desc != nullptr) ? x_desc->ndim() : 0;
+    
+    // 计算padded_shape大小
+    const size_t *pads_ptr = reinterpret_cast<const size_t *>(pads);
+    bool has_padding = false;
+    if (pads_ptr != nullptr) {
+        for (size_t i = 0; i < ndim; ++i) {
+            if (pads_ptr[i] > 0) {
+                has_padding = true;
+                break;
+            }
+        }
+    }
+    size_t padded_shape_size = has_padding ? (ndim + 2) : 0;
 
-    const size_t *pads_ptr = reinterpret_cast<const size_t *>(pads);           // Renamed to avoid conflict
-    const size_t *strides_ptr = reinterpret_cast<const size_t *>(strides);     // Renamed
-    const size_t *dilations_ptr = reinterpret_cast<const size_t *>(dilations); // Renamed
+    // 计算meta总大小
+    size_t meta_size = ndim * 6 + bias_dims_size + padded_shape_size; // 6个ndim大小的数组 + bias_dims + padded_shape
+    std::vector<size_t> meta(meta_size);
 
-    info.spatial_sizes = 1;
-    for (size_t i = 0; i < info.ndim; i++) {
-        info.input_dims[i] = x_desc->shape()[i + 2];
-        info.kernel_dims[i] = w_desc->shape()[i + 2];
-        info.output_dims[i] = y_desc->shape()[i + 2];
-        info.pads_info[i] = pads_ptr == nullptr ? 0 : pads_ptr[i];
-        info.strides_info[i] = strides_ptr == nullptr ? 1 : strides_ptr[i];
-        info.dilations_info[i] = dilations_ptr == nullptr ? 1 : dilations_ptr[i];
-        info.spatial_sizes = info.spatial_sizes * info.output_dims[i];
-        size_t expected_output = (info.input_dims[i] + info.pads_info[i] * 2 - info.dilations_info[i] * (info.kernel_dims[i] - 1) - 1) / info.strides_info[i] + 1;
-        if (info.output_dims[i] != expected_output) {
+    // 获取各个数组的指针
+    size_t *input_dims = meta.data();
+    size_t *kernel_dims = input_dims + ndim;
+    size_t *output_dims = kernel_dims + ndim;
+    size_t *bias_dims = output_dims + ndim;
+    size_t *pads_info = bias_dims + bias_dims_size;
+    size_t *strides_info = pads_info + ndim;
+    size_t *dilations_info = strides_info + ndim;
+    size_t *padded_shape = dilations_info + ndim;
+
+    const size_t *strides_ptr = reinterpret_cast<const size_t *>(strides);
+    const size_t *dilations_ptr = reinterpret_cast<const size_t *>(dilations);
+
+    size_t spatial_sizes = 1;
+    
+    // 填充数据
+    for (size_t i = 0; i < ndim; i++) {
+        input_dims[i] = x_desc->shape()[i + 2];
+        kernel_dims[i] = w_desc->shape()[i + 2];
+        output_dims[i] = y_desc->shape()[i + 2];
+        pads_info[i] = pads_ptr == nullptr ? 0 : pads_ptr[i];
+        strides_info[i] = strides_ptr == nullptr ? 1 : strides_ptr[i];
+        dilations_info[i] = dilations_ptr == nullptr ? 1 : dilations_ptr[i];
+        spatial_sizes = spatial_sizes * output_dims[i];
+        
+        size_t expected_output = (input_dims[i] + pads_info[i] * 2 - dilations_info[i] * (kernel_dims[i] - 1) - 1) / strides_info[i] + 1;
+        if (output_dims[i] != expected_output) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
     }
-    if (b_desc != nullptr) {
-        info.bias_dims.resize(x_desc->ndim());
-        std::fill(info.bias_dims.begin(), info.bias_dims.end(), 1);
-        info.bias_dims[1] = b_desc->shape()[0];
+
+    // 填充bias_dims
+    if (bias_dims_size > 0) {
+        std::fill(bias_dims, bias_dims + bias_dims_size, 1);
+        bias_dims[1] = b_desc->shape()[0];
     }
+
+    // 填充padded_shape
+    if (padded_shape_size > 0) {
+        padded_shape[0] = batch;
+        padded_shape[1] = in_channels;
+        for (size_t i = 0; i < ndim; ++i) {
+            padded_shape[i + 2] = input_dims[i] + 2 * pads_info[i];
+        }
+    }
+
+    ConvInfo info(std::move(meta), ndim, batch, in_channels, out_channels, 
+                  spatial_sizes, bias_dims_size, padded_shape_size);
 
 #ifdef ENABLE_CUDA_API
     if (handle_->device == INFINI_DEVICE_NVIDIA) {
