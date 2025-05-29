@@ -171,7 +171,7 @@ void applyConv(
     const Xdata *x,
     const Xdata *w,
     const size_t *x_shape) {
-#pragma omp parallel for collapse(2) schedule(dynamic)
+#pragma omp parallel for
     for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(info.batch()); ++i) {
         for (ptrdiff_t j = 0; j < static_cast<ptrdiff_t>(info.out_channels()); ++j) {
             size_t y_index = i * info.out_channels() + j;
