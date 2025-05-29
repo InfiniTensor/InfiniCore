@@ -1,0 +1,59 @@
+#include "../../../../../build/ninetoothed/relu.h"
+#include "../../../devices/cuda/cuda_common.cuh"
+#include "relu_cuda.cuh"
+
+namespace op::relu::cuda {
+
+Descriptor::~Descriptor() = default;
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t out_desc,
+    std::vector<infiniopTensorDescriptor_t> input_desc_vec) {
+
+    auto handle = reinterpret_cast<device::cuda::Handle *>(handle_);
+    auto dtype = out_desc->dtype();
+
+    const auto &x_desc = input_desc_vec.at(0);
+    const auto &y_shape = out_desc->shape();
+    const auto &x_shape = x_desc->shape();
+
+    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64);
+
+    CHECK_SAME_SHAPE(y_shape, x_shape);
+
+    // create CUDA elementwise descriptor
+    CREATE_ELEMENTWISE_CUDA_DESCRIPTOR(handle, dtype, out_desc, input_desc_vec)
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *output,
+    std::vector<const void *> inputs,
+    void *stream) const {
+    if (workspace_size < _workspace_size) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+
+    NineToothedTensor x_tensor{const_cast<void *>(inputs[0]), const_cast<uint64_t *>(_info.getInputShape(0)), const_cast<int64_t *>(_info.getInputStrides(0))};
+    NineToothedTensor y_tensor{output, const_cast<uint64_t *>(_info.getOutputShape()), const_cast<int64_t *>(_info.getOutputStrides())};
+
+    switch (_dtype) {
+    case INFINI_DTYPE_F16:
+    case INFINI_DTYPE_F32:
+    case INFINI_DTYPE_F64:
+        if (launch_relu(stream, x_tensor, y_tensor, _info.getNdim(), _dtype)) {
+            return INFINI_STATUS_INTERNAL_ERROR;
+        }
+        return INFINI_STATUS_SUCCESS;
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
+    return INFINI_STATUS_SUCCESS;
+}
+} // namespace op::relu::cuda
