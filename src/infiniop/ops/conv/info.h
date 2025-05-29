@@ -197,6 +197,17 @@ inline utils::Result<ConvInfo> ConvInfo::create(
         dilations_info[i] = dilations_ptr == nullptr ? 1 : dilations_ptr[i];
         spatial_sizes = spatial_sizes * output_dims[i];
 
+        if (strides_info[i] == 0) {
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
+        if (dilations_info[i] == 0) {
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
+        if (kernel_dims[i] == 0) {
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
+        spatial_sizes = spatial_sizes * output_dims[i];
+
         size_t expected_output = (input_dims[i] + pads_info[i] * 2 - dilations_info[i] * (kernel_dims[i] - 1) - 1) / strides_info[i] + 1;
         if (output_dims[i] != expected_output) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
