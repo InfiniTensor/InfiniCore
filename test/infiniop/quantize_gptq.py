@@ -64,9 +64,9 @@ class QuantizeGPTQDescriptor(Structure):
 infiniopQuantizeGPTQDescriptor_t = POINTER(QuantizeGPTQDescriptor)
 
 
-def quantize(x, scale, zero, maxq):
+def quantize(x, scale, zero, minq, maxq):
     if scale.shape[1] == 1:
-        q = torch.clamp(torch.round(x / scale) + zero, 0, maxq)
+        q = torch.clamp(torch.round(x / scale) + zero, minq, maxq)
         return scale * (q - zero)
     else:
         group_size = x.shape[1] // scale.shape[1]
@@ -77,7 +77,7 @@ def quantize(x, scale, zero, maxq):
                     x[:, j * group_size : (j + 1) * group_size] / scale[:, j : j + 1]
                 )
                 + zero[:, j : j + 1],
-                0,
+                minq,
                 maxq,
             )
             y[:, j * group_size : (j + 1) * group_size] = scale[:, j : j + 1] * (
@@ -91,6 +91,7 @@ class Quantizer(nn.Module):
     def __init__(self, shape=1):
         super(Quantizer, self).__init__()
         self.register_buffer("maxq", torch.tensor(0))
+        self.register_buffer("minq", torch.tensor(0))
         self.register_buffer("scale", torch.zeros(shape))
         self.register_buffer("zero", torch.zeros(shape))
 
@@ -103,8 +104,14 @@ class Quantizer(nn.Module):
         norm=2.4,
         grid=100,
         maxshrink=0.8,
+        sign_ed=False,
     ):
-        self.maxq = torch.tensor(2**bits - 1)
+        if sign_ed:  # 有符号量化，范围是[-8,7]
+            self.maxq = torch.tensor(2 ** (bits - 1) - 1)
+            self.minq = -torch.tensor(2 ** (bits - 1))
+        else:  # 无符号量化，范围是[0,15]
+            self.maxq = torch.tensor(2**bits - 1)
+            self.minq = -torch.tensor(0)
         self.perchannel = perchannel
         self.sym = sym
         self.mse = mse
@@ -115,6 +122,7 @@ class Quantizer(nn.Module):
     def find_params(self, x, weight=False):
         dev = x.device
         self.maxq = self.maxq.to(dev)
+        self.minq = self.minq.to(dev)
 
         shape = x.shape
         if self.perchannel:
@@ -139,9 +147,9 @@ class Quantizer(nn.Module):
         xmin[tmp] = -1
         xmax[tmp] = +1
 
-        self.scale = (xmax - xmin) / self.maxq
+        self.scale = (xmax - xmin) / (self.maxq - self.minq)
         if self.sym:
-            self.zero = torch.full_like(self.scale, (self.maxq + 1) / 2)
+            self.zero = torch.full_like(self.scale, (self.maxq + self.minq + 1) / 2)
         else:
             self.zero = torch.round(-xmin / self.scale)
 
@@ -151,9 +159,11 @@ class Quantizer(nn.Module):
                 p = 1 - i / self.grid
                 xmin1 = p * xmin
                 xmax1 = p * xmax
-                scale1 = (xmax1 - xmin1) / self.maxq
+                scale1 = (xmax1 - xmin1) / (self.maxq - self.minq)
                 zero1 = torch.round(-xmin1 / scale1) if not self.sym else self.zero
-                q = quantize(x, scale1.unsqueeze(1), zero1.unsqueeze(1), self.maxq)
+                q = quantize(
+                    x, scale1.unsqueeze(1), zero1.unsqueeze(1), self.minq, self.maxq
+                )
                 q -= x
                 q.abs_()
                 q.pow_(self.norm)
@@ -190,7 +200,7 @@ class Quantizer(nn.Module):
 
     def quantize(self, x):
         if self.ready():
-            return quantize(x, self.scale, self.zero, self.maxq)
+            return quantize(x, self.scale, self.zero, self.minq, self.maxq)
         return x
 
     def enabled(self):
@@ -292,6 +302,7 @@ class GPTQ:
                     w.unsqueeze(1),
                     self.quantizer.scale,
                     self.quantizer.zero,
+                    self.quantizer.minq,
                     self.quantizer.maxq,
                 ).flatten()
                 Q1[:, i] = q
@@ -313,13 +324,13 @@ class GPTQ:
         self.zero = zero.to(self.weight.dtype)
 
 
-def get_scale_zero(b, a, c, group_size):
+def get_scale_zero(b, a, c, group_size, sign_ed):
     weight = b.clone()
     inp = a.clone()
     out = c.clone()
     gptq = GPTQ(weight)
     gptq.quantizer = Quantizer()
-    gptq.quantizer.configure(perchannel=True, sym=False, mse=False)
+    gptq.quantizer.configure(perchannel=True, sym=False, mse=False, signed=sign_ed)
     gptq.add_batch(inp, out)
     gptq.fasterquant(group_size=group_size)
 
@@ -383,7 +394,9 @@ def test(
     s = torch.zeros([N, num_groups], dtype=dtype).to(torch_device)
     z = torch.zeros([N, num_groups], dtype=dtype).to(torch_device)
     if torch_device == "cuda":
-        b_ref, s, z = get_scale_zero(b, a.t(), c, group_size)
+        b_ref, s, z = get_scale_zero(
+            b, a.t(), c, group_size, signed=False
+        )  # 无符号量化
         z = torch.zeros_like(s)
         packed_weights = pack(b_ref, s, z)
         # print(s)

@@ -42,17 +42,25 @@ infiniStatus_t Descriptor::create(infiniopHandle_t handle_, Descriptor **desc_pt
     return INFINI_STATUS_SUCCESS;
 }
 
-float quantize(float x, float s, float z, float maxq) {
+float quantize(float x, float s, float z, float minq, float maxq) {
     float q = std::roundf(x / s + z);
-    q = std::max(0.0f, std::min(maxq, q));
+    q = std::max(minq, std::min(maxq, q));
     return s * (q - z);
 }
 
 template <typename T>
 void find_params(T *x, T *b_scale, T *zero, int N, int K,
                  int bits = 4, bool sym = false, bool mse = false,
-                 float norm = 2.4f, int grid = 100, float maxshrink = 0.8f) {
-    float maxq = static_cast<float>(std::pow(2, bits) - 1);
+                 float norm = 2.4f, int grid = 100, float maxshrink = 0.8f, bool sign_ed = false) {
+    float maxq;
+    float minq;
+    if (sign_ed) { // 如果有符号量化
+        maxq = static_cast<float>(std::pow(2, bits - 1) - 1);
+        minq = -static_cast<float>(std::pow(2, bits - 1));
+    } else {
+        maxq = static_cast<float>(std::pow(2, bits) - 1);
+        minq = 0.0f;
+    }
 #pragma omp parallel for
     for (int n = 0; n < N; n++) {
         float x_min = FLT_MAX;
@@ -76,16 +84,16 @@ void find_params(T *x, T *b_scale, T *zero, int N, int K,
             x_max = 1;
         }
         if constexpr (std::is_same<T, fp16_t>::value) {
-            b_scale[n] = utils::cast<fp16_t>((x_max - x_min) / maxq);
+            b_scale[n] = utils::cast<fp16_t>((x_max - x_min) / (maxq - minq));
             if (sym) {
-                zero[n] = utils::cast<fp16_t>((maxq + 1.0f) * 0.5f);
+                zero[n] = utils::cast<fp16_t>((maxq + minq + 1.0f) * 0.5f);
             } else {
-                zero[n] = utils::cast<fp16_t>(-x_min * maxq / (x_max - x_min));
+                zero[n] = utils::cast<fp16_t>(-x_min * (maxq - minq) / (x_max - x_min));
             }
         } else if constexpr (std::is_same<T, float>::value) {
-            b_scale[n] = (x_max - x_min) / maxq;
+            b_scale[n] = (x_max - x_min) / (maxq - minq);
             if (sym) {
-                zero[n] = (maxq + 1.0f) * 0.5f;
+                zero[n] = (maxq + minq + 1.0f) * 0.5f;
             } else {
                 zero[n] = -x_min / b_scale[n];
             }
@@ -96,11 +104,11 @@ void find_params(T *x, T *b_scale, T *zero, int N, int K,
                 float p = 1 - static_cast<float>(i) / static_cast<float>(grid);
                 float x_min_1 = p * x_min;
                 float x_max_1 = p * x_max;
-                float scale_1 = (x_max_1 - x_min_1) / maxq;
+                float scale_1 = (x_max_1 - x_min_1) / (maxq - minq);
                 float zero_1 = (sym ? utils::cast<float>(zero[n]) : std::roundf(-x_min_1 / scale_1));
                 float err = 0.0f;
                 for (int k = 0; k < K; k++) {
-                    float q = quantize(utils::cast<float>(x[n * K + k]), scale_1, zero_1, maxq);
+                    float q = quantize(utils::cast<float>(x[n * K + k]), scale_1, zero_1, minq, maxq);
                     q -= utils::cast<float>(x[n * K + k]);
                     q = std::abs(q);
                     q = static_cast<float>(std::pow(q, norm));
@@ -344,12 +352,20 @@ void fasterquant(T *weight, T *Q, float *Err, T *b_scale, T *zero, float *Hess,
                  int M, int K, int N,
                  int block_size = 128, float percdamp = 0.01, int group_size = -1,
                  int bits = 4, bool sym = false, bool mse = false,
-                 float norm = 2.4, int grid = 100, float maxshrink = 0.8) {
-    float maxq = static_cast<float>(std::pow(2, bits) - 1);
+                 float norm = 2.4, int grid = 100, float maxshrink = 0.8, bool sign_ed = false) {
+    float maxq;
+    float minq;
+    if (sign_ed) { // 如果有符号量化
+        maxq = static_cast<float>(std::pow(2, bits - 1) - 1);
+        minq = -static_cast<float>(std::pow(2, bits - 1));
+    } else {
+        maxq = static_cast<float>(std::pow(2, bits) - 1);
+        minq = 0.0f;
+    }
     int num_groups = (group_size == -1 ? 1 : K / group_size);
 
     if (group_size == -1) {
-        find_params(weight, b_scale, zero, N, K, bits, sym, mse, norm, grid, maxshrink);
+        find_params(weight, b_scale, zero, N, K, bits, sym, mse, norm, grid, maxshrink, sign_ed);
     }
     float damp = 0.0f;
 
@@ -388,13 +404,13 @@ void fasterquant(T *weight, T *Q, float *Err, T *b_scale, T *zero, float *Hess,
                 if ((index * block_size + i) % group_size == 0) {
                     int ind = (index * block_size + i) / group_size;
                     for (int n = 0; n < N; n++) {
-                        find_params(&weight[n * K + index * block_size + i], &b_scale[n * num_groups + ind], &zero[n * num_groups + ind], 1, group_size, bits, sym, mse, norm, grid, maxshrink);
+                        find_params(&weight[n * K + index * block_size + i], &b_scale[n * num_groups + ind], &zero[n * num_groups + ind], 1, group_size, bits, sym, mse, norm, grid, maxshrink, sign_ed);
                     }
                 }
             }
             int ind = (group_size != -1 ? (index * block_size + i) / group_size : 0);
             for (int n = 0; n < N; n++) {
-                float q = quantize(utils::cast<float>(weight[n * K + index * block_size + i]), utils::cast<float>(b_scale[n * num_groups + ind]), utils::cast<float>(zero[n * num_groups + ind]), maxq);
+                float q = quantize(utils::cast<float>(weight[n * K + index * block_size + i]), utils::cast<float>(b_scale[n * num_groups + ind]), utils::cast<float>(zero[n * num_groups + ind]), minq, maxq);
                 if constexpr (std::is_same<T, fp16_t>::value) {
                     Q[n * K + index * block_size + i] = utils::cast<fp16_t>(q);
                 } else if constexpr (std::is_same<T, float>::value) {
@@ -435,8 +451,16 @@ void fasterquant(T *weight, T *Q, float *Err, T *b_scale, T *zero, float *Hess,
 }
 
 void PackQuantizedWeight(fp16_t *Q, fp16_t *b_scale, fp16_t *zero,
-                         int32_t *packed_weight, int K, int N, int group_size, int bits = 4) {
-    int maxq = int(std::pow(2, bits) - 1);
+                         int32_t *packed_weight, int K, int N, int group_size, int bits = 4, bool sign_ed = false) {
+    int maxq;
+    int minq;
+    if (sign_ed) { // 如果有符号量化
+        maxq = int(std::pow(2, bits - 1) - 1);
+        minq = -int(std::pow(2, bits - 1));
+    } else {
+        maxq = int(std::pow(2, bits) - 1);
+        minq = 0;
+    }
     int num_groups = (group_size == -1) ? 1 : K / group_size;
     int blocks_per_group = (group_size == -1) ? K / 8 : group_size / 8;
 
@@ -458,7 +482,7 @@ void PackQuantizedWeight(fp16_t *Q, fp16_t *b_scale, fp16_t *zero,
             int k = row_base + i;
             float val = utils::cast<float>(Q[n * K + k]); // Q: [N, K]
             int q = static_cast<int>(std::roundf(val / scale + zero_f));
-            q = std::max(0, std::min(maxq, q)); // clamp to [0, maxq]
+            q = std::max(minq, std::min(maxq, q)); // clamp to [minq, maxq]
             packed |= (q & 0xF) << (i * 4);
         }
 
@@ -518,6 +542,7 @@ void quantWeights(void *workspace, int32_t *packed_weights,
     int grid = 100;
     float maxshrink = 0.8f;
     float nsamples = 0.0f;
+    bool sign_ed = false;
 
     char *tmp = (char *)workspace + (K * K + N * block_size) * sizeof(float);
     float *Hess = (float *)workspace; //[K, K]
@@ -535,9 +560,9 @@ void quantWeights(void *workspace, int32_t *packed_weights,
                         M, K, N,
                         block_size, percdamp, group_size,
                         bits, sym, mse,
-                        norm, grid, maxshrink);
+                        norm, grid, maxshrink, sign_ed);
 
-    PackQuantizedWeight(Q, b_scale, zero, packed_weights, K, N, group_size, bits);
+    PackQuantizedWeight(Q, b_scale, zero, packed_weights, K, N, group_size, bits, sign_ed);
 }
 
 void caculate(void *workspace, fp16_t *C, const fp16_t *A,
