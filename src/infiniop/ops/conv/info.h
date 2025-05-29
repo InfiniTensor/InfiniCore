@@ -131,10 +131,13 @@ inline utils::Result<size_t> calculateConvOutputSize(
     size_t stride,
     size_t dilation) {
     if (stride == 0) {
-        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        return utils::Result<size_t>(INFINI_STATUS_BAD_TENSOR_SHAPE);
+    }
+    if (dilation == 0) {
+        return utils::Result<size_t>(INFINI_STATUS_BAD_TENSOR_SHAPE);
     }
     if (kernel_size == 0) {
-        return INFINI_STATUS_BAD_TENSOR_SHAPE; // 卷积核大小不能为0
+        return utils::Result<size_t>(INFINI_STATUS_BAD_TENSOR_SHAPE);
     }
     size_t effective_kernel = dilation * (kernel_size - 1) + 1;
 
