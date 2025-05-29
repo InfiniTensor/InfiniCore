@@ -124,6 +124,31 @@ public:
         size_t n);
 };
 
+inline utils::Result<size_t> calculateConvOutputSize(
+    size_t input_size,
+    size_t kernel_size,
+    size_t padding,
+    size_t stride,
+    size_t dilation) {
+    if (stride == 0) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+    if (kernel_size == 0) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE; // 卷积核大小不能为0
+    }
+    size_t effective_kernel = dilation * (kernel_size - 1) + 1;
+
+    size_t padded_input = input_size + 2 * padding;
+
+    if (padded_input < effective_kernel) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+
+    size_t output_size = (padded_input - effective_kernel) / stride + 1;
+
+    return utils::Result<size_t>(output_size);
+}
+
 inline utils::Result<ConvInfo> ConvInfo::create(
     infiniopHandle_t handle_,
     infiniopTensorDescriptor_t y_desc,
@@ -196,19 +221,14 @@ inline utils::Result<ConvInfo> ConvInfo::create(
         strides_info[i] = strides_ptr == nullptr ? 1 : strides_ptr[i];
         dilations_info[i] = dilations_ptr == nullptr ? 1 : dilations_ptr[i];
         spatial_sizes = spatial_sizes * output_dims[i];
-
-        if (strides_info[i] == 0) {
-            return INFINI_STATUS_BAD_TENSOR_SHAPE;
-        }
-        if (dilations_info[i] == 0) {
-            return INFINI_STATUS_BAD_TENSOR_SHAPE;
-        }
-        if (kernel_dims[i] == 0) {
-            return INFINI_STATUS_BAD_TENSOR_SHAPE;
-        }
-        spatial_sizes = spatial_sizes * output_dims[i];
-
-        size_t expected_output = (input_dims[i] + pads_info[i] * 2 - dilations_info[i] * (kernel_dims[i] - 1) - 1) / strides_info[i] + 1;
+        auto output_result = calculateConvOutputSize(
+            input_dims[i],
+            kernel_dims[i],
+            pads_info[i],
+            strides_info[i],
+            dilations_info[i]);
+        CHECK_RESULT(output_result);
+        size_t expected_output = output_result.take();
         if (output_dims[i] != expected_output) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }

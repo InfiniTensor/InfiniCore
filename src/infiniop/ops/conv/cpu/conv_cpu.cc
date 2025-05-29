@@ -171,15 +171,22 @@ void applyConv(
     const Xdata *x,
     const Xdata *w,
     const size_t *x_shape) {
-#pragma omp parallel for
-    for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(info.batch()); ++i) {
-        for (ptrdiff_t j = 0; j < static_cast<ptrdiff_t>(info.out_channels()); ++j) {
-            size_t y_index = i * info.out_channels() + j;
-            for (size_t k = 0; k < info.in_channels(); ++k) {
-                size_t x_index = i * info.in_channels() + k;
-                size_t w_index = j * info.in_channels() + k;
-                _applyConv(info, y, x, w, x_shape, x_index, w_index, y_index, 2);
-            }
+    const ptrdiff_t batch_size = static_cast<ptrdiff_t>(info.batch());
+    const ptrdiff_t out_channels = static_cast<ptrdiff_t>(info.out_channels());
+    const ptrdiff_t total_iterations = batch_size * out_channels;
+
+#pragma omp parallel for schedule(dynamic)
+    for (ptrdiff_t iter = 0; iter < total_iterations; ++iter) {
+        const ptrdiff_t i = iter / out_channels; // batch index
+        const ptrdiff_t j = iter % out_channels; // output channel index
+
+        const size_t y_index = static_cast<size_t>(i) * info.out_channels() + static_cast<size_t>(j);
+
+        // 内层循环：遍历输入通道
+        for (size_t k = 0; k < info.in_channels(); ++k) {
+            const size_t x_index = static_cast<size_t>(i) * info.in_channels() + k;
+            const size_t w_index = static_cast<size_t>(j) * info.in_channels() + k;
+            _applyConv(info, y, x, w, x_shape, x_index, w_index, y_index, 2);
         }
     }
 }
