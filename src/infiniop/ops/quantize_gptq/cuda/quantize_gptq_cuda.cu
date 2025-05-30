@@ -71,14 +71,14 @@ infiniStatus_t Descriptor::calculate(
     int group_size = int(_info.group_size);
     int num_groups = int(_info.num_groups);
     bool is_weight_transposed = _info.is_weight_transposed;
-    if (_info.atype == INFINI_DTYPE_F16 && !is_weight_transposed) {
+    if (_info.atype == INFINI_DTYPE_F16 && is_weight_transposed) {
         gptq_marlin::gptq_marlin_mm_fp16(c, a, packed_weights, b_scale,
                                          m, n, k,
                                          workspace, bits,
                                          num_groups, group_size,
                                          this->device_id, (cudaStream_t)stream);
 
-    } else if (_info.atype == INFINI_DTYPE_BF16 && !is_weight_transposed) {
+    } else if (_info.atype == INFINI_DTYPE_BF16 && is_weight_transposed) {
         gptq_marlin::gptq_marlin_mm_bf16(c, a, packed_weights, b_scale,
                                          m, n, k,
                                          workspace, bits,

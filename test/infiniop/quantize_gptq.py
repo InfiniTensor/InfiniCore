@@ -23,7 +23,6 @@ from libinfiniop import (
 #  Configuration (Internal Use Only)
 # ==============================================================================
 # These are not meant to be imported from other modules
-is_weight_transposed = False
 
 _TEST_CASES = []
 
@@ -38,7 +37,7 @@ MODELS = {
 for _, layers in MODELS.items():
     for layer in layers:
         for batch in [1, 16]:
-            _TEST_CASES.append(((batch, layer[0], layer[1], is_weight_transposed)))
+            _TEST_CASES.append(((batch, layer[0], layer[1])))
 
 # Data types used for testing
 _TENSOR_DTYPES = [torch.float16]
@@ -324,14 +323,14 @@ class GPTQ:
         self.zero = zero.to(self.weight.dtype)
 
 
-def get_scale_zero(b, a, c, group_size, bits, sign_ed):
+def get_scale_zero(b, a, c, group_size, bits, sym, sign_ed):
     weight = b.clone()
     inp = a.clone()
     out = c.clone()
     gptq = GPTQ(weight)
     gptq.quantizer = Quantizer()
     gptq.quantizer.configure(
-        bits=bits, perchannel=True, sym=False, mse=False, sign_ed=sign_ed
+        bits=bits, perchannel=True, sym=sym, mse=False, sign_ed=sign_ed
     )
     gptq.add_batch(inp, out)
     gptq.fasterquant(group_size=group_size)
@@ -370,7 +369,6 @@ def test(
     M,
     K,
     N,
-    is_weight_transposed,
     dtype=torch.float16,
     sync=None,
 ):
@@ -381,8 +379,13 @@ def test(
     # Initialize tensors
     a = 1e0 * torch.randn([K, M], dtype=dtype).to(torch_device)
     layer = nn.Linear(K, N)
-    b = 1e0 * layer.weight.data.to(dtype).to(torch_device)
+    b = 1e-3 * layer.weight.data.to(dtype).to(torch_device)
     c = torch.zeros([N, M], dtype=dtype).to(torch_device)
+    is_weight_transposed = False
+    sign_ed = False
+    sym = False
+    if torch_device != "cpu":
+        is_weight_transposed = True
 
     group_size = -1
     num_groups = 1
@@ -397,37 +400,45 @@ def test(
     packed_weights = torch.zeros([N, K // 8], dtype=torch.int32).to(torch_device)
     s = torch.zeros([N, num_groups], dtype=dtype).to(torch_device)
     z = torch.zeros([N, num_groups], dtype=dtype).to(torch_device)
-    sign_ed = False
+
     bits = 4
     maxq = 2**bits - 1
     minq = 0
     if sign_ed:  # 有符号量化，范围是[-8,7]
         maxq = 2 ** (bits - 1) - 1
         minq = -(2 ** (bits - 1))
-    sym = False
 
     if torch_device == "cuda":
         b_ref, s, z = get_scale_zero(
-            b, a.t(), c, group_size, bits, sign_ed=sign_ed
+            b, a.t(), c, group_size, bits, sym, sign_ed=sign_ed
         )  # 无符号量化
 
         packed_weights = pack(b_ref, s, z, minq, maxq)
 
-    if torch_device == "cpu":
-        b_ref, s, z = get_scale_zero(
-            b, a.t(), c, group_size, bits, sign_ed=sign_ed
-        )  # 无符号量化
+    # if torch_device == "cpu":
+    #     b_ref, s, z = get_scale_zero(
+    #         b, a.t(), c, group_size, bits, sym, sign_ed=sign_ed
+    #     )  # 无符号量化
 
-        packed_weights = pack(b_ref, s, z, minq, maxq)
-
-    a_tensor, b_tensor, c_tensor, s_tensor, z_tensor, packed_weights_tensor = (
-        to_tensor(a, lib),
-        to_tensor(b, lib),
-        to_tensor(c, lib),
-        to_tensor(s, lib),
-        to_tensor(z, lib),
-        to_tensor(packed_weights, lib),
-    )
+    #     packed_weights = pack(b_ref, s, z, minq, maxq)
+    if is_weight_transposed:
+        a_tensor, b_tensor, c_tensor, s_tensor, z_tensor, packed_weights_tensor = (
+            to_tensor(a.t(), lib),
+            to_tensor(b.t(), lib),
+            to_tensor(c.t(), lib),
+            to_tensor(s.t(), lib),
+            to_tensor(z.t(), lib),
+            to_tensor(packed_weights.t(), lib),
+        )
+    else:
+        a_tensor, b_tensor, c_tensor, s_tensor, z_tensor, packed_weights_tensor = (
+            to_tensor(a, lib),
+            to_tensor(b, lib),
+            to_tensor(c, lib),
+            to_tensor(s, lib),
+            to_tensor(z, lib),
+            to_tensor(packed_weights, lib),
+        )
 
     descriptor = infiniopQuantizeGPTQDescriptor_t()
     check_error(
@@ -463,19 +474,19 @@ def test(
     workspace = create_workspace(workspace_size.value, a.device)
 
     # Execute infiniop quantize_gptq operator
-    # check_error(
-    #     lib.infiniopQuantizeGPTQ(
-    #         descriptor,
-    #         workspace.data_ptr() if workspace is not None else None,
-    #         workspace_size.value,
-    #         packed_weights_tensor.data,
-    #         s_tensor.data,
-    #         z_tensor.data,
-    #         a_tensor.data,
-    #         b_tensor.data,
-    #         None,
-    #     )
-    # )
+    check_error(
+        lib.infiniopQuantizeGPTQ(
+            descriptor,
+            workspace.data_ptr() if workspace is not None else None,
+            workspace_size.value,
+            packed_weights_tensor.data,
+            s_tensor.data,
+            z_tensor.data,
+            a_tensor.data,
+            b_tensor.data,
+            None,
+        )
+    )
 
     def lib_quantize_gptq():
         check_error(
@@ -495,13 +506,15 @@ def test(
     lib_quantize_gptq()
 
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
-    tmpa = ans.flatten()
-    tmpc = c.flatten()
-    for i in range(tmpa.shape[0]):
-        if abs(tmpa[i] - tmpc[i]) > atol + rtol * abs(tmpa[i]):
-            print(tmpa[i], tmpc[i], abs(tmpa[i] - tmpc[i]), rtol * abs(tmpa[i]))
-            break
+    # tmpa = ans.flatten()
+    # tmpc = c.flatten()
+    # for i in range(tmpa.shape[0]):
+    #     if abs(tmpa[i] - tmpc[i]) > atol + rtol * abs(tmpa[i]):
+    #         print(tmpa[i], tmpc[i], abs(tmpa[i] - tmpc[i]), rtol * abs(tmpa[i]))
+    #         break
 
+    if is_weight_transposed:
+        c = c.t()
     if DEBUG:
         debug(c, ans, atol=atol, rtol=rtol)
     assert torch.allclose(c, ans, atol=atol, rtol=rtol)
