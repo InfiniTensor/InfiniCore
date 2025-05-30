@@ -317,20 +317,22 @@ class GPTQ:
 
             W[:, i2:] -= Err1.matmul(Hinv[i1:i2, i2:])
 
-        # print('error', torch.sum(Losses).item())
+        print("error", torch.sum(Losses).item())
 
         self.weight = Q.reshape(self.weight.shape).to(self.weight.dtype)
         self.scale = scale.to(self.weight.dtype)
         self.zero = zero.to(self.weight.dtype)
 
 
-def get_scale_zero(b, a, c, group_size, sign_ed):
+def get_scale_zero(b, a, c, group_size, bits, sign_ed):
     weight = b.clone()
     inp = a.clone()
     out = c.clone()
     gptq = GPTQ(weight)
     gptq.quantizer = Quantizer()
-    gptq.quantizer.configure(perchannel=True, sym=False, mse=False, signed=sign_ed)
+    gptq.quantizer.configure(
+        bits=bits, perchannel=True, sym=False, mse=False, sign_ed=sign_ed
+    )
     gptq.add_batch(inp, out)
     gptq.fasterquant(group_size=group_size)
 
@@ -341,8 +343,10 @@ def get_scale_zero(b, a, c, group_size, sign_ed):
     )
 
 
-def pack(weight, scale, zero):
-    intweight = torch.round((weight + zero) / scale).to(torch.int32)
+def pack(weight, scale, zero, minq, maxq):
+    intweight = torch.clamp(torch.round(weight / scale + zero), minq, maxq).to(
+        torch.int32
+    )
     qweight = torch.zeros(
         [weight.shape[0], weight.shape[1] // 8], dtype=torch.int32, device=weight.device
     )
@@ -377,7 +381,7 @@ def test(
     # Initialize tensors
     a = 1e0 * torch.randn([K, M], dtype=dtype).to(torch_device)
     layer = nn.Linear(K, N)
-    b = 1e-3 * layer.weight.data.to(dtype).to(torch_device)
+    b = 1e0 * layer.weight.data.to(dtype).to(torch_device)
     c = torch.zeros([N, M], dtype=dtype).to(torch_device)
 
     group_size = -1
@@ -393,13 +397,28 @@ def test(
     packed_weights = torch.zeros([N, K // 8], dtype=torch.int32).to(torch_device)
     s = torch.zeros([N, num_groups], dtype=dtype).to(torch_device)
     z = torch.zeros([N, num_groups], dtype=dtype).to(torch_device)
+    sign_ed = False
+    bits = 4
+    maxq = 2**bits - 1
+    minq = 0
+    if sign_ed:  # 有符号量化，范围是[-8,7]
+        maxq = 2 ** (bits - 1) - 1
+        minq = -(2 ** (bits - 1))
+    sym = False
+
     if torch_device == "cuda":
         b_ref, s, z = get_scale_zero(
-            b, a.t(), c, group_size, signed=False
+            b, a.t(), c, group_size, bits, sign_ed=sign_ed
         )  # 无符号量化
-        z = torch.zeros_like(s)
-        packed_weights = pack(b_ref, s, z)
-        # print(s)
+
+        packed_weights = pack(b_ref, s, z, minq, maxq)
+
+    if torch_device == "cpu":
+        b_ref, s, z = get_scale_zero(
+            b, a.t(), c, group_size, bits, sign_ed=sign_ed
+        )  # 无符号量化
+
+        packed_weights = pack(b_ref, s, z, minq, maxq)
 
     a_tensor, b_tensor, c_tensor, s_tensor, z_tensor, packed_weights_tensor = (
         to_tensor(a, lib),
@@ -444,19 +463,19 @@ def test(
     workspace = create_workspace(workspace_size.value, a.device)
 
     # Execute infiniop quantize_gptq operator
-    check_error(
-        lib.infiniopQuantizeGPTQ(
-            descriptor,
-            workspace.data_ptr() if workspace is not None else None,
-            workspace_size.value,
-            packed_weights_tensor.data,
-            s_tensor.data,
-            z_tensor.data,
-            a_tensor.data,
-            b_tensor.data,
-            None,
-        )
-    )
+    # check_error(
+    #     lib.infiniopQuantizeGPTQ(
+    #         descriptor,
+    #         workspace.data_ptr() if workspace is not None else None,
+    #         workspace_size.value,
+    #         packed_weights_tensor.data,
+    #         s_tensor.data,
+    #         z_tensor.data,
+    #         a_tensor.data,
+    #         b_tensor.data,
+    #         None,
+    #     )
+    # )
 
     def lib_quantize_gptq():
         check_error(
@@ -476,12 +495,12 @@ def test(
     lib_quantize_gptq()
 
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
-    # tmpa = ans.flatten()
-    # tmpc = c.flatten()
-    # for i in range(tmpa.shape[0]):
-    #     if abs(tmpa[i] - tmpc[i]) > atol + rtol * abs(tmpa[i]):
-    #         print(tmpa[i], tmpc[i], abs(tmpa[i] - tmpc[i]), rtol * abs(tmpa[i]))
-    #         break
+    tmpa = ans.flatten()
+    tmpc = c.flatten()
+    for i in range(tmpa.shape[0]):
+        if abs(tmpa[i] - tmpc[i]) > atol + rtol * abs(tmpa[i]):
+            print(tmpa[i], tmpc[i], abs(tmpa[i] - tmpc[i]), rtol * abs(tmpa[i]))
+            break
 
     if DEBUG:
         debug(c, ans, atol=atol, rtol=rtol)
