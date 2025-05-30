@@ -94,11 +94,11 @@ if __name__ == "__main__":
             None,
         ),
         SwiGLUTestCase(
-            np.random.rand(13, 4).astype(np.float16),
+            np.random.rand(13, 4).astype(np.float16) / 10.0,
             None,
-            np.random.rand(13, 4).astype(np.float16),
+            np.random.rand(13, 4).astype(np.float16) / 10.0,
             None,
-            np.random.rand(13, 4).astype(np.float16),
+            np.random.rand(13, 4).astype(np.float16) / 10.0,
             None,
         ),
         SwiGLUTestCase(
@@ -110,11 +110,11 @@ if __name__ == "__main__":
             gguf_strides(10, 1),
         ),
         SwiGLUTestCase(
-            np.random.rand(13, 4).astype(np.float16),
+            np.random.rand(13, 4).astype(np.float16) / 10.0,
             gguf_strides(10, 1),
-            np.random.rand(13, 4).astype(np.float16),
+            np.random.rand(13, 4).astype(np.float16) / 10.0,
             gguf_strides(10, 1),
-            np.random.rand(13, 4).astype(np.float16),
+            np.random.rand(13, 4).astype(np.float16) / 10.0,
             gguf_strides(10, 1),
         ),
         SwiGLUTestCase(
@@ -126,11 +126,11 @@ if __name__ == "__main__":
             None,
         ),
         SwiGLUTestCase(
-            np.random.rand(13, 4, 4).astype(np.float16),
+            np.random.rand(13, 4, 4).astype(np.float16) / 10.0,
             None,
-            np.random.rand(13, 4, 4).astype(np.float16),
+            np.random.rand(13, 4, 4).astype(np.float16) / 10.0,
             None,
-            np.random.rand(13, 4, 4).astype(np.float16),
+            np.random.rand(13, 4, 4).astype(np.float16) / 10.0,
             None,
         ),
         SwiGLUTestCase(
@@ -142,11 +142,11 @@ if __name__ == "__main__":
             gguf_strides(20, 4, 1),
         ),
         SwiGLUTestCase(
-            np.random.rand(13, 4, 4).astype(np.float16),
+            np.random.rand(13, 4, 4).astype(np.float16) / 10.0,
             gguf_strides(20, 4, 1),
-            np.random.rand(13, 4, 4).astype(np.float16),
+            np.random.rand(13, 4, 4).astype(np.float16) / 10.0,
             gguf_strides(20, 4, 1),
-            np.random.rand(13, 4, 4).astype(np.float16),
+            np.random.rand(13, 4, 4).astype(np.float16) / 10.0,
             gguf_strides(20, 4, 1),
         ),
         SwiGLUTestCase(
@@ -158,11 +158,11 @@ if __name__ == "__main__":
             None,
         ),
         SwiGLUTestCase(
-            np.random.rand(16, 5632).astype(np.float16),
+            np.random.rand(16, 5632).astype(np.float16) / 10.0,
             None,
-            np.random.rand(16, 5632).astype(np.float16),
+            np.random.rand(16, 5632).astype(np.float16) / 10.0,
             None,
-            np.random.rand(16, 5632).astype(np.float16),
+            np.random.rand(16, 5632).astype(np.float16) / 10.0,
             None,
         ),
         SwiGLUTestCase(
@@ -174,11 +174,11 @@ if __name__ == "__main__":
             gguf_strides(13312, 1),
         ),
         SwiGLUTestCase(
-            np.random.rand(16, 5632).astype(np.float16),
+            np.random.rand(16, 5632).astype(np.float16) / 10.0,
             gguf_strides(13312, 1),
-            np.random.rand(16, 5632).astype(np.float16),
+            np.random.rand(16, 5632).astype(np.float16) / 10.0,
             gguf_strides(13312, 1),
-            np.random.rand(16, 5632).astype(np.float16),
+            np.random.rand(16, 5632).astype(np.float16) / 10.0,
             gguf_strides(13312, 1),
         ),
         SwiGLUTestCase(
@@ -190,11 +190,11 @@ if __name__ == "__main__":
             gguf_strides(1, 16),
         ),
         SwiGLUTestCase(
-            np.random.rand(16, 5632).astype(np.float16),
+            np.random.rand(16, 5632).astype(np.float16) / 10.0,
             gguf_strides(5632, 1),
-            np.random.rand(16, 5632).astype(np.float16),
+            np.random.rand(16, 5632).astype(np.float16) / 10.0,
             gguf_strides(5632, 1),
-            np.random.rand(16, 5632).astype(np.float16),
+            np.random.rand(16, 5632).astype(np.float16) / 10.0,
             gguf_strides(1, 16),
         ),
         SwiGLUTestCase(
@@ -206,11 +206,11 @@ if __name__ == "__main__":
             gguf_strides(1, 2, 6),
         ),
         SwiGLUTestCase(
-            np.random.rand(2, 3, 400).astype(np.float16),
+            np.random.rand(2, 3, 400).astype(np.float16) / 10.0,
             gguf_strides(1200, 400, 1),
-            np.random.rand(2, 3, 400).astype(np.float16),
+            np.random.rand(2, 3, 400).astype(np.float16) / 10.0,
             gguf_strides(1200, 400, 1),
-            np.random.rand(2, 3, 400).astype(np.float16),
+            np.random.rand(2, 3, 400).astype(np.float16) / 10.0,
             gguf_strides(1, 2, 6),
         ),
         SwiGLUTestCase(
@@ -222,11 +222,11 @@ if __name__ == "__main__":
             None,
         ),
         SwiGLUTestCase(
-            np.random.rand(4, 4, 5632).astype(np.float16),
+            np.random.rand(4, 4, 5632).astype(np.float16) / 10.0,
             None,
-            np.random.rand(4, 4, 5632).astype(np.float16),
+            np.random.rand(4, 4, 5632).astype(np.float16) / 10.0,
             None,
-            np.random.rand(4, 4, 5632).astype(np.float16),
+            np.random.rand(4, 4, 5632).astype(np.float16) / 10.0,
             None,
         ),
         SwiGLUTestCase(
@@ -238,11 +238,11 @@ if __name__ == "__main__":
             gguf_strides(45056, 5632, 1),
         ),
         SwiGLUTestCase(
-            np.random.rand(4, 4, 5632).astype(np.float16),
+            np.random.rand(4, 4, 5632).astype(np.float16) / 10.0,
             gguf_strides(45056, 5632, 1),
-            np.random.rand(4, 4, 5632).astype(np.float16),
+            np.random.rand(4, 4, 5632).astype(np.float16) / 10.0,
             gguf_strides(45056, 5632, 1),
-            np.random.rand(4, 4, 5632).astype(np.float16),
+            np.random.rand(4, 4, 5632).astype(np.float16) / 10.0,
             gguf_strides(45056, 5632, 1),
         ),
     ]
