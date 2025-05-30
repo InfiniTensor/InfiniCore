@@ -259,9 +259,12 @@ class GPTQ:
         damp = percdamp * torch.mean(torch.diag(H))
         diag = torch.arange(self.columns, device=self.dev)
         H[diag, diag] += damp
-        H = torch.linalg.cholesky(H.to("cpu")).to(
-            H.device
-        )  # 对于CUDA来说，这个地方直接在CUDA上做cholesky分解可能会失败
+        if H.device == "cuda":
+            H = torch.linalg.cholesky(H.to("cpu")).to(
+                H.device
+            )  # 对于CUDA来说，这个地方直接在CUDA上做cholesky分解可能会失败
+        else:
+            H = torch.linalg.cholesky(H)
         H = torch.cholesky_inverse(H)
         H = torch.linalg.cholesky(H, upper=True)
         Hinv = H
@@ -386,7 +389,9 @@ def test(
     sym = False
     if torch_device != "cpu":
         is_weight_transposed = True
-
+    if torch_device == "npu":
+        sign_ed = True
+        sym = True
     group_size = -1
     num_groups = 1
     if group_size == -1:
@@ -408,7 +413,7 @@ def test(
         maxq = 2 ** (bits - 1) - 1
         minq = -(2 ** (bits - 1))
 
-    if torch_device == "cuda":
+    if torch_device == "cuda" or torch_device == "npu":
         b_ref, s, z = get_scale_zero(
             b, a.t(), c, group_size, bits, sym, sign_ed=sign_ed
         )  # 无符号量化
