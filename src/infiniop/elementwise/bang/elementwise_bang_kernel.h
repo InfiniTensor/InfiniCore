@@ -289,7 +289,7 @@ __mlu_global__ void elementwiseKernel(
 
     // Cast input pointers to the correct type
     Tdata *typed_inputs[N];
-    for (size_t i = 0; i < N; i++) {
+    for (size_t i = 0; i < N; ++i) {
         typed_inputs[i] = reinterpret_cast<Tdata *>(const_cast<void *>(inputs[i]));
     }
 
@@ -322,7 +322,7 @@ __mlu_global__ void elementwiseKernel(
 
     // Get index offsets for each operand
     size_t input_indexes[N];
-    for (size_t i = 0; i < N; i++) {
+    for (size_t i = 0; i < N; ++i) {
         input_indexes[i] = indexer(i, 0);
     }
 
