@@ -11,6 +11,7 @@ DECLARE_INFINIOP_TEST(mul)
 DECLARE_INFINIOP_TEST(clip)
 DECLARE_INFINIOP_TEST(swiglu)
 DECLARE_INFINIOP_TEST(add)
+DECLARE_INFINIOP_TEST(causal_softmax)
 
 #define REGISTER_INFINIOP_TEST(name)                      \
     {                                                     \
@@ -25,14 +26,15 @@ DECLARE_INFINIOP_TEST(add)
 /*
  * Register all the tests here
  */
-#define TEST_BUILDER_MAPPINGS                 \
-    {                                         \
-        REGISTER_INFINIOP_TEST(gemm)          \
-        REGISTER_INFINIOP_TEST(random_sample) \
-        REGISTER_INFINIOP_TEST(add)           \
-        REGISTER_INFINIOP_TEST(mul)           \
-        REGISTER_INFINIOP_TEST(clip)          \
-        REGISTER_INFINIOP_TEST(swiglu)        \
+#define TEST_BUILDER_MAPPINGS                  \
+    {                                          \
+        REGISTER_INFINIOP_TEST(gemm)           \
+        REGISTER_INFINIOP_TEST(random_sample)  \
+        REGISTER_INFINIOP_TEST(add)            \
+        REGISTER_INFINIOP_TEST(mul)            \
+        REGISTER_INFINIOP_TEST(clip)           \
+        REGISTER_INFINIOP_TEST(causal_softmax) \
+        REGISTER_INFINIOP_TEST(swiglu)         \
     }
 
 namespace infiniop_test {
