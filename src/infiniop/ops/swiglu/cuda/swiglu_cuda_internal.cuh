@@ -2,8 +2,8 @@
 #define __SWIGLU_CUDA_H__
 
 #include "../../../elementwise/cuda/elementwise_cuda.cuh"
-#include <cuda_fp16.h>
 #include <cuda_bf16.h>
+#include <cuda_fp16.h>
 
 namespace op::swiglu::cuda {
 typedef struct SwiGLUOp {

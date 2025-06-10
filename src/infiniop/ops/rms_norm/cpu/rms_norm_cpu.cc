@@ -42,9 +42,9 @@ infiniStatus_t rmsnorm(const RMSNormInfo *info, T *y, const T *x, const T *w) {
 
 template <typename T, typename Tw>
 infiniStatus_t rmsnormHalfPrecision(const RMSNormInfo *info, T *y, const T *x, const Tw *w) {
-    static_assert(std::is_same<T, fp16_t>::value || std::is_same<T, bf16_t>::value, 
+    static_assert(std::is_same<T, fp16_t>::value || std::is_same<T, bf16_t>::value,
                   "T must be fp16_t or bf16_t");
-    
+
 #pragma omp parallel for
     for (ptrdiff_t i = 0; i < ptrdiff_t(info->shape[0]); i++) {
         T *x_ = (T *)(x + i * info->x_strides[0]);
@@ -61,8 +61,7 @@ infiniStatus_t rmsnormHalfPrecision(const RMSNormInfo *info, T *y, const T *x, c
                 float val = utils::cast<float>(x_[j * info->x_strides[1]]) * w[j] * rms;
                 y_[j * info->y_strides[1]] = utils::cast<T>(val);
             } else if constexpr (std::is_same<Tw, T>::value) {
-                float val = utils::cast<float>(x_[j * info->x_strides[1]]) * 
-                           utils::cast<float>(w[j]) * rms;
+                float val = utils::cast<float>(x_[j * info->x_strides[1]]) * utils::cast<float>(w[j]) * rms;
                 y_[j * info->y_strides[1]] = utils::cast<T>(val);
             } else {
                 std::abort();
