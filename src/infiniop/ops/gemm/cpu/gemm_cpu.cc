@@ -85,7 +85,7 @@ infiniStatus_t Descriptor::calculate(
     case INFINI_DTYPE_F16:
         cpu::calculate<fp16_t>(_info, c, beta, a, b, alpha);
         return INFINI_STATUS_SUCCESS;
-    
+
     case INFINI_DTYPE_BF16:
         cpu::calculate<bf16_t>(_info, c, beta, a, b, alpha);
         return INFINI_STATUS_SUCCESS;
