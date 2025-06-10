@@ -64,7 +64,7 @@ infiniStatus_t Descriptor::calculate(
 
     if (_info.dtype == INFINI_DTYPE_F16) {
         CHECK_STATUS(causal_softmax<fp16_t>(&_info, (fp16_t *)y, (const fp16_t *)x));
-    } else if (_info.dtype == INFINI_DTYPE_BF16) {  
+    } else if (_info.dtype == INFINI_DTYPE_BF16) {
         CHECK_STATUS(causal_softmax<bf16_t>(&_info, (bf16_t *)y, (const bf16_t *)x));
     } else if (_info.dtype == INFINI_DTYPE_F32) {
         CHECK_STATUS(causal_softmax<float>(&_info, (float *)y, (const float *)x));

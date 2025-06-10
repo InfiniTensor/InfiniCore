@@ -28,14 +28,14 @@ TypeTo cast(TypeFrom val) {
     } else if constexpr (std::is_same<TypeTo, fp16_t>::value && std::is_same<TypeFrom, float>::value) {
         return _f32_to_f16(val);
     } else if constexpr (std::is_same<TypeTo, fp16_t>::value && !std::is_same<TypeFrom, float>::value) {
-        return _f32_to_f16(static_cast<float>(val));  
+        return _f32_to_f16(static_cast<float>(val));
     } else if constexpr (std::is_same<TypeFrom, fp16_t>::value && std::is_same<TypeTo, float>::value) {
         return _f16_to_f32(val);
     } else if constexpr (std::is_same<TypeFrom, fp16_t>::value && !std::is_same<TypeTo, float>::value) {
         return static_cast<TypeTo>(_f16_to_f32(val));
-    } else if constexpr (std::is_same<TypeTo, bf16_t>::value && std::is_same<TypeFrom, float>::value){
+    } else if constexpr (std::is_same<TypeTo, bf16_t>::value && std::is_same<TypeFrom, float>::value) {
         return _f32_to_bf16(val);
-    } else if constexpr (std::is_same<TypeTo, bf16_t>::value && !std::is_same<TypeFrom, float>::value){
+    } else if constexpr (std::is_same<TypeTo, bf16_t>::value && !std::is_same<TypeFrom, float>::value) {
         return _f32_to_bf16(static_cast<float>(val));
     } else if constexpr (std::is_same<TypeFrom, bf16_t>::value && std::is_same<TypeTo, float>::value) {
         return _bf16_to_f32(val);

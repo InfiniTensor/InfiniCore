@@ -39,7 +39,7 @@ infiniStatus_t Descriptor::calculate(
     switch (_dtype) {
     case INFINI_DTYPE_F16:
         return _device_info->calculate<SwiGLUOp, fp16_t>(_info, output, inputs, stream);
-    case INFINI_DTYPE_BF16:  
+    case INFINI_DTYPE_BF16:
         return _device_info->calculate<SwiGLUOp, bf16_t>(_info, output, inputs, stream);
     case INFINI_DTYPE_F32:
         return _device_info->calculate<SwiGLUOp, float>(_info, output, inputs, stream);

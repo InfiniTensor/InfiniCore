@@ -87,7 +87,7 @@ class Calculate {
         case INFINI_DTYPE_F16:
             switch_f<Tidx, fp16_t>(algo, n, args);
             break;
-        case INFINI_DTYPE_BF16:  
+        case INFINI_DTYPE_BF16:
             switch_f<Tidx, bf16_t>(algo, n, args);
             break;
         case INFINI_DTYPE_F32:
