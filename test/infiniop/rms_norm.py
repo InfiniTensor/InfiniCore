@@ -22,22 +22,36 @@ from libinfiniop import (
 # ==============================================================================
 #  Configuration (Internal Use Only)
 # ==============================================================================
-# These are not meant to be imported from other modules
-_TEST_CASES = [
+# Float16 test case - w_dtype can be Float16 or Float32
+_TEST_CASES_F16 = [
     # y_shape, x_shape, w_shape, y_stride, x_stride, w_dtype
+    ((1, 4), (1, 4), (4,), None, None, torch.float16),
     ((1, 4), (1, 4), (4,), None, None, torch.float32),
-    ((16, 2048), (16, 2048), (2048,), None, None, torch.float32),
     ((16, 2048), (16, 2048), (2048,), None, None, torch.float16),
-    ((16, 2048), (16, 2048), (2048,), (4096, 1), (4096, 1), torch.float32),
+    ((16, 2048), (16, 2048), (2048,), None, None, torch.float32),
     ((16, 2048), (16, 2048), (2048,), (4096, 1), (4096, 1), torch.float16),
+    ((16, 2048), (16, 2048), (2048,), (4096, 1), (4096, 1), torch.float32),
+]
+
+# BFloat16 test case - w_dtype can be BFloat16 or Float32
+_TEST_CASES_BF16 = [
+    # y_shape, x_shape, w_shape, y_stride, x_stride, w_dtype
+    ((1, 4), (1, 4), (4,), None, None, torch.bfloat16),
+    ((1, 4), (1, 4), (4,), None, None, torch.float32),
+    ((16, 2048), (16, 2048), (2048,), None, None, torch.bfloat16),
+    ((16, 2048), (16, 2048), (2048,), None, None, torch.float32),
+    ((16, 2048), (16, 2048), (2048,), (4096, 1), (4096, 1), torch.bfloat16),
+    ((16, 2048), (16, 2048), (2048,), (4096, 1), (4096, 1), torch.float32),
 ]
 
 # x types used for testing
-_TENSOR_DTYPES = [torch.float16]
+_TENSOR_DTYPES_BF16 = [torch.bfloat16]
+_TENSOR_DTYPES_FP16 = [torch.float16]
 
 # Tolerance map for different data types
 _TOLERANCE_MAP = {
     torch.float16: {"atol": 1e-3, "rtol": 1e-3},
+    torch.bfloat16: {"atol": 5e-3, "rtol": 5e-3},
 }
 
 DEBUG = False
@@ -75,6 +89,18 @@ def test(
     dtype=torch.float16,
     sync=None
 ):
+    # 检查 BF16 支持
+    if dtype == torch.bfloat16:
+        if torch_device.startswith('cuda'):
+            # 检查 CUDA 设备是否支持 BF16
+            device_id = int(torch_device.split(':')[1]) if ':' in torch_device else 0
+            if not torch.cuda.get_device_capability(device_id) >= (8, 0):
+                print(f"Skipping BF16 test on {torch_device} - requires compute capability >= 8.0")
+                return
+        elif torch_device == 'cpu':
+            # CPU 通常支持 BF16，但可以添加额外检查
+            pass
+
     print(
         f"Testing RMS_Norm on {torch_device} with y_shape:{y_shape} x_shape:{x_shape} w_shape:{w_shape}"
         f" y_stride:{y_stride} x_stride:{x_stride} w_dtype:{w_dtype} dtype:{dtype}"
@@ -137,7 +163,10 @@ def test(
 
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:
-        debug(y, ans, atol=atol, rtol=rtol)
+        if dtype == torch.bfloat16:
+            pass
+        else:
+            debug(y, ans, atol=atol, rtol=rtol)
     assert torch.allclose(y, ans, atol=atol, rtol=rtol)
 
     # Profiling workflow
@@ -169,7 +198,7 @@ if __name__ == "__main__":
         POINTER(c_uint64),
     ]
 
-    lib.infiniopRMSNorm.restypes = c_int32
+    lib.infiniopRMSNorm.restype = c_int32
     lib.infiniopRMSNorm.argtypes = [
         infiniopRMSNormDescriptor_t,
         c_void_p,
@@ -193,6 +222,9 @@ if __name__ == "__main__":
 
     # Execute tests
     for device in get_test_devices(args):
-        test_operator(lib, device, test, _TEST_CASES, _TENSOR_DTYPES)
+        # testing FP16
+        test_operator(lib, device, test, _TEST_CASES_F16, _TENSOR_DTYPES_FP16)
+        # testing BF16
+        test_operator(lib, device, test, _TEST_CASES_BF16, _TENSOR_DTYPES_BF16)
 
     print("\033[92mTest passed!\033[0m")

@@ -31,12 +31,13 @@ _TEST_CASES = [
 ]
 
 # Data types used for testing
-_TENSOR_DTYPES = [torch.float16, torch.float32]
+_TENSOR_DTYPES = [torch.float16, torch.float32, torch.bfloat16]
 
 # Tolerance map for different data types
 _TOLERANCE_MAP = {
     torch.float16: {"atol": 0, "rtol": 1e-2},
     torch.float32: {"atol": 0, "rtol": 1e-3},
+    torch.bfloat16: {"atol": 0, "rtol": 5e-2},  
 }
 
 DEBUG = False
@@ -54,7 +55,6 @@ class GemmDescriptor(Structure):
 
 infiniopGemmDescriptor_t = POINTER(GemmDescriptor)
 
-
 # PyTorch implementation for matrix multiplication
 def gemm(d, _c, beta, _a, _b, alpha):
     if _c.ndim == 2:
@@ -64,7 +64,6 @@ def gemm(d, _c, beta, _a, _b, alpha):
     else:
         torch.matmul(_a, _b, out=d)
         d.mul_(alpha).add_(_c, alpha=beta)
-
 
 # The argument list should be (lib, handle, torch_device, <param list>, dtype)
 # The <param list> should keep the same order as the one specified in _TEST_CASES
@@ -83,6 +82,15 @@ def test(
     dtype=torch.float16,
     sync=None
 ):
+    
+    #检查是否支持cuda BF16
+    if dtype == torch.bfloat16:
+        if torch_device.startswith('cuda'):
+            device_id = int(torch_device.split(':')[1]) if ':' in torch_device else 0
+            if not torch.cuda.get_device_capability(device_id) >= (8, 0):
+                print(f"Skipping BF16 test on {torch_device} - requires compute capability >= 8.0")
+                return 
+        
     print(
         f"Testing Gemm on {torch_device} with alpha:{alpha}, beta:{beta},"
         f" a_shape:{a_shape}, b_shape:{b_shape}, c_shape:{c_shape},"
@@ -149,8 +157,13 @@ def test(
 
     # Validate results
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
+
     if DEBUG:
-        debug(c, ans, atol=atol, rtol=rtol)
+        if dtype == torch.bfloat16:
+            pass
+        else:
+            debug(c, ans, atol=atol, rtol=rtol)
+   
     assert torch.allclose(c, ans, atol=atol, rtol=rtol)
 
     # Profiling workflow
