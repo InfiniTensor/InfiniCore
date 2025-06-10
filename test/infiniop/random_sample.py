@@ -37,10 +37,11 @@ _TEST_CASES = [
 ]
 
 # Data types used for testing
-_TENSOR_DTYPES = [torch.float16]
+_TENSOR_DTYPES = [torch.float16, torch.bfloat16]
 
 _TOLERANCE_MAP = {
     torch.float16: {"atol": 0, "rtol": 0},
+    torch.bfloat16: {"atol": 0, "rtol": 0},
 }
 
 
@@ -86,6 +87,18 @@ def test(
     dtype=torch.float16,
     sync=None,
 ):
+    # 检查 BF16 支持
+    if dtype == torch.bfloat16:
+        if torch_device.startswith('cuda'):
+            # 检查 CUDA 设备是否支持 BF16
+            device_id = int(torch_device.split(':')[1]) if ':' in torch_device else 0
+            if not torch.cuda.get_device_capability(device_id) >= (8, 0):
+                print(f"Skipping BF16 test on {torch_device} - requires compute capability >= 8.0")
+                return
+        elif torch_device == 'cpu':
+            # CPU 通常支持 BF16，但可以添加额外检查
+            pass
+
     print(
         f"Testing RandomSample on {torch_device} with voc:{voc} random_val:{random_val} topp:{topp} topk:{topk} temperature:{temperature} dtype:{dtype}"
     )
@@ -152,13 +165,16 @@ def test(
 
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:
-        debug_all(
-            (indices.type(ans.dtype), data[indices]),
-            (ans, data[ans]),
-            "or",
-            atol=atol,
-            rtol=rtol,
-        )
+        if dtype == torch.bfloat16:
+            pass
+        else:
+            debug_all(
+                (indices.type(ans.dtype), data[indices]),
+                (ans, data[ans]),
+                "or",
+                atol=atol,
+                rtol=rtol,
+            )
     assert indices.type(ans.dtype) == ans or data[ans] == data[indices]
 
     # Profiling workflow

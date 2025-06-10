@@ -57,11 +57,12 @@ _TEST_CASES = [
 ]
 
 # Data types used for testing
-_TENSOR_DTYPES = [torch.float16, torch.float32]
+_TENSOR_DTYPES = [torch.float16, torch.bfloat16, torch.float32]
 
 # Tolerance map for different data types
 _TOLERANCE_MAP = {
     torch.float16: {"atol": 1e-3, "rtol": 1e-3},
+    torch.bfloat16: {"atol": 5e-3, "rtol": 5e-3},
     torch.float32: {"atol": 2e-7, "rtol": 1e-7},
 }
 
@@ -126,6 +127,18 @@ def test(
     dtype=torch.float16,
     sync=None,
 ):
+    # 检查 BF16 支持
+    if dtype == torch.bfloat16:
+        if torch_device.startswith('cuda'):
+            # 检查 CUDA 设备是否支持 BF16
+            device_id = int(torch_device.split(':')[1]) if ':' in torch_device else 0
+            if not torch.cuda.get_device_capability(device_id) >= (8, 0):
+                print(f"Skipping BF16 test on {torch_device} - requires compute capability >= 8.0")
+                return
+        elif torch_device == 'cpu':
+            # CPU 通常支持 BF16，但可以添加额外检查
+            pass
+
     print(
         f"Testing SwiGLU on {torch_device} with shape:{shape} a_stride:{a_stride} b_stride:{b_stride} c_stride:{c_stride} "
         f"dtype:{dtype} inplace:{inplace}"
@@ -182,7 +195,10 @@ def test(
 
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:
-        debug(c, ans, atol=atol, rtol=rtol)
+        if dtype == torch.bfloat16:
+            pass
+        else:
+            debug(c, ans, atol=atol, rtol=rtol)
     assert torch.allclose(c, ans, atol=atol, rtol=rtol)
 
     # Profiling workflow

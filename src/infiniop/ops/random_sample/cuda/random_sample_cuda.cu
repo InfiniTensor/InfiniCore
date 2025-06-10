@@ -37,6 +37,7 @@ infiniStatus_t Descriptor::create(
     case CASE:                                      \
         switch (info.dt_p) {                        \
             CASE_P(INFINI_DTYPE_F16, Tidx, half);   \
+            CASE_P(INFINI_DTYPE_BF16, Tidx, __nv_bfloat16); \
             CASE_P(INFINI_DTYPE_F32, Tidx, float);  \
             CASE_P(INFINI_DTYPE_F64, Tidx, double); \
         default:                                    \
