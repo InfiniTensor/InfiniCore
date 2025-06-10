@@ -36,12 +36,13 @@ _TEST_CASES = [
 ]
 
 # Data types used for testing
-_TENSOR_DTYPES = [torch.float16, torch.float32]
+_TENSOR_DTYPES = [torch.float16, torch.float32, torch.bfloat16]
 
 # Tolerance map for different data types
 _TOLERANCE_MAP = {
     torch.float16: {"atol": 0, "rtol": 1e-2},
     torch.float32: {"atol": 0, "rtol": 1e-3},
+    torch.bfloat16: {"atol": 0, "rtol": 5e-2},  
 }
 
 DEBUG = False
@@ -59,13 +60,20 @@ class GemmDescriptor(Structure):
 
 infiniopGemmDescriptor_t = POINTER(GemmDescriptor)
 
-
 # PyTorch implementation for matrix multiplication
 def gemm(_c, beta, _a, _b, alpha):
     a, b, c = _a.clone(), _b.clone(), _c.clone()
     result_dtype = c.dtype
-    fp32_result = torch.matmul(a.to(torch.float32), b.to(torch.float32))
-    return alpha * fp32_result.to(result_dtype) + beta * c
+    if result_dtype == torch.bfloat16:
+        # 对于bf16，先转换为float32进行计算，最后才转换回bf16
+        fp32_a = a.to(torch.float32)
+        fp32_b = b.to(torch.float32)
+        fp32_c = c.to(torch.float32)
+        fp32_result = torch.matmul(fp32_a, fp32_b)
+        return (alpha * fp32_result + beta * fp32_c).to(torch.bfloat16)
+    else:
+        fp32_result = torch.matmul(a.to(torch.float32), b.to(torch.float32))
+        return alpha * fp32_result.to(result_dtype) + beta * c
 
 
 # The argument list should be (lib, handle, torch_device, <param list>, dtype)
@@ -85,6 +93,15 @@ def test(
     dtype=torch.float16,
     sync=None
 ):
+    
+    #检查是否支持cuda BF16
+    if dtype == torch.bfloat16:
+        if torch_device.startswith('cuda'):
+            device_id = int(torch_device.split(':')[1]) if ':' in torch_device else 0
+            if not torch.cuda.get_device_capability(device_id) >= (8, 0):
+                print(f"Skipping BF16 test on {torch_device} - requires compute capability >= 8.0")
+                return 
+        
     print(
         f"Testing Gemm on {torch_device} with alpha:{alpha}, beta:{beta},"
         f" a_shape:{a_shape}, b_shape:{b_shape}, c_shape:{c_shape},"
@@ -150,8 +167,13 @@ def test(
 
     # Validate results
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
+
     if DEBUG:
-        debug(c, ans, atol=atol, rtol=rtol)
+        if dtype == torch.bfloat16:
+            pass
+        else:
+            debug(c, ans, atol=atol, rtol=rtol)
+   
     assert torch.allclose(c, ans, atol=atol, rtol=rtol)
 
     # Profiling workflow
