@@ -11,9 +11,6 @@
 
 namespace op::conv {
 class ConvInfo;
-#ifdef ENABLE_CUDA_API
-class CudnnConvHandler;
-#endif
 } // namespace op::conv
 
 namespace op::conv {
@@ -207,11 +204,11 @@ inline utils::Result<ConvInfo> ConvInfo::create(
     size_t *output_dims = kernel_dims + ndim;
     size_t *bias_dims = output_dims + ndim;
     size_t *pads_info = bias_dims + bias_dims_size;
-    size_t *strides_info = pads_info + ndim;
-    size_t *dilations_info = strides_info + ndim;
+    ptrdiff_t *strides_info = reinterpret_cast<ptrdiff_t *>(pads_info) + ndim;
+    size_t *dilations_info = reinterpret_cast<size_t *>(strides_info) + ndim;
     size_t *padded_shape = dilations_info + ndim;
 
-    const size_t *strides_ptr = reinterpret_cast<const size_t *>(strides);
+    const ptrdiff_t *strides_ptr = reinterpret_cast<const ptrdiff_t *>(strides);
     const size_t *dilations_ptr = reinterpret_cast<const size_t *>(dilations);
 
     size_t spatial_sizes = 1;

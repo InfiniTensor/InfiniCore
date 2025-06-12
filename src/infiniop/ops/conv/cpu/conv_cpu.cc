@@ -134,9 +134,6 @@ void _applyConv(
         dilation = info.dilation_info(ndim - 2);
         stride = info.stride_info(ndim - 2);
     }
-    if (stride == 0) {
-        std::cerr << "Error: stride cannot be zero." << std::endl;
-    }
     const auto steps = (dim_size - dilation * (kernel_size - 1) - 1) / stride + 1;
     x_index *= dim_size;
     w_index *= kernel_size;
