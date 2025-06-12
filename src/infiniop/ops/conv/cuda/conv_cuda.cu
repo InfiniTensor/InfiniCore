@@ -2,22 +2,22 @@
 #include "conv_cuda.cuh"
 
 #define DESTROY_CUDNN_DESCRIPTOR(desc_ptr, destroy_func) \
-    do { \
-        if (desc_ptr) { \
-            destroy_func(desc_ptr); \
-            desc_ptr = nullptr; \
-        } \
-    } while(0)
+    do {                                                 \
+        if (desc_ptr) {                                  \
+            destroy_func(desc_ptr);                      \
+            desc_ptr = nullptr;                          \
+        }                                                \
+    } while (0)
 
-#define CLEANUP_CUDNN_DESCRIPTORS() \
-    do { \
-        DESTROY_CUDNN_DESCRIPTOR(x_desc, cudnnDestroyTensorDescriptor); \
-        DESTROY_CUDNN_DESCRIPTOR(y_desc, cudnnDestroyTensorDescriptor); \
-        DESTROY_CUDNN_DESCRIPTOR(w_desc, cudnnDestroyFilterDescriptor); \
-        DESTROY_CUDNN_DESCRIPTOR(b_desc, cudnnDestroyTensorDescriptor); \
-        DESTROY_CUDNN_DESCRIPTOR(act_desc, cudnnDestroyActivationDescriptor); \
+#define CLEANUP_CUDNN_DESCRIPTORS()                                             \
+    do {                                                                        \
+        DESTROY_CUDNN_DESCRIPTOR(x_desc, cudnnDestroyTensorDescriptor);         \
+        DESTROY_CUDNN_DESCRIPTOR(y_desc, cudnnDestroyTensorDescriptor);         \
+        DESTROY_CUDNN_DESCRIPTOR(w_desc, cudnnDestroyFilterDescriptor);         \
+        DESTROY_CUDNN_DESCRIPTOR(b_desc, cudnnDestroyTensorDescriptor);         \
+        DESTROY_CUDNN_DESCRIPTOR(act_desc, cudnnDestroyActivationDescriptor);   \
         DESTROY_CUDNN_DESCRIPTOR(conv_desc, cudnnDestroyConvolutionDescriptor); \
-    } while(0)
+    } while (0)
 
 namespace op::conv::cuda {
 
@@ -125,13 +125,13 @@ private:
         CHECK_CUDNN(cudnnCreateConvolutionDescriptor(&conv_desc));
 
         CHECK_CUDNN(cudnnSetTensorNdDescriptorEx(
-            x_desc, CUDNN_TENSOR_NCHW, cudnn_data_type, 
+            x_desc, CUDNN_TENSOR_NCHW, cudnn_data_type,
             actual_tensor_ndim, input_dims.data()));
         CHECK_CUDNN(cudnnSetTensorNdDescriptorEx(
-            y_desc, CUDNN_TENSOR_NCHW, cudnn_data_type, 
+            y_desc, CUDNN_TENSOR_NCHW, cudnn_data_type,
             actual_tensor_ndim, output_dims.data()));
         CHECK_CUDNN(cudnnSetFilterNdDescriptor(
-            w_desc, cudnn_data_type, CUDNN_TENSOR_NCHW, 
+            w_desc, cudnn_data_type, CUDNN_TENSOR_NCHW,
             actual_tensor_ndim, filter_dims.data()));
 
         return INFINI_STATUS_SUCCESS;
@@ -166,7 +166,7 @@ private:
 
         CHECK_CUDNN(cudnnCreateTensorDescriptor(&b_desc));
         CHECK_CUDNN(cudnnSetTensorNdDescriptor(
-            b_desc, cudnn_data_type, bias_dims_arr.size(), 
+            b_desc, cudnn_data_type, bias_dims_arr.size(),
             bias_dims_arr.data(), bias_strides_arr.data()));
         CHECK_CUDNN(cudnnCreateActivationDescriptor(&act_desc));
         CHECK_CUDNN(cudnnSetActivationDescriptor(
@@ -176,10 +176,10 @@ private:
     }
 
     infiniStatus_t setupConvolutionDescriptor(const std::vector<int> &pads,
-                                               const std::vector<int> &strides,
-                                               const std::vector<int> &dilations,
-                                               int spatial_ndim,
-                                               cudnnDataType_t compute_type) {
+                                              const std::vector<int> &strides,
+                                              const std::vector<int> &dilations,
+                                              int spatial_ndim,
+                                              cudnnDataType_t compute_type) {
         CHECK_CUDNN(cudnnSetConvolutionNdDescriptor(
             conv_desc,
             spatial_ndim,
@@ -220,7 +220,7 @@ private:
 
         std::vector<cudnnConvolutionFwdAlgoPerf_t> perf_results(maxAlgoCount);
         int algoCounts = 0;
-        
+
         CHECK_STATUS(internal->useCudnn(
             nullptr, [&](cudnnHandle_t handle) {
                 CHECK_CUDNN(cudnnFindConvolutionForwardAlgorithm(
@@ -250,7 +250,7 @@ private:
     }
 
 public:
-    Opaque(Opaque&& other) noexcept
+    Opaque(Opaque &&other) noexcept
         : internal(std::move(other.internal)),
           x_desc(other.x_desc),
           y_desc(other.y_desc),
@@ -260,7 +260,7 @@ public:
           conv_desc(other.conv_desc),
           algo(other.algo),
           workspace_size(other.workspace_size) {
-        
+
         other.x_desc = nullptr;
         other.y_desc = nullptr;
         other.w_desc = nullptr;
@@ -287,7 +287,7 @@ public:
         std::vector<int> input_strides_arr(actual_tensor_ndim);
         std::vector<int> output_strides_arr(actual_tensor_ndim);
 
-        initializeDimensionArrays(info, input_dims_arr, output_dims_arr, 
+        initializeDimensionArrays(info, input_dims_arr, output_dims_arr,
                                   filter_dims_arr, input_strides_arr, output_strides_arr);
 
         std::vector<int> pads_arr(spatial_ndim_for_conv_desc);
@@ -299,13 +299,13 @@ public:
         cudnnDataType_t cudnn_data_type;
         CHECK_STATUS(getCudnnDataType(data_type, cudnn_data_type));
 
-        CHECK_STATUS(createBasicDescriptors(input_dims_arr, output_dims_arr, 
+        CHECK_STATUS(createBasicDescriptors(input_dims_arr, output_dims_arr,
                                             filter_dims_arr, cudnn_data_type, actual_tensor_ndim));
 
         CHECK_STATUS(createBiasDescriptors(info, cudnn_data_type, actual_tensor_ndim));
 
         CHECK_STATUS(setupConvolutionDescriptor(pads_arr, strides_arr, dilations_arr,
-                                                 spatial_ndim_for_conv_desc, compute_type));
+                                                spatial_ndim_for_conv_desc, compute_type));
 
         if (info.bias_dims_size() == 0) {
             CHECK_STATUS(setupAlgorithmWithoutBias());
