@@ -274,7 +274,7 @@ public:
         CLEANUP_CUDNN_DESCRIPTORS();
     }
 
-    infiniStatus_t GenHandler(ConvInfo &info,
+    infiniStatus_t initializeCudnnContext(ConvInfo &info,
                               infiniDtype_t data_type,
                               cudnnDataType_t compute_type) {
         bool is_1d_conv = (info.ndim() == 1);
@@ -321,7 +321,7 @@ public:
         ConvInfo &info,
         infiniDtype_t data_type) {
         Opaque opaque(internal_ptr);
-        auto status = opaque.GenHandler(info, data_type, CUDNN_DATA_FLOAT);
+        auto status = opaque.initializeCudnnContext(info, data_type, CUDNN_DATA_FLOAT);
         if (status != INFINI_STATUS_SUCCESS) {
             return status;
         }

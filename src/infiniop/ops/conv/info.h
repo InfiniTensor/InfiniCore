@@ -74,11 +74,11 @@ public:
     inline const size_t *getPadsInfo() const {
         return getBiasDims() + _bias_dims_size;
     }
-    inline const size_t *getStridesInfo() const {
-        return getPadsInfo() + _ndim;
+    inline const ptrdiff_t *getStridesInfo() const {
+        return reinterpret_cast<const ptrdiff_t*>(getPadsInfo()) + _ndim;
     }
     inline const size_t *getDilationsInfo() const {
-        return getStridesInfo() + _ndim;
+        return reinterpret_cast<const size_t *>(getStridesInfo()) + _ndim;
     }
     inline const size_t *getPaddedShape() const {
         return getDilationsInfo() + _ndim;
