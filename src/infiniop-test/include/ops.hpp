@@ -7,7 +7,9 @@
  */
 DECLARE_INFINIOP_TEST(gemm)
 DECLARE_INFINIOP_TEST(random_sample)
+DECLARE_INFINIOP_TEST(rms_norm)
 DECLARE_INFINIOP_TEST(mul)
+DECLARE_INFINIOP_TEST(rope)
 DECLARE_INFINIOP_TEST(clip)
 DECLARE_INFINIOP_TEST(swiglu)
 DECLARE_INFINIOP_TEST(add)
@@ -33,6 +35,8 @@ DECLARE_INFINIOP_TEST(add)
         REGISTER_INFINIOP_TEST(mul)           \
         REGISTER_INFINIOP_TEST(clip)          \
         REGISTER_INFINIOP_TEST(swiglu)        \
+        REGISTER_INFINIOP_TEST(rope)          \
+        REGISTER_INFINIOP_TEST(rms_norm)      \
     }
 
 namespace infiniop_test {
