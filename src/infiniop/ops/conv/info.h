@@ -75,7 +75,7 @@ public:
         return getBiasDims() + _bias_dims_size;
     }
     inline const ptrdiff_t *getStridesInfo() const {
-        return reinterpret_cast<const ptrdiff_t*>(getPadsInfo()) + _ndim;
+        return reinterpret_cast<const ptrdiff_t *>(getPadsInfo()) + _ndim;
     }
     inline const size_t *getDilationsInfo() const {
         return reinterpret_cast<const size_t *>(getStridesInfo()) + _ndim;

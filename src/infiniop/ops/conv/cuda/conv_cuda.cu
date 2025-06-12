@@ -275,8 +275,8 @@ public:
     }
 
     infiniStatus_t initializeCudnnContext(ConvInfo &info,
-                              infiniDtype_t data_type,
-                              cudnnDataType_t compute_type) {
+                                          infiniDtype_t data_type,
+                                          cudnnDataType_t compute_type) {
         bool is_1d_conv = (info.ndim() == 1);
         int actual_tensor_ndim = is_1d_conv ? 4 : static_cast<int>(info.ndim() + 2);
         int spatial_ndim_for_conv_desc = is_1d_conv ? 2 : static_cast<int>(info.ndim());
