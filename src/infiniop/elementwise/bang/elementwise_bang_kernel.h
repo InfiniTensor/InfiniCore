@@ -6,109 +6,8 @@
 using namespace device::bang::kernel;
 
 // NRAM memory constraints
-#define NRAM_MAX_SIZE 102400
+#define NRAM_MAX_SIZE 1024 * 400
 constexpr size_t ALIGN_SIZE = 128; // Cambricon alignment requirement
-
-/**
- * @brief Helper struct for computing input tensor indices considering broadcasting and striding.
- */
-struct InputIndexer {
-    size_t idx;
-    size_t ndim;
-    const bool *input_contiguous;
-    const bool *input_broadcasted;
-    const size_t *input_shapes;
-    const ptrdiff_t *input_strides;
-    const ptrdiff_t *output_strides;
-
-    /**
-     * @brief Computes memory offset for input tensor element.
-     *
-     * @param input_id    Input tensor ID.
-     * @param element_idx Element index in output tensor.
-     * @return size_t     Memory offset in input tensor.
-     */
-    __mlu_device__ size_t operator()(size_t input_id, size_t element_idx) const {
-        size_t global_idx = idx + element_idx;
-        return input_contiguous[input_id]
-                 ? global_idx
-                 : (input_broadcasted[input_id]
-                        ? indexToReducedOffset(global_idx, ndim, output_strides, input_strides + input_id * ndim)
-                        : indexToOffset(global_idx, ndim, input_shapes + input_id * ndim, input_strides + input_id * ndim));
-    }
-};
-
-/**
- * @brief Computes output tensor index considering striding.
- *
- * @param idx            Linear index.
- * @param is_contiguous  Whether output is contiguous.
- * @param ndim           Number of dimensions.
- * @param shape          Output tensor shape.
- * @param strides        Output tensor strides.
- * @return size_t        Memory offset in output tensor.
- */
-inline __mlu_device__ size_t
-getOutputIndex(size_t idx,
-               bool is_contiguous,
-               size_t ndim,
-               const size_t *shape,
-               const ptrdiff_t *strides) {
-    return is_contiguous ? idx : indexToOffset(idx, ndim, shape, strides);
-}
-
-/**
- * @brief Calculates optimal chunk size for memory operations based on tensor contiguity.
- *
- *        This function doesn't handle tensors with non-standard strides, which
- *        require more general optimizations not specific to Cambricon.
- *
- * @param global_idx_    Starting global index.
- * @param ndim           Number of dimensions.
- * @param shape          Tensor shape.
- * @param strides        Tensor strides.
- * @param max_len        Maximum allowed chunk size.
- * @return size_t        Optimal chunk size for memory operations.
- */
-__mlu_device__ size_t calculateChunkSize(
-    size_t global_idx_,
-    size_t ndim,
-    const size_t *shape,
-    const ptrdiff_t *strides,
-    size_t max_len) {
-    // Find the last dimension that is contiguous
-    int last_contiguous_dim = -1;
-    ptrdiff_t expected_stride = 1;
-
-    for (int i = (int)ndim - 1; i >= 0; --i) {
-        if (strides[i] != expected_stride) {
-            break;
-        }
-        last_contiguous_dim = i;
-        if (i > 0) {
-            expected_stride *= shape[i];
-        }
-    }
-
-    if (last_contiguous_dim < 0) {
-        return 1;
-    }
-
-    // Calculate position in the contiguous block
-    size_t global_idx = global_idx_;
-    size_t pos_in_block = 0;
-    size_t block_size = 1;
-
-    for (int i = (int)ndim - 1; i >= last_contiguous_dim; --i) {
-        size_t dim_idx = global_idx % shape[i];
-        pos_in_block += dim_idx * block_size;
-        block_size *= shape[i];
-        global_idx /= shape[i];
-    }
-
-    size_t remaining_in_block = block_size - pos_in_block;
-    return std::min(max_len, remaining_in_block);
-}
 
 /**
  * @brief Core elementwise operation implementation for BANG device.
@@ -182,25 +81,19 @@ __mlu_device__ void launchOp(
                                GDRAM2NRAM);
             } else {
                 // Non-contiguous case - copy in contiguous chunks
-                size_t remaining = curr_batch;
-                size_t current_pos = 0;
-
-                while (remaining > 0) {
-                    size_t element_offset = indexer(i, processed + current_pos);
-                    size_t chunk_size = calculateChunkSize(start_idx + processed + current_pos,
-                                                           ndim,
-                                                           input_shapes + i * ndim,
-                                                           input_strides + i * ndim,
-                                                           remaining);
-
-                    __memcpy_async(input_buffers[i] + current_pos,
-                                   typed_inputs[i] + element_offset,
-                                   chunk_size * sizeof(Tdata),
-                                   GDRAM2NRAM);
-
-                    current_pos += chunk_size;
-                    remaining -= chunk_size;
-                }
+                nonContiguousMemcpy<Tdata>(
+                    input_buffers[i],
+                    typed_inputs[i],
+                    GDRAM2NRAM,
+                    indexer,
+                    i,
+                    processed,
+                    curr_batch,
+                    start_idx,
+                    ndim,
+                    input_shapes + i * ndim,
+                    input_strides + i * ndim,
+                    true);
             }
         }
         __sync_io();
@@ -220,31 +113,19 @@ __mlu_device__ void launchOp(
                            NRAM2GDRAM);
         } else {
             // Non-contiguous output - copy in contiguous chunks
-            size_t remaining = curr_batch;
-            size_t current_pos = 0;
-
-            while (remaining > 0) {
-                size_t chunk_size = calculateChunkSize(start_idx + processed + current_pos,
-                                                       ndim,
-                                                       output_shape,
-                                                       output_strides,
-                                                       remaining);
-
-                size_t out_offset = getOutputIndex(
-                    start_idx + processed + current_pos,
-                    output_contiguous,
-                    ndim,
-                    output_shape,
-                    output_strides);
-
-                __memcpy_async(output + out_offset,
-                               output_buffer + current_pos,
-                               chunk_size * sizeof(Tdata),
-                               NRAM2GDRAM);
-
-                current_pos += chunk_size;
-                remaining -= chunk_size;
-            }
+            nonContiguousMemcpy<Tdata>(
+                output,
+                output_buffer,
+                NRAM2GDRAM,
+                indexer,
+                0, // unused for output
+                processed,
+                curr_batch,
+                start_idx,
+                ndim,
+                output_shape,
+                output_strides,
+                false);
         }
 
         processed += curr_batch;
