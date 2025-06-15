@@ -99,7 +99,7 @@ public:
     inline size_t pad_info(size_t i) const {
         return i < _ndim ? getPadsInfo()[i] : 0;
     }
-    inline size_t stride_info(size_t i) const {
+    inline ptrdiff_t stride_info(size_t i) const {
         return i < _ndim ? getStridesInfo()[i] : 0;
     }
     inline size_t dilation_info(size_t i) const {
