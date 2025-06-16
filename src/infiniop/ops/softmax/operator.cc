@@ -20,8 +20,9 @@ __C __export infiniStatus_t infiniopCreateSoftmaxDescriptor(infiniopHandle_t han
             handle,                                                            \
             reinterpret_cast<op::softmax::NAMESPACE::Descriptor **>(desc_ptr), \
             y_desc,                                                            \
-            x_desc,                                                            \                                                 
+            x_desc,                                                            \
             axis)
+
     switch (handle->device) {
 #ifdef ENABLE_CPU_API
         CREATE(INFINI_DEVICE_CPU, cpu);
@@ -93,7 +94,7 @@ infiniopDestroySoftmaxDescriptor(infiniopSoftmaxDescriptor_t desc) {
 #define DELETE(CASE, NAMESPACE)                                                    \
     case CASE:                                                                     \
         delete reinterpret_cast<const op::softmax::NAMESPACE::Descriptor *>(desc); \
-        return INFINI_STATUS_SUCCESS;
+        return INFINI_STATUS_SUCCESS
 
     switch (desc->device_type) {
 #ifdef ENABLE_CPU_API
