@@ -64,7 +64,6 @@ def gemm(d, _c, beta, _a, _b, alpha):
     else:
         torch.matmul(_a, _b, out=d)
         d.mul_(alpha).add_(_c, alpha=beta)
-
 # The argument list should be (lib, handle, torch_device, <param list>, dtype)
 # The <param list> should keep the same order as the one specified in _TEST_CASES
 def test(
