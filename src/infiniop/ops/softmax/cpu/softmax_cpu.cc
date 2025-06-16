@@ -41,47 +41,46 @@ void softmax_cpu(const SoftmaxInfo &info,
     int dimsize = info.dimsize;
     int stride = info.stride;
     int othersize = info.otherdim_size;
-    if constexpr (std::is_same_v<T, fp16_t>) {
-        auto input = reinterpret_cast<const fp16_t *>(x);
-        auto output = reinterpret_cast<fp16_t *>(y);
-        for (int i = 0; i < othersize; i++) {
-            int tid = i % stride + (i - i % stride) * dimsize;
-            float max_data = -INFINITY;
-            for (int j = 0; j < dimsize; j++) {
-                int index = tid + j * stride;
-                max_data = fmax(max_data, utils::cast<float>(input[index]));
-            }
-            float sum_data = 0.0f;
-            for (int j = 0; j < dimsize; j++) {
-                int index = tid + j * stride;
-                sum_data += std::exp(utils::cast<float>(input[index]) - max_data);
-            }
-            for (int j = 0; j < dimsize; j++) {
-                int index = tid + j * stride;
-                output[index] = utils::cast<fp16_t>(std::exp(utils::cast<float>(input[index]) - max_data) / sum_data);
-            }
+    auto to_float = [](const T &val) -> float {
+        if constexpr (std::is_same_v<T, fp16_t>) {
+            return utils::cast<float>(val);
+        } else {
+            return val;
         }
-    } else if constexpr (std::is_same_v<T, float>) {
-        auto input = reinterpret_cast<const float *>(x);
-        auto output = reinterpret_cast<float *>(y);
+    };
+
+    auto from_float = [](float val) -> T {
+        if constexpr (std::is_same_v<T, fp16_t>) {
+            return utils::cast<fp16_t>(val);
+        } else {
+            return val;
+        }
+    };
+
+    auto input = reinterpret_cast<const T *>(x);
+    auto output = reinterpret_cast<T *>(y);
+
+    auto compute_softmax = [&](int i) {
+        int tid = i % stride + (i - i % stride) * dimsize;
+        float max_data = -INFINITY;
+        for (int j = 0; j < dimsize; j++) {
+            int index = tid + j * stride;
+            max_data = fmax(max_data, to_float(input[index]));
+        }
+        float sum_data = 0.0f;
+        for (int j = 0; j < dimsize; j++) {
+            int index = tid + j * stride;
+            sum_data += std::exp(to_float(input[index]) - max_data);
+        }
+        for (int j = 0; j < dimsize; j++) {
+            int index = tid + j * stride;
+            float result = std::exp(to_float(input[index]) - max_data) / sum_data;
+            output[index] = from_float(result);
+        }
+    };
 #pragma omp parallel for
-        for (int i = 0; i < othersize; i++) {
-            int tid = i % stride + (i - i % stride) * dimsize;
-            float max_data = -INFINITY;
-            for (int j = 0; j < dimsize; j++) {
-                int index = tid + j * stride;
-                max_data = fmax(max_data, input[index]);
-            }
-            float sum_data = 0.0f;
-            for (int j = 0; j < dimsize; j++) {
-                int index = tid + j * stride;
-                sum_data += std::exp(input[index] - max_data);
-            }
-            for (int j = 0; j < dimsize; j++) {
-                int index = tid + j * stride;
-                output[index] = std::exp(input[index] - max_data) / sum_data;
-            }
-        }
+    for (int i = 0; i < othersize; i++) {
+        compute_softmax(i);
     }
 }
 

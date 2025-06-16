@@ -1,5 +1,6 @@
 #ifndef __SOFTMAX_CUDA_KERNEL_H__
 #define __SOFTMAX_CUDA_KERNEL_H__
+
 #include "../../../devices/cuda/cuda_kernel_common.cuh"
 #include "softmax_cuda.cuh"
 #include <cub/block/block_reduce.cuh>
@@ -74,7 +75,6 @@ i 也就是 (blockIdx.x * blockDim.y + threadIdx.y) / stride
 j 也就是 (blockIdx.x * blockDim.y + threadIdx.y) % stride
 然后i转化为线性也就是 i * stride * dimsize
 j直接加上就好
-
 */
 template <int elemPerThread, int BLOCK_DIM_Y, int BLOCK_DIM_X, typename T>
 __global__ void Softmax_warp_impl(const T *x, T *y, int stride, int dimsize, int otherdim_size) {

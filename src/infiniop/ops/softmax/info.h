@@ -1,5 +1,5 @@
-#ifndef __CONV_INFO_H__
-#define __CONV_INFO_H__
+#ifndef __SOFTMAX_INFO_H__
+#define __SOFTMAX_INFO_H__
 
 #include "../../../utils.h"
 #include "../../operator.h"
@@ -44,4 +44,4 @@ public:
 };
 } // namespace op::softmax
 
-#endif // __CONV_INFO_H__
+#endif // __SOFTMAX_INFO_H__
