@@ -30,7 +30,7 @@ public:
         info.otherdim_size = 1;
         info.stride = 1;
         info.dimsize = static_cast<int>(x_desc->dim(axis));
-        int ndim = y_desc->ndim();
+        int ndim = static_cast<int>(y_desc->ndim());
         for (int i = ndim - 1; i >= 0; i--) {
             info.size *= static_cast<int>(y_desc->dim(i));
         }
