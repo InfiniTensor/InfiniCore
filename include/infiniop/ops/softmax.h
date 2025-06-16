@@ -1,5 +1,5 @@
-#ifndef __INFINIOP_MLP_API_H__
-#define __INFINIOP_MLP_API_H__
+#ifndef __INFINIOP_SOFTMAX_API_H__
+#define __INFINIOP_SOFTMAX_API_H__
 
 #include "../operator_descriptor.h"
 

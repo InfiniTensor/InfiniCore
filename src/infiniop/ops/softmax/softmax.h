@@ -46,4 +46,4 @@
             void *stream) const;                                 \
     };                                                           \
     }
-#endif // __CONV_H__
+#endif // __SOFTMAX_H__
