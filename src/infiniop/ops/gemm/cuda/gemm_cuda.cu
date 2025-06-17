@@ -20,7 +20,7 @@ infiniStatus_t Descriptor::create(
     auto handle = reinterpret_cast<device::cuda::nvidia::Handle *>(handle_);
     auto dtype = c_desc->dtype();
 
-    if (dtype != INFINI_DTYPE_F16 && dtype != INFINI_DTYPE_F32) {
+    if (dtype != INFINI_DTYPE_F16 && dtype != INFINI_DTYPE_F32 && dtype != INFINI_DTYPE_BF16) {
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
 
@@ -52,7 +52,10 @@ infiniStatus_t Descriptor::calculate(
         a_type = b_type = c_type = CUDA_R_16F;
         compute_type = CUBLAS_COMPUTE_32F;
         break;
-
+    case INFINI_DTYPE_BF16:
+        a_type = b_type = c_type = CUDA_R_16BF;
+        compute_type = CUBLAS_COMPUTE_32F;
+        break;
     case INFINI_DTYPE_F32:
         a_type = b_type = c_type = CUDA_R_32F;
 #ifdef ENABLE_SUGON_CUDA_API
