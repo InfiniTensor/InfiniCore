@@ -16,4 +16,5 @@ __C infiniStatus_t infiniopGetSoftmaxWorkspaceSize(infiniopSoftmaxDescriptor_t d
 __C infiniStatus_t infiniopSoftmax(infiniopSoftmaxDescriptor_t desc, void *workspace, size_t workspace_size, void *y, const void *x, void *stream);
 
 __C infiniStatus_t infiniopDestroySoftmaxDescriptor(infiniopSoftmaxDescriptor_t desc);
+
 #endif

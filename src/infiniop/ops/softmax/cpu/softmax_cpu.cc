@@ -38,48 +38,35 @@ infiniStatus_t Descriptor::create(
 template <typename T>
 void softmax_cpu(const SoftmaxInfo &info,
                  const void *x, void *y, int axis) {
-    int dimsize = info.dimsize;
+    int dim_size = info.dim_size;
     int stride = info.stride;
-    int othersize = info.otherdim_size;
-    auto to_float = [](const T &val) -> float {
-        if constexpr (std::is_same_v<T, fp16_t>) {
-            return utils::cast<float>(val);
-        } else {
-            return val;
-        }
-    };
-
-    auto from_float = [](float val) -> T {
-        if constexpr (std::is_same_v<T, fp16_t>) {
-            return utils::cast<fp16_t>(val);
-        } else {
-            return val;
-        }
-    };
-
+    int other_size = info.other_size;
     auto input = reinterpret_cast<const T *>(x);
     auto output = reinterpret_cast<T *>(y);
 
     auto compute_softmax = [&](int i) {
-        int tid = i % stride + (i - i % stride) * dimsize;
+        int tid = i % stride + (i - i % stride) * dim_size;
+
         float max_data = -INFINITY;
-        for (int j = 0; j < dimsize; j++) {
+        for (int j = 0; j < dim_size; j++) {
             int index = tid + j * stride;
-            max_data = fmax(max_data, to_float(input[index]));
+            max_data = fmax(max_data, utils::cast<float>(input[index]));
         }
+
         float sum_data = 0.0f;
-        for (int j = 0; j < dimsize; j++) {
+        for (int j = 0; j < dim_size; j++) {
             int index = tid + j * stride;
-            sum_data += std::exp(to_float(input[index]) - max_data);
+            sum_data += std::exp(utils::cast<float>(input[index]) - max_data);
         }
-        for (int j = 0; j < dimsize; j++) {
+
+        for (int j = 0; j < dim_size; j++) {
             int index = tid + j * stride;
-            float result = std::exp(to_float(input[index]) - max_data) / sum_data;
-            output[index] = from_float(result);
+            float result = std::exp(utils::cast<float>(input[index]) - max_data) / sum_data;
+            output[index] = utils::cast<T>(result);
         }
     };
 #pragma omp parallel for
-    for (int i = 0; i < othersize; i++) {
+    for (int i = 0; i < other_size; i++) {
         compute_softmax(i);
     }
 }
