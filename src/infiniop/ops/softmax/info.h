@@ -10,10 +10,10 @@ namespace op::softmax {
 class SoftmaxInfo {
 public:
     int axis;
-    int otherdim_size;
+    int other_size;
     int stride;
     int size;
-    int dimsize;
+    int dim_size;
 
     static utils::Result<SoftmaxInfo> create(
         infiniopTensorDescriptor_t y_desc,
@@ -27,9 +27,9 @@ public:
         SoftmaxInfo info;
         info.axis = axis;
         info.size = 1;
-        info.otherdim_size = 1;
+        info.other_size = 1;
         info.stride = 1;
-        info.dimsize = static_cast<int>(x_desc->dim(axis));
+        info.dim_size = static_cast<int>(x_desc->dim(axis));
         int ndim = static_cast<int>(y_desc->ndim());
         for (int i = ndim - 1; i >= 0; i--) {
             info.size *= static_cast<int>(y_desc->dim(i));
@@ -38,7 +38,7 @@ public:
         for (int i = axis + 1; i < ndim; i++) {
             info.stride *= static_cast<int>(x_desc->dim(i));
         }
-        info.otherdim_size = info.size / info.dimsize;
+        info.other_size = info.size / info.dim_size;
         return utils::Result<SoftmaxInfo>(info);
     }
 };

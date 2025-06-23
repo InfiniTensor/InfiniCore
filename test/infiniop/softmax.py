@@ -23,6 +23,7 @@ from enum import Enum, auto
 # ==============================================================================
 # These are not meant to be imported from other modules
 _TEST_CASES_ = [
+    # shape  reduce_axis
     ((32, 20, 512), 0),
     ((32, 20, 512), 1), 
     ((32, 20, 512), 2),
