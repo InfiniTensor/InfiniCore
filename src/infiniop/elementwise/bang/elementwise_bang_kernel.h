@@ -6,7 +6,7 @@
 using namespace device::bang::kernel;
 
 // NRAM memory constraints
-#define NRAM_MAX_SIZE 1024 * 400
+#define NRAM_MAX_SIZE 1024 * 480
 constexpr size_t ALIGN_SIZE = 128; // Cambricon alignment requirement
 
 /**
