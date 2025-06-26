@@ -1,3 +1,4 @@
+import torch
 import ctypes
 from .datatypes import *
 from .devices import *
@@ -230,6 +231,35 @@ def debug(actual, desired, atol=0, rtol=1e-2, equal_nan=False, verbose=True):
     )
 
 
+def check_bf16_support(torch_device):
+    """
+    Check whether the specified device supports BF16.
+    Arguments:
+    ----------
+    - torch_device: Device string, e.g. 'cuda:0' or 'cpu'
+
+    Returns:
+    ----------
+    - bool: Whether BF16 is supported
+    If not supported, print a message and return False; otherwise, return True.
+    """
+    if torch_device.startswith("cuda"):
+        # 检查 CUDA 设备是否支持 BF16（计算能力 >= 8.0）
+        device_id = int(torch_device.split(":")[1]) if ":" in torch_device else 0
+        if not torch.cuda.get_device_capability(device_id) >= (8, 0):
+            print(
+                f"Skipping BF16 test on {torch_device} - requires compute capability >= 8.0"
+            )
+            return False
+        return True
+    elif torch_device == "cpu":
+        # CPU 通常支持 BF16，但可以根据需要添加附加检查
+        return True
+    else:
+        print(f"暂未添加在硬件 {torch_device}上对BF16的支持检查")
+        return False
+
+
 def debug_all(
     actual_vals: Sequence,
     desired_vals: Sequence,
@@ -427,7 +457,7 @@ def test_operator(lib, device, test_func, test_cases, tensor_dtypes):
                     infiniDeviceEnum_str_map[device],
                     *test_case,
                     tensor_dtype,
-                    get_sync_func(device)
+                    get_sync_func(device),
                 )
     finally:
         destroy_handle(lib, handle)
@@ -480,11 +510,12 @@ def get_test_devices(args):
 
 def get_sync_func(device):
     import torch
+
     device_str = infiniDeviceEnum_str_map[device]
-    
+
     if device == InfiniDeviceEnum.CPU:
         sync = None
     else:
         sync = getattr(torch, device_str).synchronize
-    
+
     return sync

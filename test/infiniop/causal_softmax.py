@@ -15,6 +15,7 @@ from libinfiniop import (
     debug,
     get_tolerance,
     profile_operation,
+    check_bf16_support,
 )
 from enum import Enum, auto
 
@@ -88,19 +89,12 @@ def test(
     y_stride=None,
     inplace=Inplace.OUT_OF_PLACE,
     dtype=torch.float16,
-    sync=None
+    sync=None,
 ):
     # 检查 BF16 支持
     if dtype == torch.bfloat16:
-        if torch_device.startswith('cuda'):
-            # 检查 CUDA 设备是否支持 BF16
-            device_id = int(torch_device.split(':')[1]) if ':' in torch_device else 0
-            if not torch.cuda.get_device_capability(device_id) >= (8, 0):
-                print(f"Skipping BF16 test on {torch_device} - requires compute capability >= 8.0")
-                return
-        elif torch_device == 'cpu':
-            # CPU 通常支持 BF16，但可以添加额外检查
-            pass
+        if not check_bf16_support(torch_device):
+            return
 
     print(
         f"Testing CausalSoftmax on {torch_device} with shape:{shape} x_stride:{x_stride} y_stride:{y_stride} dtype:{dtype} inplace:{inplace}"
@@ -122,7 +116,7 @@ def test(
         y = torch.zeros(shape, dtype=dtype).to(torch_device)
         y = rearrange_if_needed(y, y_stride)
         y_tensor = to_tensor(y, lib)
-        
+
     if sync is not None:
         sync()
 
@@ -157,9 +151,9 @@ def test(
         )
 
     lib_causal_softmax()
-    
+
     if sync is not None:
-        sync() 
+        sync()
 
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:

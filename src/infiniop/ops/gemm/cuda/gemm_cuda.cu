@@ -20,9 +20,7 @@ infiniStatus_t Descriptor::create(
     auto handle = reinterpret_cast<device::cuda::nvidia::Handle *>(handle_);
     auto dtype = c_desc->dtype();
 
-    if (dtype != INFINI_DTYPE_F16 && dtype != INFINI_DTYPE_F32 && dtype != INFINI_DTYPE_BF16) {
-        return INFINI_STATUS_BAD_TENSOR_DTYPE;
-    }
+    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_BF16);
 
     auto result = MatmulInfo::create(c_desc, a_desc, b_desc, MatrixLayout::COL_MAJOR);
     CHECK_RESULT(result);

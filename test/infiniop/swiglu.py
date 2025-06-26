@@ -14,7 +14,8 @@ from libinfiniop import (
     debug,
     get_tolerance,
     profile_operation,
-    create_workspace
+    create_workspace,
+    check_bf16_support,
 )
 from enum import Enum, auto
 
@@ -35,6 +36,7 @@ _TEST_CASES_ = [
     ((4, 4, 5632), None, None, None),
     ((4, 4, 5632), (45056, 5632, 1), (45056, 5632, 1), (45056, 5632, 1)),
 ]
+
 
 class Inplace(Enum):
     OUT_OF_PLACE = auto()
@@ -81,7 +83,6 @@ infiniopSwiGLUDescriptor_t = POINTER(SwiGLUDescriptor)
 
 def swiglu(a, b):
     return a * b / (1 + torch.exp(-b.float()).to(b.dtype))
-    
 
 
 def process_tensors(c, c_strides, a, a_stride, b, b_stride, inplace):
@@ -129,15 +130,8 @@ def test(
 ):
     # 检查 BF16 支持
     if dtype == torch.bfloat16:
-        if torch_device.startswith('cuda'):
-            # 检查 CUDA 设备是否支持 BF16
-            device_id = int(torch_device.split(':')[1]) if ':' in torch_device else 0
-            if not torch.cuda.get_device_capability(device_id) >= (8, 0):
-                print(f"Skipping BF16 test on {torch_device} - requires compute capability >= 8.0")
-                return
-        elif torch_device == 'cpu':
-            # CPU 通常支持 BF16，但可以添加额外检查
-            pass
+        if not check_bf16_support(torch_device):
+            return
 
     print(
         f"Testing SwiGLU on {torch_device} with shape:{shape} a_stride:{a_stride} b_stride:{b_stride} c_stride:{c_stride} "
@@ -184,10 +178,13 @@ def test(
     def lib_swiglu():
         check_error(
             lib.infiniopSwiGLU(
-                descriptor, 
+                descriptor,
                 workspace.data_ptr() if workspace is not None else None,
                 workspace_size.value,
-                c_tensor.data, a_tensor.data, b_tensor.data, None
+                c_tensor.data,
+                a_tensor.data,
+                b_tensor.data,
+                None,
             )
         )
 

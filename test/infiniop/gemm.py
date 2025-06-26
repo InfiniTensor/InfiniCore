@@ -15,6 +15,7 @@ from libinfiniop import (
     debug,
     get_tolerance,
     profile_operation,
+    check_bf16_support,
 )
 
 # ==============================================================================
@@ -37,7 +38,7 @@ _TENSOR_DTYPES = [torch.float16, torch.float32, torch.bfloat16]
 _TOLERANCE_MAP = {
     torch.float16: {"atol": 0, "rtol": 1e-2},
     torch.float32: {"atol": 0, "rtol": 1e-3},
-    torch.bfloat16: {"atol": 0, "rtol": 5e-2},  
+    torch.bfloat16: {"atol": 0, "rtol": 5e-2},
 }
 
 DEBUG = False
@@ -55,6 +56,7 @@ class GemmDescriptor(Structure):
 
 infiniopGemmDescriptor_t = POINTER(GemmDescriptor)
 
+
 # PyTorch implementation for matrix multiplication
 def gemm(d, _c, beta, _a, _b, alpha):
     if _c.ndim == 2:
@@ -64,6 +66,8 @@ def gemm(d, _c, beta, _a, _b, alpha):
     else:
         torch.matmul(_a, _b, out=d)
         d.mul_(alpha).add_(_c, alpha=beta)
+
+
 # The argument list should be (lib, handle, torch_device, <param list>, dtype)
 # The <param list> should keep the same order as the one specified in _TEST_CASES
 def test(
@@ -79,17 +83,13 @@ def test(
     b_stride=None,
     c_stride=None,
     dtype=torch.float16,
-    sync=None
+    sync=None,
 ):
-    
-    #检查是否支持cuda BF16
+    # 检查 BF16 支持
     if dtype == torch.bfloat16:
-        if torch_device.startswith('cuda'):
-            device_id = int(torch_device.split(':')[1]) if ':' in torch_device else 0
-            if not torch.cuda.get_device_capability(device_id) >= (8, 0):
-                print(f"Skipping BF16 test on {torch_device} - requires compute capability >= 8.0")
-                return 
-        
+        if not check_bf16_support(torch_device):
+            return
+
     print(
         f"Testing Gemm on {torch_device} with alpha:{alpha}, beta:{beta},"
         f" a_shape:{a_shape}, b_shape:{b_shape}, c_shape:{c_shape},"
@@ -162,7 +162,7 @@ def test(
             pass
         else:
             debug(c, ans, atol=atol, rtol=rtol)
-   
+
     assert torch.allclose(c, ans, atol=atol, rtol=rtol)
 
     # Profiling workflow

@@ -17,6 +17,7 @@ from libinfiniop import (
     debug,
     get_tolerance,
     profile_operation,
+    check_bf16_support,
 )
 
 # ==============================================================================
@@ -87,19 +88,12 @@ def test(
     x_stride,
     w_dtype=torch.float16,
     dtype=torch.float16,
-    sync=None
+    sync=None,
 ):
     # 检查 BF16 支持
     if dtype == torch.bfloat16:
-        if torch_device.startswith('cuda'):
-            # 检查 CUDA 设备是否支持 BF16
-            device_id = int(torch_device.split(':')[1]) if ':' in torch_device else 0
-            if not torch.cuda.get_device_capability(device_id) >= (8, 0):
-                print(f"Skipping BF16 test on {torch_device} - requires compute capability >= 8.0")
-                return
-        elif torch_device == 'cpu':
-            # CPU 通常支持 BF16，但可以添加额外检查
-            pass
+        if not check_bf16_support(torch_device):
+            return
 
     print(
         f"Testing RMS_Norm on {torch_device} with y_shape:{y_shape} x_shape:{x_shape} w_shape:{w_shape}"
@@ -119,10 +113,10 @@ def test(
         for tensor, stride in zip([x, y], [x_stride, y_stride])
     ]
     x_tensor, y_tensor, w_tensor = [to_tensor(tensor, lib) for tensor in [x, y, w]]
-    
+
     if sync is not None:
         sync()
-    
+
     descriptor = infiniopRMSNormDescriptor_t()
 
     check_error(

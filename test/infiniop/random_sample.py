@@ -16,6 +16,7 @@ from libinfiniop import (
     get_tolerance,
     profile_operation,
     synchronize_device,
+    check_bf16_support,
 )
 
 # ==============================================================================
@@ -89,15 +90,8 @@ def test(
 ):
     # 检查 BF16 支持
     if dtype == torch.bfloat16:
-        if torch_device.startswith('cuda'):
-            # 检查 CUDA 设备是否支持 BF16
-            device_id = int(torch_device.split(':')[1]) if ':' in torch_device else 0
-            if not torch.cuda.get_device_capability(device_id) >= (8, 0):
-                print(f"Skipping BF16 test on {torch_device} - requires compute capability >= 8.0")
-                return
-        elif torch_device == 'cpu':
-            # CPU 通常支持 BF16，但可以添加额外检查
-            pass
+        if not check_bf16_support(torch_device):
+            return
 
     print(
         f"Testing RandomSample on {torch_device} with voc:{voc} random_val:{random_val} topp:{topp} topk:{topk} temperature:{temperature} dtype:{dtype}"
