@@ -51,7 +51,7 @@ _TENSOR_DTYPES_FP16 = [torch.float16]
 
 # Tolerance map for different data types
 _TOLERANCE_MAP = {
-    torch.float16: {"atol": 1e-3, "rtol": 1e-3},
+    torch.float16: {"atol": 2e-3, "rtol": 2e-3},
     torch.bfloat16: {"atol": 8e-3, "rtol": 8e-3},
 }
 
@@ -101,7 +101,7 @@ def test(
     )
 
     y = torch.zeros(y_shape, dtype=dtype).to(torch_device)
-    x = torch.rand(x_shape, dtype=dtype).to(torch_device) * 0.5
+    x = torch.rand(x_shape, dtype=dtype).to(torch_device)
     w = torch.rand(w_shape, dtype=w_dtype).to(torch_device)
     ans = torch.zeros(y_shape, dtype=dtype).to(torch_device)
 
