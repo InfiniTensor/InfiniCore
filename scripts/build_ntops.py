@@ -5,6 +5,7 @@ import pathlib
 
 import ninetoothed
 from ninetoothed.aot import _HEADER_PATH
+from ntops.kernels import relu
 
 CURRENT_FILE_PATH = pathlib.Path(__file__)
 
@@ -100,5 +101,26 @@ def _generate_param_value_combinations(param_grid):
     return tuple(dict(zip(keys, combination)) for combination in value_combinations)
 
 
+def _build_relu():
+    ndim_values = range(1, MAX_NDIM + 1)
+    dtype_values = (ninetoothed.float16, ninetoothed.float32, ninetoothed.float64)
+
+    constexpr_param_grid = {
+        "ndim": ndim_values,
+        "dtype": dtype_values,
+        "block_size": (1024,),
+    }
+
+    _build_op(
+        relu.premake,
+        constexpr_param_grid,
+        caller="cuda",
+        op_name="relu",
+        output_dir=BUILD_DIRECTORY_PATH,
+    )
+
+
 if __name__ == "__main__":
     BUILD_DIRECTORY_PATH.mkdir(exist_ok=True)
+
+    _build_relu()
