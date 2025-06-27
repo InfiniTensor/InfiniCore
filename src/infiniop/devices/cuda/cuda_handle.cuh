@@ -6,21 +6,21 @@
 #include "cuda_handle.h"
 #include <cublas_v2.h>
 #include <cudnn.h>
+#include <cusparse.h>
 #include <functional>
 
 #define CHECK_CUBLAS(API) CHECK_INTERNAL(API, CUBLAS_STATUS_SUCCESS)
 #define CHECK_CUDNN(API) CHECK_INTERNAL(API, CUDNN_STATUS_SUCCESS)
+#define CHECK_CUSPARSE(API) CHECK_INTERNAL(API, CUSPARSE_STATUS_SUCCESS)
 
 namespace device::cuda {
 
 class Handle::Internal {
     Pool<cublasHandle_t> blas_handles;
     Pool<cudnnHandle_t> dnn_handles;
+    Pool<cusparseHandle_t> sparse_handles;
 
-    int _warp_size,
-        _max_threads_per_block,
-        _block_size[3],
-        _grid_size[3];
+    int _warp_size, _max_threads_per_block, _block_size[3], _grid_size[3];
 
     template <typename T>
     using Fn = std::function<infiniStatus_t(T)>;
@@ -28,8 +28,12 @@ class Handle::Internal {
 public:
     Internal(int);
 
-    infiniStatus_t useCublas(cudaStream_t stream, const Fn<cublasHandle_t> &f) const;
-    infiniStatus_t useCudnn(cudaStream_t stream, const Fn<cudnnHandle_t> &f) const;
+    infiniStatus_t useCublas(cudaStream_t stream,
+                             const Fn<cublasHandle_t> &f) const;
+    infiniStatus_t useCudnn(cudaStream_t stream,
+                            const Fn<cudnnHandle_t> &f) const;
+    infiniStatus_t useCusparse(cudaStream_t stream,
+                               const Fn<cusparseHandle_t> &f) const;
 
     int warpSize() const;
     int maxThreadsPerBlock() const;

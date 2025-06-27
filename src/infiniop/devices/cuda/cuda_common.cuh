@@ -3,6 +3,7 @@
 
 #include "cuda_handle.cuh"
 #include "infinicore.h"
+#include <cuda_runtime.h>
 
 namespace device::cuda {
 

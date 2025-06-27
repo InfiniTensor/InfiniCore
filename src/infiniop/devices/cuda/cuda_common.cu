@@ -3,12 +3,9 @@
 namespace device::cuda {
 
 Handle::Handle(infiniDevice_t device, int device_id)
-    : InfiniopHandle{device, device_id},
-      _internal(std::make_shared<Handle::Internal>(device_id)) {}
+    : InfiniopHandle{device, device_id}, _internal(std::make_shared<Handle::Internal>(device_id)) {}
 
-auto Handle::internal() const -> const std::shared_ptr<Internal> & {
-    return _internal;
-}
+auto Handle::internal() const -> const std::shared_ptr<Internal> & { return _internal; }
 
 Handle::Internal::Internal(int device_id) {
     cudaDeviceProp prop;
@@ -42,6 +39,17 @@ infiniStatus_t Handle::Internal::useCudnn(cudaStream_t stream, const Fn<cudnnHan
     CHECK_CUDNN(cudnnSetStream(*handle, stream));
     CHECK_STATUS(f(*handle));
     dnn_handles.push(std::move(*handle));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Handle::Internal::useCusparse(cudaStream_t stream, const Fn<cusparseHandle_t> &f) const {
+    auto handle = sparse_handles.pop();
+    if (!handle) {
+        CHECK_CUSPARSE(cusparseCreate(&(*handle)));
+    }
+    CHECK_CUSPARSE(cusparseSetStream(*handle, stream));
+    CHECK_STATUS(f(*handle));
+    sparse_handles.push(std::move(*handle));
     return INFINI_STATUS_SUCCESS;
 }
 
@@ -79,8 +87,7 @@ cudnnDataType_t getCudnnDtype(infiniDtype_t dt) {
 
 namespace nvidia {
 
-Handle::Handle(int device_id)
-    : cuda::Handle(INFINI_DEVICE_NVIDIA, device_id) {}
+Handle::Handle(int device_id) : cuda::Handle(INFINI_DEVICE_NVIDIA, device_id) {}
 
 infiniStatus_t Handle::create(InfiniopHandle **handle_ptr, int device_id) {
     *handle_ptr = new Handle(device_id);

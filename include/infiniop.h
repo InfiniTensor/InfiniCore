@@ -23,4 +23,5 @@
 #include "infiniop/ops/swiglu.h"
 #include "infiniop/tensor_descriptor.h"
 
+#include "infiniop/ops/spmv.h"
 #endif // __INFINIOP_API_H__

@@ -8,6 +8,8 @@
 #include "cnrt.h"
 #include <functional>
 
+struct InfiniopTensorDescriptor;
+
 #define CHECK_BANG(API) CHECK_INTERNAL(API, CNNL_STATUS_SUCCESS)
 
 namespace device::bang {
