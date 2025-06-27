@@ -157,10 +157,7 @@ def test(
 
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:
-        if dtype == torch.bfloat16:
-            pass
-        else:
-            debug(y, ans, atol=atol, rtol=rtol)
+        debug(y, ans, atol=atol, rtol=rtol)
     assert torch.allclose(y, ans, atol=atol, rtol=rtol)
 
     # Profiling workflow

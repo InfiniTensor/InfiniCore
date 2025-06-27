@@ -224,6 +224,10 @@ def debug(actual, desired, atol=0, rtol=1e-2, equal_nan=False, verbose=True):
         If True, the function will print detailed information about any discrepancies between the tensors.
     """
     import numpy as np
+    # 如果是BF16，全部转成FP32再比对
+    if actual.dtype == torch.bfloat16 or desired.dtype == torch.bfloat16:
+        actual = actual.to(torch.float32)
+        desired = desired.to(torch.float32)
 
     print_discrepancy(actual, desired, atol, rtol, equal_nan, verbose)
     np.testing.assert_allclose(
@@ -299,6 +303,9 @@ def debug_all(
     passed = False if condition == "or" else True
 
     for index, (actual, desired) in enumerate(zip(actual_vals, desired_vals)):
+        if actual.dtype == torch.bfloat16 or desired.dtype == torch.bfloat16:
+            actual = actual.to(torch.float32)
+            desired = desired.to(torch.float32)
         print(f" \033[36mCondition #{index + 1}:\033[0m {actual} == {desired}")
         indices = print_discrepancy(actual, desired, atol, rtol, equal_nan, verbose)
         if condition == "or":

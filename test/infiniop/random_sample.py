@@ -159,16 +159,13 @@ def test(
 
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:
-        if dtype == torch.bfloat16:
-            pass
-        else:
-            debug_all(
-                (indices.type(ans.dtype), data[indices]),
-                (ans, data[ans]),
-                "or",
-                atol=atol,
-                rtol=rtol,
-            )
+        debug_all(
+            (indices.type(ans.dtype), data[indices]),
+            (ans, data[ans]),
+            "or",
+            atol=atol,
+            rtol=rtol,
+        )
     assert indices.type(ans.dtype) == ans or data[ans] == data[indices]
 
     # Profiling workflow

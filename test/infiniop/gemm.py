@@ -158,10 +158,7 @@ def test(
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
 
     if DEBUG:
-        if dtype == torch.bfloat16:
-            pass
-        else:
-            debug(c, ans, atol=atol, rtol=rtol)
+        debug(c, ans, atol=atol, rtol=rtol)
 
     assert torch.allclose(c, ans, atol=atol, rtol=rtol)
 
