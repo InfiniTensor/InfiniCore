@@ -17,11 +17,15 @@ def run_tests(args):
         "random_sample.py",
         "rms_norm.py",
         "rope.py",
+        "sub.py",
         "swiglu.py",
         "attention.py",
+        "causal_softmax.py",
+        "rearrange.py",
+        "mul.py"
     ]:
         result = subprocess.run(
-            f"python {test} {args}", text=True, encoding="utf-8", shell=True
+            f"python {test} {args} --debug", text=True, encoding="utf-8", shell=True
         )
         if result.returncode != 0:
             failed.append(test)
