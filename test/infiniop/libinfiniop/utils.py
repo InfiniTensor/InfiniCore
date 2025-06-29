@@ -235,33 +235,12 @@ def debug(actual, desired, atol=0, rtol=1e-2, equal_nan=False, verbose=True):
     )
 
 
-def check_bf16_support(torch_device):
-    """
-    Check whether the specified device supports BF16.
-    Arguments:
-    ----------
-    - torch_device: Device string, e.g. 'cuda:0' or 'cpu'
-
-    Returns:
-    ----------
-    - bool: Whether BF16 is supported
-    If not supported, print a message and return False; otherwise, return True.
-    """
-    if torch_device.startswith("cuda"):
-        # 检查 CUDA 设备是否支持 BF16（计算能力 >= 8.0）
-        device_id = int(torch_device.split(":")[1]) if ":" in torch_device else 0
-        if not torch.cuda.get_device_capability(device_id) >= (8, 0):
-            print(
-                f"Skipping BF16 test on {torch_device} - requires compute capability >= 8.0"
-            )
-            return False
-        return True
-    elif torch_device == "cpu":
-        # CPU 通常支持 BF16，但可以根据需要添加附加检查
-        return True
+def filter_tensor_dtypes_by_device(device, tensor_dtypes):
+    if device in (InfiniDeviceEnum.CPU, InfiniDeviceEnum.NVIDIA):
+        return tensor_dtypes
     else:
-        print(f"暂未添加在硬件 {torch_device}上对BF16的支持检查")
-        return False
+        # 过滤掉 torch.bfloat16
+        return [dt for dt in tensor_dtypes if dt != torch.bfloat16]
 
 
 def debug_all(
@@ -455,6 +434,7 @@ def test_operator(lib, device, test_func, test_cases, tensor_dtypes):
     """
     lib.infinirtSetDevice(device, ctypes.c_int(0))
     handle = create_handle(lib)
+    tensor_dtypes = filter_tensor_dtypes_by_device(device, tensor_dtypes)
     try:
         for test_case in test_cases:
             for tensor_dtype in tensor_dtypes:

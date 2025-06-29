@@ -15,7 +15,6 @@ from libinfiniop import (
     get_tolerance,
     profile_operation,
     create_workspace,
-    check_bf16_support,
 )
 from enum import Enum, auto
 
@@ -128,11 +127,6 @@ def test(
     dtype=torch.float16,
     sync=None,
 ):
-    # 检查 BF16 支持
-    if dtype == torch.bfloat16:
-        if not check_bf16_support(torch_device):
-            return
-
     print(
         f"Testing SwiGLU on {torch_device} with shape:{shape} a_stride:{a_stride} b_stride:{b_stride} c_stride:{c_stride} "
         f"dtype:{dtype} inplace:{inplace}"

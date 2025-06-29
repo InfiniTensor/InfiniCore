@@ -16,7 +16,6 @@ from libinfiniop import (
     get_tolerance,
     profile_operation,
     synchronize_device,
-    check_bf16_support,
 )
 from enum import Enum, auto
 
@@ -121,11 +120,6 @@ def test(
     dtype=torch.float32,
     sync=None,
 ):
-    # 检查 BF16 支持
-    if dtype == torch.bfloat16:
-        if not check_bf16_support(torch_device):
-            return
-
     if inplace == Inplace.INPLACE_X:
         y_strides = x_strides
     print(

@@ -17,7 +17,6 @@ from libinfiniop import (
     debug,
     get_tolerance,
     profile_operation,
-    check_bf16_support,
 )
 
 # ==============================================================================
@@ -90,11 +89,6 @@ def test(
     dtype=torch.float16,
     sync=None,
 ):
-    # 检查 BF16 支持
-    if dtype == torch.bfloat16:
-        if not check_bf16_support(torch_device):
-            return
-
     print(
         f"Testing RMS_Norm on {torch_device} with y_shape:{y_shape} x_shape:{x_shape} w_shape:{w_shape}"
         f" y_stride:{y_stride} x_stride:{x_stride} w_dtype:{w_dtype} dtype:{dtype}"

@@ -15,7 +15,6 @@ from libinfiniop import (
     debug,
     get_tolerance,
     profile_operation,
-    check_bf16_support,
 )
 from enum import Enum, auto
 
@@ -91,11 +90,6 @@ def test(
     dtype=torch.float16,
     sync=None,
 ):
-    # 检查 BF16 支持
-    if dtype == torch.bfloat16:
-        if not check_bf16_support(torch_device):
-            return
-
     print(
         f"Testing CausalSoftmax on {torch_device} with shape:{shape} x_stride:{x_stride} y_stride:{y_stride} dtype:{dtype} inplace:{inplace}"
     )

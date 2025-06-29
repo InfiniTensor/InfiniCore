@@ -15,7 +15,6 @@ from libinfiniop import (
     debug,
     get_tolerance,
     profile_operation,
-    check_bf16_support,
 )
 
 # ==============================================================================
@@ -85,11 +84,6 @@ def test(
     dtype=torch.float16,
     sync=None,
 ):
-    # 检查 BF16 支持
-    if dtype == torch.bfloat16:
-        if not check_bf16_support(torch_device):
-            return
-
     print(
         f"Testing Gemm on {torch_device} with alpha:{alpha}, beta:{beta},"
         f" a_shape:{a_shape}, b_shape:{b_shape}, c_shape:{c_shape},"
