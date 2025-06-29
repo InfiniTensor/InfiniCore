@@ -16,7 +16,6 @@ from libinfiniop import (
     get_tolerance,
     profile_operation,
     synchronize_device,
-    check_bf16_support,
 )
 
 # ==============================================================================
@@ -88,11 +87,6 @@ def test(
     dtype=torch.float16,
     sync=None,
 ):
-    # 检查 BF16 支持
-    if dtype == torch.bfloat16:
-        if not check_bf16_support(torch_device):
-            return
-
     print(
         f"Testing RandomSample on {torch_device} with voc:{voc} random_val:{random_val} topp:{topp} topk:{topk} temperature:{temperature} dtype:{dtype}"
     )
