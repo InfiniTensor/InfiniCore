@@ -2,12 +2,9 @@
 #define __INFINIOP_ELEMENTWISE_BANG_KERNEL_MLU__
 
 #include "../../devices/bang/bang_kernel_common.h"
+#include "../../devices/bang/common_bang.h"
 
 using namespace device::bang::kernel;
-
-// NRAM memory constraints
-#define NRAM_MAX_SIZE 1024 * 480
-constexpr size_t ALIGN_SIZE = 128; // Cambricon alignment requirement
 
 /**
  * @brief Core elementwise operation implementation for BANG device.
