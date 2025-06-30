@@ -15,7 +15,7 @@ target("infiniop-cuda")
 
     set_policy("build.cuda.devlink", true)
     set_toolchains("cuda")
-    add_links("cublas", "cudnn")
+    add_links("cublas", "cudnn", "cusparse")
     add_cugencodes("native")
 
     if is_plat("windows") then

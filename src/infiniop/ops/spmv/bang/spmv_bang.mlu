@@ -1,0 +1,129 @@
+#include "../../../devices/bang/bang_handle.h"
+#include "../../../devices/bang/common_bang.h"
+#include "../info.h"
+#include "bang.h"
+#include "mlu.h"
+#include "spmv_bang.h"
+#include <cstddef>
+
+#define NRAMSIZE 1024 * 512 // 512KB NRAM size
+
+__mlu_entry__ void spmv_csr(int num_rows, int num_cols, int nnz,
+                            int *row_ptr, int *col_indices,
+                            float *values, float *x, float *y) {
+    // 计算每个 task 处理的行范围
+    // 如果按照nnz划分任务，或许要在descriptor中记录一些信息；
+    int rows_num_pertask = (num_rows + taskDim - 1) / taskDim;
+    int start_row = taskId * rows_num_pertask;
+    int end_row = num_rows < (taskId + 1) * rows_num_pertask ? num_rows : (taskId + 1) * rows_num_pertask;
+    // int low = 0;
+    // int high = num_rows;
+    // int nnz_per_task = nnz / taskDim;
+    // while (low < high) {
+    //     int mid = (low + high) / 2;
+    //     if (row_ptr[mid] < taskId * nnz_per_task) {
+    //         low = mid + 1;
+    //     } else {
+    //         high = mid;
+    //     }
+    // }
+    // int start_row = low;
+    // // printf("taskId: %d, start_row: %d\n", taskId, start_row);
+    // int end_row = num_rows;
+    // if (taskId != taskDim - 1) {
+    //     high = num_rows;
+    //     while (low < high) {
+    //         int mid = (low + high) / 2;
+    //         if (row_ptr[mid] < (taskId + 1) * nnz_per_task) {
+    //             low = mid + 1;
+    //         } else {
+    //             high = mid;
+    //         }
+    //     }
+    //     end_row = low;
+    // }
+    // printf("taskId: %d, end_row: %d\n", taskId, end_row);
+    // 处理分配给当前 task 的行
+    // move values data from GDRAM to NRAM
+    const int float_capacity = (NRAMSIZE / sizeof(float)) * 0.75; // 75% of NRAM size
+    __nram__ float nram_values[(NRAMSIZE / sizeof(float)) * 3 / 4];
+    __nram__ float sum = 0.0f;
+    __nram__ int current_num = 0;
+    __nram__ int current_begin = 0;
+    for (int row = start_row; row < end_row; row++) {
+        for (int k = 0; k < row_ptr[row + 1] - row_ptr[row]; k += float_capacity) {
+            current_num = std::min(float_capacity, row_ptr[row + 1] - row_ptr[row] - k);
+            // move values data from GDRAM to NRAM
+            current_begin = row_ptr[row] + k;
+            __memcpy(nram_values, values + current_begin, current_num * sizeof(float), GDRAM2NRAM);
+            for (int i = 0; i < current_num; i++) {
+                sum += nram_values[i] * x[col_indices[current_begin + i]];
+            }
+        }
+        y[row] = sum;
+        sum = 0.0f; // reset sum for the next row
+    }
+    return;
+}
+namespace op::spmv::bang {
+struct Descriptor::Opaque {
+    std::shared_ptr<device::bang::Handle::Internal> internal;
+};
+
+Descriptor::~Descriptor() { delete _opaque; }
+
+infiniStatus_t Descriptor::create(infiniopHandle_t handle_,
+                                  Descriptor **desc_ptr, size_t num_cols,
+                                  size_t num_rows, size_t nnz,
+                                  infiniDtype_t dtype) {
+    auto handle = reinterpret_cast<device::bang::cambricon::Handle *>(handle_);
+
+    // currently only float32 supported
+    if (dtype != INFINI_DTYPE_F32) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
+    auto result = SpMVInfo::create(num_cols, num_rows, nnz);
+    CHECK_RESULT(result);
+
+    *desc_ptr = new Descriptor(dtype, result.take(), new Opaque{handle->internal()},
+                               handle->device, handle->device_id);
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(void *y, const void *x, const void *values,
+                                     const void *row_ptr,
+                                     const void *col_indices,
+                                     void *stream) const {
+    // do basic validation
+    auto validation_result = validateSpMVCSR(y, x, values, row_ptr, col_indices, _dtype);
+    CHECK_OR_RETURN(validation_result == INFINI_STATUS_SUCCESS, validation_result);
+
+    CNRT_CHECK(cnrtSetDevice(device_id));
+    cnrtQueue_t queue;
+    if (stream == nullptr || stream == NULL) {
+        CNRT_CHECK(cnrtQueueCreate(&queue));
+    } else {
+        queue = (cnrtQueue_t)stream;
+    }
+    cnrtDim3_t dim = {256, 1, 1};
+    cnrtFunctionType_t ktype = CNRT_FUNC_TYPE_BLOCK;
+
+    int num_rows = static_cast<int>(_info.num_rows);
+    int num_cols = static_cast<int>(_info.num_cols);
+    int nnz = static_cast<int>(_info.nnz);
+
+    int *d_row_ptr = (int *)row_ptr;
+    int *d_col_indices = (int *)col_indices;
+    float *d_values = (float *)values;
+    float *d_x = (float *)x;
+    float *d_y = (float *)y;
+
+    spmv_csr<<<dim, ktype, queue>>>(num_rows, num_cols, nnz, d_row_ptr, d_col_indices, d_values, d_x, d_y);
+
+    CNRT_CHECK(cnrtQueueSync(queue));
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace op::spmv::bang
