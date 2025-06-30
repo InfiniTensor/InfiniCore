@@ -22,31 +22,28 @@ from libinfiniop import (
 # ==============================================================================
 #  Configuration (Internal Use Only)
 # ==============================================================================
-# Float16 test case - w_dtype can be Float16 or Float32
-_TEST_CASES_F16 = [
-    # y_shape, x_shape, w_shape, y_stride, x_stride, w_dtype
-    ((1, 4), (1, 4), (4,), None, None, torch.float16),
-    ((1, 4), (1, 4), (4,), None, None, torch.float32),
-    ((16, 2048), (16, 2048), (2048,), None, None, torch.float16),
-    ((16, 2048), (16, 2048), (2048,), None, None, torch.float32),
-    ((16, 2048), (16, 2048), (2048,), (4096, 1), (4096, 1), torch.float16),
-    ((16, 2048), (16, 2048), (2048,), (4096, 1), (4096, 1), torch.float32),
+_TEST_CASES_ = [
+    # y_shape, x_shape, w_shape, y_stride, x_stride
+    ((1, 4), (1, 4), (4,), None, None),
+    ((1, 4), (1, 4), (4,), None, None),
+    ((16, 2048), (16, 2048), (2048,), None, None),
+    ((16, 2048), (16, 2048), (2048,), None, None),
+    ((16, 2048), (16, 2048), (2048,), (4096, 1), (4096, 1)),
+    ((16, 2048), (16, 2048), (2048,), (4096, 1), (4096, 1)),
 ]
 
-# BFloat16 test case - w_dtype can be BFloat16 or Float32
-_TEST_CASES_BF16 = [
-    # y_shape, x_shape, w_shape, y_stride, x_stride, w_dtype
-    ((1, 4), (1, 4), (4,), None, None, torch.bfloat16),
-    ((1, 4), (1, 4), (4,), None, None, torch.float32),
-    ((16, 2048), (16, 2048), (2048,), None, None, torch.bfloat16),
-    ((16, 2048), (16, 2048), (2048,), None, None, torch.float32),
-    ((16, 2048), (16, 2048), (2048,), (4096, 1), (4096, 1), torch.bfloat16),
-    ((16, 2048), (16, 2048), (2048,), (4096, 1), (4096, 1), torch.float32),
-]
-
+# w (weight) types 
+# Note: 'None' means the same as input dtype
+_WEIGHT_DTYPES = [None, torch.float32]
 # x types used for testing
-_TENSOR_DTYPES_BF16 = [torch.bfloat16]
-_TENSOR_DTYPES_FP16 = [torch.float16]
+_TENSOR_DTYPES = [torch.float16, torch.bfloat16]
+
+# Form the test cases by appending each element of _WEIGHT_DTYPES to each tuple in _TEST_CASES_
+_TEST_CASES = [
+    test_case + (w_dtype,)
+    for test_case in _TEST_CASES_
+    for w_dtype in _WEIGHT_DTYPES
+]
 
 # Tolerance map for different data types
 _TOLERANCE_MAP = {
@@ -94,6 +91,7 @@ def test(
         f" y_stride:{y_stride} x_stride:{x_stride} w_dtype:{w_dtype} dtype:{dtype}"
     )
 
+    w_dtype = w_dtype if w_dtype else dtype
     y = torch.zeros(y_shape, dtype=dtype).to(torch_device)
     x = torch.rand(x_shape, dtype=dtype).to(torch_device)
     w = torch.rand(w_shape, dtype=w_dtype).to(torch_device)
@@ -207,9 +205,6 @@ if __name__ == "__main__":
 
     # Execute tests
     for device in get_test_devices(args):
-        # testing FP16
-        test_operator(lib, device, test, _TEST_CASES_F16, _TENSOR_DTYPES_FP16)
-        # testing BF16
-        test_operator(lib, device, test, _TEST_CASES_BF16, _TENSOR_DTYPES_BF16)
+        test_operator(lib, device, test, _TEST_CASES, _TENSOR_DTYPES)
 
     print("\033[92mTest passed!\033[0m")
