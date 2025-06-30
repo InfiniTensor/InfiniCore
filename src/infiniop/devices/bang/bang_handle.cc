@@ -8,10 +8,15 @@ namespace device::bang {
 
 Handle::Handle(infiniDevice_t device, int device_id)
     : InfiniopHandle{device, device_id},
-      _internal(std::make_shared<Handle::Internal>()) {}
+      _internal(std::make_shared<Handle::Internal>(device_id)) {}
 
 auto Handle::internal() const -> const std::shared_ptr<Internal> & {
     return _internal;
+}
+
+Handle::Internal::Internal(int device_id) {
+    cnrtDeviceGetAttribute(&_cluster_count, cnrtAttrClusterCount, device_id);
+    cnrtDeviceGetAttribute(&_core_per_cluster, cnrtAttrMcorePerCluster, device_id);
 }
 
 infiniStatus_t Handle::Internal::useCnnl(cnrtQueue_t queue, const Fn<cnnlHandle_t> &f) const {
@@ -24,6 +29,9 @@ infiniStatus_t Handle::Internal::useCnnl(cnrtQueue_t queue, const Fn<cnnlHandle_
     cnnl_handles.push(std::move(*handle));
     return INFINI_STATUS_SUCCESS;
 }
+
+int Handle::Internal::getCorePerCluster() const { return _core_per_cluster; }
+int Handle::Internal::getClusterCount() const { return _cluster_count; }
 
 cnnlDataType_t getCnnlDtype(infiniDtype_t dt) {
     switch (dt) {

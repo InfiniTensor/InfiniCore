@@ -18,8 +18,7 @@ public:
             __bang_neg(out, gate, num_elements);
             __bang_active_exphp(out, out, num_elements);
             __bang_add_scalar(out, out, 1.0f, num_elements);
-            __bang_active_reciphp(out, out, num_elements);
-            __bang_mul(out, gate, out, num_elements);
+            __bang_div(out, gate, out, num_elements);
             __bang_mul(out, up, out, num_elements);
         } else {
             for (size_t i = 0; i < num_elements; ++i) {
