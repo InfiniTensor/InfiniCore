@@ -34,11 +34,12 @@ _TEST_CASES_ = [
 ]
 
 # Data types used for testing
-_TENSOR_DTYPES = [torch.float16, torch.float32]
+_TENSOR_DTYPES = [torch.float16, torch.bfloat16, torch.float32]
 
 # Tolerance map for different data types
 _TOLERANCE_MAP = {
     torch.float16: {"atol": 1e-3, "rtol": 1e-2},
+    torch.bfloat16: {"atol": 5e-3, "rtol": 5e-2},
 }
 
 
@@ -87,7 +88,7 @@ def test(
     y_stride=None,
     inplace=Inplace.OUT_OF_PLACE,
     dtype=torch.float16,
-    sync=None
+    sync=None,
 ):
     print(
         f"Testing CausalSoftmax on {torch_device} with shape:{shape} x_stride:{x_stride} y_stride:{y_stride} dtype:{dtype} inplace:{inplace}"
@@ -109,7 +110,7 @@ def test(
         y = torch.zeros(shape, dtype=dtype).to(torch_device)
         y = rearrange_if_needed(y, y_stride)
         y_tensor = to_tensor(y, lib)
-        
+
     if sync is not None:
         sync()
 
@@ -144,9 +145,9 @@ def test(
         )
 
     lib_causal_softmax()
-    
+
     if sync is not None:
-        sync() 
+        sync()
 
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:
