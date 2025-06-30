@@ -46,6 +46,16 @@ if has_config("nv-gpu") then
     includes("xmake/cuda.lua")
 end
 
+option("cudnn")
+    set_default(true)
+    set_showmenu(true)
+    set_description("Whether to complie cudnn for Nvidia GPU")
+option_end()
+
+if has_config("cudnn") then
+    add_defines("ENABLE_CUDNN_API")
+end
+
 -- 寒武纪
 option("cambricon-mlu")
     set_default(false)
