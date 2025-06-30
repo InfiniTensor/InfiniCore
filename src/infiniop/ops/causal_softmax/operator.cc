@@ -11,9 +11,14 @@
 #ifdef ENABLE_METAX_API
 #include "maca/causal_softmax_maca.h"
 #endif
+#ifdef ENABLE_MOORE_API
+#include "musa/causal_softmax_musa.h"
+#endif
 #ifdef ENABLE_ASCEND_API
 #include "ascend/causal_softmax_ascend.h"
 #endif
+
+#include <iostream> // 包含 std::cout 所需的头文件
 
 __C infiniStatus_t infiniopCreateCausalSoftmaxDescriptor(
     infiniopHandle_t handle,
@@ -38,6 +43,9 @@ __C infiniStatus_t infiniopCreateCausalSoftmaxDescriptor(
 #endif
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, maca)
+#endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, musa)
 #endif
 #ifdef ENABLE_CAMBRICON_MLU
     case DevCambriconMlu: {
@@ -89,6 +97,9 @@ __C infiniStatus_t infiniopGetCausalSoftmaxWorkspaceSize(infiniopCausalSoftmaxDe
 #ifdef ENABLE_METAX_API
         GET(INFINI_DEVICE_METAX, maca)
 #endif
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, musa)
+#endif
 #ifdef ENABLE_METAX_GPU
     case DevMetaxGpu: {
         return macaGetCausalSoftmaxWorkspaceSize((CausalSoftmaxMacaDescriptor_t)desc, size);
@@ -124,6 +135,9 @@ __C infiniStatus_t infiniopCausalSoftmax(
 #endif
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, maca)
+#endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, musa)
 #endif
 #ifdef ENABLE_CAMBRICON_MLU
     case DevCambriconMlu: {
@@ -164,6 +178,9 @@ __C infiniStatus_t infiniopDestroyCausalSoftmaxDescriptor(infiniopCausalSoftmaxD
 #endif
 #ifdef ENABLE_METAX_API
         DESTROY(INFINI_DEVICE_METAX, maca)
+#endif
+#ifdef ENABLE_MOORE_API
+        DESTROY(INFINI_DEVICE_MOORE, musa)
 #endif
 #ifdef ENABLE_CAMBRICON_MLU
     case DevCambriconMlu: {
