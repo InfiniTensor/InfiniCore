@@ -1,11 +1,25 @@
 #ifndef __INFINIOP_BANG_KERNEL_COMMON_H__
 #define __INFINIOP_BANG_KERNEL_COMMON_H__
 
+// Include Cambricon CNNL and CNRT headers for MLU (Machine Learning Unit) specific functions
 #include "cnnl.h"
 #include "cnrt.h"
 
 namespace device::bang::kernel {
 
+/**
+ * @brief Converts a flattened index to a reduced offset considering broadcasting.
+ *
+ * This function is used when dealing with broadcasted tensors where the input
+ * has been broadcast to match the output shape. It calculates the offset in
+ * the original (non-broadcasted) tensor.
+ *
+ * @param flat_index The flattened index in the output tensor
+ * @param ndim Number of dimensions
+ * @param broadcasted_strides Strides of the broadcasted tensor
+ * @param target_strides Strides of the original (non-broadcasted) tensor
+ * @return size_t Offset in the original tensor's memory
+ */
 inline __mlu_device__ size_t indexToReducedOffset(
     size_t flat_index,
     size_t ndim,
@@ -14,12 +28,26 @@ inline __mlu_device__ size_t indexToReducedOffset(
 
     size_t res = 0;
     for (size_t i = 0; i < ndim; ++i) {
+        // Calculate contribution from each dimension
         res += flat_index / broadcasted_strides[i] * target_strides[i];
+        // Remove the contribution from this dimension
         flat_index %= broadcasted_strides[i];
     }
     return res;
 }
 
+/**
+ * @brief Converts a flattened index to a memory offset considering tensor striding.
+ *
+ * This is the general case for non-contiguous tensors where elements are not
+ * stored sequentially in memory.
+ *
+ * @param flat_index The flattened index in the tensor
+ * @param ndim Number of dimensions
+ * @param shape Tensor shape
+ * @param strides Tensor strides (in elements)
+ * @return size_t Offset in the tensor's memory
+ */
 inline __mlu_device__ size_t indexToOffset(
     size_t flat_index,
     size_t ndim,
@@ -27,8 +55,11 @@ inline __mlu_device__ size_t indexToOffset(
     const ptrdiff_t *strides) {
 
     size_t res = 0;
+    // Process dimensions from highest to lowest
     for (size_t i = ndim; i-- > 0;) {
+        // Add contribution from this dimension
         res += (flat_index % shape[i]) * strides[i];
+        // Remove the contribution from this dimension
         flat_index /= shape[i];
     }
     return res;
@@ -36,15 +67,18 @@ inline __mlu_device__ size_t indexToOffset(
 
 /**
  * @brief Helper struct for computing input tensor indices considering broadcasting and striding.
+ *
+ * This is particularly useful for operations where inputs may be broadcasted
+ * to match the output shape, or may have non-contiguous memory layouts.
  */
 struct InputIndexer {
-    size_t idx;
-    size_t ndim;
-    const bool *input_contiguous;
-    const bool *input_broadcasted;
-    const size_t *input_shapes;
-    const ptrdiff_t *input_strides;
-    const ptrdiff_t *output_strides;
+    size_t idx;                      // Base index for this task
+    size_t ndim;                     // Number of dimensions
+    const bool *input_contiguous;    // Array indicating which inputs are contiguous
+    const bool *input_broadcasted;   // Array indicating which inputs are broadcasted
+    const size_t *input_shapes;      // Array of input shapes (concatenated)
+    const ptrdiff_t *input_strides;  // Array of input strides (concatenated)
+    const ptrdiff_t *output_strides; // Output tensor strides
 
     /**
      * @brief Computes memory offset for input tensor element.
@@ -56,9 +90,11 @@ struct InputIndexer {
     __mlu_device__ size_t operator()(size_t input_id, size_t element_idx) const {
         size_t global_idx = idx + element_idx;
         return input_contiguous[input_id]
-                 ? global_idx
+                 ? global_idx // Simple case: contiguous memory
                  : (input_broadcasted[input_id]
+                        // Handle broadcasted case
                         ? indexToReducedOffset(global_idx, ndim, output_strides, input_strides + input_id * ndim)
+                        // General non-contiguous case
                         : indexToOffset(global_idx, ndim, input_shapes + input_id * ndim, input_strides + input_id * ndim));
     }
 };
@@ -80,21 +116,19 @@ getOutputIndex(size_t idx,
                const size_t *shape,
                const ptrdiff_t *strides) {
     return is_contiguous ? idx : indexToOffset(idx, ndim, shape, strides);
-}
-
-/**
- * @brief Calculates optimal chunk size for memory operations based on tensor contiguity.
- *
- *        This function doesn't handle tensors with non-standard strides, which
- *        require more general optimizations not specific to Cambricon.
- *
- * @param global_idx_    Starting global index.
- * @param ndim           Number of dimensions.
- * @param shape          Tensor shape.
- * @param strides        Tensor strides.
- * @param max_len        Maximum allowed chunk size.
- * @return size_t        Optimal chunk size for memory operations.
- */
+} /**
+   * @brief Calculates optimal chunk size for memory operations based on tensor contiguity.
+   *
+   *        This function doesn't handle tensors with non-standard strides, which
+   *        require more general optimizations not specific to Cambricon.
+   *
+   * @param global_idx_    Starting global index.
+   * @param ndim           Number of dimensions.
+   * @param shape          Tensor shape.
+   * @param strides        Tensor strides.
+   * @param max_len        Maximum allowed chunk size.
+   * @return size_t        Optimal chunk size for memory operations.
+   */
 __mlu_device__ size_t calculateChunkSize(
     size_t global_idx_,
     size_t ndim,

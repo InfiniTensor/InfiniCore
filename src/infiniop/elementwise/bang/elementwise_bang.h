@@ -80,6 +80,7 @@ struct DeviceImpl::Opaque {
             output,
             reinterpret_cast<const void *const *>(d_inputs_arr),
             queue,
+            internal,
             args...);
 
         // Synchronize queue to ensure completion
@@ -190,21 +191,22 @@ infiniStatus_t DeviceImpl::calculate(const op::elementwise::ElementwiseInfo &inf
  *
  * @param OpName Name of the elementwise operation.
  */
-#define LAUNCH_ELEMENTWISE_KERNEL(OpName)       \
-    template <typename Tdata, typename... Args> \
-    void launch##OpName##Kernel(                \
-        size_t output_size,                     \
-        size_t ndim,                            \
-        bool output_contiguous,                 \
-        const void *input_contiguous,           \
-        const void *input_broadcasted,          \
-        const void *output_shape,               \
-        const void *input_shapes,               \
-        const void *output_strides,             \
-        const void *input_strides,              \
-        void *output,                           \
-        const void *const *inputs,              \
-        cnrtQueue_t queue,                      \
+#define LAUNCH_ELEMENTWISE_KERNEL(OpName)                                \
+    template <typename Tdata, typename... Args>                          \
+    void launch##OpName##Kernel(                                         \
+        size_t output_size,                                              \
+        size_t ndim,                                                     \
+        bool output_contiguous,                                          \
+        const void *input_contiguous,                                    \
+        const void *input_broadcasted,                                   \
+        const void *output_shape,                                        \
+        const void *input_shapes,                                        \
+        const void *output_strides,                                      \
+        const void *input_strides,                                       \
+        void *output,                                                    \
+        const void *const *inputs,                                       \
+        cnrtQueue_t queue,                                               \
+        const std::shared_ptr<device::bang::Handle::Internal> &internal, \
         Args... args);
 
 #endif // __INFINIOP_ELEMENTWISE_BANG_H__

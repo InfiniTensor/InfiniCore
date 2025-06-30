@@ -213,29 +213,6 @@ __mlu_global__ void elementwiseKernel(
 }
 
 /**
- * @brief Determines optimal kernel launch configuration based on input size and hardware.
- *
- *        Details of this function may require further investigations.
- *
- * @param output_size Total number of output elements.
- * @return cnrtDim3_t Optimal kernel launch dimensions.
- */
-inline cnrtDim3_t getOptimalLaunchConfig() {
-    cnrtDim3_t dim;
-
-    // Get hardware information
-    int cluster_num, core_num;
-    cnrtDeviceGetAttribute(&cluster_num, cnrtAttrClusterCount, 0);
-    cnrtDeviceGetAttribute(&core_num, cnrtAttrMcorePerCluster, 0);
-
-    dim.x = core_num;
-    dim.y = cluster_num;
-    dim.z = 1;
-
-    return dim;
-}
-
-/**
  * @brief Intermediate layer that determines optimal launch configuration before calling elementwiseKernel.
  *
  * @tparam N        Number of input tensors.
@@ -257,10 +234,18 @@ void launchElementwiseKernelWrapper(
     Tdata *output,
     const void *const *inputs,
     cnrtQueue_t queue,
+    const std::shared_ptr<device::bang::Handle::Internal> &internal,
     Args... args) {
 
-    // Determine optimal launch configuration
-    cnrtDim3_t dim = getOptimalLaunchConfig();
+    // Get hardware information from internal handle
+    int core_per_cluster = internal->getCorePerCluster();
+    int cluster_count = internal->getClusterCount();
+
+    // Set kernel launch dimensions
+    cnrtDim3_t dim;
+    dim.x = core_per_cluster;
+    dim.y = cluster_count;
+    dim.z = 1;
 
     // Choose kernel type based on problem characteristics
     cnrtFunctionType_t func_type = CNRT_FUNC_TYPE_BLOCK;
@@ -284,31 +269,32 @@ void launchElementwiseKernelWrapper(
  * @param OpName Name of the operation.
  * @param Op     Operator functor type.
  */
-#define LAUNCH_ELEMENTWISE_KERNEL_IMPL(OpName, Op)                      \
-    template <typename Tdata, typename... Args>                         \
-    void launch##OpName##Kernel(                                        \
-        size_t output_size,                                             \
-        size_t ndim,                                                    \
-        bool output_contiguous,                                         \
-        const void *input_contiguous,                                   \
-        const void *input_broadcasted,                                  \
-        const void *output_shape,                                       \
-        const void *input_shapes,                                       \
-        const void *output_strides,                                     \
-        const void *input_strides,                                      \
-        void *output,                                                   \
-        const void *const *inputs,                                      \
-        cnrtQueue_t queue,                                              \
-        Args... args) {                                                 \
-        launchElementwiseKernelWrapper<Op::num_inputs, Op, Tdata>(      \
-            output_size, ndim, output_contiguous,                       \
-            reinterpret_cast<const bool *>(input_contiguous),           \
-            reinterpret_cast<const bool *>(input_broadcasted),          \
-            reinterpret_cast<const size_t *>(output_shape),             \
-            reinterpret_cast<const size_t *>(input_shapes),             \
-            reinterpret_cast<const ptrdiff_t *>(output_strides),        \
-            reinterpret_cast<const ptrdiff_t *>(input_strides),         \
-            reinterpret_cast<Tdata *>(output), inputs, queue, args...); \
+#define LAUNCH_ELEMENTWISE_KERNEL_IMPL(OpName, Op)                                \
+    template <typename Tdata, typename... Args>                                   \
+    void launch##OpName##Kernel(                                                  \
+        size_t output_size,                                                       \
+        size_t ndim,                                                              \
+        bool output_contiguous,                                                   \
+        const void *input_contiguous,                                             \
+        const void *input_broadcasted,                                            \
+        const void *output_shape,                                                 \
+        const void *input_shapes,                                                 \
+        const void *output_strides,                                               \
+        const void *input_strides,                                                \
+        void *output,                                                             \
+        const void *const *inputs,                                                \
+        cnrtQueue_t queue,                                                        \
+        const std::shared_ptr<device::bang::Handle::Internal> &internal,          \
+        Args... args) {                                                           \
+        launchElementwiseKernelWrapper<Op::num_inputs, Op, Tdata>(                \
+            output_size, ndim, output_contiguous,                                 \
+            reinterpret_cast<const bool *>(input_contiguous),                     \
+            reinterpret_cast<const bool *>(input_broadcasted),                    \
+            reinterpret_cast<const size_t *>(output_shape),                       \
+            reinterpret_cast<const size_t *>(input_shapes),                       \
+            reinterpret_cast<const ptrdiff_t *>(output_strides),                  \
+            reinterpret_cast<const ptrdiff_t *>(input_strides),                   \
+            reinterpret_cast<Tdata *>(output), inputs, queue, internal, args...); \
     }
 
 /**
@@ -318,20 +304,28 @@ void launchElementwiseKernelWrapper(
  * @param T      Data type.
  * @param ...    Additional template arguments.
  */
-#define LAUNCH_ELEMENTWISE_KERNEL_INSTANTIATE(OpName, T, ...) \
-    template void launch##OpName##Kernel<T, ##__VA_ARGS__>(   \
-        size_t output_size,                                   \
-        size_t ndim,                                          \
-        bool output_contiguous,                               \
-        const void *input_contiguous,                         \
-        const void *input_broadcasted,                        \
-        const void *output_shape,                             \
-        const void *input_shapes,                             \
-        const void *output_strides,                           \
-        const void *input_strides,                            \
-        void *output,                                         \
-        const void *const *inputs,                            \
-        cnrtQueue_t queue,                                    \
+/**
+ * @brief Macro for instantiating elementwise kernel for specific types.
+ *
+ * @param OpName Name of the operation.
+ * @param T      Data type.
+ * @param ...    Additional template arguments.
+ */
+#define LAUNCH_ELEMENTWISE_KERNEL_INSTANTIATE(OpName, T, ...)            \
+    template void launch##OpName##Kernel<T, ##__VA_ARGS__>(              \
+        size_t output_size,                                              \
+        size_t ndim,                                                     \
+        bool output_contiguous,                                          \
+        const void *input_contiguous,                                    \
+        const void *input_broadcasted,                                   \
+        const void *output_shape,                                        \
+        const void *input_shapes,                                        \
+        const void *output_strides,                                      \
+        const void *input_strides,                                       \
+        void *output,                                                    \
+        const void *const *inputs,                                       \
+        cnrtQueue_t queue,                                               \
+        const std::shared_ptr<device::bang::Handle::Internal> &internal, \
         ##__VA_ARGS__);
 
 #endif
