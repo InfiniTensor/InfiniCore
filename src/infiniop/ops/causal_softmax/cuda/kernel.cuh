@@ -1,11 +1,8 @@
-#ifndef __CAUSAL_SOFTMAX_KERNEL_H__
-#define __CAUSAL_SOFTMAX_KERNEL_H__
-
-#include "../../../devices/maca/maca_kernel_common.h"
-#include "../../../reduce/maca/reduce.h"
+﻿#ifndef __CAUSAL_SOFTMAX_KERNEL_CUH__
+#define __CAUSAL_SOFTMAX_KERNEL_CUH__
 
 template <unsigned int BLOCK_SIZE, typename Tdata, typename Tcompute>
-INFINIOP_MACA_KERNEL causalSoftmax(
+__device__ void causalSoftmaxKernel(
     Tdata *y_, const Tdata *x_,
     size_t batch, size_t height, size_t width,
     ptrdiff_t y_stride_b, ptrdiff_t y_stride_h,
@@ -18,7 +15,7 @@ INFINIOP_MACA_KERNEL causalSoftmax(
 
     // [Reduce] Find max value in each row and store in shared memory
     __shared__ Tdata max_;
-    Tdata max_0 = op::common_maca::reduce_op::max<BLOCK_SIZE, Tdata>(x, width - height + 1 + blockIdx.x);
+    Tdata max_0 = op::common_cuda::reduce_op::max<BLOCK_SIZE, Tdata>(x, width - height + 1 + blockIdx.x);
     if (threadIdx.x == 0) {
         max_ = max_0;
     }
@@ -32,11 +29,11 @@ INFINIOP_MACA_KERNEL causalSoftmax(
         //          2 | * * * ... * * * |
         //  height: 3  col_id->
         if (width + blockIdx.x >= threadIdx.x + height) {
-#ifdef ENABLE_MACA_API
-            y[col] = exp_(x[col] - max_);
-#else
-            y[col] = exp(x[col] - max_);
-#endif
+            if constexpr (std::is_same_v<Tdata, half>) {
+                y[col] = hexp(x[col] - max_);
+            } else {
+                y[col] = exp(x[col] - max_);
+            }
         } else {
             y[col] = Tdata(0);
         }
@@ -45,7 +42,7 @@ INFINIOP_MACA_KERNEL causalSoftmax(
 
     // [Reduce] Find the sum of each updated row and store in shared memory
     __shared__ Tcompute sum_;
-    Tcompute sum_0 = op::common_maca::reduce_op::sum<BLOCK_SIZE, Tdata, Tcompute>(y, width);
+    Tcompute sum_0 = op::common_cuda::reduce_op::sum<BLOCK_SIZE, Tdata, Tcompute>(y, width);
     if (threadIdx.x == 0) {
         sum_ = sum_0;
     }
@@ -57,4 +54,4 @@ INFINIOP_MACA_KERNEL causalSoftmax(
     }
 }
 
-#endif // __CAUSAL_SOFTMAX_KERNEL_H__
+#endif // __CAUSAL_SOFTMAX_KERNEL_CUH__

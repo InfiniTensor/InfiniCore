@@ -15,7 +15,10 @@ target("infiniop-cuda")
 
     set_policy("build.cuda.devlink", true)
     set_toolchains("cuda")
-    add_links("cublas", "cudnn")
+    add_links("cublas")
+    if has_config("cudnn") then
+        add_links("cudnn")
+    end
     add_cugencodes("native")
 
     if is_plat("windows") then
@@ -33,8 +36,10 @@ target("infiniop-cuda")
         add_cxxflags("-fPIC")
     end
 
+    add_cuflags("-Xcompiler=-Wno-error=deprecated-declarations")
+
     set_languages("cxx17")
-    add_files("../src/infiniop/devices/cuda/*.cu", "../src/infiniop/ops/*/cuda/*.cu")
+    add_files("../src/infiniop/devices/cuda/*.cu", "../src/infiniop/ops/*/cuda/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")
 target_end()
 
 target("infinirt-cuda")
@@ -87,5 +92,5 @@ target("infiniccl-cuda")
         end
     end
     set_languages("cxx17")
-    
+
 target_end()
