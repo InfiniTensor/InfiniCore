@@ -89,7 +89,7 @@ option_end()
 
 if has_config("metax-gpu") then
     add_defines("ENABLE_METAX_API")
-    includes("xmake/maca.lua")
+    includes("xmake/metax.lua")
 end
 
 -- 摩尔线程
