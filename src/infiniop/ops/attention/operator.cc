@@ -1,7 +1,11 @@
-#include "../../operator.h"
+#if defined(ENABLE_NINETOOTHED) && (defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API))
+#include "../../../../build/ninetoothed/scaled_dot_product_attention.h"
+#endif
+
 #include "../../../utils.h"
 #include "../../../utils/check.h"
 #include "../../handle.h"
+#include "../../operator.h"
 #include "../../tensor.h"
 #include "infiniop/ops/attention.h"
 #include "infiniop/ops/causal_softmax.h"
@@ -11,6 +15,7 @@
 #include <cmath>
 #include <cstdint>
 
+#if !defined(ENABLE_NINETOOTHED) || (!defined(ENABLE_NVIDIA_API) && !defined(ENABLE_ILUVATAR_API))
 struct InfiniopAttentionDescriptor {
     InfiniopDescriptor _super;
     infiniopRearrangeDescriptor_t rearrange_desc_k;
@@ -30,6 +35,32 @@ struct InfiniopAttentionDescriptor {
     size_t v_cache_offset;
     float qk_alpha;
 };
+#else
+struct InfiniopAttentionDescriptor {
+    InfiniopDescriptor _super;
+    size_t workspace_size;
+    uint64_t query_shape[4];
+    int64_t query_strides[4];
+    uint64_t key_shape[4];
+    int64_t key_strides[4];
+    uint64_t value_shape[4];
+    int64_t value_strides[4];
+    uint64_t present_key_shape[4];
+    int64_t present_key_strides[4];
+    uint64_t present_value_shape[4];
+    int64_t present_value_strides[4];
+    uint64_t present_key_slot_shape[4];
+    int64_t present_key_slot_strides[4];
+    uint64_t present_value_slot_shape[4];
+    int64_t present_value_slot_strides[4];
+    double scale;
+    uint64_t output_shape[4];
+    int64_t output_strides[4];
+    size_t present_key_slot_offset;
+    size_t present_value_slot_offset;
+    infiniDtype_t dtype;
+};
+#endif
 
 __C __export infiniStatus_t infiniopCreateAttentionDescriptor(infiniopHandle_t handle,
                                                               infiniopAttentionDescriptor_t *desc_ptr,
@@ -85,6 +116,7 @@ __C __export infiniStatus_t infiniopCreateAttentionDescriptor(infiniopHandle_t h
         return INFINI_STATUS_BAD_PARAM;
     }
 
+#if !defined(ENABLE_NINETOOTHED) || (!defined(ENABLE_NVIDIA_API) && !defined(ENABLE_ILUVATAR_API))
     // Rearrange k into k_cache
     infiniopTensorDescriptor_t dst_k_desc;
     CHECK_STATUS(infiniopCreateTensorDescriptor(&dst_k_desc, 3, k_desc->shape().data(), k_cache_desc->strides().data(), k_cache_desc->dtype()));
@@ -181,6 +213,7 @@ __C __export infiniStatus_t infiniopCreateAttentionDescriptor(infiniopHandle_t h
     size_t op_workspace_size = utils::align(std::max(std::max(matmul1_workspace_size, matmul2_workspace_size), softmax_workspace_size), alignment);
     size_t temp_tensors_size = attn_score_size + std::max(q_cont_size, att_val_size);
     size_t workspace_size = temp_tensors_size + op_workspace_size;
+#endif
 
     // k_cache_offset
     size_t k_cache_offset = 0;
@@ -194,6 +227,7 @@ __C __export infiniStatus_t infiniopCreateAttentionDescriptor(infiniopHandle_t h
         v_cache_offset = pos * v_cache_desc->getByteStrides()[1];
     }
 
+#if !defined(ENABLE_NINETOOTHED) || (!defined(ENABLE_NVIDIA_API) && !defined(ENABLE_ILUVATAR_API))
     // create attention descriptor
     *(InfiniopAttentionDescriptor **)desc_ptr = new InfiniopAttentionDescriptor{
         {handle->device, handle->device_id},
@@ -214,6 +248,31 @@ __C __export infiniStatus_t infiniopCreateAttentionDescriptor(infiniopHandle_t h
         v_cache_offset,
         1.f / std::sqrt(float(head_dim)),
     };
+#else
+    *(InfiniopAttentionDescriptor **)desc_ptr = new InfiniopAttentionDescriptor{
+        {handle->device, handle->device_id},
+        0,
+        {1, q_desc->shape()[0], q_desc->shape()[1], q_desc->shape()[2]},
+        {0, q_desc->strides()[0], q_desc->strides()[1], q_desc->strides()[2]},
+        {1, k_cache_desc->shape()[0], pos + k_desc->shape()[1], k_cache_desc->shape()[2]},
+        {0, k_cache_desc->strides()[0], k_cache_desc->strides()[1], k_cache_desc->strides()[2]},
+        {1, v_cache_desc->shape()[0], pos + v_desc->shape()[1], v_cache_desc->shape()[2]},
+        {0, v_cache_desc->strides()[0], v_cache_desc->strides()[1], v_cache_desc->strides()[2]},
+        {1, k_desc->shape()[0], k_desc->shape()[1], k_desc->shape()[2]},
+        {0, k_desc->strides()[0], k_desc->strides()[1], k_desc->strides()[2]},
+        {1, v_desc->shape()[0], v_desc->shape()[1], v_desc->shape()[2]},
+        {0, v_desc->strides()[0], v_desc->strides()[1], v_desc->strides()[2]},
+        {1, k_desc->shape()[0], k_desc->shape()[1], k_desc->shape()[2]},
+        {0, k_cache_desc->strides()[0], k_cache_desc->strides()[1], k_cache_desc->strides()[2]},
+        {1, v_desc->shape()[0], v_desc->shape()[1], v_desc->shape()[2]},
+        {0, v_cache_desc->strides()[0], v_cache_desc->strides()[1], v_cache_desc->strides()[2]},
+        static_cast<double>(1.0 / std::sqrt(head_dim)),
+        {1, out_desc->shape()[1], out_desc->shape()[0], out_desc->shape()[2]},
+        {0, out_desc->strides()[1], out_desc->strides()[0], out_desc->strides()[2]},
+        k_cache_offset,
+        v_cache_offset,
+        out_desc->dtype()};
+#endif
 
     return INFINI_STATUS_SUCCESS;
 }
@@ -234,6 +293,7 @@ __C __export infiniStatus_t infiniopAttention(infiniopAttentionDescriptor_t desc
                                               void *v_cache,
                                               void *stream) {
     auto desc = (InfiniopAttentionDescriptor *)desc_;
+#if !defined(ENABLE_NINETOOTHED) || (!defined(ENABLE_NVIDIA_API) && !defined(ENABLE_ILUVATAR_API))
     if (workspace_size_ < desc->workspace_size) {
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE; // STATUS_MEMORY_NOT_ALLOCATED
     }
@@ -270,12 +330,77 @@ __C __export infiniStatus_t infiniopAttention(infiniopAttentionDescriptor_t desc
                               att_val, att_score, v_cache, 1.0, 0.0, stream));
     // rearrange out
     CHECK_STATUS(infiniopRearrange(desc->rearrange_desc_out, out, att_val, stream));
+#else
+    const auto &query_shape{desc->query_shape};
+    const auto &query_strides{desc->query_strides};
+    const auto &key_shape{desc->key_shape};
+    const auto &key_strides{desc->key_strides};
+    const auto &value_shape{desc->value_shape};
+    const auto &value_strides{desc->value_strides};
+    const auto &present_key_shape{desc->present_key_shape};
+    const auto &present_key_strides{desc->present_key_strides};
+    const auto &present_value_shape{desc->present_value_shape};
+    const auto &present_value_strides{desc->present_value_strides};
+    const auto &present_key_slot_shape{desc->present_key_slot_shape};
+    const auto &present_key_slot_strides{desc->present_key_slot_strides};
+    const auto &present_value_slot_shape{desc->present_value_slot_shape};
+    const auto &present_value_slot_strides{desc->present_value_slot_strides};
+    const auto &scale_{desc->scale};
+    const auto &output_shape{desc->output_shape};
+    const auto &output_strides{desc->output_strides};
+    const auto &present_key_slot_offset{desc->present_key_slot_offset};
+    const auto &present_value_slot_offset{desc->present_value_slot_offset};
+    const auto &dtype{desc->dtype};
+
+    uint64_t empty_shape[4];
+    int64_t empty_strides[4];
+
+    NineToothedTensor query{const_cast<void *>(q), const_cast<uint64_t *>(query_shape), const_cast<int64_t *>(query_strides)};
+    NineToothedTensor key{const_cast<void *>(k_cache), const_cast<uint64_t *>(key_shape), const_cast<int64_t *>(key_strides)};
+    NineToothedTensor value{const_cast<void *>(v_cache), const_cast<uint64_t *>(value_shape), const_cast<int64_t *>(value_strides)};
+    NineToothedTensor present_key{const_cast<void *>(k), const_cast<uint64_t *>(present_key_shape), const_cast<int64_t *>(present_key_strides)};
+    NineToothedTensor present_value{const_cast<void *>(v), const_cast<uint64_t *>(present_value_shape), const_cast<int64_t *>(present_value_strides)};
+    NineToothedTensor present_key_slot{const_cast<void *>(static_cast<void *>(static_cast<char *>(k_cache) + present_key_slot_offset)), const_cast<uint64_t *>(present_key_slot_shape), const_cast<int64_t *>(present_key_slot_strides)};
+    NineToothedTensor present_value_slot{const_cast<void *>(static_cast<void *>(static_cast<char *>(v_cache) + present_value_slot_offset)), const_cast<uint64_t *>(present_value_slot_shape), const_cast<int64_t *>(present_value_slot_strides)};
+    NineToothedTensor attn_mask{nullptr, empty_shape, empty_strides};
+    NineToothedTensor is_causal{nullptr, nullptr, nullptr};
+    NineToothedTensor scale{const_cast<double *>(&scale_), empty_shape, empty_strides};
+    NineToothedTensor output{const_cast<void *>(out), const_cast<uint64_t *>(output_shape), const_cast<int64_t *>(output_strides)};
+    NineToothedTensor with_attn_mask{nullptr, nullptr, nullptr};
+    NineToothedTensor causal_variant{nullptr, nullptr, nullptr};
+
+    if (launch_scaled_dot_product_attention(stream,
+                                            query,
+                                            key,
+                                            value,
+                                            present_key,
+                                            present_value,
+                                            present_key_slot,
+                                            present_value_slot,
+                                            attn_mask,
+                                            is_causal,
+                                            scale,
+                                            output,
+                                            with_attn_mask,
+                                            causal_variant,
+                                            1,
+                                            output.shape[3],
+                                            1,
+                                            0,
+                                            2,
+                                            dtype,
+                                            32,
+                                            32)) {
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
+#endif
 
     return INFINI_STATUS_SUCCESS;
 }
 
 __C __export infiniStatus_t infiniopDestroyAttentionDescriptor(infiniopAttentionDescriptor_t desc_) {
     auto desc = (InfiniopAttentionDescriptor *)desc_;
+#if !defined(ENABLE_NINETOOTHED) || (!defined(ENABLE_NVIDIA_API) && !defined(ENABLE_ILUVATAR_API))
     if (desc->rearrange_desc_q) {
         CHECK_STATUS(infiniopDestroyRearrangeDescriptor(desc->rearrange_desc_q));
     }
@@ -285,6 +410,7 @@ __C __export infiniStatus_t infiniopDestroyAttentionDescriptor(infiniopAttention
     CHECK_STATUS(infiniopDestroyGemmDescriptor(desc->matmul_desc1));
     CHECK_STATUS(infiniopDestroyGemmDescriptor(desc->matmul_desc2));
     CHECK_STATUS(infiniopDestroyCausalSoftmaxDescriptor(desc->softmax_desc));
+#endif
     delete desc;
 
     return INFINI_STATUS_SUCCESS;
