@@ -264,6 +264,9 @@ target("infiniccl")
     if has_config("ascend-npu") then
         add_deps("infiniccl-ascend")
     end
+    if has_config("cambricon-mlu") then
+        add_deps("infiniccl-cambricon")
+    end
     if has_config("metax-gpu") then
         add_deps("infiniccl-metax")
     end
