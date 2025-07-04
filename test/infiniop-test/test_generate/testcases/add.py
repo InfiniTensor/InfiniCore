@@ -1,8 +1,6 @@
-from ast import List
 import numpy as np
 import gguf
 from typing import List
-from numpy.lib.stride_tricks import as_strided
 
 from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides, process_zero_stride_tensor
 
