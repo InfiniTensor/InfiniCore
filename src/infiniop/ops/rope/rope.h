@@ -78,7 +78,7 @@ public:
         const infiniDtype_t pos_type = pos_desc->dtype();
         CHECK_OR_RETURN(data_type == x_desc->dtype() && data_type == sin_desc->dtype() && data_type == cos_desc->dtype(),
                         INFINI_STATUS_BAD_TENSOR_DTYPE);
-        CHECK_DTYPE(data_type, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64);
+        CHECK_DTYPE(data_type, INFINI_DTYPE_F16, INFINI_DTYPE_BF16, INFINI_DTYPE_F32, INFINI_DTYPE_F64);
         CHECK_DTYPE_ANY_INT(pos_type);
 
         CHECK_OR_RETURN(y_desc->ndim() == 3
@@ -104,11 +104,7 @@ public:
         // Last dimension of x and y must be contiguous
         CHECK_OR_RETURN(y_desc->stride(2) == 1 && x_desc->stride(2) == 1, INFINI_STATUS_BAD_TENSOR_STRIDES);
         // sin table and cos table must be totally contiguous
-        CHECK_OR_RETURN(sin_desc->stride(1) == 1
-                            && cos_desc->stride(1) == 1
-                            && sin_desc->stride(0) == ptrdiff_t(table_dim)
-                            && cos_desc->stride(0) == ptrdiff_t(table_dim),
-                        INFINI_STATUS_BAD_TENSOR_STRIDES);
+        CHECK_OR_RETURN(sin_desc->isContiguous() && cos_desc->isContiguous(), INFINI_STATUS_BAD_TENSOR_STRIDES);
 
         return utils::Result<RoPEInfo>(RoPEInfo{
             data_type,

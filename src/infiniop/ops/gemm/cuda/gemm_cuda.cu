@@ -20,9 +20,7 @@ infiniStatus_t Descriptor::create(
     auto handle = reinterpret_cast<device::cuda::nvidia::Handle *>(handle_);
     auto dtype = c_desc->dtype();
 
-    if (dtype != INFINI_DTYPE_F16 && dtype != INFINI_DTYPE_F32) {
-        return INFINI_STATUS_BAD_TENSOR_DTYPE;
-    }
+    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_BF16);
 
     auto result = MatmulInfo::create(c_desc, a_desc, b_desc, MatrixLayout::COL_MAJOR);
     CHECK_RESULT(result);
@@ -45,17 +43,34 @@ infiniStatus_t Descriptor::calculate(
     void *stream) const {
 
     cudaDataType a_type, b_type, c_type;
+#ifdef ENABLE_ILUVATAR_CUDA_API
+    cudaDataType compute_type;
+#else
     cublasComputeType_t compute_type;
+#endif
 
     switch (_dtype) {
     case INFINI_DTYPE_F16:
         a_type = b_type = c_type = CUDA_R_16F;
+#ifdef ENABLE_ILUVATAR_CUDA_API
+        compute_type = CUDA_R_32F;
+#else
         compute_type = CUBLAS_COMPUTE_32F;
+#endif
         break;
-
+    case INFINI_DTYPE_BF16:
+        a_type = b_type = c_type = CUDA_R_16BF;
+#ifdef ENABLE_ILUVATAR_CUDA_API
+        compute_type = CUDA_R_32F;
+#else
+        compute_type = CUBLAS_COMPUTE_32F;
+#endif
+        break;
     case INFINI_DTYPE_F32:
         a_type = b_type = c_type = CUDA_R_32F;
-#ifdef ENABLE_SUGON_CUDA_API
+#if defined ENABLE_ILUVATAR_CUDA_API
+        compute_type = CUDA_R_32F;
+#elif defined ENABLE_SUGON_CUDA_API
         compute_type = CUBLAS_COMPUTE_32F;
 #else
         compute_type = CUBLAS_COMPUTE_32F_FAST_TF32;

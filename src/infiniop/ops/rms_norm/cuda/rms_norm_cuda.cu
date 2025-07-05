@@ -60,6 +60,10 @@ infiniStatus_t launchKernel(
         LAUNCH_KERNEL(half, half, float);
     } else if (atype == INFINI_DTYPE_F16 && wtype == INFINI_DTYPE_F32) {
         LAUNCH_KERNEL(half, float, float);
+    } else if (atype == INFINI_DTYPE_BF16 && wtype == INFINI_DTYPE_BF16) {
+        LAUNCH_KERNEL(__nv_bfloat16, __nv_bfloat16, float);
+    } else if (atype == INFINI_DTYPE_BF16 && wtype == INFINI_DTYPE_F32) {
+        LAUNCH_KERNEL(__nv_bfloat16, float, float);
     } else if (atype == INFINI_DTYPE_F32 && wtype == INFINI_DTYPE_F32) {
         LAUNCH_KERNEL(float, float, float);
     } else {
@@ -91,6 +95,8 @@ infiniStatus_t Descriptor::calculate(
         CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_1024>(batch_size, dim, y, _info.atype, stride_y, x, stride_x, w, _info.wtype, _info.epsilon, cuda_stream));
     } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_512) {
         CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_512>(batch_size, dim, y, _info.atype, stride_y, x, stride_x, w, _info.wtype, _info.epsilon, cuda_stream));
+    } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_4096) {
+        CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_4096>(batch_size, dim, y, _info.atype, stride_y, x, stride_x, w, _info.wtype, _info.epsilon, cuda_stream));
     } else {
         return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
     }

@@ -6,6 +6,7 @@
 
 // Posible maximum number of threads per block for CUDA architectures
 // Used for picking correct kernel launch configuration
+#define CUDA_BLOCK_SIZE_4096 4096
 #define CUDA_BLOCK_SIZE_1024 1024
 #define CUDA_BLOCK_SIZE_512 512
 
@@ -51,10 +52,12 @@ exp_(const float val) {
     return expf(val);
 }
 
+#ifndef ENABLE_ILUVATAR_CUDA_API
 __forceinline__ __device__ long double
 exp_(const long double val) {
     return expl(val);
 }
+#endif
 
 __forceinline__ __device__ double
 exp_(const double val) {
@@ -63,6 +66,11 @@ exp_(const double val) {
 
 __forceinline__ __device__ __half
 exp_(const __half x) {
+    return hexp(x);
+}
+
+__forceinline__ __device__ __nv_bfloat16
+exp_(const __nv_bfloat16 x) {
     return hexp(x);
 }
 #endif

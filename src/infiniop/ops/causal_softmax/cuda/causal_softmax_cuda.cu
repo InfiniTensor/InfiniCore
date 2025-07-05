@@ -38,6 +38,12 @@ infiniStatus_t launchKernel(void *y, const void *x, infiniDtype_t dtype,
                                               batch_size, seq_len, total_seq_len,
                                               y_stride_b, y_stride_i,
                                               x_stride_b, x_stride_i);
+    } else if (dtype == INFINI_DTYPE_BF16) {
+        causalSoftmax<BLOCK_SIZE, __nv_bfloat16, float>
+            <<<grid, BLOCK_SIZE, 0, stream>>>((__nv_bfloat16 *)y, (const __nv_bfloat16 *)x,
+                                              batch_size, seq_len, total_seq_len,
+                                              y_stride_b, y_stride_i,
+                                              x_stride_b, x_stride_i);
     } else if (dtype == INFINI_DTYPE_F32) {
         causalSoftmax<BLOCK_SIZE, float, float>
             <<<grid, BLOCK_SIZE, 0, stream>>>((float *)y, (const float *)x,
@@ -61,6 +67,10 @@ infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size,
             _info.y_stride_b, _info.y_stride_i, _info.x_stride_b, _info.x_stride_i, stream));
     } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_512) {
         CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_512>(
+            y, x, _info.dtype, _info.batch_size, _info.seq_len, _info.total_seq_len,
+            _info.y_stride_b, _info.y_stride_i, _info.x_stride_b, _info.x_stride_i, stream));
+    } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_4096) {
+        CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_4096>(
             y, x, _info.dtype, _info.batch_size, _info.seq_len, _info.total_seq_len,
             _info.y_stride_b, _info.y_stride_i, _info.x_stride_b, _info.x_stride_i, stream));
     } else {
