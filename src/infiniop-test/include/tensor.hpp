@@ -14,10 +14,10 @@ inline infiniDtype_t ggmlTypeToInfiniType(GGML_TYPE type) {
         return INFINI_DTYPE_I32;
     case GGML_TYPE_I64:
         return INFINI_DTYPE_I64;
-    case GGML_TYPE_F16:
-        return INFINI_DTYPE_F16;
     case GGML_TYPE_BF16:
         return INFINI_DTYPE_BF16;
+    case GGML_TYPE_F16:
+        return INFINI_DTYPE_F16;
     case GGML_TYPE_F32:
         return INFINI_DTYPE_F32;
     case GGML_TYPE_F64:

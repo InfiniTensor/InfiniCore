@@ -262,6 +262,8 @@ void Tensor::debug() const {
     auto tensor = to(INFINI_DEVICE_CPU, 0);
     std::cout << "Tensor: " << tensor->info() << std::endl;
     switch (_ggml_type) {
+    case GGML_TYPE_BF16:
+        printData((bf16_t *)(tensor->data()), _shape, _strides, 0);
     case GGML_TYPE_F16:
         printData((fp16_t *)(tensor->data()), _shape, _strides, 0);
         break;
