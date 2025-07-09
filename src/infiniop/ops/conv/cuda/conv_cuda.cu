@@ -108,6 +108,8 @@ private:
             cudnn_data_type = device::cuda::getCudnnDtype(data_type);
         } else if (data_type == INFINI_DTYPE_F32) {
             cudnn_data_type = device::cuda::getCudnnDtype(data_type);
+        } else if (data_type == INFINI_DTYPE_BF16) {
+            cudnn_data_type = device::cuda::getCudnnDtype(data_type);
         } else {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
@@ -349,9 +351,7 @@ infiniStatus_t Descriptor::create(
     auto handle = reinterpret_cast<device::cuda::nvidia::Handle *>(handle_);
     auto dtype = y_desc->dtype();
 
-    if (dtype != INFINI_DTYPE_F16 && dtype != INFINI_DTYPE_F32) {
-        return INFINI_STATUS_BAD_TENSOR_DTYPE;
-    }
+    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_BF16);
 
     auto result = ConvInfo::create(handle_, y_desc, x_desc, w_desc, b_desc,
                                    pads, strides, dilations, n);

@@ -49,7 +49,7 @@ infiniStatus_t Descriptor::create(
     auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
     auto dtype = y_desc->dtype();
 
-    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32);
+    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_BF16);
 
     auto result = ConvInfo::create(handle_, y_desc, x_desc, w_desc, b_desc,
                                    pads, strides, dilations, n);
@@ -62,7 +62,7 @@ infiniStatus_t Descriptor::create(
         WorkSpaceSize += calculatePaddedInputSize(info) * infiniSizeOf(dtype);
     }
 
-    if (dtype == INFINI_DTYPE_F16) {
+    if (dtype == INFINI_DTYPE_F16 || dtype == INFINI_DTYPE_BF16) {
         WorkSpaceSize += calculateOutputSize(info) * sizeof(float);
     }
 
@@ -154,7 +154,7 @@ void _applyConv(
             const auto curr_x_index = x_index + i * stride + k * dilation;
             const auto curr_w_index = w_index + k;
             if (ndim == info.ndim() + 1) {
-                if constexpr (std::is_same<Xdata, fp16_t>::value) {
+                if constexpr (std::is_same<Xdata, fp16_t>::value || std::is_same<Xdata, bf16_t>::value) {
                     y[y_index] += utils::cast<float>(x[curr_x_index]) * utils::cast<float>(w[curr_w_index]);
                 } else {
                     y[y_index] += x[curr_x_index] * w[curr_w_index];
@@ -207,10 +207,11 @@ void _conv_cpu(
         if constexpr (std::is_same<Xdata, fp16_t>::value) {
             fp16_t zero_val = utils::cast<fp16_t>(0.0f);
             std::fill(padded_x, padded_x + calculatePaddedInputSize(info), zero_val);
+        } else if constexpr (std::is_same<Xdata, bf16_t>::value) {
+            bf16_t zero_val = utils::cast<bf16_t>(0.0f);
+            std::fill(padded_x, padded_x + calculatePaddedInputSize(info), zero_val);
         } else if constexpr (std::is_same<Xdata, float>::value) {
             std::fill(padded_x, padded_x + calculatePaddedInputSize(info), 0.0f);
-        } else {
-            std::fill(padded_x, padded_x + calculatePaddedInputSize(info), static_cast<Xdata>(0));
         }
         fillPaddedInput(info, x, info.getPaddedShape(), padded_x, 0, 0, 0);
 
@@ -296,6 +297,46 @@ infiniStatus_t conv_cpu<fp16_t>(
     return INFINI_STATUS_SUCCESS;
 }
 
+template <>
+infiniStatus_t conv_cpu<bf16_t>(
+    const ConvInfo &info,
+    void *workspace,
+    size_t workspace_size,
+    void *y,
+    const void *x,
+    const void *w,
+    const void *bias) {
+    auto y_float = reinterpret_cast<float *>(workspace);
+    auto x_half = reinterpret_cast<const bf16_t *>(x);
+    auto w_half = reinterpret_cast<const bf16_t *>(w);
+    auto output_size = calculateOutputSize(info);
+    std::fill(y_float, y_float + output_size, 0.0f);
+
+    void *conv_workspace = y_float + output_size;
+    size_t conv_workspace_size = workspace_size - output_size * sizeof(float);
+
+    _conv_cpu<bf16_t, float>(info, conv_workspace, conv_workspace_size, y_float, x_half, w_half);
+
+    auto y_half = reinterpret_cast<bf16_t *>(y);
+    if (bias != nullptr) {
+        auto bias_half = reinterpret_cast<const bf16_t *>(bias);
+#pragma omp parallel for
+        for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(output_size); ++i) {
+            size_t channel_idx = (i / info.spatial_sizes()) % info.out_channels();
+            float bias_value = utils::cast<float>(bias_half[channel_idx]);
+            y_float[i] += bias_value;
+            y_half[i] = utils::cast<bf16_t>(y_float[i]);
+        }
+    } else {
+#pragma omp parallel for
+        for (ptrdiff_t i = 0; i < static_cast<ptrdiff_t>(output_size); ++i) {
+            y_half[i] = utils::cast<bf16_t>(y_float[i]);
+        }
+    }
+
+    return INFINI_STATUS_SUCCESS;
+}
+
 infiniStatus_t Descriptor::calculate(
     void *workspace,
     size_t workspace_size,
@@ -312,6 +353,8 @@ infiniStatus_t Descriptor::calculate(
         return conv_cpu<fp16_t>(_info, workspace, workspace_size, y, x, w, bias);
     case INFINI_DTYPE_F32:
         return conv_cpu<float>(_info, workspace, workspace_size, y, x, w, bias);
+    case INFINI_DTYPE_BF16:
+        return conv_cpu<bf16_t>(_info, workspace, workspace_size, y, x, w, bias);
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }

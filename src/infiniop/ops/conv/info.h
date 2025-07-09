@@ -164,7 +164,6 @@ inline utils::Result<ConvInfo> ConvInfo::create(
     if (dtype != x_desc->dtype() || dtype != w_desc->dtype()) {
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
-    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32);
 
     size_t ndim = n;
     size_t new_dims = n + 2;
