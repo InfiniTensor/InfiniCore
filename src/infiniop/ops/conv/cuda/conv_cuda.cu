@@ -245,7 +245,7 @@ private:
             algo = perf_results[i].algo;
             break;
         }
-        
+
         return INFINI_STATUS_SUCCESS;
     }
 
