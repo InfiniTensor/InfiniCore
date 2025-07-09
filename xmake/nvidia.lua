@@ -47,7 +47,11 @@ target("infiniop-nvidia")
     add_cuflags("-Xcompiler=-Wno-error=deprecated-declarations")
 
     set_languages("cxx17")
-    add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu", "../build/ninetoothed/*.c")
+    add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")
+
+    if has_config("ninetoothed") then
+        add_files("../build/ninetoothed/*.c")
+    end
 target_end()
 
 target("infinirt-nvidia")
