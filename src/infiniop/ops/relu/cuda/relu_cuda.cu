@@ -19,7 +19,7 @@ infiniStatus_t Descriptor::create(
     const auto &y_shape = out_desc->shape();
     const auto &x_shape = x_desc->shape();
 
-    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64);
+    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64, INFINI_DTYPE_BF16);
 
     CHECK_SAME_SHAPE(y_shape, x_shape);
 
@@ -62,6 +62,7 @@ infiniStatus_t Descriptor::calculate(
     case INFINI_DTYPE_F16:
     case INFINI_DTYPE_F32:
     case INFINI_DTYPE_F64:
+    case INFINI_DTYPE_BF16:
         if (launch_relu(stream, x, y, ndim, _dtype, block_size)) {
             return INFINI_STATUS_INTERNAL_ERROR;
         }
