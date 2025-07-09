@@ -1,9 +1,13 @@
 ﻿#include "../../../devices/cuda/cuda_kernel_common.cuh"
 #include "infinicore.h"
+
+#ifdef ENABLE_INFINI_CUB
+#include "../../../../infinicub/include/cub_algorithms_nvidia.cuh"
+#else
 #include <cub/device/device_radix_sort.cuh>
 #include <cub/device/device_reduce.cuh>
 #include <cub/device/device_scan.cuh>
-
+#endif
 namespace op::random_sample::cuda {
 
 // ↓↓↓ 重新封装 cub api，减少模板参数，方便调用
@@ -16,10 +20,18 @@ static cudaError argMax_(
     void *workspace_ptr,
     size_t &workspace_len,
     cudaStream_t stream) {
+
+#ifdef ENABLE_INFINI_CUB
+    return infini_cub::nvidai::DeviceReduce::ArgMax(
+        workspace_ptr, workspace_len,
+        logits, kv_pair, n,
+        stream);
+#else
     return cub::DeviceReduce::ArgMax(
         workspace_ptr, workspace_len,
         logits, kv_pair, n,
         stream);
+#endif
 }
 
 template <class Tval, class Tidx>
@@ -29,6 +41,15 @@ static cudaError radixSort(
     const Tidx *val_in, Tidx *val_out,
     int n,
     cudaStream_t stream) {
+
+#ifdef ENABLE_INFINI_CUB
+    return infini_cub::nvidai::DeviceRadixSort::SortPairsDescending(
+        workspace_ptr, workspace_len,
+        key_in, key_out,
+        val_in, val_out,
+        n,
+        stream);
+#else
     return cub::DeviceRadixSort::SortPairsDescending(
         workspace_ptr, workspace_len,
         key_in, key_out,
@@ -36,6 +57,7 @@ static cudaError radixSort(
         n,
         0, sizeof(Tval) * 8,
         stream);
+#endif
 }
 
 template <class T>
@@ -43,10 +65,18 @@ static cudaError inclusiveSum(
     void *workspace_ptr, size_t &workspace_len,
     T *data, int n,
     cudaStream_t stream) {
+
+#ifdef ENABLE_INFINI_CUB
+    return infini_cub::nvidai::DeviceReduce::InclusiveSum(
+        workspace_ptr, workspace_len,
+        data, n,
+        stream);
+#else
     return cub::DeviceScan::InclusiveSum(
         workspace_ptr, workspace_len,
         data, data, n,
         stream);
+#endif
 }
 
 // ↑↑↑ 重新封装 cub api，减少模板参数，方便调用

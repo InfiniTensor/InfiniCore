@@ -18,6 +18,13 @@ if is_plat("windows") then
     add_cxflags("/utf-8", {force = true})
 end
 
+-- infinicub
+option("prebuild")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Enable or disable cub package")
+option_end()
+
 -- CPU
 option("cpu")
     set_default(true)

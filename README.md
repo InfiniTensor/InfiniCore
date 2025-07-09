@@ -51,7 +51,7 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
 | `--sugon-dcu=[y\|n]`     | 是否编译曙光 DCU 接口实现         | n
 | `--kunlun-xpu=[y\|n]`    | 是否编译昆仑 XPU 接口实现         | n
 | `--ccl=[y\|n]`           | 是否编译 InfiniCCL 通信库接口实现 | n
-
+| `--prebuild=[y\|n]`      | 是否提前编译cub包，以减少编译耗时  | n
 ### 手动安装
 
 1. 项目配置
@@ -75,8 +75,9 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
      # 英伟达
      # 可以指定 CUDA 路径， 一般环境变量为 `CUDA_HOME` 或者 `CUDA_ROOT`
      # window系统：--cuda="%CUDA_HOME%"
-     # linux系统：--cuda=$CUDA_HOME
-     xmake f --nv-gpu=true --cuda=$CUDA_HOME -cv
+     # linux系统 ：--cuda=$CUDA_HOME
+     # 如果提前编译cub包，要将 prebuild 设置为 true
+     xmake f --nv-gpu=true --cuda=$CUDA_HOME --prebuild=false -cv
 
      # 寒武纪
      xmake f --cambricon-mlu=true -cv
