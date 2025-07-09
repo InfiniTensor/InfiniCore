@@ -33,6 +33,13 @@ struct SumOp<half> {
     }
 };
 
+template <>
+struct SumOp<__nv_bfloat16> {
+    __device__ __forceinline__ __nv_bfloat16 operator()(const __nv_bfloat16 &a, const __nv_bfloat16 &b) const {
+        return __hadd(a, b);
+    }
+};
+
 template <typename T>
 struct MaxOp {
     __device__ __forceinline__ T operator()(const T &a, const T &b) const {
@@ -43,6 +50,13 @@ struct MaxOp {
 template <>
 struct MaxOp<half> {
     __device__ __forceinline__ half operator()(const half &a, const half &b) const {
+        return __hmax(a, b);
+    }
+};
+
+template <>
+struct MaxOp<__nv_bfloat16> {
+    __device__ __forceinline__ __nv_bfloat16 operator()(const __nv_bfloat16 &a, const __nv_bfloat16 &b) const {
         return __hmax(a, b);
     }
 };

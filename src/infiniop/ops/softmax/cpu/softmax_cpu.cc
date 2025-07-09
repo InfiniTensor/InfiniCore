@@ -18,7 +18,7 @@ infiniStatus_t Descriptor::create(
     const auto &x_shape = x->shape();
     const auto &y_shape = y->shape();
 
-    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32);
+    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_BF16);
 
     CHECK_SAME_SHAPE(y_shape, x_shape);
 
@@ -83,6 +83,9 @@ infiniStatus_t Descriptor::calculate(
         return INFINI_STATUS_SUCCESS;
     case INFINI_DTYPE_F32:
         softmax_cpu<float>(_info, x, y, _info.axis);
+        return INFINI_STATUS_SUCCESS;
+    case INFINI_DTYPE_BF16:
+        softmax_cpu<bf16_t>(_info, x, y, _info.axis);
         return INFINI_STATUS_SUCCESS;
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;

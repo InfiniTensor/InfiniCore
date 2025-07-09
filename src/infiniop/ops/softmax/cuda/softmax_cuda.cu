@@ -23,7 +23,7 @@ infiniStatus_t Descriptor::create(
     auto result = SoftmaxInfo::create(y, x, axis);
     CHECK_RESULT(result);
     CHECK_SAME_SHAPE(y->shape(), x->shape());
-    CHECK_DTYPE(y->dtype(), x->dtype(), INFINI_DTYPE_F16, INFINI_DTYPE_F32);
+    CHECK_DTYPE(y->dtype(), x->dtype(), INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_BF16);
     *desc_ptr = new Descriptor(
         dtype,
         result.take(),
@@ -45,6 +45,8 @@ infiniStatus_t Descriptor::calculate(
         return softmax_dispatch<half>(_info, y, x, stream_);
     case INFINI_DTYPE_F32:
         return softmax_dispatch<float>(_info, y, x, stream_);
+    case INFINI_DTYPE_BF16:
+        return softmax_dispatch<__nv_bfloat16>(_info, y, x, stream_);
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
