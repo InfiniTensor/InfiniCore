@@ -14,6 +14,9 @@
 #ifdef ENABLE_ASCEND_API
 #include "ascend/causal_softmax_ascend.h"
 #endif
+#ifdef ENABLE_KUNLUN_API
+#include "kunlun/causal_softmax_kunlun.h"
+#endif
 
 __C infiniStatus_t infiniopCreateCausalSoftmaxDescriptor(
     infiniopHandle_t handle,
@@ -38,6 +41,9 @@ __C infiniStatus_t infiniopCreateCausalSoftmaxDescriptor(
 #endif
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, maca)
+#endif
+#ifdef ENABLE_KUNLUN_API
+        CREATE(INFINI_DEVICE_KUNLUN, kunlun)
 #endif
 #ifdef ENABLE_CAMBRICON_MLU
     case DevCambriconMlu: {
@@ -75,6 +81,9 @@ __C infiniStatus_t infiniopGetCausalSoftmaxWorkspaceSize(infiniopCausalSoftmaxDe
 #endif
 #ifdef ENABLE_CUDA_API
         GET(INFINI_DEVICE_NVIDIA, cuda)
+#endif
+#ifdef ENABLE_KUNLUN_API
+        GET(INFINI_DEVICE_KUNLUN, kunlun)
 #endif
 #ifdef ENABLE_CAMBRICON_MLU
     case DevCambriconMlu: {
@@ -125,6 +134,9 @@ __C infiniStatus_t infiniopCausalSoftmax(
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, maca)
 #endif
+#ifdef ENABLE_KUNLUN_API
+        CALCULATE(INFINI_DEVICE_KUNLUN, kunlun)
+#endif
 #ifdef ENABLE_CAMBRICON_MLU
     case DevCambriconMlu: {
         return bangCausalSoftmax((CausalSoftmaxBangDescriptor_t)desc, workspace, workspace_size, data, stream);
@@ -164,6 +176,9 @@ __C infiniStatus_t infiniopDestroyCausalSoftmaxDescriptor(infiniopCausalSoftmaxD
 #endif
 #ifdef ENABLE_METAX_API
         DESTROY(INFINI_DEVICE_METAX, maca)
+#endif
+#ifdef ENABLE_KUNLUN_API
+        DESTROY(INFINI_DEVICE_KUNLUN, kunlun)
 #endif
 #ifdef ENABLE_CAMBRICON_MLU
     case DevCambriconMlu: {
