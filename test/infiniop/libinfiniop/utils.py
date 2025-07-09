@@ -334,6 +334,8 @@ def debug(actual, desired, atol=0, rtol=1e-2, equal_nan=False, verbose=True):
 def filter_tensor_dtypes_by_device(device, tensor_dtypes):
     if device in (InfiniDeviceEnum.CPU, InfiniDeviceEnum.NVIDIA):
         return tensor_dtypes
+    elif device == InfiniDeviceEnum.KUNLUN:
+        return [dt for dt in tensor_dtypes if (dt != InfiniDtype.F16 and dt != InfiniDtype.BF16)]
     else:
         # 过滤掉 torch.bfloat16
         return [dt for dt in tensor_dtypes if dt != torch.bfloat16]
