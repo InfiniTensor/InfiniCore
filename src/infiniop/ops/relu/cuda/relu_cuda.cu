@@ -1,3 +1,5 @@
+#ifdef ENABLE_NINETOOTHED
+
 #include "../../../../../build/ninetoothed/relu.h"
 #include "../../../devices/cuda/cuda_common.cuh"
 #include "relu_cuda.cuh"
@@ -74,3 +76,5 @@ infiniStatus_t Descriptor::calculate(
     return INFINI_STATUS_SUCCESS;
 }
 } // namespace op::relu::cuda
+
+#endif

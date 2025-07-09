@@ -39,7 +39,11 @@ target("infiniop-cuda")
     end
 
     set_languages("cxx17")
-    add_files("../src/infiniop/devices/cuda/*.cu", "../src/infiniop/ops/*/cuda/*.cu", "../build/ninetoothed/*.c")
+    add_files("../src/infiniop/devices/cuda/*.cu", "../src/infiniop/ops/*/cuda/*.cu")
+
+    if has_config("ninetoothed") then
+        add_files("../build/ninetoothed/*.c")
+    end
 target_end()
 
 target("infinirt-cuda")
