@@ -21,6 +21,7 @@ target("infiniop-nvidia")
         local nvcc = find_tool("nvcc")
         if nvcc ~= nil then
             target:add("linkdirs", path.directory(path.directory(nvcc.program)) .. "/lib64/stubs")
+            target:add("links", "cuda")
         end
     end)
 
