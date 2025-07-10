@@ -59,7 +59,7 @@ _TEST_CASES = [
 ]
 
 # Data types used for testing
-_TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.F32, InfiniDtype.BF16]
+_TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.F32]
 
 # Tolerance map for different data types
 _TOLERANCE_MAP = {

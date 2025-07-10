@@ -14,6 +14,9 @@
 #ifdef ENABLE_METAX_API
 #include "maca/swiglu_maca.h"
 #endif
+#ifdef ENABLE_CAMBRICON_API
+#include "bang/swiglu_bang.h"
+#endif
 #ifdef ENABLE_ASCEND_API
 #include "ascend/swiglu_ascend.h"
 #endif
@@ -48,22 +51,11 @@ __C infiniStatus_t infiniopCreateSwiGLUDescriptor(
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, maca);
 #endif
-#ifdef ENABLE_CAMBRICON_MLU
-    case DevCambriconMlu: {
-        return bangCreateSwiGLUDescriptor((BangHandle_t)handle,
-                                          (SwiGLUBangDescriptor_t *)desc_ptr,
-                                          c_desc, a_desc, b_desc);
-    }
+#ifdef ENABLE_CAMBRICON_API
+        CREATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
 #ifdef ENABLE_ASCEND_API
         CREATE(INFINI_DEVICE_ASCEND, ascend);
-#endif
-#ifdef ENABLE_METAX_GPU
-    case DevMetaxGpu: {
-        return macaCreateSwiGLUDescriptor((MacaHandle_t)handle,
-                                          (SwiGLUMacaDescriptor_t *)desc_ptr,
-                                          c_desc, a_desc, b_desc);
-    }
 #endif
 #ifdef ENABLE_MTHREADS_GPU
     case DevMthreadsGpu:
@@ -98,18 +90,11 @@ __C infiniStatus_t infiniopGetSwiGLUWorkspaceSize(infiniopSwiGLUDescriptor_t des
 #ifdef ENABLE_METAX_API
         GET(INFINI_DEVICE_METAX, maca);
 #endif
-#ifdef ENABLE_CAMBRICON_MLU
-    case DevCambriconMlu: {
-        return bangGetSwiGLUWorkspaceSize((SwiGLUBangDescriptor_t)desc, size);
-    }
+#ifdef ENABLE_CAMBRICON_API
+        GET(INFINI_DEVICE_CAMBRICON, bang)
 #endif
 #ifdef ENABLE_ASCEND_API
         GET(INFINI_DEVICE_ASCEND, ascend)
-#endif
-#ifdef ENABLE_METAX_GPU
-    case DevMetaxGpu: {
-        return macaGetSwiGLUWorkspaceSize((SwiGLUMacaDescriptor_t)desc, size);
-    }
 #endif
 #ifdef ENABLE_MTHREADS_GPU
     case DevMthreadsGpu: {
@@ -151,17 +136,11 @@ __C infiniStatus_t infiniopSwiGLU(
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, maca);
 #endif
-#ifdef ENABLE_CAMBRICON_MLU
-    case DevCambriconMlu: {
-        return bangSwiGLU((SwiGLUBangDescriptor_t)desc, c, a, b, stream);
-    }
+#ifdef ENABLE_CAMBRICON_API
+        CALCULATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
 #ifdef ENABLE_ASCEND_API
         CALCULATE(INFINI_DEVICE_ASCEND, ascend);
-#endif
-#ifdef ENABLE_METAX_GPU
-    case DevMetaxGpu:
-        return macaSwiGLU((SwiGLUMacaDescriptor_t)desc, c, a, b, stream);
 #endif
 #ifdef ENABLE_MTHREADS_GPU
     case DevMthreadsGpu:
@@ -197,17 +176,11 @@ infiniopDestroySwiGLUDescriptor(infiniopSwiGLUDescriptor_t desc) {
 #ifdef ENABLE_METAX_API
         DELETE(INFINI_DEVICE_METAX, maca);
 #endif
-#ifdef ENABLE_CAMBRICON_MLU
-    case DevCambriconMlu: {
-        return bangDestroySwiGLUDescriptor((SwiGLUBangDescriptor_t)desc);
-    }
+#ifdef ENABLE_CAMBRICON_API
+        DELETE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
 #ifdef ENABLE_ASCEND_API
         DELETE(INFINI_DEVICE_ASCEND, ascend)
-#endif
-#ifdef ENABLE_METAX_GPU
-    case DevMetaxGpu:
-        return macaDestroySwiGLUDescriptor((SwiGLUMacaDescriptor_t)desc);
 #endif
 #ifdef ENABLE_MTHREADS_GPU
     case DevMthreadsGpu:
