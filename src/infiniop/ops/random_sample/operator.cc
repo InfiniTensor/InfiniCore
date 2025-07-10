@@ -14,6 +14,9 @@
 #ifdef ENABLE_ASCEND_API
 #include "ascend/random_sample_aclnn.h"
 #endif
+#ifdef ENABLE_MOORE_API
+#include "musa/random_sample_musa.h"
+#endif
 
 __C infiniStatus_t
 infiniopCreateRandomSampleDescriptor(
@@ -43,6 +46,9 @@ infiniopCreateRandomSampleDescriptor(
 #endif
 #ifdef ENABLE_ASCEND_API
         CREATE(INFINI_DEVICE_ASCEND, ascend);
+#endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, musa);
 #endif
 
     default:
@@ -76,6 +82,9 @@ __C infiniStatus_t infiniopGetRandomSampleWorkspaceSize(
 #endif
 #ifdef ENABLE_ASCEND_API
         GET(INFINI_DEVICE_ASCEND, ascend);
+#endif
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, musa);
 #endif
 
     default:
@@ -120,6 +129,9 @@ __C infiniStatus_t infiniopRandomSample(
 #ifdef ENABLE_ASCEND_API
         CALCULATE(INFINI_DEVICE_ASCEND, ascend);
 #endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, musa);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -149,6 +161,9 @@ __C infiniStatus_t infiniopDestroyRandomSampleDescriptor(
 #endif
 #ifdef ENABLE_ASCEND_API
         DELETE(INFINI_DEVICE_ASCEND, ascend);
+#endif
+#ifdef ENABLE_MOORE_API
+        DELETE(INFINI_DEVICE_MOORE, musa);
 #endif
 
     default:
