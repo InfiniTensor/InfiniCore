@@ -11,7 +11,7 @@
 
 #define CHECK_BANG(API) CHECK_INTERNAL(API, CNNL_STATUS_SUCCESS)
 
-#define NRAM_MAX_SIZE 1024 * 480
+#define NRAM_MAX_SIZE 1024 * 240
 constexpr size_t ALIGN_SIZE = 128;
 
 namespace device::bang {
