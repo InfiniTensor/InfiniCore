@@ -10,7 +10,7 @@ public:
     static constexpr size_t num_inputs = 2;
     template <typename T>
     __mlu_device__ void operator()(T *out, const T *up, const T *gate, size_t num_elements) const {
-        if constexpr (std::is_same_v<T, half>) {
+        if constexpr (std::is_same_v<T, half> || std::is_same_v<T, bfloat16_t>) {
             __bang_active_sigmoid(out, gate, num_elements);
             __bang_mul(out, out, gate, num_elements);
             __bang_mul(out, out, up, num_elements);
@@ -31,6 +31,7 @@ public:
 LAUNCH_ELEMENTWISE_KERNEL_IMPL(SwiGLU, SwiGLUOp)
 
 LAUNCH_ELEMENTWISE_KERNEL_INSTANTIATE(SwiGLU, half)
+LAUNCH_ELEMENTWISE_KERNEL_INSTANTIATE(SwiGLU, bfloat16_t)
 LAUNCH_ELEMENTWISE_KERNEL_INSTANTIATE(SwiGLU, float)
 
 #endif // __SWIGLU_BANG_INTERNAL_H__

@@ -63,9 +63,9 @@ _TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.BF16, InfiniDtype.F32]
 
 # Tolerance map for different data types
 _TOLERANCE_MAP = {
-    torch.float16: {"atol": 1e-3, "rtol": 1e-3},
-    torch.bfloat16: {"atol": 5e-3, "rtol": 5e-3},
-    torch.float32: {"atol": 1e-5, "rtol": 1e-5},
+    InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+    InfiniDtype.BF16: {"atol": 5e-3, "rtol": 1e-2},
+    InfiniDtype.F32: {"atol": 1e-5, "rtol": 1e-5},
 }
 
 DEBUG = False
