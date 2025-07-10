@@ -91,6 +91,16 @@ int checkData(const void *actual, const void *expected, infiniDtype_t dtype, siz
 void *testAllReduceThread(void *arg) {
     ThreadArgs *args = (ThreadArgs *)arg;
     *(args->result) = 1;
+
+    // 打印设备类型信息用于调试
+    // std::cerr << "[DEBUG] args->device_type = " << args->device_type << std::endl;
+    // if (args->comm != nullptr) {
+    //     std::cerr << "[DEBUG] args->comm->device_type = " << args->comm->device_type << std::endl;
+    // } else {
+    //     std::cerr << "[ERROR] args->comm is nullptr!" << std::endl;
+    //     return nullptr;
+    // }
+
     TEST_INFINI_THREAD(infinirtSetDevice(args->device_type, args->device_id));
     infinirtStream_t stream;
     TEST_INFINI_THREAD(infinirtStreamCreate(&stream));
@@ -99,6 +109,10 @@ void *testAllReduceThread(void *arg) {
     void *buf;
     TEST_INFINI_THREAD(infinirtMalloc(&buf, args->count * infiniSizeOf(args->dtype)));
     TEST_INFINI_THREAD(infinirtMemcpy(buf, args->data, args->count * infiniSizeOf(args->dtype), INFINIRT_MEMCPY_H2D));
+
+    //  // 再次确认通信器设备类型
+    //  std::cerr << "[INFO] Before infinicclAllReduce: comm->device_type = " << args->comm->device_type << std::endl;
+
     TEST_INFINI_THREAD(infinicclAllReduce(buf, buf, args->count, args->dtype, INFINICCL_SUM, args->comm, stream));
     TEST_INFINI_THREAD(infinirtDeviceSynchronize());
     TEST_INFINI_THREAD(infinirtMemcpy(output, buf, args->count * infiniSizeOf(args->dtype), INFINIRT_MEMCPY_D2H));
