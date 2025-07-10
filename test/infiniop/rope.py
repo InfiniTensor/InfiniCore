@@ -106,7 +106,19 @@ def sin_cos_table(pos, dim, torch_device, theta, dtype):
         torch_device
     )
     angles = torch.outer(pos, freqs)
-    return torch.sin(angles).to(dtype), torch.cos(angles).to(dtype)
+
+    sin_table = torch.sin(angles).to(dtype)
+    cos_table = torch.cos(angles).to(dtype)
+
+    # Issue: torch_musa's implementation of `torch.sin` and `torch.cos` modifies the output tensor's stride
+    #        when input shape is (1, 64) and stride is (64, 1). The resulting stride becomes (1, 1), which
+    #        breaks downstream tests or operations relying on the original stride layout.
+    # Workaround: Restore the original shape and stride using `.clone().as_strided(...)` after computation.
+    if "musa" in torch_device.type:
+        sin_table = sin_table.clone().as_strided(angles.shape, angles.stride())
+        cos_table = cos_table.clone().as_strided(angles.shape, angles.stride())
+
+    return sin_table, cos_table
 
 
 def test(
