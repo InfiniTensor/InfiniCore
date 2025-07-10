@@ -55,3 +55,30 @@ target("infinirt-moore")
     add_cxflags("-lstdc++", "-fPIC")
     add_files("../src/infinirt/musa/*.cc")
 target_end()
+
+
+target("infiniccl-moore")
+    set_kind("static")
+    add_deps("infinirt")
+    on_install(function (target) end)
+
+    add_links("musart")
+    set_warnings("all", "error")
+    if not is_plat("windows") then
+        add_cxflags("-fPIC")
+    end
+    if has_config("ccl") then
+        -- add_links("libmccl.so")
+        -- add_files("../src/infiniccl/musa/*.cc")
+        local mccl_root = os.getenv("MUSA_ROOT")
+        if mccl_root then
+            add_includedirs(mccl_root .. "/include")
+            add_links(mccl_root .. "/lib/libmccl.so")
+        else
+            add_links("mccl") -- Fall back to default nccl linking
+        end
+        add_files("../src/infiniccl/musa/*.cc")
+
+    end
+    set_languages("cxx17")    
+target_end()
