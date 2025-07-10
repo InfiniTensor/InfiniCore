@@ -9,6 +9,8 @@
 
 inline double getVal(void *ptr, GGML_TYPE ggml_type) {
     switch (ggml_type) {
+    case GGML_TYPE_BF16:
+        return utils::cast<double>(*(bf16_t *)ptr);
     case GGML_TYPE_F16:
         return utils::cast<double>(*(fp16_t *)ptr);
     case GGML_TYPE_F32:
