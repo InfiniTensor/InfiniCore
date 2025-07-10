@@ -73,9 +73,19 @@ class CausalSoftmaxDescriptor(Structure):
 infiniopCausalSoftmaxDescriptor_t = POINTER(CausalSoftmaxDescriptor)
 
 
-def causal_softmax(x):
+def causal_softmax(x, device_type):
     type = x.dtype
-    mask = torch.tril(torch.ones_like(x), diagonal=-1).flip(dims=[-2, -1])
+
+    # Issue: torch_musa's implementation of `torch.tril` has a known bug for certain shapes (e.g., (32, 5, 5)).
+    # Workaround: Generate the lower triangular mask on the CPU and then transfer it to the MUSA device.
+    if device_type == "musa":
+        mask = (
+            torch.tril(torch.ones_like(x).to("cpu"), diagonal=-1)
+            .flip(dims=[-2, -1])
+            .to("musa")
+        )
+    else:
+        mask = torch.tril(torch.ones_like(x), diagonal=-1).flip(dims=[-2, -1])
     masked = torch.where(mask == 1, -torch.inf, x.to(torch.float32))
     return torch.nn.functional.softmax(masked, dim=-1, dtype=type)
 
@@ -96,9 +106,20 @@ def test(
     )
 
     x = torch.rand(shape, dtype=dtype).to(torch_device)
-    mask = torch.tril(torch.ones_like(x), diagonal=-1).flip(dims=[-2, -1])
+
+    # Issue: torch_musa's implementation of `torch.tril` has a known bug for certain shapes (e.g., (32, 5, 5)).
+    # Workaround: Generate the lower triangular mask on the CPU and then transfer it to the MUSA device.
+    if torch_device == "musa":
+        mask = (
+            torch.tril(torch.ones_like(x).to("cpu"), diagonal=-1)
+            .flip(dims=[-2, -1])
+            .to("musa")
+        )
+    else:
+        mask = torch.tril(torch.ones_like(x), diagonal=-1).flip(dims=[-2, -1])
+
     x = torch.where(mask == 1, torch.full_like(x, torch.finfo(x.dtype).max), x)
-    ans = causal_softmax(x)
+    ans = causal_softmax(x, torch_device)
 
     x = rearrange_if_needed(x, x_stride)
 
