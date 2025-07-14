@@ -1,10 +1,10 @@
 #ifdef ENABLE_NINETOOTHED
 
 #include "../../../../../build/ninetoothed/relu.h"
-#include "../../../devices/cuda/cuda_common.cuh"
-#include "relu_cuda.cuh"
+#include "../../../devices/nvidia/nvidia_common.cuh"
+#include "relu_nvidia.cuh"
 
-namespace op::relu::cuda {
+namespace op::relu::nvidia {
 
 Descriptor::~Descriptor() = default;
 
@@ -14,7 +14,7 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t out_desc,
     std::vector<infiniopTensorDescriptor_t> input_desc_vec) {
 
-    auto handle = reinterpret_cast<device::cuda::Handle *>(handle_);
+    auto handle = reinterpret_cast<device::nvidia::Handle *>(handle_);
     auto dtype = out_desc->dtype();
 
     const auto &x_desc = input_desc_vec.at(0);
@@ -75,6 +75,6 @@ infiniStatus_t Descriptor::calculate(
 
     return INFINI_STATUS_SUCCESS;
 }
-} // namespace op::relu::cuda
+} // namespace op::relu::nvidia
 
 #endif

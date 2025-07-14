@@ -5,9 +5,9 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/relu_cpu.h"
 #endif
-#ifdef ENABLE_CUDA_API
+#ifdef ENABLE_NVIDIA_API
 #ifdef ENABLE_NINETOOTHED
-#include "cuda/relu_cuda.cuh"
+#include "nvidia/relu_nvidia.cuh"
 #endif
 #endif
 
@@ -30,9 +30,9 @@ __C infiniStatus_t infiniopCreateReluDescriptor(
 #ifdef ENABLE_CPU_API
         CREATE(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_CUDA_API
+#ifdef ENABLE_NVIDIA_API
 #ifdef ENABLE_NINETOOTHED
-        CREATE(INFINI_DEVICE_NVIDIA, cuda);
+        CREATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
 #endif
 
@@ -54,9 +54,9 @@ __C infiniStatus_t infiniopGetReluWorkspaceSize(infiniopReluDescriptor_t desc, s
 #ifdef ENABLE_CPU_API
         GET(INFINI_DEVICE_CPU, cpu)
 #endif
-#ifdef ENABLE_CUDA_API
+#ifdef ENABLE_NVIDIA_API
 #ifdef ENABLE_NINETOOTHED
-        GET(INFINI_DEVICE_NVIDIA, cuda)
+        GET(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
 #endif
     default:
@@ -85,9 +85,9 @@ __C infiniStatus_t infiniopRelu(
 #ifdef ENABLE_CPU_API
         CALCULATE(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_CUDA_API
+#ifdef ENABLE_NVIDIA_API
 #ifdef ENABLE_NINETOOTHED
-        CALCULATE(INFINI_DEVICE_NVIDIA, cuda);
+        CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
 #endif
 
@@ -111,9 +111,9 @@ infiniopDestroyReluDescriptor(infiniopReluDescriptor_t desc) {
 #ifdef ENABLE_CPU_API
         DELETE(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_CUDA_API
+#ifdef ENABLE_NVIDIA_API
 #ifdef ENABLE_NINETOOTHED
-        DELETE(INFINI_DEVICE_NVIDIA, cuda);
+        DELETE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
 #endif
 
