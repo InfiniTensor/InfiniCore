@@ -20,6 +20,16 @@ jobs:
     - name: checkout code
       uses: actions/checkout@v4
 
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install colorama
+        
     - name: Check Format
       run: |
         pip install black
@@ -37,6 +47,33 @@ jobs:
       run: |
         pip install numpy
         pip install torch
+        pip install gguf
 
     - name: Python Test
       run: python scripts/python_test.py --cpu
+
+    - name: GGUF Generation Test
+      run: python scripts/gguf_test.py --mode gguf
+
+    - name: C++ Test on Linux
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        export LD_LIBRARY_PATH="$PWD/build/linux/x86_64/release:$LD_LIBRARY_PATH"
+        tests=(add gemm mul random_sample swiglu clip)
+        for t in "${tests[@]}"; do
+          build/linux/x86_64/release/infiniop-test \
+            test/infiniop-test/${t}.gguf \
+            --cpu \
+            --warmup 0 \
+            --run 0
+        done
+
+    - name: C++ Test on Windows
+      if: matrix.os == 'windows-latest'
+      run: |
+        $exe = ".\build\windows\x64\release\infiniop-test.exe"
+        $base = "test\infiniop-test"
+        $tests = @("add","gemm","mul","random_sample","swiglu","clip")
+        foreach ($t in $tests) {
+          & $exe "$base\$t.gguf" "--cpu" "--warmup" "0" "--run" "0"
+        }

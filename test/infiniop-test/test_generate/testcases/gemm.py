@@ -1,4 +1,3 @@
-from ast import List
 import numpy as np
 import gguf
 from typing import List
