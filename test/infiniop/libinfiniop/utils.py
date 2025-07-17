@@ -60,7 +60,7 @@ def to_tensor(tensor, lib, force_unsigned=False):
 
 
 def create_workspace(size, torch_device):
-    print(f" - Workspace Size : {size}")
+    # print(f" - Workspace Size : {size}")
     if size == 0:
         return None
     import torch
