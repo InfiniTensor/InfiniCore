@@ -49,13 +49,25 @@ class ExpTestCase(InfiniopTestCase):
             raw_dtype=ggml_dtype,
         )
         
-        # 创建output张量（输出缓冲区）
-        # 确保输出类型与输入类型一致
-        output_numpy = np.empty_like(input_numpy)
+        # 添加空的output张量（实际输出，将由算子填充）
+        output_tensor = torch.empty_like(self.input)
+        if output_tensor.dtype == torch.bfloat16:
+            output_numpy = output_tensor.view(torch.uint16).numpy()
+        else:
+            output_numpy = output_tensor.numpy()
+        
         test_writer.add_tensor(
             test_writer.gguf_key("output"),
             output_numpy,
             raw_dtype=ggml_dtype,
+        )
+        
+        # 添加期望结果张量（ans）
+        expected_output = reference_exp(self.input.double())
+        test_writer.add_tensor(
+            test_writer.gguf_key("ans"),
+            expected_output.numpy(),
+            raw_dtype=gguf.GGMLQuantizationType.F64,
         )
 
 

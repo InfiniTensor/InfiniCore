@@ -2,6 +2,7 @@
 #define __EXP_CPU_H__
 
 #include <cmath>
+#include <type_traits>
 
 #include "../../../elementwise/cpu/elementwise_cpu.h"
 

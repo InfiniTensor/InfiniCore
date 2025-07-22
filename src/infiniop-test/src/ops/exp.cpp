@@ -35,10 +35,11 @@ std::shared_ptr<infiniop_test::Result> Test::run(
     infiniopExpDescriptor_t op_desc;
     auto input = _attributes->input->to(device, device_id);
     auto output = _attributes->output->to(device, device_id);
+    
     CHECK_OR(infiniopCreateExpDescriptor(handle, &op_desc,
-                                       output->desc(),
-                                       input->desc()),
-             return TEST_FAILED(OP_CREATION_FAILED, "Failed to create op descriptor."));
+                                         output->desc(),
+                                         input->desc()),
+             return TEST_FAILED(OP_CREATION_FAILED, "Failed to create exp descriptor."));
     size_t workspace_size;
     CHECK_OR(infiniopGetExpWorkspaceSize(op_desc, &workspace_size),
              return TEST_FAILED(OP_CREATION_FAILED, "Failed to get workspace size."));
@@ -46,9 +47,9 @@ std::shared_ptr<infiniop_test::Result> Test::run(
     CHECK_OR(infinirtMalloc(&workspace, workspace_size),
              return TEST_FAILED(OP_CREATION_FAILED, "Failed to allocate workspace."));
     CHECK_OR(infiniopExp(op_desc, workspace, workspace_size,
-                       output->data(),
-                       input->data(),
-                       nullptr),
+                         output->data(),
+                         input->data(),
+                         nullptr),
              return TEST_FAILED(OP_EXECUTION_FAILED, "Failed during execution."));
 
     try {
