@@ -24,7 +24,6 @@ public:
         BlasMatrix ans;
 
         if (layout->ndim() == 2) {
-            std::cerr << "[debug] into dim-2" << std::endl;
             ans.ndim = 2;
             ans.batch = 1;
             ans.stride = 0;
@@ -33,7 +32,6 @@ public:
             ans.row_stride = layout->stride(0);
             ans.col_stride = layout->stride(1);
         } else if (layout->ndim() == 3) {
-            std::cerr << "[debug] into dim-3" << std::endl;
             ans.ndim = 3;
             ans.batch = layout->dim(0);
             ans.stride = ans.batch == 1 ? 0 : layout->stride(0);
@@ -97,14 +95,6 @@ public:
         auto c_matrix = BlasMatrix::create(c_desc);
         CHECK_RESULT(c_matrix);
 
-        std::cerr << "[debug]a_matrix-row_stride: " << a_matrix->row_stride << std::endl;
-        std::cerr << "[debug]a_matrix-col_stride: " << a_matrix->col_stride << std::endl;
-        std::cerr << "[debug]b_matrix-row_stride: " << b_matrix->row_stride << std::endl;
-        std::cerr << "[debug]b_matrix-col_stride: " << b_matrix->col_stride << std::endl;
-        std::cerr << "[debug]c_matrix-row_stride: " << c_matrix->row_stride << std::endl;
-        std::cerr << "[debug]c_matrix-col_stride: " << c_matrix->col_stride << std::endl;
-
-
         if (c_matrix->rows != a_matrix->rows || c_matrix->cols != b_matrix->cols || a_matrix->cols != b_matrix->rows) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
@@ -127,10 +117,6 @@ public:
         auto m = c_matrix->rows;
         auto n = c_matrix->cols;
         auto k = a_matrix->cols;
-
-        std::cerr << "[debug]m: " << m << std::endl;
-        std::cerr << "[debug]n: " << n << std::endl;
-        std::cerr << "[debug]k: " << k << std::endl;
 
         return utils::Result<MatmulInfo>(MatmulInfo{
             a_matrix.take(),
