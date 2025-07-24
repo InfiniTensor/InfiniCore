@@ -76,25 +76,70 @@ infiniStatus_t calculate(
         right->SetType(::musa::dnn::Tensor::Type::FLOAT);
     }
 
-    // std::cout << "info.batch: " << info.batch << std::endl;
-    // std::cout << "info.m: " << info.m << std::endl;
-    // std::cout << "info.n: " << info.n << std::endl;
-    // std::cout << "info.k: " << info.k << std::endl;
+    // 5. bind tensor addr
+    out->SetAddr(c);
+    left->SetAddr(a);
+    right->SetAddr(b);
 
     // 4. BatchMatMul Tensor compute config
-    std::array<int64_t, 3> a_dims_array = {
-        static_cast<int64_t>(info.batch),
-        static_cast<int64_t>(info.m),
-        static_cast<int64_t>(info.k)
-    };
-    left->SetNdInfo(static_cast<int>(a_dims_array.size()), a_dims_array.data());
+    std::array<int64_t, 3> a_dims_array;
+    std::array<int64_t, 3> a_stride_array;
+    if (info.a_matrix.col_stride != 1){
+        a_dims_array = {
+            static_cast<int64_t>(info.batch),
+            static_cast<int64_t>(info.k),
+            static_cast<int64_t>(info.m)
+        };
 
-    std::array<int64_t, 3> b_dims_array = {
-        static_cast<int64_t>(info.batch),
-        static_cast<int64_t>(info.k),
-        static_cast<int64_t>(info.n)
-    };
-    right->SetNdInfo(static_cast<int>(b_dims_array.size()), b_dims_array.data());
+        a_stride_array = {
+            static_cast<int64_t>(info.m * info.k),
+            static_cast<int64_t>(info.m),
+            static_cast<int64_t>(1)
+        };
+    }
+    else{
+        a_dims_array = {
+            static_cast<int64_t>(info.batch),
+            static_cast<int64_t>(info.m),
+            static_cast<int64_t>(info.k)
+        };
+        a_stride_array = {
+            static_cast<int64_t>(info.m * info.k),
+            static_cast<int64_t>(info.k),
+            static_cast<int64_t>(1)
+        };
+    }
+    left->SetNdInfo(static_cast<int>(a_dims_array.size()), a_dims_array.data(), a_stride_array.data());
+
+
+    std::array<int64_t, 3> b_dims_array;
+    std::array<int64_t, 3> b_stride_array;
+    if (info.b_matrix.col_stride != 1){
+        b_dims_array = {
+            static_cast<int64_t>(info.batch),
+            static_cast<int64_t>(info.n),
+            static_cast<int64_t>(info.k)
+        };
+
+        b_stride_array = {
+            static_cast<int64_t>(info.n * info.k),
+            static_cast<int64_t>(info.k),
+            static_cast<int64_t>(1)
+        };
+    }
+    else{
+        b_dims_array = {
+            static_cast<int64_t>(info.batch),
+            static_cast<int64_t>(info.k),
+            static_cast<int64_t>(info.n)
+        };
+        b_stride_array = {
+            static_cast<int64_t>(info.n * info.k),
+            static_cast<int64_t>(info.n),
+            static_cast<int64_t>(1)
+        };
+    }
+    right->SetNdInfo(static_cast<int>(b_dims_array.size()), b_dims_array.data(), b_stride_array.data());
 
     std::array<int64_t, 3> c_dims_array = {
         static_cast<int64_t>(info.batch),
@@ -102,18 +147,6 @@ infiniStatus_t calculate(
         static_cast<int64_t>(info.n)
     };
     out->SetNdInfo(static_cast<int>(c_dims_array.size()), c_dims_array.data());
-
-    // ::musa::dnn::Status status1 = left->SetNdInfo(3, a_dims);
-    // if (status1 == ::musa::dnn::Status::SUCCESS) {
-    //     std::cerr << "Success to set left." << std::endl;
-    // }
-
-
-    // 5. bind tensor addr
-    out->SetAddr(c);
-    left->SetAddr(a);
-    right->SetAddr(b);
-
 
     // 6. set BatchMatMul MemoryHandler
     ::musa::dnn::MemoryMaintainer maintainer = [](size_t size) -> ::musa::dnn::MemoryHandler {
@@ -124,21 +157,23 @@ infiniStatus_t calculate(
         });
     };
 
+    if(info.a_matrix.col_stride == 1 && info.b_matrix.col_stride !=1){
+        matmul_operator->SetTranspose(false, true);
+    }
+    else if(info.a_matrix.col_stride != 1 && info.b_matrix.col_stride ==1){
+        matmul_operator->SetTranspose(true, false);
+    }
+    else if(info.a_matrix.col_stride != 1 && info.b_matrix.col_stride !=1){
+        matmul_operator->SetTranspose(true, true);
+    }
+    else{
+        matmul_operator->SetTranspose(false, false);
+    }
+
     // 7. set BatchMatMul GetWorkspaceSize
     size_t workspace_size_in_bytes = 0;
     matmul_operator->GetWorkspaceSize(*mudnn_handles_t, workspace_size_in_bytes, *out, *left, *right);
 
-    // std::cout << "info.is_transed: " << info.is_transed << std::endl;
-    // std::cout << "left dims: " << a_dims[0] << ", " << a_dims[1] << ", " << a_dims[2] << std::endl;
-    // std::cout << "right dims: " << b_dims[0] << ", " << b_dims[1] << ", " << b_dims[2] << std::endl;
-    // std::cout << "output dims: " << c_dims[0] << ", " << c_dims[1] << ", " << c_dims[2] << std::endl;
-
-
-    // if (info.is_transed) {
-    //    matmul_operator->SetTranspose(true, true);
-    // } else {
-    //    matmul_operator->SetTranspose(false, false);
-    // }
 
     // 8. set BatchMatMul Alpha Beta and Gamma
     matmul_operator->SetAlpha((double)alpha);
