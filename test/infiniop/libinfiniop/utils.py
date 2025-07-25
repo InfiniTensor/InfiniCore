@@ -137,6 +137,9 @@ class TestTensor(CTensor):
             shape_, strides_, dt, device, mode="manual", set_tensor=torch_tensor
         )
 
+    def update_torch_tensor(self, new_tensor: torch.Tensor):
+        self._torch_tensor = new_tensor
+
 
 def to_torch_dtype(dt: InfiniDtype, compatability_mode=False):
     if dt == InfiniDtype.I8:
@@ -575,7 +578,7 @@ def profile_operation(desc, func, torch_device, NUM_PRERUN, NUM_ITERATIONS):
 
     # Timed execution
     elapsed = timed_op(lambda: func(), NUM_ITERATIONS, torch_device)
-    print(f" {desc} time: {elapsed * 1000 :6f} ms")
+    print(f" {desc} time: {elapsed * 1000:6f} ms")
 
 
 def test_operator(device, test_func, test_cases, tensor_dtypes):
