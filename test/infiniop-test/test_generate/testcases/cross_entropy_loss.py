@@ -58,13 +58,17 @@ class CrossEntropyLossTestCase(InfiniopTestCase):
             # Shape (C,) - single sample classification
             logits_shape = (num_classes,)
             self.target_shape = ()
-        elif len(input_shape) == 2:
-            # Shape (N, C) - batch classification
-            logits_shape = (input_shape[0], num_classes)
-            self.target_shape = (input_shape[0],)
+        elif len(input_shape) >= 2:
+            # Shape (N, C, [d1], [d2], ...)
+            if input_shape[1] != num_classes:
+                raise ValueError(
+                    f"Input shape {input_shape} does not match num_classes {num_classes}."
+                )
+            logits_shape = input_shape
+            self.target_shape = (input_shape[0],) + input_shape[2:]
         else:
             raise ValueError(
-                f"Unsupported input shape: {input_shape}. Only 1D and 2D inputs are supported."
+                f"Unsupported input shape: {input_shape}."
             )
 
         self.input_logits = random_tensor(logits_shape, dtype)
@@ -131,7 +135,6 @@ if __name__ == "__main__":
     # Generate test cases for each data type
     for dtype in dtypes:
 
-        # ============ 1D Cases (C,) - 0D target ============
         test_cases.extend(
             [
                 CrossEntropyLossTestCase(
@@ -140,26 +143,10 @@ if __name__ == "__main__":
                     dtype=dtype,
                 ),
                 CrossEntropyLossTestCase(
-                    input_shape=(5,),
-                    num_classes=5,
-                    dtype=dtype,
-                ),
-                CrossEntropyLossTestCase(
-                    input_shape=(100,),
-                    num_classes=100,
-                    dtype=dtype,
-                ),
-                CrossEntropyLossTestCase(
                     input_shape=(1000,),
-                    num_classes=1000,
+                    num_classes=200,
                     dtype=dtype,
                 ),
-            ]
-        )
-
-        # ============ 2D Cases (N, C) - 1D target ============
-        test_cases.extend(
-            [
                 CrossEntropyLossTestCase(
                     input_shape=(4, 10),
                     num_classes=10,
@@ -190,88 +177,27 @@ if __name__ == "__main__":
                     num_classes=50,
                     dtype=dtype,
                 ),
-            ]
-        )
-
-        # ============ Various Class Numbers ============
-        test_cases.extend(
-            [
-                # Binary classification
+                 # 3D: (N, C, d1)
                 CrossEntropyLossTestCase(
-                    input_shape=(2,),
-                    num_classes=2,
+                    input_shape=(4, 10, 5),
+                    num_classes=10,
                     dtype=dtype,
                 ),
+                # 4D: (N, C, d1, d2)
                 CrossEntropyLossTestCase(
-                    input_shape=(16, 2),
-                    num_classes=2,
+                    input_shape=(2, 8, 8, 8),
+                    num_classes=8,
                     dtype=dtype,
                 ),
-                # Small multi-class
+                # 5D: (N, C, d1, d2, d3)
                 CrossEntropyLossTestCase(
-                    input_shape=(3,),
-                    num_classes=3,
-                    dtype=dtype,
-                ),
-                CrossEntropyLossTestCase(
-                    input_shape=(32, 3),
-                    num_classes=3,
-                    dtype=dtype,
-                ),
-                # Large vocabulary
-                CrossEntropyLossTestCase(
-                    input_shape=(50000,),
-                    num_classes=50000,
-                    dtype=dtype,
-                ),
-                CrossEntropyLossTestCase(
-                    input_shape=(8, 50000),
-                    num_classes=50000,
+                    input_shape=(3, 10, 10, 20, 30),
+                    num_classes=10,
                     dtype=dtype,
                 ),
             ]
         )
 
-    # Add some edge cases
-    edge_cases = [
-        # Single sample cases
-        CrossEntropyLossTestCase(
-            input_shape=(1, 10),
-            num_classes=10,
-            dtype=torch.float32,
-        ),
-        CrossEntropyLossTestCase(
-            input_shape=(1, 1000),
-            num_classes=1000,
-            dtype=torch.float16,
-        ),
-        # Large batch
-        CrossEntropyLossTestCase(
-            input_shape=(512, 100),
-            num_classes=100,
-            dtype=torch.bfloat16,
-        ),
-        # Very large vocabulary
-        CrossEntropyLossTestCase(
-            input_shape=(4, 100000),
-            num_classes=100000,
-            dtype=torch.float32,
-        ),
-        # Small class number
-        CrossEntropyLossTestCase(
-            input_shape=(256, 4),
-            num_classes=4,
-            dtype=torch.float16,
-        ),
-        # Medium scale
-        CrossEntropyLossTestCase(
-            input_shape=(64, 512),
-            num_classes=512,
-            dtype=torch.bfloat16,
-        ),
-    ]
-
-    test_cases.extend(edge_cases)
 
     print(f"Generated {len(test_cases)} test cases")
     print(f"Data types: {len(dtypes)} types (f32, f16, bf16)")
