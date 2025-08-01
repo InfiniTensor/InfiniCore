@@ -83,3 +83,13 @@ bf16_t _f32_to_bf16(float val) {
 
     return bf16_t{bf16_bits};
 }
+
+std::ostream &operator<<(std::ostream &os, const CustomFloat16 &f16) {
+    os << _f16_to_f32(f16) << std::endl;
+    return os;
+}
+
+std::ostream &operator<<(std::ostream &os, const CustomBFloat16 &bf16) {
+    os << _bf16_to_f32(bf16) << std::endl;
+    return os;
+}

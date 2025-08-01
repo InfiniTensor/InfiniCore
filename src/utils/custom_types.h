@@ -1,15 +1,20 @@
 #ifndef __INFINIUTILS_CUSTOM_TYPES_H__
 #define __INFINIUTILS_CUSTOM_TYPES_H__
+#include <ostream>
 #include <stdint.h>
 #include <type_traits>
 
 struct CustomFloat16 {
     uint16_t _v;
+
+    friend std::ostream &operator<<(std::ostream &os, const CustomFloat16 &f16);
 };
 typedef struct CustomFloat16 fp16_t;
 
 struct CustomBFloat16 {
     uint16_t _v;
+
+    friend std::ostream &operator<<(std::ostream &os, const CustomBFloat16 &bf16);
 };
 typedef struct CustomBFloat16 bf16_t;
 
