@@ -18,6 +18,38 @@ if is_plat("windows") then
     add_cxflags("/utf-8", {force = true})
 end
 
+-- 添加INFINI_ROOT环境变量
+on_config(function()
+    function Check_INFINI_ROOT()
+        if is_plat("windows") then
+            return
+        end
+
+        -- .bashrc文件中是否有INFINI_ROOT
+        local marker = "# INFINI_ROOT configuration (auto-added by xmake.lua).\n"
+        local bashrc_path = path.join(os.getenv("HOME"), ".bashrc")
+        if io.readfile(bashrc_path):find(marker, 1, true) then
+            return
+        end
+        
+        -- 向.bashrc文件中添加 INFINI_ROOT
+        local INFINI_ROOT = path.join(os.getenv("HOME"), ".infini")
+        print(string.format("INFINI_ROOT not set!!! New INFINI_ROOT: %s\n", INFINI_ROOT))
+        local file = io.open(bashrc_path, "a")
+        if file then
+            file:write("\n")
+            file:write(marker)
+            file:write(string.format("export INFINI_ROOT=%s\n",INFINI_ROOT))
+            file:write(string.format("export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$INFINI_ROOT/lib\n"))
+            file:flush()
+            file:close()
+        else
+            print(string.format("could not open file: %s\n",bashrc_path))
+        end
+    end
+    Check_INFINI_ROOT()
+end)
+
 -- CPU
 option("cpu")
     set_default(true)
