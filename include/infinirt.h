@@ -3,6 +3,11 @@
 
 #include "infinicore.h"
 
+#include <cstddef>
+#include <map>
+#include <memory>
+#include <variant>
+
 typedef void *infinirtStream_t;
 typedef void *infinirtEvent_t;
 
@@ -52,5 +57,39 @@ __C __export infiniStatus_t infinirtMemcpyAsync(void *dst, const void *src, size
 // Stream-ordered memory
 __C __export infiniStatus_t infinirtMallocAsync(void **p_ptr, size_t size, infinirtStream_t stream);
 __C __export infiniStatus_t infinirtFreeAsync(void *ptr, infinirtStream_t stream);
+
+// Virtual memory & physical memory
+typedef void *infinirtMemProp_t;
+typedef void *infinirtDeviceptr_t;
+typedef void *infinirtAllocationHandle_t;
+
+// Represents a physical memory allocation, mirroring Rust's PhyMem.
+struct infinirtPhyMem {
+    infinirtAllocationHandle_t handle; // Opaque handle to physical memory
+    size_t len;
+    infinirtMemProp_t prop;
+};
+
+// Represents a vacant region, storing its length.
+using infinirtVacantRegion = size_t;
+// Represents a mapped region, holding a shared pointer to the physical memory object.
+using infinirtMappedRegion = std::shared_ptr<infinirtPhyMem>;
+// A region in virtual memory can be either mapped or vacant.
+using infinirtPhyRegion = std::variant<infinirtMappedRegion, infinirtVacantRegion>;
+
+struct infinirtVirtualMemManager {
+    infinirtDeviceptr_t device_ptr;
+    size_t len;
+    // Maps offset to a physical region (mapped or vacant).
+    std::map<size_t, infinirtPhyRegion> map;
+};
+
+__C __export infiniStatus_t infinirtGetMemProp(infinirtMemProp_t *prop, infiniDevice_t device, int device_id);
+__C __export infiniStatus_t infinirtGetMemGranularityMinimum(size_t *granularity, infinirtMemProp_t prop);
+__C __export infiniStatus_t infinirtCreatePhysicalMem(infinirtPhyMem *phy_mem, size_t len, infinirtMemProp_t prop);
+
+__C __export infiniStatus_t infinirtCreateVirtualMemManager(infinirtVirtualMemManager *vm, infiniDevice_t device, size_t len, size_t min_addr);
+__C __export infiniStatus_t infinirtMapVirtualMem(void **mapped_ptr, infinirtVirtualMemManager *vm, size_t offset, infinirtPhyMem *phy_mem);
+__C __export infiniStatus_t infinirtUnmapVirtualMem(infinirtVirtualMemManager *vm, size_t offset);
 
 #endif // __INFINIRT_API_H__

@@ -88,4 +88,27 @@ infiniStatus_t freeAsync(void *ptr, infinirtStream_t stream) {
     return freeDevice(ptr);
 }
 
+infiniStatus_t getMemProp(infinirtMemProp_t *prop_ptr, infiniDevice_t device, int device_id) {
+    return INFINI_STATUS_NOT_IMPLEMENTED;
+}
+
+infiniStatus_t getMemGranularityMinimum(size_t *granularity, infinirtMemProp_t prop) {
+    return INFINI_STATUS_NOT_IMPLEMENTED;
+}
+
+infiniStatus_t createPhysicalMem(infinirtPhyMem *phy_mem, size_t len, infinirtMemProp_t prop) {
+    return INFINI_STATUS_NOT_IMPLEMENTED;
+}
+
+infiniStatus_t createVirtualMemManager(infinirtVirtualMemManager *vm, infiniDevice_t device, size_t len, size_t min_addr) {
+    return INFINI_STATUS_NOT_IMPLEMENTED;
+}
+
+infiniStatus_t mapVirtualMem(void **mapped_ptr, infinirtVirtualMemManager *vm, size_t offset, infinirtPhyMem *phy_mem) {
+    return INFINI_STATUS_NOT_IMPLEMENTED;
+}
+
+infiniStatus_t unmapVirtualMem(infinirtVirtualMemManager *vm, size_t offset) {
+    return INFINI_STATUS_NOT_IMPLEMENTED;
+}
 } // namespace infinirt::cpu
