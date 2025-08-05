@@ -4,6 +4,7 @@
 #include "../../../utils.h"
 #include "../../handle.h"
 #include "../pool.h"
+#include <cublas_v2.h>
 #include <functional>
 #include <memory>
 #include <xpu/runtime.h>
@@ -16,6 +17,7 @@ typedef XPUStream kunlunStream_t;
 typedef XPUEvent kunlunEvent_t;
 typedef xdnn::Context *xdnnHandle_t;
 
+#define CHECK_CUBLAS(API) CHECK_INTERNAL(API, CUBLAS_STATUS_SUCCESS)
 #define CHECK_KUNLUN(API) CHECK_INTERNAL(API, XPU_SUCCESS)
 
 namespace device::kunlun {
@@ -35,11 +37,13 @@ public:
 
 class Handle::Internal {
     Pool<xdnnHandle_t> dnn_handles;
+    Pool<cublasHandle_t> blas_handles;
     template <typename T>
     using Fn = std::function<infiniStatus_t(T)>;
 
 public:
     infiniStatus_t useXdnn(kunlunStream_t stream, const Fn<xdnnHandle_t> &f) const;
+    infiniStatus_t useCublas(cudaStream_t stream, const Fn<cublasHandle_t> &f) const;
 };
 
 } // namespace device::kunlun

@@ -10,6 +10,18 @@ auto Handle::internal() const -> const std::shared_ptr<Internal> & {
     return _internal;
 }
 
+infiniStatus_t Handle::Internal::useCublas(cudaStream_t stream, const Fn<cublasHandle_t> &f) const {
+
+    auto handle = blas_handles.pop();
+    if (!handle) {
+        CHECK_CUBLAS(cublasCreate(&(*handle)));
+    }
+    CHECK_CUBLAS(cublasSetStream(*handle, stream));
+    CHECK_STATUS(f(*handle));
+    blas_handles.push(std::move(*handle));
+    return INFINI_STATUS_SUCCESS;
+}
+
 infiniStatus_t Handle::Internal::useXdnn(kunlunStream_t stream, const Fn<xdnnHandle_t> &f) const {
     auto handle = dnn_handles.pop();
     if (!handle) {
