@@ -3,7 +3,6 @@ import torch
 import numpy as np
 from typing import List
 from ml_dtypes import bfloat16
-from gguf import GGMLQuantizationType
 
 from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides, process_zero_stride_tensor
 
@@ -78,13 +77,6 @@ class LayerNormTestCase(InfiniopTestCase):
         self.shape_input_std_deviation = shape_input_std_deviation
         self.stride_input_std_deviation = stride_input_std_deviation
         self.eps = eps
-        
-    # convert input dtype to GGUF quantization type, especially for bfloat16
-    def _to_gguf_dtype(self, input):
-        if input.dtype == bfloat16:
-            return GGMLQuantizationType.BF16
-        else:
-            return np_dtype_to_ggml(input.dtype)
     
     def write_test(self, test_writer: InfiniopTestWriter):
         super().write_test(test_writer)
@@ -124,23 +116,23 @@ class LayerNormTestCase(InfiniopTestCase):
         
         
         test_writer.add_tensor(
-            test_writer.gguf_key("input"), self.input, raw_dtype=self._to_gguf_dtype(self.input)
+            test_writer.gguf_key("input"), self.input, raw_dtype=np_dtype_to_ggml(self.input.dtype)
         )
         test_writer.add_tensor(
-            test_writer.gguf_key("weight"), self.weight, raw_dtype=self._to_gguf_dtype(self.weight)
+            test_writer.gguf_key("weight"), self.weight, raw_dtype=np_dtype_to_ggml(self.weight.dtype)
         )
         if self.bias is not None:
             test_writer.add_tensor(
-                test_writer.gguf_key("bias"), self.bias, raw_dtype=self._to_gguf_dtype(self.bias)
+                test_writer.gguf_key("bias"), self.bias, raw_dtype=np_dtype_to_ggml(self.bias.dtype)
             )
         test_writer.add_tensor(
-            test_writer.gguf_key("output"), self.output, raw_dtype=self._to_gguf_dtype(self.output)
+            test_writer.gguf_key("output"), self.output, raw_dtype=np_dtype_to_ggml(self.output.dtype)
         )
         test_writer.add_tensor(
-            test_writer.gguf_key("input_standardization"), self.input_standardization, raw_dtype=self._to_gguf_dtype(self.input_standardization)
+            test_writer.gguf_key("input_standardization"), self.input_standardization, raw_dtype=np_dtype_to_ggml(self.input_standardization.dtype)
         )
         test_writer.add_tensor(
-            test_writer.gguf_key("input_std_deviation"), self.input_std_deviation, raw_dtype=self._to_gguf_dtype(self.input_std_deviation)
+            test_writer.gguf_key("input_std_deviation"), self.input_std_deviation, raw_dtype=np_dtype_to_ggml(self.input_std_deviation.dtype)
         )
         
         ans_output, ans_input_standardization, ans_input_std_deviation = layer_norm(
@@ -160,9 +152,10 @@ class LayerNormTestCase(InfiniopTestCase):
         )
         
 
-if __name__ == "__main__":
-    test_writer = InfiniopTestWriter("layer_norm.gguf")
+def gen_gguf(dtype: np.dtype, filename: str):
+    test_writer = InfiniopTestWriter(filename)
     test_cases = []
+    
     # ==============================================================================
     #  Configuration
     # ==============================================================================
@@ -180,56 +173,67 @@ if __name__ == "__main__":
         ((4, 4, 5632), None, None, True, 1e-5),
         ((4, 4, 5632), (45056, 5632, 1), (45056, 5632, 1), True, 1e-5),
     ]
-    _TENSOR_DTYPES_ = [
-        np.float32,
-        np.float64,
-        bfloat16,
-    ]
     
-    for dtype in _TENSOR_DTYPES_:
-        for shape, stride_input, stride_output, has_bias, eps in _TEST_CASES_:
-            shape_weight = [shape[-1],]
-            shape_std = shape[:-1] + (1, )
-            input = np.random.rand(*shape).astype(dtype)
-            weight = np.random.rand(shape[-1]).astype(dtype)
-            bias = np.random.rand(shape[-1]).astype(dtype) if has_bias else None
-            output = np.empty(tuple(0 for _ in shape), dtype=dtype)
-            input_standardization = np.empty(tuple(0 for _ in shape), dtype=dtype)
-            input_std_deviation = np.empty(tuple(0 for _ in shape_std), dtype=dtype)
-            
-            stride_weight = None
-            stride_bias = None
-            stride_input_standardization = None
-            stride_input_std_deviation = None
-            input = process_zero_stride_tensor(input, stride_input)
-            weight = process_zero_stride_tensor(weight, stride_weight)
-            bias = process_zero_stride_tensor(bias, stride_bias) if has_bias else None
-            output = process_zero_stride_tensor(output, stride_output)
-            input_standardization = process_zero_stride_tensor(input_standardization, stride_input_standardization)
-            input_std_deviation = process_zero_stride_tensor(input_std_deviation, stride_input_std_deviation)
-            
-            test_case = LayerNormTestCase(
-                input=input,
-                shape_input=shape,
-                stride_input=stride_input,
-                weight=weight,
-                shape_weight=shape_weight,
-                stride_weight=stride_weight,
-                bias=bias,
-                shape_bias=shape_weight if has_bias else None,
-                stride_bias=stride_weight if has_bias else None,
-                output=output,
-                shape_output=shape,
-                stride_output=stride_output,
-                input_standardization=input_standardization,
-                shape_input_standardization=shape,
-                stride_input_standardization=stride_input_standardization,
-                input_std_deviation=input_std_deviation,
-                shape_input_std_deviation=shape_std,
-                stride_input_std_deviation=stride_input_std_deviation,
-                eps=eps,
-            )
-            test_cases.append(test_case)
+    for shape, stride_input, stride_output, has_bias, eps in _TEST_CASES_:
+        shape_weight = [shape[-1],]
+        shape_std = shape[:-1] + (1, )
+        input = np.random.rand(*shape).astype(dtype)
+        weight = np.random.rand(shape[-1]).astype(dtype)
+        bias = np.random.rand(shape[-1]).astype(dtype) if has_bias else None
+        output = np.empty(tuple(0 for _ in shape), dtype=dtype)
+        input_standardization = np.empty(tuple(0 for _ in shape), dtype=dtype)
+        input_std_deviation = np.empty(tuple(0 for _ in shape_std), dtype=dtype)
+        
+        stride_weight = None
+        stride_bias = None
+        stride_input_standardization = None
+        stride_input_std_deviation = None
+        input = process_zero_stride_tensor(input, stride_input)
+        weight = process_zero_stride_tensor(weight, stride_weight)
+        bias = process_zero_stride_tensor(bias, stride_bias) if has_bias else None
+        output = process_zero_stride_tensor(output, stride_output)
+        input_standardization = process_zero_stride_tensor(input_standardization, stride_input_standardization)
+        input_std_deviation = process_zero_stride_tensor(input_std_deviation, stride_input_std_deviation)
+        
+        test_case = LayerNormTestCase(
+            input=input,
+            shape_input=shape,
+            stride_input=stride_input,
+            weight=weight,
+            shape_weight=shape_weight,
+            stride_weight=stride_weight,
+            bias=bias,
+            shape_bias=shape_weight if has_bias else None,
+            stride_bias=stride_weight if has_bias else None,
+            output=output,
+            shape_output=shape,
+            stride_output=stride_output,
+            input_standardization=input_standardization,
+            shape_input_standardization=shape,
+            stride_input_standardization=stride_input_standardization,
+            input_std_deviation=input_std_deviation,
+            shape_input_std_deviation=shape_std,
+            stride_input_std_deviation=stride_input_std_deviation,
+            eps=eps,
+        )
+        test_cases.append(test_case)
     
     test_writer.add_tests(test_cases)
     test_writer.save()
+
+
+if __name__ == "__main__":
+    _TENSOR_DTYPES_ = [
+        np.float32,
+        np.float16,
+        bfloat16,
+    ]
+    dtype_filename_map = {
+        np.float32: "layer_norm_f32.gguf",
+        np.float16: "layer_norm_f16.gguf",
+        bfloat16: "layer_norm_bf16.gguf",
+    }
+    
+    for dtype in _TENSOR_DTYPES_:
+        filename = dtype_filename_map[dtype]
+        gen_gguf(dtype, filename)

@@ -3,7 +3,6 @@ import torch
 import numpy as np
 from typing import List
 from ml_dtypes import bfloat16
-from gguf import GGMLQuantizationType
 
 from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides, process_zero_stride_tensor
 
@@ -72,12 +71,6 @@ class RMSNormBackwardTestCase(InfiniopTestCase):
         self.stride_grad_w = stride_grad_w
         self.eps = eps
         
-    # convert input dtype to GGUF quantization type, especially for bfloat16
-    def _to_gguf_dtype(self, input):
-        if input.dtype == bfloat16:
-            return GGMLQuantizationType.BF16
-        else:
-            return np_dtype_to_ggml(input.dtype)
         
     def write_test(self, test_writer: "InfiniopTestWriter"):
         super().write_test(test_writer)
@@ -110,19 +103,19 @@ class RMSNormBackwardTestCase(InfiniopTestCase):
         )
         
         test_writer.add_tensor(
-            test_writer.gguf_key("x"), self.x, raw_dtype=self._to_gguf_dtype(self.x)
+            test_writer.gguf_key("x"), self.x, raw_dtype=np_dtype_to_ggml(self.x.dtype)
         )
         test_writer.add_tensor(
-            test_writer.gguf_key("w"), self.w, raw_dtype=self._to_gguf_dtype(self.w)
+            test_writer.gguf_key("w"), self.w, raw_dtype=np_dtype_to_ggml(self.w.dtype)
         )
         test_writer.add_tensor(
-            test_writer.gguf_key("grad_y"), self.grad_y, raw_dtype=self._to_gguf_dtype(self.grad_y)
+            test_writer.gguf_key("grad_y"), self.grad_y, raw_dtype=np_dtype_to_ggml(self.grad_y.dtype)
         )
         test_writer.add_tensor(
-            test_writer.gguf_key("grad_x"), self.grad_x, raw_dtype=self._to_gguf_dtype(self.grad_x)
+            test_writer.gguf_key("grad_x"), self.grad_x, raw_dtype=np_dtype_to_ggml(self.grad_x.dtype)
         )
         test_writer.add_tensor(
-            test_writer.gguf_key("grad_w"), self.grad_w, raw_dtype=self._to_gguf_dtype(self.grad_w)
+            test_writer.gguf_key("grad_w"), self.grad_w, raw_dtype=np_dtype_to_ggml(self.grad_w.dtype)
         )
         
         ans_grad_x, ans_grad_w = rms_norm_backward(
@@ -140,9 +133,10 @@ class RMSNormBackwardTestCase(InfiniopTestCase):
         )
         
 
-if __name__ == "__main__":
-    test_writer = InfiniopTestWriter("rms_norm_backward.gguf")
+def gen_gguf(dtype: np.dtype, filename: str):
+    test_writer = InfiniopTestWriter(filename)
     test_cases = []
+    
     # ==============================================================================
     #  Configuration
     # ==============================================================================
@@ -160,47 +154,58 @@ if __name__ == "__main__":
         ((4, 4, 5632), None, None, None, 1e-5),
         ((4, 4, 5632), (45056, 5632, 1), (45056, 5632, 1), (45056, 5632, 1), 1e-5),
     ]
-    _TENSOR_DTYPES_ = [
-        np.float32,
-        np.float64,
-        bfloat16,
-    ]
     
-    for dtype in _TENSOR_DTYPES_:
-        for shape, stride_x, stride_grad_y, stride_grad_x, eps in _TEST_CASES_:
-            shape_weight = [shape[-1],]
-            x = np.random.rand(*shape).astype(dtype)
-            grad_y = np.random.rand(*shape).astype(dtype)
-            w = np.random.rand(shape[-1]).astype(dtype)
-            grad_x = np.empty(tuple(0 for _ in shape), dtype=dtype)
-            grad_w = np.empty((shape[-1],), dtype=dtype)
-            
-            stride_w = None
-            stride_grad_w = None
-            x = process_zero_stride_tensor(x, stride_x)
-            w = process_zero_stride_tensor(w, stride_w)
-            grad_y = process_zero_stride_tensor(grad_y, stride_grad_y)
-            grad_x = process_zero_stride_tensor(grad_x, stride_grad_x)
-            
-            test_case = RMSNormBackwardTestCase(
-                x=x,
-                shape_x=shape,
-                stride_x=stride_x,
-                w=w,
-                shape_w=shape_weight,
-                stride_w=stride_w,
-                grad_y=grad_y,
-                shape_grad_y=shape,
-                stride_grad_y=stride_grad_y,
-                grad_x=grad_x,
-                shape_grad_x=shape,
-                stride_grad_x=stride_grad_x,
-                grad_w=grad_w,
-                shape_grad_w=shape_weight,
-                stride_grad_w=stride_grad_w,
-                eps=eps,
-            )
-            test_cases.append(test_case)
+    for shape, stride_x, stride_grad_y, stride_grad_x, eps in _TEST_CASES_:
+        shape_weight = [shape[-1],]
+        x = np.random.rand(*shape).astype(dtype)
+        grad_y = np.random.rand(*shape).astype(dtype)
+        w = np.random.rand(shape[-1]).astype(dtype)
+        grad_x = np.empty(tuple(0 for _ in shape), dtype=dtype)
+        grad_w = np.empty((shape[-1],), dtype=dtype)
+        
+        stride_w = None
+        stride_grad_w = None
+        x = process_zero_stride_tensor(x, stride_x)
+        w = process_zero_stride_tensor(w, stride_w)
+        grad_y = process_zero_stride_tensor(grad_y, stride_grad_y)
+        grad_x = process_zero_stride_tensor(grad_x, stride_grad_x)
+        
+        test_case = RMSNormBackwardTestCase(
+            x=x,
+            shape_x=shape,
+            stride_x=stride_x,
+            w=w,
+            shape_w=shape_weight,
+            stride_w=stride_w,
+            grad_y=grad_y,
+            shape_grad_y=shape,
+            stride_grad_y=stride_grad_y,
+            grad_x=grad_x,
+            shape_grad_x=shape,
+            stride_grad_x=stride_grad_x,
+            grad_w=grad_w,
+            shape_grad_w=shape_weight,
+            stride_grad_w=stride_grad_w,
+            eps=eps,
+        )
+        test_cases.append(test_case)
 
     test_writer.add_tests(test_cases)
     test_writer.save()
+
+
+if __name__ == "__main__":
+    _TENSOR_DTYPES_ = [
+        np.float32,
+        np.float16,
+        bfloat16,
+    ]
+    dtype_filename_map = {
+        np.float32: "rms_norm_backward_f32.gguf",
+        np.float16: "rms_norm_backward_f16.gguf",
+        bfloat16: "rms_norm_backward_bf16.gguf",
+    }
+    
+    for dtype in _TENSOR_DTYPES_:
+        filename = dtype_filename_map[dtype]
+        gen_gguf(dtype, filename)

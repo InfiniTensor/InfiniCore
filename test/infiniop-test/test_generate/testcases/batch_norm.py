@@ -3,7 +3,6 @@ import torch
 import numpy as np
 from typing import List
 from ml_dtypes import bfloat16
-from gguf import GGMLQuantizationType
 
 from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides, process_zero_stride_tensor
 
@@ -84,13 +83,6 @@ class BatchNormTestCase(InfiniopTestCase):
         self.running_var = running_var
         self.shape_running_var = shape_running_var
         self.stride_running_var = stride_running_var
-    
-    # convert input dtype to GGUF quantization type, especially for bfloat16
-    def _to_gguf_dtype(self, input):
-        if input.dtype == bfloat16:
-            return GGMLQuantizationType.BF16
-        else:
-            return np_dtype_to_ggml(input.dtype)
         
     def write_test(self, test_writer: "InfiniopTestWriter"):
         super().write_test(test_writer)
@@ -130,22 +122,22 @@ class BatchNormTestCase(InfiniopTestCase):
         )
         
         test_writer.add_tensor(
-            test_writer.gguf_key("input"), self.input, raw_dtype=self._to_gguf_dtype(self.input)
+            test_writer.gguf_key("input"), self.input, raw_dtype=np_dtype_to_ggml(self.input.dtype)
         )
         test_writer.add_tensor(
-            test_writer.gguf_key("weight"), self.weight, raw_dtype=self._to_gguf_dtype(self.weight)
+            test_writer.gguf_key("weight"), self.weight, raw_dtype=np_dtype_to_ggml(self.weight.dtype)
         )
         test_writer.add_tensor(
-            test_writer.gguf_key("bias"), self.bias, raw_dtype=self._to_gguf_dtype(self.bias)
+            test_writer.gguf_key("bias"), self.bias, raw_dtype=np_dtype_to_ggml(self.bias.dtype)
         )
         test_writer.add_tensor(
-            test_writer.gguf_key("output"), self.output, raw_dtype=self._to_gguf_dtype(self.output)
+            test_writer.gguf_key("output"), self.output, raw_dtype=np_dtype_to_ggml(self.output.dtype)
         )
         test_writer.add_tensor(
-            test_writer.gguf_key("running_mean"), self.running_mean, raw_dtype=self._to_gguf_dtype(self.running_mean)
+            test_writer.gguf_key("running_mean"), self.running_mean, raw_dtype=np_dtype_to_ggml(self.running_mean.dtype)
         )
         test_writer.add_tensor(
-            test_writer.gguf_key("running_var"), self.running_var, raw_dtype=self._to_gguf_dtype(self.running_var)
+            test_writer.gguf_key("running_var"), self.running_var, raw_dtype=np_dtype_to_ggml(self.running_var.dtype)
         )
         
         ans_output, ans_running_mean, ans_running_var = batch_norm(
@@ -165,10 +157,11 @@ class BatchNormTestCase(InfiniopTestCase):
             test_writer.gguf_key("ans_running_var"), ans_running_var, raw_dtype=gguf.GGMLQuantizationType.F64
         )
         
-
-if __name__ == "__main__":
-    test_writer = InfiniopTestWriter("batch_norm.gguf")
+    
+def gen_gguf(dtype: np.dtype, filename: str):
+    test_writer = InfiniopTestWriter(filename)
     test_cases = []
+    
     # ==============================================================================
     #  Configuration
     # ==============================================================================
@@ -186,56 +179,66 @@ if __name__ == "__main__":
         ((16, 4, 2816), (45056, 11264, 1), (45056, 11264, 1), 0.1, 1e-5),
         ((16, 4, 2816), (90112, 11264, 1), (90112, 11264, 1), 0.1, 1e-5),
     ]
-    _TENSOR_DTYPES_ = [
-        np.float32,
-        np.float16,
-        bfloat16,
-    ]
-    for dtype in _TENSOR_DTYPES_:
-        for shape, stride_input, stride_output, momentum, eps in _TEST_CASES_:
-            input = np.random.rand(*shape).astype(dtype)
-            output = np.empty(tuple(0 for _ in shape), dtype=dtype)
-            shape_running = [shape[1],]
-            running_mean = np.empty(tuple(0 for _ in shape_running), dtype=dtype)
-            running_var = np.empty(tuple(0 for _ in shape_running), dtype=dtype)
-            weight = np.random.rand(shape[1]).astype(dtype)
-            bias = np.random.rand(shape[1]).astype(dtype)
-            
-            stride_weight = None
-            stride_bias = None
-            stride_running_mean = None
-            stride_running_var = None
-            input = process_zero_stride_tensor(input, stride_input)
-            weight = process_zero_stride_tensor(weight, stride_weight)
-            bias = process_zero_stride_tensor(bias, stride_bias)
-            output = process_zero_stride_tensor(output, stride_output)
-            running_mean = process_zero_stride_tensor(running_mean, stride_running_mean)
-            running_var = process_zero_stride_tensor(running_var, stride_running_var)
-            
-            test_case = BatchNormTestCase(
-                input=input,
-                shape_input=shape,
-                stride_input=stride_input,
-                weight=weight,
-                shape_weight=shape_running,
-                stride_weight=stride_weight,
-                bias=bias,
-                shape_bias=shape_running,
-                stride_bias=stride_bias,
-                output=output,
-                shape_output=shape,
-                stride_output=stride_output,
-                running_mean=running_mean,
-                shape_running_mean=shape_running,
-                stride_running_mean=stride_running_mean,
-                running_var=running_var,
-                shape_running_var=shape_running,
-                stride_running_var=stride_running_var,
-                momentum=momentum,
-                eps=eps,
-            )
-            test_cases.append(test_case)
+    for shape, stride_input, stride_output, momentum, eps in _TEST_CASES_:
+        input = np.random.rand(*shape).astype(dtype)
+        output = np.empty(tuple(0 for _ in shape), dtype=dtype)
+        shape_running = [shape[1],]
+        running_mean = np.empty(tuple(0 for _ in shape_running), dtype=dtype)
+        running_var = np.empty(tuple(0 for _ in shape_running), dtype=dtype)
+        weight = np.random.rand(shape[1]).astype(dtype)
+        bias = np.random.rand(shape[1]).astype(dtype)
+        
+        stride_weight = None
+        stride_bias = None
+        stride_running_mean = None
+        stride_running_var = None
+        input = process_zero_stride_tensor(input, stride_input)
+        weight = process_zero_stride_tensor(weight, stride_weight)
+        bias = process_zero_stride_tensor(bias, stride_bias)
+        output = process_zero_stride_tensor(output, stride_output)
+        running_mean = process_zero_stride_tensor(running_mean, stride_running_mean)
+        running_var = process_zero_stride_tensor(running_var, stride_running_var)
+        
+        test_case = BatchNormTestCase(
+            input=input,
+            shape_input=shape,
+            stride_input=stride_input,
+            weight=weight,
+            shape_weight=shape_running,
+            stride_weight=stride_weight,
+            bias=bias,
+            shape_bias=shape_running,
+            stride_bias=stride_bias,
+            output=output,
+            shape_output=shape,
+            stride_output=stride_output,
+            running_mean=running_mean,
+            shape_running_mean=shape_running,
+            stride_running_mean=stride_running_mean,
+            running_var=running_var,
+            shape_running_var=shape_running,
+            stride_running_var=stride_running_var,
+            momentum=momentum,
+            eps=eps,
+        )
+        test_cases.append(test_case)
     
     test_writer.add_tests(test_cases)
     test_writer.save()
-            
+
+
+if __name__ == "__main__":
+    _TENSOR_DTYPES_ = [
+        np.float32, 
+        np.float16, 
+        bfloat16,
+    ]
+    dtype_filename_map = {
+        np.float32: "batch_norm_float32.gguf",
+        np.float16: "batch_norm_float16.gguf",
+        bfloat16: "batch_norm_bfloat16.gguf",
+    }
+
+    for dtype in _TENSOR_DTYPES_:
+        filename = dtype_filename_map[dtype]
+        gen_gguf(dtype, filename)
