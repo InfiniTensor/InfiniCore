@@ -19,6 +19,40 @@ void printData(const T *data, const std::vector<size_t> &shape, const std::vecto
     }
 }
 
+// The type int8_t is represented by signed char, with a range of –128 to 127.
+// It may contain non-printable characters and thus cannot be printed directly.
+template <>
+void printData(const int8_t *data, const std::vector<size_t> &shape,
+               const std::vector<ptrdiff_t> &strides, size_t dim) {
+    if (dim == shape.size() - 1) {
+        for (size_t i = 0; i < shape[dim]; i++) {
+            std::cout << static_cast<int>(*(data + i * strides[dim])) << " ";
+        }
+        std::cout << std::endl;
+    } else if (dim < shape.size() - 1) {
+        for (size_t i = 0; i < shape[dim]; i++) {
+            printData(data + i * strides[dim], shape, strides, dim + 1);
+            std::cout << std::endl;
+        }
+    }
+}
+
+template <>
+void printData(const bf16_t *data, const std::vector<size_t> &shape,
+               const std::vector<ptrdiff_t> &strides, size_t dim) {
+    if (dim == shape.size() - 1) {
+        for (size_t i = 0; i < shape[dim]; i++) {
+            std::cout << utils::cast<float>(*(data + i * strides[dim])) << " ";
+        }
+        std::cout << std::endl;
+    } else if (dim < shape.size() - 1) {
+        for (size_t i = 0; i < shape[dim]; i++) {
+            printData(data + i * strides[dim], shape, strides, dim + 1);
+            std::cout << std::endl;
+        }
+    }
+}
+
 template <>
 void printData(const fp16_t *data, const std::vector<size_t> &shape,
                const std::vector<ptrdiff_t> &strides, size_t dim) {
@@ -26,6 +60,7 @@ void printData(const fp16_t *data, const std::vector<size_t> &shape,
         for (size_t i = 0; i < shape[dim]; i++) {
             std::cout << utils::cast<float>(*(data + i * strides[dim])) << " ";
         }
+        std::cout << std::endl;
     } else if (dim < shape.size() - 1) {
         for (size_t i = 0; i < shape[dim]; i++) {
             printData(data + i * strides[dim], shape, strides, dim + 1);
