@@ -74,18 +74,18 @@ def gen_gguf(dtype: np.dtype, filename: str):
     #  Configuration
     # ==============================================================================
     # These are not meant to be imported from other modules
-    _TEST_CASES_ = [
+    _TEST_CASES = [
         # shape_input, stride_input, shape_output, stride_output, dim
         ((13, 4), None, (1, 4), None, 0),
         ((13, 4), None, (13, 1), None, 1),
         ((13, 4), (10, 1), (13, 1), (10, 1), 1),
         ((13, 4, 4), None, (1, 4, 4), None, 0),
         ((13, 4, 4), None, (13, 4, 1), None, 2),
-        ((16, 5632), None, (1, 5632), None, 0),
         ((16, 5632), None, (16, 1), None, 1),
-        ((16, 5632), (13312, 1), (16, 1), (13312, 1), 1),
+        ((16, 5632), (6000, 1), (1, 5632), (6000, 1), 0),
         ((4, 4, 5632), None, (4, 4, 1), None, 2),
-        ((4, 4, 5632), (45056, 5632, 1), (4, 1, 5632), (45056, 5632, 1), 1),
+        ((16, 8, 4, 8), None, (1, 8, 4, 8), None, 0),
+        ((16, 8, 4, 8), None, (16, 8, 1, 8), None, 2),
     ]
 
     for shape_input, stride_input, shape_output, stride_output, dim in _TEST_CASES_:
