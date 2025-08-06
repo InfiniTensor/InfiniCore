@@ -6,6 +6,8 @@
 
 inline infiniDtype_t ggmlTypeToInfiniType(GGML_TYPE type) {
     switch (type) {
+    case GGML_TYPE_Q8_K:
+        return INFINI_DTYPE_BOOL;
     case GGML_TYPE_I8:
         return INFINI_DTYPE_I8;
     case GGML_TYPE_I16:

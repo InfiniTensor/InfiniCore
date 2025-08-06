@@ -17,6 +17,8 @@ inline double getVal(void *ptr, GGML_TYPE ggml_type) {
         return *(float *)ptr;
     case GGML_TYPE_F64:
         return *(double *)ptr;
+    case GGML_TYPE_Q8_K:
+        return *(bool *)ptr;
     case GGML_TYPE_I8:
         return *(int8_t *)ptr;
     case GGML_TYPE_I16:
@@ -40,6 +42,8 @@ inline size_t ggmlSizeOf(GGML_TYPE ggml_type) {
         return sizeof(float);
     case GGML_TYPE_F64:
         return sizeof(double);
+    case GGML_TYPE_Q8_K:
+        return sizeof(bool);
     case GGML_TYPE_I8:
         return sizeof(int8_t);
     case GGML_TYPE_I16:

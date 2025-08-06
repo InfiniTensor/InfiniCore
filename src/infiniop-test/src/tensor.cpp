@@ -1,4 +1,5 @@
 #include "tensor.hpp"
+#include "gguf.hpp"
 #include "utils.hpp"
 #include <cstring>
 #include <infinirt.h>
@@ -273,6 +274,9 @@ void Tensor::debug() const {
     case GGML_TYPE_F64:
         printData((double *)(tensor->data()), _shape, _strides, 0);
         break;
+    case GGML_TYPE_Q8_K:
+        printData((bool *)(tensor->data()), _shape, _strides, 0);
+        break;
     case GGML_TYPE_I8:
         printData((int8_t *)(tensor->data()), _shape, _strides, 0);
         break;
@@ -281,6 +285,9 @@ void Tensor::debug() const {
         break;
     case GGML_TYPE_I32:
         printData((int32_t *)(tensor->data()), _shape, _strides, 0);
+        break;
+    case GGML_TYPE_I64:
+        printData((int64_t *)(tensor->data()), _shape, _strides, 0);
         break;
     default:
         std::cout << "Unsupported GGML type" << std::endl;
