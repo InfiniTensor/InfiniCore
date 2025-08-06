@@ -3,7 +3,6 @@ import torch
 import numpy as np
 from typing import List
 from ml_dtypes import bfloat16
-from gguf import GGMLQuantizationType
 
 from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides, process_zero_stride_tensor
 
@@ -36,13 +35,6 @@ class ReduceMeanTestCase(InfiniopTestCase):
         self.stride_output = stride_output
         self.dim = dim
         
-    # convert input dtype to GGUF quantization type, especially for bfloat16
-    def _to_gguf_dtype(self, input):
-        if input.dtype == bfloat16:
-            return GGMLQuantizationType.BF16
-        else:
-            return np_dtype_to_ggml(input.dtype)
-        
     def write_test(self, test_writer: "InfiniopTestWriter"):
         super().write_test(test_writer)
         test_writer.add_int64(test_writer.gguf_key("dim"), self.dim)
@@ -50,18 +42,21 @@ class ReduceMeanTestCase(InfiniopTestCase):
             test_writer.add_array(test_writer.gguf_key("input.shape"), self.shape_input)
         if self.shape_output is not None:
             test_writer.add_array(test_writer.gguf_key("output.shape"), self.shape_output)
+        
         if self.stride_input is not None:
             test_writer.add_array(test_writer.gguf_key("input.strides"), gguf_strides(*self.stride_input))
         test_writer.add_array(
             test_writer.gguf_key("output.strides"),
             gguf_strides(*self.stride_output if self.stride_output is not None else contiguous_gguf_strides(self.shape_output))
         )
+        
         test_writer.add_tensor(
-            test_writer.gguf_key("input"), self.input, raw_dtype=self._to_gguf_dtype(self.input)
+            test_writer.gguf_key("input"), self.input, raw_dtype=np_dtype_to_ggml(self.input.dtype)
         )
         test_writer.add_tensor(
-            test_writer.gguf_key("output"), self.output, raw_dtype=self._to_gguf_dtype(self.output)
+            test_writer.gguf_key("output"), self.output, raw_dtype=np_dtype_to_ggml(self.output.dtype)
         )
+        
         ans = reduce_mean(
             self.input.astype(np.float64),
             self.dim,
@@ -71,9 +66,10 @@ class ReduceMeanTestCase(InfiniopTestCase):
         )
         
 
-if __name__ == "__main__":
-    test_writer = InfiniopTestWriter("reduce_mean.gguf")
+def gen_gguf(dtype: np.dtype, filename: str):
+    test_writer = InfiniopTestWriter(filename)
     test_cases = []
+
     # ==============================================================================
     #  Configuration
     # ==============================================================================
@@ -91,28 +87,39 @@ if __name__ == "__main__":
         ((4, 4, 5632), None, (4, 4, 1), None, 2),
         ((4, 4, 5632), (45056, 5632, 1), (4, 1, 5632), (45056, 5632, 1), 1),
     ]
+
+    for shape_input, stride_input, shape_output, stride_output, dim in _TEST_CASES_:
+        input = np.random.rand(*shape_input).astype(dtype)
+        output = np.empty(tuple(0 for _ in shape_output), dtype=dtype)
+        input = process_zero_stride_tensor(input, stride_input)
+        output = process_zero_stride_tensor(output, stride_output)
+        test_case = ReduceMeanTestCase(
+            input=input,
+            shape_input=shape_input,
+            stride_input=stride_input,
+            output=output,
+            shape_output=shape_output,
+            stride_output=stride_output,
+            dim=dim,
+        )
+        test_cases.append(test_case)
+    
+    test_writer.add_tests(test_cases)
+    test_writer.save()
+
+
+if __name__ == "__main__":
     _TENSOR_DTYPES_ = [
         np.float32,
         np.float16,
         bfloat16,
     ]
-    for dtype in _TENSOR_DTYPES_:
-        for shape_input, stride_input, shape_output, stride_output, dim in _TEST_CASES_:
-            input = np.random.rand(*shape_input).astype(dtype)
-            output = np.empty(tuple(0 for _ in shape_output), dtype=dtype)
-            input = process_zero_stride_tensor(input, stride_input)
-            output = process_zero_stride_tensor(output, stride_output)
-            test_case = ReduceMeanTestCase(
-                input=input,
-                shape_input=shape_input,
-                stride_input=stride_input,
-                output=output,
-                shape_output=shape_output,
-                stride_output=stride_output,
-                dim=dim,
-            )
-            test_cases.append(test_case)
+    dtype_filename_map = {
+        np.float32: "reduce_mean_f32.gguf",
+        np.float16: "reduce_mean_f16.gguf",
+        bfloat16: "reduce_mean_bf16.gguf",
+    }
     
-    test_writer.add_tests(test_cases)
-    test_writer.save()
-            
+    for dtype in _TENSOR_DTYPES_:
+        filename = dtype_filename_map[dtype]
+        gen_gguf(dtype, filename)

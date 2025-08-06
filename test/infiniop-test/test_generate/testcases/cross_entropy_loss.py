@@ -4,7 +4,6 @@ import numpy as np
 import torch.nn.functional as F
 from typing import List
 from ml_dtypes import bfloat16
-from gguf import GGMLQuantizationType
 
 from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides, process_zero_stride_tensor
 
@@ -43,13 +42,6 @@ class CrossEntropyLossTestCase(InfiniopTestCase):
         self.shape_target = shape_target
         self.stride_target = stride_target
         
-    # convert input dtype to GGUF quantization type, especially for bfloat16
-    def _to_gguf_dtype(self, input):
-        if input.dtype == bfloat16:
-            return GGMLQuantizationType.BF16
-        else:
-            return np_dtype_to_ggml(input.dtype)
-        
     def write_test(self, test_writer: InfiniopTestWriter):
         super().write_test(test_writer)
         
@@ -64,10 +56,10 @@ class CrossEntropyLossTestCase(InfiniopTestCase):
             test_writer.add_array(test_writer.gguf_key("target.strides"), gguf_strides(*self.stride_target))
         
         test_writer.add_tensor(
-            test_writer.gguf_key("logits"), self.logits, raw_dtype=self._to_gguf_dtype(self.logits)
+            test_writer.gguf_key("logits"), self.logits, raw_dtype=np_dtype_to_ggml(self.logits.dtype)
         )
         test_writer.add_tensor(
-            test_writer.gguf_key("target"), self.target, raw_dtype=self._to_gguf_dtype(self.target)
+            test_writer.gguf_key("target"), self.target, raw_dtype=np_dtype_to_ggml(self.target.dtype)
         )
         
         ans = cross_entropy_loss(
@@ -75,17 +67,17 @@ class CrossEntropyLossTestCase(InfiniopTestCase):
             self.target.astype(np.float64),
         )
         test_writer.add_tensor(
-            test_writer.gguf_key("ans"), ans, raw_dtype=GGMLQuantizationType.F64
+            test_writer.gguf_key("ans"), ans, raw_dtype=gguf.GGMLQuantizationType.F64
         )
         
-    
-if __name__ == "__main__":
-    test_writer = InfiniopTestWriter("cross_entropy_loss.gguf")
+
+def gen_gguf(dtype: np.dtype, filename: str):
+    test_writer = InfiniopTestWriter(filename)
     test_cases = []
+    
     # ==============================================================================
     #  Configuration
     # ==============================================================================
-    # These are not meant to be imported from other modules
     _TEST_CASES_ = [
         # shape, stride_logits, stride_target
         ((4, 2), None, None),
@@ -99,30 +91,40 @@ if __name__ == "__main__":
         ((4, 4, 5632), None, None),
         ((4, 4, 5632), (45056, 5632, 1), (45056, 5632, 1)),
     ]
-    _TENSOR_DTYPES_ = [
-        np.float32,
-        np.float64,
-        bfloat16,
-    ]
     
-    for dtype in _TENSOR_DTYPES_:
-        for shape, stride_logits, stride_target in _TEST_CASES_:
-            logits = np.random.rand(*shape).astype(dtype)
-            target = np.random.rand(*shape).astype(dtype)
-            target = softmax(target, axis=1)
-            
-            logits = process_zero_stride_tensor(logits, stride_logits)
-            target = process_zero_stride_tensor(target, stride_target)
-            
-            test_case = CrossEntropyLossTestCase(
-                logits=logits,
-                shape_logits=shape,
-                stride_logits=stride_logits,
-                target=target,
-                shape_target=shape,
-                stride_target=stride_target,
-            )
-            test_cases.append(test_case)   
+    for shape, stride_logits, stride_target in _TEST_CASES_:
+        logits = np.random.rand(*shape).astype(dtype)
+        target = np.random.rand(*shape).astype(dtype)
+        target = softmax(target, axis=1)
+        
+        logits = process_zero_stride_tensor(logits, stride_logits)
+        target = process_zero_stride_tensor(target, stride_target)
+        
+        test_case = CrossEntropyLossTestCase(
+            logits=logits,
+            shape_logits=shape,
+            stride_logits=stride_logits,
+            target=target,
+            shape_target=shape,
+            stride_target=stride_target,
+        )
+        test_cases.append(test_case)
     
     test_writer.add_tests(test_cases)
     test_writer.save()
+    
+if __name__ == "__main__":
+    _TENSOR_DTYPES_ = [
+        np.float32,
+        np.float16,
+        bfloat16,
+    ]
+    dtype_filename_map = {
+        np.float32: "cross_entropy_loss_f32.gguf",
+        np.float16: "cross_entropy_loss_f16.gguf",
+        bfloat16: "cross_entropy_loss_bf16.gguf",
+    }
+    
+    for dtype in _TENSOR_DTYPES_:
+        filename = dtype_filename_map[dtype]
+        gen_gguf(dtype, filename)

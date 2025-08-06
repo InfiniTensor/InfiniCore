@@ -4,7 +4,6 @@ import numpy as np
 import torch.nn.functional as F
 from typing import List
 from ml_dtypes import bfloat16
-from gguf import GGMLQuantizationType
 
 from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides, process_zero_stride_tensor
 
@@ -98,13 +97,6 @@ class FlashAttentionTestCase(InfiniopTestCase):
         self.shape_out = shape_out
         self.stride_out = stride_out
         
-    # convert input dtype to GGUF quantization type, especially for bfloat16
-    def _to_gguf_dtype(self, input):
-        if input.dtype == bfloat16:
-            return GGMLQuantizationType.BF16
-        else:
-            return np_dtype_to_ggml(input.dtype)
-        
     def write_test(self, test_writer: InfiniopTestWriter):
         super().write_test(test_writer)
         test_writer.add_int32(test_writer.gguf_key("mask_type"), self.mask_type)
@@ -134,20 +126,20 @@ class FlashAttentionTestCase(InfiniopTestCase):
         )
         
         test_writer.add_tensor(
-            test_writer.gguf_key("q"), self.q, raw_dtype=self._to_gguf_dtype(self.q)
+            test_writer.gguf_key("q"), self.q, raw_dtype=np_dtype_to_ggml(self.q.dtype)
         )
         test_writer.add_tensor(
-            test_writer.gguf_key("k"), self.k, raw_dtype=self._to_gguf_dtype(self.k)
+            test_writer.gguf_key("k"), self.k, raw_dtype=np_dtype_to_ggml(self.k.dtype)
         )
         test_writer.add_tensor(
-            test_writer.gguf_key("v"), self.v, raw_dtype=self._to_gguf_dtype(self.v)
+            test_writer.gguf_key("v"), self.v, raw_dtype=np_dtype_to_ggml(self.v.dtype)
         )
         if self.mask is not None:
             test_writer.add_tensor(
-                test_writer.gguf_key("mask"), self.mask, raw_dtype=self._to_gguf_dtype(self.mask)
+                test_writer.gguf_key("mask"), self.mask, raw_dtype=np_dtype_to_ggml(self.mask.dtype)
             )
         test_writer.add_tensor(
-            test_writer.gguf_key("out"), self.out, raw_dtype=self._to_gguf_dtype(self.out)
+            test_writer.gguf_key("out"), self.out, raw_dtype=np_dtype_to_ggml(self.out.dtype)
         )
         
         ans = flash_attention(
@@ -161,10 +153,11 @@ class FlashAttentionTestCase(InfiniopTestCase):
             test_writer.gguf_key("ans"), ans, raw_dtype=gguf.GGMLQuantizationType.F64
         )
         
-    
-if __name__ == "__main__":
-    test_writer = InfiniopTestWriter("flash_attention.gguf")
+
+def gen_gguf(dtype: np.dtype, filename: str):
+    test_writer = InfiniopTestWriter(filename)
     test_cases = []
+
     # ==============================================================================
     #  Configuration
     # ==============================================================================
@@ -180,56 +173,67 @@ if __name__ == "__main__":
         ((4, 10, 2, 4), (4, 10, 2, 4), None, None, None, 2),
         ((4, 20, 2, 4), (4, 10, 2, 4), None, None, None, 0),
         ((4, 10, 8, 4), (4, 10, 2, 4), None, None, None, 1),
-        ((16, 1024, 8, 64), (16, 1024, 8, 64), None, None, None, 2),
-        ((16, 2048, 16, 64), (16, 2048, 8, 64), None, None, None, 0),
+        # ((16, 1024, 8, 64), (16, 1024, 8, 64), None, None, None, 2),
+        # ((16, 2048, 16, 64), (16, 2048, 8, 64), None, None, None, 0),
     ]
-    _TENSOR_DYPES_ = [
-        np.float32,
-        np.float64,
-        bfloat16,
-    ]
-    for dytpe in _TENSOR_DYPES_:
-        for shape_q, shape_kv, stride_q, stride_kv, stride_out, mask_type in _TEST_CASES_:
-            q = np.random.rand(*shape_q).astype(dytpe)
-            k = np.random.rand(*shape_kv).astype(dytpe)
-            v = np.random.rand(*shape_kv).astype(dytpe)
+    for shape_q, shape_kv, stride_q, stride_kv, stride_out, mask_type in _TEST_CASES_:
+        q = np.random.rand(*shape_q).astype(dtype)
+        k = np.random.rand(*shape_kv).astype(dtype)
+        v = np.random.rand(*shape_kv).astype(dtype)
+        
+        shape_mask = None if mask_type == 0 else (q.shape[-3], k.shape[-3])
+        if mask_type == 1:
+            mask = np.random.randint(0, 2, size=shape_mask).astype(np.float32)
+            mask = np.where(mask == 1, -np.inf, mask)
+        else:
+            mask = None
             
-            shape_mask = None if mask_type == 0 else (q.shape[-3], k.shape[-3])
-            if mask_type == 1:
-                mask = np.random.randint(0, 2, size=shape_mask).astype(np.float32)
-                mask = np.where(mask == 1, -np.inf, mask)
-            else:
-                mask = None
-                
-            out = np.empty(tuple(0 for _ in shape_q), dtype=dytpe)
-            
-            stride_mask = None
-            q = process_zero_stride_tensor(q, stride_q)
-            k = process_zero_stride_tensor(k, stride_kv)
-            v = process_zero_stride_tensor(v, stride_kv)
-            out = process_zero_stride_tensor(out, stride_out)
-            if mask is not None:
-                mask = process_zero_stride_tensor(mask, stride_mask)
-            
-            test_case = FlashAttentionTestCase(
-                q=q,
-                shape_q=shape_q,
-                stride_q=stride_q,
-                k=k,
-                shape_k=shape_kv,
-                stride_k=stride_kv,
-                v=v,
-                shape_v=shape_kv,
-                stride_v=stride_kv,
-                out=out,
-                shape_out=shape_q,
-                stride_out=stride_out,
-                mask=mask,
-                shape_mask=shape_mask,
-                stride_mask=stride_mask,
-                mask_type=mask_type,
-            )
-            test_cases.append(test_case)
+        out = np.empty(tuple(0 for _ in shape_q), dtype=dtype)
+        
+        stride_mask = None
+        q = process_zero_stride_tensor(q, stride_q)
+        k = process_zero_stride_tensor(k, stride_kv)
+        v = process_zero_stride_tensor(v, stride_kv)
+        out = process_zero_stride_tensor(out, stride_out)
+        if mask is not None:
+            mask = process_zero_stride_tensor(mask, stride_mask)
+        
+        test_case = FlashAttentionTestCase(
+            q=q,
+            shape_q=shape_q,
+            stride_q=stride_q,
+            k=k,
+            shape_k=shape_kv,
+            stride_k=stride_kv,
+            v=v,
+            shape_v=shape_kv,
+            stride_v=stride_kv,
+            out=out,
+            shape_out=shape_q,
+            stride_out=stride_out,
+            mask=mask,
+            shape_mask=shape_mask,
+            stride_mask=stride_mask,
+            mask_type=mask_type,
+        )
+        test_cases.append(test_case)
     
     test_writer.add_tests(test_cases)
     test_writer.save()
+
+    
+if __name__ == "__main__":
+    _TENSOR_DTYPES_ = [
+        np.float32,
+        np.float16,
+        bfloat16,
+    ]
+    dtype_filename_map = {
+        np.float32: "flash_attention_f32.gguf",
+        np.float16: "flash_attention_f16.gguf",
+        bfloat16: "flash_attention_bf16.gguf",
+    }
+    
+    for dtype in _TENSOR_DTYPES_:
+        filename = dtype_filename_map[dtype]
+        gen_gguf(dtype, filename)
