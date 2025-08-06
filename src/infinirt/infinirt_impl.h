@@ -29,9 +29,9 @@
     infiniStatus_t mallocAsync(void **p_ptr, size_t size, infinirtStream_t stream) IMPL;                                          \
     infiniStatus_t freeAsync(void *ptr, infinirtStream_t stream) IMPL;                                                            \
     infiniStatus_t getMemGranularityMinimum(size_t *granularity) IMPL;                                                            \
-    infiniStatus_t createPhysicalMem(infinirtPhyMem_t *phy_mem, size_t len) IMPL;                                                  \
+    infiniStatus_t createPhysicalMem(infinirtPhyMem_t *phy_mem, size_t len) IMPL;                                                 \
     infiniStatus_t releasePhysicalMem(infinirtPhyMem_t phy_mem) IMPL;                                                             \
-    infiniStatus_t createVirtualMem(infinirtVirtualMem_t *vm, size_t len) IMPL;                                                    \
+    infiniStatus_t createVirtualMem(infinirtVirtualMem_t *vm, size_t len) IMPL;                                                   \
     infiniStatus_t mapVirtualMem(void **mapped_ptr, infinirtVirtualMem_t vm, size_t offset, infinirtPhyMem_t phy_mem) IMPL;       \
     infiniStatus_t unmapVirtualMem(infinirtVirtualMem_t vm, size_t offset) IMPL;                                                  \
     infiniStatus_t releaseVirtualMem(infinirtVirtualMem_t vm) IMPL;

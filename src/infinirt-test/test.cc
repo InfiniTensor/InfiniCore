@@ -152,8 +152,7 @@ bool testVirtualMem(infiniDevice_t device, int deviceId) {
         // Create virtual memory regions
         infinirtVirtualMem_t vm1, vm2;
         size_t vm_len = 10 * min_granularity;
-        if (infinirtCreateVirtualMem(&vm1, vm_len) != INFINI_STATUS_SUCCESS ||
-            infinirtCreateVirtualMem(&vm2, 2 * min_granularity) != INFINI_STATUS_SUCCESS) {
+        if (infinirtCreateVirtualMem(&vm1, vm_len) != INFINI_STATUS_SUCCESS || infinirtCreateVirtualMem(&vm2, 2 * min_granularity) != INFINI_STATUS_SUCCESS) {
             std::cerr << "Failed to create virtual memory regions" << std::endl;
             return false;
         }
@@ -167,8 +166,7 @@ bool testVirtualMem(infiniDevice_t device, int deviceId) {
 
         // Map physical memory to both virtual memory regions
         void *mapped_ptr1, *mapped_ptr2;
-        if (infinirtMapVirtualMem(&mapped_ptr1, vm1, min_granularity, phy_mem) != INFINI_STATUS_SUCCESS ||
-            infinirtMapVirtualMem(&mapped_ptr2, vm2, min_granularity, phy_mem) != INFINI_STATUS_SUCCESS) {
+        if (infinirtMapVirtualMem(&mapped_ptr1, vm1, min_granularity, phy_mem) != INFINI_STATUS_SUCCESS || infinirtMapVirtualMem(&mapped_ptr2, vm2, min_granularity, phy_mem) != INFINI_STATUS_SUCCESS) {
             std::cerr << "Failed to map virtual memory" << std::endl;
             return false;
         }
