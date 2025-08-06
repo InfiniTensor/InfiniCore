@@ -5,8 +5,8 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/cpu_handle.h"
 #endif
-#ifdef ENABLE_CUDA_API
-#include "cuda/cuda_handle.h"
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
+#include "nvidia/nvidia_handle.h"
 #endif
 #ifdef ENABLE_CAMBRICON_API
 #include "bang/bang_handle.h"
@@ -21,7 +21,7 @@
 #include "kunlun/kunlun_handle.h"
 #endif
 #ifdef ENABLE_METAX_API
-#include "maca/maca_handle.h"
+#include "metax/metax_handle.h"
 #endif
 
 __C infiniStatus_t infiniopCreateHandle(infiniopHandle_t *handle_ptr) {
@@ -41,8 +41,11 @@ __C infiniStatus_t infiniopCreateHandle(infiniopHandle_t *handle_ptr) {
 #ifdef ENABLE_CPU_API
         CREATE(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_CUDA_API
-        CREATE(INFINI_DEVICE_NVIDIA, cuda::nvidia);
+#ifdef ENABLE_NVIDIA_API
+        CREATE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        CREATE(INFINI_DEVICE_ILUVATAR, iluvatar);
 #endif
 #ifdef ENABLE_CAMBRICON_API
         CREATE(INFINI_DEVICE_CAMBRICON, bang::cambricon);
@@ -57,7 +60,7 @@ __C infiniStatus_t infiniopCreateHandle(infiniopHandle_t *handle_ptr) {
         CREATE(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
 #ifdef ENABLE_METAX_API
-        CREATE(INFINI_DEVICE_METAX, maca);
+        CREATE(INFINI_DEVICE_METAX, metax);
 #endif
 
     default:
@@ -78,8 +81,11 @@ __C infiniStatus_t infiniopDestroyHandle(infiniopHandle_t handle) {
 #ifdef ENABLE_CPU_API
         DELETE(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_CUDA_API
-        DELETE(INFINI_DEVICE_NVIDIA, cuda::nvidia);
+#ifdef ENABLE_NVIDIA_API
+        DELETE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        DELETE(INFINI_DEVICE_ILUVATAR, iluvatar);
 #endif
 #ifdef ENABLE_CAMBRICON_API
         DELETE(INFINI_DEVICE_CAMBRICON, bang::cambricon);
@@ -94,7 +100,7 @@ __C infiniStatus_t infiniopDestroyHandle(infiniopHandle_t handle) {
         DELETE(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
 #ifdef ENABLE_METAX_API
-        DELETE(INFINI_DEVICE_METAX, maca);
+        DELETE(INFINI_DEVICE_METAX, metax);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

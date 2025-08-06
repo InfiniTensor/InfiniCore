@@ -12,11 +12,17 @@ if is_mode("debug") then
     add_defines("DEBUG_MODE")
 end
 
+if is_plat("windows") then
+    set_runtimes("MD")
+    add_ldflags("/utf-8", {force = true})
+    add_cxflags("/utf-8", {force = true})
+end
+
 -- CPU
 option("cpu")
     set_default(true)
     set_showmenu(true)
-    set_description("Whether to complie implementations for CPU")
+    set_description("Whether to compile implementations for CPU")
 option_end()
 
 option("omp")
@@ -38,32 +44,29 @@ end
 option("nv-gpu")
     set_default(false)
     set_showmenu(true)
-    set_description("Whether to complie implementations for Nvidia GPU")
+    set_description("Whether to compile implementations for Nvidia GPU")
 option_end()
 
 if has_config("nv-gpu") then
-    add_defines("ENABLE_CUDA_API")
-    includes("xmake/cuda.lua")
+    add_defines("ENABLE_NVIDIA_API")
+    includes("xmake/nvidia.lua")
 end
 
--- 天数智芯
-option("iluvatar-gpu")
-    set_default(false)
+option("cudnn")
+    set_default(true)
     set_showmenu(true)
-    set_description("Whether to complie implementations for Iluvatar GPU")
+    set_description("Whether to compile cudnn for Nvidia GPU")
 option_end()
 
-if has_config("iluvatar-gpu") then
-    add_defines("ENABLE_CUDA_API")
-    add_defines("ENABLE_ILUVATAR_CUDA_API")
-    includes("xmake/iluvatar.lua")
+if has_config("cudnn") then
+    add_defines("ENABLE_CUDNN_API")
 end
 
 -- 寒武纪
 option("cambricon-mlu")
     set_default(false)
     set_showmenu(true)
-    set_description("Whether to complie implementations for Cambricon MLU")
+    set_description("Whether to compile implementations for Cambricon MLU")
 option_end()
 
 if has_config("cambricon-mlu") then
@@ -75,7 +78,7 @@ end
 option("ascend-npu")
     set_default(false)
     set_showmenu(true)
-    set_description("Whether to complie implementations for Huawei Ascend NPU")
+    set_description("Whether to compile implementations for Huawei Ascend NPU")
 option_end()
 
 if has_config("ascend-npu") then
@@ -83,23 +86,35 @@ if has_config("ascend-npu") then
     includes("xmake/ascend.lua")
 end
 
+-- 天数智芯
+option("iluvatar-gpu")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Whether to compile implementations for Iluvatar GPU")
+option_end()
+
+if has_config("iluvatar-gpu") then
+    add_defines("ENABLE_ILUVATAR_API")
+    includes("xmake/iluvatar.lua")
+end
+
 -- 沐曦
 option("metax-gpu")
     set_default(false)
     set_showmenu(true)
-    set_description("Whether to complie implementations for MetaX GPU")
+    set_description("Whether to compile implementations for MetaX GPU")
 option_end()
 
 if has_config("metax-gpu") then
     add_defines("ENABLE_METAX_API")
-    includes("xmake/maca.lua")
+    includes("xmake/metax.lua")
 end
 
 -- 摩尔线程
 option("moore-gpu")
     set_default(false)
     set_showmenu(true)
-    set_description("Whether to complie implementations for Moore Threads GPU")
+    set_description("Whether to compile implementations for Moore Threads GPU")
 option_end()
 
 if has_config("moore-gpu") then
@@ -111,11 +126,10 @@ end
 option("sugon-dcu")
     set_default(false)
     set_showmenu(true)
-    set_description("Whether to complie implementations for Sugon DCU")
+    set_description("Whether to compile implementations for Sugon DCU")
 option_end()
 
 if has_config("sugon-dcu") then
-    add_defines("ENABLE_CUDA_API")
     add_defines("ENABLE_SUGON_CUDA_API")
 end
 
@@ -131,12 +145,22 @@ if has_config("kunlun-xpu") then
     includes("xmake/kunlun.lua")
 end
 
--- InfiniCCL
-option("ccl")
-set_default(false)
+-- 九齿
+option("ninetoothed")
     set_default(false)
     set_showmenu(true)
-    set_description("Wether to complie implementations for InfiniCCL")
+    set_description("Whether to complie NineToothed implementations")
+option_end()
+
+if has_config("ninetoothed") then
+    add_defines("ENABLE_NINETOOTHED")
+end
+
+-- InfiniCCL
+option("ccl")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Wether to compile implementations for InfiniCCL")
 option_end()
 
 if has_config("ccl") then
@@ -159,7 +183,7 @@ target("infini-utils")
         add_cxflags("-fPIC", "-Wno-unknown-pragmas")
         if has_config("omp") then
             add_cxflags("-fopenmp")
-            add_ldflags("-fopenmp")
+            add_ldflags("-fopenmp", {force = true})
         end
     end
 
@@ -173,7 +197,7 @@ target("infinirt")
         add_deps("infinirt-cpu")
     end
     if has_config("nv-gpu") then
-        add_deps("infinirt-cuda")
+        add_deps("infinirt-nvidia")
     end
     if has_config("cambricon-mlu") then
         add_deps("infinirt-cambricon")
@@ -207,7 +231,7 @@ target("infiniop")
         add_deps("infiniop-cpu")
     end
     if has_config("nv-gpu") then
-        add_deps("infiniop-cuda")
+        add_deps("infiniop-nvidia")
     end
     if has_config("iluvatar-gpu") then
         add_deps("infiniop-iluvatar")
@@ -221,9 +245,9 @@ target("infiniop")
         )
         add_shflags("-s", "-shared", "-fPIC")
         add_links("cublas", "cudnn", "cudadevrt", "cudart_static", "rt", "pthread", "dl")
-        -- Using -linfiniop-cuda will fail, manually link the target using full path
+        -- Using -linfiniop-nvidia will fail, manually link the target using full path
         add_deps("nv-gpu", {inherit = false})
-        add_links(builddir.."/libinfiniop-cuda.a")
+        add_links(builddir.."/libinfiniop-nvidia.a")
         set_toolchains("sugon-dcu-linker")
     end
 
@@ -259,13 +283,16 @@ target("infiniccl")
     add_deps("infinirt")
 
     if has_config("nv-gpu") then
-        add_deps("infiniccl-cuda")
+        add_deps("infiniccl-nvidia")
     end
     if has_config("ascend-npu") then
         add_deps("infiniccl-ascend")
     end
     if has_config("metax-gpu") then
         add_deps("infiniccl-metax")
+    end
+    if has_config("iluvatar-gpu") then
+        add_deps("infiniccl-iluvatar")
     end
 
     set_languages("cxx17")

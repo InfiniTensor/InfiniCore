@@ -8,12 +8,11 @@
 #ifdef ENABLE_ASCEND_API
 #include "ascend/rearrange_ascend.h"
 #endif
-
-#ifdef ENABLE_CUDA_API
-#include "cuda/rearrange_cuda.cuh"
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
+#include "nvidia/rearrange_nvidia.cuh"
 #endif
 #ifdef ENABLE_METAX_API
-#include "maca/rearrange_maca.h"
+#include "metax/rearrange_metax.h"
 #endif
 
 __C infiniStatus_t infiniopCreateRearrangeDescriptor(
@@ -39,11 +38,14 @@ __C infiniStatus_t infiniopCreateRearrangeDescriptor(
         CREATE(INFINI_DEVICE_ASCEND, ascend);
 #endif
 
-#ifdef ENABLE_CUDA_API
-        CREATE(INFINI_DEVICE_NVIDIA, cuda);
+#ifdef ENABLE_NVIDIA_API
+        CREATE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_METAX_API
-        CREATE(INFINI_DEVICE_METAX, maca);
+        CREATE(INFINI_DEVICE_METAX, metax);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -72,11 +74,14 @@ __C infiniStatus_t infiniopRearrange(
         CALCULATE(INFINI_DEVICE_ASCEND, ascend);
 #endif
 
-#ifdef ENABLE_CUDA_API
-        CALCULATE(INFINI_DEVICE_NVIDIA, cuda);
+#ifdef ENABLE_NVIDIA_API
+        CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_METAX_API
-        CALCULATE(INFINI_DEVICE_METAX, maca);
+        CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
 
     default:
@@ -102,12 +107,14 @@ __C infiniStatus_t infiniopDestroyRearrangeDescriptor(
 #ifdef ENABLE_ASCEND_API
         DELETE(INFINI_DEVICE_ASCEND, ascend);
 #endif
-
-#ifdef ENABLE_CUDA_API
-        DELETE(INFINI_DEVICE_NVIDIA, cuda);
+#ifdef ENABLE_NVIDIA_API
+        DELETE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        DELETE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_METAX_API
-        DELETE(INFINI_DEVICE_METAX, maca);
+        DELETE(INFINI_DEVICE_METAX, metax);
 #endif
 
     default:

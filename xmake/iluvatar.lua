@@ -42,13 +42,17 @@ target("infiniop-iluvatar")
     add_links("cudart", "cublas", "cudnn")
 
     set_warnings("all", "error")
+    add_cuflags("-Wno-error=unused-private-field")
     add_cuflags("-fPIC", "-x", "ivcore", "-std=c++17", {force = true})
-    add_cuflags("-fPIC")
     add_culdflags("-fPIC")
     add_cxflags("-fPIC")
 
     -- set_languages("cxx17") 天数似乎不能用这个配置
-    add_files("../src/infiniop/devices/cuda/*.cu", "../src/infiniop/ops/*/cuda/*.cu")
+    add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")
+
+    if has_config("ninetoothed") then
+        add_files("../build/ninetoothed/*.c", {cxflags = {"-Wno-return-type"}})
+    end
 target_end()
 
 target("infinirt-iluvatar")
@@ -64,10 +68,39 @@ target("infinirt-iluvatar")
 
     set_warnings("all", "error")
     add_cuflags("-fPIC", "-x", "ivcore", "-std=c++17", {force = true})
-    add_cuflags("-fPIC")
     add_culdflags("-fPIC")
     add_cxflags("-fPIC")
 
     -- set_languages("cxx17") 天数似乎不能用这个配置
     add_files("../src/infinirt/cuda/*.cu")
+target_end()
+
+target("infiniccl-iluvatar")
+    set_kind("static")
+    add_deps("infinirt")
+    on_install(function (target) end)
+
+    if has_config("ccl") then
+        set_toolchains("iluvatar.toolchain")
+        add_rules("iluvatar.env")
+        set_values("cuda.rdc", false)
+
+        add_links("cudart")
+
+        set_warnings("all", "error")
+        add_cuflags("-fPIC", "-x", "ivcore", "-std=c++17", {force = true})
+        add_culdflags("-fPIC")
+        add_cxflags("-fPIC")
+
+        local nccl_root = os.getenv("NCCL_ROOT")
+        if nccl_root then
+            add_includedirs(nccl_root .. "/include")
+            add_links(nccl_root .. "/lib/libnccl.so")
+        else
+            add_links("nccl") -- Fall back to default nccl linking
+        end
+
+        -- set_languages("cxx17") 天数似乎不能用这个配置
+        add_files("../src/infiniccl/cuda/*.cu")
+    end
 target_end()

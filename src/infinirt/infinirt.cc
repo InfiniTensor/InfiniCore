@@ -5,7 +5,7 @@
 #include "cpu/infinirt_cpu.h"
 #include "cuda/infinirt_cuda.cuh"
 #include "kunlun/infinirt_kunlun.h"
-#include "maca/infinirt_maca.h"
+#include "metax/infinirt_metax.h"
 #include "musa/infinirt_musa.h"
 
 thread_local infiniDevice_t CURRENT_DEVICE_TYPE = INFINI_DEVICE_CPU;
@@ -23,6 +23,10 @@ __C infiniStatus_t infinirtGetAllDeviceCount(int *count_array) {
         return INFINI_STATUS_NULL_POINTER;
     }
     for (size_t i = 0; i < INFINI_DEVICE_TYPE_COUNT; i++) {
+        if (i == INFINI_DEVICE_ILUVATAR || i == INFINI_DEVICE_KUNLUN || i == INFINI_DEVICE_SUGON) {
+            count_array[i] = 0;
+            continue;
+        }
         auto status = infinirtGetDeviceCount(static_cast<infiniDevice_t>(i), &count_array[i]);
         if (status != INFINI_STATUS_SUCCESS) {
             return status;
@@ -62,13 +66,16 @@ __C infiniStatus_t infinirtGetDevice(infiniDevice_t *device_ptr, int *device_id_
             _status = infinirt::ascend::API PARAMS;                    \
             break;                                                     \
         case INFINI_DEVICE_METAX:                                      \
-            _status = infinirt::maca::API PARAMS;                      \
+            _status = infinirt::metax::API PARAMS;                     \
             break;                                                     \
         case INFINI_DEVICE_MOORE:                                      \
             _status = infinirt::musa::API PARAMS;                      \
             break;                                                     \
         case INFINI_DEVICE_KUNLUN:                                     \
             _status = infinirt::kunlun::API PARAMS;                    \
+            break;                                                     \
+        case INFINI_DEVICE_ILUVATAR:                                   \
+            _status = infinirt::cuda::API PARAMS;                      \
             break;                                                     \
         default:                                                       \
             _status = INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;         \

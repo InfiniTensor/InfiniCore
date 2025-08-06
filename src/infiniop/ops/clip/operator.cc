@@ -5,8 +5,11 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/clip_cpu.h"
 #endif
-#ifdef ENABLE_CUDA_API
-#include "cuda/clip_cuda.cuh"
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
+#include "nvidia/clip_nvidia.cuh"
+#endif
+#ifdef ENABLE_METAX_API
+#include "metax/clip_metax.h"
 #endif
 
 __C infiniStatus_t infiniopCreateClipDescriptor(
@@ -30,8 +33,14 @@ __C infiniStatus_t infiniopCreateClipDescriptor(
 #ifdef ENABLE_CPU_API
         CREATE(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_CUDA_API
-        CREATE(INFINI_DEVICE_NVIDIA, cuda);
+#ifdef ENABLE_NVIDIA_API
+        CREATE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax);
 #endif
 
     default:
@@ -52,8 +61,14 @@ __C infiniStatus_t infiniopGetClipWorkspaceSize(infiniopClipDescriptor_t desc, s
 #ifdef ENABLE_CPU_API
         GET(INFINI_DEVICE_CPU, cpu)
 #endif
-#ifdef ENABLE_CUDA_API
-        GET(INFINI_DEVICE_NVIDIA, cuda)
+#ifdef ENABLE_NVIDIA_API
+        GET(INFINI_DEVICE_NVIDIA, nvidia)
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        GET(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax)
 #endif
     }
 
@@ -82,8 +97,14 @@ __C infiniStatus_t infiniopClip(
 #ifdef ENABLE_CPU_API
         CALCULATE(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_CUDA_API
-        CALCULATE(INFINI_DEVICE_NVIDIA, cuda);
+#ifdef ENABLE_NVIDIA_API
+        CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
 
     default:
@@ -106,8 +127,14 @@ infiniopDestroyClipDescriptor(infiniopClipDescriptor_t desc) {
 #ifdef ENABLE_CPU_API
         DELETE(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_CUDA_API
-        DELETE(INFINI_DEVICE_NVIDIA, cuda);
+#ifdef ENABLE_NVIDIA_API
+        DELETE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        DELETE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        DELETE(INFINI_DEVICE_METAX, metax);
 #endif
 
     default:

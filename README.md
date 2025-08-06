@@ -24,6 +24,8 @@ InfiniCore 是一个跨平台统一编程工具集，为不同芯片平台的功
 - 寒武纪 MLU；
 - 昆仑芯 XPU；
 
+API 定义以及使用方式详见 [`InfiniCore文档`](https://github.com/InfiniTensor/InfiniCore-Documentation)。
+
 ## 配置和使用
 
 ### 一键安装
@@ -50,12 +52,18 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
 | `--iluvatar-gpu=[y\|n]`  | 是否编译沐曦 GPU 接口实现         | n
 | `--sugon-dcu=[y\|n]`     | 是否编译曙光 DCU 接口实现         | n
 | `--kunlun-xpu=[y\|n]`    | 是否编译昆仑 XPU 接口实现         | n
+| `--ninetoothed=[y\|n]`   | 是否编译九齿实现                 | n
 | `--ccl=[y\|n]`           | 是否编译 InfiniCCL 通信库接口实现 | n
 
 ### 手动安装
 
+0. 生成九齿算子（可选）
+
+    参见[使用九齿](#使用九齿)章节。
+
 1. 项目配置
 
+   windows系统上，建议使用`xmake v2.8.9`编译项目。
    - 查看当前配置
 
      ```shell
@@ -73,6 +81,8 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
      ```shell
      # 英伟达
      # 可以指定 CUDA 路径， 一般环境变量为 `CUDA_HOME` 或者 `CUDA_ROOT`
+     # window系统：--cuda="%CUDA_HOME%"
+     # linux系统：--cuda=$CUDA_HOME
      xmake f --nv-gpu=true --cuda=$CUDA_HOME -cv
 
      # 寒武纪
@@ -126,62 +136,32 @@ xmake build infiniccl-test
 infiniccl-test --nvidia
 ```
 
-## 开发指南
+### 使用九齿
 
-### 代码格式化
+[九齿](https://github.com/InfiniTensor/ninetoothed)是一门基于 Triton 但提供更高层抽象的领域特定语言（DSL）。使用九齿可以降低算子的开发门槛，并且提高开发效率。
 
-本项目使用 [`scripts/format.py`](/scripts/format.py) 脚本实现代码格式化检查和操作。
+InfiniCore 目前已经可以接入使用九齿实现的算子，但是这部分实现的编译是默认关闭的。如果选择编译库中的九齿实现，需要使用 `--ninetoothed=y`，并在运行一键安装脚本前完成以下准备工作：
 
-使用
+1. 安装九齿与[九齿算子库](https://github.com/InfiniTensor/ntops)：
 
 ```shell
-python scripts/format.py -h
+git clone https://github.com/InfiniTensor/ntops.git
+cd ntops
+pip install -e .
 ```
 
-查看脚本帮助信息：
+注：安装 `ntops` 时，`ninetoothed` 会被当成依赖也一并安装进来。
 
-```plaintext
-usage: format.py [-h] [--ref REF] [--path [PATH ...]] [--check] [--c C] [--py PY]
+2. 在 `InfiniCore` 文件夹下运行以下命令 AOT 编译库中的九齿算子：
 
-options:
-  -h, --help         show this help message and exit
-  --ref REF          Git reference (commit hash) to compare against.
-  --path [PATH ...]  Files to format or check.
-  --check            Check files without modifying them.
-  --c C              C formatter (default: clang-format-16)
-  --py PY            Python formatter (default: black)
+```shell
+PYTHONPATH=${PYTHONPATH}:src python scripts/build_ntops.py
 ```
 
-参数中：
+注：如果对九齿相关文件有修改，需要重新构建 InfiniCore 时，也需要同时运行以上命令进行重新生成。
 
-- `ref` 和 `path` 控制格式化的文件范围
-  - 若 `ref` 和 `path` 都为空，格式化当前暂存（git added）的文件；
-  - 否则
-    - 若 `ref` 非空，将比较指定 commit 和当前代码的差异，只格式化修改过的文件；
-    - 若 `path` 非空，可传入多个路径（`--path p0 p1 p2`），只格式化指定路径及其子目录中的文件；
-- 若设置 `--check`，将检查代码是否需要修改格式，不修改文件内容；
-- 通过 `--c` 指定 c/c++ 格式化器，默认为 `clang-format-16`；
-- 通过 `--python` 指定 python 格式化器 `black`；
+3. 按照上面的指引进行[一键安装](#一键安装)或者[手动安装](#手动安装)。
 
-### vscode 开发配置
+## 如何开源贡献
 
-基本配置见 [xmake 官方文档](https://xmake.io/#/zh-cn/plugin/more_plugins?id=%e9%85%8d%e7%bd%ae-intellsence)。
-
-- TL;DR
-  - clangd
-
-    打开 *xmake.lua*，保存一次以触发编译命令生成，将在工作路径下自动生成 *.vscode/compile_commands.json* 文件。然后在这个文件夹下创建 *settings.json*，填入：
-
-    > .vscode/settings.json
-
-    ```json
-    {
-        "clangd.arguments": [
-            "--compile-commands-dir=.vscode"
-        ],
-        "xmake.additionalConfigArguments": [
-            // 在这里配置 XMAKE_CONFIG_FLAGS
-            "--nv-gpu=y"
-        ],
-    }
-    ```
+见 [`InfiniCore开发者手册`](DEV.md)。

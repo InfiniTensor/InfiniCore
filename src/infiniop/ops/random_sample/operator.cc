@@ -5,11 +5,11 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/random_sample_cpu.h"
 #endif
-#ifdef ENABLE_CUDA_API
-#include "cuda/random_sample_cuda.cuh"
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
+#include "nvidia/random_sample_nvidia.cuh"
 #endif
 #ifdef ENABLE_METAX_API
-#include "maca/random_sample_maca.h"
+#include "metax/random_sample_metax.h"
 #endif
 #ifdef ENABLE_ASCEND_API
 #include "ascend/random_sample_aclnn.h"
@@ -35,11 +35,14 @@ infiniopCreateRandomSampleDescriptor(
 #ifdef ENABLE_CPU_API
         CREATE(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_CUDA_API
-        CREATE(INFINI_DEVICE_NVIDIA, cuda);
+#ifdef ENABLE_NVIDIA_API
+        CREATE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_METAX_API
-        CREATE(INFINI_DEVICE_METAX, maca);
+        CREATE(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_ASCEND_API
         CREATE(INFINI_DEVICE_ASCEND, ascend);
@@ -68,11 +71,14 @@ __C infiniStatus_t infiniopGetRandomSampleWorkspaceSize(
 #ifdef ENABLE_CPU_API
         GET(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_CUDA_API
-        GET(INFINI_DEVICE_NVIDIA, cuda);
+#ifdef ENABLE_NVIDIA_API
+        GET(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        GET(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_METAX_API
-        GET(INFINI_DEVICE_METAX, maca);
+        GET(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_ASCEND_API
         GET(INFINI_DEVICE_ASCEND, ascend);
@@ -111,11 +117,14 @@ __C infiniStatus_t infiniopRandomSample(
 #ifdef ENABLE_CPU_API
         CALCULATE(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_CUDA_API
-        CALCULATE(INFINI_DEVICE_NVIDIA, cuda);
+#ifdef ENABLE_NVIDIA_API
+        CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_METAX_API
-        CALCULATE(INFINI_DEVICE_METAX, maca);
+        CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_ASCEND_API
         CALCULATE(INFINI_DEVICE_ASCEND, ascend);
@@ -141,11 +150,14 @@ __C infiniStatus_t infiniopDestroyRandomSampleDescriptor(
 #ifdef ENABLE_CPU_API
         DELETE(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_CUDA_API
-        DELETE(INFINI_DEVICE_NVIDIA, cuda);
+#ifdef ENABLE_NVIDIA_API
+        DELETE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        DELETE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_METAX_API
-        DELETE(INFINI_DEVICE_METAX, maca);
+        DELETE(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_ASCEND_API
         DELETE(INFINI_DEVICE_ASCEND, ascend);

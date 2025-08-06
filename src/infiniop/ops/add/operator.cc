@@ -5,8 +5,11 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/add_cpu.h"
 #endif
-#ifdef ENABLE_CUDA_API
-#include "cuda/add_cuda.cuh"
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
+#include "nvidia/add_nvidia.cuh"
+#endif
+#ifdef ENABLE_METAX_API
+#include "metax/add_metax.h"
 #endif
 
 __C infiniStatus_t infiniopCreateAddDescriptor(
@@ -30,8 +33,14 @@ __C infiniStatus_t infiniopCreateAddDescriptor(
 #ifdef ENABLE_CPU_API
         CREATE(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_CUDA_API
-        CREATE(INFINI_DEVICE_NVIDIA, cuda);
+#ifdef ENABLE_NVIDIA_API
+        CREATE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax);
 #endif
 
     default:
@@ -46,14 +55,20 @@ __C infiniStatus_t infiniopGetAddWorkspaceSize(infiniopAddDescriptor_t desc, siz
 #define GET(CASE, NAMESPACE)                                                               \
     case CASE:                                                                             \
         *size = reinterpret_cast<op::add::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
-        return INFINI_STATUS_SUCCESS;
+        return INFINI_STATUS_SUCCESS
 
     switch (desc->device_type) {
 #ifdef ENABLE_CPU_API
-        GET(INFINI_DEVICE_CPU, cpu)
+        GET(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_CUDA_API
-        GET(INFINI_DEVICE_NVIDIA, cuda)
+#ifdef ENABLE_NVIDIA_API
+        GET(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        GET(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -82,8 +97,14 @@ __C infiniStatus_t infiniopAdd(
 #ifdef ENABLE_CPU_API
         CALCULATE(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_CUDA_API
-        CALCULATE(INFINI_DEVICE_NVIDIA, cuda);
+#ifdef ENABLE_NVIDIA_API
+        CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
 
     default:
@@ -99,15 +120,21 @@ infiniopDestroyAddDescriptor(infiniopAddDescriptor_t desc) {
 #define DELETE(CASE, NAMESPACE)                                                \
     case CASE:                                                                 \
         delete reinterpret_cast<const op::add::NAMESPACE::Descriptor *>(desc); \
-        return INFINI_STATUS_SUCCESS;
+        return INFINI_STATUS_SUCCESS
 
     switch (desc->device_type) {
 
 #ifdef ENABLE_CPU_API
         DELETE(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_CUDA_API
-        DELETE(INFINI_DEVICE_NVIDIA, cuda);
+#ifdef ENABLE_NVIDIA_API
+        DELETE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        DELETE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        DELETE(INFINI_DEVICE_METAX, metax);
 #endif
 
     default:

@@ -5,14 +5,14 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/rms_norm_cpu.h"
 #endif
-#ifdef ENABLE_CUDA_API
-#include "cuda/rms_norm_cuda.cuh"
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
+#include "nvidia/rms_norm_nvidia.cuh"
 #endif
 #ifdef ENABLE_ASCEND_API
 #include "ascend/rms_norm_aclnn.h"
 #endif
 #ifdef ENABLE_METAX_API
-#include "maca/rms_norm_maca.cuh"
+#include "metax/rms_norm_metax.cuh"
 #endif
 #ifdef ENABLE_MOORE_API
 #include "musa/rms_norm_musa.cuh"
@@ -37,17 +37,20 @@ __C infiniStatus_t infiniopCreateRMSNormDescriptor(
             y_desc,                                                             \
             x_desc,                                                             \
             w_desc,                                                             \
-            epsilon);
+            epsilon)
 
     switch (handle->device) {
 #ifdef ENABLE_CPU_API
-        CREATE(INFINI_DEVICE_CPU, cpu)
+        CREATE(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_CUDA_API
-        CREATE(INFINI_DEVICE_NVIDIA, cuda)
+#ifdef ENABLE_NVIDIA_API
+        CREATE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_KUNLUN_API
-        CREATE(INFINI_DEVICE_KUNLUN, kunlun)
+        CREATE(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
 #ifdef ENABLE_CAMBRICON_MLU
     case DevCambriconMlu: {
@@ -55,13 +58,13 @@ __C infiniStatus_t infiniopCreateRMSNormDescriptor(
     }
 #endif
 #ifdef ENABLE_ASCEND_API
-        CREATE(INFINI_DEVICE_ASCEND, ascend)
+        CREATE(INFINI_DEVICE_ASCEND, ascend);
 #endif
 #ifdef ENABLE_METAX_API
-        CREATE(INFINI_DEVICE_METAX, maca)
+        CREATE(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_MOORE_API
-        CREATE(INFINI_DEVICE_MOORE, musa)
+        CREATE(INFINI_DEVICE_MOORE, musa);
 #endif
     }
 
@@ -75,17 +78,20 @@ __C infiniStatus_t infiniopGetRMSNormWorkspaceSize(infiniopRMSNormDescriptor_t d
 #define GET(CASE, NAMESPACE)                                                                    \
     case CASE:                                                                                  \
         *size = reinterpret_cast<op::rms_norm::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
-        return INFINI_STATUS_SUCCESS;
+        return INFINI_STATUS_SUCCESS
 
     switch (desc->device_type) {
 #ifdef ENABLE_CPU_API
-        GET(INFINI_DEVICE_CPU, cpu)
+        GET(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_CUDA_API
-        GET(INFINI_DEVICE_NVIDIA, cuda)
+#ifdef ENABLE_NVIDIA_API
+        GET(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        GET(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_KUNLUN_API
-        GET(INFINI_DEVICE_KUNLUN, kunlun)
+        GET(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
 #ifdef ENABLE_CAMBRICON_MLU
     case DevCambriconMlu: {
@@ -93,13 +99,13 @@ __C infiniStatus_t infiniopGetRMSNormWorkspaceSize(infiniopRMSNormDescriptor_t d
     }
 #endif
 #ifdef ENABLE_ASCEND_API
-        GET(INFINI_DEVICE_ASCEND, ascend)
+        GET(INFINI_DEVICE_ASCEND, ascend);
 #endif
 #ifdef ENABLE_METAX_API
-        GET(INFINI_DEVICE_METAX, maca)
+        GET(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_MOORE_API
-        GET(INFINI_DEVICE_MOORE, musa)
+        GET(INFINI_DEVICE_MOORE, musa);
 #endif
     }
 
@@ -114,17 +120,20 @@ __C infiniStatus_t infiniopRMSNorm(infiniopRMSNormDescriptor_t desc, void *works
 #define CALCULATE(CASE, NAMESPACE)                                                       \
     case CASE:                                                                           \
         return reinterpret_cast<op::rms_norm::NAMESPACE::Descriptor *>(desc)->calculate( \
-            workspace, workspace_size, y, x, w, stream);
+            workspace, workspace_size, y, x, w, stream)
 
     switch (desc->device_type) {
 #ifdef ENABLE_CPU_API
-        CALCULATE(INFINI_DEVICE_CPU, cpu)
+        CALCULATE(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_CUDA_API
-        CALCULATE(INFINI_DEVICE_NVIDIA, cuda)
+#ifdef ENABLE_NVIDIA_API
+        CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_KUNLUN_API
-        CALCULATE(INFINI_DEVICE_KUNLUN, kunlun)
+        CALCULATE(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
 #ifdef ENABLE_CAMBRICON_MLU
     case DevCambriconMlu: {
@@ -132,13 +141,13 @@ __C infiniStatus_t infiniopRMSNorm(infiniopRMSNormDescriptor_t desc, void *works
     }
 #endif
 #ifdef ENABLE_ASCEND_API
-        CALCULATE(INFINI_DEVICE_ASCEND, ascend)
+        CALCULATE(INFINI_DEVICE_ASCEND, ascend);
 #endif
 #ifdef ENABLE_METAX_API
-        CALCULATE(INFINI_DEVICE_METAX, maca)
+        CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_MOORE_API
-        CALCULATE(INFINI_DEVICE_MOORE, musa)
+        CALCULATE(INFINI_DEVICE_MOORE, musa);
 #endif
     }
 
@@ -152,17 +161,20 @@ __C infiniStatus_t infiniopDestroyRMSNormDescriptor(infiniopRMSNormDescriptor_t 
 #define DESTROY(CASE, NAMESPACE)                                              \
     case CASE:                                                                \
         delete reinterpret_cast<op::rms_norm::NAMESPACE::Descriptor *>(desc); \
-        return INFINI_STATUS_SUCCESS;
+        return INFINI_STATUS_SUCCESS
 
     switch (desc->device_type) {
 #ifdef ENABLE_CPU_API
-        DESTROY(INFINI_DEVICE_CPU, cpu)
+        DESTROY(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_CUDA_API
-        DESTROY(INFINI_DEVICE_NVIDIA, cuda)
+#ifdef ENABLE_NVIDIA_API
+        DESTROY(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        DESTROY(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_KUNLUN_API
-        DESTROY(INFINI_DEVICE_KUNLUN, kunlun)
+        DESTROY(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
 #ifdef ENABLE_CAMBRICON_MLU
     case DevCambriconMlu: {
@@ -170,13 +182,13 @@ __C infiniStatus_t infiniopDestroyRMSNormDescriptor(infiniopRMSNormDescriptor_t 
     }
 #endif
 #ifdef ENABLE_ASCEND_API
-        DESTROY(INFINI_DEVICE_ASCEND, ascend)
+        DESTROY(INFINI_DEVICE_ASCEND, ascend);
 #endif
 #ifdef ENABLE_METAX_API
-        DESTROY(INFINI_DEVICE_METAX, maca)
+        DESTROY(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_MOORE_API
-        DESTROY(INFINI_DEVICE_MOORE, musa)
+        DESTROY(INFINI_DEVICE_MOORE, musa);
 #endif
     }
 
