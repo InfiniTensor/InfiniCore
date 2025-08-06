@@ -171,27 +171,31 @@ __C infiniStatus_t infinirtFreeAsync(void *ptr, infinirtStream_t stream) {
     INFINIRT_CALL_DEVICE_API(freeAsync, (ptr, stream));
 }
 
-__C infiniStatus_t infinirtGetMemProp(infinirtMemProp_t *prop, infiniDevice_t device, int device_id) {
-    INFINIRT_CALL_DEVICE_API_AND(device, getMemProp, (prop, device, device_id), {});
+__C infiniStatus_t infinirtGetMemGranularityMinimum(size_t *granularity) {
+    INFINIRT_CALL_DEVICE_API(getMemGranularityMinimum, (granularity));
 }
 
-__C infiniStatus_t infinirtGetMemGranularityMinimum(size_t *granularity, infinirtMemProp_t prop) {
-    INFINIRT_CALL_DEVICE_API(getMemGranularityMinimum, (granularity, prop));
+__C infiniStatus_t infinirtCreatePhysicalMem(infinirtPhyMem_t *phy_mem, size_t len) {
+    INFINIRT_CALL_DEVICE_API(createPhysicalMem, (phy_mem, len));
 }
 
-__C infiniStatus_t infinirtCreatePhysicalMem(infinirtPhyMem *phy_mem, size_t len, infinirtMemProp_t prop) {
-    INFINIRT_CALL_DEVICE_API(createPhysicalMem, (phy_mem, len, prop));
+__C infiniStatus_t infinirtReleasePhysicalMem(infinirtPhyMem_t phy_mem) {
+    INFINIRT_CALL_DEVICE_API(releasePhysicalMem, (phy_mem));
 }
 
-__C infiniStatus_t infinirtCreateVirtualMemManager(infinirtVirtualMemManager *vm, infiniDevice_t device, size_t len, size_t min_addr) {
-    INFINIRT_CALL_DEVICE_API(createVirtualMemManager, (vm, device, len, min_addr));
+__C infiniStatus_t infinirtCreateVirtualMem(infinirtVirtualMem_t *vm, size_t len) {
+    INFINIRT_CALL_DEVICE_API(createVirtualMem, (vm, len));
 }
 
-__C infiniStatus_t infinirtMapVirtualMem(void **mapped_ptr, infinirtVirtualMemManager *vm, size_t offset,
-                                         infinirtPhyMem *phy_mem) {
+__C infiniStatus_t infinirtMapVirtualMem(void **mapped_ptr, infinirtVirtualMem_t vm, size_t offset,
+                                         infinirtPhyMem_t phy_mem) {
     INFINIRT_CALL_DEVICE_API(mapVirtualMem, (mapped_ptr, vm, offset, phy_mem));
 }
 
-__C infiniStatus_t infinirtUnmapVirtualMem(infinirtVirtualMemManager *vm, size_t offset) {
+__C infiniStatus_t infinirtUnmapVirtualMem(infinirtVirtualMem_t vm, size_t offset) {
     INFINIRT_CALL_DEVICE_API(unmapVirtualMem, (vm, offset));
+}
+
+__C infiniStatus_t infinirtReleaseVirtualMem(infinirtVirtualMem_t vm) {
+    INFINIRT_CALL_DEVICE_API(releaseVirtualMem, (vm));
 }

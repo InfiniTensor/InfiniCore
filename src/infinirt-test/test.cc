@@ -100,83 +100,141 @@ bool testVirtualMem(infiniDevice_t device, int deviceId) {
               << "Testing virtual memory on Device ID: " << deviceId << "\n"
               << "==============================================" << std::endl;
 
-    infinirtMemProp_t prop;
-    if (infinirtGetMemProp(&prop, device, deviceId) != INFINI_STATUS_SUCCESS) {
-        std::cerr << "Failed to get memory property for device " << device << " with ID " << deviceId << std::endl;
-        return false;
-    }
+    // Get minimum granularity
     size_t min_granularity;
-    if (infinirtGetMemGranularityMinimum(&min_granularity, prop) != INFINI_STATUS_SUCCESS) {
-        std::cerr << "Failed to get memory granularity minimum for device " << device << " with ID " << deviceId << std::endl;
+    if (infinirtGetMemGranularityMinimum(&min_granularity) != INFINI_STATUS_SUCCESS) {
+        std::cerr << "Failed to get memory granularity minimum" << std::endl;
         return false;
     }
     std::cout << "Memory granularity minimum: " << min_granularity << " bytes" << std::endl;
 
-    infinirtVirtualMemManager vm;
-    if (infinirtCreateVirtualMemManager(&vm, device, 10 * min_granularity, 0) != INFINI_STATUS_SUCCESS) {
-        std::cerr << "Failed to reserve virtual memory for device " << device << " with ID " << deviceId << std::endl;
-        return false;
-    }
-    std::cout << "Virtual memory reserved: " << vm.len << " bytes" << std::endl;
+    // Test 1: Basic virtual memory allocation and release
+    {
+        std::cout << "\nTest 1: Basic virtual memory allocation and release" << std::endl;
+        infinirtVirtualMem_t vm;
+        size_t vm_len = 10 * min_granularity;
+        if (infinirtCreateVirtualMem(&vm, vm_len) != INFINI_STATUS_SUCCESS) {
+            std::cerr << "Failed to reserve virtual memory" << std::endl;
+            return false;
+        }
+        std::cout << "Virtual memory reserved: " << vm_len << " bytes" << std::endl;
 
-    infinirtPhyMem phy_mem;
-    if (infinirtCreatePhysicalMem(&phy_mem, min_granularity, prop) != INFINI_STATUS_SUCCESS) {
-        std::cerr << "Failed to create physical memory for device " << device << " with ID " << deviceId << std::endl;
-        return false;
-    }
-    std::cout << "Physical memory created: " << phy_mem.len << " bytes" << std::endl;
-
-    void *mapped_ptr;
-    if (infinirtMapVirtualMem(&mapped_ptr, &vm, min_granularity, &phy_mem) != INFINI_STATUS_SUCCESS) {
-        std::cerr << "Failed to map virtual memory for device " << device << " with ID " << deviceId << std::endl;
-        return false;
-    }
-    std::cout << "Virtual memory mapped at address: " << mapped_ptr << std::endl;
-
-    size_t num_elements = min_granularity / sizeof(size_t);
-    std::vector<size_t> host_data(num_elements);
-    std::iota(host_data.begin(), host_data.end(), 0);
-
-    if (infinirtMemcpy(mapped_ptr, host_data.data(), min_granularity, INFINIRT_MEMCPY_H2D) != INFINI_STATUS_SUCCESS) {
-        std::cerr << "Failed to copy data from host to device." << std::endl;
-        return false;
+        // Release virtual memory
+        if (infinirtReleaseVirtualMem(vm) != INFINI_STATUS_SUCCESS) {
+            std::cerr << "Failed to release virtual memory" << std::endl;
+            return false;
+        }
+        std::cout << "Virtual memory released successfully" << std::endl;
     }
 
-    infinirtVirtualMemManager vm2;
-    if (infinirtCreateVirtualMemManager(&vm2, device, 2 * min_granularity, 0) != INFINI_STATUS_SUCCESS) {
-        std::cerr << "Failed to reserve second virtual memory for device " << device << " with ID " << deviceId << std::endl;
-        return false;
+    // Test 2: Physical memory allocation and release
+    {
+        std::cout << "\nTest 2: Physical memory allocation and release" << std::endl;
+        infinirtPhyMem_t phy_mem;
+        if (infinirtCreatePhysicalMem(&phy_mem, min_granularity) != INFINI_STATUS_SUCCESS) {
+            std::cerr << "Failed to create physical memory" << std::endl;
+            return false;
+        }
+        std::cout << "Physical memory created: " << min_granularity << " bytes" << std::endl;
+
+        // Release physical memory
+        if (infinirtReleasePhysicalMem(phy_mem) != INFINI_STATUS_SUCCESS) {
+            std::cerr << "Failed to release physical memory" << std::endl;
+            return false;
+        }
+        std::cout << "Physical memory released successfully" << std::endl;
     }
 
-    void *mapped_ptr2;
-    if (infinirtMapVirtualMem(&mapped_ptr2, &vm2, min_granularity, &phy_mem) != INFINI_STATUS_SUCCESS) {
-        std::cerr << "Failed to map second virtual memory for device " << device << " with ID " << deviceId << std::endl;
-        return false;
+    // Test 3: Virtual memory mapping and unmapping with data verification
+    {
+        std::cout << "\nTest 3: Virtual memory mapping and data verification" << std::endl;
+
+        // Create virtual memory regions
+        infinirtVirtualMem_t vm1, vm2;
+        size_t vm_len = 10 * min_granularity;
+        if (infinirtCreateVirtualMem(&vm1, vm_len) != INFINI_STATUS_SUCCESS ||
+            infinirtCreateVirtualMem(&vm2, 2 * min_granularity) != INFINI_STATUS_SUCCESS) {
+            std::cerr << "Failed to create virtual memory regions" << std::endl;
+            return false;
+        }
+
+        // Create physical memory
+        infinirtPhyMem_t phy_mem;
+        if (infinirtCreatePhysicalMem(&phy_mem, min_granularity) != INFINI_STATUS_SUCCESS) {
+            std::cerr << "Failed to create physical memory" << std::endl;
+            return false;
+        }
+
+        // Map physical memory to both virtual memory regions
+        void *mapped_ptr1, *mapped_ptr2;
+        if (infinirtMapVirtualMem(&mapped_ptr1, vm1, min_granularity, phy_mem) != INFINI_STATUS_SUCCESS ||
+            infinirtMapVirtualMem(&mapped_ptr2, vm2, min_granularity, phy_mem) != INFINI_STATUS_SUCCESS) {
+            std::cerr << "Failed to map virtual memory" << std::endl;
+            return false;
+        }
+
+        // Write data through first mapping
+        size_t num_elements = min_granularity / sizeof(size_t);
+        std::vector<size_t> host_data(num_elements);
+        std::iota(host_data.begin(), host_data.end(), 0);
+        if (infinirtMemcpy(mapped_ptr1, host_data.data(), min_granularity, INFINIRT_MEMCPY_H2D) != INFINI_STATUS_SUCCESS) {
+            std::cerr << "Failed to copy data to device" << std::endl;
+            return false;
+        }
+
+        // Read data through second mapping
+        std::vector<size_t> host_data2(num_elements, 0);
+        if (infinirtMemcpy(host_data2.data(), mapped_ptr2, min_granularity, INFINIRT_MEMCPY_D2H) != INFINI_STATUS_SUCCESS) {
+            std::cerr << "Failed to copy data from device" << std::endl;
+            return false;
+        }
+
+        // Verify data
+        if (!std::equal(host_data.begin(), host_data.end(), host_data2.begin())) {
+            std::cerr << "Data mismatch between mappings" << std::endl;
+            return false;
+        }
+
+        // Test unmapping
+        if (infinirtUnmapVirtualMem(vm1, min_granularity) != INFINI_STATUS_SUCCESS) {
+            std::cerr << "Failed to unmap virtual memory" << std::endl;
+            return false;
+        }
+
+        // Verify memory access fails after unmapping
+        if (infinirtMemcpy(host_data.data(), mapped_ptr1, min_granularity, INFINIRT_MEMCPY_D2H) == INFINI_STATUS_SUCCESS) {
+            std::cerr << "Memory access after unmap should fail" << std::endl;
+            return false;
+        }
+
+        // Clean up all resources
+        std::cout << "\nCleaning up resources..." << std::endl;
+
+        // Unmap remaining mapping
+        if (infinirtUnmapVirtualMem(vm2, min_granularity) != INFINI_STATUS_SUCCESS) {
+            std::cerr << "Failed to unmap second virtual memory" << std::endl;
+            return false;
+        }
+
+        // Release physical memory
+        if (infinirtReleasePhysicalMem(phy_mem) != INFINI_STATUS_SUCCESS) {
+            std::cerr << "Failed to release physical memory" << std::endl;
+            return false;
+        }
+
+        // Release virtual memory regions
+        if (infinirtReleaseVirtualMem(vm1) != INFINI_STATUS_SUCCESS) {
+            std::cerr << "Failed to release first virtual memory" << std::endl;
+            return false;
+        }
+        if (infinirtReleaseVirtualMem(vm2) != INFINI_STATUS_SUCCESS) {
+            std::cerr << "Failed to release second virtual memory" << std::endl;
+            return false;
+        }
+
+        std::cout << "All resources cleaned up successfully" << std::endl;
     }
 
-    std::vector<size_t> host_data2(num_elements, 0);
-    if (infinirtMemcpy(host_data2.data(), mapped_ptr2, min_granularity, INFINIRT_MEMCPY_D2H) != INFINI_STATUS_SUCCESS) {
-        std::cerr << "Failed to copy data from device to host." << std::endl;
-        return false;
-    }
-
-    if (!std::equal(host_data.begin(), host_data.end(), host_data2.begin())) {
-        std::cerr << "Data mismatch between host_data and host_data2." << std::endl;
-        return false;
-    }
-
-    std::cout << "Unmapping virtual memory..." << std::endl;
-    if (infinirtUnmapVirtualMem(&vm, min_granularity) != INFINI_STATUS_SUCCESS) {
-        std::cerr << "Failed to unmap virtual memory for device " << device << " with ID " << deviceId << std::endl;
-        return false;
-    }
-
-    if (infinirtMemcpy(host_data.data(), mapped_ptr, min_granularity, INFINIRT_MEMCPY_D2H) == INFINI_STATUS_SUCCESS) {
-        std::cerr << "Memory access after unmap should fail, but it succeeded." << std::endl;
-        return false;
-    }
-
-    std::cout << "Virtual memory test PASSED!" << std::endl;
-
+    std::cout << "\nAll virtual memory tests PASSED!" << std::endl;
     return true;
 }
