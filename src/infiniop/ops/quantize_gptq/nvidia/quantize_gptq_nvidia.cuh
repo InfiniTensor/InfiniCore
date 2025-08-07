@@ -3,6 +3,6 @@
 
 #include "../quantize_gptq.h"
 
-DESCRIPTOR(cuda)
+DESCRIPTOR(nvidia)
 
 #endif // __QUANTIZE_GPTQ_CUDA_H__

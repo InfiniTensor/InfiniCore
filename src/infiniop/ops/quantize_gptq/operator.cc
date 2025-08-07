@@ -5,8 +5,8 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/quantize_gptq_cpu.h"
 #endif
-#ifdef ENABLE_CUDA_API
-#include "cuda/quantize_gptq_cuda.cuh"
+#ifdef ENABLE_NVIDIA_API
+#include "nvidia/quantize_gptq_nvidia.cuh"
 #endif
 
 __C infiniStatus_t infiniopCreateQuantizeGPTQDescriptor(infiniopHandle_t handle,
@@ -30,8 +30,8 @@ __C infiniStatus_t infiniopCreateQuantizeGPTQDescriptor(infiniopHandle_t handle,
 #ifdef ENABLE_CPU_API
         CREATE(INFINI_DEVICE_CPU, cpu)
 #endif
-#ifdef ENABLE_CUDA_API
-        CREATE(INFINI_DEVICE_NVIDIA, cuda)
+#ifdef ENABLE_NVIDIA_API
+        CREATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -47,8 +47,8 @@ __C infiniStatus_t infiniopGetQuantizeGPTQWorkspaceSize(infiniopQuantizeGPTQDesc
 #ifdef ENABLE_CPU_API
         GET(INFINI_DEVICE_CPU, cpu)
 #endif
-#ifdef ENABLE_CUDA_API
-        GET(INFINI_DEVICE_NVIDIA, cuda)
+#ifdef ENABLE_NVIDIA_API
+        GET(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -73,8 +73,8 @@ __C infiniStatus_t infiniopQuantizeGPTQ(infiniopQuantizeGPTQDescriptor_t desc,
 #ifdef ENABLE_CPU_API
         QUANT(INFINI_DEVICE_CPU, cpu)
 #endif
-#ifdef ENABLE_CUDA_API
-        QUANT(INFINI_DEVICE_NVIDIA, cuda)
+#ifdef ENABLE_NVIDIA_API
+        QUANT(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -99,8 +99,8 @@ __C infiniStatus_t infiniopQuantizeLinearGPTQ(infiniopQuantizeGPTQDescriptor_t d
 #ifdef ENABLE_CPU_API
         CACULATE(INFINI_DEVICE_CPU, cpu)
 #endif
-#ifdef ENABLE_CUDA_API
-        CACULATE(INFINI_DEVICE_NVIDIA, cuda)
+#ifdef ENABLE_NVIDIA_API
+        CACULATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -117,8 +117,8 @@ __C infiniStatus_t infiniopDestroyQuantizeGPTQDescriptor(infiniopQuantizeGPTQDes
 #ifdef ENABLE_CPU_API
         DESTROY(INFINI_DEVICE_CPU, cpu)
 #endif
-#ifdef ENABLE_CUDA_API
-        DESTROY(INFINI_DEVICE_NVIDIA, cuda)
+#ifdef ENABLE_NVIDIA_API
+        DESTROY(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

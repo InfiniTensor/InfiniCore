@@ -11,10 +11,10 @@
     class Descriptor final : public InfiniopDescriptor {                       \
         struct Opaque;                                                         \
         Opaque *_opaque;                                                       \
-        MatmulGptqInfo _info;                                                  \
+        QuantizeGptqInfo _info;                                                \
         size_t _workspace_size;                                                \
                                                                                \
-        Descriptor(MatmulGptqInfo info, Opaque *opaque,                        \
+        Descriptor(QuantizeGptqInfo info, Opaque *opaque,                      \
                    size_t workspace_size,                                      \
                    infiniDevice_t device_type, int device_id)                  \
             : InfiniopDescriptor{device_type, device_id},                      \
@@ -46,9 +46,9 @@
     };                                                                         \
     }
 
-class MatmulGptqInfo {
+class QuantizeGptqInfo {
 private:
-    MatmulGptqInfo() = default;
+    QuantizeGptqInfo() = default;
 
 public:
     infiniDtype_t atype, packed_weights_type;
@@ -56,7 +56,7 @@ public:
     ptrdiff_t group_size;
     bool is_weight_transposed;
 
-    static utils::Result<MatmulGptqInfo> createMatmulGptqInfo(
+    static utils::Result<QuantizeGptqInfo> createQuantizeGptqInfo(
         infiniopTensorDescriptor_t c_desc,
         infiniopTensorDescriptor_t a_desc,
         infiniopTensorDescriptor_t packed_weights_desc,
@@ -139,7 +139,7 @@ public:
                             INFINI_STATUS_BAD_TENSOR_SHAPE);
         }
 
-        return utils::Result<MatmulGptqInfo>(MatmulGptqInfo{
+        return utils::Result<QuantizeGptqInfo>(QuantizeGptqInfo{
             atype,
             packed_weights_type,
             m,
