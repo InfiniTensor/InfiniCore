@@ -5,4 +5,7 @@
 
 ELEMENTWISE_DESCRIPTOR(swiglu, kunlun)
 
+// Op interface declare
+LAUNCH_ELEMENTWISE_KERNEL(SwiGLU)
+
 #endif // __SWIGLU_KUNLUN_H__
