@@ -36,6 +36,7 @@ __C infiniStatus_t infiniopCreateQuantizeGPTQDescriptor(infiniopHandle_t handle,
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
+#undef CREATE
 }
 
 __C infiniStatus_t infiniopGetQuantizeGPTQWorkspaceSize(infiniopQuantizeGPTQDescriptor_t desc, size_t *size) {
@@ -53,6 +54,7 @@ __C infiniStatus_t infiniopGetQuantizeGPTQWorkspaceSize(infiniopQuantizeGPTQDesc
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
+#undef GET
 }
 
 __C infiniStatus_t infiniopQuantizeGPTQ(infiniopQuantizeGPTQDescriptor_t desc,
@@ -79,6 +81,7 @@ __C infiniStatus_t infiniopQuantizeGPTQ(infiniopQuantizeGPTQDescriptor_t desc,
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
+#undef QUANT
 }
 
 __C infiniStatus_t infiniopQuantizeLinearGPTQ(infiniopQuantizeGPTQDescriptor_t desc,
@@ -105,6 +108,7 @@ __C infiniStatus_t infiniopQuantizeLinearGPTQ(infiniopQuantizeGPTQDescriptor_t d
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
+#undef CACULATE
 }
 
 __C infiniStatus_t infiniopDestroyQuantizeGPTQDescriptor(infiniopQuantizeGPTQDescriptor_t desc) {
@@ -123,4 +127,5 @@ __C infiniStatus_t infiniopDestroyQuantizeGPTQDescriptor(infiniopQuantizeGPTQDes
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
+#undef DESTROY
 }

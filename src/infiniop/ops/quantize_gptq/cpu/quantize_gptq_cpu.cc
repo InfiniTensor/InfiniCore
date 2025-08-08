@@ -37,7 +37,6 @@ infiniStatus_t Descriptor::create(infiniopHandle_t handle_, Descriptor **desc_pt
     QuantizeGptqInfo info = result.take();
     size_t min_workspace_size
         = (info.k * info.k + info.n * info.block_size) * sizeof(float) + (2 * info.n * info.k) * infiniSizeOf(info.atype);
-    std::cout << "kernel workspace:" << min_workspace_size << std::endl;
     *desc_ptr = new Descriptor(info, nullptr, min_workspace_size, handle->device, handle->device_id);
     return INFINI_STATUS_SUCCESS;
 }
@@ -568,7 +567,6 @@ void quantWeights(void *workspace, int32_t *packed_weights,
 void caculate(void *workspace, fp16_t *C, const fp16_t *A,
               int32_t *packed_weights, fp16_t *b_scale, fp16_t *zero,
               int M, int K, int N, int group_size) {
-
     MatmulPackedWeight(C, A, packed_weights, b_scale, zero, M, K, N, group_size);
 }
 
@@ -624,10 +622,8 @@ infiniStatus_t Descriptor::calculate(
     int group_size = int(_info.group_size);
     bool is_weight_transposed = _info.is_weight_transposed;
     if (_info.atype == INFINI_DTYPE_F16 && !is_weight_transposed) {
-        std::cout << "cpu start" << std::endl;
         caculate(workspace, (fp16_t *)c, (fp16_t *)a, (int32_t *)packed_weights, (fp16_t *)b_scale, (fp16_t *)zero,
                  m, k, n, group_size);
-        std::cout << "cpu end" << std::endl;
 
     } else {
         return INFINI_STATUS_BAD_TENSOR_DTYPE;

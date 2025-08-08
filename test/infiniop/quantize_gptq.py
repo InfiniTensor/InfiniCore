@@ -27,24 +27,23 @@ from libinfiniop import (
 # ==============================================================================
 # These are not meant to be imported from other modules
 
-_TEST_CASES = [(1, 128, 128)]
-# _TEST_CASES = []
+_TEST_CASES = []
 
-# MODELS = {
-#     "7B": [(4096, 3 * 4096), (4096, 4096), (4096, 2 * 10752), (10752, 4096)],
-#     # "13B": [(5120, 3 * 5120), (5120, 5120), (5120, 2 * 13568), (13568, 5120)],
-#     # "33B": [(6656, 3 * 6656), (6656, 6656), (6656, 2 * 17664), (17664, 6656)],
-#     # "70B": [(8192, 3 * 8192), (8192, 8192), (8192, 2 * 21760), (21760, 8192)],
-# }
+MODELS = {
+    "7B": [(4096, 3 * 4096), (4096, 4096), (4096, 2 * 10752), (10752, 4096)],
+    # "13B": [(5120, 3 * 5120), (5120, 5120), (5120, 2 * 13568), (13568, 5120)],
+    # "33B": [(6656, 3 * 6656), (6656, 6656), (6656, 2 * 17664), (17664, 6656)],
+    # "70B": [(8192, 3 * 8192), (8192, 8192), (8192, 2 * 21760), (21760, 8192)],
+}
 
-# # Loop through models and layers to generate the new _TEST_CASES
-# for _, layers in MODELS.items():
-#     for layer in layers:
-#         for batch in [1, 16]:
-#             _TEST_CASES.append(((batch, layer[0], layer[1])))
+# Loop through models and layers to generate the new _TEST_CASES
+for _, layers in MODELS.items():
+    for layer in layers:
+        for batch in [1, 16]:
+            _TEST_CASES.append(((batch, layer[0], layer[1])))
 
 # Data types used for testing
-#_TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.BF16, InfiniDtype.F32]
+# _TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.BF16, InfiniDtype.F32]
 _TENSOR_DTYPES = [InfiniDtype.F16]
 # Tolerance map for different data types
 _TOLERANCE_MAP = {
@@ -57,6 +56,7 @@ DEBUG = False
 PROFILE = False
 NUM_PRERUN = 10
 NUM_ITERATIONS = 1000
+
 
 def quantize(x, scale, zero, minq, maxq):
     if scale.shape[1] == 1:
@@ -508,12 +508,14 @@ def gen_quant4(m, n, groupsize=-1):
 
 
 # PyTorch implementation for matrix multiplication
-def quantize_gptq(ans, a, b, is_weight_transposed):  # 昇腾芯片的CPU不支持转置计算
+def quantize_gptq(a, b, is_weight_transposed):  # 昇腾芯片的CPU不支持转置计算
     if is_weight_transposed:
         ans = torch.matmul(a.to(torch.float32), b.to(torch.float32)).to(b.dtype)
     else:
         ans = torch.matmul(b.to(torch.float32), a.to(torch.float32)).to(b.dtype)
-    
+    return ans
+
+
 # The argument list should be (lib, handle, device, <param list>, dtype)
 # The <param list> should keep the same order as the one specified in _TEST_CASES
 def test(
@@ -526,15 +528,15 @@ def test(
     sync=None,
 ):
     print(
-        f"Testing QuantizeGPTQ on {InfiniDeviceNames[device]}" f" M:{M}, K:{K}, N:{N}, dtype:{InfiniDtypeNames[dtype]}"
+        f"Testing QuantizeGPTQ on {InfiniDeviceNames[device]}"
+        f" M:{M}, K:{K}, N:{N}, dtype:{InfiniDtypeNames[dtype]}"
     )
 
     # Initialize tensors
     a = TestTensor((K, M), None, dtype, device)
     b = TestTensor((N, K), None, dtype, device)
     c = TestTensor((N, M), None, dtype, device, mode="zeros")
-    ans = TestTensor((N, M), None, dtype, device, mode="zeros")
-    
+
     is_weight_transposed = False
     sign_ed = False
     sym = False
@@ -548,8 +550,10 @@ def test(
     else:
         num_groups = K // group_size
 
-    packed_weights = TestTensor((N, K // 8), None, InfiniDtype.I32, device, mode="zeros")
-    print(packed_weights.torch_tensor().dtype)
+    packed_weights = TestTensor(
+        (N, K // 8), None, InfiniDtype.I32, device, mode="zeros"
+    )
+
     s = TestTensor((N, num_groups), None, dtype, device, mode="zeros")
     z = TestTensor((N, num_groups), None, dtype, device, mode="zeros")
 
@@ -559,40 +563,62 @@ def test(
     if sign_ed:  # 有符号量化，范围是[-8,7]
         maxq = 2 ** (bits - 1) - 1
         minq = -(2 ** (bits - 1))
-    
+
     if device == InfiniDeviceEnum.NVIDIA:
         b_data, packed_weights_data, s_data = gen_quant4(K, N, groupsize=group_size)
         a = TestTensor((M, K), None, dtype, device)
         b = TestTensor((K, N), None, dtype, device, mode="manual", set_tensor=b_data)
         c = TestTensor((M, N), None, dtype, device, mode="zeros")
-        ans = TestTensor((M, N), None, dtype, device, mode="zeros")
-        packed_weights = TestTensor((K // 8, N), None, InfiniDtype.I32, device, mode="manual", set_tensor=packed_weights_data)
-        s = TestTensor((num_groups, N), None, dtype, device, mode="manual", set_tensor=s_data)
+
+        packed_weights = TestTensor(
+            (K // 8, N),
+            None,
+            InfiniDtype.I32,
+            device,
+            mode="manual",
+            set_tensor=packed_weights_data,
+        )
+        s = TestTensor(
+            (num_groups, N), None, dtype, device, mode="manual", set_tensor=s_data
+        )
         z = TestTensor((num_groups, N), None, dtype, device, mode="zeros")
-        
+
     if device == InfiniDeviceEnum.CPU:
         b_ref_data, s_data, z_data = get_scale_zero(
-            b.torch_tensor(), a.torch_tensor().t(), c.torch_tensor(), group_size, bits, sym, sign_ed=sign_ed
+            b.torch_tensor(),
+            a.torch_tensor().t(),
+            c.torch_tensor(),
+            group_size,
+            bits,
+            sym,
+            sign_ed=sign_ed,
         )  # 无符号量化
 
         packed_weights_data = pack(b_ref_data, s_data, z_data, minq, maxq)
-        packed_weights = TestTensor((N, K // 8), None, InfiniDtype.I32, device, mode="manual", set_tensor=packed_weights_data)
-        s = TestTensor((N, num_groups), None, dtype, device, mode="manual", set_tensor=s_data)
-        z = TestTensor((N, num_groups), None, dtype, device, mode="manual", set_tensor=z_data)
-
-    def torch_quantize_gptq():
-        quantize_gptq(
-            ans.torch_tensor(),
-            a.torch_tensor(), 
-            b.torch_tensor(), 
-            is_weight_transposed,
+        packed_weights = TestTensor(
+            (N, K // 8),
+            None,
+            InfiniDtype.I32,
+            device,
+            mode="manual",
+            set_tensor=packed_weights_data,
+        )
+        s = TestTensor(
+            (N, num_groups), None, dtype, device, mode="manual", set_tensor=s_data
+        )
+        z = TestTensor(
+            (N, num_groups), None, dtype, device, mode="manual", set_tensor=z_data
         )
 
-    torch_quantize_gptq()
+    ans = quantize_gptq(
+        a.torch_tensor(),
+        b.torch_tensor(),
+        is_weight_transposed,
+    )
 
     if sync is not None:
         sync()
-    
+
     descriptor = infiniopOperatorDescriptor_t()
     check_error(
         LIBINFINIOP.infiniopCreateQuantizeGPTQDescriptor(
@@ -625,7 +651,7 @@ def test(
         )
     )
     workspace = TestWorkspace(workspace_size.value, device)
-    print("work python", workspace_size.value)
+
     # Execute infiniop quantize_gptq operator
     # check_error(
     #     LIBINFINIOP.infiniopQuantizeGPTQ(
@@ -640,23 +666,7 @@ def test(
     #         None,
     #     )
     # )
-    def check_tensor_valid(name, t):
-        tt = t.torch_tensor()
-        ptr = tt.data_ptr()
-        print(f"[{name}] shape: {tt.shape}, dtype: {tt.dtype}, device: {tt.device}, data_ptr: {hex(ptr)}")
 
-        if ptr % 16 != 0:
-            print(f"⚠️ Warning: {name} is NOT aligned to 16 bytes, kernel may crash!")
-
-    check_tensor_valid("a", a)
-    check_tensor_valid("c", c)
-    check_tensor_valid("packed_weights", packed_weights)
-    check_tensor_valid("s", s)
-    check_tensor_valid("z", z)
-
-    print(ans.torch_tensor())
-    # ad = TestTensor((M, N), None, dtype, device, mode="zeros")
-    # print(ad.torch_tensor())
     def lib_quantize_gptq():
         check_error(
             LIBINFINIOP.infiniopQuantizeLinearGPTQ(
@@ -673,10 +683,7 @@ def test(
         )
 
     lib_quantize_gptq()
-    ad = TestTensor((M, N), None, dtype, device, mode="zeros")
-    print(ad.torch_tensor())
-    print(ans.torch_tensor())
-    print(c.torch_tensor())
+
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     # tmpa = ans.torch_tensor().flatten()
     # tmpc = c.actual_tensor().flatten()
@@ -685,15 +692,14 @@ def test(
     #         print(tmpa[i], tmpc[i], abs(tmpa[i] - tmpc[i]), rtol * abs(tmpa[i]))
     #         break
 
-    
     if DEBUG:
-        debug(c.actual_tensor(), ans.torch_tensor(), atol=atol, rtol=rtol)
-    assert torch.allclose(c.actual_tensor(), ans.torch_tensor(), atol=atol, rtol=rtol)
+        debug(c.actual_tensor(), ans, atol=atol, rtol=rtol)
+    assert torch.allclose(c.actual_tensor(), ans, atol=atol, rtol=rtol)
 
     # Profiling workflow
     if PROFILE:
         # fmt: off
-        profile_operation("PyTorch", lambda: torch_quantize_gptq(), device, NUM_PRERUN, NUM_ITERATIONS)
+        profile_operation("PyTorch", lambda: quantize_gptq(a.torch_tensor(), b.torch_tensor(), is_weight_transposed), device, NUM_PRERUN, NUM_ITERATIONS)
         profile_operation("    lib", lambda: lib_quantize_gptq(), device, NUM_PRERUN, NUM_ITERATIONS)
         # fmt: on
     check_error(LIBINFINIOP.infiniopDestroyQuantizeGPTQDescriptor(descriptor))

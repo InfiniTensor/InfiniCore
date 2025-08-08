@@ -1,12 +1,7 @@
 #include "../../../devices/nvidia/nvidia_common.cuh"
 #include "gptq_marlin.cuh"
 #include "quantize_gptq_nvidia.cuh"
-#include <cassert>
-#ifdef NDEBUG
-#define SAFE_ASSERT(x) ((void)(x))
-#else
-#define SAFE_ASSERT(x) assert(x)
-#endif
+
 namespace op::quantize_gptq::nvidia {
 
 struct Descriptor::Opaque {
@@ -30,7 +25,6 @@ infiniStatus_t Descriptor::create(
     QuantizeGptqInfo info = result.take();
     int max_par = gptq_marlin::max_par;
     size_t min_workspace_size = info.n / gptq_marlin::min_thread_n * max_par * sizeof(int) + info.m * info.k * infiniSizeOf(info.atype);
-    std::cout << "kernel workspace:" << min_workspace_size << std::endl;
     *desc_ptr = new Descriptor(info, new Opaque{handle->internal()}, min_workspace_size, handle->device, handle->device_id);
     return INFINI_STATUS_SUCCESS;
 }
@@ -74,13 +68,11 @@ infiniStatus_t Descriptor::calculate(
     bool is_weight_transposed = _info.is_weight_transposed;
 
     if (_info.atype == INFINI_DTYPE_F16 && is_weight_transposed) {
-        std::cout << "gpu start: " << "group_size: " << group_size << "num_groups: " << num_groups << std::endl;
         gptq_marlin::gptq_marlin_mm_fp16(c, a, packed_weights, b_scale,
                                          m, n, k,
                                          workspace, bits,
                                          num_groups, group_size,
                                          this->device_id, (cudaStream_t)stream);
-        std::cout << "gpu end" << std::endl;
 
     } else if (_info.atype == INFINI_DTYPE_BF16 && is_weight_transposed) {
         gptq_marlin::gptq_marlin_mm_bf16(c, a, packed_weights, b_scale,
