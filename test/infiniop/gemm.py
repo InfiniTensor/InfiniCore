@@ -22,34 +22,67 @@ from libinfiniop import (
 # ==============================================================================
 # These are not meant to be imported from other modules
 _TEST_CASES = [
-    # alpha, beta, a_shape, b_shape, c_shape, a_stride, b_stride, c_stride
-    # (1.0, 0.0, (1, 2048), (2048, 2048), (1, 2048), None, None, None),
-    # (1.0, 0.0, (2, 4, 2048), (2, 2048, 2048), (2, 4, 2048), None, None, None),
-    # (1.0, 0.0, (2, 4, 8), (2, 8, 16), (2, 4, 16), None, None, None),
-    # (1.0, 0.0, (16, 16), (16, 16), (16, 16), None, None, None),
-    # (1.0, 0.0, (1, 16, 16), (1, 16, 16), (1, 16, 16), None, None, None),
-    # (1.0, 0.0, (1, 4, 4), (1, 4, 4), (1, 4, 4), None, None, None),
-    # (1.0, 0.0, (1, 16, 16), (1, 16, 16), (1, 16, 16), None, None, None),
-    # (1.0, 0.0, (1, 2048), (2048, 2048), (1, 2048), (4096, 1), (4096, 1), (4096, 1)),
-    # (1.0, 0.0, (1, 2048), (2048, 2048), (1, 2048), (4096, 1), (4096, 1), (4096, 1)),
-    # (1.0, 1.0, (6, 2048), (2048, 2560), (6, 2560), (2048, 1), (1, 2048), (2560, 1)),
-    # (1.0, 1.0, (6, 2048), (2048, 2560), (6, 2560), (2048, 1), (1, 2048), (2560, 1)),
-    # (1.0 / 8.0, 0.0, (4, 8 * 6, 64), (4, 64, 6), (4, 8 * 6, 6), None, None, None),
-    # (1.0 / 8.0, 0.0, (4, 8 * 6, 64), (4, 64, 6), (4, 8 * 6, 6), None, None, None),
+    ## alpha, beta, a_shape, b_shape, c_shape, a_stride, b_stride, c_stride
 
-    # (1.0, 0.0, (1, 4, 5120), (5120, 1536), (1, 4, 1536), None, None, None),
-    # (1.0, 0.0, (1, 4, 1536), (1536, 24576), (1, 4, 24576), None, None, None),
-    # (1.0, 0.0, (1, 4, 5120), (5120, 576), (1, 4, 576), None, None, None),
-    # (1.0, 0.0, (1, 4, 16384), (16384, 5120), (1, 4, 5120), None, None, None),
-    # (1.0, 0.0, (1, 4, 5120), (5120, 12288), (1, 4, 12288), None, None, None),
-    # (1.0, 0.0, (1, 4, 3072), (3072, 5120), (1, 4, 5120), None, None, None),
-    # (1.0, 0.0, (1, 4, 12288), (12288, 5120), (1, 4, 5120), None, None, None),
+    (1.0, 0.0, (1, 2048), (2048, 2048), (1, 2048), None, None, None),
+    (1.0, 0.0, (2, 4, 2048), (2, 2048, 2048), (2, 4, 2048), None, None, None),
+    (1.0, 0.0, (2, 4, 8), (2, 8, 16), (2, 4, 16), None, None, None),
+    (1.0, 0.0, (16, 16), (16, 16), (16, 16), None, None, None),
+    (1.0, 0.0, (1, 16, 16), (1, 16, 16), (1, 16, 16), None, None, None),
+    (1.0, 0.0, (1, 4, 4), (1, 4, 4), (1, 4, 4), None, None, None),
+    (1.0, 0.0, (1, 16, 16), (1, 16, 16), (1, 16, 16), None, None, None),
+    (1.0 / 8.0, 0.0, (4, 8 * 6, 64), (4, 64, 6), (4, 8 * 6, 6), None, None, None),
+    (1.0 / 8.0, 0.0, (4, 8 * 6, 64), (4, 64, 6), (4, 8 * 6, 6), None, None, None),
+    (1.0, 0.0, (1, 4, 5120), (5120, 1536), (1, 4, 1536), None, None, None),
+    
+    ## with stride, support row major
+    (1.0, 0.0, (1, 2048), (2048, 2048), (1, 2048), (4096, 1), (4096, 1), (4096, 1)),
+    (1.0, 0.0, (1, 2048), (2048, 2048), (1, 2048), (2048, 1), (2048, 1), (2048, 1)),
 
+    (1.0, 0.0, (2, 3), (3, 4), (2, 4), (3, 1), (4, 1), (4, 1)),
+    
+    ## ktransformer GEMM shape test
+    (1.0, 0.0, (1, 4, 1536), (1536, 24576), (1, 4, 24576), None, None, None),
+    (1.0, 0.0, (1, 4, 5120), (5120, 576), (1, 4, 576), None, None, None),
+    (1.0, 0.0, (1, 4, 16384), (16384, 5120), (1, 4, 5120), None, None, None),
+    (1.0, 0.0, (1, 4, 5120), (5120, 12288), (1, 4, 12288), None, None, None),
+    (1.0, 0.0, (1, 4, 3072), (3072, 5120), (1, 4, 5120), None, None, None),
+    (1.0, 0.0, (1, 4, 12288), (12288, 5120), (1, 4, 5120), None, None, None),
     (1.0, 0.0, (1, 8, 2048), (2048, 3072), (1, 8, 3072), None, None, None),
+
+    ## support col-major tensor test cases, eg:
+    (1.0, 1.0, (6, 2048), (2048, 2560), (6, 2560), (2048, 1), (1, 2048), (2560, 1)),
+    (1.0, 0.0, (2, 4), (4, 8), (2, 8), (4, 1), (8, 1), (8, 1)),
+    (1.0, 0.0, (2, 4), (4, 8), (2, 8), (4, 1), (8, 1), (8, 1)),
+    (1.0, 0.0, (2, 4), (4, 8), (2, 8), (4, 1), (1, 4), (8, 1)),
+    (1.0, 0.0, (2, 4), (4, 8), (2, 8), (4, 1), (1, 4), (8, 1)),
+    (1.0, 0.0, (1, 2048), (2048, 2048), (1, 2048), None, None, None),
+    (1.0, 0.0, (2, 4, 2048), (2, 2048, 2048), (2, 4, 2048), None, None, None),
+    (1.0, 0.0, (1, 2048), (2048, 2048), (1, 2048), (4096, 1), (4096, 1), (4096, 1)),
+    (1.0, 1.0, (6, 2048), (2048, 2560), (6, 2560), (2048, 1), (1, 2048), (2560, 1)),
+    (1.0 / 8.0, 0.0, (4, 8 * 6, 64), (4, 64, 6), (4, 8 * 6, 6), None, None, None),
+
+    ## alpha, beta, a_shape, b_shape, c_shape, a_stride, b_stride, c_stride
+    (1.0, 0.0, (1, 2048), (2048, 2048), (1, 2048), None, None, None),
+    (1.0, 0.0, (2, 4, 2048), (2, 2048, 2048), (2, 4, 2048), None, None, None),
+    (1.0, 0.0, (1, 2048), (2048, 2048), (1, 2048), (4096, 1), (4096, 1), (4096, 1)),
+    (1.0, 1.0, (6, 2048), (2048, 2560), (6, 2560), (2048, 1), (1, 2048), (2560, 1)),
+    (1.0 / 8.0, 0.0, (4, 8 * 6, 64), (4, 64, 6), (4, 8 * 6, 6), None, None, None),
+
+    ## 9G 7B model GEMM shape test
+    (1.0, 0.0, (15, 3584), (3584, 10752), (15, 10752), (3584, 1), (1, 3584), (10752, 1)),
+    (1.0, 0.0, (15, 3584), (3584, 3584), (15, 3584), (3584, 1), (1, 3584), (3584, 1)),
+    (1.0, 0.0, (28, 15, 128), (28, 128, 15), (28, 15, 15), (1920, 128, 1), (128, 1, 3584), (225, 15, 1)),
+    (1.0, 0.0, (28, 15, 15), (28, 15, 128), (28, 15, 128), (225, 15, 1), (128, 3584, 1), (1920, 128, 1)),
+    (1.0, 0.0, (15, 3584), (3584, 37888), (15, 37888), (3584, 1), (1, 3584), (37888, 1)),
+    (1.0, 0.0, (15, 18944), (18944, 3584), (15, 3584), (37888, 1), (1, 18944), (3584, 1)),
+    (1.0, 0.0, (1, 3584), (3584, 73448), (1, 73448), (3584, 1), (1, 3584), (73448, 1)),
+
 ]
 
 # Data types used for testing
-_TENSOR_DTYPES = [torch.float32]
+# _TENSOR_DTYPES = [torch.float16, torch.float32]
+_TENSOR_DTYPES = [torch.float16]
 
 # Tolerance map for different data types
 _TOLERANCE_MAP = {
@@ -74,11 +107,17 @@ infiniopGemmDescriptor_t = POINTER(GemmDescriptor)
 
 
 # PyTorch implementation for matrix multiplication
-def gemm(_c, beta, _a, _b, alpha):
-    a, b, c = _a.clone(), _b.clone(), _c.clone()
-    result_dtype = c.dtype
-    fp32_result = torch.matmul(a.to(torch.float32), b.to(torch.float32))
-    return alpha * fp32_result.to(result_dtype) + beta * c
+def gemm(d, _c, beta, _a, _b, alpha):
+    try:
+        if _c.ndim == 2:
+            torch.addmm(_c, _a, _b, beta=beta, alpha=alpha, out=d)
+        elif _c.ndim == 3:
+            torch.baddbmm(_c, _a, _b, beta=beta, alpha=alpha, out=d)
+        else:
+            raise
+    except Exception:
+        torch.matmul(_a, _b, out=d)
+        d.mul_(alpha).add_(_c, alpha=beta)
 
 
 # The argument list should be (lib, handle, torch_device, <param list>, dtype)
@@ -96,7 +135,7 @@ def test(
     b_stride=None,
     c_stride=None,
     dtype=torch.float16,
-    sync=None
+    sync=None,
 ):
     print(
         f"Testing Gemm on {torch_device} with alpha:{alpha}, beta:{beta},"
@@ -104,55 +143,14 @@ def test(
         f" a_stride:{a_stride}, b_stride:{b_stride}, c_stride:{c_stride}, dtype:{dtype}"
     )
 
-    # Initialize tensors - ktransformer
-    loaded_x = torch.load("/home/zhushuang/ktransformer-test/spikezhu/example/mudnn_compare/x_data.pt")
-    loaded_weight = torch.load("/home/zhushuang/ktransformer-test/spikezhu/example/mudnn_compare/weight_data.pt")
-
-    print("is_contiguous:", loaded_x.is_contiguous())
-    print("is_contiguous:", loaded_weight.is_contiguous())
-
-    print(f"loaded_x-shape:{loaded_x.shape}")
-    print(f"loaded_x-type:{loaded_x.dtype}")
-    print("loaded_x:")
-    print(loaded_x)
-    print()
-    a = loaded_x.to(torch.float32).reshape(1, 8, 2048).to(torch_device)
-    a = torch.ones_like(a)
-    print(f"a-shape:{a.shape}")
-    print(f"a-stride:{a.stride()}")
-
-
-
-    print(f"loaded_weight-shape:{loaded_weight.shape}")
-    print(f"loaded_weight-type:{loaded_weight.dtype}")
-    print("loaded_weight:")
-    print(loaded_weight)
-    print()
-    b = loaded_weight.to(torch.float32).reshape(2048, 3072).contiguous().to(torch_device)
-    print(f"b-shape:{b.shape}")
-    print(f"b-stride:{b.stride()}")
-
-
-    c = torch.rand(c_shape, dtype=dtype).to(torch.float32).to(torch_device)
-
-
-    # # Initialize tensors - random test
-    dtype_in = torch.bfloat16
-    dtype_out = torch.float32
-    # a = (torch.rand(a_shape, dtype=dtype_in)/100).to(dtype_out).to(torch_device)
-    # b = (torch.rand(b_shape, dtype=dtype_in)/1000).to(dtype_out).to(torch_device)
-    # print(f"b-shape-2:{b.shape}")
-    # print(f"b-stride-2:{b.stride()}")
-
-    # c = (torch.rand(c_shape, dtype=dtype_in)/100).to(dtype_out).to(torch_device)
-
-    # a = torch.rand(a_shape, dtype=dtype).to(torch_device)
-    # b = torch.rand(b_shape, dtype=dtype).to(torch_device)
-    # c = torch.ones(c_shape, dtype=dtype).to(torch_device)
-
+    # Initialize tensors
+    a = torch.rand(a_shape, dtype=dtype).to(torch_device)
+    b = torch.rand(b_shape, dtype=dtype).to(torch_device)
+    c = torch.ones(c_shape, dtype=dtype).to(torch_device)
+    ans = torch.zeros(c_shape, dtype=dtype).to(torch_device)
 
     # Compute the PyTorch reference result
-    ans = gemm(c, beta, a, b, alpha)
+    gemm(ans, c, beta, a, b, alpha)
 
     a, b, c = [
         rearrange_if_needed(tensor, stride)
@@ -203,31 +201,18 @@ def test(
 
     lib_gemm()
 
-    # for i in range(c.shape[0]):
-    #     for j in range(c.shape[1]):
-    #         for k in range(c.shape[2]):
-    #             print(f"{i}, {j}, {k}")
-    #             print(f"c:{c[i, j , k]}, ans:{ans[i, j, k]}")
-
-    print("c:")
-    print(c)
-    print()
-    print("ans:")
-    print(ans)
-    print()
-
-
     # Validate results
-    # atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
-    atol, rtol = 1e-2, 1e-2
+    atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
+
     if DEBUG:
         debug(c, ans, atol=atol, rtol=rtol)
+
     assert torch.allclose(c, ans, atol=atol, rtol=rtol)
 
     # Profiling workflow
     if PROFILE:
         # fmt: off
-        profile_operation("PyTorch", lambda: gemm(c, beta, a, b, alpha), torch_device, NUM_PRERUN, NUM_ITERATIONS)
+        # profile_operation("PyTorch", lambda: gemm(ans, c, beta, a, b, alpha), torch_device, NUM_PRERUN, NUM_ITERATIONS)
         profile_operation("    lib", lambda: lib_gemm(), torch_device, NUM_PRERUN, NUM_ITERATIONS)
         # fmt: on
     check_error(lib.infiniopDestroyGemmDescriptor(descriptor))

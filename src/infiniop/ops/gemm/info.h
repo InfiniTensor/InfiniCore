@@ -105,14 +105,14 @@ public:
         }
 
         auto is_transed = false;
-        // if ((layout == MatrixLayout::COL_MAJOR && c_matrix->col_stride == 1)
-        //     || (layout == MatrixLayout::ROW_MAJOR && c_matrix->row_stride == 1)) {
-        //     c_matrix->transpose();
-        //     b_matrix->transpose();
-        //     a_matrix->transpose();
-        //     std::swap(a_matrix, b_matrix);
-        //     is_transed = true;
-        // }
+        if ((layout == MatrixLayout::COL_MAJOR && c_matrix->col_stride == 1)
+            || (layout == MatrixLayout::ROW_MAJOR && c_matrix->row_stride == 1)) {
+            c_matrix->transpose();
+            b_matrix->transpose();
+            a_matrix->transpose();
+            std::swap(a_matrix, b_matrix);
+            is_transed = true;
+        }
 
         auto m = c_matrix->rows;
         auto n = c_matrix->cols;
