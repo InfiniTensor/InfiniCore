@@ -11,6 +11,9 @@
 #ifdef ENABLE_METAX_API
 #include "metax/mul_metax.h"
 #endif
+#ifdef ENABLE_KUNLUN_API
+#include "kunlun/mul_kunlun.h"
+#endif
 
 __C infiniStatus_t infiniopCreateMulDescriptor(
     infiniopHandle_t handle,
@@ -42,6 +45,9 @@ __C infiniStatus_t infiniopCreateMulDescriptor(
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, metax);
 #endif
+#ifdef ENABLE_KUNLUN_API
+        CREATE(INFINI_DEVICE_KUNLUN, kunlun);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -69,6 +75,9 @@ __C infiniStatus_t infiniopGetMulWorkspaceSize(infiniopMulDescriptor_t desc, siz
 #endif
 #ifdef ENABLE_METAX_API
         GET(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_KUNLUN_API
+        GET(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
 
     default:
@@ -107,6 +116,9 @@ __C infiniStatus_t infiniopMul(
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
+#ifdef ENABLE_KUNLUN_API
+        CALCULATE(INFINI_DEVICE_KUNLUN, kunlun);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -136,6 +148,9 @@ infiniopDestroyMulDescriptor(infiniopMulDescriptor_t desc) {
 #endif
 #ifdef ENABLE_METAX_API
         DELETE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_KUNLUN_API
+        DELETE(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
 
     default:
