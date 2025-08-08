@@ -53,4 +53,19 @@ __C __export infiniStatus_t infinirtMemcpyAsync(void *dst, const void *src, size
 __C __export infiniStatus_t infinirtMallocAsync(void **p_ptr, size_t size, infinirtStream_t stream);
 __C __export infiniStatus_t infinirtFreeAsync(void *ptr, infinirtStream_t stream);
 
+// Virtual memory & physical memory
+typedef void *infinirtDeviceptr_t;
+typedef void *infinirtAllocationHandle_t;
+typedef void *infinirtPhyMem_t;
+typedef void *infinirtVirtualMem_t;
+
+__C __export infiniStatus_t infinirtGetMemGranularityMinimum(size_t *granularity);
+__C __export infiniStatus_t infinirtCreatePhysicalMem(infinirtPhyMem_t *phy_mem, size_t len);
+__C __export infiniStatus_t infinirtReleasePhysicalMem(infinirtPhyMem_t phy_mem);
+
+__C __export infiniStatus_t infinirtCreateVirtualMem(infinirtVirtualMem_t *vm, size_t len);
+__C __export infiniStatus_t infinirtMapVirtualMem(void **mapped_ptr, infinirtVirtualMem_t vm, size_t offset, infinirtPhyMem_t phy_mem);
+__C __export infiniStatus_t infinirtUnmapVirtualMem(infinirtVirtualMem_t vm, size_t offset);
+__C __export infiniStatus_t infinirtReleaseVirtualMem(infinirtVirtualMem_t vm);
+
 #endif // __INFINIRT_API_H__
