@@ -97,7 +97,7 @@ __C infiniStatus_t infiniopGetSwiGLUWorkspaceSize(infiniopSwiGLUDescriptor_t des
         GET(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_CAMBRICON_API
-        GET(INFINI_DEVICE_CAMBRICON, bang)
+        GET(INFINI_DEVICE_CAMBRICON, bang);
 #endif
 #ifdef ENABLE_ASCEND_API
         GET(INFINI_DEVICE_ASCEND, ascend);
