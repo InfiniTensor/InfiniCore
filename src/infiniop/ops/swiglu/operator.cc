@@ -17,6 +17,9 @@
 #ifdef ENABLE_CAMBRICON_API
 #include "bang/swiglu_bang.h"
 #endif
+#ifdef ENABLE_CAMBRICON_API
+#include "bang/swiglu_bang.h"
+#endif
 #ifdef ENABLE_ASCEND_API
 #include "ascend/swiglu_ascend.h"
 #endif
@@ -101,11 +104,6 @@ __C infiniStatus_t infiniopGetSwiGLUWorkspaceSize(infiniopSwiGLUDescriptor_t des
 #endif
 #ifdef ENABLE_ASCEND_API
         GET(INFINI_DEVICE_ASCEND, ascend);
-#endif
-#ifdef ENABLE_MTHREADS_GPU
-    case DevMthreadsGpu: {
-        return musaGetSwiGLUWorkspaceSize((SwiGLUMusaDescriptor_t)desc, size);
-    }
 #endif
     }
 

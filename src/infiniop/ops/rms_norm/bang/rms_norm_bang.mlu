@@ -1,0 +1,195 @@
+#include "../../../devices/bang/common_bang.h"
+#include "../../../reduce/bang/reduce_bang.h"
+#include "rms_norm_bang.h"
+
+__nram__ char nram_buffer[NRAM_MAX_SIZE];
+const int SRC_MAX_SIZE = NRAM_MAX_SIZE / 4;
+
+template <typename T, typename Tw>
+__mlu_global__ void rmsnorm(T *output, const T *input, const Tw *weight,
+                            size_t *shape, ptrdiff_t *output_strides, ptrdiff_t *input_strides,
+                            float epsilon, int num_dims, int norm_dim_size) {
+    // Calculate problem dimensions
+    int batch_volume = 1;
+    for (int dim_idx = 0; dim_idx < num_dims - 1; ++dim_idx) {
+        batch_volume *= shape[dim_idx];
+    }
+    int vector_size = shape[num_dims - 1];
+
+    // Determine maximum batch size for NRAM operations
+    int max_batch_size = (vector_size >= SRC_MAX_SIZE / sizeof(Tw) ? SRC_MAX_SIZE / sizeof(Tw) : norm_dim_size);
+    constexpr int reduce_buffer_size = 128 / sizeof(float);
+
+    // Task distribution across cores
+    int remaining_tasks = batch_volume % taskDim;
+    int base_tasks_per_core = batch_volume / taskDim;
+    int actual_tasks = base_tasks_per_core + (taskId < remaining_tasks ? 1 : 0);
+    int task_start_idx = (taskId < remaining_tasks ? taskId * base_tasks_per_core + taskId : taskId * base_tasks_per_core + remaining_tasks);
+
+    // NRAM buffer allocation
+    int half_type_offset = (sizeof(T) == 2 ? max_batch_size : 0);
+    char *input_buffer = nram_buffer + reduce_buffer_size * sizeof(float);
+    char *weight_buffer = input_buffer + (max_batch_size + half_type_offset) * sizeof(T);
+
+    float *reduction_result = (float *)nram_buffer;
+    T *input_cache = (T *)input_buffer;
+    Tw *weight_cache = (Tw *)weight_buffer;
+
+    // Process vectors assigned to current core
+    int processed_tasks = 0;
+    while (processed_tasks < actual_tasks) {
+        int input_offset = 0;
+        int output_offset = 0;
+        int current_index = task_start_idx + processed_tasks;
+
+        // Calculate memory offsets for current task
+        for (int dim = num_dims - 2; dim >= 0; --dim) {
+            input_offset += (current_index % shape[dim]) * input_strides[dim];
+            output_offset += (current_index % shape[dim]) * output_strides[dim];
+            current_index = current_index / shape[dim];
+        }
+
+        // Compute sum of squares
+        __bang_write_zero(reduction_result, reduce_buffer_size);
+        float sum_squared = op::common_bang::reduce_op::sumSquaredBatched<T>(
+            input + input_offset, input_cache, reduction_result, vector_size, max_batch_size);
+        // Compute normalization factor
+        float rms_value = sum_squared / vector_size;
+        rms_value += epsilon;
+        rms_value = sqrtf(rms_value);
+        float inv_rms = 1.0f / rms_value;
+
+        // Process vector in chunks
+        size_t processed_elements = 0;
+        while (processed_elements < vector_size) {
+            size_t current_batch = std::min((size_t)max_batch_size, vector_size - processed_elements);
+
+            // Load data
+            __memcpy(input_cache, input + input_offset + processed_elements, current_batch * sizeof(T), GDRAM2NRAM);
+            __memcpy(weight_cache, weight + processed_elements, current_batch * sizeof(Tw), GDRAM2NRAM);
+
+            // Type conversion (if needed)
+            if constexpr (std::is_same<T, half>::value && std::is_same<Tw, float>::value) {
+                __bang_float2half_dn((T *)weight_cache, weight_cache, current_batch);
+            }
+
+            // Normalization and scaling
+            __bang_mul(input_cache, input_cache, (T *)weight_cache, current_batch);
+            __bang_mul_scalar(input_cache, input_cache, inv_rms, current_batch);
+
+            // Store results
+            __memcpy(output + output_offset + processed_elements, input_cache, current_batch * sizeof(T), NRAM2GDRAM);
+
+            processed_elements += current_batch;
+        }
+
+        processed_tasks++;
+    }
+}
+
+template <typename T, typename Tw>
+void rmsnormUnion(void *workspace, int core_per_cluster, int cluster_count, cnrtQueue_t queue, void *y, const void *x, const void *w, const size_t *shape, const ptrdiff_t *y_strides, const ptrdiff_t *x_strides, float eps, int ndim) {
+    cnrtDim3_t kernel_dim;
+    cnrtFunctionType_t kernel_type;
+
+    // Configure kernel dimensions
+    kernel_dim.x = core_per_cluster;
+    kernel_dim.y = cluster_count;
+    kernel_dim.z = 1;
+    kernel_type = CNRT_FUNC_TYPE_UNION1; // Can choose others, but must adapt kernel_type accordingly
+    int dimsize = shape[ndim - 1];       // Length of operation dimension
+    int dim_s;                           // dim_s is the next power of 2 greater than dimsize
+    float mi = log2(dimsize);
+    if (floor(mi) == mi) {
+        dim_s = dimsize;
+    } else {
+        dim_s = pow(2, floor(mi) + 1);
+    }
+    constexpr int reduce_num = 128 / sizeof(float); // Cambricon __bang_reduce_sum can only reduce 128 bytes at a time
+    if (dim_s < reduce_num) {
+        dim_s = reduce_num; // Force dim_s >= reduce_num
+    }
+
+    // Prepare device pointers
+    auto y_ = reinterpret_cast<T *>(y);
+    auto x_ = reinterpret_cast<const T *>(x);
+    auto w_ = reinterpret_cast<const Tw *>(w);
+    char *tmp_device = reinterpret_cast<char *>(workspace);
+    char *tmp_stride = tmp_device + ndim * sizeof(size_t);
+    size_t *mlu_shape = (size_t *)tmp_device;
+    ptrdiff_t *mlu_x_strides = (ptrdiff_t *)tmp_stride;
+    ptrdiff_t *mlu_y_strides = mlu_x_strides + ndim;
+
+    // Copy shape and stride information to device
+    CNRT_CHECK(cnrtMemcpyAsync(mlu_shape, const_cast<size_t *>(shape), ndim * sizeof(size_t), queue, cnrtMemcpyHostToDev)); // const not supported
+    CNRT_CHECK(cnrtMemcpyAsync(mlu_x_strides, const_cast<ptrdiff_t *>(x_strides), ndim * sizeof(ptrdiff_t), queue, cnrtMemcpyHostToDev));
+    CNRT_CHECK(cnrtMemcpyAsync(mlu_y_strides, const_cast<ptrdiff_t *>(y_strides), ndim * sizeof(ptrdiff_t), queue, cnrtMemcpyHostToDev));
+
+    // Launch kernel
+    rmsnorm<T, Tw><<<kernel_dim, kernel_type, queue>>>(y_, x_, w_, mlu_shape, mlu_y_strides, mlu_x_strides, eps, ndim, dim_s);
+
+    cnrtQueueSync(queue);
+}
+
+namespace op::rms_norm::bang {
+
+struct Descriptor::Opaque {
+    std::shared_ptr<device::bang::Handle::Internal> internal;
+};
+
+Descriptor::~Descriptor() {
+    delete _opaque;
+}
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t y_desc,
+    infiniopTensorDescriptor_t x_desc,
+    infiniopTensorDescriptor_t w_desc,
+    float epsilon) {
+    auto handle = reinterpret_cast<device::bang::cambricon::Handle *>(handle_);
+
+    auto result = RMSNormInfo::create(y_desc, x_desc, w_desc, epsilon);
+    CHECK_RESULT(result);
+    auto info = result.take();
+
+    size_t workspace_size = info.ndim() * (sizeof(size_t) + 2 * sizeof(ptrdiff_t));
+    *desc_ptr = new Descriptor(
+        new Descriptor::Opaque{static_cast<device::bang::Handle *>(handle)->internal()},
+        info,
+        workspace_size,
+        handle->device,
+        handle->device_id);
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size,
+                                     void *y, const void *x, const void *w,
+                                     void *stream) const {
+    auto queue = reinterpret_cast<cnrtQueue_t>(stream);
+    int core_per_cluster = _opaque->internal->getCorePerCluster();
+    int cluster_count = _opaque->internal->getClusterCount();
+
+    // Dispatch based on data types
+    if (_info.atype == INFINI_DTYPE_F16) {
+        if (_info.wtype == INFINI_DTYPE_F16) {
+            rmsnormUnion<half, half>(workspace, core_per_cluster, cluster_count, queue, y, x, w, _info.shape.data(), _info.y_strides.data(), _info.x_strides.data(), _info.epsilon, _info.ndim());
+        } else if (_info.wtype == INFINI_DTYPE_F32) {
+            rmsnormUnion<half, float>(workspace, core_per_cluster, cluster_count, queue, y, x, w, _info.shape.data(), _info.y_strides.data(), _info.x_strides.data(), _info.epsilon, _info.ndim());
+        } else {
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
+    } else if (_info.atype == INFINI_DTYPE_F32) {
+        if (_info.wtype == INFINI_DTYPE_F32) {
+            rmsnormUnion<float, float>(workspace, core_per_cluster, cluster_count, queue, y, x, w, _info.shape.data(), _info.y_strides.data(), _info.x_strides.data(), _info.epsilon, _info.ndim());
+        }
+    } else {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace op::rms_norm::bang
