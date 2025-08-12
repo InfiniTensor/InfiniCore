@@ -28,11 +28,6 @@ def flash_attention(
     v_tensor = torch.tensor(v, requires_grad=True)
     mask_tensor = torch.tensor(mask) if mask is not None else None
     
-    # print(f"q_shape: {q_tensor.shape}")
-    # print(f"k_shape: {k_tensor.shape}")
-    # print(f"v_shape: {v_tensor.shape}")
-    # print(f"mask_shape: {mask_tensor.shape}")
-    
     if q_tensor.dim() == 3:
         # from (seq_len, num_heads, dim) to (num_heads, seq_len, dim)
         q_shaped = q_tensor.permute(1, 0, 2)
@@ -72,6 +67,9 @@ class FlashAttentionTestCase(InfiniopTestCase):
         out: np.ndarray,
         shape_out: List[int] | None,
         stride_out: List[int] | None,
+        l: np.ndarray,
+        shape_l: List[int] | None,
+        stride_l: List[int] | None,
         mask: np.ndarray | None,
         shape_mask: List[int] | None,
         stride_mask: List[int] | None,
@@ -96,6 +94,9 @@ class FlashAttentionTestCase(InfiniopTestCase):
         self.out = out
         self.shape_out = shape_out
         self.stride_out = stride_out
+        self.l = l
+        self.shape_l = shape_l
+        self.stride_l = stride_l
         
     def write_test(self, test_writer: InfiniopTestWriter):
         super().write_test(test_writer)
@@ -111,6 +112,8 @@ class FlashAttentionTestCase(InfiniopTestCase):
             test_writer.add_array(test_writer.gguf_key("mask.shape"), self.shape_mask)
         if self.shape_out is not None:
             test_writer.add_array(test_writer.gguf_key("out.shape"), self.shape_out)
+        if self.shape_l is not None:
+            test_writer.add_array(test_writer.gguf_key("l.shape"), self.shape_l)
             
         if self.stride_q is not None:
             test_writer.add_array(test_writer.gguf_key("q.stride"), gguf_strides(*self.stride_q))
@@ -123,6 +126,10 @@ class FlashAttentionTestCase(InfiniopTestCase):
         test_writer.add_array(
             test_writer.gguf_key("out.stride"),
             gguf_strides(*self.stride_out) if self.stride_out is not None else contiguous_gguf_strides(self.shape_out)
+        )
+        test_writer.add_array(
+            test_writer.gguf_key("l.stride"),
+            gguf_strides(*self.stride_l) if self.stride_l is not None else contiguous_gguf_strides(self.shape_l)
         )
         
         test_writer.add_tensor(
@@ -140,6 +147,9 @@ class FlashAttentionTestCase(InfiniopTestCase):
             )
         test_writer.add_tensor(
             test_writer.gguf_key("out"), self.out, raw_dtype=np_dtype_to_ggml(self.out.dtype)
+        )
+        test_writer.add_tensor(
+            test_writer.gguf_key("l"), self.l, raw_dtype=np_dtype_to_ggml(self.l.dtype)
         )
         
         ans = flash_attention(
@@ -163,20 +173,18 @@ def gen_gguf(dtype: np.dtype, filename: str):
     # ==============================================================================
     # These are not meant to be imported from other modules
     _TEST_CASES_ = [
-        # shape_q, shape_kv, stride_q, stride_kv, stride_out, mask_type
+        # shape_q, shape_kv, mask_type
         # inputLayout -> ((batch_size), seq_len, num_heads, head_dim)
-        ((10, 2, 4), (10, 2, 4), None, None, None, 0),
-        ((10, 2, 4), (10, 2, 4), None, None, None, 1),
-        ((10, 2, 4), (10, 2, 4), None, None, None, 2),
-        ((20, 2, 4), (10, 2, 4), None, None, None, 0),
-        ((10, 8, 4), (10, 2, 4), None, None, None, 1),
-        ((4, 10, 2, 4), (4, 10, 2, 4), None, None, None, 2),
-        ((4, 20, 2, 4), (4, 10, 2, 4), None, None, None, 0),
-        ((4, 10, 8, 4), (4, 10, 2, 4), None, None, None, 1),
-        # ((16, 1024, 8, 64), (16, 1024, 8, 64), None, None, None, 2),
-        # ((16, 2048, 16, 64), (16, 2048, 8, 64), None, None, None, 0),
+        ((10, 2, 4), (10, 2, 4), 0),
+        ((10, 2, 4), (10, 2, 4), 1),
+        ((10, 2, 4), (10, 2, 4), 2),
+        ((20, 2, 4), (10, 2, 4), 0),
+        ((10, 8, 4), (10, 2, 4), 1),
+        ((4, 10, 2, 4), (4, 10, 2, 4), 2),
+        ((4, 20, 2, 4), (4, 10, 2, 4), 0),
+        ((4, 10, 8, 4), (4, 10, 2, 4), 1),
     ]
-    for shape_q, shape_kv, stride_q, stride_kv, stride_out, mask_type in _TEST_CASES_:
+    for shape_q, shape_kv, mask_type in _TEST_CASES_:
         q = np.random.rand(*shape_q).astype(dtype)
         k = np.random.rand(*shape_kv).astype(dtype)
         v = np.random.rand(*shape_kv).astype(dtype)
@@ -190,7 +198,15 @@ def gen_gguf(dtype: np.dtype, filename: str):
             
         out = np.empty(tuple(0 for _ in shape_q), dtype=dtype)
         
+        shape_l = shape_q[:-1]
+        l = np.empty(tuple(0 for _ in shape_l), dtype=dtype)
+        
+        stride_q = None
+        stride_kv = None
+        stride_out = None
+        stride_l = None
         stride_mask = None
+        
         q = process_zero_stride_tensor(q, stride_q)
         k = process_zero_stride_tensor(k, stride_kv)
         v = process_zero_stride_tensor(v, stride_kv)
@@ -211,6 +227,9 @@ def gen_gguf(dtype: np.dtype, filename: str):
             out=out,
             shape_out=shape_q,
             stride_out=stride_out,
+            l=l,
+            shape_l=shape_l,
+            stride_l=stride_l,
             mask=mask,
             shape_mask=shape_mask,
             stride_mask=stride_mask,

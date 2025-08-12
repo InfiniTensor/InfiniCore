@@ -214,20 +214,18 @@ def gen_gguf(dtype: np.dtype, filename: str):
     #  Configuration
     # ==============================================================================
     _TEST_CASES = [
-        # shape_q, shape_kv, stride_q, stride_kv, stride_grad_out, mask_type
-        ((10, 2, 4), (10, 2, 4), None, None, None, 0),
-        ((10, 2, 4), (10, 2, 4), None, None, None, 1),
-        ((10, 2, 4), (10, 2, 4), None, None, None, 2),
-        ((20, 2, 4), (10, 2, 4), None, None, None, 0),
-        ((10, 8, 4), (10, 2, 4), None, None, None, 1),
-        ((4, 10, 2, 4), (4, 10, 2, 4), None, None, None, 2),
-        ((4, 20, 2, 4), (4, 10, 2, 4), None, None, None, 0),
-        ((4, 10, 8, 4), (4, 10, 2, 4), None, None, None, 1),
-        # ((16, 1024, 8, 64), (16, 1024, 8, 64), None, None, None, 2),
-        # ((16, 2048, 16, 64), (16, 2048, 8, 64), None, None, None, 0),
+        # shape_q, shape_kv, mask_type
+        ((10, 2, 4), (10, 2, 4), 0),
+        ((10, 2, 4), (10, 2, 4), 1),
+        ((10, 2, 4), (10, 2, 4), 2),
+        ((20, 2, 4), (10, 2, 4), 0),
+        ((10, 8, 4), (10, 2, 4), 1),
+        ((4, 10, 2, 4), (4, 10, 2, 4), 2),
+        ((4, 20, 2, 4), (4, 10, 2, 4), 0),
+        ((4, 10, 8, 4), (4, 10, 2, 4), 1),
     ]
     
-    for shape_q, shape_kv, stride_q, stride_kv, stride_grad_out, mask_type in _TEST_CASES:
+    for shape_q, shape_kv, mask_type in _TEST_CASES:
         q = np.random.rand(*shape_q).astype(dtype)
         k = np.random.rand(*shape_kv).astype(dtype)
         v = np.random.rand(*shape_kv).astype(dtype)
@@ -244,9 +242,14 @@ def gen_gguf(dtype: np.dtype, filename: str):
         grad_k = np.empty(tuple(0 for _ in shape_kv), dtype=dtype)
         grad_v = np.empty(tuple(0 for _ in shape_kv), dtype=dtype)
         
+        stride_q = None
+        stride_kv = None
+        stride_grad_out = None
+        stride_grad_q = None
+        stride_grad_kv = None
+        stride_grad_v = None
         stride_mask = None
-        stride_grad_q = stride_q
-        stride_grad_kv = stride_kv
+        
         q = process_zero_stride_tensor(q, stride_q)
         k = process_zero_stride_tensor(k, stride_kv)
         v = process_zero_stride_tensor(v, stride_kv)
