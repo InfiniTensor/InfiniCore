@@ -29,12 +29,12 @@
     infiniStatus_t mallocAsync(void **p_ptr, size_t size, infinirtStream_t stream) IMPL;                                          \
     infiniStatus_t freeAsync(void *ptr, infinirtStream_t stream) IMPL;                                                            \
     infiniStatus_t getMemGranularityMinimum(size_t *granularity) IMPL;                                                            \
-    infiniStatus_t createPhysicalMem(infinirtPhyMem_t *phy_mem, size_t len) IMPL;                                                 \
-    infiniStatus_t releasePhysicalMem(infinirtPhyMem_t phy_mem) IMPL;                                                             \
-    infiniStatus_t createVirtualMem(infinirtVirtualMem_t *vm, size_t len) IMPL;                                                   \
-    infiniStatus_t mapVirtualMem(void **mapped_ptr, infinirtVirtualMem_t vm, size_t offset, infinirtPhyMem_t phy_mem) IMPL;       \
-    infiniStatus_t unmapVirtualMem(infinirtVirtualMem_t vm, size_t offset) IMPL;                                                  \
-    infiniStatus_t releaseVirtualMem(infinirtVirtualMem_t vm) IMPL;
+    infiniStatus_t createPhysicalMem(infinirtPhysicalMemoryHandle_t *pm_handle, size_t len) IMPL;                                 \
+    infiniStatus_t releasePhysicalMem(infinirtPhysicalMemoryHandle_t pm_handle) IMPL;                                             \
+    infiniStatus_t createVirtualMem(void **vm, size_t len) IMPL;                                                                  \
+    infiniStatus_t mapVirtualMem(void *vm, size_t len, size_t offset, infinirtPhysicalMemoryHandle_t pm_handle) IMPL;             \
+    infiniStatus_t unmapVirtualMem(void *vm, size_t len) IMPL;                                                                    \
+    infiniStatus_t releaseVirtualMem(void *vm, size_t len) IMPL;
 
 #define INFINIRT_DEVICE_API_IMPL INFINIRT_DEVICE_API(, )
 #define INFINIRT_DEVICE_API_NOOP INFINIRT_DEVICE_API({ return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED; }, {*count = 0; return INFINI_STATUS_SUCCESS; })

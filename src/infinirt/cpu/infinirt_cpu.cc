@@ -92,27 +92,27 @@ infiniStatus_t getMemGranularityMinimum(size_t *granularity) {
     return INFINI_STATUS_NOT_IMPLEMENTED;
 }
 
-infiniStatus_t createPhysicalMem(infinirtPhyMem_t *phy_mem, size_t len) {
+infiniStatus_t createPhysicalMem(infinirtPhysicalMemoryHandle_t *pm_handle, size_t len) {
     return INFINI_STATUS_NOT_IMPLEMENTED;
 }
 
-infiniStatus_t releasePhysicalMem(infinirtPhyMem_t phy_mem) {
+infiniStatus_t releasePhysicalMem(infinirtPhysicalMemoryHandle_t pm_handle) {
     return INFINI_STATUS_NOT_IMPLEMENTED;
 }
 
-infiniStatus_t createVirtualMem(infinirtVirtualMem_t *vm, size_t len) {
+infiniStatus_t createVirtualMem(void **vm, size_t len) {
     return INFINI_STATUS_NOT_IMPLEMENTED;
 }
 
-infiniStatus_t releaseVirtualMem(infinirtVirtualMem_t vm) {
+infiniStatus_t releaseVirtualMem(void *vm, size_t len) {
     return INFINI_STATUS_NOT_IMPLEMENTED;
 }
 
-infiniStatus_t mapVirtualMem(void **mapped_ptr, infinirtVirtualMem_t vm, size_t offset, infinirtPhyMem_t phy_mem) {
+infiniStatus_t mapVirtualMem(void *vm, size_t len, size_t offset, infinirtPhysicalMemoryHandle_t pm_handle) {
     return INFINI_STATUS_NOT_IMPLEMENTED;
 }
 
-infiniStatus_t unmapVirtualMem(infinirtVirtualMem_t vm, size_t offset) {
+infiniStatus_t unmapVirtualMem(void *vm, size_t len) {
     return INFINI_STATUS_NOT_IMPLEMENTED;
 }
 } // namespace infinirt::cpu

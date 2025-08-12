@@ -2,30 +2,11 @@
 #include "infinirt_cuda.cuh"
 #include <cuda.h>
 #include <cuda_runtime.h>
-#include <map>
-#include <memory>
 #include <string.h>
-#include <variant>
 
 #define CHECK_CUDART(RT_API) CHECK_INTERNAL(RT_API, cudaSuccess)
 
 namespace infinirt::cuda {
-// Internal struct definitions for opaque pointers
-struct PhyMemImpl {
-    infinirtAllocationHandle_t handle;
-    size_t len;
-    CUmemAllocationProp *prop;
-};
-
-using VacantRegion = size_t;
-using MappedRegion = std::shared_ptr<PhyMemImpl>;
-using PhyRegion = std::variant<MappedRegion, VacantRegion>;
-
-struct VirtualMemManagerImpl {
-    infinirtDeviceptr_t device_ptr;
-    size_t len;
-    std::map<size_t, PhyRegion> map;
-};
 
 infiniStatus_t getDeviceCount(int *count) {
     CHECK_CUDART(cudaGetDeviceCount(count));
@@ -176,123 +157,53 @@ infiniStatus_t getMemGranularityMinimum(size_t *granularity) {
     return INFINI_STATUS_SUCCESS;
 }
 
-infiniStatus_t createPhysicalMem(infinirtPhyMem_t *phy_mem, size_t len) {
+infiniStatus_t createPhysicalMem(infinirtPhysicalMemoryHandle_t *pm_handle, size_t len) {
     CUmemGenericAllocationHandle handle;
     CUmemAllocationProp *cuda_prop = getMemProp();
     CHECK_CUDART(cuMemCreate(&handle, len, cuda_prop, 0));
 
-    PhyMemImpl *impl = new PhyMemImpl;
-    impl->handle = (infinirtAllocationHandle_t)handle;
-    impl->len = len;
-    impl->prop = cuda_prop;
-
-    *phy_mem = (infinirtPhyMem_t)impl;
+    *pm_handle = (infinirtPhysicalMemoryHandle_t)handle;
     return INFINI_STATUS_SUCCESS;
 }
 
-infiniStatus_t releasePhysicalMem(infinirtPhyMem_t phy_mem) {
-    PhyMemImpl *impl = (PhyMemImpl *)phy_mem;
-    CHECK_CUDART(cuMemRelease((CUmemGenericAllocationHandle)impl->handle));
-    delete impl->prop;
-    delete impl;
+infiniStatus_t releasePhysicalMem(infinirtPhysicalMemoryHandle_t pm_handle) {
+    CHECK_CUDART(cuMemRelease((CUmemGenericAllocationHandle)pm_handle));
     return INFINI_STATUS_SUCCESS;
 }
 
-infiniStatus_t createVirtualMem(infinirtVirtualMem_t *vm, size_t len) {
+infiniStatus_t createVirtualMem(void **vm, size_t len) {
     CUdeviceptr device_ptr;
     CHECK_CUDART(cuMemAddressReserve(&device_ptr, len, 0, (CUdeviceptr)0, 0));
 
-    VirtualMemManagerImpl *impl = new VirtualMemManagerImpl;
-    impl->device_ptr = (infinirtDeviceptr_t)device_ptr;
-    impl->len = len;
-    impl->map.clear();
-    impl->map[0] = VacantRegion(len);
-
-    *vm = (infinirtVirtualMem_t)impl;
+    *vm = (void *)device_ptr;
     return INFINI_STATUS_SUCCESS;
 }
 
-infiniStatus_t releaseVirtualMem(infinirtVirtualMem_t vm) {
-    VirtualMemManagerImpl *impl = (VirtualMemManagerImpl *)vm;
-
-    // First unmap all mapped regions
-    for (auto &[offset, region] : impl->map) {
-        if (auto *mapped = std::get_if<MappedRegion>(&region)) {
-            CUdeviceptr ptr = (CUdeviceptr)impl->device_ptr + offset;
-            CHECK_CUDART(cuMemUnmap(ptr, (*mapped)->len));
-        }
-    }
-
-    // Then free the virtual address space
-    CHECK_CUDART(cuMemAddressFree((CUdeviceptr)impl->device_ptr, impl->len));
-
-    delete impl;
+infiniStatus_t releaseVirtualMem(void *vm, size_t len) {
+    CHECK_CUDART(cuMemAddressFree((CUdeviceptr)vm, len));
     return INFINI_STATUS_SUCCESS;
 }
 
-infiniStatus_t mapVirtualMem(void **mapped_ptr, infinirtVirtualMem_t vm, size_t offset,
-                             infinirtPhyMem_t phy_mem) {
-    VirtualMemManagerImpl *vm_impl = (VirtualMemManagerImpl *)vm;
-    PhyMemImpl *phy_impl = (PhyMemImpl *)phy_mem;
+infiniStatus_t mapVirtualMem(void *vm, size_t len, size_t offset,
+                             infinirtPhysicalMemoryHandle_t pm_handle) {
 
-    if (offset > vm_impl->len || offset + phy_impl->len > vm_impl->len) {
-        std::cerr << "Offset is out of range"
-                  << " offset: " << offset << " phy_mem->len: " << phy_impl->len << " vm->len: " << vm_impl->len << std::endl;
-        return INFINI_STATUS_BAD_PARAM;
-    }
-    auto it = vm_impl->map.upper_bound(offset);
-    --it;
-    auto &[head, region] = *it;
+    CUdeviceptr ptr = (CUdeviceptr)vm + offset;
+    CHECK_CUDART(cuMemMap(ptr, len, 0, (CUmemGenericAllocationHandle)pm_handle, 0));
 
-    if (auto *vacant = std::get_if<VacantRegion>(&region)) {
-        if (phy_impl->len > *vacant) {
-            std::cerr << "Physical memory length is greater than the vacant region length" << std::endl;
-            return INFINI_STATUS_BAD_PARAM;
-        }
+    CUmemAllocationProp *cuda_prop = getMemProp();
+    CUmemAccessDesc desc = {};
+    desc.location = cuda_prop->location;
+    desc.flags = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+    CHECK_CUDART(cuMemSetAccess(ptr, len, &desc, 1));
 
-        CUdeviceptr ptr = (CUdeviceptr)vm_impl->device_ptr + offset;
-        CHECK_CUDART(cuMemMap(ptr, phy_impl->len, 0, (CUmemGenericAllocationHandle)phy_impl->handle, 0));
-        CUmemAccessDesc desc = {};
-        desc.location = phy_impl->prop->location;
-        desc.flags = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
-        CHECK_CUDART(cuMemSetAccess(ptr, phy_impl->len, &desc, 1));
-
-        vm_impl->map.erase(it);
-        vm_impl->map[offset] = std::make_shared<PhyMemImpl>(*phy_impl);
-        auto head_len = offset - head;
-        auto tail_len = *vacant - head_len - phy_impl->len;
-        if (head_len > 0) {
-            vm_impl->map[head] = head_len;
-        }
-        if (tail_len > 0) {
-            vm_impl->map[head + head_len + phy_impl->len] = tail_len;
-        }
-
-        *mapped_ptr = (void *)ptr;
-        return INFINI_STATUS_SUCCESS;
-    } else {
-        std::cerr << "Virtual memory already mapped at offset: " << offset << std::endl;
-        return INFINI_STATUS_INTERNAL_ERROR;
-    }
+    return INFINI_STATUS_SUCCESS;
 }
 
-infiniStatus_t unmapVirtualMem(infinirtVirtualMem_t vm, size_t offset) {
-    VirtualMemManagerImpl *vm_impl = (VirtualMemManagerImpl *)vm;
-    auto it = vm_impl->map.find(offset);
-    if (it == vm_impl->map.end()) {
-        return INFINI_STATUS_BAD_PARAM;
-    }
+infiniStatus_t unmapVirtualMem(void *vm, size_t len) {
+    CUdeviceptr ptr = (CUdeviceptr)vm;
+    CHECK_CUDART(cuMemUnmap(ptr, len));
 
-    if (auto *mapped = std::get_if<MappedRegion>(&it->second)) {
-        auto phy_mem = *mapped;
-        auto ptr = (CUdeviceptr)vm_impl->device_ptr + offset;
-        CHECK_CUDART(cuMemUnmap(ptr, phy_mem->len));
-
-        it->second = phy_mem->len;
-        return INFINI_STATUS_SUCCESS;
-    } else {
-        return INFINI_STATUS_BAD_PARAM;
-    }
+    return INFINI_STATUS_SUCCESS;
 }
 
 } // namespace infinirt::cuda

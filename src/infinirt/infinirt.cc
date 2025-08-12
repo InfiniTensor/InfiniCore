@@ -175,27 +175,27 @@ __C infiniStatus_t infinirtGetMemGranularityMinimum(size_t *granularity) {
     INFINIRT_CALL_DEVICE_API(getMemGranularityMinimum, (granularity));
 }
 
-__C infiniStatus_t infinirtCreatePhysicalMem(infinirtPhyMem_t *phy_mem, size_t len) {
-    INFINIRT_CALL_DEVICE_API(createPhysicalMem, (phy_mem, len));
+__C infiniStatus_t infinirtCreatePhysicalMem(infinirtPhysicalMemoryHandle_t *pm_handle, size_t len) {
+    INFINIRT_CALL_DEVICE_API(createPhysicalMem, (pm_handle, len));
 }
 
-__C infiniStatus_t infinirtReleasePhysicalMem(infinirtPhyMem_t phy_mem) {
-    INFINIRT_CALL_DEVICE_API(releasePhysicalMem, (phy_mem));
+__C infiniStatus_t infinirtReleasePhysicalMem(infinirtPhysicalMemoryHandle_t pm_handle) {
+    INFINIRT_CALL_DEVICE_API(releasePhysicalMem, (pm_handle));
 }
 
-__C infiniStatus_t infinirtCreateVirtualMem(infinirtVirtualMem_t *vm, size_t len) {
+__C infiniStatus_t infinirtCreateVirtualMem(void **vm, size_t len) {
     INFINIRT_CALL_DEVICE_API(createVirtualMem, (vm, len));
 }
 
-__C infiniStatus_t infinirtMapVirtualMem(void **mapped_ptr, infinirtVirtualMem_t vm, size_t offset,
-                                         infinirtPhyMem_t phy_mem) {
-    INFINIRT_CALL_DEVICE_API(mapVirtualMem, (mapped_ptr, vm, offset, phy_mem));
+__C infiniStatus_t infinirtMapVirtualMem(void *vm, size_t len, size_t offset,
+                                         infinirtPhysicalMemoryHandle_t pm_handle) {
+    INFINIRT_CALL_DEVICE_API(mapVirtualMem, (vm, len, offset, pm_handle));
 }
 
-__C infiniStatus_t infinirtUnmapVirtualMem(infinirtVirtualMem_t vm, size_t offset) {
-    INFINIRT_CALL_DEVICE_API(unmapVirtualMem, (vm, offset));
+__C infiniStatus_t infinirtUnmapVirtualMem(void *vm, size_t len) {
+    INFINIRT_CALL_DEVICE_API(unmapVirtualMem, (vm, len));
 }
 
-__C infiniStatus_t infinirtReleaseVirtualMem(infinirtVirtualMem_t vm) {
-    INFINIRT_CALL_DEVICE_API(releaseVirtualMem, (vm));
+__C infiniStatus_t infinirtReleaseVirtualMem(void *vm, size_t len) {
+    INFINIRT_CALL_DEVICE_API(releaseVirtualMem, (vm, len));
 }
