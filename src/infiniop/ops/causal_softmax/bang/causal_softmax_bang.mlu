@@ -186,6 +186,8 @@ infiniStatus_t Descriptor::calculate(
     // Dispatch based on data type
     if (_info.dtype == INFINI_DTYPE_F16) {
         causalSoftmaxUnion<half>(workspace, core_per_cluster, cluster_count, queue, y, x, &_info);
+    } else if (_info.dtype == INFINI_DTYPE_BF16) {
+        causalSoftmaxUnion<bfloat16_t>(workspace, core_per_cluster, cluster_count, queue, y, x, &_info);
     } else if (_info.dtype == INFINI_DTYPE_F32) {
         causalSoftmaxUnion<float>(workspace, core_per_cluster, cluster_count, queue, y, x, &_info);
     } else {
