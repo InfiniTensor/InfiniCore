@@ -237,7 +237,6 @@ def mul_(lib):
     ]
 
 
-
 @OpRegister.operator
 def quantize_gptq_(lib):
     lib.infiniopCreateQuantizeGPTQDescriptor.restype = c_int32
@@ -505,6 +504,7 @@ def swiglu_(lib):
     lib.infiniopDestroySwiGLUDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
+
 
 @OpRegister.operator
 def conv_(lib):

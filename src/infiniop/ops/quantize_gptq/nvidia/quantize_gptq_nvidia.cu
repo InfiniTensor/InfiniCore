@@ -66,6 +66,10 @@ infiniStatus_t Descriptor::calculate(
     int group_size = int(_info.group_size);
     int num_groups = int(_info.num_groups);
     bool is_weight_transposed = _info.is_weight_transposed;
+    cudaError_t err = cudaMemset(workspace, 0, workspace_size);
+    if (err != cudaSuccess) {
+        printf("cudaMemset failed: %s\n", cudaGetErrorString(err));
+    }
 
     if (_info.atype == INFINI_DTYPE_F16 && is_weight_transposed) {
         gptq_marlin::gptq_marlin_mm_fp16(c, a, packed_weights, b_scale,

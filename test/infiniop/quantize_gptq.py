@@ -526,7 +526,7 @@ def test(
     N,
     dtype=InfiniDtype.F16,
     sync=None,
-):
+):  # device=nvidia的时候精度不足
     print(
         f"Testing QuantizeGPTQ on {InfiniDeviceNames[device]}"
         f" M:{M}, K:{K}, N:{N}, dtype:{InfiniDtypeNames[dtype]}"
@@ -685,7 +685,7 @@ def test(
     lib_quantize_gptq()
 
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
-    # tmpa = ans.torch_tensor().flatten()
+    # tmpa = ans.flatten()
     # tmpc = c.actual_tensor().flatten()
     # for i in range(tmpa.shape[0]):
     #     if abs(tmpa[i] - tmpc[i]) > atol + rtol * abs(tmpa[i]):
