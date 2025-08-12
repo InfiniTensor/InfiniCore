@@ -1,0 +1,54 @@
+#ifndef __RANDOM_SAMPLE_KUNLUN_H__
+#define __RANDOM_SAMPLE_KUNLUN_H__
+
+#include "../../../devices/kunlun/kunlun_kernel_common.h"
+
+template<class Tidx>
+__global__ void sampleKernel(Tidx *result, float *destination, int *topk_indices, float random_val,
+                                    float topp,
+                                    int topk){
+    int cid = core_id();
+    int ncores = core_num();
+    if (cid >= ncores) {
+        return;
+    }
+    int thread_id = ncores * cluster_id() + cid;                                    
+    if(thread_id == 0){
+        int end = 0;
+        for (end = 0; end < topk; end++) {
+
+            if (destination[end] >= topp) {
+                break;
+            }
+        }
+
+        if (end < topk - 1) {
+            end += 1;
+        } else {
+            end = topk;
+        }
+
+        random_val *= destination[end - 1];
+
+        for (int i = 0; i < end; i++) {
+            if (random_val < destination[i]) {
+                result[0] = static_cast<Tidx>(topk_indices[i]);
+                break;
+            }
+        }
+    }                                    
+}
+
+void sample_I64(void *result, float *destination, int *topk_indices, float random_val,
+                                    float topp,
+                                    int topk_, XPUStream stream){
+    sampleKernel<int64_t><<<1, 1, stream>>>((int64_t *)result, destination, topk_indices, random_val, topp, topk_);
+}
+
+void sample_I32(void *result, float *destination, int *topk_indices, float random_val,
+                                    float topp,
+                                    int topk_, XPUStream stream){
+    sampleKernel<int32_t><<<1, 1, stream>>>((int32_t *)result, destination, topk_indices, random_val, topp, topk_);
+}
+
+#endif // __RANDOM_SAMPLE_KUNLUN_H__
