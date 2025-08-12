@@ -11,6 +11,17 @@ using namespace std;
 
 __nram__ char nram_buffer[NRAM_MAX_SIZE];
 
+// Helper functions for bfloat16 operations
+template <typename T>
+__mlu_device__ T bfloat16_to_float(const bfloat16_t &bf) {
+    return static_cast<T>(bf);
+}
+
+template <typename T>
+__mlu_device__ bfloat16_t float_to_bfloat16(const T &f) {
+    return static_cast<bfloat16_t>(f);
+}
+
 template <class Tidx, class Tval>
 utils::Result<size_t> calculateWorkspace(size_t n) {
     size_t size = n * (sizeof(Tidx) + sizeof(Tval)) + sizeof(Tval);
@@ -32,9 +43,16 @@ __mlu_device__ void findTopk(
     int topk) {
     for (int i = 0; i < topk; ++i) {
         for (int j = i + 1; j < size; ++j) {
-            if (values[i] < values[j]) {
-                swap(values[i], values[j]);
-                swap(result[i], result[j]);
+            if constexpr (std::is_same<Tval, bfloat16_t>::value) {
+                if (bfloat16_to_float<float>(values[i]) < bfloat16_to_float<float>(values[j])) {
+                    swap(values[i], values[j]);
+                    swap(result[i], result[j]);
+                }
+            } else {
+                if (values[i] < values[j]) {
+                    swap(values[i], values[j]);
+                    swap(result[i], result[j]);
+                }
             }
         }
     }
@@ -75,9 +93,17 @@ __mlu_global__ void argMax(
         __memcpy(nram_src, probs + r * task_per_load + taskId * max_num,
                  max_num * sizeof(Tval), GDRAM2NRAM);
         __bang_argmax(nram_max, nram_src, max_num);
-        if (nram_max[0] > current_max) {
-            current_max = nram_max[0];
-            current_index = r * task_per_load + taskId * max_num + *((int64_t *)&nram_max[1]);
+
+        if constexpr (std::is_same<Tval, bfloat16_t>::value) {
+            if (bfloat16_to_float<float>(nram_max[0]) > bfloat16_to_float<float>(current_max)) {
+                current_max = nram_max[0];
+                current_index = r * task_per_load + taskId * max_num + *((int64_t *)&nram_max[1]);
+            }
+        } else {
+            if (nram_max[0] > current_max) {
+                current_max = nram_max[0];
+                current_index = r * task_per_load + taskId * max_num + *((int64_t *)&nram_max[1]);
+            }
         }
     }
 
@@ -90,9 +116,17 @@ __mlu_global__ void argMax(
         __bang_write_value(nram_src, max_num, -INFINITY);
         __memcpy(nram_src, probs + start, step * sizeof(Tval), GDRAM2NRAM);
         __bang_argmax(nram_max, nram_src, step);
-        if (nram_max[0] > current_max) {
-            current_max = nram_max[0];
-            current_index = start + *((int64_t *)&nram_max[1]);
+
+        if constexpr (std::is_same<Tval, bfloat16_t>::value) {
+            if (bfloat16_to_float<float>(nram_max[0]) > bfloat16_to_float<float>(current_max)) {
+                current_max = nram_max[0];
+                current_index = start + *((int64_t *)&nram_max[1]);
+            }
+        } else {
+            if (nram_max[0] > current_max) {
+                current_max = nram_max[0];
+                current_index = start + *((int64_t *)&nram_max[1]);
+            }
         }
     }
 
@@ -104,9 +138,16 @@ __mlu_global__ void argMax(
         Tval global_max = probs[gdram_indices[0]];
         Tidx global_idx = gdram_indices[0];
         for (size_t id = 1; id < taskDim; ++id) {
-            if (probs[gdram_indices[id]] > global_max) {
-                global_max = probs[gdram_indices[id]];
-                global_idx = gdram_indices[id];
+            if constexpr (std::is_same<Tval, bfloat16_t>::value) {
+                if (bfloat16_to_float<float>(probs[gdram_indices[id]]) > bfloat16_to_float<float>(global_max)) {
+                    global_max = probs[gdram_indices[id]];
+                    global_idx = gdram_indices[id];
+                }
+            } else {
+                if (probs[gdram_indices[id]] > global_max) {
+                    global_max = probs[gdram_indices[id]];
+                    global_idx = gdram_indices[id];
+                }
             }
         }
         result[0] = global_idx;
@@ -129,7 +170,14 @@ __mlu_global__ void randomSampleKernel(
     constexpr int max_num = SRC_MAX_SIZE / sizeof(Tval);
     constexpr int w_size = 128 / sizeof(Tval);
     constexpr int seg_num = max_num / w_size;
-    const float temp_inv = 1.0 / temperature;
+
+    // Handle temperature division carefully
+    Tval temp_inv;
+    if constexpr (std::is_same<Tval, bfloat16_t>::value) {
+        temp_inv = float_to_bfloat16<bfloat16_t>(1.0f / temperature);
+    } else {
+        temp_inv = static_cast<Tval>(1.0 / temperature);
+    }
 
     // NRAM buffer allocation
     Tval *nram_src = (Tval *)nram_buffer;
@@ -148,7 +196,6 @@ __mlu_global__ void randomSampleKernel(
     int step = vocab_size / taskDim + (taskId < vocab_size % taskDim ? 1 : 0);
     int start_idx = taskId * (vocab_size / taskDim) + min<size_t>(taskId, vocab_size % taskDim);
 
-    // Process data
     // Load and process data
     __memcpy(nram_src, probs + start_idx, step * sizeof(Tval), GDRAM2NRAM);
 
@@ -204,7 +251,13 @@ __mlu_global__ void randomSampleKernel(
 
     // Top-p sampling
     if (taskId == 0) {
-        const Tval global_sum_inv = 1.0 / global_sum[0];
+        Tval global_sum_inv;
+        if constexpr (std::is_same<Tval, bfloat16_t>::value) {
+            global_sum_inv = float_to_bfloat16<bfloat16_t>(1.0f / bfloat16_to_float<float>(global_sum[0]));
+        } else {
+            global_sum_inv = static_cast<Tval>(1.0 / global_sum[0]);
+        }
+
         __memcpy(nram_topk, global_topk, topk * sizeof(Tval), GDRAM2NRAM);
 
         __bang_sub_scalar(nram_topk, nram_topk, global_max, topk);
@@ -213,23 +266,54 @@ __mlu_global__ void randomSampleKernel(
         __bang_mul_scalar(nram_topk, nram_topk, global_sum_inv, topk);
 
         // Cumulative sum
-        Tval cumsum = 0;
+        Tval cumsum;
+        if constexpr (std::is_same<Tval, bfloat16_t>::value) {
+            cumsum = float_to_bfloat16<bfloat16_t>(0.0f);
+        } else {
+            cumsum = static_cast<Tval>(0);
+        }
         int end = topk;
         for (int i = 0; i < topk; ++i) {
-            cumsum += nram_topk[i];
-            if (cumsum >= topp) {
-                end = i + 1;
-                break;
+            if constexpr (std::is_same<Tval, bfloat16_t>::value) {
+                cumsum = float_to_bfloat16<bfloat16_t>(bfloat16_to_float<float>(cumsum) + bfloat16_to_float<float>(nram_topk[i]));
+                if (bfloat16_to_float<float>(cumsum) >= topp) {
+                    end = i + 1;
+                    break;
+                }
+            } else {
+                cumsum += nram_topk[i];
+                if (cumsum >= static_cast<Tval>(topp)) {
+                    end = i + 1;
+                    break;
+                }
             }
         }
 
-        random_val *= cumsum;
-        cumsum = 0;
+        if constexpr (std::is_same<Tval, bfloat16_t>::value) {
+            random_val *= bfloat16_to_float<float>(cumsum);
+        } else {
+            random_val *= cumsum;
+        }
+
+        if constexpr (std::is_same<Tval, bfloat16_t>::value) {
+            cumsum = float_to_bfloat16<bfloat16_t>(0.0f);
+        } else {
+            cumsum = static_cast<Tval>(0);
+        }
+
         for (int i = 0; i < end; ++i) {
-            cumsum += nram_topk[i];
-            if (random_val < cumsum) {
-                result[0] = gdram_indices[i];
-                break;
+            if constexpr (std::is_same<Tval, bfloat16_t>::value) {
+                cumsum = float_to_bfloat16<bfloat16_t>(bfloat16_to_float<float>(cumsum) + bfloat16_to_float<float>(nram_topk[i]));
+                if (random_val < bfloat16_to_float<float>(cumsum)) {
+                    result[0] = gdram_indices[i];
+                    break;
+                }
+            } else {
+                cumsum += nram_topk[i];
+                if (random_val < cumsum) {
+                    result[0] = gdram_indices[i];
+                    break;
+                }
             }
         }
     }
@@ -251,7 +335,14 @@ __mlu_global__ void randomSampleKernelLarge(
     const int max_num = SRC_MAX_SIZE / sizeof(Tval);
     const int w_size = 128 / sizeof(Tval);
     const int seg_num = max_num / w_size;
-    const Tval temp_inv = 1.0 / static_cast<Tval>(temperature);
+
+    // Handle temperature division carefully
+    Tval temp_inv;
+    if constexpr (std::is_same<Tval, bfloat16_t>::value) {
+        temp_inv = float_to_bfloat16<bfloat16_t>(1.0f / temperature);
+    } else {
+        temp_inv = static_cast<Tval>(1.0 / temperature);
+    }
 
     const int task_size = taskDim * max_num;
     const int remain = vocab_size % task_size;
@@ -265,13 +356,13 @@ __mlu_global__ void randomSampleKernelLarge(
 
     // NRAM buffer allocation
     char *nram_buffer_ind = nram_buffer + (2 * max_num + w_size + 2 * topk + taskDim * topk) * sizeof(Tval);
-    Tval *nram_src = (Tval *)nram_buffer;                 // [max_num]
-    Tval *nram_topk_buffer = nram_src + max_num;          // [2 * topk]
-    Tval *nram_partial_sum = nram_topk_buffer + 2 * topk; // [max_num]
-    Tval *nram_sum_final = nram_partial_sum + max_num;    // [w_size]
-    Tval *nram_global_topk = nram_sum_final + w_size;     // [taskDim * topk]
-    uint64_t *nram_indices = (uint64_t *)nram_buffer_ind; // [max_num]
-    uint64_t *nram_topk_indices = nram_indices + max_num; // [2 * topk]
+    Tval *nram_src = (Tval *)nram_buffer;
+    Tval *nram_topk_buffer = nram_src + max_num;
+    Tval *nram_partial_sum = nram_topk_buffer + 2 * topk;
+    Tval *nram_sum_final = nram_partial_sum + max_num;
+    Tval *nram_global_topk = nram_sum_final + w_size;
+    uint64_t *nram_indices = (uint64_t *)nram_buffer_ind;
+    uint64_t *nram_topk_indices = nram_indices + max_num;
     uint64_t *nram_global_indices = nram_topk_indices + 2 * topk;
 
     // Initialize buffers
@@ -290,14 +381,11 @@ __mlu_global__ void randomSampleKernelLarge(
         }
         __memcpy(nram_src, probs + r * task_size + taskId * max_num, max_num * sizeof(Tval), GDRAM2NRAM);
 
-        // Use helper function to find top-k elements
         findTopk(nram_src, nram_indices, max_num, topk);
 
-        // Store the topk elements
         __memcpy(nram_topk_buffer + topk, nram_src, topk * sizeof(Tval), NRAM2NRAM);
         __memcpy(nram_topk_indices + topk, nram_indices, topk * sizeof(uint64_t), NRAM2NRAM);
 
-        // Merge with previous topk using helper function
         findTopk(nram_topk_buffer, nram_topk_indices, 2 * topk, topk);
     }
 
@@ -318,7 +406,6 @@ __mlu_global__ void randomSampleKernelLarge(
                 __memcpy(nram_topk_indices + topk, nram_indices, step * sizeof(uint64_t), NRAM2NRAM);
         }
 
-        // Merge with previous topk
         findTopk(nram_topk_buffer, nram_topk_indices, 2 * topk, topk);
     }
 
@@ -332,7 +419,6 @@ __mlu_global__ void randomSampleKernelLarge(
         __memcpy(nram_global_topk, global_topk, taskDim * topk * sizeof(Tval), GDRAM2NRAM);
         __memcpy(nram_global_indices, gdram_indices, taskDim * topk * sizeof(uint64_t), GDRAM2NRAM);
 
-        // Sort all partial topk results using helper
         findTopk(nram_global_topk, nram_global_indices, taskDim * topk, topk);
 
         __memcpy(global_topk, nram_global_topk, topk * sizeof(Tval), NRAM2GDRAM);
@@ -373,22 +459,41 @@ __mlu_global__ void randomSampleKernelLarge(
             }
         }
         for (int i = 0; i < w_size; ++i) {
-            nram_sum_final[0] += nram_partial_sum[i];
+            if constexpr (std::is_same<Tval, bfloat16_t>::value) {
+                nram_sum_final[0] = float_to_bfloat16<bfloat16_t>(
+                    bfloat16_to_float<float>(nram_sum_final[0]) + bfloat16_to_float<float>(nram_partial_sum[i]));
+            } else {
+                nram_sum_final[0] += nram_partial_sum[i];
+            }
         }
     } else {
         for (int i = 0; i < max_num; ++i) {
-            nram_sum_final[0] += nram_partial_sum[i];
+            if constexpr (std::is_same<Tval, bfloat16_t>::value) {
+                nram_sum_final[0] = float_to_bfloat16<bfloat16_t>(
+                    bfloat16_to_float<float>(nram_sum_final[0]) + bfloat16_to_float<float>(nram_partial_sum[i]));
+            } else {
+                nram_sum_final[0] += nram_partial_sum[i];
+            }
         }
     }
 
-    global_sum[0] = 0.0;
+    if constexpr (std::is_same<Tval, bfloat16_t>::value) {
+        global_sum[0] = float_to_bfloat16<bfloat16_t>(0.0f);
+    } else {
+        global_sum[0] = 0.0;
+    }
     __sync_all();
     __bang_atomic_add(nram_sum_final, global_sum, nram_sum_final, 1);
 
-    const Tval global_sum_inv = 1.0 / global_sum[0];
-
     // Task 0 performs the final sampling
     if (taskId == 0) {
+        Tval global_sum_inv;
+        if constexpr (std::is_same<Tval, bfloat16_t>::value) {
+            global_sum_inv = float_to_bfloat16<bfloat16_t>(1.0f / bfloat16_to_float<float>(global_sum[0]));
+        } else {
+            global_sum_inv = static_cast<Tval>(1.0 / global_sum[0]);
+        }
+
         __memcpy(nram_global_topk, global_topk, topk * sizeof(Tval), GDRAM2NRAM);
 
         // Softmax for topk elements
@@ -401,24 +506,47 @@ __mlu_global__ void randomSampleKernelLarge(
         __bang_write_value(nram_topk_buffer, 2 * topk, 0);
         nram_topk_buffer[0] = nram_global_topk[0];
         for (int i = 1; i < topk; ++i) {
-            nram_topk_buffer[i] = nram_topk_buffer[i - 1] + nram_global_topk[i];
+            if constexpr (std::is_same<Tval, bfloat16_t>::value) {
+                nram_topk_buffer[i] = float_to_bfloat16<bfloat16_t>(
+                    bfloat16_to_float<float>(nram_topk_buffer[i - 1]) + bfloat16_to_float<float>(nram_global_topk[i]));
+            } else {
+                nram_topk_buffer[i] = nram_topk_buffer[i - 1] + nram_global_topk[i];
+            }
         }
 
         // Find the cutoff point for top-p sampling
         int end = 0;
         for (end = 0; end < topk; ++end) {
-            if (nram_topk_buffer[end] >= static_cast<Tval>(topp)) {
-                break;
+            if constexpr (std::is_same<Tval, bfloat16_t>::value) {
+                if (bfloat16_to_float<float>(nram_topk_buffer[end]) >= topp) {
+                    break;
+                }
+            } else {
+                if (nram_topk_buffer[end] >= static_cast<Tval>(topp)) {
+                    break;
+                }
             }
         }
         end = (end < topk - 1) ? end + 1 : topk;
 
         // Perform the sampling
-        random_val *= nram_topk_buffer[end - 1];
+        if constexpr (std::is_same<Tval, bfloat16_t>::value) {
+            random_val *= bfloat16_to_float<float>(nram_topk_buffer[end - 1]);
+        } else {
+            random_val *= nram_topk_buffer[end - 1];
+        }
+
         for (int i = 0; i < end; ++i) {
-            if (random_val < nram_topk_buffer[i]) {
-                result[0] = gdram_indices[i];
-                break;
+            if constexpr (std::is_same<Tval, bfloat16_t>::value) {
+                if (random_val < bfloat16_to_float<float>(nram_topk_buffer[i])) {
+                    result[0] = gdram_indices[i];
+                    break;
+                }
+            } else {
+                if (random_val < nram_topk_buffer[i]) {
+                    result[0] = gdram_indices[i];
+                    break;
+                }
             }
         }
         __memcpy(global_topk, nram_global_topk, topk * sizeof(Tval), NRAM2GDRAM);
@@ -444,6 +572,9 @@ struct Algo {
         } else if constexpr (std::is_same<Tval_, CustomFloat16>::value) {
             auto logits = reinterpret_cast<const half *>(probs);
             argMax<<<dim, CNRT_FUNC_TYPE_BLOCK, queue>>>(logits, result, gdram_indices, voc);
+        } else if constexpr (std::is_same<Tval_, CustomBFloat16>::value) {
+            auto logits = reinterpret_cast<const bfloat16_t *>(probs);
+            argMax<<<dim, CNRT_FUNC_TYPE_BLOCK, queue>>>(logits, result, gdram_indices, voc);
         }
 
         cnrtQueueSync(queue);
@@ -467,19 +598,14 @@ struct Algo {
 
         if constexpr (std::is_same<Tval_, float>::value) {
             auto logits = reinterpret_cast<const float *>(probs);
-
-            // Calculate workspace pointers
             offset += sizeof(float) * voc;
-
             if (offset > workspace_size) {
                 return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
             }
-
             float *global_top_k = (float *)gdram_indices + task_num * topk * sizeof(Tidx);
             float *global_sum = global_top_k + task_num * topk;
 
             const int max_num = SRC_MAX_SIZE / sizeof(float);
-            // bool is_large_vocab = (voc >= task_num * max_num);
             if (voc >= task_num * max_num) {
                 randomSampleKernelLarge<<<dim, CNRT_FUNC_TYPE_UNION1, queue>>>(
                     logits, result, gdram_indices, global_top_k, global_sum, voc, random_val, topp, topk, temperature);
@@ -487,22 +613,16 @@ struct Algo {
                 randomSampleKernel<<<dim, CNRT_FUNC_TYPE_UNION1, queue>>>(
                     logits, result, gdram_indices, global_top_k, global_sum, voc, random_val, topp, topk, temperature);
             }
-
         } else if constexpr (std::is_same<Tval_, CustomFloat16>::value) {
             auto logits = reinterpret_cast<const half *>(probs);
-
-            // Calculate workspace pointers
             offset += sizeof(half) * voc;
-
             if (offset > workspace_size) {
                 return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
             }
-
             half *global_top_k = (half *)gdram_indices + task_num * topk * sizeof(Tidx);
             half *global_sum = global_top_k + task_num * topk;
 
             const int max_num = SRC_MAX_SIZE / sizeof(half);
-            // bool is_large_vocab = (voc >= task_num * max_num);
             if (voc >= task_num * max_num) {
                 randomSampleKernelLarge<<<dim, CNRT_FUNC_TYPE_UNION1, queue>>>(
                     logits, result, gdram_indices, global_top_k, global_sum, voc, random_val, topp, topk, temperature);
@@ -510,7 +630,23 @@ struct Algo {
                 randomSampleKernel<<<dim, CNRT_FUNC_TYPE_UNION1, queue>>>(
                     logits, result, gdram_indices, global_top_k, global_sum, voc, random_val, topp, topk, temperature);
             }
+        } else if constexpr (std::is_same<Tval_, CustomBFloat16>::value) {
+            auto logits = reinterpret_cast<const bfloat16_t *>(probs);
+            offset += sizeof(bfloat16_t) * voc;
+            if (offset > workspace_size) {
+                return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+            }
+            bfloat16_t *global_top_k = (bfloat16_t *)gdram_indices + task_num * topk * sizeof(Tidx);
+            bfloat16_t *global_sum = global_top_k + task_num * topk;
 
+            const int max_num = SRC_MAX_SIZE / sizeof(bfloat16_t);
+            if (voc >= task_num * max_num) {
+                randomSampleKernelLarge<<<dim, CNRT_FUNC_TYPE_UNION1, queue>>>(
+                    logits, result, gdram_indices, global_top_k, global_sum, voc, random_val, topp, topk, temperature);
+            } else {
+                randomSampleKernel<<<dim, CNRT_FUNC_TYPE_UNION1, queue>>>(
+                    logits, result, gdram_indices, global_top_k, global_sum, voc, random_val, topp, topk, temperature);
+            }
         } else {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
