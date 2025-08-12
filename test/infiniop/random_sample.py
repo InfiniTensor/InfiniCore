@@ -56,7 +56,14 @@ def random_sample(data, random_val, topp, topk, voc, temperature):
         sorted_vals, sorted_indices = torch.sort(data, descending=True)
 
         scaled_vals = (sorted_vals - sorted_vals[0]) / temperature
-        probs = torch.softmax(scaled_vals, dim=0)
+        try:
+            probs = torch.softmax(scaled_vals, dim=0)
+        except RuntimeError as e:
+            if "not implemented for 'Half'" in str(e):
+                scaled_vals = scaled_vals.to(torch.float32)
+                probs = torch.softmax(scaled_vals, dim=0)
+            else:
+                raise
         cum_probs = torch.cumsum(probs, dim=0)
 
         k_index = min(topk, voc) - 1
