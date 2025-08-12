@@ -84,8 +84,8 @@ class LinearTestCase(InfiniopTestCase):
         test_writer.add_tensor(test_writer.gguf_key("ans"), ans_numpy, raw_dtype=gguf.GGMLQuantizationType.F64)
 
 
-if __name__ == "__main__":
-    test_writer = InfiniopTestWriter("linear.gguf")
+def gen_gguf(dtype: torch.dtype, filename: str):
+    test_writer = InfiniopTestWriter(filename)
     test_cases = []
 
     # 测试用例配置：(x_shape, w_shape, b_shape=None, y_shape, x_strides=None, w_strides=None, b_strides=None, y_strides)
@@ -115,38 +115,49 @@ if __name__ == "__main__":
         ((2, 3, 4), (5, 4), (5,), (2, 3, 5), [24, 8, 2], [8, 2], [5], None),
     ]
 
-    _TENSOR_DTYPES_ = [
-        torch.float32,
-        torch.float16,
-        # torch.bfloat16,
-    ]
+    for x_shape, w_shape, b_shape, y_shape, x_strides, w_strides, b_strides, y_strides in _TEST_CASES_:
+        # 生成输入和权重
+        x = torch.rand(*x_shape, dtype=dtype)
+        w = torch.rand(*w_shape, dtype=dtype)
+        
+        # 生成偏置（如果需要）
+        b = torch.rand(*b_shape, dtype=dtype) if b_shape is not None else None
 
-    for dtype in _TENSOR_DTYPES_:
-        for x_shape, w_shape, b_shape, y_shape, x_strides, w_strides, b_strides, y_strides in _TEST_CASES_:
-            # 生成输入和权重
-            x = torch.rand(*x_shape, dtype=dtype)
-            w = torch.rand(*w_shape, dtype=dtype)
-            
-            # 生成偏置（如果需要）
-            b = torch.rand(*b_shape, dtype=dtype) if b_shape is not None else None
-
-            y = torch.empty(y_shape, dtype=dtype)
-            
-            test_case = LinearTestCase(
-                x=x,
-                w=w,
-                b=b,
-                y=y,
-                x_shape=x_shape, 
-                w_shape=w_shape,
-                b_shape=b_shape,
-                y_shape=y_shape,
-                x_strides=x_strides,
-                w_strides=w_strides,
-                b_strides=b_strides,
-                y_strides=y_strides,
-            )
-            test_cases.append(test_case)
+        y = torch.empty(y_shape, dtype=dtype)
+        
+        test_case = LinearTestCase(
+            x=x,
+            w=w,
+            b=b,
+            y=y,
+            x_shape=x_shape, 
+            w_shape=w_shape,
+            b_shape=b_shape,
+            y_shape=y_shape,
+            x_strides=x_strides,
+            w_strides=w_strides,
+            b_strides=b_strides,
+            y_strides=y_strides,
+        )
+        test_cases.append(test_case)
 
     test_writer.add_tests(test_cases)
     test_writer.save()
+
+if __name__ == "__main__":
+    _TENSOR_DTYPES_ = [
+        bfloat16,
+        torch.float32,
+        torch.float16,
+    ]
+
+    dtype_filename_map = {
+        bfloat16: "linear_bf16.gguf",
+        torch.float32: "linear_f32.gguf",
+        torch.float16: "linear_f16.gguf",
+    }
+
+    # 生成测试用例
+    for dtype in _TENSOR_DTYPES_:
+        filename = dtype_filename_map[dtype]
+        gen_gguf(dtype, filename)

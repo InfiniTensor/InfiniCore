@@ -130,8 +130,8 @@ class LinearBackwardTestCase(InfiniopTestCase):
             test_writer.add_tensor(test_writer.gguf_key("ans_grad_b"), ans_b_grad_numpy, raw_dtype=gguf.GGMLQuantizationType.F64)
 
 
-if __name__ == "__main__":
-    test_writer = InfiniopTestWriter("linear_backward.gguf")
+def gen_gguf(dtype: torch.dtype, filename: str):
+    test_writer = InfiniopTestWriter(filename)
     test_cases = []
 
 # (x_shape, w_shape, b_shape, grad_y_shape,
@@ -161,44 +161,55 @@ if __name__ == "__main__":
         ((2, 3, 5), (7, 5), None, (2, 3, 7), [30, 10, 2], [5, 1], None, [21, 3, 1], [30, 10, 2], [5, 1], None),
     ]
 
-    _TENSOR_DTYPES_ = [
-        torch.float32,
-        torch.float16,
-        # torch.bfloat16,
-    ]
+    for x_shape, w_shape, b_shape, grad_y_shape, x_strides, w_strides, b_strides, grad_y_strides, grad_x_strides, grad_w_strides, grad_b_strides in _TEST_CASES_:
+        # 生成输入、权重和输出梯度
+        x = torch.rand(*x_shape, dtype=dtype, requires_grad=True)
+        w = torch.rand(*w_shape, dtype=dtype, requires_grad=True)
+        b = torch.rand(*b_shape, dtype=dtype, requires_grad=True) if b_shape is not None else None
+        grad_y = torch.rand(*grad_y_shape, dtype=dtype)
+        grad_x = torch.empty(x_shape, dtype=dtype)
+        grad_w = torch.empty(w_shape, dtype=dtype)
+        grad_b = torch.empty(b_shape, dtype=dtype) if b_shape is not None else None
 
-    for dtype in _TENSOR_DTYPES_:
-        for x_shape, w_shape, b_shape, grad_y_shape, x_strides, w_strides, b_strides, grad_y_strides, grad_x_strides, grad_w_strides, grad_b_strides in _TEST_CASES_:
-            # 生成输入、权重和输出梯度
-            x = torch.rand(*x_shape, dtype=dtype, requires_grad=True)
-            w = torch.rand(*w_shape, dtype=dtype, requires_grad=True)
-            b = torch.rand(*b_shape, dtype=dtype, requires_grad=True) if b_shape is not None else None
-            grad_y = torch.rand(*grad_y_shape, dtype=dtype)
-            grad_x = torch.empty(x_shape, dtype=dtype)
-            grad_w = torch.empty(w_shape, dtype=dtype)
-            grad_b = torch.empty(b_shape, dtype=dtype) if b_shape is not None else None
-
-            test_case = LinearBackwardTestCase(
-                x=x,
-                w=w,
-                b=b,
-                grad_y=grad_y,
-                grad_x=grad_x,
-                grad_w=grad_w,
-                grad_b=grad_b,
-                x_shape=x_shape,
-                w_shape=w_shape,
-                b_shape=b_shape,
-                grad_y_shape=grad_y_shape,
-                x_strides=x_strides,
-                w_strides=w_strides,
-                b_strides=b_strides,
-                grad_y_strides=grad_y_strides,
-                grad_x_strides=grad_x_strides,
-                grad_w_strides=grad_w_strides,
-                grad_b_strides=grad_b_strides,
-            )
-            test_cases.append(test_case)
+        test_case = LinearBackwardTestCase(
+            x=x,
+            w=w,
+            b=b,
+            grad_y=grad_y,
+            grad_x=grad_x,
+            grad_w=grad_w,
+            grad_b=grad_b,
+            x_shape=x_shape,
+            w_shape=w_shape,
+            b_shape=b_shape,
+            grad_y_shape=grad_y_shape,
+            x_strides=x_strides,
+            w_strides=w_strides,
+            b_strides=b_strides,
+            grad_y_strides=grad_y_strides,
+            grad_x_strides=grad_x_strides,
+            grad_w_strides=grad_w_strides,
+            grad_b_strides=grad_b_strides,
+        )
+        test_cases.append(test_case)
 
     test_writer.add_tests(test_cases)
     test_writer.save()
+
+if __name__ == "__main__":
+    _TENSOR_DTYPES_ = [
+        bfloat16,
+        torch.float32,
+        torch.float16,
+    ]
+
+    dtype_filename_map = {
+        bfloat16: "linear_backward_bf16.gguf",
+        torch.float32: "linear_backward_f32.gguf",
+        torch.float16: "linear_backward_f16.gguf",
+    }   
+    
+    # 生成测试用例
+    for dtype in _TENSOR_DTYPES_:
+        filename = dtype_filename_map[dtype]
+        gen_gguf(dtype, filename)

@@ -13,13 +13,13 @@ def random_tensor(
     high: int | None = None
 ) -> torch.Tensor:
     """
-    仅支持 dtype 为 F16, F32, F64, I8, I16, I32, I64 的随机张量生成。
+    仅支持 dtype 为 BF16, F16, F32, F64, I8, I16, I32, I64 的随机张量生成。
     对于整数类型，默认范围[-100, 100)。
     对于浮点类型，默认范围[-5, 5)。
     可通过 low、high 参数自定义范围。
     其他类型将报错不支持。
     """
-    if dtype in (torch.float16, torch.float32, torch.float64, torch.bfloat16):
+    if dtype in (bfloat16, torch.float16, torch.float32, torch.float64, torch.bfloat16):
         l = -5.0 if low is None else float(low)
         h = 5.0 if high is None else float(high)
         return (h - l) * torch.rand(*shape, dtype=dtype) + l
@@ -95,8 +95,8 @@ class ScatterTestCase(InfiniopTestCase):
         )
 
 
-if __name__ == "__main__":
-    test_writer = InfiniopTestWriter("scatter_.gguf")
+def gen_gguf(dtype: torch.dtype, filename: str):
+    test_writer = InfiniopTestWriter(filename)
     test_cases = []
 
     # 测试用例格式：(output_shape, input_shape, dim, index_shape, input_strides=None, output_strides=None, index_strides=None)
@@ -108,9 +108,33 @@ if __name__ == "__main__":
         ((2, 3, 4), (2, 3, 4), 2, (2, 3, 4), None, None, None),
         ((5, 5), (3, 5), 0, (3, 5), None, None, None),
     ]
-    
+
+    for output_shape, input_shape, dim, index_shape, input_strides, output_strides, index_strides in _TEST_CASES_:
+        output = torch.empty(output_shape, dtype=dtype)
+        input = random_tensor(input_shape, dtype)  # 使用随机张量生成src
+        # 动态生成 index，范围为 [0, output_shape[dim])
+        index = random_tensor(index_shape, torch.int64, 0, output_shape[dim])
+        
+        test_case = ScatterTestCase(
+            output=output,
+            index=index,
+            input=input,
+            dim=dim,
+            output_shape=output_shape,
+            input_shape=input_shape,
+            index_shape=index_shape,
+            output_strides=output_strides,
+            input_strides=input_strides,
+            index_strides=index_strides,
+        )
+        test_cases.append(test_case)
+
+    test_writer.add_tests(test_cases)
+    test_writer.save()
+
+if __name__ == "__main__":
     _TENSOR_DTYPES_ = [
-        # torch.bfloat16,
+        bfloat16,
         torch.float32,
         torch.float64,
         torch.float16,
@@ -120,26 +144,18 @@ if __name__ == "__main__":
         torch.int64,
     ]
 
-    for dtype in _TENSOR_DTYPES_:
-        for output_shape, input_shape, dim, index_shape, input_strides, output_strides, index_strides in _TEST_CASES_:
-            output = torch.empty(output_shape, dtype=dtype)
-            input = random_tensor(input_shape, dtype)  # 使用随机张量生成src
-            # 动态生成 index，范围为 [0, output_shape[dim])
-            index = random_tensor(index_shape, torch.int64, 0, output_shape[dim])
-            
-            test_case = ScatterTestCase(
-                output=output,
-                index=index,
-                input=input,
-                dim=dim,
-                output_shape=output_shape,
-                input_shape=input_shape,
-                index_shape=index_shape,
-                output_strides=output_strides,
-                input_strides=input_strides,
-                index_strides=index_strides,
-            )
-            test_cases.append(test_case)
+    dtype_filename_map = {
+        bfloat16: "scatter_bf16.gguf",
+        torch.float16: "scatter_f16.gguf",
+        torch.float32: "scatter_f32.gguf",  
+        torch.float64: "scatter_f64.gguf",
+        torch.int8: "scatter_i8.gguf",
+        torch.int16: "scatter_i16.gguf",
+        torch.int32: "scatter_i32.gguf",
+        torch.int64: "scatter_i64.gguf",
+    }
 
-    test_writer.add_tests(test_cases)
-    test_writer.save()
+    # 生成测试用例
+    for dtype in _TENSOR_DTYPES_:
+        filename = dtype_filename_map[dtype]
+        gen_gguf(dtype, filename)
