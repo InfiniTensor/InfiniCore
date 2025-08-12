@@ -8,7 +8,6 @@ namespace op::common_bang::reduce_op {
 constexpr int batch_size = 128 / sizeof(float);
 
 __mlu_func__ void sumInternal(float *dst, float *src, int max_batch) {
-    // constexpr int batch_size = 128 / sizeof(float);
     const int width = max_batch / batch_size;
 
     // Use vectorized reduction
@@ -66,7 +65,6 @@ __mlu_func__ float sum(const T *source, T *src, float *dst, int num_elements, in
 template <typename T>
 __mlu_func__ float sumBatched(const T *source, T *src, float *dst, int num_elements, int max_batch) {
     constexpr int min_vector_size = 32;
-    // constexpr int batch_size = 128 / sizeof(float);
 
     // For small vectors, use safer element-wise computation
     if (num_elements < min_vector_size) {
@@ -104,7 +102,7 @@ __mlu_func__ float sumBatched(const T *source, T *src, float *dst, int num_eleme
             // half/bfloat16 processing path
             if constexpr (std::is_same_v<T, half>) {
                 __bang_half2float((float *)(src + offset), src + offset, curr_batch);
-            } else {
+            } else if constexpr (std::is_same_v<T, bfloat16_t>) {
                 __bang_bfloat162float((float *)(src + offset), src + offset, curr_batch);
             }
 
@@ -145,7 +143,14 @@ __mlu_func__ float sumSquared(const T *source, T *src, float *dst, int num_eleme
         // Find max absolute value
         float max_val = 0.0f;
         for (size_t i = 0; i < curr_batch; ++i) {
-            float val = fabs(__half2float(src[offset + i]));
+            float val = 0.0f;
+            if constexpr (std::is_same_v<T, half>) {
+                val = fabs(__half2float(src[offset + i]));
+            } else if constexpr (std::is_same_v<T, bfloat16_t>) {
+                val = fabs(__bfloat162float(src[offset + i]));
+            } else {
+                val = fabs(src[offset + i]);
+            }
             max_val = std::max(val, max_val);
         }
 
@@ -154,7 +159,14 @@ __mlu_func__ float sumSquared(const T *source, T *src, float *dst, int num_eleme
 
         // Scaled computation
         for (size_t i = 0; i < curr_batch; ++i) {
-            float val = __half2float(src[offset + i]) * scale;
+            float val = 0.0f;
+            if constexpr (std::is_same_v<T, half>) {
+                val = __half2float(src[offset + i]) * scale;
+            } else if constexpr (std::is_same_v<T, bfloat16_t>) {
+                val = __bfloat162float(src[offset + i]) * scale;
+            } else {
+                val = src[offset + i] * scale;
+            }
             sum += val * val;
         }
 
@@ -167,8 +179,7 @@ __mlu_func__ float sumSquared(const T *source, T *src, float *dst, int num_eleme
 
 template <typename T>
 __mlu_func__ float sumSquaredBatched(const T *source, T *src, float *dst, int num_elements, int max_batch) {
-    constexpr int min_vector_size = 32; // Minimum vector size threshold
-    // constexpr int batch_size = 128 / sizeof(float);
+    constexpr int min_vector_size = 32;
 
     // For small vectors, use safer element-wise computation
     if (num_elements < min_vector_size) {
@@ -210,7 +221,7 @@ __mlu_func__ float sumSquaredBatched(const T *source, T *src, float *dst, int nu
             // half/bfloat16 processing path
             if constexpr (std::is_same_v<T, half>) {
                 __bang_half2float((float *)(src + offset), src + offset, curr_batch);
-            } else {
+            } else if constexpr (std::is_same_v<T, bfloat16_t>) {
                 __bang_bfloat162float((float *)(src + offset), src + offset, curr_batch);
             }
 
@@ -258,7 +269,6 @@ __mlu_func__ float sumSquaredBatched(const T *source, T *src, float *dst, int nu
 }
 
 __mlu_func__ void maxInternal(float *dst, float *src, int max_batch) {
-    // constexpr int batch_size = 128 / sizeof(float);
     __bang_maxpool(
         dst, src,
         batch_size,             // channel size
@@ -309,7 +319,7 @@ __mlu_func__ float max(const T *source, T *src, float *dst, int num_elements, in
 
 template <typename T>
 __mlu_func__ float maxBatched(const T *source, T *src, float *dst, int num_elements, int max_batch) {
-    constexpr int min_vector_size = 32; // Minimum vector size threshold
+    constexpr int min_vector_size = 32;
 
     // For small vectors, use safer element-wise computation
     if (num_elements < min_vector_size) {
