@@ -33,14 +33,15 @@ infiniStatus_t Descriptor::create(
         workspace_size = workspace_result.take();                       \
     } break
 
-#define CASE_I(CASE, Tidx)                         \
-    case CASE:                                     \
-        switch (info.dt_p) {                       \
-            CASE_P(INFINI_DTYPE_F16, Tidx, half);  \
-            CASE_P(INFINI_DTYPE_F32, Tidx, float); \
-        default:                                   \
-            return INFINI_STATUS_BAD_TENSOR_DTYPE; \
-        }                                          \
+#define CASE_I(CASE, Tidx)                               \
+    case CASE:                                           \
+        switch (info.dt_p) {                             \
+            CASE_P(INFINI_DTYPE_F16, Tidx, half);        \
+            CASE_P(INFINI_DTYPE_BF16, Tidx, bfloat16_t); \
+            CASE_P(INFINI_DTYPE_F32, Tidx, float);       \
+        default:                                         \
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;       \
+        }                                                \
         break
 
     switch (info.dt_i) {
