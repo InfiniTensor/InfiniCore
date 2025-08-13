@@ -17,9 +17,6 @@
 #ifdef ENABLE_CAMBRICON_API
 #include "bang/swiglu_bang.h"
 #endif
-#ifdef ENABLE_CAMBRICON_API
-#include "bang/swiglu_bang.h"
-#endif
 #ifdef ENABLE_ASCEND_API
 #include "ascend/swiglu_ascend.h"
 #endif
