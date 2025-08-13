@@ -15,7 +15,7 @@ def np_dtype_to_ggml(tensor_dtype: np.dtype):
         return GGMLQuantizationType.F32
     elif tensor_dtype == np.float64:
         return GGMLQuantizationType.F64
-    elif tensor_dtype == np.bool:
+    elif tensor_dtype == np.bool_:
         return GGMLQuantizationType.Q8_K
     elif tensor_dtype == np.int8:
         return GGMLQuantizationType.I8

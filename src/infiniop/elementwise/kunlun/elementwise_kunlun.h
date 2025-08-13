@@ -227,9 +227,6 @@ private:
         CHECK_KUNLUN(xpu_memcpy_async(workspace, h_inputs_arr, input_arr_size, XPU_HOST_TO_DEVICE, stream));
         CHECK_KUNLUN(xpu_memcpy_async((void *)d_meta_start, info_meta_start, info.getMetaMemSize(), XPU_HOST_TO_DEVICE, stream));
 
-        xpu_wait(stream);
-        // xpu_wait(stream);
-
         // offset/assign the pointers
         d_inputs_arr = reinterpret_cast<__global_ptr__ const void **>(workspace);
         d_output_shape = reinterpret_cast<__global_ptr__ const size_t *>(d_meta_start);
