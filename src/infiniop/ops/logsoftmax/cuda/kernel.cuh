@@ -43,11 +43,13 @@ __device__ void logSoftmaxKernel(
     // Find maximum value for numerical stability
     Tcompute max_val = static_cast<Tcompute>(-INFINITY);
     for (int i = tid; i < probs_size; i += BLOCK_SIZE) {
-        Tcompute val = static_cast<Tcompute>(x_batch[i * x_stride_p]);
-        if constexpr (std::is_same_v<Tcompute, float>) {
-            max_val = fmaxf(max_val, val);
-        } else {
-            max_val = fmax(max_val, val);
+        if (i < probs_size) {  // Add boundary check
+            Tcompute val = static_cast<Tcompute>(x_batch[i * x_stride_p]);
+            if constexpr (std::is_same_v<Tcompute, float>) {
+                max_val = fmaxf(max_val, val);
+            } else {
+                max_val = fmax(max_val, val);
+            }
         }
     }
     max_val = BlockReduce(temp_storage).Reduce(max_val, cub::Max());
@@ -59,11 +61,13 @@ __device__ void logSoftmaxKernel(
     // Compute sum of exp(x - max)
     Tcompute sum_exp = static_cast<Tcompute>(0.0);
     for (int i = tid; i < probs_size; i += BLOCK_SIZE) {
-        Tcompute val = static_cast<Tcompute>(x_batch[i * x_stride_p]);
-        if constexpr (std::is_same_v<Tcompute, float>) {
-            sum_exp += expf(val - shared_max_val);
-        } else {
-            sum_exp += exp(val - shared_max_val);
+        if (i < probs_size) {  // Add boundary check
+            Tcompute val = static_cast<Tcompute>(x_batch[i * x_stride_p]);
+            if constexpr (std::is_same_v<Tcompute, float>) {
+                sum_exp += expf(val - shared_max_val);
+            } else {
+                sum_exp += exp(val - shared_max_val);
+            }
         }
     }
     sum_exp = BlockReduce(temp_storage).Sum(sum_exp);
@@ -80,9 +84,11 @@ __device__ void logSoftmaxKernel(
         log_sum_exp = log(shared_sum_exp);
     }
     for (int i = tid; i < probs_size; i += BLOCK_SIZE) {
-        Tcompute val = static_cast<Tcompute>(x_batch[i * x_stride_p]);
-        Tcompute result = val - shared_max_val - log_sum_exp;
-        y_batch[i * y_stride_p] = static_cast<Tdata_out>(result);
+        if (i < probs_size) {  // Add boundary check
+            Tcompute val = static_cast<Tcompute>(x_batch[i * x_stride_p]);
+            Tcompute result = val - shared_max_val - log_sum_exp;
+            y_batch[i * y_stride_p] = static_cast<Tdata_out>(result);
+        }
     }
 }
 
