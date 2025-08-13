@@ -17,6 +17,7 @@ def run_tests(args):
         "causal_softmax.py",
         "clip.py",
         "gemm.py",
+        "logsoftmax.py",
         "mul.py",
         "random_sample.py",
         "rearrange.py",
