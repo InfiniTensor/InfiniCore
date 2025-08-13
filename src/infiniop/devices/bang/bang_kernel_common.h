@@ -7,6 +7,21 @@
 
 namespace device::bang::kernel {
 
+template <typename T>
+__mlu_device__ float to_float(const T &v) {
+    return static_cast<float>(v);
+}
+
+template <typename T>
+__mlu_device__ bfloat16_t to_bfloat16(const T &v) {
+    return static_cast<bfloat16_t>(v);
+}
+
+template <typename T>
+__mlu_device__ half to_half(const T &v) {
+    return static_cast<half>(v);
+}
+
 /**
  * @brief Converts a flattened index to a reduced offset considering broadcasting.
  *
