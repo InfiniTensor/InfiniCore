@@ -74,6 +74,9 @@ __mlu_global__ void argMax(
 
     // Process full chunks
     for (size_t r = 0; r < repeat; ++r) {
+        __memcpy(nram_src, probs + r * task_per_load + taskId * max_num,
+                 max_num * sizeof(Tval), GDRAM2NRAM);
+        __bang_argmax(nram_max, nram_src, max_num);
         if (nram_max[0] > current_max) {
             current_max = nram_max[0];
             current_index = r * task_per_load + taskId * max_num + *((int64_t *)&nram_max[1]);
@@ -538,6 +541,8 @@ struct Algo {
         } else if constexpr (std::is_same<Tval_, CustomBFloat16>::value) {
             auto logits = reinterpret_cast<const bfloat16_t *>(probs);
             argMax<<<dim, CNRT_FUNC_TYPE_BLOCK, queue>>>(logits, result, gdram_indices, voc);
+        } else {
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
 
         cnrtQueueSync(queue);
