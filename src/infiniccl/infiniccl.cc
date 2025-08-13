@@ -1,6 +1,7 @@
 #include "infiniccl.h"
 
 #include "./ascend/infiniccl_ascend.h"
+#include "./cambricon/infiniccl_cambricon.h"
 #include "./cuda/infiniccl_cuda.h"
 #include "./metax/infiniccl_metax.h"
 
@@ -18,6 +19,7 @@ __C infiniStatus_t infinicclCommInitAll(
         COMM_INIT_ALL(INFINI_DEVICE_NVIDIA, cuda);
         COMM_INIT_ALL(INFINI_DEVICE_ILUVATAR, cuda);
         COMM_INIT_ALL(INFINI_DEVICE_ASCEND, ascend);
+        COMM_INIT_ALL(INFINI_DEVICE_CAMBRICON, cambricon);
         COMM_INIT_ALL(INFINI_DEVICE_METAX, metax);
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -39,6 +41,7 @@ __C infiniStatus_t infinicclCommDestroy(infinicclComm_t comm) {
         COMM_DESTROY(INFINI_DEVICE_NVIDIA, cuda);
         COMM_DESTROY(INFINI_DEVICE_ILUVATAR, cuda);
         COMM_DESTROY(INFINI_DEVICE_ASCEND, ascend);
+        COMM_DESTROY(INFINI_DEVICE_CAMBRICON, cambricon);
         COMM_DESTROY(INFINI_DEVICE_METAX, metax);
 
     default:
@@ -68,6 +71,7 @@ __C infiniStatus_t infinicclAllReduce(
         ALL_REDUCE(INFINI_DEVICE_NVIDIA, cuda);
         ALL_REDUCE(INFINI_DEVICE_ILUVATAR, cuda);
         ALL_REDUCE(INFINI_DEVICE_ASCEND, ascend);
+        ALL_REDUCE(INFINI_DEVICE_CAMBRICON, cambricon);
         ALL_REDUCE(INFINI_DEVICE_METAX, metax);
 
     default:

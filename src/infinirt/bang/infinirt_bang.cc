@@ -8,6 +8,7 @@ namespace infinirt::bang {
 infiniStatus_t getDeviceCount(int *count) {
     unsigned int device_count = static_cast<unsigned int>(*count);
     CHECK_BANGRT(cnrtGetDeviceCount(&device_count));
+    *count = static_cast<int>(device_count);
     return INFINI_STATUS_SUCCESS;
 }
 

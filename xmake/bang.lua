@@ -60,3 +60,38 @@ target("infinirt-cambricon")
     add_files("../src/infinirt/bang/*.cc")
     add_cxflags("-lstdc++ -Wall -Werror -fPIC")
 target_end()
+
+target("infiniccl-cambricon")
+    set_kind("static")
+    add_deps("infinirt")
+    add_deps("infini-utils")
+    set_warnings("all", "error")
+    set_languages("cxx17")
+    on_install(function (target) end)
+    
+    if has_config("ccl") then
+        if is_plat("linux") then
+            add_includedirs(NEUWARE_HOME .. "/include")
+            add_linkdirs(NEUWARE_HOME .. "/lib64")
+            add_links("cncl", "cnrt")
+
+            if has_package("libibverbs") then
+                add_links("ibverbs")
+                add_defines("CNCL_RDMA_ENABLED=1")
+            end
+
+            if is_arch("arm64") then
+                add_defines("CNCL_ARM64_COMPAT_MODE=1")
+            end
+
+            add_rpathdirs(NEUWARE_HOME .. "/lib64")
+            add_runenvs("LD_LIBRARY_PATH", NEUWARE_HOME .. "/lib64")
+
+            add_files("../src/infiniccl/cambricon/*.cc")
+            add_cxflags("-fPIC")
+            add_ldflags("-fPIC")
+        else
+            print("[Warning] CNCL is currently only supported on Linux")
+        end
+    end
+target_end()
