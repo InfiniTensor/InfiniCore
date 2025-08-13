@@ -116,20 +116,20 @@ class FlashAttentionTestCase(InfiniopTestCase):
             test_writer.add_array(test_writer.gguf_key("l.shape"), self.shape_l)
             
         if self.stride_q is not None:
-            test_writer.add_array(test_writer.gguf_key("q.stride"), gguf_strides(*self.stride_q))
+            test_writer.add_array(test_writer.gguf_key("q.strides"), gguf_strides(*self.stride_q))
         if self.stride_k is not None:
-            test_writer.add_array(test_writer.gguf_key("k.stride"), gguf_strides(*self.stride_k))
+            test_writer.add_array(test_writer.gguf_key("k.strides"), gguf_strides(*self.stride_k))
         if self.stride_v is not None:
-            test_writer.add_array(test_writer.gguf_key("v.stride"), gguf_strides(*self.stride_v))
+            test_writer.add_array(test_writer.gguf_key("v.strides"), gguf_strides(*self.stride_v))
         if self.stride_mask is not None:
-            test_writer.add_array(test_writer.gguf_key("mask.stride"), gguf_strides(*self.stride_mask))
+            test_writer.add_array(test_writer.gguf_key("mask.strides"), gguf_strides(*self.stride_mask))
         test_writer.add_array(
-            test_writer.gguf_key("out.stride"),
-            gguf_strides(*self.stride_out) if self.stride_out is not None else contiguous_gguf_strides(self.shape_out)
+            test_writer.gguf_key("out.strides"),
+            gguf_strides(*self.stride_out if self.stride_out is not None else contiguous_gguf_strides(self.shape_out))
         )
         test_writer.add_array(
-            test_writer.gguf_key("l.stride"),
-            gguf_strides(*self.stride_l) if self.stride_l is not None else contiguous_gguf_strides(self.shape_l)
+            test_writer.gguf_key("l.strides"),
+            gguf_strides(*self.stride_l if self.stride_l is not None else contiguous_gguf_strides(self.shape_l))
         )
         
         test_writer.add_tensor(
@@ -141,10 +141,9 @@ class FlashAttentionTestCase(InfiniopTestCase):
         test_writer.add_tensor(
             test_writer.gguf_key("v"), self.v, raw_dtype=np_dtype_to_ggml(self.v.dtype)
         )
-        if self.mask is not None:
-            test_writer.add_tensor(
-                test_writer.gguf_key("mask"), self.mask, raw_dtype=np_dtype_to_ggml(self.mask.dtype)
-            )
+        test_writer.add_tensor(
+            test_writer.gguf_key("mask"), self.mask, raw_dtype=np_dtype_to_ggml(self.mask.dtype)
+        )
         test_writer.add_tensor(
             test_writer.gguf_key("out"), self.out, raw_dtype=np_dtype_to_ggml(self.out.dtype)
         )
@@ -189,12 +188,9 @@ def gen_gguf(dtype: np.dtype, filename: str):
         k = np.random.rand(*shape_kv).astype(dtype)
         v = np.random.rand(*shape_kv).astype(dtype)
         
-        shape_mask = None if mask_type == 0 else (q.shape[-3], k.shape[-3])
-        if mask_type == 1:
-            mask = np.random.randint(0, 2, size=shape_mask).astype(np.float32)
-            mask = np.where(mask == 1, -np.inf, mask)
-        else:
-            mask = None
+        shape_mask = (q.shape[-3], k.shape[-3])
+        mask = np.random.randint(0, 2, size=shape_mask).astype(np.float32)
+        mask = np.where(mask == 1, -np.inf, mask)
             
         out = np.empty(tuple(0 for _ in shape_q), dtype=dtype)
         
@@ -211,8 +207,8 @@ def gen_gguf(dtype: np.dtype, filename: str):
         k = process_zero_stride_tensor(k, stride_kv)
         v = process_zero_stride_tensor(v, stride_kv)
         out = process_zero_stride_tensor(out, stride_out)
-        if mask is not None:
-            mask = process_zero_stride_tensor(mask, stride_mask)
+        l = process_zero_stride_tensor(l, stride_l)
+        mask = process_zero_stride_tensor(mask, stride_mask)
         
         test_case = FlashAttentionTestCase(
             q=q,

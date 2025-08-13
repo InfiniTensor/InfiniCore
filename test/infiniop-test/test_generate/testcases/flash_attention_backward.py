@@ -139,26 +139,26 @@ class FlashAttentionBackwardTest(InfiniopTestCase):
             test_writer.add_array(test_writer.gguf_key("grad_v.shape"), self.shape_grad_v)
             
         if self.stride_q is not None:
-            test_writer.add_array(test_writer.gguf_key("q.stride"), gguf_strides(*self.stride_q))
+            test_writer.add_array(test_writer.gguf_key("q.strides"), gguf_strides(*self.stride_q))
         if self.stride_k is not None:
-            test_writer.add_array(test_writer.gguf_key("k.stride"), gguf_strides(*self.stride_k))
+            test_writer.add_array(test_writer.gguf_key("k.strides"), gguf_strides(*self.stride_k))
         if self.stride_v is not None:
-            test_writer.add_array(test_writer.gguf_key("v.stride"), gguf_strides(*self.stride_v))
+            test_writer.add_array(test_writer.gguf_key("v.strides"), gguf_strides(*self.stride_v))
         if self.stride_mask is not None:
-            test_writer.add_array(test_writer.gguf_key("mask.stride"), gguf_strides(*self.stride_mask))
+            test_writer.add_array(test_writer.gguf_key("mask.strides"), gguf_strides(*self.stride_mask))
         if self.stride_grad_out is not None:
-            test_writer.add_array(test_writer.gguf_key("grad_out.stride"), gguf_strides(*self.stride_grad_out))
+            test_writer.add_array(test_writer.gguf_key("grad_out.strides"), gguf_strides(*self.stride_grad_out))
         test_writer.add_array(
-            test_writer.gguf_key("grad_q.stride"),
-            gguf_strides(*self.stride_grad_q) if self.stride_grad_q is not None else contiguous_gguf_strides(self.shape_grad_q)
+            test_writer.gguf_key("grad_q.strides"),
+            gguf_strides(*self.stride_grad_q if self.stride_grad_q is not None else contiguous_gguf_strides(self.shape_grad_q))
         )
         test_writer.add_array(
-            test_writer.gguf_key("grad_k.stride"),
-            gguf_strides(*self.stride_grad_k) if self.stride_grad_k is not None else contiguous_gguf_strides(self.shape_grad_k)
+            test_writer.gguf_key("grad_k.strides"),
+            gguf_strides(*self.stride_grad_k if self.stride_grad_k is not None else contiguous_gguf_strides(self.shape_grad_k))
         )
         test_writer.add_array(
-            test_writer.gguf_key("grad_v.stride"),
-            gguf_strides(*self.stride_grad_v) if self.stride_grad_v is not None else contiguous_gguf_strides(self.shape_grad_v)
+            test_writer.gguf_key("grad_v.strides"),
+            gguf_strides(*self.stride_grad_v if self.stride_grad_v is not None else contiguous_gguf_strides(self.shape_grad_v))
         )
         
         test_writer.add_tensor(
@@ -170,10 +170,9 @@ class FlashAttentionBackwardTest(InfiniopTestCase):
         test_writer.add_tensor(
             test_writer.gguf_key("v"), self.v, raw_dtype=np_dtype_to_ggml(self.v.dtype)
         )
-        if self.mask is not None:
-            test_writer.add_tensor(
-                test_writer.gguf_key("mask"), self.mask, raw_dtype=np_dtype_to_ggml(self.mask.dtype)
-            )
+        test_writer.add_tensor(
+            test_writer.gguf_key("mask"), self.mask, raw_dtype=np_dtype_to_ggml(self.mask.dtype)
+        )
         test_writer.add_tensor(
             test_writer.gguf_key("grad_out"), self.grad_out, raw_dtype=np_dtype_to_ggml(self.grad_out.dtype)
         )
@@ -231,12 +230,9 @@ def gen_gguf(dtype: np.dtype, filename: str):
         v = np.random.rand(*shape_kv).astype(dtype)
         grad_out = np.random.rand(*shape_q).astype(dtype)
         
-        shape_mask = None if mask_type == 0 else (q.shape[-3], k.shape[-3])
-        if mask_type == 1:
-            mask = np.random.randint(0, 2, size=shape_mask).astype(np.float32)
-            mask = np.where(mask == 1, -np.inf, mask)
-        else:
-            mask = None
+        shape_mask = (q.shape[-3], k.shape[-3])
+        mask = np.random.randint(0, 2, size=shape_mask).astype(np.float32)
+        mask = np.where(mask == 1, -np.inf, mask)
         
         grad_q = np.empty(tuple(0 for _ in shape_q), dtype=dtype)
         grad_k = np.empty(tuple(0 for _ in shape_kv), dtype=dtype)
@@ -257,8 +253,7 @@ def gen_gguf(dtype: np.dtype, filename: str):
         grad_q = process_zero_stride_tensor(grad_q, stride_grad_q)
         grad_k = process_zero_stride_tensor(grad_k, stride_grad_kv)
         grad_v = process_zero_stride_tensor(grad_v, stride_grad_kv)
-        if mask is not None:
-            mask = process_zero_stride_tensor(mask, stride_mask)
+        mask = process_zero_stride_tensor(mask, stride_mask)
         
         test_case = FlashAttentionBackwardTest(
             q=q,
