@@ -3,8 +3,9 @@ from ast import List
 import numpy as np
 import gguf
 from typing import List
+from ml_dtypes import bfloat16
 
-from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides
+from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides, tensor_to_numpy
 
 def random_tensor(
     shape: List[int],
@@ -62,7 +63,8 @@ class IndexCopyTestCase(InfiniopTestCase):
         # 写入维度信息
         test_writer.add_int32(test_writer.gguf_key("dim"), self.dim)
         # 写入索引信息
-        index_numpy = self.index.detach().cpu().numpy()
+        index_numpy = tensor_to_numpy(self.index)
+        # index_numpy = self.index.detach().cpu().numpy()
         test_writer.add_tensor(
             test_writer.gguf_key("index"),
             index_numpy,
@@ -80,8 +82,10 @@ class IndexCopyTestCase(InfiniopTestCase):
         test_writer.add_array(test_writer.gguf_key("index.strides"), gguf_strides(*self.index_strides))
 
         # 转换torch tensor为numpy用于写入文件
-        input_numpy = self.input.detach().cpu().numpy()
-        output_numpy = self.output.detach().cpu().numpy()
+        # input_numpy = self.input.detach().cpu().numpy()
+        # output_numpy = self.output.detach().cpu().numpy()
+        input_numpy = tensor_to_numpy(self.input)
+        output_numpy = tensor_to_numpy(self.output)
 
         # 写入张量数据
         test_writer.add_tensor(
@@ -98,7 +102,8 @@ class IndexCopyTestCase(InfiniopTestCase):
         # 计算并写入答案
         ans = torch.zeros(self.output_shape, dtype=self.output.dtype)
         ans.index_copy_(self.dim, self.index, self.input)
-        ans_numpy = ans.detach().cpu().numpy()
+        # ans_numpy = ans.detach().cpu().numpy()
+        ans_numpy = tensor_to_numpy(ans)
         test_writer.add_tensor(
             test_writer.gguf_key("ans"),
             ans_numpy,
@@ -128,11 +133,14 @@ def gen_gguf(dtype: torch.dtype, filename: str):
     ]
 
     for output_shape, input_shape, index_shape, dim, input_strides, output_strides, index_strides in _TEST_CASES_:
+        if dtype == bfloat16:  # 确保已经 import bfloat16
+            dtype = torch.bfloat16
         # 生成输入张量
         input = random_tensor(input_shape, dtype)
 
         # 动态生成 index，范围是 [0, output_shape[dim])
         index = random_tensor(index_shape, torch.int64, 0, output_shape[dim])
+
         output = torch.empty(output_shape, dtype=dtype)
         
         test_case = IndexCopyTestCase(

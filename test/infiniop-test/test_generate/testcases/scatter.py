@@ -3,8 +3,9 @@ from ast import List
 import numpy as np
 import gguf
 from typing import List
+from ml_dtypes import bfloat16
 
-from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides
+from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides, tensor_to_numpy
 
 def random_tensor(
     shape: List[int],
@@ -66,7 +67,8 @@ class ScatterTestCase(InfiniopTestCase):
         test_writer.add_array(test_writer.gguf_key("output.shape"), self.output_shape)
         if self.output_strides is not None:
             test_writer.add_array(test_writer.gguf_key("output.strides"), gguf_strides(*self.output_strides))
-        output_numpy = self.output.detach().cpu().numpy()
+        # output_numpy = self.output.detach().cpu().numpy()
+        output_numpy = tensor_to_numpy(self.output)
         test_writer.add_tensor(
                     test_writer.gguf_key("output"), output_numpy, raw_dtype=np_dtype_to_ggml(output_numpy.dtype)
                 )
@@ -74,20 +76,23 @@ class ScatterTestCase(InfiniopTestCase):
         test_writer.add_array(test_writer.gguf_key("index.shape"), self.index_shape)
         if self.index_strides is not None:
             test_writer.add_array(test_writer.gguf_key("index.strides"), gguf_strides(*self.index_strides))
-        index_numpy = self.index.detach().cpu().numpy()
+        # index_numpy = self.index.detach().cpu().numpy()
+        index_numpy = tensor_to_numpy(self.index)
         test_writer.add_tensor(test_writer.gguf_key("index"), index_numpy, raw_dtype=np_dtype_to_ggml(index_numpy.dtype),)
 
         # 写入源张量形状、步长和数据
         test_writer.add_array(test_writer.gguf_key("input.shape"), self.input_shape)
         if self.input_strides is not None:
             test_writer.add_array(test_writer.gguf_key("input.strides"), gguf_strides(*self.input_strides))
-        input_numpy = self.input.detach().cpu().numpy()
+        # input_numpy = self.input.detach().cpu().numpy()
+        input_numpy = tensor_to_numpy(self.input)
         test_writer.add_tensor(test_writer.gguf_key("input"), input_numpy, raw_dtype=np_dtype_to_ggml(input_numpy.dtype),)
 
         # 计算预期结果（调用PyTorch的scatter_）
         ans = torch.zeros(self.output_shape, dtype=self.output.dtype)
         ans.scatter_(self.dim, self.index, self.input)
-        ans_numpy = ans.detach().cpu().numpy()
+        # ans_numpy = ans.detach().cpu().numpy()
+        ans_numpy = tensor_to_numpy(ans)
         test_writer.add_tensor(
             test_writer.gguf_key("ans"),
             ans_numpy,
@@ -110,6 +115,8 @@ def gen_gguf(dtype: torch.dtype, filename: str):
     ]
 
     for output_shape, input_shape, dim, index_shape, input_strides, output_strides, index_strides in _TEST_CASES_:
+        if dtype == bfloat16:  
+            dtype = torch.bfloat16
         output = torch.empty(output_shape, dtype=dtype)
         input = random_tensor(input_shape, dtype)  # 使用随机张量生成src
         # 动态生成 index，范围为 [0, output_shape[dim])

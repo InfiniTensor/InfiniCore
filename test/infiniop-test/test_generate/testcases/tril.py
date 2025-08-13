@@ -3,8 +3,9 @@ from ast import List
 import numpy as np
 import gguf
 from typing import List
+from ml_dtypes import bfloat16
 
-from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides
+from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides, tensor_to_numpy
 
 def random_tensor(
     shape: List[int],
@@ -59,7 +60,8 @@ class TrilTestCase(InfiniopTestCase):
         test_writer.add_array(test_writer.gguf_key("input.shape"), self.shape)
         if self.input_strides is not None:
             test_writer.add_array(test_writer.gguf_key("input.strides"), self.input_strides)
-        input_numpy = self.input.detach().cpu().numpy()
+        # input_numpy = self.input.detach().cpu().numpy()
+        input_numpy = tensor_to_numpy(self.input)
         test_writer.add_tensor(test_writer.gguf_key("input"), input_numpy, raw_dtype=np_dtype_to_ggml(input_numpy.dtype),)
 
         # 写入输出张量的形状和步长和数据
@@ -68,14 +70,16 @@ class TrilTestCase(InfiniopTestCase):
             test_writer.gguf_key("output.strides"),
             gguf_strides(*self.output_strides if self.output_strides is not None else contiguous_gguf_strides(self.shape))
         )        
-        output_numpy = self.output.detach().cpu().numpy()
+        # output_numpy = self.output.detach().cpu().numpy()
+        output_numpy = tensor_to_numpy(self.output)
         test_writer.add_tensor(
             test_writer.gguf_key("output"), output_numpy, raw_dtype=np_dtype_to_ggml(output_numpy.dtype)
         )
 
         # 计算预期结果
         ans = torch.tril(self.input, diagonal=self.diagonal)
-        ans_numpy = ans.detach().cpu().numpy()
+        # ans_numpy = ans.detach().cpu().numpy()
+        ans_numpy = tensor_to_numpy(ans)
         
         # 写入预期结果
         test_writer.add_tensor(
@@ -109,6 +113,8 @@ def gen_gguf(dtype: torch.dtype, filename: str):
     ]
 
     for shape, diagonal, input_strides, output_strides in _TEST_CASES_:
+        if dtype == bfloat16:  
+            dtype = torch.bfloat16
         input = random_tensor(shape, dtype)
         output = torch.empty(shape, dtype=dtype)
         

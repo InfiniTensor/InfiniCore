@@ -4,6 +4,7 @@ import gguf
 from typing import List
 import torch
 import torch.nn.functional as F
+from ml_dtypes import bfloat16
 
 # 直接从transformers库导入DeepseekV3TopkRouter
 from transformers.models.deepseek_v3.modular_deepseek_v3 import DeepseekV3TopkRouter
@@ -215,9 +216,9 @@ def gen_gguf(dtype: torch.dtype, filename: str):
 if __name__ == "__main__":
     _TENSOR_DTYPES_ = [np.float16, np.float32, bfloat16]
     dtype_filename_map = {
+        np.float16: "topk_router_f16.gguf",
+        np.float32: "topk_router_f32.gguf",
         bfloat16: "topk_router_bf16.gguf",
-        torch.float32: "topk_router_f32.gguf",
-        torch.float16: "topk_router_f16.gguf",
     }
     # 生成测试用例
     for dtype in _TENSOR_DTYPES_:

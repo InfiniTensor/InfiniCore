@@ -2,6 +2,7 @@ from typing import List
 
 import gguf
 import numpy as np
+import torch
 from gguf import GGMLQuantizationType
 from ml_dtypes import bfloat16
 
@@ -30,6 +31,14 @@ def np_dtype_to_ggml(tensor_dtype: np.dtype):
             "Only BF16, F16, F32, F64, BOOL, I8, I16, I32, I64 tensors are supported for now"
         )
 
+def tensor_to_numpy(tensor):
+    """PyTorch 的 bfloat16 类型不能直接转换为 numpy 数组，需要通过 float32 中转"""
+    if tensor.dtype == torch.bfloat16:
+        # 通过 float32 中转，然后转为 ml_dtypes.bfloat16
+        float32_array = tensor.detach().cpu().float().numpy()
+        return float32_array.astype(bfloat16)
+    else:
+        return tensor.detach().cpu().numpy()
 
 def gguf_strides(*args: int) -> list[int] | None:
     return list(args)[::-1] if args else None

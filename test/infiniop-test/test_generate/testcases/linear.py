@@ -3,8 +3,9 @@ from ast import List
 import numpy as np
 import gguf
 from typing import List
+from ml_dtypes import bfloat16
 
-from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides
+from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides, tensor_to_numpy
 
 class LinearTestCase(InfiniopTestCase):
     def __init__(
@@ -42,13 +43,15 @@ class LinearTestCase(InfiniopTestCase):
         # 写入输入张量 x
         test_writer.add_array(test_writer.gguf_key("x.shape"), self.x_shape)
         test_writer.add_array(test_writer.gguf_key("x.strides"), self.x_strides)
-        x_numpy = self.x.detach().cpu().numpy()
+        # x_numpy = self.x.detach().cpu().numpy()
+        x_numpy = tensor_to_numpy(self.x)
         test_writer.add_tensor(test_writer.gguf_key("x"), x_numpy, raw_dtype=np_dtype_to_ggml(x_numpy.dtype))
 
         # 写入权重矩阵 w
         test_writer.add_array(test_writer.gguf_key("w.shape"), self.w_shape)
         test_writer.add_array(test_writer.gguf_key("w.strides"), self.w_strides)
-        w_numpy = self.w.detach().cpu().numpy()
+        # w_numpy = self.w.detach().cpu().numpy()
+        w_numpy = tensor_to_numpy(self.w)
         test_writer.add_tensor(test_writer.gguf_key("w"), w_numpy, raw_dtype=np_dtype_to_ggml(w_numpy.dtype))
 
         # 写入偏置向量 b（如果存在）
@@ -56,7 +59,8 @@ class LinearTestCase(InfiniopTestCase):
             test_writer.add_array(test_writer.gguf_key("b.shape"), self.b_shape)
             if self.b_strides is not None:
                 test_writer.add_array(test_writer.gguf_key("b.strides"), self.b_strides)
-            b_numpy = self.b.detach().cpu().numpy()
+            # b_numpy = self.b.detach().cpu().numpy()
+            b_numpy = tensor_to_numpy(self.b)
             test_writer.add_tensor(test_writer.gguf_key("b"), b_numpy, raw_dtype=np_dtype_to_ggml(b_numpy.dtype))
         
         # 写入输出张量 y
@@ -65,7 +69,8 @@ class LinearTestCase(InfiniopTestCase):
             test_writer.gguf_key("y.strides"),
             gguf_strides(*self.y_strides if self.y_strides is not None else contiguous_gguf_strides(self.y_shape))
         )
-        y_numpy = self.y.detach().cpu().numpy()
+        # y_numpy = self.y.detach().cpu().numpy()
+        y_numpy = tensor_to_numpy(self.y)
         test_writer.add_tensor(
             test_writer.gguf_key("y"), y_numpy, raw_dtype=np_dtype_to_ggml(y_numpy.dtype)
         )
@@ -78,7 +83,8 @@ class LinearTestCase(InfiniopTestCase):
         
         # 使用FP64计算预期结果
         ans = torch.nn.functional.linear(x_fp64, w_fp64, b_fp64)
-        ans_numpy = y.detach().cpu().numpy()
+        # ans_numpy = y.detach().cpu().numpy()
+        ans_numpy = tensor_to_numpy(ans)
 
         # 写入预期结果
         test_writer.add_tensor(test_writer.gguf_key("ans"), ans_numpy, raw_dtype=gguf.GGMLQuantizationType.F64)
@@ -116,6 +122,8 @@ def gen_gguf(dtype: torch.dtype, filename: str):
     ]
 
     for x_shape, w_shape, b_shape, y_shape, x_strides, w_strides, b_strides, y_strides in _TEST_CASES_:
+        if dtype == bfloat16:  # 确保已经 import bfloat16
+            dtype = torch.bfloat16
         # 生成输入和权重
         x = torch.rand(*x_shape, dtype=dtype)
         w = torch.rand(*w_shape, dtype=dtype)

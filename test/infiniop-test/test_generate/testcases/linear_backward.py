@@ -3,8 +3,9 @@ from ast import List
 import numpy as np
 import gguf
 from typing import List
+from ml_dtypes import bfloat16
 
-from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides
+from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides, tensor_to_numpy
 
 class LinearBackwardTestCase(InfiniopTestCase):
     def __init__(
@@ -54,38 +55,44 @@ class LinearBackwardTestCase(InfiniopTestCase):
         # 写入输入数据 x
         test_writer.add_array(test_writer.gguf_key("x.shape"), self.x_shape)
         test_writer.add_array(test_writer.gguf_key("x.strides"), self.x_strides)
-        x_numpy = self.x.detach().cpu().numpy()
+        # x_numpy = self.x.detach().cpu().numpy()
+        x_numpy = tensor_to_numpy(self.x)
         test_writer.add_tensor(test_writer.gguf_key("x"), x_numpy, raw_dtype=np_dtype_to_ggml(x_numpy.dtype))
 
         # 写入权重 w
         test_writer.add_array(test_writer.gguf_key("w.shape"), self.w_shape)
         test_writer.add_array(test_writer.gguf_key("w.strides"), self.w_strides)
-        w_numpy = self.w.detach().cpu().numpy()
+        # w_numpy = self.w.detach().cpu().numpy()
+        w_numpy = tensor_to_numpy(self.w)
         test_writer.add_tensor(test_writer.gguf_key("w"), w_numpy, raw_dtype=np_dtype_to_ggml(w_numpy.dtype))
 
         # 写入偏置 b
         if self.b is not None:
             test_writer.add_array(test_writer.gguf_key("b.shape"), self.b_shape)
             test_writer.add_array(test_writer.gguf_key("b.strides"), self.b_strides)
-            b_numpy = self.b.detach().cpu().numpy()
+            # b_numpy = self.b.detach().cpu().numpy()
+            b_numpy = tensor_to_numpy(self.b)
             test_writer.add_tensor(test_writer.gguf_key("b"), b_numpy, raw_dtype=np_dtype_to_ggml(b_numpy.dtype))
 
         # 写入输出梯度 grad_y
         test_writer.add_array(test_writer.gguf_key("grad_y.shape"), self.grad_y_shape)
         test_writer.add_array(test_writer.gguf_key("grad_y.strides"), self.grad_y_strides)
-        grad_y_numpy = self.grad_y.detach().cpu().numpy()
+        # grad_y_numpy = self.grad_y.detach().cpu().numpy()
+        grad_y_numpy = tensor_to_numpy(self.grad_y)
         test_writer.add_tensor(test_writer.gguf_key("grad_y"), grad_y_numpy, raw_dtype=np_dtype_to_ggml(grad_y_numpy.dtype))
 
         # 写入grad_x, grad_w, grad_b的形状和步长和数据
         test_writer.add_array(test_writer.gguf_key("grad_x.shape"), self.x_shape)
         test_writer.add_array(test_writer.gguf_key("grad_x.strides"), self.grad_x_strides)
-        grad_x_numpy = self.grad_x.detach().cpu().numpy()
+        # grad_x_numpy = self.grad_x.detach().cpu().numpy()
+        grad_x_numpy = tensor_to_numpy(self.grad_x)
         test_writer.add_tensor(
             test_writer.gguf_key("grad_x"), grad_x_numpy, raw_dtype=np_dtype_to_ggml(grad_x_numpy.dtype)
         )
         test_writer.add_array(test_writer.gguf_key("grad_w.shape"), self.w_shape)
         test_writer.add_array(test_writer.gguf_key("grad_w.strides"), self.grad_w_strides)
-        grad_w_numpy = self.grad_w.detach().cpu().numpy()
+        # grad_w_numpy = self.grad_w.detach().cpu().numpy()
+        grad_w_numpy = tensor_to_numpy(self.grad_w)
         test_writer.add_tensor(
             test_writer.gguf_key("grad_w"), grad_w_numpy, raw_dtype=np_dtype_to_ggml(grad_w_numpy.dtype)
         )
@@ -93,7 +100,8 @@ class LinearBackwardTestCase(InfiniopTestCase):
             test_writer.add_array(test_writer.gguf_key("grad_b.shape"), self.b_shape)
             if self.grad_b_strides is not None:
                 test_writer.add_array(test_writer.gguf_key("grad_b.strides"), self.grad_b_strides)
-            grad_b_numpy = self.grad_b.detach().cpu().numpy()
+            # grad_b_numpy = self.grad_b.detach().cpu().numpy()
+            grad_b_numpy = tensor_to_numpy(self.grad_b)
             test_writer.add_tensor(
                 test_writer.gguf_key("grad_b"), grad_b_numpy, raw_dtype=np_dtype_to_ggml(grad_b_numpy.dtype)
             )
@@ -115,17 +123,20 @@ class LinearBackwardTestCase(InfiniopTestCase):
         # 写入计算得到的梯度
         # grad_x (输入梯度)
         ans_x_grad = ans_x.grad
+        # ans_x_grad_numpy = ans_x_grad.detach().cpu().numpy()
         ans_x_grad_numpy = ans_x_grad.detach().cpu().numpy()
         test_writer.add_tensor(test_writer.gguf_key("ans_grad_x"), ans_x_grad_numpy, raw_dtype=gguf.GGMLQuantizationType.F64)
 
         # grad_w (权重梯度)
         ans_w_grad = ans_w.grad
+        # ans_w_grad_numpy = ans_w_grad.detach().cpu().numpy()
         ans_w_grad_numpy = ans_w_grad.detach().cpu().numpy()
         test_writer.add_tensor(test_writer.gguf_key("ans_grad_w"), ans_w_grad_numpy, raw_dtype=gguf.GGMLQuantizationType.F64)
 
         # grad_b (偏置梯度)
         if ans_b is not None:
             ans_b_grad = ans_b.grad
+            # ans_b_grad_numpy = ans_b_grad.detach().cpu().numpy()
             ans_b_grad_numpy = ans_b_grad.detach().cpu().numpy()
             test_writer.add_tensor(test_writer.gguf_key("ans_grad_b"), ans_b_grad_numpy, raw_dtype=gguf.GGMLQuantizationType.F64)
 
@@ -163,6 +174,8 @@ def gen_gguf(dtype: torch.dtype, filename: str):
 
     for x_shape, w_shape, b_shape, grad_y_shape, x_strides, w_strides, b_strides, grad_y_strides, grad_x_strides, grad_w_strides, grad_b_strides in _TEST_CASES_:
         # 生成输入、权重和输出梯度
+        if dtype == bfloat16:  
+            dtype = torch.bfloat16
         x = torch.rand(*x_shape, dtype=dtype, requires_grad=True)
         w = torch.rand(*w_shape, dtype=dtype, requires_grad=True)
         b = torch.rand(*b_shape, dtype=dtype, requires_grad=True) if b_shape is not None else None
