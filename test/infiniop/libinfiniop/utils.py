@@ -70,6 +70,22 @@ class TestTensor(CTensor):
             self._torch_tensor = torch.rand(
                 torch_shape, dtype=to_torch_dtype(dt), device=torch_device_map[device]
             )
+        elif mode == "bool":
+            self._torch_tensor = torch.randint(
+                0,
+                2,
+                torch_shape,
+                dtype=to_torch_dtype(dt),
+                device=torch_device_map[device],
+            )
+        elif mode == "int":
+            self._torch_tensor = torch.randint(
+                -50,
+                50,
+                torch_shape,
+                dtype=to_torch_dtype(dt),
+                device=torch_device_map[device],
+            )
         elif mode == "zeros":
             self._torch_tensor = torch.zeros(
                 torch_shape, dtype=to_torch_dtype(dt), device=torch_device_map[device]
@@ -122,7 +138,9 @@ class TestTensor(CTensor):
 
 
 def to_torch_dtype(dt: InfiniDtype, compatability_mode=False):
-    if dt == InfiniDtype.I8:
+    if dt == InfiniDtype.BOOL:
+        return torch.bool
+    elif dt == InfiniDtype.I8:
         return torch.int8
     elif dt == InfiniDtype.I16:
         return torch.int16
@@ -329,6 +347,11 @@ def debug(actual, desired, atol=0, rtol=1e-2, equal_nan=False, verbose=True):
     if actual.dtype == torch.bfloat16 or desired.dtype == torch.bfloat16:
         actual = actual.to(torch.float32)
         desired = desired.to(torch.float32)
+
+    # 如果是Bool，全部转成01再比对
+    if actual.dtype == torch.bool or desired.dtype == torch.bool:
+        actual = actual.to(torch.int8)
+        desired = desired.to(torch.int8)
 
     print_discrepancy(actual, desired, atol, rtol, equal_nan, verbose)
     np.testing.assert_allclose(
