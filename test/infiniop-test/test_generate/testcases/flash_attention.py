@@ -100,6 +100,7 @@ class FlashAttentionTestCase(InfiniopTestCase):
         
     def write_test(self, test_writer: InfiniopTestWriter):
         super().write_test(test_writer)
+        # test_writer.add_array(test_writer.gguf_key("mask_type"), [self.mask_type,])
         test_writer.add_int32(test_writer.gguf_key("mask_type"), self.mask_type)
         
         if self.shape_q is not None:
@@ -172,40 +173,40 @@ def gen_gguf(dtype: np.dtype, filename: str):
     # ==============================================================================
     # These are not meant to be imported from other modules
     _TEST_CASES_ = [
-        # shape_q, shape_kv, mask_type
+        # shape_q, shape_kv, mask_type(0: None, 1: Full, 2: Causal)
         # inputLayout -> ((batch_size), seq_len, num_heads, head_dim)
-        ((10, 2, 4), (10, 2, 4), 0),
-        ((10, 2, 4), (10, 2, 4), 1),
-        ((10, 2, 4), (10, 2, 4), 2),
-        ((20, 2, 4), (10, 2, 4), 0),
-        ((10, 8, 4), (10, 2, 4), 1),
-        ((4, 10, 2, 4), (4, 10, 2, 4), 2),
-        ((4, 20, 2, 4), (4, 10, 2, 4), 0),
+        ((5, 2, 2), (5, 2, 2), 0),
+        ((13, 4, 4), (13, 4, 4), 0),
+        ((13, 4, 4), (13, 4, 4), 2),
+        ((4, 10, 2, 4), (4, 10, 2, 4), 0),
+        ((4, 20, 2, 4), (4, 10, 2, 4), 2),
         ((4, 10, 8, 4), (4, 10, 2, 4), 1),
     ]
     for shape_q, shape_kv, mask_type in _TEST_CASES_:
         q = np.random.rand(*shape_q).astype(dtype)
         k = np.random.rand(*shape_kv).astype(dtype)
         v = np.random.rand(*shape_kv).astype(dtype)
-        
+
         shape_mask = (q.shape[-3], k.shape[-3])
         mask = np.random.randint(0, 2, size=shape_mask).astype(np.float32)
         mask = np.where(mask == 1, -np.inf, mask)
             
-        out = np.empty(tuple(0 for _ in shape_q), dtype=dtype)
+        out = np.zeros(shape_q, dtype=dtype)
+        # out = np.empty(tuple(0 for _ in shape_out), dtype=dtype)
         
         shape_l = shape_q[:-1]
-        l = np.empty(tuple(0 for _ in shape_l), dtype=dtype)
+        l = np.zeros(shape_l, dtype=dtype)
         
         stride_q = None
-        stride_kv = None
+        stride_k = None
+        stride_v = None
         stride_out = None
         stride_l = None
         stride_mask = None
         
         q = process_zero_stride_tensor(q, stride_q)
-        k = process_zero_stride_tensor(k, stride_kv)
-        v = process_zero_stride_tensor(v, stride_kv)
+        k = process_zero_stride_tensor(k, stride_k)
+        v = process_zero_stride_tensor(v, stride_v)
         out = process_zero_stride_tensor(out, stride_out)
         l = process_zero_stride_tensor(l, stride_l)
         mask = process_zero_stride_tensor(mask, stride_mask)
@@ -222,7 +223,7 @@ def gen_gguf(dtype: np.dtype, filename: str):
             stride_v=stride_kv,
             out=out,
             shape_out=shape_q,
-            stride_out=stride_out,
+            stride_out=stride_q,
             l=l,
             shape_l=shape_l,
             stride_l=stride_l,
