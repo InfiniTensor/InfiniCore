@@ -45,14 +45,19 @@ infiniStatus_t calculate(
     float alpha,
     void *stream) 
 {
-    // 1. 创建 BatchMatMul operator
+    // 0. For muDNN development, refer to the official documentation and the following headers:
+    // - /usr/local/musa/include/mudnn_base.h
+    // - /usr/local/musa/include/mudnn_math.h
+    // - /usr/local/musa/include/mudnn.h
+
+    // 1. Create BatchMatMul operator
     auto matmul_operator = std::make_unique<::musa::dnn::BatchMatMul>();
     matmul_operator->SetComputeMode(::musa::dnn::BatchMatMul::ComputeMode::TENSOR);
 
-    // 2. 使用 _internal->useMudnn 来管理 muDNN handle
+    // 2. Use _internal->useMudnn to manage muDNN handle
     return _internal->useMudnn((musaStream_t)stream, [&](::musa::dnn::Handle &mudnn_handle) -> infiniStatus_t {
 
-        // 3. 创建 Tensor
+        // 3. Create BatchMatMul Tensor
         ::musa::dnn::Tensor out, left, right;
 
         if constexpr (std::is_same<Tdata, half>::value) {
@@ -65,12 +70,12 @@ infiniStatus_t calculate(
             right.SetType(::musa::dnn::Tensor::Type::FLOAT);
         }
 
-        // 4. 绑定地址
+        // 4. Bind BatchMatMul Tensor addr
         out.SetAddr(c);
         left.SetAddr(a);
         right.SetAddr(b);
 
-        // 5. 配置 Tensor A
+        // 5. Config Tensor left
         std::array<int64_t, 3> a_dims_array;
         std::array<int64_t, 3> a_stride_array;
         if (info.a_matrix.col_stride != 1) {
@@ -87,7 +92,7 @@ infiniStatus_t calculate(
                            1 };
         left.SetNdInfo(static_cast<int>(a_dims_array.size()), a_dims_array.data(), a_stride_array.data());
 
-        // 6. 配置 Tensor B
+        // 6. Config Tensor right
         std::array<int64_t, 3> b_dims_array;
         std::array<int64_t, 3> b_stride_array;
         if (info.b_matrix.col_stride != 1) {
@@ -104,7 +109,7 @@ infiniStatus_t calculate(
                            1 };
         right.SetNdInfo(static_cast<int>(b_dims_array.size()), b_dims_array.data(), b_stride_array.data());
 
-        // 7. 配置输出 Tensor C
+        // 7. Confit Tensor out, muDNN BatchMatMul output only support row-major tensor
         std::array<int64_t, 3> c_dims_array = { static_cast<int64_t>(info.batch),
                                                 static_cast<int64_t>(info.m),
                                                 static_cast<int64_t>(info.n) };
@@ -120,7 +125,7 @@ infiniStatus_t calculate(
             return ::musa::dnn::MemoryHandler(ptr, [](void* p) { if(p) musaFree(p); });
         };
 
-        // 9. Tensor 转置
+        // 9. Tensor left and Tensor right transpose config
         if (info.a_matrix.col_stride == 1 && info.b_matrix.col_stride != 1)
             matmul_operator->SetTranspose(false, true);
         else if (info.a_matrix.col_stride != 1 && info.b_matrix.col_stride == 1)
@@ -130,7 +135,7 @@ infiniStatus_t calculate(
         else
             matmul_operator->SetTranspose(false, false);
 
-        // 10. Workspace 大小
+        // 10. BatchMatMul workspace config
         size_t workspace_size_in_bytes = 0;
         matmul_operator->GetWorkspaceSize(mudnn_handle, workspace_size_in_bytes, out, left, right);
 
@@ -161,7 +166,6 @@ infiniStatus_t calculate(
         return INFINI_STATUS_SUCCESS;
     });
 }
-
 
 
 infiniStatus_t Descriptor::calculate(void *workspace,
