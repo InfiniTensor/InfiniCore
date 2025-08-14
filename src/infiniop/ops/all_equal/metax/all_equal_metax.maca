@@ -1,0 +1,213 @@
+#include "../../../elementwise/metax/elementwise_metax.h"
+
+#include "kernel.cuh"
+#include "all_equal_metax.h"
+#include <cstdint>
+namespace op::all_equal::metax {
+
+struct Descriptor::Opaque {
+    std::shared_ptr<device::metax::Handle::Internal> internal;
+};
+
+Descriptor::~Descriptor() {
+    delete _opaque;
+}
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t out_desc,
+    std::vector<infiniopTensorDescriptor_t> input_desc_vec) {
+
+    const auto &a_desc = input_desc_vec.at(0);
+    const auto &b_desc = input_desc_vec.at(1);
+    const auto &c_shape = out_desc->shape();
+    const auto &a_shape = a_desc->shape();
+    const auto &b_shape = b_desc->shape();
+
+    auto dtype = a_desc->dtype();
+
+    CHECK_DTYPE(dtype, INFINI_DTYPE_BOOL, INFINI_DTYPE_I8, INFINI_DTYPE_I16, INFINI_DTYPE_I32, INFINI_DTYPE_I64, INFINI_DTYPE_BF16, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64);
+
+    CHECK_SAME_SHAPE(a_shape, b_shape);
+
+    auto info_result = AllEqualInfo::create(out_desc, input_desc_vec);
+    CHECK_RESULT(info_result);
+    auto info = info_result.take();
+    auto workspace_size = info.getMetaMemSize() + info.getInputSize() * sizeof(void *);
+
+    auto opaque_ptr = new Opaque{reinterpret_cast<device::metax::Handle *>(handle_)->internal()};
+    info_result.take();
+
+    *desc_ptr = new Descriptor(opaque_ptr, std::move(info), workspace_size, handle_->device, handle_->device_id);
+
+    return INFINI_STATUS_SUCCESS;
+}
+template <size_t N>
+infiniStatus_t infoToDevice(
+    const op::all_equal::AllEqualInfo &info,
+    void *workspace,
+    const void *const *h_inputs_arr,
+    const void **&d_inputs_arr,
+    const bool *&d_input_contiguous,
+    const bool *&d_input_broadcasted,
+    const ptrdiff_t *&d_output_strides,
+    const size_t *&d_input_shapes,
+    const ptrdiff_t *&d_input_strides,
+    hcStream_t stream) {
+
+    constexpr auto input_size = N;
+    const auto ndim = info.getNdim();
+    constexpr auto input_arr_size = N * sizeof(*h_inputs_arr);
+    const int8_t *info_meta_start = info.getMetaStart();
+    const int8_t *d_meta_start = reinterpret_cast<int8_t *>(workspace) + input_arr_size;
+
+    // copy the input pointer array and meta to device
+    CHECK_METAX(hcMemcpyAsync(workspace, h_inputs_arr, input_arr_size, hcMemcpyHostToDevice, stream));
+    CHECK_METAX(hcMemcpyAsync((void *)d_meta_start, info_meta_start, info.getMetaMemSize(), hcMemcpyHostToDevice, stream));
+
+    // offset/assign the pointers
+    d_inputs_arr = reinterpret_cast<const void **>(workspace);
+    d_output_strides = reinterpret_cast<const ptrdiff_t *>(d_meta_start);
+    d_input_shapes = reinterpret_cast<const size_t *>(d_output_strides + ndim);
+    d_input_strides = reinterpret_cast<const ptrdiff_t *>(d_input_shapes + input_size * ndim);
+    d_input_contiguous = reinterpret_cast<const bool *>(d_input_strides + input_size * ndim);
+    d_input_broadcasted = reinterpret_cast<const bool *>(d_input_contiguous + input_size);
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+template <unsigned int BLOCK_SIZE, typename Tdata>
+infiniStatus_t launchCompareKernel(const AllEqualInfo &info, void *workspace, std::vector<const void *> inputs, uint8_t *flags, void *stream) {
+    // Device pointers
+    const void **d_inputs_arr = nullptr;
+    const bool *d_input_contiguous = nullptr;
+    const bool *d_input_broadcasted = nullptr;
+    const ptrdiff_t *d_output_strides = nullptr;
+    const size_t *d_input_shapes = nullptr;
+    const ptrdiff_t *d_input_strides = nullptr;
+
+    CHECK_STATUS(infoToDevice<2>(info, workspace, inputs.data(), d_inputs_arr,
+                                 d_input_contiguous, d_input_broadcasted,
+                                 d_output_strides,
+                                 d_input_shapes, d_input_strides, reinterpret_cast<hcStream_t>(stream)));
+
+    const std::size_t input_numel = info.getInputNumel();
+    const std::size_t GRID_SIZE = (input_numel + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    compareKernel<BLOCK_SIZE, Tdata><<<GRID_SIZE, BLOCK_SIZE, 0, reinterpret_cast<hcStream_t>(stream)>>>(input_numel, info.getNdim(), d_input_contiguous, d_input_broadcasted, d_input_shapes, d_output_strides, d_input_strides, reinterpret_cast<const void **>(d_inputs_arr), flags);
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+template <unsigned int BLOCK_SIZE>
+infiniStatus_t launchCountKernel(uint8_t *flags, unsigned int *count, std::size_t input_numel, void *stream) {
+    const std::size_t GRID_SIZE = (input_numel + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    countKernel<BLOCK_SIZE><<<GRID_SIZE, BLOCK_SIZE, 0, reinterpret_cast<hcStream_t>(stream)>>>(flags, count, input_numel);
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *output,
+    std::vector<const void *> inputs,
+    void *stream) const {
+
+    if (workspace_size < _workspace_size) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+
+    const std::size_t input_numel = _info.getInputNumel();
+    std::vector<uint8_t> flags(input_numel, 0);
+    uint8_t *h_flags = flags.data();
+    uint8_t *d_flags = nullptr;
+    hcMalloc(&d_flags, input_numel * sizeof(uint8_t));
+    hcMemcpy(d_flags, h_flags, input_numel * sizeof(uint8_t), hcMemcpyHostToDevice);
+    unsigned int h_count{};
+    unsigned int *d_count;
+    hcMalloc(&d_count, sizeof(unsigned int));
+    hcMemset(d_count, 0, sizeof(unsigned int));
+
+    const std::size_t BLOCK_SIZE = 256;
+    bool ans{false};
+    switch (_info._dtype) {
+    case INFINI_DTYPE_BOOL:
+        launchCompareKernel<BLOCK_SIZE, bool>(_info, workspace, inputs, d_flags, stream);
+        launchCountKernel<BLOCK_SIZE>(d_flags, d_count, input_numel, stream);
+        hcMemcpy(&h_count, d_count, sizeof(unsigned int), hcMemcpyDeviceToHost);
+        ans = (h_count == 0);
+        hcMemcpy(output, &ans, sizeof(bool), hcMemcpyHostToDevice);
+        break;
+    case INFINI_DTYPE_I8:
+        launchCompareKernel<BLOCK_SIZE, int8_t>(_info, workspace, inputs, d_flags, stream);
+        launchCountKernel<BLOCK_SIZE>(d_flags, d_count, input_numel, stream);
+        hcMemcpy(&h_count, d_count, sizeof(unsigned int), hcMemcpyDeviceToHost);
+        ans = (h_count == 0);
+        hcMemcpy(output, &ans, sizeof(bool), hcMemcpyHostToDevice);
+        break;
+    case INFINI_DTYPE_I16: {
+        launchCompareKernel<BLOCK_SIZE, int16_t>(_info, workspace, inputs, d_flags, stream);
+        launchCountKernel<BLOCK_SIZE>(d_flags, d_count, input_numel, stream);
+        hcMemcpy(&h_count, d_count, sizeof(unsigned int), hcMemcpyDeviceToHost);
+        ans = (h_count == 0);
+        hcMemcpy(output, &ans, sizeof(bool), hcMemcpyHostToDevice);
+        break;
+    }
+    case INFINI_DTYPE_I32: {
+        launchCompareKernel<BLOCK_SIZE, int32_t>(_info, workspace, inputs, d_flags, stream);
+        launchCountKernel<BLOCK_SIZE>(d_flags, d_count, input_numel, stream);
+        hcMemcpy(&h_count, d_count, sizeof(unsigned int), hcMemcpyDeviceToHost);
+        ans = (h_count == 0);
+        hcMemcpy(output, &ans, sizeof(bool), hcMemcpyHostToDevice);
+        break;
+    }
+    case INFINI_DTYPE_I64: {
+        launchCompareKernel<BLOCK_SIZE, int64_t>(_info, workspace, inputs, d_flags, stream);
+        launchCountKernel<BLOCK_SIZE>(d_flags, d_count, input_numel, stream);
+        hcMemcpy(&h_count, d_count, sizeof(unsigned int), hcMemcpyDeviceToHost);
+        ans = (h_count == 0);
+        hcMemcpy(output, &ans, sizeof(bool), hcMemcpyHostToDevice);
+        break;
+    }
+    case INFINI_DTYPE_BF16: {
+        launchCompareKernel<BLOCK_SIZE, hpcc_bfloat16>(_info, workspace, inputs, d_flags, stream);
+        launchCountKernel<BLOCK_SIZE>(d_flags, d_count, input_numel, stream);
+        hcMemcpy(&h_count, d_count, sizeof(unsigned int), hcMemcpyDeviceToHost);
+        ans = (h_count == 0);
+        hcMemcpy(output, &ans, sizeof(bool), hcMemcpyHostToDevice);
+        break;
+    }
+    case INFINI_DTYPE_F16: {
+        launchCompareKernel<BLOCK_SIZE, half>(_info, workspace, inputs, d_flags, stream);
+        launchCountKernel<BLOCK_SIZE>(d_flags, d_count, input_numel, stream);
+        hcMemcpy(&h_count, d_count, sizeof(unsigned int), hcMemcpyDeviceToHost);
+        ans = (h_count == 0);
+        hcMemcpy(output, &ans, sizeof(bool), hcMemcpyHostToDevice);
+        break;
+    }
+    case INFINI_DTYPE_F32: {
+        launchCompareKernel<BLOCK_SIZE, float>(_info, workspace, inputs, d_flags, stream);
+        launchCountKernel<BLOCK_SIZE>(d_flags, d_count, input_numel, stream);
+        hcMemcpy(&h_count, d_count, sizeof(unsigned int), hcMemcpyDeviceToHost);
+        ans = (h_count == 0);
+        hcMemcpy(output, &ans, sizeof(bool), hcMemcpyHostToDevice);
+        break;
+    }
+    case INFINI_DTYPE_F64: {
+        launchCompareKernel<BLOCK_SIZE, double>(_info, workspace, inputs, d_flags, stream);
+        launchCountKernel<BLOCK_SIZE>(d_flags, d_count, input_numel, stream);
+        hcMemcpy(&h_count, d_count, sizeof(unsigned int), hcMemcpyDeviceToHost);
+        ans = (h_count == 0);
+        hcMemcpy(output, &ans, sizeof(bool), hcMemcpyHostToDevice);
+        break;
+    }
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
+    hcFree(d_count);
+    hcFree(d_flags);
+
+    return INFINI_STATUS_SUCCESS;
+}
+} // namespace op::all_equal::metax
