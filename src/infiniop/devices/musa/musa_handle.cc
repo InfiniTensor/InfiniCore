@@ -45,7 +45,9 @@ infiniStatus_t Handle::Internal::useMudnn(musaStream_t stream, const Fn<::musa::
     if (opt_handle.has_value()) {
         handle = std::move(*opt_handle);
     } else {
-        handle = std::make_unique<::musa::dnn::Handle>();
+        int dev_id = 0;
+        musaGetDevice(&dev_id);
+        handle = std::make_unique<::musa::dnn::Handle>(dev_id);
     }
     CHECK_MUDNN(handle->SetStream(stream));
     CHECK_STATUS(f(*handle));
