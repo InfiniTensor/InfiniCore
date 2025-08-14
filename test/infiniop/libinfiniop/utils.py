@@ -608,6 +608,6 @@ def get_sync_func(device):
     if device == InfiniDeviceEnum.CPU or device == InfiniDeviceEnum.CAMBRICON:
         sync = None
     else:
-        sync = getattr(torch, infiniDeviceEnum_str_map[device]).synchronize
+        sync = getattr(torch, torch_device_map[device]).synchronize
 
     return sync
