@@ -102,11 +102,6 @@ __C infiniStatus_t infiniopGetSwiGLUWorkspaceSize(infiniopSwiGLUDescriptor_t des
 #ifdef ENABLE_ASCEND_API
         GET(INFINI_DEVICE_ASCEND, ascend);
 #endif
-#ifdef ENABLE_MTHREADS_GPU
-    case DevMthreadsGpu: {
-        return musaGetSwiGLUWorkspaceSize((SwiGLUMusaDescriptor_t)desc, size);
-    }
-#endif
     }
 
 #undef GET

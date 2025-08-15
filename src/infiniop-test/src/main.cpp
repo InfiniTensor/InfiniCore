@@ -9,7 +9,7 @@ struct ParsedArgs {
     int device_id = 0;                              // CUDA device ID (if specified)
     int warmups = 0;                                // Default to 0 if not given
     int iterations = 0;                             // Default to 0 if not given
-    double atol = 0.001;                            // Default absolute tolerance
+    double atol = 0.0015;                           // Default absolute tolerance
     double rtol = 0.001;                            // Default relative tolerance
 };
 

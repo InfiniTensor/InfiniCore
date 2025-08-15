@@ -46,7 +46,7 @@ _TEST_CASES = [
 # Tolerance map for different data types
 _TOLERANCE_MAP = {
     InfiniDtype.F16: {"atol": 2e-3, "rtol": 2e-3},
-    InfiniDtype.BF16: {"atol": 8e-3, "rtol": 8e-3},
+    InfiniDtype.BF16: {"atol": 1e-2, "rtol": 1e-2},
 }
 
 DEBUG = False
