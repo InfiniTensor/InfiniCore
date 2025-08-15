@@ -1,6 +1,24 @@
 #include "../../../devices/musa/common_musa.h"
-#include "../cuda/rms_norm_kernel.cuh"
-#include "rms_norm_musa.cuh"
+#include "rms_norm_musa.h"
+
+#include "../../../devices/musa/musa_kernel_common.h"
+#include <cub/block/block_reduce.cuh>
+
+#include "../../../reduce/cuda/reduce.cuh"
+
+#include "../cuda/kernel.cuh"
+
+template <unsigned int BLOCK_SIZE, typename Tcompute, typename Tdata, typename Tweight>
+INFINIOP_MUSA_KERNEL rmsnormKernel(
+    Tdata *__restrict__ y,
+    ptrdiff_t stride_y,
+    const Tdata *__restrict__ x,
+    ptrdiff_t stride_x,
+    const Tweight *__restrict__ w,
+    size_t dim,
+    float epsilon) {
+    rmsnormBlock<BLOCK_SIZE, Tcompute>(y, stride_y, x, stride_x, w, dim, epsilon);
+}
 
 namespace op::rms_norm::musa {
 
@@ -46,20 +64,24 @@ infiniStatus_t launchKernel(
     float epsilon,
     musaStream_t musa_stream) {
 
-#define LAUNCH_KERNEL(Tdata, Tweight, Tcompute)                                                     \
-    rmsnormBlock<BLOCK_SIZE, Tdata, Tweight, Tcompute><<<batch_size, BLOCK_SIZE, 0, musa_stream>>>( \
-        reinterpret_cast<Tdata *>(y),                                                               \
-        stride_y,                                                                                   \
-        reinterpret_cast<const Tdata *>(x),                                                         \
-        stride_x,                                                                                   \
-        reinterpret_cast<const Tweight *>(w),                                                       \
-        dim,                                                                                        \
+#define LAUNCH_KERNEL(Tdata, Tweight, Tcompute)                                                      \
+    rmsnormKernel<BLOCK_SIZE, Tcompute, Tdata, Tweight><<<batch_size, BLOCK_SIZE, 0, musa_stream>>>( \
+        reinterpret_cast<Tdata *>(y),                                                                \
+        stride_y,                                                                                    \
+        reinterpret_cast<const Tdata *>(x),                                                          \
+        stride_x,                                                                                    \
+        reinterpret_cast<const Tweight *>(w),                                                        \
+        dim,                                                                                         \
         epsilon)
 
     if (atype == INFINI_DTYPE_F16 && wtype == INFINI_DTYPE_F16) {
         LAUNCH_KERNEL(half, half, float);
     } else if (atype == INFINI_DTYPE_F16 && wtype == INFINI_DTYPE_F32) {
         LAUNCH_KERNEL(half, float, float);
+    } else if (atype == INFINI_DTYPE_BF16 && wtype == INFINI_DTYPE_BF16) {
+        LAUNCH_KERNEL(__mt_bfloat16, __mt_bfloat16, float);
+    } else if (atype == INFINI_DTYPE_BF16 && wtype == INFINI_DTYPE_F32) {
+        LAUNCH_KERNEL(__mt_bfloat16, float, float);
     } else if (atype == INFINI_DTYPE_F32 && wtype == INFINI_DTYPE_F32) {
         LAUNCH_KERNEL(float, float, float);
     } else {
@@ -87,8 +109,12 @@ infiniStatus_t Descriptor::calculate(
     auto musa_stream = reinterpret_cast<musaStream_t>(stream);
 
     // launch kernel with different block sizes
-    if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_1024) {
-        CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_1024>(batch_size, dim, y, _info.atype, stride_y, x, stride_x, w, _info.wtype, _info.epsilon, musa_stream));
+    if (_opaque->internal->maxThreadsPerBlock() == MUSA_BLOCK_SIZE_1024) {
+        CHECK_STATUS(launchKernel<MUSA_BLOCK_SIZE_1024>(batch_size, dim, y, _info.atype, stride_y, x, stride_x, w, _info.wtype, _info.epsilon, musa_stream));
+    } else if (_opaque->internal->maxThreadsPerBlock() == MUSA_BLOCK_SIZE_512) {
+        CHECK_STATUS(launchKernel<MUSA_BLOCK_SIZE_512>(batch_size, dim, y, _info.atype, stride_y, x, stride_x, w, _info.wtype, _info.epsilon, musa_stream));
+    } else if (_opaque->internal->maxThreadsPerBlock() == MUSA_BLOCK_SIZE_2048) {
+        CHECK_STATUS(launchKernel<MUSA_BLOCK_SIZE_2048>(batch_size, dim, y, _info.atype, stride_y, x, stride_x, w, _info.wtype, _info.epsilon, musa_stream));
     } else {
         return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
     }
