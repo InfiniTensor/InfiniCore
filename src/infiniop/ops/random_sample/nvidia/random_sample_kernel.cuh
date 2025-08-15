@@ -1,4 +1,4 @@
-﻿#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
+#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 #include "infinicore.h"
 #include <cub/device/device_radix_sort.cuh>
 #include <cub/device/device_reduce.cuh>
@@ -6,7 +6,7 @@
 
 namespace op::random_sample::nvidia {
 
-// ↓↓↓ 重新封装 cub api，减少模板参数，方便调用
+// 重新封装 cub api，减少模板参数，方便调用
 
 template <class T>
 static cudaError argMax_(
@@ -16,6 +16,7 @@ static cudaError argMax_(
     void *workspace_ptr,
     size_t &workspace_len,
     cudaStream_t stream) {
+    // Use CUB's ArgMax with KeyValuePair output
     return cub::DeviceReduce::ArgMax(
         workspace_ptr, workspace_len,
         logits, kv_pair, n,
@@ -49,8 +50,8 @@ static cudaError inclusiveSum(
         stream);
 }
 
-// ↑↑↑ 重新封装 cub api，减少模板参数，方便调用
-// ↓↓↓ 计算 workspace
+// 重新封装 cub api，减少模板参数，方便调用
+// 计算 workspace
 
 // 地址对齐到 256
 static constexpr size_t align256(size_t size) {
@@ -94,8 +95,8 @@ utils::Result<size_t> calculateWorkspace(size_t n_) {
     return utils::Result<size_t>(cub::Max()(argmax, size_random));
 }
 
-// ↑↑↑ 计算 workspace
-// ↓↓↓ 通过特化将 fp16_t 转换为 half
+// 计算 workspace
+// 通过特化将 fp16_t 转换为 half
 
 template <class Tval>
 struct CudaTval {
@@ -112,8 +113,8 @@ struct CudaTval<bf16_t> {
     using Type = __nv_bfloat16;
 };
 
-// ↑↑↑ 通过特化将 fp16_t 转换为 half
-// ↓↓↓ 用于采样过程的小型 kernel
+// 通过特化将 fp16_t 转换为 half
+// 用于采样过程的小型 kernel
 
 // cuda toolkit 11.x 带的 cub::DeviceReduce::ArgMax 只接受 cub::KeyValuePair<int, Tval> 输出。
 // 这个 kernel 用于取出序号
@@ -171,7 +172,7 @@ static __global__ void randomSampleKernel(
     }
 }
 
-// ↑↑↑ 用于采样过程的小型 kernel
+// 用于采样过程的小型 kernel
 
 struct Algo {
     int block_size;

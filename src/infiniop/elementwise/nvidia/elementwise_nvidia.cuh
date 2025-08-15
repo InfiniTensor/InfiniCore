@@ -2,9 +2,12 @@
 #define __INFINIOP_ELEMENTWISE_CUDA_H__
 
 #include "../../../utils.h"
+#include "elementwise_nvidia_api.cuh"
+
+#ifdef __CUDACC__
+
 #include "../../devices/nvidia/nvidia_common.cuh"
 #include "../../devices/nvidia/nvidia_kernel_common.cuh"
-#include "elementwise_nvidia_api.cuh"
 
 namespace op::elementwise::nvidia {
 
@@ -296,6 +299,7 @@ private:
         const int8_t *d_meta_start = reinterpret_cast<int8_t *>(workspace) + input_arr_size;
 
         // copy the input pointer array and meta to device
+        printf("h_inputs_arr=%p, input_arr_size=%lu, d_meta_start=%p, meta_mem_size=%lu\n", h_inputs_arr, input_arr_size, d_meta_start, info.getMetaMemSize());
         CHECK_CUDA(cudaMemcpyAsync(workspace, h_inputs_arr, input_arr_size, cudaMemcpyHostToDevice, stream));
         CHECK_CUDA(cudaMemcpyAsync((void *)d_meta_start, info_meta_start, info.getMetaMemSize(), cudaMemcpyHostToDevice, stream));
 
@@ -415,5 +419,7 @@ infiniStatus_t DeviceImpl::calculate(const op::elementwise::ElementwiseInfo &inf
 }
 
 } // namespace op::elementwise::nvidia
+
+#endif // __CUDACC__
 
 #endif // __INFINIOP_ELEMENTWISE_CUDA_H__

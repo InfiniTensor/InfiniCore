@@ -66,23 +66,40 @@ class TestTensor(CTensor):
                 torch_strides.append(strides[i])
             else:
                 torch_shape.append(shape[i])
+        
+        # Use compatibility mode for unsupported unsigned types
+        use_compat = dt in [InfiniDtype.U16, InfiniDtype.U32, InfiniDtype.U64]
+        torch_dtype = to_torch_dtype(dt, compatability_mode=use_compat)
+        
         if mode == "random":
-            self._torch_tensor = torch.rand(
-                torch_shape, dtype=to_torch_dtype(dt), device=torch_device_map[device]
-            )
+            if torch_dtype in [torch.int8, torch.int16, torch.int32, torch.int64, torch.uint8, torch.uint16, torch.uint32, torch.uint64]:
+                # For integer types, use randint to avoid the "check_uniform_bounds" error
+                self._torch_tensor = torch.randint(
+                    0, 10, torch_shape, dtype=torch_dtype, device=torch_device_map[device]
+                )
+            elif torch_dtype == torch.bool:
+                # For boolean type, use randint with 0 or 1
+                self._torch_tensor = torch.randint(
+                    0, 2, torch_shape, dtype=torch_dtype, device=torch_device_map[device]
+                )
+            else:
+                # For floating point types, use rand
+                self._torch_tensor = torch.rand(
+                    torch_shape, dtype=torch_dtype, device=torch_device_map[device]
+                )
         elif mode == "zeros":
             self._torch_tensor = torch.zeros(
-                torch_shape, dtype=to_torch_dtype(dt), device=torch_device_map[device]
+                torch_shape, dtype=torch_dtype, device=torch_device_map[device]
             )
         elif mode == "ones":
             self._torch_tensor = torch.ones(
-                torch_shape, dtype=to_torch_dtype(dt), device=torch_device_map[device]
+                torch_shape, dtype=torch_dtype, device=torch_device_map[device]
             )
         elif mode == "manual":
             assert set_tensor is not None
             assert torch_shape == list(set_tensor.shape)
             assert torch_strides == list(set_tensor.stride())
-            self._torch_tensor = set_tensor.to(to_torch_dtype(dt)).to(
+            self._torch_tensor = set_tensor.to(torch_dtype).to(
                 torch_device_map[device]
             )
         else:
@@ -132,6 +149,8 @@ def to_torch_dtype(dt: InfiniDtype, compatability_mode=False):
         return torch.int64
     elif dt == InfiniDtype.U8:
         return torch.uint8
+    elif dt == InfiniDtype.BOOL:
+        return torch.bool
     elif dt == InfiniDtype.F16:
         return torch.float16
     elif dt == InfiniDtype.BF16:

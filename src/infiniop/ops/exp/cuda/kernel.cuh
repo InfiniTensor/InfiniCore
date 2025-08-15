@@ -12,7 +12,10 @@ public:
         } else if constexpr (std::is_same_v<T, half>) {
             return hexp(x);
         } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
-            return __float2bfloat16(expf(__bfloat162float(x)));
+            // 使用double作为中间计算类型以提高精度
+            double x_double = static_cast<double>(__bfloat162float(x));
+            double result = ::exp(x_double);
+            return __float2bfloat16(static_cast<float>(result));
         } else if constexpr (std::is_same_v<T, float>) {
             return expf(x);
         } else {

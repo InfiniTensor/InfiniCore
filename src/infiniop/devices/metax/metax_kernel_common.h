@@ -67,3 +67,82 @@ __forceinline__ __device__ __hpcc_bfloat16
 exp_(const __hpcc_bfloat16 x) {
     return hexp(x);
 }
+
+__forceinline__ __device__ float
+sin_(const float val) {
+    return sinf(val);
+}
+
+__forceinline__ __device__ long double
+sin_(const long double val) {
+    return sin(val);
+}
+
+__forceinline__ __device__ double
+sin_(const double val) {
+    return sin(val);
+}
+
+__forceinline__ __device__ __half
+sin_(const __half x) {
+    return hsin(x);
+}
+
+__forceinline__ __device__ __hpcc_bfloat16
+sin_(const __hpcc_bfloat16 x) {
+    return hsin(x);
+}
+
+__forceinline__ __device__ float
+cos_(const float val) {
+    return cosf(val);
+}
+
+__forceinline__ __device__ long double
+cos_(const long double val) {
+    return cos(val);
+}
+
+__forceinline__ __device__ double
+cos_(const double val) {
+    return cos(val);
+}
+
+__forceinline__ __device__ __half
+cos_(const __half x) {
+    float x_float = __half2float(x);
+    return __float2half(cosf(x_float));
+}
+
+__forceinline__ __device__ __hpcc_bfloat16
+cos_(const __hpcc_bfloat16 x) {
+    float x_float = __bfloat162float(x);
+    return __float2bfloat16(cosf(x_float));
+}
+
+__forceinline__ __device__ float
+tanh_(const float val) {
+    return tanhf(val);
+}
+
+__forceinline__ __device__ long double
+tanh_(const long double val) {
+    return tanh(val);
+}
+
+__forceinline__ __device__ double
+tanh_(const double val) {
+    return tanh(val);
+}
+
+__forceinline__ __device__ __half
+tanh_(const __half x) {
+    float x_float = __half2float(x);
+    return __float2half(tanhf(x_float));
+}
+
+__forceinline__ __device__ __hpcc_bfloat16
+tanh_(const __hpcc_bfloat16 x) {
+    float x_float = __bfloat162float(x);
+    return __float2bfloat16(tanhf(x_float));
+}

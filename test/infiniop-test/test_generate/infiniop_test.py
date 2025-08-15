@@ -19,9 +19,11 @@ def np_dtype_to_ggml(tensor_dtype: np.dtype):
         return GGMLQuantizationType.I32
     elif tensor_dtype == np.int64:
         return GGMLQuantizationType.I64
+    elif tensor_dtype == np.bool_:
+        return GGMLQuantizationType.I8  # Use I8 to represent bool in GGUF
     else:
         raise ValueError(
-            "Only F16, F32, F64, I8, I16, I32, I64 tensors are supported for now"
+            "Only F16, F32, F64, I8, I16, I32, I64, BOOL tensors are supported for now"
         )
 
 

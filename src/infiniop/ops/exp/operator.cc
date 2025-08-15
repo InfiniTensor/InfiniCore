@@ -6,8 +6,12 @@
 #include "cpu/exp_cpu.h"
 #endif
 
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
 #include "nvidia/exp_nv.cuh"
+#endif
+
+#ifdef ENABLE_METAX_API
+#include "metax/exp_metax.h"
 #endif
 
 __C infiniStatus_t infiniopCreateExpDescriptor(
@@ -34,6 +38,14 @@ __C infiniStatus_t infiniopCreateExpDescriptor(
         CREATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
 
+#ifdef ENABLE_ILUVATAR_API
+        CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax);
+#endif
+
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -54,6 +66,12 @@ __C infiniStatus_t infiniopGetExpWorkspaceSize(infiniopExpDescriptor_t desc, siz
 #endif
 #ifdef ENABLE_NVIDIA_API
         GET(INFINI_DEVICE_NVIDIA, nvidia)
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        GET(INFINI_DEVICE_ILUVATAR, nvidia)
+#endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -86,6 +104,14 @@ __C infiniStatus_t infiniopExp(
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
 
+#ifdef ENABLE_ILUVATAR_API
+        CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax);
+#endif
+
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -109,6 +135,14 @@ infiniopDestroyExpDescriptor(infiniopExpDescriptor_t desc) {
 
 #ifdef ENABLE_NVIDIA_API
         DELETE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+
+#ifdef ENABLE_ILUVATAR_API
+        DELETE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+
+#ifdef ENABLE_METAX_API
+        DELETE(INFINI_DEVICE_METAX, metax);
 #endif
 
     default:

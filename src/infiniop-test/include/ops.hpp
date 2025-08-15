@@ -13,10 +13,18 @@ DECLARE_INFINIOP_TEST(rope)
 DECLARE_INFINIOP_TEST(clip)
 DECLARE_INFINIOP_TEST(swiglu)
 DECLARE_INFINIOP_TEST(add)
+DECLARE_INFINIOP_TEST(cast)
 DECLARE_INFINIOP_TEST(causal_softmax)
 DECLARE_INFINIOP_TEST(rearrange)
 DECLARE_INFINIOP_TEST(sub)
 DECLARE_INFINIOP_TEST(exp)
+DECLARE_INFINIOP_TEST(sin)
+DECLARE_INFINIOP_TEST(cos)
+DECLARE_INFINIOP_TEST(tanh)
+DECLARE_INFINIOP_TEST(hardswish)
+DECLARE_INFINIOP_TEST(sigmoid_backward)
+DECLARE_INFINIOP_TEST(leaky_relu)
+DECLARE_INFINIOP_TEST(where)
 
 #define REGISTER_INFINIOP_TEST(name)                      \
     {                                                     \
@@ -36,6 +44,7 @@ DECLARE_INFINIOP_TEST(exp)
         REGISTER_INFINIOP_TEST(gemm)           \
         REGISTER_INFINIOP_TEST(random_sample)  \
         REGISTER_INFINIOP_TEST(add)            \
+        REGISTER_INFINIOP_TEST(cast)           \
         REGISTER_INFINIOP_TEST(mul)            \
         REGISTER_INFINIOP_TEST(clip)           \
         REGISTER_INFINIOP_TEST(swiglu)         \
@@ -45,6 +54,13 @@ DECLARE_INFINIOP_TEST(exp)
         REGISTER_INFINIOP_TEST(rearrange)      \
         REGISTER_INFINIOP_TEST(sub)            \
         REGISTER_INFINIOP_TEST(exp)            \
+        REGISTER_INFINIOP_TEST(sin)            \
+        REGISTER_INFINIOP_TEST(cos)            \
+        REGISTER_INFINIOP_TEST(tanh)           \
+        REGISTER_INFINIOP_TEST(hardswish)      \
+        REGISTER_INFINIOP_TEST(sigmoid_backward) \
+        REGISTER_INFINIOP_TEST(leaky_relu)       \
+        REGISTER_INFINIOP_TEST(where)             \
     }
 
 namespace infiniop_test {

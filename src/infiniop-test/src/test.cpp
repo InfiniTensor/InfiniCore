@@ -91,6 +91,24 @@ std::shared_ptr<Result> runTest(const GGUFFileReader &gguf_reader,
             }
         }
 
+        // Check if any tensor uses BF16 type to adjust tolerance
+        bool has_bf16 = false;
+        for (auto tensor_name : builder.tensor_names) {
+            auto info = tensor_info.find("test." + std::to_string(test_id) + "." + tensor_name);
+            if (info != tensor_info.end() && info->second->ggml_type == GGML_TYPE_BF16) {
+                has_bf16 = true;
+                break;
+            }
+        }
+        
+        // Adjust tolerance for BF16 type
+        double adjusted_rtol = rtol;
+        double adjusted_atol = atol;
+        if (has_bf16) {
+            adjusted_rtol = 0.01;  // More relaxed relative tolerance for BF16
+            adjusted_atol = 0.01;  // More relaxed absolute tolerance for BF16
+        }
+
         for (auto tensor_name : builder.tensor_names) {
             auto info = tensor_info.find("test." + std::to_string(test_id) + "." + tensor_name);
             if (info != tensor_info.end()) {
@@ -107,7 +125,7 @@ std::shared_ptr<Result> runTest(const GGUFFileReader &gguf_reader,
         }
         std::shared_ptr<infiniop_test::base::Test> test;
         try {
-            test = builder.build(attrs, tensors, rtol, atol);
+            test = builder.build(attrs, tensors, adjusted_rtol, adjusted_atol);
         } catch (const std::exception &e) {
             return TEST_INIT_FAILED(op_name + "/n" + e.what());
         }

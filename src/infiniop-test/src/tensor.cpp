@@ -2,6 +2,7 @@
 #include "utils.hpp"
 #include <cstring>
 #include <infinirt.h>
+#include "../../infiniop/tensor.h"
 #include <sstream>
 
 template <typename T>
@@ -162,7 +163,7 @@ Tensor::Tensor(const GGUFTensorInfo *info,
             }
         }
     }
-    infiniopCreateTensorDescriptor(&_desc, ndim, temp_shape.data(), _strides.data(), ggmlTypeToInfiniType(_ggml_type));
+    infiniopCreateTensorDescriptor(&_desc, ndim, temp_shape.data(), _strides.data(), ggmlTypeToInfiniTypeWithBool(_ggml_type));
     size_t size;
     calculateTensorMemory(size, _offset, temp_shape, _strides, ggmlTypeSize(_ggml_type));
     _memory = std::make_shared<Memory>(size, INFINI_DEVICE_CPU, 0);
@@ -202,7 +203,7 @@ Tensor::Tensor(std::shared_ptr<Memory> memory, size_t offset,
                const std::vector<size_t> &shape,
                const std::vector<ptrdiff_t> &strides,
                GGML_TYPE dtype) : _memory(memory), _shape(shape), _strides(strides), _offset(offset), _ggml_type(dtype) {
-    infiniopCreateTensorDescriptor(&_desc, shape.size(), shape.data(), strides.data(), ggmlTypeToInfiniType(dtype));
+    infiniopCreateTensorDescriptor(&_desc, shape.size(), shape.data(), strides.data(), ggmlTypeToInfiniTypeWithBool(dtype));
 }
 
 std::shared_ptr<Tensor> Tensor::to(infiniDevice_t device, int device_id) const {
@@ -251,6 +252,8 @@ void Tensor::debug() const {
     }
 }
 
+
+
 std::string Tensor::info() const {
     std::ostringstream oss;
     oss << "Shape: [";
@@ -269,7 +272,7 @@ std::string Tensor::info() const {
         }
     }
     oss << "]";
-    oss << ", Type: " << GGML_TYPE_NAME[_ggml_type];
+    oss << ", Type: " << infiniDtypeToString(_desc->dtype());
 
     return oss.str();
 }

@@ -27,6 +27,15 @@ inline infiniDtype_t ggmlTypeToInfiniType(GGML_TYPE type) {
     }
 }
 
+// Special handling for bool type in GGUF files
+inline infiniDtype_t ggmlTypeToInfiniTypeWithBool(GGML_TYPE type) {
+    if (type == GGML_TYPE_I8) {
+        // For where operator, I8 in GGUF should be treated as BOOL in InfiniCore
+        return INFINI_DTYPE_BOOL;
+    }
+    return ggmlTypeToInfiniType(type);
+}
+
 namespace infiniop_test {
 class Memory {
 private:
@@ -69,6 +78,11 @@ public:
     infiniopTensorDescriptor_t desc() const { return _desc; }
     std::vector<size_t> shape() const { return std::vector<size_t>(_shape); }
     std::vector<ptrdiff_t> strides() const { return std::vector<ptrdiff_t>(_strides); }
+    // Method to override tensor descriptor type for special cases like bool conversion
+    void overrideDescriptorType(infiniDtype_t new_type) {
+        infiniopDestroyTensorDescriptor(_desc);
+        infiniopCreateTensorDescriptor(&_desc, _shape.size(), _shape.data(), _strides.data(), new_type);
+    }
     GGML_TYPE ggml_type() const { return _ggml_type; }
     void *data() const;
     std::shared_ptr<Tensor> to(infiniDevice_t device, int device_id = 0) const;

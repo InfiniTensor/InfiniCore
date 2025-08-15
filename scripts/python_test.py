@@ -14,16 +14,25 @@ def run_tests(args):
     for test in [
         "add.py",
         "attention.py",
+        "cast.py",
         "causal_softmax.py",
         "clip.py",
+        "cos.py",
+        "exp.py",
         "gemm.py",
+        "hardswish.py",
+        "leaky_relu.py",
         "mul.py",
         "random_sample.py",
         "rearrange.py",
         "rms_norm.py",
         "rope.py",
+        "sigmoid_backward.py",
+        "sin.py",
         "sub.py",
         "swiglu.py",
+        "tanh.py",
+        "where.py",
     ]:
         result = subprocess.run(
             f"python {test} {args} --debug", text=True, encoding="utf-8", shell=True
