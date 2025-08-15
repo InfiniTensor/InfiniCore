@@ -1,0 +1,60 @@
+#include "../../../elementwise/nvidia/elementwise_nvidia.cuh"
+#include "../cuda/kernel.cuh"
+#include "cross_entropy_loss_backward_nvidia.cuh"
+
+namespace op::cross_entropy_loss_backward::nvidia {
+
+Descriptor::~Descriptor() = default;
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t out_desc,
+    std::vector<infiniopTensorDescriptor_t> input_desc_vec
+) {
+    auto handle = reinterpret_cast<device::nvidia::Handle *>(handle_);
+//  --------------------- start: check data type and calculate workspace size ----------------------    
+
+    auto dtype = out_desc->dtype();
+    const auto &probs_desc = input_desc_vec.at(0);
+    const auto &target_desc = input_desc_vec.at(1);
+    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_BF16);
+    CHECK_SAME_SHAPE(out_desc->shape(), probs_desc->shape(), target_desc->shape());
+    size_t batch_size = 1;
+    for (size_t d = 0; d < out_desc->ndim() - 1; d++)
+        batch_size *= out_desc->dim(d);    
+
+//  ---------------------- end: check data type and calculate workspace size -----------------------
+    // create CUDA elementwise descriptor
+    CREATE_CROSS_ENTROPY_LOSS_BACKWARD_ELEMENTWISE_CUDA_DESCRIPTOR(handle, dtype, out_desc, input_desc_vec, batch_size);
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *output,
+    std::vector<const void *> inputs,
+    void *stream) const {
+
+    if (workspace_size < _workspace_size) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+
+    #define CALCULATE_CROSS_ENTROPY_LOSS_BACKWARD_OP(BLOCK_SIZE, TDATA) \
+        return _device_info->calculate<BLOCK_SIZE, cuda::CrossEntropyLossBackwardOp, TDATA>(_info, workspace, output, inputs, stream, (TDATA)((float)_batch_size))
+
+    switch (_dtype) {
+    case INFINI_DTYPE_F16:
+        CALCULATE_CROSS_ENTROPY_LOSS_BACKWARD_OP(256, half);
+    case INFINI_DTYPE_F32:
+        CALCULATE_CROSS_ENTROPY_LOSS_BACKWARD_OP(256, float);
+    case INFINI_DTYPE_BF16:
+        CALCULATE_CROSS_ENTROPY_LOSS_BACKWARD_OP(256, cuda_bfloat16);
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+    return INFINI_STATUS_SUCCESS;
+}
+} // namespace op::cross_entropy_loss_backward::nvidia
