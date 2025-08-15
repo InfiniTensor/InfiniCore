@@ -1,0 +1,151 @@
+#include "../../../devices/metax/metax_common.h"
+#include "linear_metax.h"
+#include <hccub/block/block_reduce.cuh>
+#include "../../../devices/metax/metax_kernel_common.h"
+#include "../../../reduce/cuda/reduce.cuh"
+#include "../cuda/kernel.cuh"
+#include "../info.h"
+
+namespace op::linear::metax {
+
+template <unsigned int BLOCK_SIZE, typename Tdata, typename Tcompute>
+INFINIOP_METAX_KERNEL launchKernel(
+    Tdata * y,
+    const Tdata * x,
+    const Tdata * w,
+    const Tdata * b,
+	size_t in_features,
+	size_t out_features,
+	ptrdiff_t y_stride,
+	ptrdiff_t x_stride,
+	ptrdiff_t w_stride_out,
+    ptrdiff_t w_stride_in,
+	ptrdiff_t b_stride,
+    bool bias    
+) {
+    linearKernel<BLOCK_SIZE, Tdata, Tcompute>(
+		y,
+		x,
+		w,
+		b,
+        in_features,
+        out_features,
+        y_stride,
+        x_stride,
+        w_stride_out,
+        w_stride_in,
+        b_stride,
+        bias
+    );
+}
+
+//  ----------------------------------- start: call launchKernel -----------------------------------
+template <unsigned int BLOCK_SIZE, typename Tdata>
+infiniStatus_t calculate_linear(
+    const LinearInfo &info,
+    Tdata * y,
+    const Tdata * x,
+    const Tdata * w,
+    const Tdata * b,
+    hcStream_t stream
+) {
+    launchKernel<1, Tdata, float><<<info.out_features, 1, 0, stream>>>(
+        y,
+        x,
+        w,
+        b,
+        info.in_features,
+        info.out_features,
+        info.y_stride,
+        info.x_stride,
+        info.w_stride_out,
+        info.w_stride_in,
+        info.b_stride,
+        info.bias          
+    );
+    return INFINI_STATUS_SUCCESS;
+}
+//  ------------------------------------ end: call launchKernel ------------------------------------
+
+
+struct Descriptor::Opaque {
+    std::shared_ptr<device::metax::Handle::Internal> internal;
+};
+
+Descriptor::~Descriptor() {
+    delete _opaque;
+}
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t y_desc,
+    infiniopTensorDescriptor_t x_desc,
+    infiniopTensorDescriptor_t w_desc,
+    infiniopTensorDescriptor_t b_desc
+) {
+    auto handle = reinterpret_cast<device::metax::Handle *>(handle_);
+//  --------------------- start: check data type and calculate workspace size ----------------------    
+    auto dtype = y_desc->dtype();
+    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_BF16);
+    auto result = LinearInfo::createLinearInfo(
+        y_desc,
+        x_desc,
+        w_desc,
+        b_desc
+    );
+    CHECK_RESULT(result);
+    const LinearInfo &info = result.take();
+    size_t WorkSpaceSize = 0;
+//  ---------------------- end: check data type and calculate workspace size -----------------------
+
+    *desc_ptr = new Descriptor(
+        dtype, std::move(info), WorkSpaceSize, 
+        new Opaque{handle->internal()},
+        handle->device, handle->device_id
+    );
+    return INFINI_STATUS_SUCCESS;
+}
+
+
+
+infiniStatus_t Descriptor::calculate(
+    void * workspace,
+    size_t workspace_size,
+    void * y,
+    const void * x,
+    const void * w,
+    const void * b,
+    void *stream_
+) const {
+    if (workspace_size < _workspace_size)
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+
+    hcStream_t stream = (hcStream_t)stream_;
+
+    #define CALCULATE_LINEAR(BLOCK_SIZE, TDATA) \
+        calculate_linear<BLOCK_SIZE, TDATA>(_info, (TDATA *)y, (const TDATA *)x, (const TDATA *)w, (const TDATA *)b, stream)
+    #define CALCULATE_LINEAR_WITH_METAX_BLOCK(BLOCK_SIZE)             \
+    {                                                                 \
+        if (_info.dtype == INFINI_DTYPE_F16)                          \
+            return CALCULATE_LINEAR(BLOCK_SIZE, half);                \
+        else if (_info.dtype == INFINI_DTYPE_F32)                     \
+            return CALCULATE_LINEAR(BLOCK_SIZE, float);               \
+        else if (_info.dtype == INFINI_DTYPE_BF16)                    \
+            return CALCULATE_LINEAR(BLOCK_SIZE, cuda_bfloat16);       \
+        else                                                          \
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;                    \
+    }
+
+    if (_opaque->internal->maxThreadsPerBlock() == METAX_BLOCK_SIZE_1024)
+        CALCULATE_LINEAR_WITH_METAX_BLOCK(METAX_BLOCK_SIZE_1024)
+    else if (_opaque->internal->maxThreadsPerBlock() == METAX_BLOCK_SIZE_512)
+        CALCULATE_LINEAR_WITH_METAX_BLOCK(METAX_BLOCK_SIZE_512)
+    else
+        return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
+    return INFINI_STATUS_SUCCESS;
+
+    #undef CALCULATE_LINEAR_WITH_METAX_BLOCK
+    #undef CALCULATE_LINEAR
+}
+} // namespace op::linear::metax

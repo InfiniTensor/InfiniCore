@@ -17,5 +17,12 @@
 #include "infiniop/ops/sub.h"
 #include "infiniop/ops/swiglu.h"
 #include "infiniop/tensor_descriptor.h"
+#include "infiniop/ops/index_copy_inplace.h"
+#include "infiniop/ops/gather.h"
+#include "infiniop/ops/scatter.h"
+#include "infiniop/ops/tril.h"
+#include "infiniop/ops/triu.h"
+#include "infiniop/ops/linear.h"
+#include "infiniop/ops/linear_backward.h"
 
 #endif // __INFINIOP_API_H__
