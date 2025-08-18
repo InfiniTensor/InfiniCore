@@ -59,8 +59,12 @@ infiniStatus_t conv_kernel(
     char *workspace_value = reinterpret_cast<char *>(workspace);
     int64_t bias_ndims = info.bias_dims_size();
     int64_t bias_size = 1;
-    for (int64_t i = 0; i < bias_ndims; i++) {
-        bias_size *= info.bias_dim(i);
+    if (bias_ndims > 0) {
+        for (int64_t i = 0; i < bias_ndims; i++) {
+            bias_size *= info.bias_dim(i);
+        }
+    } else {
+        bias_size = 0;
     }
     float *bias_F32 = (float *)workspace_value;
     switch (info.ndim()) {
@@ -146,7 +150,11 @@ infiniStatus_t conv_kernel(
     case 2: {
         std::vector<int64_t> ksize = {(int64_t)info.kernel_dim(0), (int64_t)info.kernel_dim(1)};
         std::vector<int64_t> stride = {(int64_t)info.stride_info(0), (int64_t)info.stride_info(1)};
-        std::vector<int64_t> pad = {(int64_t)info.pad_info(0), (int64_t)info.pad_info(1)};
+        std::vector<int64_t> pad = {
+            (int64_t)info.pad_info(0),
+            (int64_t)info.pad_info(0),
+            (int64_t)info.pad_info(1),
+            (int64_t)info.pad_info(1)};
         std::vector<int64_t> dilation = {(int64_t)info.dilation_info(0), (int64_t)info.dilation_info(1)};
         printf("x_shape:(%ld, %ld, %ld, %ld)\n", info.batch(), info.in_channels(), info.input_dim(0), info.input_dim(1));
         printf("kernel_dim:(%ld, %ld)\n", ksize[0], ksize[1]);
