@@ -1,10 +1,11 @@
 #include "rope_kunlun.h"
+#include "../../../devices/kunlun/kunlun_common.h"
 #include "../../../devices/kunlun/kunlun_handle.h"
 #include <memory>
 
 void RoPEF32I32F32(void *destination, const void *source,
                    const void *pos_ids, const void *sin_table, const void *cos_table,
-                   size_t seqlen, size_t nhead, size_t dhead,
+                   uint32_t seqlen, uint32_t nhead, uint32_t dhead,
                    long x_stride_seqlen, long x_stride_nhead,
                    long y_stride_seqlen, long y_stride_nhead,
                    XPUStream stream);
@@ -51,9 +52,9 @@ infiniStatus_t Descriptor::calculate(
     const void *sin_table,
     const void *cos_table,
     void *stream) const {
-    size_t seqlen = (size_t)_info.seqlen;
-    size_t nhead = (size_t)_info.nhead;
-    size_t dhead = (size_t)_info.dhead;
+    uint32_t seqlen = (uint32_t)_info.seqlen;
+    uint32_t nhead = (uint32_t)_info.nhead;
+    uint32_t dhead = (uint32_t)_info.dhead;
     long x_stride_seqlen = (long)_info.x_stride_seqlen;
     long x_stride_nhead = (long)_info.x_stride_nhead;
     long y_stride_seqlen = (long)_info.y_stride_seqlen;

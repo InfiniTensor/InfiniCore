@@ -6,12 +6,12 @@
 template <typename T, typename Tindex, typename Tangle>
 __global__ void RoPEKernel(T *destination, const T *source, 
                 const Tindex *pos_ids, const Tangle *sin_table, const Tangle *cos_table, 
-                size_t seqlen,  size_t nhead, size_t dhead,
+                uint32_t seqlen,  uint32_t nhead, uint32_t dhead,
                 long x_stride_seqlen, long x_stride_nhead,
                 long y_stride_seqlen, long y_stride_nhead,
                 XPUStream stream){
     //ndim = 3
-    size_t other_size = seqlen * nhead;
+    uint32_t other_size = seqlen * nhead;
 
     int cid = core_id();
     int ncores = core_num();
@@ -72,7 +72,7 @@ __global__ void RoPEKernel(T *destination, const T *source,
 template <typename T, typename Tindex, typename Tangle>
 void RoPE(void *destination, const void *source, 
                 const void *pos_ids, const void *sin_table, const void *cos_table, 
-                size_t seqlen,  size_t nhead, size_t dhead,
+                uint32_t seqlen,  uint32_t nhead, uint32_t dhead,
                 long x_stride_seqlen, long x_stride_nhead,
                 long y_stride_seqlen, long y_stride_nhead,
                 XPUStream stream){
@@ -86,7 +86,7 @@ void RoPE(void *destination, const void *source,
 }
 void RoPEF32I32F32(void *destination, const void *source, 
                 const void *pos_ids, const void *sin_table, const void *cos_table, 
-                size_t seqlen,  size_t nhead, size_t dhead,
+                uint32_t seqlen,  uint32_t nhead, uint32_t dhead,
                 long x_stride_seqlen, long x_stride_nhead,
                 long y_stride_seqlen, long y_stride_nhead,
                 XPUStream stream){
