@@ -20,6 +20,9 @@
 #ifdef ENABLE_KUNLUN_API
 #include "kunlun/causal_softmax_kunlun.h"
 #endif
+#ifdef ENABLE_MOORE_API
+#include "moore/causal_softmax_moore.h"
+#endif
 
 __C infiniStatus_t infiniopCreateCausalSoftmaxDescriptor(
     infiniopHandle_t handle,
@@ -57,6 +60,9 @@ __C infiniStatus_t infiniopCreateCausalSoftmaxDescriptor(
 #ifdef ENABLE_KUNLUN_API
         CREATE(INFINI_DEVICE_KUNLUN, kunlun)
 #endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore)
+#endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
@@ -89,6 +95,9 @@ __C infiniStatus_t infiniopGetCausalSoftmaxWorkspaceSize(infiniopCausalSoftmaxDe
 #endif
 #ifdef ENABLE_KUNLUN_API
         GET(INFINI_DEVICE_KUNLUN, kunlun)
+#endif
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, moore)
 #endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -128,6 +137,9 @@ __C infiniStatus_t infiniopCausalSoftmax(
 #ifdef ENABLE_KUNLUN_API
         CALCULATE(INFINI_DEVICE_KUNLUN, kunlun)
 #endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore)
+#endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
@@ -160,6 +172,9 @@ __C infiniStatus_t infiniopDestroyCausalSoftmaxDescriptor(infiniopCausalSoftmaxD
 #endif
 #ifdef ENABLE_KUNLUN_API
         DESTROY(INFINI_DEVICE_KUNLUN, kunlun)
+#endif
+#ifdef ENABLE_MOORE_API
+        DESTROY(INFINI_DEVICE_MOORE, moore)
 #endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
