@@ -28,7 +28,7 @@ __global__ void RoPEKernel(T *destination, const T *source,
     int ind_start = (thread_id < remain ? thread_id * step_hard : remain * step_hard + (thread_id - remain) * step_easy);
 
     constexpr int buf_size = 256;
-    __local__ T x_local[buf_size];//昆仑芯不支持bf16到f32的转换，只能默认T=float
+    __local__ T x_local[buf_size];
     __local__ T y_local[buf_size];
     __local__ T sin_local[buf_size];
     __local__ T cos_local[buf_size];
