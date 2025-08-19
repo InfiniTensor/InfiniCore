@@ -9,6 +9,18 @@ void RoPEF32I32F32(void *destination, const void *source,
                    long x_stride_seqlen, long x_stride_nhead,
                    long y_stride_seqlen, long y_stride_nhead,
                    XPUStream stream);
+void RoPEF16I32F32(void *destination, const void *source,
+                   const void *pos_ids, const void *sin_table, const void *cos_table,
+                   uint32_t seqlen, uint32_t nhead, uint32_t dhead,
+                   long x_stride_seqlen, long x_stride_nhead,
+                   long y_stride_seqlen, long y_stride_nhead,
+                   XPUStream stream);
+void RoPEBF16I32F32(void *destination, const void *source,
+                    const void *pos_ids, const void *sin_table, const void *cos_table,
+                    uint32_t seqlen, uint32_t nhead, uint32_t dhead,
+                    long x_stride_seqlen, long x_stride_nhead,
+                    long y_stride_seqlen, long y_stride_nhead,
+                    XPUStream stream);
 
 namespace op::rope::kunlun {
 
@@ -59,13 +71,32 @@ infiniStatus_t Descriptor::calculate(
     long x_stride_nhead = (long)_info.x_stride_nhead;
     long y_stride_seqlen = (long)_info.y_stride_seqlen;
     long y_stride_nhead = (long)_info.y_stride_nhead;
-    if (_info.data_type == INFINI_DTYPE_F32 && _info.pos_type == INFINI_DTYPE_I32) {
-        RoPEF32I32F32(y, x,
-                      pos_ids, sin_table, cos_table,
-                      seqlen, nhead, dhead,
-                      x_stride_seqlen, x_stride_nhead,
-                      y_stride_seqlen, y_stride_nhead, reinterpret_cast<kunlunStream_t>(stream));
-        return INFINI_STATUS_SUCCESS;
+    if (_info.pos_type == INFINI_DTYPE_I32) {
+        switch (_info.data_type) {
+        case INFINI_DTYPE_F32:
+            RoPEF32I32F32(y, x,
+                          pos_ids, sin_table, cos_table,
+                          seqlen, nhead, dhead,
+                          x_stride_seqlen, x_stride_nhead,
+                          y_stride_seqlen, y_stride_nhead, reinterpret_cast<kunlunStream_t>(stream));
+            return INFINI_STATUS_SUCCESS;
+        case INFINI_DTYPE_F16:
+            RoPEF16I32F32(y, x,
+                          pos_ids, sin_table, cos_table,
+                          seqlen, nhead, dhead,
+                          x_stride_seqlen, x_stride_nhead,
+                          y_stride_seqlen, y_stride_nhead, reinterpret_cast<kunlunStream_t>(stream));
+            return INFINI_STATUS_SUCCESS;
+        case INFINI_DTYPE_BF16:
+            RoPEBF16I32F32(y, x,
+                           pos_ids, sin_table, cos_table,
+                           seqlen, nhead, dhead,
+                           x_stride_seqlen, x_stride_nhead,
+                           y_stride_seqlen, y_stride_nhead, reinterpret_cast<kunlunStream_t>(stream));
+            return INFINI_STATUS_SUCCESS;
+        default:
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
     } else {
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
