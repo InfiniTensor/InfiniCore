@@ -1,1 +1,1 @@
-from .infiniop_test import InfiniopTestCase, InfiniopTestWriter, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides, process_zero_stride_tensor
+from .infiniop_test import InfiniopTestCase, InfiniopTestWriter, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides, process_zero_stride_tensor, tensor_to_numpy
