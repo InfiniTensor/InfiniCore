@@ -26,10 +26,10 @@ __mlu_device__ void swap(Tval &a, Tval &b) {
     b = tmp;
 }
 
-template <typename Tval>
+template <typename Tval, typename Tidx>
 __mlu_device__ void findTopk(
     Tval *values,
-    uint64_t *result,
+    Tidx *result,
     int size,
     int topk) {
     for (int i = 0; i < topk; ++i) {
@@ -42,10 +42,10 @@ __mlu_device__ void findTopk(
     }
 }
 
-template <typename Tval>
+template <typename Tval, typename Tidx>
 __mlu_device__ void initTopkBuffer(
     Tval *values,
-    uint64_t *result,
+    Tidx *result,
     int actual_size,
     int topk) {
     if (actual_size < topk) {
@@ -152,8 +152,8 @@ __mlu_global__ void randomSampleKernel(
     Tval *nram_partial_sum = nram_src + max_num;
     Tval *nram_sum_final = nram_partial_sum + max_num;
     Tval *nram_topk = nram_sum_final + w_size;
-    uint64_t *nram_indices = (uint64_t *)(nram_topk + topk);
-    uint64_t *nram_global_indices = nram_indices + max_num;
+    Tidx *nram_indices = (Tidx *)(nram_topk + topk);
+    Tidx *nram_global_indices = nram_indices + max_num;
 
     // Initialize buffers
     __bang_write_value(nram_src, max_num, -INFINITY);
@@ -177,18 +177,18 @@ __mlu_global__ void randomSampleKernel(
 
     // Store results
     __memcpy(global_topk + taskId * topk, nram_src, topk * sizeof(Tval), NRAM2GDRAM);
-    __memcpy(gdram_indices + taskId * topk, nram_indices, topk * sizeof(uint64_t), NRAM2GDRAM);
+    __memcpy(gdram_indices + taskId * topk, nram_indices, topk * sizeof(Tidx), NRAM2GDRAM);
     __sync_all();
 
     // Global reduction on task 0
     if (taskId == 0) {
         __memcpy(nram_topk, global_topk, taskDim * topk * sizeof(Tval), GDRAM2NRAM);
-        __memcpy(nram_global_indices, gdram_indices, taskDim * topk * sizeof(uint64_t), GDRAM2NRAM);
+        __memcpy(nram_global_indices, gdram_indices, taskDim * topk * sizeof(Tidx), GDRAM2NRAM);
 
         findTopk(nram_topk, nram_global_indices, taskDim * topk, topk);
 
         __memcpy(global_topk, nram_topk, topk * sizeof(Tval), NRAM2GDRAM);
-        __memcpy(gdram_indices, nram_global_indices, topk * sizeof(uint64_t), NRAM2GDRAM);
+        __memcpy(gdram_indices, nram_global_indices, topk * sizeof(Tidx), NRAM2GDRAM);
     }
     __sync_io();
 
@@ -334,9 +334,9 @@ __mlu_global__ void randomSampleKernelLarge(
     Tval *nram_partial_sum = nram_topk_buffer + 2 * topk;
     Tval *nram_sum_final = nram_partial_sum + max_num;
     Tval *nram_global_topk = nram_sum_final + w_size;
-    uint64_t *nram_indices = (uint64_t *)nram_buffer_ind;
-    uint64_t *nram_topk_indices = nram_indices + max_num;
-    uint64_t *nram_global_indices = nram_topk_indices + 2 * topk;
+    Tidx *nram_indices = (Tidx *)nram_buffer_ind;
+    Tidx *nram_topk_indices = nram_indices + max_num;
+    Tidx *nram_global_indices = nram_topk_indices + 2 * topk;
 
     // Initialize buffers
     for (int i = 0; i < 2 * topk; ++i) {
@@ -350,14 +350,14 @@ __mlu_global__ void randomSampleKernelLarge(
     // Process full chunks
     for (int r = 0; r < repeat; ++r) {
         if (r > 0) {
-            __bang_add_scalar(nram_indices, nram_indices, task_size, max_num);
+            __bang_add_scalar((short *)nram_indices, (short *)nram_indices, task_size, max_num / sizeof(short));
         }
         __memcpy(nram_src, probs + r * task_size + taskId * max_num, max_num * sizeof(Tval), GDRAM2NRAM);
 
         findTopk(nram_src, nram_indices, max_num, topk);
 
         __memcpy(nram_topk_buffer + topk, nram_src, topk * sizeof(Tval), NRAM2NRAM);
-        __memcpy(nram_topk_indices + topk, nram_indices, topk * sizeof(uint64_t), NRAM2NRAM);
+        __memcpy(nram_topk_indices + topk, nram_indices, topk * sizeof(Tidx), NRAM2NRAM);
 
         findTopk(nram_topk_buffer, nram_topk_indices, 2 * topk, topk);
     }
@@ -372,11 +372,11 @@ __mlu_global__ void randomSampleKernelLarge(
         if (step >= topk) {
             findTopk(nram_src, nram_indices, step, topk);
             __memcpy(nram_topk_buffer + topk, nram_src, topk * sizeof(Tval), NRAM2NRAM);
-            __memcpy(nram_topk_indices + topk, nram_indices, topk * sizeof(uint64_t), NRAM2NRAM);
+            __memcpy(nram_topk_indices + topk, nram_indices, topk * sizeof(Tidx), NRAM2NRAM);
         } else {
             initTopkBuffer(nram_src, nram_indices, step, topk);
             __memcpy(nram_topk_buffer + topk, nram_src, step * sizeof(Tval), NRAM2NRAM),
-                __memcpy(nram_topk_indices + topk, nram_indices, step * sizeof(uint64_t), NRAM2NRAM);
+                __memcpy(nram_topk_indices + topk, nram_indices, step * sizeof(Tidx), NRAM2NRAM);
         }
 
         findTopk(nram_topk_buffer, nram_topk_indices, 2 * topk, topk);
@@ -384,18 +384,18 @@ __mlu_global__ void randomSampleKernelLarge(
 
     // Store results to global memory
     __memcpy(global_topk + taskId * topk, nram_topk_buffer, topk * sizeof(Tval), NRAM2GDRAM);
-    __memcpy(gdram_indices + taskId * topk, nram_topk_indices, topk * sizeof(uint64_t), NRAM2GDRAM);
+    __memcpy(gdram_indices + taskId * topk, nram_topk_indices, topk * sizeof(Tidx), NRAM2GDRAM);
     __sync_all();
 
     // Task 0 merges all partial results
     if (taskId == 0) {
         __memcpy(nram_global_topk, global_topk, taskDim * topk * sizeof(Tval), GDRAM2NRAM);
-        __memcpy(nram_global_indices, gdram_indices, taskDim * topk * sizeof(uint64_t), GDRAM2NRAM);
+        __memcpy(nram_global_indices, gdram_indices, taskDim * topk * sizeof(Tidx), GDRAM2NRAM);
 
         findTopk(nram_global_topk, nram_global_indices, taskDim * topk, topk);
 
         __memcpy(global_topk, nram_global_topk, topk * sizeof(Tval), NRAM2GDRAM);
-        __memcpy(gdram_indices, nram_global_indices, topk * sizeof(uint64_t), NRAM2GDRAM);
+        __memcpy(gdram_indices, nram_global_indices, topk * sizeof(Tidx), NRAM2GDRAM);
     }
     __sync_all();
 

@@ -110,7 +110,7 @@ def test(
         torch.int32
     )  # 这个函数在device速度可能会很慢，可以通过data.to("cpu")方式加快计算过程
 
-    indices = TestTensor([], None, InfiniDtype.I64, device, mode="zeros")
+    indices = TestTensor([], None, InfiniDtype.I32, device, mode="zeros")
 
     if sync is not None:
         sync()
