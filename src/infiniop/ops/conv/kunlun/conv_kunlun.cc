@@ -67,6 +67,20 @@ infiniStatus_t conv_kernel(
         bias_size = 0;
     }
     float *bias_F32 = (float *)workspace_value;
+    CHECK_STATUS(internal->useXdnn(
+        (kunlunStream_t)stream,
+        [&](xdnnHandle_t handle) {
+            if (bias_size > 0) {
+                if constexpr (std::is_same<Tdata, float16>::value) {
+                    CHECK_KUNLUN((xdnn::cast<Tdata, float>(handle, (Tdata *)bias, bias_F32, bias_size)));
+                } else if constexpr (std::is_same<Tdata, float>::value) {
+                    bias_F32 = (float *)bias;
+                }
+            } else {
+                bias_F32 = nullptr;
+            }
+            return INFINI_STATUS_SUCCESS;
+        }));
     switch (info.ndim()) {
     case 1: {
         int64_t ksize = (int64_t)info.kernel_dim(0);
@@ -77,15 +91,6 @@ infiniStatus_t conv_kernel(
         CHECK_STATUS(internal->useXdnn(
             (kunlunStream_t)stream,
             [&](xdnnHandle_t handle) {
-                if (bias_size > 0) {
-                    if constexpr (std::is_same<Tdata, float16>::value) {
-                        CHECK_KUNLUN((xdnn::cast<Tdata, float>(handle, (Tdata *)bias, bias_F32, bias_size)));
-                    } else if constexpr (std::is_same<Tdata, float>::value) {
-                        bias_F32 = (float *)bias;
-                    }
-                } else {
-                    bias_F32 = nullptr;
-                }
                 CHECK_KUNLUN((xdnn::conv1d_fusion<Tdata, Tdata, Tdata, int16_t>(handle, (Tdata *)x, (Tdata *)w, (Tdata *)y, (int64_t)info.batch(), (int64_t)info.in_channels(), (int64_t)info.input_dim(0),
                                                                                 (int64_t)info.out_channels(), ksize,
                                                                                 stride, pad,
@@ -107,15 +112,6 @@ infiniStatus_t conv_kernel(
         CHECK_STATUS(internal->useXdnn(
             (kunlunStream_t)stream,
             [&](xdnnHandle_t handle) {
-                if (bias_size > 0) {
-                    if constexpr (std::is_same<Tdata, float16>::value) {
-                        CHECK_KUNLUN((xdnn::cast<Tdata, float>(handle, (Tdata *)bias, bias_F32, bias_size)));
-                    } else if constexpr (std::is_same<Tdata, float>::value) {
-                        bias_F32 = (float *)bias;
-                    }
-                } else {
-                    bias_F32 = nullptr;
-                }
                 CHECK_KUNLUN((xdnn::conv2d_fusion<Tdata, Tdata, Tdata, int16_t>(handle, (Tdata *)x, (Tdata *)w, (Tdata *)y, (int64_t)info.batch(), (int64_t)info.in_channels(), (int64_t)info.input_dim(0),
                                                                                 (int64_t)info.input_dim(1), (int64_t)info.out_channels(), ksize,
                                                                                 stride, pad,
@@ -136,15 +132,6 @@ infiniStatus_t conv_kernel(
         CHECK_STATUS(internal->useXdnn(
             (kunlunStream_t)stream,
             [&](xdnnHandle_t handle) {
-                if (bias_size > 0) {
-                    if constexpr (std::is_same<Tdata, float16>::value) {
-                        CHECK_KUNLUN((xdnn::cast<Tdata, float>(handle, (Tdata *)bias, bias_F32, bias_size)));
-                    } else if constexpr (std::is_same<Tdata, float>::value) {
-                        bias_F32 = (float *)bias;
-                    }
-                } else {
-                    bias_F32 = nullptr;
-                }
                 CHECK_KUNLUN((xdnn::conv3d_fusion<Tdata, Tdata, Tdata, int16_t>(handle, (Tdata *)x, (Tdata *)w, (Tdata *)y, (int64_t)info.batch(), (int64_t)info.in_channels(), (int64_t)info.input_dim(0),
                                                                                 (int64_t)info.input_dim(1), (int64_t)info.input_dim(2), (int64_t)info.out_channels(), ksize,
                                                                                 stride, pad,
