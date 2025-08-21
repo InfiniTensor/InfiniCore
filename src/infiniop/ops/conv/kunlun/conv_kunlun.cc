@@ -45,10 +45,10 @@ infiniStatus_t Descriptor::create(
     return INFINI_STATUS_SUCCESS;
 }
 
+template <typename Tdata>
 infiniStatus_t conv_kernel(
     std::shared_ptr<device::kunlun::Handle::Internal> internal,
     const ConvInfo &info,
-    infiniDtype_t dtype,
     void *workspace,
     size_t workspace_size,
     void *y,
@@ -74,114 +74,58 @@ infiniStatus_t conv_kernel(
         std::initializer_list<int64_t> pad = {(int64_t)info.pad_info(0)};
         int64_t dilation = (int64_t)info.dilation_info(0);
 
-        if (dtype == INFINI_DTYPE_F16) {
-
-            if (bias_size > 0) {
-                CHECK_STATUS(internal->useXdnn(
-                    (kunlunStream_t)stream,
-                    [&](xdnnHandle_t handle) {
-                        CHECK_KUNLUN((xdnn::cast<float16, float>(handle, (float16 *)bias, bias_F32, bias_size)));
-                        CHECK_KUNLUN((xdnn::conv1d_fusion<float16, float16, float16, int16_t>(handle, (float16 *)x, (float16 *)w, (float16 *)y, (int64_t)info.batch(), (int64_t)info.in_channels(), (int64_t)info.input_dim(0),
-                                                                                              (int64_t)info.out_channels(), ksize,
-                                                                                              stride, pad,
-                                                                                              dilation, 1, nullptr,
-                                                                                              nullptr, nullptr, true, bias_F32,
-                                                                                              nullptr, baidu::xpu::api::Activation_t::LINEAR,
-                                                                                              nullptr)));
-                        return INFINI_STATUS_SUCCESS;
-                    }));
-            } else {
-                CHECK_STATUS(internal->useXdnn(
-                    (kunlunStream_t)stream,
-                    [&](xdnnHandle_t handle) {
-                        CHECK_KUNLUN((xdnn::conv1d_fusion<float16, float16, float16, int16_t>(handle, (float16 *)x, (float16 *)w, (float16 *)y, (int64_t)info.batch(), (int64_t)info.in_channels(), (int64_t)info.input_dim(0),
-                                                                                              (int64_t)info.out_channels(), ksize,
-                                                                                              stride, pad,
-                                                                                              dilation, 1, nullptr,
-                                                                                              nullptr, nullptr, true, nullptr,
-                                                                                              nullptr, baidu::xpu::api::Activation_t::LINEAR,
-                                                                                              nullptr)));
-                        return INFINI_STATUS_SUCCESS;
-                    }));
-            }
-            return INFINI_STATUS_SUCCESS;
-
-        } else if (dtype == INFINI_DTYPE_F32) {
-            CHECK_STATUS(internal->useXdnn(
-                (kunlunStream_t)stream,
-                [&](xdnnHandle_t handle) {
-                    CHECK_KUNLUN((xdnn::conv1d_fusion<float, float, float, int16_t>(handle, (float *)x, (float *)w, (float *)y, (int64_t)info.batch(), (int64_t)info.in_channels(), (int64_t)info.input_dim(0),
-                                                                                    (int64_t)info.out_channels(), ksize,
-                                                                                    stride, pad,
-                                                                                    dilation, 1, nullptr,
-                                                                                    nullptr, nullptr, true, (float *)bias,
-                                                                                    nullptr, baidu::xpu::api::Activation_t::LINEAR,
-                                                                                    nullptr)));
-                    return INFINI_STATUS_SUCCESS;
-                }));
-        } else {
-            return INFINI_STATUS_BAD_TENSOR_DTYPE;
-        }
-        break;
+        CHECK_STATUS(internal->useXdnn(
+            (kunlunStream_t)stream,
+            [&](xdnnHandle_t handle) {
+                if (bias_size > 0) {
+                    if constexpr (std::is_same<Tdata, float16>::value) {
+                        CHECK_KUNLUN((xdnn::cast<Tdata, float>(handle, (Tdata *)bias, bias_F32, bias_size)));
+                    } else if constexpr (std::is_same<Tdata, float>::value) {
+                        bias_F32 = (float *)bias;
+                    }
+                } else {
+                    bias_F32 = nullptr;
+                }
+                CHECK_KUNLUN((xdnn::conv1d_fusion<Tdata, Tdata, Tdata, int16_t>(handle, (Tdata *)x, (Tdata *)w, (Tdata *)y, (int64_t)info.batch(), (int64_t)info.in_channels(), (int64_t)info.input_dim(0),
+                                                                                (int64_t)info.out_channels(), ksize,
+                                                                                stride, pad,
+                                                                                dilation, 1, nullptr,
+                                                                                nullptr, nullptr, true, bias_F32,
+                                                                                nullptr, baidu::xpu::api::Activation_t::LINEAR,
+                                                                                nullptr)));
+                return INFINI_STATUS_SUCCESS;
+            }));
+        return INFINI_STATUS_SUCCESS;
     }
     case 2: {
         std::vector<int64_t> ksize = {(int64_t)info.kernel_dim(0), (int64_t)info.kernel_dim(1)};
         std::vector<int64_t> stride = {(int64_t)info.stride_info(0), (int64_t)info.stride_info(1)};
         std::vector<int64_t> pad = {
             (int64_t)info.pad_info(0),
-            (int64_t)info.pad_info(0),
-            (int64_t)info.pad_info(1),
             (int64_t)info.pad_info(1)};
         std::vector<int64_t> dilation = {(int64_t)info.dilation_info(0), (int64_t)info.dilation_info(1)};
-
-        if (dtype == INFINI_DTYPE_F16) {
-            if (bias_size > 0) {
-                CHECK_STATUS(internal->useXdnn(
-                    (kunlunStream_t)stream,
-                    [&](xdnnHandle_t handle) {
-                        CHECK_KUNLUN((xdnn::cast<float16, float>(handle, (float16 *)bias, bias_F32, bias_size)));
-                        CHECK_KUNLUN((xdnn::conv2d_fusion<float16, float16, float16, int16_t>(handle, (float16 *)x, (float16 *)w, (float16 *)y, (int64_t)info.batch(), (int64_t)info.in_channels(), (int64_t)info.input_dim(0),
-                                                                                              (int64_t)info.input_dim(1), (int64_t)info.out_channels(), ksize,
-                                                                                              stride, pad,
-                                                                                              dilation, 1, nullptr,
-                                                                                              nullptr, nullptr, true, bias_F32,
-                                                                                              nullptr, baidu::xpu::api::Activation_t::LINEAR, nullptr,
-                                                                                              nullptr, -1)));
-                        return INFINI_STATUS_SUCCESS;
-                    }));
-            } else {
-                CHECK_STATUS(internal->useXdnn(
-                    (kunlunStream_t)stream,
-                    [&](xdnnHandle_t handle) {
-                        CHECK_KUNLUN((xdnn::conv2d_fusion<float16, float16, float16, int16_t>(handle, (float16 *)x, (float16 *)w, (float16 *)y, (int64_t)info.batch(), (int64_t)info.in_channels(), (int64_t)info.input_dim(0),
-                                                                                              (int64_t)info.input_dim(1), (int64_t)info.out_channels(), ksize,
-                                                                                              stride, pad,
-                                                                                              dilation, 1, nullptr,
-                                                                                              nullptr, nullptr, true, nullptr,
-                                                                                              nullptr, baidu::xpu::api::Activation_t::LINEAR, nullptr,
-                                                                                              nullptr, -1)));
-                        return INFINI_STATUS_SUCCESS;
-                    }));
-            }
-            return INFINI_STATUS_SUCCESS;
-
-        } else if (dtype == INFINI_DTYPE_F32) {
-            CHECK_STATUS(internal->useXdnn(
-                (kunlunStream_t)stream,
-                [&](xdnnHandle_t handle) {
-                    CHECK_KUNLUN((xdnn::conv2d_fusion<float, float, float, int16_t>(handle, (float *)x, (float *)w, (float *)y, (int64_t)info.batch(), (int64_t)info.in_channels(), (int64_t)info.input_dim(0),
-                                                                                    (int64_t)info.input_dim(1), (int64_t)info.out_channels(), ksize,
-                                                                                    stride, pad,
-                                                                                    dilation, 1, nullptr,
-                                                                                    nullptr, nullptr, true, (float *)bias,
-                                                                                    nullptr, baidu::xpu::api::Activation_t::LINEAR, nullptr,
-                                                                                    nullptr, -1)));
-                    return INFINI_STATUS_SUCCESS;
-                }));
-        } else {
-            return INFINI_STATUS_BAD_TENSOR_DTYPE;
-        }
-        break;
+        CHECK_STATUS(internal->useXdnn(
+            (kunlunStream_t)stream,
+            [&](xdnnHandle_t handle) {
+                if (bias_size > 0) {
+                    if constexpr (std::is_same<Tdata, float16>::value) {
+                        CHECK_KUNLUN((xdnn::cast<Tdata, float>(handle, (Tdata *)bias, bias_F32, bias_size)));
+                    } else if constexpr (std::is_same<Tdata, float>::value) {
+                        bias_F32 = (float *)bias;
+                    }
+                } else {
+                    bias_F32 = nullptr;
+                }
+                CHECK_KUNLUN((xdnn::conv2d_fusion<Tdata, Tdata, Tdata, int16_t>(handle, (Tdata *)x, (Tdata *)w, (Tdata *)y, (int64_t)info.batch(), (int64_t)info.in_channels(), (int64_t)info.input_dim(0),
+                                                                                (int64_t)info.input_dim(1), (int64_t)info.out_channels(), ksize,
+                                                                                stride, pad,
+                                                                                dilation, 1, nullptr,
+                                                                                nullptr, nullptr, true, bias_F32,
+                                                                                nullptr, baidu::xpu::api::Activation_t::LINEAR, nullptr,
+                                                                                nullptr, -1)));
+                return INFINI_STATUS_SUCCESS;
+            }));
+        return INFINI_STATUS_SUCCESS;
     }
     case 3: {
         std::vector<int64_t> ksize = {(int64_t)info.kernel_dim(0), (int64_t)info.kernel_dim(1), (int64_t)info.kernel_dim(2)};
@@ -189,53 +133,28 @@ infiniStatus_t conv_kernel(
         std::vector<int64_t> pad = {(int64_t)info.pad_info(0), (int64_t)info.pad_info(1), (int64_t)info.pad_info(2)};
         std::vector<int64_t> dilation = {(int64_t)info.dilation_info(0), (int64_t)info.dilation_info(1), (int64_t)info.dilation_info(2)};
 
-        if (dtype == INFINI_DTYPE_F16) {
-            if (bias_size > 0) {
-                CHECK_STATUS(internal->useXdnn(
-                    (kunlunStream_t)stream,
-                    [&](xdnnHandle_t handle) {
-                        CHECK_KUNLUN((xdnn::cast<float16, float>(handle, (float16 *)bias, bias_F32, bias_size)));
-                        CHECK_KUNLUN((xdnn::conv3d_fusion<float16, float16, float16, int16_t>(handle, (float16 *)x, (float16 *)w, (float16 *)y, (int64_t)info.batch(), (int64_t)info.in_channels(), (int64_t)info.input_dim(0),
-                                                                                              (int64_t)info.input_dim(1), (int64_t)info.input_dim(2), (int64_t)info.out_channels(), ksize,
-                                                                                              stride, pad,
-                                                                                              dilation, 1, nullptr,
-                                                                                              nullptr, nullptr, true, bias_F32,
-                                                                                              nullptr, baidu::xpu::api::Activation_t::LINEAR,
-                                                                                              nullptr)));
-                        return INFINI_STATUS_SUCCESS;
-                    }));
-            } else {
-                CHECK_STATUS(internal->useXdnn(
-                    (kunlunStream_t)stream,
-                    [&](xdnnHandle_t handle) {
-                        CHECK_KUNLUN((xdnn::conv3d_fusion<float16, float16, float16, int16_t>(handle, (float16 *)x, (float16 *)w, (float16 *)y, (int64_t)info.batch(), (int64_t)info.in_channels(), (int64_t)info.input_dim(0),
-                                                                                              (int64_t)info.input_dim(1), (int64_t)info.input_dim(2), (int64_t)info.out_channels(), ksize,
-                                                                                              stride, pad,
-                                                                                              dilation, 1, nullptr,
-                                                                                              nullptr, nullptr, true, nullptr,
-                                                                                              nullptr, baidu::xpu::api::Activation_t::LINEAR,
-                                                                                              nullptr)));
-                        return INFINI_STATUS_SUCCESS;
-                    }));
-            }
-            return INFINI_STATUS_SUCCESS;
-        } else if (dtype == INFINI_DTYPE_F32) {
-            CHECK_STATUS(internal->useXdnn(
-                (kunlunStream_t)stream,
-                [&](xdnnHandle_t handle) {
-                    CHECK_KUNLUN((xdnn::conv3d_fusion<float, float, float, int16_t>(handle, (float *)x, (float *)w, (float *)y, (int64_t)info.batch(), (int64_t)info.in_channels(), (int64_t)info.input_dim(0),
-                                                                                    (int64_t)info.input_dim(1), (int64_t)info.input_dim(2), (int64_t)info.out_channels(), ksize,
-                                                                                    stride, pad,
-                                                                                    dilation, 1, nullptr,
-                                                                                    nullptr, nullptr, true, (float *)bias,
-                                                                                    nullptr, baidu::xpu::api::Activation_t::LINEAR,
-                                                                                    nullptr)));
-                    return INFINI_STATUS_SUCCESS;
-                }));
-        } else {
-            return INFINI_STATUS_BAD_TENSOR_DTYPE;
-        }
-        break;
+        CHECK_STATUS(internal->useXdnn(
+            (kunlunStream_t)stream,
+            [&](xdnnHandle_t handle) {
+                if (bias_size > 0) {
+                    if constexpr (std::is_same<Tdata, float16>::value) {
+                        CHECK_KUNLUN((xdnn::cast<Tdata, float>(handle, (Tdata *)bias, bias_F32, bias_size)));
+                    } else if constexpr (std::is_same<Tdata, float>::value) {
+                        bias_F32 = (float *)bias;
+                    }
+                } else {
+                    bias_F32 = nullptr;
+                }
+                CHECK_KUNLUN((xdnn::conv3d_fusion<Tdata, Tdata, Tdata, int16_t>(handle, (Tdata *)x, (Tdata *)w, (Tdata *)y, (int64_t)info.batch(), (int64_t)info.in_channels(), (int64_t)info.input_dim(0),
+                                                                                (int64_t)info.input_dim(1), (int64_t)info.input_dim(2), (int64_t)info.out_channels(), ksize,
+                                                                                stride, pad,
+                                                                                dilation, 1, nullptr,
+                                                                                nullptr, nullptr, true, bias_F32,
+                                                                                nullptr, baidu::xpu::api::Activation_t::LINEAR,
+                                                                                nullptr)));
+                return INFINI_STATUS_SUCCESS;
+            }));
+        return INFINI_STATUS_SUCCESS;
     }
     default:
         return INFINI_STATUS_BAD_TENSOR_SHAPE;
@@ -254,17 +173,31 @@ infiniStatus_t Descriptor::calculate(
     if (workspace_size < _workspace_size) {
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
-    CHECK_STATUS(conv_kernel(
-        _opaque->internal,
-        _info,
-        _dtype,
-        workspace,
-        workspace_size,
-        y,
-        x,
-        w,
-        bias,
-        stream));
+    if (_dtype == INFINI_DTYPE_F16) {
+        CHECK_STATUS(conv_kernel<float16>(
+            _opaque->internal,
+            _info,
+            workspace,
+            workspace_size,
+            y,
+            x,
+            w,
+            bias,
+            stream));
+    } else if (_dtype == INFINI_DTYPE_F32) {
+        CHECK_STATUS(conv_kernel<float>(
+            _opaque->internal,
+            _info,
+            workspace,
+            workspace_size,
+            y,
+            x,
+            w,
+            bias,
+            stream));
+    } else {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
 
     return INFINI_STATUS_SUCCESS;
 }
