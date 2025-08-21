@@ -73,39 +73,16 @@ infiniStatus_t conv_kernel(
         int64_t stride = (int64_t)info.stride_info(0);
         std::initializer_list<int64_t> pad = {(int64_t)info.pad_info(0)};
         int64_t dilation = (int64_t)info.dilation_info(0);
-        printf("x_shape:(%ld, %ld, %ld)\n", info.batch(), info.in_channels(), info.input_dim(0));
-        printf("kernel_dim:(%ld)\n", ksize);
-        printf("stride:(%ld)\n", stride);
-        printf("pad:(%ld)\n", (int64_t)info.pad_info(0));
-        printf("dilation:(%ld)\n", dilation);
-        std::cout << "ndim: " << info.ndim() << " bias_size: " << bias_size << std::endl;
+
         if (dtype == INFINI_DTYPE_F16) {
-            // float16 *host_x, *host_w, *host_bias;
-            // host_x = (float16 *)malloc((int)info.batch() * (int)info.in_channels() * (int)info.input_dim(0) * sizeof(float16));
-            // host_w = (float16 *)malloc((int)bias_size * (int)info.in_channels() * (int)info.kernel_dim(0) * sizeof(float16));
-            // host_bias = (float16 *)malloc((int)bias_size * sizeof(float16));
-            // xpu_memcpy(host_x, x, (int)info.batch() * (int)info.in_channels() * (int)info.input_dim(0) * sizeof(float16), XPU_DEVICE_TO_HOST);
-            // xpu_memcpy(host_w, w, (int)bias_size * (int)info.in_channels() * (int)info.kernel_dim(0) * sizeof(float16), XPU_DEVICE_TO_HOST);
-            // xpu_memcpy(host_bias, bias, (int)bias_size * sizeof(float16), XPU_DEVICE_TO_HOST);
-            // for (int i = 0; i < (int)info.batch() * (int)info.in_channels() * (int)info.input_dim(0); i++) {
-            //     printf("%.4f ", static_cast<float>(host_x[i]));
-            // }
-            // printf("\n");
-            // for (int i = 0; i < (int)bias_size * (int)info.in_channels() * (int)info.kernel_dim(0); i++) {
-            //     printf("%.4f ", static_cast<float>(host_w[i]));
-            // }
-            // printf("\n");
-            // for (int i = 0; i < (int)bias_size; i++) {
-            //     printf("%.4f ", static_cast<float>(host_bias[i]));
-            // }
-            // printf("\n");
+
             if (bias_size > 0) {
                 CHECK_STATUS(internal->useXdnn(
                     (kunlunStream_t)stream,
                     [&](xdnnHandle_t handle) {
                         CHECK_KUNLUN((xdnn::cast<float16, float>(handle, (float16 *)bias, bias_F32, bias_size)));
                         CHECK_KUNLUN((xdnn::conv1d_fusion<float16, float16, float16, int16_t>(handle, (float16 *)x, (float16 *)w, (float16 *)y, (int64_t)info.batch(), (int64_t)info.in_channels(), (int64_t)info.input_dim(0),
-                                                                                              (int64_t)info.kernel_dim(0), ksize,
+                                                                                              (int64_t)info.out_channels(), ksize,
                                                                                               stride, pad,
                                                                                               dilation, 1, nullptr,
                                                                                               nullptr, nullptr, true, bias_F32,
@@ -118,7 +95,7 @@ infiniStatus_t conv_kernel(
                     (kunlunStream_t)stream,
                     [&](xdnnHandle_t handle) {
                         CHECK_KUNLUN((xdnn::conv1d_fusion<float16, float16, float16, int16_t>(handle, (float16 *)x, (float16 *)w, (float16 *)y, (int64_t)info.batch(), (int64_t)info.in_channels(), (int64_t)info.input_dim(0),
-                                                                                              (int64_t)info.kernel_dim(0), ksize,
+                                                                                              (int64_t)info.out_channels(), ksize,
                                                                                               stride, pad,
                                                                                               dilation, 1, nullptr,
                                                                                               nullptr, nullptr, true, nullptr,
@@ -134,7 +111,7 @@ infiniStatus_t conv_kernel(
                 (kunlunStream_t)stream,
                 [&](xdnnHandle_t handle) {
                     CHECK_KUNLUN((xdnn::conv1d_fusion<float, float, float, int16_t>(handle, (float *)x, (float *)w, (float *)y, (int64_t)info.batch(), (int64_t)info.in_channels(), (int64_t)info.input_dim(0),
-                                                                                    (int64_t)info.kernel_dim(0), ksize,
+                                                                                    (int64_t)info.out_channels(), ksize,
                                                                                     stride, pad,
                                                                                     dilation, 1, nullptr,
                                                                                     nullptr, nullptr, true, (float *)bias,
@@ -156,12 +133,7 @@ infiniStatus_t conv_kernel(
             (int64_t)info.pad_info(1),
             (int64_t)info.pad_info(1)};
         std::vector<int64_t> dilation = {(int64_t)info.dilation_info(0), (int64_t)info.dilation_info(1)};
-        printf("x_shape:(%ld, %ld, %ld, %ld)\n", info.batch(), info.in_channels(), info.input_dim(0), info.input_dim(1));
-        printf("kernel_dim:(%ld, %ld)\n", ksize[0], ksize[1]);
-        printf("stride:(%ld, %ld)\n", stride[0], stride[1]);
-        printf("pad:(%ld, %ld)\n", pad[0], pad[1]);
-        printf("dilation:(%ld, %ld)\n", dilation[0], dilation[1]);
-        std::cout << "ndim: " << info.ndim() << " bias_size: " << bias_size << std::endl;
+
         if (dtype == INFINI_DTYPE_F16) {
             if (bias_size > 0) {
                 CHECK_STATUS(internal->useXdnn(
@@ -169,7 +141,7 @@ infiniStatus_t conv_kernel(
                     [&](xdnnHandle_t handle) {
                         CHECK_KUNLUN((xdnn::cast<float16, float>(handle, (float16 *)bias, bias_F32, bias_size)));
                         CHECK_KUNLUN((xdnn::conv2d_fusion<float16, float16, float16, int16_t>(handle, (float16 *)x, (float16 *)w, (float16 *)y, (int64_t)info.batch(), (int64_t)info.in_channels(), (int64_t)info.input_dim(0),
-                                                                                              (int64_t)info.input_dim(1), (int64_t)info.kernel_dim(0), ksize,
+                                                                                              (int64_t)info.input_dim(1), (int64_t)info.out_channels(), ksize,
                                                                                               stride, pad,
                                                                                               dilation, 1, nullptr,
                                                                                               nullptr, nullptr, true, bias_F32,
@@ -182,7 +154,7 @@ infiniStatus_t conv_kernel(
                     (kunlunStream_t)stream,
                     [&](xdnnHandle_t handle) {
                         CHECK_KUNLUN((xdnn::conv2d_fusion<float16, float16, float16, int16_t>(handle, (float16 *)x, (float16 *)w, (float16 *)y, (int64_t)info.batch(), (int64_t)info.in_channels(), (int64_t)info.input_dim(0),
-                                                                                              (int64_t)info.input_dim(1), (int64_t)info.kernel_dim(0), ksize,
+                                                                                              (int64_t)info.input_dim(1), (int64_t)info.out_channels(), ksize,
                                                                                               stride, pad,
                                                                                               dilation, 1, nullptr,
                                                                                               nullptr, nullptr, true, nullptr,
@@ -198,7 +170,7 @@ infiniStatus_t conv_kernel(
                 (kunlunStream_t)stream,
                 [&](xdnnHandle_t handle) {
                     CHECK_KUNLUN((xdnn::conv2d_fusion<float, float, float, int16_t>(handle, (float *)x, (float *)w, (float *)y, (int64_t)info.batch(), (int64_t)info.in_channels(), (int64_t)info.input_dim(0),
-                                                                                    (int64_t)info.input_dim(1), (int64_t)info.kernel_dim(0), ksize,
+                                                                                    (int64_t)info.input_dim(1), (int64_t)info.out_channels(), ksize,
                                                                                     stride, pad,
                                                                                     dilation, 1, nullptr,
                                                                                     nullptr, nullptr, true, (float *)bias,
@@ -217,12 +189,6 @@ infiniStatus_t conv_kernel(
         std::vector<int64_t> pad = {(int64_t)info.pad_info(0), (int64_t)info.pad_info(1), (int64_t)info.pad_info(2)};
         std::vector<int64_t> dilation = {(int64_t)info.dilation_info(0), (int64_t)info.dilation_info(1), (int64_t)info.dilation_info(2)};
 
-        printf("x_shape:(%ld, %ld, %ld, %ld, %ld)\n", info.batch(), info.in_channels(), info.input_dim(0), info.input_dim(1), info.input_dim(2));
-        printf("kernel_dim:(%ld, %ld, %ld)\n", ksize[0], ksize[1], ksize[2]);
-        printf("stride:(%ld, %ld, %ld)\n", stride[0], stride[1], stride[2]);
-        printf("pad:(%ld, %ld, %ld)\n", pad[0], pad[1], pad[2]);
-        printf("dilation:(%ld, %ld, %ld)\n", dilation[0], dilation[1], dilation[2]);
-        std::cout << "ndim: " << info.ndim() << " bias_size: " << bias_size << std::endl;
         if (dtype == INFINI_DTYPE_F16) {
             if (bias_size > 0) {
                 CHECK_STATUS(internal->useXdnn(
@@ -230,7 +196,7 @@ infiniStatus_t conv_kernel(
                     [&](xdnnHandle_t handle) {
                         CHECK_KUNLUN((xdnn::cast<float16, float>(handle, (float16 *)bias, bias_F32, bias_size)));
                         CHECK_KUNLUN((xdnn::conv3d_fusion<float16, float16, float16, int16_t>(handle, (float16 *)x, (float16 *)w, (float16 *)y, (int64_t)info.batch(), (int64_t)info.in_channels(), (int64_t)info.input_dim(0),
-                                                                                              (int64_t)info.input_dim(1), (int64_t)info.input_dim(2), (int64_t)info.kernel_dim(0), ksize,
+                                                                                              (int64_t)info.input_dim(1), (int64_t)info.input_dim(2), (int64_t)info.out_channels(), ksize,
                                                                                               stride, pad,
                                                                                               dilation, 1, nullptr,
                                                                                               nullptr, nullptr, true, bias_F32,
@@ -243,7 +209,7 @@ infiniStatus_t conv_kernel(
                     (kunlunStream_t)stream,
                     [&](xdnnHandle_t handle) {
                         CHECK_KUNLUN((xdnn::conv3d_fusion<float16, float16, float16, int16_t>(handle, (float16 *)x, (float16 *)w, (float16 *)y, (int64_t)info.batch(), (int64_t)info.in_channels(), (int64_t)info.input_dim(0),
-                                                                                              (int64_t)info.input_dim(1), (int64_t)info.input_dim(2), (int64_t)info.kernel_dim(0), ksize,
+                                                                                              (int64_t)info.input_dim(1), (int64_t)info.input_dim(2), (int64_t)info.out_channels(), ksize,
                                                                                               stride, pad,
                                                                                               dilation, 1, nullptr,
                                                                                               nullptr, nullptr, true, nullptr,
@@ -258,7 +224,7 @@ infiniStatus_t conv_kernel(
                 (kunlunStream_t)stream,
                 [&](xdnnHandle_t handle) {
                     CHECK_KUNLUN((xdnn::conv3d_fusion<float, float, float, int16_t>(handle, (float *)x, (float *)w, (float *)y, (int64_t)info.batch(), (int64_t)info.in_channels(), (int64_t)info.input_dim(0),
-                                                                                    (int64_t)info.input_dim(1), (int64_t)info.input_dim(2), (int64_t)info.kernel_dim(0), ksize,
+                                                                                    (int64_t)info.input_dim(1), (int64_t)info.input_dim(2), (int64_t)info.out_channels(), ksize,
                                                                                     stride, pad,
                                                                                     dilation, 1, nullptr,
                                                                                     nullptr, nullptr, true, (float *)bias,
