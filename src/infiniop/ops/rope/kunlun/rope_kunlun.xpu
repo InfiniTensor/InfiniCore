@@ -2,6 +2,10 @@
 #define __ROPE_KUNLUN_KERNEL_XPU__
 
 #include "../../../devices/kunlun/kunlun_kernel_common.h"
+#include "../../../devices/kunlun/kunlun_common.h"
+#include "../../../devices/kunlun/kunlun_handle.h"
+#include "rope_kunlun.h"
+#include <memory>
 
 template <typename T, typename Tindex>
 __global__ void RoPEKernel(T *destination, const T *source, 
@@ -94,43 +98,80 @@ void RoPE(void *destination, const void *source,
     xpu_wait(stream); 
     
 }
-void RoPEF32I32F32(void *destination, const void *source, 
-                const void *pos_ids, const void *sin_table, const void *cos_table, 
-                uint32_t seqlen,  uint32_t nhead, uint32_t dhead,
-                long x_stride_seqlen, long x_stride_nhead,
-                long y_stride_seqlen, long y_stride_nhead,
-                XPUStream stream){
-    RoPE<float, int32_t>(destination, source, 
-                pos_ids, sin_table, cos_table, 
-                seqlen,  nhead, dhead,
-                x_stride_seqlen, x_stride_nhead,
-                y_stride_seqlen, y_stride_nhead, stream); 
+#define LAUNCH_KERNEL(T, Tindex) \
+    RoPE<T, Tindex>(y, x, pos_ids, sin_table, cos_table, \
+                    seqlen, nhead, dhead, \
+                    x_stride_seqlen, x_stride_nhead, \
+                    y_stride_seqlen, y_stride_nhead, reinterpret_cast<kunlunStream_t>(stream));
+
+namespace op::rope::kunlun {
+
+struct Descriptor::Opaque {
+    std::shared_ptr<device::kunlun::Handle::Internal> internal;
+};
+
+Descriptor::~Descriptor() {
+    delete _opaque;
 }
 
-void RoPEF16I32F32(void *destination, const void *source, 
-                const void *pos_ids, const void *sin_table, const void *cos_table, 
-                uint32_t seqlen,  uint32_t nhead, uint32_t dhead,
-                long x_stride_seqlen, long x_stride_nhead,
-                long y_stride_seqlen, long y_stride_nhead,
-                XPUStream stream){
-    RoPE<half, int32_t>(destination, source, 
-                pos_ids, sin_table, cos_table, 
-                seqlen,  nhead, dhead,
-                x_stride_seqlen, x_stride_nhead,
-                y_stride_seqlen, y_stride_nhead, stream); 
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t y_desc,
+    infiniopTensorDescriptor_t x_desc,
+    infiniopTensorDescriptor_t pos_desc,
+    infiniopTensorDescriptor_t sin_desc,
+    infiniopTensorDescriptor_t cos_desc) {
+
+    auto result = RoPEInfo::createRoPEInfo(y_desc, x_desc, pos_desc, sin_desc, cos_desc);
+    CHECK_RESULT(result);
+
+    // Create descriptor
+    *desc_ptr = new Descriptor(
+        result.take(),
+        0,
+        new Descriptor::Opaque{static_cast<device::kunlun::Handle *>(handle)->internal()},
+        handle->device,
+        handle->device_id);
+
+    return INFINI_STATUS_SUCCESS;
 }
 
-void RoPEBF16I32F32(void *destination, const void *source, 
-                const void *pos_ids, const void *sin_table, const void *cos_table, 
-                uint32_t seqlen,  uint32_t nhead, uint32_t dhead,
-                long x_stride_seqlen, long x_stride_nhead,
-                long y_stride_seqlen, long y_stride_nhead,
-                XPUStream stream){
-    RoPE<bfloat16_t, int32_t>(destination, source, 
-                pos_ids, sin_table, cos_table, 
-                seqlen,  nhead, dhead,
-                x_stride_seqlen, x_stride_nhead,
-                y_stride_seqlen, y_stride_nhead, stream); 
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *y,
+    const void *x,
+    const void *pos_ids,
+    const void *sin_table,
+    const void *cos_table,
+    void *stream) const {
+    uint32_t seqlen = (uint32_t)_info.seqlen;
+    uint32_t nhead = (uint32_t)_info.nhead;
+    uint32_t dhead = (uint32_t)_info.dhead;
+    long x_stride_seqlen = (long)_info.x_stride_seqlen;
+    long x_stride_nhead = (long)_info.x_stride_nhead;
+    long y_stride_seqlen = (long)_info.y_stride_seqlen;
+    long y_stride_nhead = (long)_info.y_stride_nhead;
+    if (_info.pos_type == INFINI_DTYPE_I32) {
+        switch (_info.data_type) {
+        case INFINI_DTYPE_F32:
+            LAUNCH_KERNEL(float, int32_t);
+            return INFINI_STATUS_SUCCESS;
+        case INFINI_DTYPE_F16:
+            LAUNCH_KERNEL(half, int32_t);
+            return INFINI_STATUS_SUCCESS;
+        case INFINI_DTYPE_BF16:
+            LAUNCH_KERNEL(bfloat16_t, int32_t);
+            return INFINI_STATUS_SUCCESS;
+        default:
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
+    } else {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
 }
+
+} // namespace op::rope::kunlun
 
 #endif
