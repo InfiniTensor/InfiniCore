@@ -1,4 +1,6 @@
 add_rules("mode.debug", "mode.release")
+add_requires("pybind11")
+
 -- Define color codes
 local GREEN = '\27[0;32m'
 local YELLOW = '\27[1;33m'
@@ -299,6 +301,18 @@ target("infiniccl")
 
     add_files("src/infiniccl/*.cc")
     add_installfiles("include/infiniccl.h", {prefixdir = "include"})
+
+    set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
+target_end()
+
+target("_infini")
+    add_rules("python.library", {soabi = true})
+    add_packages("pybind11")
+
+    set_kind("shared")
+    add_deps("infiniop", "infinirt", "infiniccl")
+
+    add_files("src/_infini/*.cc")
 
     set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
 target_end()
