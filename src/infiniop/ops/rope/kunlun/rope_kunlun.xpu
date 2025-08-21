@@ -11,8 +11,8 @@ template <typename T, typename Tindex>
 __global__ void RoPEKernel(T *destination, const T *source, 
                 const Tindex *pos_ids, const T *sin_table, const T *cos_table, 
                 uint32_t seqlen,  uint32_t nhead, uint32_t dhead,
-                long x_stride_seqlen, long x_stride_nhead,
-                long y_stride_seqlen, long y_stride_nhead,
+                int32_t x_stride_seqlen, int32_t x_stride_nhead,
+                int32_t y_stride_seqlen, int32_t y_stride_nhead,
                 XPUStream stream){
     //ndim = 3
     uint32_t other_size = seqlen * nhead;
@@ -87,15 +87,14 @@ template <typename T, typename Tindex>
 void RoPE(void *destination, const void *source, 
                 const void *pos_ids, const void *sin_table, const void *cos_table, 
                 uint32_t seqlen,  uint32_t nhead, uint32_t dhead,
-                long x_stride_seqlen, long x_stride_nhead,
-                long y_stride_seqlen, long y_stride_nhead,
+                int32_t x_stride_seqlen, int32_t x_stride_nhead,
+                int32_t y_stride_seqlen, int32_t y_stride_nhead,
                 XPUStream stream){
     RoPEKernel<T, Tindex><<<8, 64, stream>>>((T *)destination, (T *)source, 
                 (Tindex *)pos_ids, (T *)sin_table, (T *)cos_table, 
                 seqlen,  nhead, dhead,
                 x_stride_seqlen, x_stride_nhead,
                 y_stride_seqlen, y_stride_nhead, stream);           
-    xpu_wait(stream); 
     
 }
 #define LAUNCH_KERNEL(T, Tindex) \
@@ -149,10 +148,10 @@ infiniStatus_t Descriptor::calculate(
     uint32_t seqlen = (uint32_t)_info.seqlen;
     uint32_t nhead = (uint32_t)_info.nhead;
     uint32_t dhead = (uint32_t)_info.dhead;
-    long x_stride_seqlen = (long)_info.x_stride_seqlen;
-    long x_stride_nhead = (long)_info.x_stride_nhead;
-    long y_stride_seqlen = (long)_info.y_stride_seqlen;
-    long y_stride_nhead = (long)_info.y_stride_nhead;
+    int32_t x_stride_seqlen = (int32_t)_info.x_stride_seqlen;
+    int32_t x_stride_nhead = (int32_t)_info.x_stride_nhead;
+    int32_t y_stride_seqlen = (int32_t)_info.y_stride_seqlen;
+    int32_t y_stride_nhead = (int32_t)_info.y_stride_nhead;
     if (_info.pos_type == INFINI_DTYPE_I32) {
         switch (_info.data_type) {
         case INFINI_DTYPE_F32:
