@@ -60,7 +60,7 @@ __device__ void flashAttentionBackwardBlock(
             // S_i^(j) = Q_i @ K_j^T * softmax_scale
             for (size_t y = 0; y < B_c; ++y) {
                 // mask
-                if (mask_ != nullptr and mask_[(i * B_r + tx) * seq_len_kv + j * B_c + y] == -INFINITY) {
+                if (mask_ != nullptr && mask_[(i * B_r + tx) * seq_len_kv + j * B_c + y] == -INFINITY) {
                     s_i[tx * B_c + y] = -INFINITY;
                     continue;
                 };

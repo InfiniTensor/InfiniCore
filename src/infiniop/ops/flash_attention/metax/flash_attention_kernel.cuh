@@ -66,7 +66,7 @@ __device__ void flashAttentionBlock(
                 // if (i * B_r + tx < j * B_c + y) break;
 
                 // mask
-                if (mask_ != nullptr and mask_[(i * B_r + tx) * seq_len_kv + j * B_c + y] == -INFINITY) {
+                if (mask_ != nullptr && mask_[(i * B_r + tx) * seq_len_kv + j * B_c + y] == -INFINITY) {
                     s_i[tx * B_c + y] = -INFINITY;
                     continue;
                 };
@@ -110,7 +110,7 @@ __device__ void flashAttentionBlock(
                 // if (i * B_r + tx < j * B_c + y) break;
 
                 // mask
-                if (mask_ != nullptr and mask_[(i * B_r + tx) * seq_len_kv + j * B_c + y] == -INFINITY) {
+                if (mask_ != nullptr && mask_[(i * B_r + tx) * seq_len_kv + j * B_c + y] == -INFINITY) {
                     continue;
                 }
 
@@ -161,7 +161,7 @@ __device__ void flashAttentionBlock(
                     // if (i * B_r + tx < j * B_c + y) break;
 
                     // mask
-                    if (mask_ != nullptr and mask_[(i * B_r + tx) * seq_len_kv + j * B_c + y] == -INFINITY) {
+                    if (mask_ != nullptr && mask_[(i * B_r + tx) * seq_len_kv + j * B_c + y] == -INFINITY) {
                         continue;
                     }
 

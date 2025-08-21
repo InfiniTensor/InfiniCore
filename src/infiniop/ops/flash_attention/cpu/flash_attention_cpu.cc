@@ -45,10 +45,10 @@ infiniStatus_t flashAttention(
     std::memset(out, 0, batch_size * nums_head_q * seq_len_q * head_dim * sizeof(T));
     std::memset(l, 0, batch_size * nums_head_q * seq_len_q * sizeof(T));
 
-    float softmax_scale = 1.0 / sqrt(head_dim);
+    float softmax_scale = 1.f / sqrt(float(head_dim));
 
 #pragma omp parallel for
-    for (size_t bx = 0; bx < batch_size; ++bx) {
+    for (ptrdiff_t bx = 0; bx < ptrdiff_t(batch_size); ++bx) {
         for (size_t by = 0; by < nums_head_q; ++by) {
             size_t qo_offset = bx * qo_stride_b + by * qo_stride_n;
             size_t kv_offset = bx * kv_stride_b + by / group * kv_stride_n;
@@ -91,7 +91,7 @@ infiniStatus_t flashAttention(
                             }
 
                             // mask
-                            if (mask != nullptr and mask[(i * B_r + tx) * seq_len_kv + j * B_c + y] == -INFINITY) {
+                            if (mask != nullptr && mask[(i * B_r + tx) * seq_len_kv + j * B_c + y] == -INFINITY) {
                                 s_i[tx * B_c + y] = -INFINITY;
                                 continue;
                             }
@@ -119,7 +119,7 @@ infiniStatus_t flashAttention(
                             }
 
                             // mask
-                            if (mask != nullptr and mask[(i * B_r + tx) * seq_len_kv + j * B_c + y] == -INFINITY) {
+                            if (mask != nullptr && mask[(i * B_r + tx) * seq_len_kv + j * B_c + y] == -INFINITY) {
                                 continue;
                             }
 
@@ -151,7 +151,7 @@ infiniStatus_t flashAttention(
                                 }
 
                                 // mask
-                                if (mask != nullptr and mask[(i * B_r + tx) * seq_len_kv + j * B_c + y] == -INFINITY) {
+                                if (mask != nullptr && mask[(i * B_r + tx) * seq_len_kv + j * B_c + y] == -INFINITY) {
                                     continue;
                                 }
 
@@ -207,8 +207,8 @@ infiniStatus_t Descriptor::calculate(
         }
     }
 
-    size_t T_r = ceil(float(seq_len_q) / B_r);
-    size_t T_c = ceil(float(seq_len_kv) / B_c);
+    size_t T_r = CEIL_DIV(seq_len_q, B_r);
+    size_t T_c = CEIL_DIV(seq_len_kv, B_c);
 
     if (_info.dtype == INFINI_DTYPE_F32) {
         CHECK_STATUS(flashAttention(
