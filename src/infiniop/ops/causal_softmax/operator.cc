@@ -17,6 +17,9 @@
 #ifdef ENABLE_CAMBRICON_API
 #include "bang/causal_softmax_bang.h"
 #endif
+#ifdef ENABLE_MOORE_API
+#include "moore/causal_softmax_moore.h"
+#endif
 
 __C infiniStatus_t infiniopCreateCausalSoftmaxDescriptor(
     infiniopHandle_t handle,
@@ -51,6 +54,9 @@ __C infiniStatus_t infiniopCreateCausalSoftmaxDescriptor(
 #ifdef ENABLE_ASCEND_API
         CREATE(INFINI_DEVICE_ASCEND, ascend)
 #endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore)
+#endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
@@ -80,6 +86,9 @@ __C infiniStatus_t infiniopGetCausalSoftmaxWorkspaceSize(infiniopCausalSoftmaxDe
 #endif
 #ifdef ENABLE_CAMBRICON_API
         GET(INFINI_DEVICE_CAMBRICON, bang)
+#endif
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, moore)
 #endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -116,6 +125,9 @@ __C infiniStatus_t infiniopCausalSoftmax(
 #ifdef ENABLE_ASCEND_API
         CALCULATE(INFINI_DEVICE_ASCEND, ascend)
 #endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore)
+#endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
@@ -145,6 +157,9 @@ __C infiniStatus_t infiniopDestroyCausalSoftmaxDescriptor(infiniopCausalSoftmaxD
 #endif
 #ifdef ENABLE_ASCEND_API
         DESTROY(INFINI_DEVICE_ASCEND, ascend)
+#endif
+#ifdef ENABLE_MOORE_API
+        DESTROY(INFINI_DEVICE_MOORE, moore)
 #endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
