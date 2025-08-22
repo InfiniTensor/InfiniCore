@@ -1,0 +1,10 @@
+// #ifndef __INFINIOP_INDEX_COPY_INPLACE_CPU_CUDA_H__
+// #define __INFINIOP_INDEX_COPY_INPLACE_CPU_CUDA_H__
+#ifndef __INFINIOP_INDEX_COPY_INPLACE_NVIDIA_CUH__
+#define __INFINIOP_INDEX_COPY_INPLACE_NVIDIA_CUH__
+
+#include "../index_copy_inplace.h"
+
+DESCRIPTOR(nvidia)
+
+#endif // __INFINIOP_ROPE_CUDA_H__
