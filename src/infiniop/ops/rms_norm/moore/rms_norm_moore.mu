@@ -63,7 +63,7 @@ infiniStatus_t launchKernel(
     musaStream_t musa_stream) {
 
 #define LAUNCH_KERNEL(Tdata, Tweight, Tcompute)                                                      \
-    rmsnormKernel<BLOCK_SIZE, Tcompute, Tdata, Tweight><<<batch_size, BLOCK_SIZE, 0, musa_stream>>>( \
+    rmsnormKernel<BLOCK_SIZE, Tcompute, Tdata, Tweight><<<batch_size * nhead, BLOCK_SIZE, 0, musa_stream>>>( \
         reinterpret_cast<Tdata *>(y),                                                                \
         stride_y_batch,                                                                              \
         stride_y_nhead,                                                                              \

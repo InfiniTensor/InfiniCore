@@ -63,7 +63,7 @@ infiniStatus_t launchKernel(
     hcStream_t stream) {
 
 #define LAUNCH_KERNEL(Tdata, Tweight, Tcompute)                                                 \
-    rmsnormKernel<BLOCK_SIZE, Tcompute, Tdata, Tweight><<<batch_size, BLOCK_SIZE, 0, stream>>>( \
+    rmsnormKernel<BLOCK_SIZE, Tcompute, Tdata, Tweight><<<batch_size * nhead, BLOCK_SIZE, 0, stream>>>( \
         reinterpret_cast<Tdata *>(y),                                                           \
         stride_y_batch,                                                                         \
         stride_y_nhead,                                                                         \
