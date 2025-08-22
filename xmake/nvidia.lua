@@ -69,6 +69,21 @@ target("infinirt-nvidia")
     set_toolchains("cuda")
     add_links("cudart")
 
+    on_load(function (target)
+        import("lib.detect.find_tool")
+        local nvcc = find_tool("nvcc")
+        if nvcc ~= nil then
+            if is_plat("windows") then
+                nvcc_path = os.iorun("where nvcc"):match("(.-)\r?\n")
+            else
+                nvcc_path = nvcc.program
+            end
+
+            target:add("linkdirs", path.directory(path.directory(nvcc_path)) .. "/lib64/stubs")
+            target:add("links", "cuda")
+        end
+    end)
+
     if is_plat("windows") then
         add_cuflags("-Xcompiler=/utf-8", "--expt-relaxed-constexpr", "--allow-unsupported-compiler")
         add_cxxflags("/FS")
