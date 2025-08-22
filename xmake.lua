@@ -298,6 +298,10 @@ target("infiniccl")
         add_deps("infiniccl-iluvatar")
     end
 
+    if has_config("moore-gpu") then
+        add_deps("infiniccl-moore")
+    end
+    
     set_languages("cxx17")
 
     add_files("src/infiniccl/*.cc")
