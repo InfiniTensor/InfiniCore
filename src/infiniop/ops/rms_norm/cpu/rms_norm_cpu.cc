@@ -76,7 +76,7 @@ infiniStatus_t rmsnormHalfPrecision(const RMSNormInfo *info, T *y, const T *x, c
             if constexpr (std::is_same<Tw, float>::value) {
                 float val = utils::cast<float>(x_ptr[k]) * w[k] * rms;
                 y_ptr[k] = utils::cast<T>(val);
-            } else if constexpr (std::is_same<Tw, T>::value) {
+            } else if constexpr (std::is_same<Tw, T>::value || std::is_same_v<Tw, fp16_t> || std::is_same_v<Tw, bf16_t>) {
                 float val = utils::cast<float>(x_ptr[k]) * utils::cast<float>(w[k]) * rms;
                 y_ptr[k] = utils::cast<T>(val);
             } else {
@@ -97,6 +97,8 @@ infiniStatus_t Descriptor::calculate(
             CHECK_STATUS(rmsnormHalfPrecision(&_info, (fp16_t *)y, (const fp16_t *)x, (const fp16_t *)w));
         } else if (_info.wtype == INFINI_DTYPE_F32) {
             CHECK_STATUS(rmsnormHalfPrecision(&_info, (fp16_t *)y, (const fp16_t *)x, (const float *)w));
+        } else if (_info.wtype == INFINI_DTYPE_BF16) {
+            CHECK_STATUS(rmsnormHalfPrecision(&_info, (fp16_t *)y, (const fp16_t *)x, (const bf16_t *)w));
         } else {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
@@ -105,6 +107,8 @@ infiniStatus_t Descriptor::calculate(
             CHECK_STATUS(rmsnormHalfPrecision(&_info, (bf16_t *)y, (const bf16_t *)x, (const bf16_t *)w));
         } else if (_info.wtype == INFINI_DTYPE_F32) {
             CHECK_STATUS(rmsnormHalfPrecision(&_info, (bf16_t *)y, (const bf16_t *)x, (const float *)w));
+        } else if (_info.wtype == INFINI_DTYPE_F16) {
+            CHECK_STATUS(rmsnormHalfPrecision(&_info, (bf16_t *)y, (const bf16_t *)x, (const fp16_t *)w));
         } else {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
