@@ -13,15 +13,14 @@ __C infiniStatus_t infiniopCreateTopkrouterDescriptor(
     infiniopHandle_t handle,
     infiniopTopkrouterDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t x_desc,
-    infiniopTensorDescriptor_t correction_bias_desc,
-    size_t N, size_t width, size_t topk) {
+    infiniopTensorDescriptor_t correction_bias_desc) {
 
 #define CREATE(CASE, NAMESPACE)                                                   \
     case CASE:                                                                    \
         return op::topkrouter::NAMESPACE::Descriptor::create(                     \
             handle,                                                               \
             reinterpret_cast<op::topkrouter::NAMESPACE::Descriptor **>(desc_ptr), \
-            x_desc, correction_bias_desc, N, width, topk)
+            x_desc, correction_bias_desc)
 
     switch (handle->device) {
 #ifdef ENABLE_CPU_API
@@ -59,12 +58,12 @@ __C infiniStatus_t infiniopGetTopkrouterWorkspaceSize(infiniopTopkrouterDescript
 }
 
 __C infiniStatus_t infiniopTopkrouter(infiniopTopkrouterDescriptor_t desc, void *workspace, size_t workspace_size,
-                                      void *values, void *indices, void *x, void *correction_bias, float routed_scaling_factor, void *stream) {
+                                      void *values, void *indices, void *x, void *correction_bias, float routed_scaling_factor, size_t topk, void *stream) {
 
 #define CALCULATE(CASE, NAMESPACE)                                                         \
     case CASE:                                                                             \
         return reinterpret_cast<op::topkrouter::NAMESPACE::Descriptor *>(desc)->calculate( \
-            workspace, workspace_size, (float *)values, (int *)indices, x, (float *)correction_bias, routed_scaling_factor, stream)
+            workspace, workspace_size, (float *)values, (int *)indices, x, (float *)correction_bias, routed_scaling_factor, topk, stream)
 
     switch (desc->device_type) {
 #ifdef ENABLE_CPU_API

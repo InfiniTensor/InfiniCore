@@ -10,17 +10,17 @@ infiniStatus_t Descriptor::create(
     infiniopHandle_t handle,
     Descriptor **desc_ptr,
     infiniopTensorDescriptor_t x_desc,
-    infiniopTensorDescriptor_t correction_bias_desc,
-    size_t N, size_t width, size_t topk) {
+    infiniopTensorDescriptor_t correction_bias_desc) {
 
     return INFINI_STATUS_NOT_IMPLEMENTED;
 }
 
 infiniStatus_t Descriptor::calculate(
-    void *workspace, size_t workspace_size,
-    float *values, int *indices, void *x,
-    float *correction_bias,
+    void *workspace,
+    size_t workspace_size,
+    float *values, int *indices, void *x, float *correction_bias,
     float routed_scaling_factor,
+    size_t topk,
     void *stream) const {
 
     return INFINI_STATUS_NOT_IMPLEMENTED;

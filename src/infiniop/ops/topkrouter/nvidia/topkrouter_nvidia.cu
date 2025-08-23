@@ -18,10 +18,8 @@ infiniStatus_t Descriptor::create(
     infiniopHandle_t handle,
     Descriptor **desc_ptr,
     infiniopTensorDescriptor_t x_desc,
-    infiniopTensorDescriptor_t correction_bias_desc,
-
-    size_t N, size_t width, size_t topk) {
-    auto result = TopkrouterInfo::create(x_desc, N, width, topk);
+    infiniopTensorDescriptor_t correction_bias_desc) {
+    auto result = TopkrouterInfo::create(x_desc);
     CHECK_RESULT(result);
     auto info = result.take();
 
@@ -64,8 +62,7 @@ infiniStatus_t launch_topkrouter(float *d_values_out, int *d_indices_out, void *
 
 infiniStatus_t Descriptor::calculate(
     void *workspace, size_t workspace_size,
-    float *values, int *indices, void *x, float *correction_bias, float routed_scaling_factor,
-    void *stream) const {
+    float *values, int *indices, void *x, float *correction_bias, float routed_scaling_factor, size_t topk, void *stream) const {
 
     if (workspace_size < _workspace_size) {
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
@@ -73,7 +70,6 @@ infiniStatus_t Descriptor::calculate(
 
     size_t N = _info.N;
     size_t width = _info.width; // 256
-    size_t topk = _info.topk;   // 8
 
     // size_t n_routed_experts = 256;
     // size_t n_group = 8;

@@ -128,7 +128,7 @@ def test(
         device,
         x_shape,
         x_stride,
-        tokp,
+        topk,
         x_dtype=InfiniDtype.F32,
         dtype=InfiniDtype.F16,
         sync=None,
@@ -153,10 +153,7 @@ def test(
             handle,
             ctypes.byref(descriptor),
             x.descriptor,
-            correction_bias.descriptor,
-            N,
-            width,
-            tokp
+            correction_bias.descriptor
         )
     )
 
@@ -172,8 +169,8 @@ def test(
     )
     workspace = TestWorkspace(workspace_size.value, x.device)
 
-    values = torch.zeros((N, tokp), dtype=torch.float32, device=torch_device_map[x.device])
-    indices = torch.zeros((N, tokp), dtype=torch.int32, device=torch_device_map[x.device])
+    values = torch.zeros((N, topk), dtype=torch.float32, device=torch_device_map[x.device])
+    indices = torch.zeros((N, topk), dtype=torch.int32, device=torch_device_map[x.device])
 
     def lib_topkrouter():
         check_error(
@@ -186,6 +183,7 @@ def test(
                 x.data(),
                 correction_bias.data(),
                 2.5,
+                topk,
                 None,
             )
         )

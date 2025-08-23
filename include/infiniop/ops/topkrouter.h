@@ -9,14 +9,13 @@ __C __export infiniStatus_t infiniopCreateTopkrouterDescriptor(
     infiniopHandle_t handle,
     infiniopTopkrouterDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t x_desc,
-    infiniopTensorDescriptor_t correction_bias_desc,
-    size_t N, size_t width, size_t topk);
+    infiniopTensorDescriptor_t correction_bias_desc);
 
 __C __export infiniStatus_t infiniopGetTopkrouterWorkspaceSize(infiniopTopkrouterDescriptor_t desc, size_t *size);
 
 __C __export infiniStatus_t infiniopTopkrouter(infiniopTopkrouterDescriptor_t desc, void *workspace, size_t workspace_size,
-                                               void *values, void *indices, void *x, void *correction_bias, float routed_scaling_factor, void *stream);
+                                               void *values, void *indices, void *x, void *correction_bias, float routed_scaling_factor, size_t topk, void *stream);
 
-__C __export infiniStatus_t infiniopDestroyTopkrouterxDescriptor(infiniopTopkrouterDescriptor_t desc);
+__C __export infiniStatus_t infiniopDestroyTopkrouterDescriptor(infiniopTopkrouterDescriptor_t desc);
 
 #endif
