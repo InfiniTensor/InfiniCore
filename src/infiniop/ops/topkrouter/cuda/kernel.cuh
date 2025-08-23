@@ -61,15 +61,14 @@ __global__ void topkrouter_kernel(float *values_topk,          // 输出值, 形
 
     constexpr int warp_threads = 32;
     constexpr int block_threads = 256;
-    // constexpr int items_per_thread = 1;
     constexpr int warps_per_block = block_threads / warp_threads;
     const int warp_id = tid / warp_threads;
     const int lane_id = tid % warp_threads;
 
     __shared__ float share_data[256];
     __shared__ float share_data_group[8];
-    __shared__ float share_data_group_mask[8]; // 有效的组
-    __shared__ float share_sum;                // 有效的组
+    __shared__ float share_data_group_mask[8]; // 有效的group
+    __shared__ float share_sum;
     if (tid < 8) {
         share_data_group_mask[tid] = 0.0f;
     }
@@ -95,16 +94,17 @@ __global__ void topkrouter_kernel(float *values_topk,          // 输出值, 形
         WarpMergeSortT(temp_storage[warp_id]).Sort(thread_values, thread_indices, CustomLess());
     }
     __syncthreads();
+    share_data[tid] = thread_values[0];
 
     // ----------------------------------------------------------- //
     //              每个组中,前两个数据的和                            //
     // ----------------------------------------------------------- //
-    share_data[tid] = thread_values[0];
+
     __syncthreads();
     if (0 == lane_id) {
         share_data_group[warp_id] = share_data[warp_id * warp_threads] + share_data[warp_id * warp_threads + 1];
     }
-
+    __syncthreads();
     // ----------------------------------------------------------- //
     //                  再选前 4 个                                 //
     // ----------------------------------------------------------- //
@@ -150,7 +150,7 @@ __global__ void topkrouter_kernel(float *values_topk,          // 输出值, 形
 
         typedef cub::WarpReduce<float, warp_threads> WarpReduce;
         __shared__ typename WarpReduce::TempStorage temp_storage;
-        // 使用有效项数进行部分归约
+        // 使用有效项group 进行部分归约
         float warp_sum = WarpReduce(temp_storage).Sum(value);
         if (0 == tid) {
             share_sum = warp_sum + 1e-20;
