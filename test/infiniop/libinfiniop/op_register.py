@@ -388,6 +388,42 @@ def rope_(lib):
 
 
 @OpRegister.operator
+def rope_v2_(lib):
+    lib.infiniopCreateRoPEv2Descriptor.restype = c_int32
+    lib.infiniopCreateRoPEv2Descriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetRoPEv2WorkspaceSize.restype = c_int32
+    lib.infiniopGetRoPEv2WorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopRoPEv2.restype = c_int32
+    lib.infiniopRoPEv2.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyRoPEv2Descriptor.restype = c_int32
+    lib.infiniopDestroyRoPEv2Descriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def sub_(lib):
     lib.infiniopCreateSubDescriptor.restype = c_int32
     lib.infiniopCreateSubDescriptor.argtypes = [
