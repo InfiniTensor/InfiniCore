@@ -4,22 +4,16 @@
 template <unsigned int BLOCK_SIZE, typename Tcompute, typename Tdata, typename Tweight>
 __device__ void rmsnormBlock(
     Tdata *__restrict__ y,
-    ptrdiff_t stride_y_batch,
-    ptrdiff_t stride_y_nhead,
+    ptrdiff_t stride_y,
     const Tdata *__restrict__ x,
-    ptrdiff_t stride_x_batch,
-    ptrdiff_t stride_x_nhead,
+    ptrdiff_t stride_x,
     const Tweight *__restrict__ w,
-    size_t nhead,
     size_t dim,
     float epsilon) {
-    // Each block takes care of one head in one batch
+    // Each block takes care of a row of continuous data of length dim
     // Each thread deals with every block_size element in the row
-    size_t batch_idx = blockIdx.x / nhead;
-    size_t head_idx = blockIdx.x % nhead;
-
-    auto y_ptr = y + batch_idx * stride_y_batch + head_idx * stride_y_nhead;
-    auto x_ptr = x + batch_idx * stride_x_batch + head_idx * stride_x_nhead;
+    auto y_ptr = y + blockIdx.x * stride_y;
+    auto x_ptr = x + blockIdx.x * stride_x;
     auto w_ptr = w;
 
     // Block-reduce sum of x^2

@@ -108,7 +108,10 @@ void RearrangeMeta::launch(void *dst_, const void *src_) const {
     if (count_ == 1) {
         std::memcpy(dst_, src_, unit_);
     } else {
-#pragma omp parallel for
+// OpenMP parallel for disabled due to compilation issues
+// #ifdef ENABLE_OMP
+// #pragma omp parallel for
+// #endif
         for (ptrdiff_t i = 0; i < (ptrdiff_t)count_; ++i) {
             auto dst = reinterpret_cast<char *>(dst_);
             auto src = reinterpret_cast<const char *>(src_);

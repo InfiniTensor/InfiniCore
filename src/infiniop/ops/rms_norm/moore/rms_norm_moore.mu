@@ -11,16 +11,13 @@
 template <unsigned int BLOCK_SIZE, typename Tcompute, typename Tdata, typename Tweight>
 INFINIOP_MOORE_KERNEL rmsnormKernel(
     Tdata *__restrict__ y,
-    ptrdiff_t stride_y_batch,
-    ptrdiff_t stride_y_nhead,
+    ptrdiff_t stride_y,
     const Tdata *__restrict__ x,
-    ptrdiff_t stride_x_batch,
-    ptrdiff_t stride_x_nhead,
+    ptrdiff_t stride_x,
     const Tweight *__restrict__ w,
-    size_t nhead,
     size_t dim,
     float epsilon) {
-    rmsnormBlock<BLOCK_SIZE, Tcompute>(y, stride_y_batch, stride_y_nhead, x, stride_x_batch, stride_x_nhead, w, nhead, dim, epsilon);
+    rmsnormBlock<BLOCK_SIZE, Tcompute>(y, stride_y, x, stride_x, w, dim, epsilon);
 }
 
 namespace op::rms_norm::moore {
@@ -44,6 +41,11 @@ infiniStatus_t Descriptor::create(
     CHECK_RESULT(result);
     auto info = result.take();
 
+    // only support contiguous last dimension
+    if (info.x_strides[1] != 1 || info.y_strides[1] != 1) {
+        return INFINI_STATUS_BAD_TENSOR_STRIDES;
+    }
+
     *desc_ptr = new Descriptor(
         new Opaque{reinterpret_cast<device::moore::Handle *>(handle)->internal()},
         std::move(info),
@@ -55,23 +57,20 @@ infiniStatus_t Descriptor::create(
 // launch kernel with different data types
 template <unsigned int BLOCK_SIZE>
 infiniStatus_t launchKernel(
-    uint32_t batch_size, size_t nhead, size_t dim,
-    void *y, infiniDtype_t atype, ptrdiff_t stride_y_batch, ptrdiff_t stride_y_nhead,
-    const void *x, ptrdiff_t stride_x_batch, ptrdiff_t stride_x_nhead,
+    uint32_t batch_size, size_t dim,
+    void *y, infiniDtype_t atype, ptrdiff_t stride_y,
+    const void *x, ptrdiff_t stride_x,
     const void *w, infiniDtype_t wtype,
     float epsilon,
     musaStream_t musa_stream) {
 
 #define LAUNCH_KERNEL(Tdata, Tweight, Tcompute)                                                      \
-    rmsnormKernel<BLOCK_SIZE, Tcompute, Tdata, Tweight><<<batch_size * nhead, BLOCK_SIZE, 0, musa_stream>>>( \
+    rmsnormKernel<BLOCK_SIZE, Tcompute, Tdata, Tweight><<<batch_size, BLOCK_SIZE, 0, musa_stream>>>( \
         reinterpret_cast<Tdata *>(y),                                                                \
-        stride_y_batch,                                                                              \
-        stride_y_nhead,                                                                              \
+        stride_y,                                                                                    \
         reinterpret_cast<const Tdata *>(x),                                                          \
-        stride_x_batch,                                                                              \
-        stride_x_nhead,                                                                              \
+        stride_x,                                                                                    \
         reinterpret_cast<const Tweight *>(w),                                                        \
-        nhead,                                                                                       \
         dim,                                                                                         \
         epsilon)
 
@@ -103,22 +102,19 @@ infiniStatus_t Descriptor::calculate(
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
 
-    auto stride_x_batch = _info.x_strides[0];
-    auto stride_x_nhead = _info.x_strides[1];
-    auto stride_y_batch = _info.y_strides[0];
-    auto stride_y_nhead = _info.y_strides[1];
+    auto stride_x = _info.x_strides[0];
+    auto stride_y = _info.y_strides[0];
     auto dim = _info.dim();
     uint32_t batch_size = static_cast<uint32_t>(_info.shape[0]);
-    size_t nhead = _info.shape.size() > 2 ? _info.shape[1] : 1;
     auto musa_stream = reinterpret_cast<musaStream_t>(stream);
 
     // launch kernel with different block sizes
     if (_opaque->internal->maxThreadsPerBlock() == MOORE_BLOCK_SIZE_1024) {
-        CHECK_STATUS(launchKernel<MOORE_BLOCK_SIZE_1024>(batch_size, nhead, dim, y, _info.atype, stride_y_batch, stride_y_nhead, x, stride_x_batch, stride_x_nhead, w, _info.wtype, _info.epsilon, musa_stream));
+        CHECK_STATUS(launchKernel<MOORE_BLOCK_SIZE_1024>(batch_size, dim, y, _info.atype, stride_y, x, stride_x, w, _info.wtype, _info.epsilon, musa_stream));
     } else if (_opaque->internal->maxThreadsPerBlock() == MOORE_BLOCK_SIZE_512) {
-        CHECK_STATUS(launchKernel<MOORE_BLOCK_SIZE_512>(batch_size, nhead, dim, y, _info.atype, stride_y_batch, stride_y_nhead, x, stride_x_batch, stride_x_nhead, w, _info.wtype, _info.epsilon, musa_stream));
+        CHECK_STATUS(launchKernel<MOORE_BLOCK_SIZE_512>(batch_size, dim, y, _info.atype, stride_y, x, stride_x, w, _info.wtype, _info.epsilon, musa_stream));
     } else if (_opaque->internal->maxThreadsPerBlock() == MOORE_BLOCK_SIZE_2048) {
-        CHECK_STATUS(launchKernel<MOORE_BLOCK_SIZE_2048>(batch_size, nhead, dim, y, _info.atype, stride_y_batch, stride_y_nhead, x, stride_x_batch, stride_x_nhead, w, _info.wtype, _info.epsilon, musa_stream));
+        CHECK_STATUS(launchKernel<MOORE_BLOCK_SIZE_2048>(batch_size, dim, y, _info.atype, stride_y, x, stride_x, w, _info.wtype, _info.epsilon, musa_stream));
     } else {
         return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
     }

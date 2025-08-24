@@ -1,0 +1,208 @@
+#include "linear_metax.h"
+#include "../../../devices/metax/metax_common.h"
+#include "../../../devices/metax/metax_handle.h"
+#include "../../../tensor.h"
+#include "../../../../utils/custom_types.h"
+#include <hcr/hc_runtime_api.h>
+
+namespace op::linear::metax {
+
+Descriptor::~Descriptor() = default;
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t x_desc,
+    infiniopTensorDescriptor_t w_desc,
+    infiniopTensorDescriptor_t b_desc,
+    infiniopTensorDescriptor_t y_desc) {
+
+    if (!handle_ || !desc_ptr || !x_desc || !w_desc || !y_desc) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    auto handle = static_cast<device::metax::Handle *>(handle_);
+    
+    auto x_dtype = x_desc->dtype();
+    auto w_dtype = w_desc->dtype();
+    auto y_dtype = y_desc->dtype();
+    
+    // Check data types - support F16, F32, BF16
+    if (x_dtype != INFINI_DTYPE_F16 && x_dtype != INFINI_DTYPE_F32 && x_dtype != INFINI_DTYPE_BF16) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+    
+    // Check that all tensors have same dtype
+    if (x_dtype != w_dtype || x_dtype != y_dtype) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+    
+    // Check bias data type if provided
+    if (b_desc) {
+        auto b_dtype = b_desc->dtype();
+        if (b_dtype != x_dtype) {
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
+    }
+    
+    // Check dimensions
+    auto x_shape = x_desc->shape();
+    auto w_shape = w_desc->shape();
+    auto y_shape = y_desc->shape();
+    
+    int x_ndim = x_shape.size();
+    int w_ndim = w_shape.size();
+    int y_ndim = y_shape.size();
+
+    if (w_ndim != 2 || x_ndim < 1 || y_ndim < 1) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+
+    // Get dimensions
+    std::vector<int> x_dims(x_shape.begin(), x_shape.end());
+    std::vector<int> w_dims(w_shape.begin(), w_shape.end());
+    std::vector<int> y_dims(y_shape.begin(), y_shape.end());
+    std::vector<int> b_dims;
+
+    // Check dimension compatibility
+    // x: (..., in_features), w: (out_features, in_features), y: (..., out_features)
+    int in_features = x_dims[x_ndim - 1];
+    int out_features = w_dims[0];
+    int w_in_features = w_dims[1];
+
+    if (in_features != w_in_features) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+
+    if (y_dims[y_ndim - 1] != out_features) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+
+    bool has_bias = (b_desc != nullptr);
+    
+    // Check bias dimensions if provided
+    if (has_bias) {
+        auto b_shape = b_desc->shape();
+        int b_ndim = b_shape.size();
+        b_dims = std::vector<int>(b_shape.begin(), b_shape.end());
+
+        if (b_ndim != 1 || b_dims[0] != out_features) {
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
+    }
+    
+    // Calculate batch size
+    int batch_size = 1;
+    for (size_t i = 0; i < x_dims.size() - 1; i++) {
+        batch_size *= x_dims[i];
+    }
+    
+    *desc_ptr = new Descriptor(
+        x_dtype, x_dims, w_dims, y_dims, b_dims,
+        batch_size, in_features, out_features, has_bias,
+        handle->device, handle->device_id);
+    
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *y,
+    const void *x,
+    const void *w,
+    const void *b,
+    void *stream) const {
+
+    if (!y || !x || !w) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    
+    if (_has_bias && !b) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    // Dispatch based on data type
+    switch (_dtype) {
+        case INFINI_DTYPE_F16:
+            return linearMetax<__half>(y, x, w, b, stream);
+        case INFINI_DTYPE_F32:
+            return linearMetax<float>(y, x, w, b, stream);
+        case INFINI_DTYPE_BF16:
+            return linearMetax<__hpcc_bfloat16>(y, x, w, b, stream);
+        default:
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+}
+
+// Metax kernel for linear operation
+template<typename T>
+__global__ void linearKernel(
+    T *y,
+    const T *x,
+    const T *w,
+    const T *b,
+    int batch_size,
+    int in_features,
+    int out_features,
+    bool has_bias) {
+    
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total_outputs = batch_size * out_features;
+    
+    if (idx < total_outputs) {
+        int batch_idx = idx / out_features;
+        int out_idx = idx % out_features;
+        
+        T sum = T{};
+        
+        // Compute dot product: y[batch_idx][out_idx] = sum(x[batch_idx][in_idx] * w[out_idx][in_idx])
+        for (int in_idx = 0; in_idx < in_features; in_idx++) {
+            T x_val = x[batch_idx * in_features + in_idx];
+            T w_val = w[out_idx * in_features + in_idx];
+            sum = sum + x_val * w_val;
+        }
+        
+        // Add bias if present
+        if (has_bias) {
+            sum = sum + b[out_idx];
+        }
+        
+        y[batch_idx * out_features + out_idx] = sum;
+    }
+}
+
+template <typename T>
+infiniStatus_t Descriptor::linearMetax(
+    void *y_data,
+    const void *x_data,
+    const void *w_data,
+    const void *b_data,
+    void *stream) const {
+
+    auto metax_stream = static_cast<hcStream_t>(stream);
+    
+    int total_outputs = _batch_size * _out_features;
+    
+    if (total_outputs == 0) {
+        return INFINI_STATUS_SUCCESS;
+    }
+    
+    // Launch kernel
+    const int block_size = 256;
+    const int grid_size = (total_outputs + block_size - 1) / block_size;
+    
+    linearKernel<T><<<grid_size, block_size, 0, metax_stream>>>(
+        static_cast<T*>(y_data),
+        static_cast<const T*>(x_data),
+        static_cast<const T*>(w_data),
+        static_cast<const T*>(b_data),
+        _batch_size,
+        _in_features,
+        _out_features,
+        _has_bias);
+    
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace op::linear::metax

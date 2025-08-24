@@ -1,0 +1,377 @@
+#include "scatter_metax.h"
+#include "kernel.cuh"
+#include "../../../devices/metax/metax_common.h"
+#include "../../../devices/metax/metax_handle.h"
+#include "../../../tensor.h"
+#include <hcr/hc_runtime_api.h>
+#include <cstring>
+
+namespace op::scatter::metax {
+
+Descriptor::~Descriptor() = default;
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t input_desc,
+    infiniopTensorDescriptor_t output_desc,
+    infiniopTensorDescriptor_t index_desc,
+    infiniopTensorDescriptor_t src_desc,
+    int dim) {
+
+    if (!handle_ || !desc_ptr || !input_desc || !output_desc || !src_desc || !index_desc) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    auto handle = static_cast<device::metax::Handle *>(handle_);
+    
+    // Get tensor shapes and strides
+    auto input_shape = input_desc->shape();
+    auto output_shape = output_desc->shape();
+    auto src_shape = src_desc->shape();
+    auto index_shape = index_desc->shape();
+    auto input_strides = input_desc->strides();
+    auto output_strides = output_desc->strides();
+    auto src_strides = src_desc->strides();
+    auto index_strides = index_desc->strides();
+    
+    // Validate dimensions
+    if (dim < 0 || dim >= static_cast<int>(input_shape.size())) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    
+    // Check data types
+    auto input_dtype = input_desc->dtype();
+    auto output_dtype = output_desc->dtype();
+    auto src_dtype = src_desc->dtype();
+    auto index_dtype = index_desc->dtype();
+    
+    if (input_dtype != output_dtype || input_dtype != src_dtype) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+    
+    if (index_dtype != INFINI_DTYPE_I32 && index_dtype != INFINI_DTYPE_I64) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+    
+    // Validate shapes: src and index should have same shape
+    if (src_shape.size() != index_shape.size()) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+    
+    for (size_t i = 0; i < src_shape.size(); i++) {
+        if (src_shape[i] != index_shape[i]) {
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
+    }
+    
+    *desc_ptr = new Descriptor(
+        input_dtype, index_dtype,
+        input_shape, output_shape, src_shape, index_shape,
+        input_strides, output_strides, src_strides, index_strides,
+        static_cast<size_t>(dim),
+        handle->device, handle->device_id
+    );
+    
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *output,
+    const void *input,
+    const void *index,
+    const void *src,
+    void *stream) const {
+
+    auto input_dtype = _input_dtype;
+    auto index_dtype = _index_dtype;
+    
+    if (index_dtype == INFINI_DTYPE_I32) {
+        switch (input_dtype) {
+            case INFINI_DTYPE_F16:
+                return scatterMetax<fp16_t, int32_t>(output, input, index, src, stream);
+            case INFINI_DTYPE_F32:
+                return scatterMetax<float, int32_t>(output, input, index, src, stream);
+            case INFINI_DTYPE_F64:
+                return scatterMetax<double, int32_t>(output, input, index, src, stream);
+            case INFINI_DTYPE_BF16:
+                return scatterMetax<bf16_t, int32_t>(output, input, index, src, stream);
+            case INFINI_DTYPE_I8:
+                return scatterMetax<int8_t, int32_t>(output, input, index, src, stream);
+            case INFINI_DTYPE_I16:
+                return scatterMetax<int16_t, int32_t>(output, input, index, src, stream);
+            case INFINI_DTYPE_I32:
+                return scatterMetax<int32_t, int32_t>(output, input, index, src, stream);
+            case INFINI_DTYPE_I64:
+                return scatterMetax<int64_t, int32_t>(output, input, index, src, stream);
+            case INFINI_DTYPE_U8:
+                return scatterMetax<uint8_t, int32_t>(output, input, index, src, stream);
+            case INFINI_DTYPE_U16:
+                return scatterMetax<uint16_t, int32_t>(output, input, index, src, stream);
+            case INFINI_DTYPE_U32:
+                return scatterMetax<uint32_t, int32_t>(output, input, index, src, stream);
+            case INFINI_DTYPE_U64:
+                return scatterMetax<uint64_t, int32_t>(output, input, index, src, stream);
+            case INFINI_DTYPE_BOOL:
+                return scatterMetax<bool, int32_t>(output, input, index, src, stream);
+            default:
+                return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
+    } else if (index_dtype == INFINI_DTYPE_I64) {
+        switch (input_dtype) {
+            case INFINI_DTYPE_F16:
+                return scatterMetax<fp16_t, int64_t>(output, input, index, src, stream);
+            case INFINI_DTYPE_F32:
+                return scatterMetax<float, int64_t>(output, input, index, src, stream);
+            case INFINI_DTYPE_F64:
+                return scatterMetax<double, int64_t>(output, input, index, src, stream);
+            case INFINI_DTYPE_BF16:
+                return scatterMetax<bf16_t, int64_t>(output, input, index, src, stream);
+            case INFINI_DTYPE_I8:
+                return scatterMetax<int8_t, int64_t>(output, input, index, src, stream);
+            case INFINI_DTYPE_I16:
+                return scatterMetax<int16_t, int64_t>(output, input, index, src, stream);
+            case INFINI_DTYPE_I32:
+                return scatterMetax<int32_t, int64_t>(output, input, index, src, stream);
+            case INFINI_DTYPE_I64:
+                return scatterMetax<int64_t, int64_t>(output, input, index, src, stream);
+            case INFINI_DTYPE_U8:
+                return scatterMetax<uint8_t, int64_t>(output, input, index, src, stream);
+            case INFINI_DTYPE_U16:
+                return scatterMetax<uint16_t, int64_t>(output, input, index, src, stream);
+            case INFINI_DTYPE_U32:
+                return scatterMetax<uint32_t, int64_t>(output, input, index, src, stream);
+            case INFINI_DTYPE_U64:
+                return scatterMetax<uint64_t, int64_t>(output, input, index, src, stream);
+            case INFINI_DTYPE_BOOL:
+                return scatterMetax<bool, int64_t>(output, input, index, src, stream);
+            default:
+                return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
+    }
+    
+    return INFINI_STATUS_BAD_TENSOR_DTYPE;
+}
+
+// MetaX kernel for scatter operation (matching CUDA implementation)
+// Kernel implementation moved to scatter_kernel.maca
+
+template <typename T, typename IndexT>
+infiniStatus_t Descriptor::scatterMetax(
+    void *output_data,
+    const void *input_data,
+    const void *index_data,
+    const void *src_data,
+    void *stream) const {
+
+    // Ensure device is set correctly
+    hcError_t device_err = hcSetDevice(_device_id);
+    if (device_err != hcSuccess) {
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
+    
+    auto metax_stream = static_cast<hcStream_t>(stream);
+    
+    // Calculate index size
+    size_t total_index_elements = 1;
+    for (size_t dim : _index_shape) {
+        total_index_elements *= dim;
+    }
+    
+    // Calculate input size
+    size_t total_input_elements = 1;
+    for (size_t dim : _input_shape) {
+        total_input_elements *= dim;
+    }
+    
+    // Calculate src size
+    size_t total_src_elements = 1;
+    for (size_t dim : _src_shape) {
+        total_src_elements *= dim;
+    }
+    
+    if (total_index_elements == 0) {
+        return INFINI_STATUS_SUCCESS;
+    }
+    
+    // Calculate element size based on data type
+    size_t element_size;
+    switch (_input_dtype) {
+        case INFINI_DTYPE_F16: case INFINI_DTYPE_BF16: element_size = 2; break;
+        case INFINI_DTYPE_F32: case INFINI_DTYPE_I32: case INFINI_DTYPE_U32: element_size = 4; break;
+        case INFINI_DTYPE_F64: case INFINI_DTYPE_I64: case INFINI_DTYPE_U64: element_size = 8; break;
+        case INFINI_DTYPE_I8: case INFINI_DTYPE_U8: case INFINI_DTYPE_BOOL: element_size = 1; break;
+        case INFINI_DTYPE_I16: case INFINI_DTYPE_U16: element_size = 2; break;
+        default: return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+    
+    // Step 1: Copy input to output (initialization step)
+    size_t input_size_bytes = total_input_elements * element_size;
+    
+    // Check if pointers are valid
+    if (input_data == nullptr) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    if (output_data == nullptr) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    
+    hcError_t copy_err = hcMemcpy(output_data, input_data, input_size_bytes, hcMemcpyDeviceToDevice);
+    if (copy_err != hcSuccess) {
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
+    
+    // Convert byte strides to element strides for kernel
+    std::vector<size_t> h_src_strides(_src_strides.size());
+    std::vector<size_t> h_output_strides(_output_strides.size());
+    std::vector<size_t> h_index_strides(_index_strides.size());
+    
+    // Convert byte strides to element strides
+    for (size_t i = 0; i < _src_strides.size(); i++) {
+        h_src_strides[i] = static_cast<size_t>(_src_strides[i]) / sizeof(T);
+    }
+    for (size_t i = 0; i < _index_strides.size(); i++) {
+        h_index_strides[i] = static_cast<size_t>(_index_strides[i]) / sizeof(IndexT);
+    }
+    for (size_t i = 0; i < _output_strides.size(); i++) {
+        h_output_strides[i] = static_cast<size_t>(_output_strides[i]) / sizeof(T);
+    }
+    
+    // Allocate device memory for shape and stride arrays
+    size_t *d_src_shape = nullptr, *d_output_shape = nullptr;
+    size_t *d_src_strides = nullptr, *d_output_strides = nullptr, *d_index_strides = nullptr;
+    
+    hcError_t err;
+    err = hcMalloc((void**)&d_src_shape, _src_shape.size() * sizeof(size_t));
+    if (err != hcSuccess) {
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
+    err = hcMalloc((void**)&d_output_shape, _output_shape.size() * sizeof(size_t));
+    if (err != hcSuccess) {
+        hcFree(d_src_shape);
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
+    err = hcMalloc((void**)&d_src_strides, _src_strides.size() * sizeof(size_t));
+    if (err != hcSuccess) {
+        hcFree(d_src_shape);
+        hcFree(d_output_shape);
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
+    err = hcMalloc((void**)&d_output_strides, _output_strides.size() * sizeof(size_t));
+    if (err != hcSuccess) {
+        hcFree(d_src_shape);
+        hcFree(d_output_shape);
+        hcFree(d_src_strides);
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
+    err = hcMalloc((void**)&d_index_strides, _index_strides.size() * sizeof(size_t));
+    if (err != hcSuccess) {
+        hcFree(d_src_shape);
+        hcFree(d_output_shape);
+        hcFree(d_src_strides);
+        hcFree(d_output_strides);
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
+    
+    // Copy data to device
+    err = hcMemcpy(d_src_shape, _src_shape.data(), _src_shape.size() * sizeof(size_t), hcMemcpyHostToDevice);
+    if (err != hcSuccess) {
+        hcFree(d_src_shape); hcFree(d_output_shape); hcFree(d_src_strides); hcFree(d_output_strides); hcFree(d_index_strides);
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
+    err = hcMemcpy(d_output_shape, _output_shape.data(), _output_shape.size() * sizeof(size_t), hcMemcpyHostToDevice);
+    if (err != hcSuccess) {
+        hcFree(d_src_shape); hcFree(d_output_shape); hcFree(d_src_strides); hcFree(d_output_strides); hcFree(d_index_strides);
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
+    err = hcMemcpy(d_src_strides, h_src_strides.data(), h_src_strides.size() * sizeof(size_t), hcMemcpyHostToDevice);
+    if (err != hcSuccess) {
+        hcFree(d_src_shape); hcFree(d_output_shape); hcFree(d_src_strides); hcFree(d_output_strides); hcFree(d_index_strides);
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
+    err = hcMemcpy(d_output_strides, h_output_strides.data(), h_output_strides.size() * sizeof(size_t), hcMemcpyHostToDevice);
+    if (err != hcSuccess) {
+        hcFree(d_src_shape); hcFree(d_output_shape); hcFree(d_src_strides); hcFree(d_output_strides); hcFree(d_index_strides);
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
+    err = hcMemcpy(d_index_strides, h_index_strides.data(), h_index_strides.size() * sizeof(size_t), hcMemcpyHostToDevice);
+    if (err != hcSuccess) {
+        hcFree(d_src_shape); hcFree(d_output_shape); hcFree(d_src_strides); hcFree(d_output_strides); hcFree(d_index_strides);
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
+    
+    // Check device status before kernel launch
+    hcError_t device_status = hcGetLastError();
+    if (device_status != hcSuccess) {
+        hcFree(d_src_shape);
+        hcFree(d_output_shape);
+        hcFree(d_src_strides);
+        hcFree(d_output_strides);
+        hcFree(d_index_strides);
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
+    
+    // Launch kernel
+    const int block_size = 256;
+    const int grid_size = (total_index_elements + block_size - 1) / block_size;
+    
+    // Calculate total output elements
+    size_t total_output_elements = 1;
+    for (size_t dim : _output_shape) {
+        total_output_elements *= dim;
+    }
+    
+    // Stream already converted above
+    
+    // Step 2: Launch scatter kernel
+    op::scatter::metax::launch_scatter_kernel<T, IndexT>(
+        static_cast<T*>(output_data),
+        static_cast<const T*>(src_data),
+        static_cast<const IndexT*>(index_data),
+        total_src_elements,
+        total_index_elements,
+        total_output_elements,
+        _dim,
+        d_src_strides,
+        d_output_strides,
+        d_index_strides,
+        d_src_shape,
+        d_output_shape,
+        _src_shape.size(),
+        metax_stream);
+    
+    // Check kernel launch status
+    hcError_t launch_err = hcGetLastError();
+    if (launch_err != hcSuccess) {
+        hcFree(d_src_shape);
+        hcFree(d_output_shape);
+        hcFree(d_src_strides);
+        hcFree(d_output_strides);
+        hcFree(d_index_strides);
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
+    
+    // Wait for kernel completion
+    err = hcStreamSynchronize(metax_stream);
+    if (err != hcSuccess) {
+        hcFree(d_src_shape);
+        hcFree(d_output_shape);
+        hcFree(d_src_strides);
+        hcFree(d_output_strides);
+        hcFree(d_index_strides);
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
+    
+    // Clean up device memory
+    hcFree(d_src_shape);
+    hcFree(d_output_shape);
+    hcFree(d_src_strides);
+    hcFree(d_output_strides);
+    hcFree(d_index_strides);
+    
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace op::scatter::metax

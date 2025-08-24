@@ -1,0 +1,165 @@
+#include "tril_metax.h"
+#include "../../../devices/metax/metax_common.h"
+#include "../../../devices/metax/metax_handle.h"
+#include "../../../tensor.h"
+#include "../../../../utils/custom_types.h"
+#include <hcr/hc_runtime_api.h>
+
+namespace op::tril::metax {
+
+Descriptor::~Descriptor() = default;
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t input_desc,
+    infiniopTensorDescriptor_t output_desc,
+    int diagonal) {
+
+    if (!handle_ || !desc_ptr || !input_desc || !output_desc) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    auto handle = static_cast<device::metax::Handle *>(handle_);
+    
+    // Check tensor dimensions (should be 2D)
+    auto input_shape = input_desc->shape();
+    auto output_shape = output_desc->shape();
+    
+    if (input_shape.size() != 2 || output_shape.size() != 2) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+    
+    if (input_shape[0] != output_shape[0] || input_shape[1] != output_shape[1]) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+    
+    // Check data types match
+    if (input_desc->dtype() != output_desc->dtype()) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+    
+    auto dtype = input_desc->dtype();
+    
+    // Check supported data types
+    if (dtype != INFINI_DTYPE_F16 && dtype != INFINI_DTYPE_F32 &&
+        dtype != INFINI_DTYPE_F64 && dtype != INFINI_DTYPE_BF16 &&
+        dtype != INFINI_DTYPE_I8 && dtype != INFINI_DTYPE_I16 &&
+        dtype != INFINI_DTYPE_I32 && dtype != INFINI_DTYPE_I64 &&
+        dtype != INFINI_DTYPE_U8 && dtype != INFINI_DTYPE_U16 &&
+        dtype != INFINI_DTYPE_U32 && dtype != INFINI_DTYPE_U64 &&
+        dtype != INFINI_DTYPE_BOOL) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+    
+    auto input_strides = input_desc->strides();
+    auto output_strides = output_desc->strides();
+    
+    *desc_ptr = new Descriptor(
+        dtype, input_shape, input_strides, output_strides,
+        diagonal,
+        handle->device, handle->device_id);
+    
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *output,
+    const void *input,
+    void *stream) const {
+
+    if (!output || !input) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    // Dispatch based on data type
+    switch (_dtype) {
+        case INFINI_DTYPE_F16:
+            return trilMetax<fp16_t>(output, input, stream);
+        case INFINI_DTYPE_F32:
+            return trilMetax<float>(output, input, stream);
+        case INFINI_DTYPE_F64:
+            return trilMetax<double>(output, input, stream);
+        case INFINI_DTYPE_BF16:
+            return trilMetax<bf16_t>(output, input, stream);
+        case INFINI_DTYPE_I8:
+            return trilMetax<int8_t>(output, input, stream);
+        case INFINI_DTYPE_I16:
+            return trilMetax<int16_t>(output, input, stream);
+        case INFINI_DTYPE_I32:
+            return trilMetax<int32_t>(output, input, stream);
+        case INFINI_DTYPE_I64:
+            return trilMetax<int64_t>(output, input, stream);
+        case INFINI_DTYPE_U8:
+            return trilMetax<uint8_t>(output, input, stream);
+        case INFINI_DTYPE_U16:
+            return trilMetax<uint16_t>(output, input, stream);
+        case INFINI_DTYPE_U32:
+            return trilMetax<uint32_t>(output, input, stream);
+        case INFINI_DTYPE_U64:
+            return trilMetax<uint64_t>(output, input, stream);
+        case INFINI_DTYPE_BOOL:
+            return trilMetax<bool>(output, input, stream);
+        default:
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+}
+
+// Metax kernel for tril operation
+template<typename T>
+__global__ void trilKernel(
+    T *output,
+    const T *input,
+    size_t rows,
+    size_t cols,
+    int diagonal) {
+    
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    size_t total_elements = rows * cols;
+    
+    if (idx < total_elements) {
+        size_t i = idx / cols;  // row index
+        size_t j = idx % cols;  // col index
+        
+        // Keep lower triangular part (including diagonal offset)
+        if (static_cast<int>(j) <= static_cast<int>(i) + diagonal) {
+            output[idx] = input[idx];
+        } else {
+            output[idx] = T{};  // Zero out upper triangular part
+        }
+    }
+}
+
+template <typename T>
+infiniStatus_t Descriptor::trilMetax(
+    void *output_data,
+    const void *input_data,
+    void *stream) const {
+
+    auto metax_stream = static_cast<hcStream_t>(stream);
+    
+    size_t rows = _shape[0];
+    size_t cols = _shape[1];
+    size_t total_elements = rows * cols;
+    
+    if (total_elements == 0) {
+        return INFINI_STATUS_SUCCESS;
+    }
+    
+    // Launch kernel
+    const int block_size = 256;
+    const int grid_size = (total_elements + block_size - 1) / block_size;
+    
+    trilKernel<T><<<grid_size, block_size, 0, metax_stream>>>(
+        static_cast<T*>(output_data),
+        static_cast<const T*>(input_data),
+        rows,
+        cols,
+        _diagonal);
+    
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace op::tril::metax

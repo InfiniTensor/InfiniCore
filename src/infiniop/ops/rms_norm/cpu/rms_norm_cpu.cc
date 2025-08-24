@@ -21,27 +21,19 @@ infiniStatus_t Descriptor::create(
 
 template <typename T>
 infiniStatus_t rmsnorm(const RMSNormInfo *info, T *y, const T *x, const T *w) {
-    const size_t batch_size = info->shape[0];
-    const size_t nhead = info->shape.size() > 2 ? info->shape[1] : 1;
-    const size_t dim = info->shape.back();
-    const ptrdiff_t total_blocks = static_cast<ptrdiff_t>(batch_size * nhead);
-
 #pragma omp parallel for
-    for (ptrdiff_t block_idx = 0; block_idx < total_blocks; ++block_idx) {
-        const size_t i = block_idx / nhead; // batch index
-        const size_t j = block_idx % nhead; // head index
-
-        const T *x_ptr = x + i * info->x_strides[0] + j * info->x_strides[1];
-        T *y_ptr = y + i * info->y_strides[0] + j * info->y_strides[1];
+    for (ptrdiff_t i = 0; i < ptrdiff_t(info->shape[0]); i++) {
+        T *x_ = (T *)(x + i * info->x_strides[0]);
+        T *y_ = (T *)(y + i * info->y_strides[0]);
 
         // [Reduce] sum of x^2 on last dimension
-        T ss = op::common_cpu::reduce_op::sumSquared(x_ptr, dim, info->x_strides.back());
+        T ss = op::common_cpu::reduce_op::sumSquared(x_, info->shape[1], info->x_strides[1]);
 
         // 1 / (sqrt(sum/dim + eps))
-        T rms = (T)1 / std::sqrt(ss / (T)(dim) + (T)(info->epsilon));
+        T rms = (T)1 / std::sqrt(ss / (T)(info->shape[1]) + (T)(info->epsilon));
 
-        for (size_t k = 0; k < dim; k++) {
-            y_ptr[k] = x_ptr[k] * w[k] * rms;
+        for (size_t j = 0; j < info->shape[1]; j++) {
+            y_[j * info->y_strides[1]] = x_[j * info->x_strides[1]] * w[j] * rms;
         }
     }
 
@@ -53,32 +45,24 @@ infiniStatus_t rmsnormHalfPrecision(const RMSNormInfo *info, T *y, const T *x, c
     static_assert(std::is_same<T, fp16_t>::value || std::is_same<T, bf16_t>::value,
                   "T must be fp16_t or bf16_t");
 
-    const size_t batch_size = info->shape[0];
-    const size_t nhead = info->shape.size() > 2 ? info->shape[1] : 1;
-    const size_t dim = info->shape.back();
-    const ptrdiff_t total_blocks = static_cast<ptrdiff_t>(batch_size * nhead);
-
 #pragma omp parallel for
-    for (ptrdiff_t block_idx = 0; block_idx < total_blocks; ++block_idx) {
-        const size_t i = block_idx / nhead; // batch index
-        const size_t j = block_idx % nhead; // head index
-
-        const T *x_ptr = x + i * info->x_strides[0] + j * info->x_strides[1];
-        T *y_ptr = y + i * info->y_strides[0] + j * info->y_strides[1];
+    for (ptrdiff_t i = 0; i < ptrdiff_t(info->shape[0]); i++) {
+        T *x_ = (T *)(x + i * info->x_strides[0]);
+        T *y_ = (T *)(y + i * info->y_strides[0]);
 
         // [Reduce] sum of x^2 on last dimension
-        float ss = op::common_cpu::reduce_op::sumSquared(x_ptr, dim, info->x_strides.back());
+        float ss = op::common_cpu::reduce_op::sumSquared(x_, info->shape[1], info->x_strides[1]);
 
         // 1 / (sqrt(sum/dim + eps))
-        float rms = 1.f / std::sqrt(ss / (float)(dim) + info->epsilon);
+        float rms = 1.f / std::sqrt(ss / (float)(info->shape[1]) + info->epsilon);
 
-        for (size_t k = 0; k < dim; k++) {
+        for (size_t j = 0; j < info->shape[1]; j++) {
             if constexpr (std::is_same<Tw, float>::value) {
-                float val = utils::cast<float>(x_ptr[k]) * w[k] * rms;
-                y_ptr[k] = utils::cast<T>(val);
+                float val = utils::cast<float>(x_[j * info->x_strides[1]]) * w[j] * rms;
+                y_[j * info->y_strides[1]] = utils::cast<T>(val);
             } else if constexpr (std::is_same<Tw, T>::value) {
-                float val = utils::cast<float>(x_ptr[k]) * utils::cast<float>(w[k]) * rms;
-                y_ptr[k] = utils::cast<T>(val);
+                float val = utils::cast<float>(x_[j * info->x_strides[1]]) * utils::cast<float>(w[j]) * rms;
+                y_[j * info->y_strides[1]] = utils::cast<T>(val);
             } else {
                 std::abort();
             }
@@ -109,9 +93,9 @@ infiniStatus_t Descriptor::calculate(
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
     } else if (_info.atype == INFINI_DTYPE_F32) {
-        CHECK_STATUS(rmsnorm(&_info, (float *)y, (const float *)x, (const float *)w));
+        CHECK_STATUS(rmsnorm(&_info, (float *)y, (float *)x, (float *)w));
     } else if (_info.atype == INFINI_DTYPE_F64) {
-        CHECK_STATUS(rmsnorm(&_info, (double *)y, (const double *)x, (const double *)w));
+        CHECK_STATUS(rmsnorm(&_info, (double *)y, (double *)x, (double *)w));
     } else {
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }

@@ -1,0 +1,291 @@
+#include "gather_metax.h"
+#include "../../../devices/metax/metax_common.h"
+#include "../../../devices/metax/metax_handle.h"
+#include "../../../tensor.h"
+#include "../../../../utils/custom_types.h"
+#include <hcr/hc_runtime_api.h>
+
+namespace op::gather::metax {
+
+Descriptor::~Descriptor() = default;
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t input_desc,
+    infiniopTensorDescriptor_t output_desc,
+    int dim,
+    infiniopTensorDescriptor_t index_desc) {
+
+    if (!handle_ || !desc_ptr || !input_desc || !output_desc || !index_desc) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    auto handle = static_cast<device::metax::Handle *>(handle_);
+    
+    // Get tensor shapes and strides
+    auto input_shape = input_desc->shape();
+    auto output_shape = output_desc->shape();
+    auto index_shape = index_desc->shape();
+    auto input_strides = input_desc->strides();
+    auto output_strides = output_desc->strides();
+    auto index_strides = index_desc->strides();
+    
+    // Validate dimensions
+    if (dim < 0 || dim >= static_cast<int>(input_shape.size())) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    
+    // Check data types
+    auto input_dtype = input_desc->dtype();
+    auto output_dtype = output_desc->dtype();
+    auto index_dtype = index_desc->dtype();
+    
+    if (input_dtype != output_dtype) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+    
+    if (index_dtype != INFINI_DTYPE_I32 && index_dtype != INFINI_DTYPE_I64) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+    
+    // Check supported data types
+    if (input_dtype != INFINI_DTYPE_F16 && input_dtype != INFINI_DTYPE_F32 &&
+        input_dtype != INFINI_DTYPE_F64 && input_dtype != INFINI_DTYPE_BF16 &&
+        input_dtype != INFINI_DTYPE_I8 && input_dtype != INFINI_DTYPE_I16 &&
+        input_dtype != INFINI_DTYPE_I32 && input_dtype != INFINI_DTYPE_I64 &&
+        input_dtype != INFINI_DTYPE_U8 && input_dtype != INFINI_DTYPE_U16 &&
+        input_dtype != INFINI_DTYPE_U32 && input_dtype != INFINI_DTYPE_U64 &&
+        input_dtype != INFINI_DTYPE_BOOL) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+    
+    // Validate shapes
+    if (input_shape.size() != output_shape.size() || input_shape.size() != index_shape.size()) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+    
+    // Check that all dimensions except the gather dimension match
+    for (size_t i = 0; i < input_shape.size(); i++) {
+        if (i != static_cast<size_t>(dim)) {
+            if (output_shape[i] != index_shape[i]) {
+                return INFINI_STATUS_BAD_TENSOR_SHAPE;
+            }
+        }
+    }
+    
+    *desc_ptr = new Descriptor(
+        input_dtype, index_dtype,
+        input_shape, output_shape, index_shape,
+        input_strides, output_strides, index_strides,
+        dim,
+        handle->device, handle->device_id);
+    
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *output,
+    const void *input,
+    const void *index,
+    void *stream) const {
+
+    if (!output || !input || !index) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    // Dispatch based on data type and index type
+    if (_index_dtype == INFINI_DTYPE_I32) {
+        switch (_input_dtype) {
+            case INFINI_DTYPE_F16:
+                return gatherMetax<__half, int32_t>(output, input, index, stream);
+            case INFINI_DTYPE_F32:
+                return gatherMetax<float, int32_t>(output, input, index, stream);
+            case INFINI_DTYPE_F64:
+                return gatherMetax<double, int32_t>(output, input, index, stream);
+            case INFINI_DTYPE_BF16:
+                return gatherMetax<__hpcc_bfloat16, int32_t>(output, input, index, stream);
+            case INFINI_DTYPE_I8:
+                return gatherMetax<int8_t, int32_t>(output, input, index, stream);
+            case INFINI_DTYPE_I16:
+                return gatherMetax<int16_t, int32_t>(output, input, index, stream);
+            case INFINI_DTYPE_I32:
+                return gatherMetax<int32_t, int32_t>(output, input, index, stream);
+            case INFINI_DTYPE_I64:
+                return gatherMetax<int64_t, int32_t>(output, input, index, stream);
+            case INFINI_DTYPE_U8:
+                return gatherMetax<uint8_t, int32_t>(output, input, index, stream);
+            case INFINI_DTYPE_U16:
+                return gatherMetax<uint16_t, int32_t>(output, input, index, stream);
+            case INFINI_DTYPE_U32:
+                return gatherMetax<uint32_t, int32_t>(output, input, index, stream);
+            case INFINI_DTYPE_U64:
+                return gatherMetax<uint64_t, int32_t>(output, input, index, stream);
+            case INFINI_DTYPE_BOOL:
+                return gatherMetax<bool, int32_t>(output, input, index, stream);
+            default:
+                return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
+    } else if (_index_dtype == INFINI_DTYPE_I64) {
+        switch (_input_dtype) {
+            case INFINI_DTYPE_F16:
+                return gatherMetax<__half, int64_t>(output, input, index, stream);
+            case INFINI_DTYPE_F32:
+                return gatherMetax<float, int64_t>(output, input, index, stream);
+            case INFINI_DTYPE_F64:
+                return gatherMetax<double, int64_t>(output, input, index, stream);
+            case INFINI_DTYPE_BF16:
+                return gatherMetax<__hpcc_bfloat16, int64_t>(output, input, index, stream);
+            case INFINI_DTYPE_I8:
+                return gatherMetax<int8_t, int64_t>(output, input, index, stream);
+            case INFINI_DTYPE_I16:
+                return gatherMetax<int16_t, int64_t>(output, input, index, stream);
+            case INFINI_DTYPE_I32:
+                return gatherMetax<int32_t, int64_t>(output, input, index, stream);
+            case INFINI_DTYPE_I64:
+                return gatherMetax<int64_t, int64_t>(output, input, index, stream);
+            case INFINI_DTYPE_U8:
+                return gatherMetax<uint8_t, int64_t>(output, input, index, stream);
+            case INFINI_DTYPE_U16:
+                return gatherMetax<uint16_t, int64_t>(output, input, index, stream);
+            case INFINI_DTYPE_U32:
+                return gatherMetax<uint32_t, int64_t>(output, input, index, stream);
+            case INFINI_DTYPE_U64:
+                return gatherMetax<uint64_t, int64_t>(output, input, index, stream);
+            case INFINI_DTYPE_BOOL:
+                return gatherMetax<bool, int64_t>(output, input, index, stream);
+            default:
+                return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
+    }
+    
+    return INFINI_STATUS_BAD_TENSOR_DTYPE;
+}
+
+// Metax kernel for gather operation
+template<typename T, typename IndexT>
+__global__ void gatherKernel(
+    T *output,
+    const T *input,
+    const IndexT *index,
+    size_t total_elements,
+    size_t dim,
+    size_t input_dim_size,
+    const size_t *output_shape,
+    const ptrdiff_t *input_strides,
+    const ptrdiff_t *output_strides,
+    const ptrdiff_t *index_strides,
+    size_t ndim) {
+    
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    if (idx < total_elements) {
+        // Convert linear index to multi-dimensional coordinates
+        size_t temp_idx = idx;
+        size_t coords[16]; // Increase to support more dimensions
+        
+        // Bounds check for dimensions
+        if (ndim > 16) return;
+        
+        for (int d = ndim - 1; d >= 0; d--) {
+            coords[d] = temp_idx % output_shape[d];
+            temp_idx /= output_shape[d];
+        }
+        
+        // Calculate index offset first
+        ptrdiff_t index_offset = 0;
+        for (size_t d = 0; d < ndim; d++) {
+            index_offset += coords[d] * index_strides[d];
+        }
+        
+        // Get gather index and perform bounds check
+        IndexT gather_index = index[index_offset];
+        if (gather_index >= 0 && gather_index < static_cast<IndexT>(input_dim_size)) {
+            // Calculate input offset
+            size_t input_offset = 0;
+            for (size_t d = 0; d < ndim; d++) {
+                if (d == dim) {
+                    input_offset += gather_index * input_strides[d];
+                } else {
+                    input_offset += coords[d] * input_strides[d];
+                }
+            }
+            
+            // Calculate output offset
+            size_t output_offset = 0;
+            for (size_t d = 0; d < ndim; d++) {
+                output_offset += coords[d] * output_strides[d];
+            }
+            
+            // Copy data using direct element access
+            output[output_offset] = input[input_offset];
+        }
+    }
+}
+
+template <typename T, typename IndexT>
+infiniStatus_t Descriptor::gatherMetax(
+    void *output_data,
+    const void *input_data,
+    const void *index_data,
+    void *stream) const {
+
+    auto metax_stream = static_cast<hcStream_t>(stream);
+    
+    // Calculate total elements in output
+    size_t total_elements = 1;
+    for (size_t dim : _output_shape) {
+        total_elements *= dim;
+    }
+    
+    if (total_elements == 0) {
+        return INFINI_STATUS_SUCCESS;
+    }
+    
+    // Allocate device memory for shape and stride arrays
+    size_t *d_output_shape;
+    ptrdiff_t *d_input_strides, *d_output_strides, *d_index_strides;
+    
+    hcMalloc((void**)&d_output_shape, _output_shape.size() * sizeof(size_t));
+    hcMalloc((void**)&d_input_strides, _input_strides.size() * sizeof(ptrdiff_t));
+    hcMalloc((void**)&d_output_strides, _output_strides.size() * sizeof(ptrdiff_t));
+    hcMalloc((void**)&d_index_strides, _index_strides.size() * sizeof(ptrdiff_t));
+    
+    // Copy data to device
+    hcMemcpyAsync(d_output_shape, _output_shape.data(), _output_shape.size() * sizeof(size_t), hcMemcpyHostToDevice, metax_stream);
+    hcMemcpyAsync(d_input_strides, _input_strides.data(), _input_strides.size() * sizeof(ptrdiff_t), hcMemcpyHostToDevice, metax_stream);
+    hcMemcpyAsync(d_output_strides, _output_strides.data(), _output_strides.size() * sizeof(ptrdiff_t), hcMemcpyHostToDevice, metax_stream);
+    hcMemcpyAsync(d_index_strides, _index_strides.data(), _index_strides.size() * sizeof(ptrdiff_t), hcMemcpyHostToDevice, metax_stream);
+    
+    // Launch kernel
+    const int block_size = 256;
+    const int grid_size = (total_elements + block_size - 1) / block_size;
+    
+    gatherKernel<T, IndexT><<<grid_size, block_size, 0, metax_stream>>>(
+        static_cast<T*>(output_data),
+        static_cast<const T*>(input_data),
+        static_cast<const IndexT*>(index_data),
+        total_elements,
+        _dim,
+        _input_shape[_dim],
+        d_output_shape,
+        d_input_strides,
+        d_output_strides,
+        d_index_strides,
+        _output_shape.size());
+    
+    // Wait for kernel completion
+    hcStreamSynchronize(metax_stream);
+    
+    // Clean up device memory
+    hcFree(d_output_shape);
+    hcFree(d_input_strides);
+    hcFree(d_output_strides);
+    hcFree(d_index_strides);
+    
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace op::gather::metax

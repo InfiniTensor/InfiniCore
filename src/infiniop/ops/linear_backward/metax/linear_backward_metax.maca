@@ -1,0 +1,305 @@
+#include "linear_backward_metax.h"
+#include "../../../devices/metax/metax_common.h"
+#include "../../../devices/metax/metax_handle.h"
+#include "../../../tensor.h"
+#include "../../../../utils/custom_types.h"
+#include <hcr/hc_runtime_api.h>
+
+namespace op::linear_backward::metax {
+
+Descriptor::~Descriptor() = default;
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t grad_y_desc,
+    infiniopTensorDescriptor_t x_desc,
+    infiniopTensorDescriptor_t w_desc,
+    infiniopTensorDescriptor_t grad_x_desc,
+    infiniopTensorDescriptor_t grad_w_desc,
+    infiniopTensorDescriptor_t grad_b_desc) {
+
+    if (!handle_ || !desc_ptr || !grad_y_desc || !x_desc || !w_desc) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    auto handle = static_cast<device::metax::Handle *>(handle_);
+    
+    auto grad_y_dtype = grad_y_desc->dtype();
+    auto x_dtype = x_desc->dtype();
+    auto w_dtype = w_desc->dtype();
+    
+    // Check data types - support F16, F32, BF16
+    if (grad_y_dtype != INFINI_DTYPE_F16 && grad_y_dtype != INFINI_DTYPE_F32 && grad_y_dtype != INFINI_DTYPE_BF16) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+    
+    // Check that all input tensors have same dtype
+    if (grad_y_dtype != x_dtype || grad_y_dtype != w_dtype) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+    
+    // Check gradient tensor data types if provided
+    if (grad_x_desc && grad_x_desc->dtype() != grad_y_dtype) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+    if (grad_w_desc && grad_w_desc->dtype() != grad_y_dtype) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+    if (grad_b_desc && grad_b_desc->dtype() != grad_y_dtype) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+    
+    // Check dimensions
+    auto grad_y_shape = grad_y_desc->shape();
+    auto x_shape = x_desc->shape();
+    auto w_shape = w_desc->shape();
+    
+    int grad_y_ndim = grad_y_shape.size();
+    int x_ndim = x_shape.size();
+    int w_ndim = w_shape.size();
+
+    if (w_ndim != 2 || x_ndim < 1 || grad_y_ndim < 1) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+
+    // Get dimensions
+    std::vector<int> grad_y_dims(grad_y_shape.begin(), grad_y_shape.end());
+    std::vector<int> x_dims(x_shape.begin(), x_shape.end());
+    std::vector<int> w_dims(w_shape.begin(), w_shape.end());
+
+    // Check dimension compatibility
+    // x: (..., in_features), w: (out_features, in_features), grad_y: (..., out_features)
+    int in_features = x_dims[x_ndim - 1];
+    int out_features = w_dims[0];
+    int w_in_features = w_dims[1];
+
+    if (in_features != w_in_features) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+
+    if (grad_y_dims[grad_y_ndim - 1] != out_features) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+
+    // Check gradient tensor dimensions if provided
+    if (grad_x_desc) {
+        auto grad_x_shape = grad_x_desc->shape();
+        if (grad_x_shape != x_shape) {
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
+    }
+    
+    if (grad_w_desc) {
+        auto grad_w_shape = grad_w_desc->shape();
+        if (grad_w_shape != w_shape) {
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
+    }
+    
+    if (grad_b_desc) {
+        auto grad_b_shape = grad_b_desc->shape();
+        int grad_b_ndim = grad_b_shape.size();
+        std::vector<int> grad_b_dims(grad_b_shape.begin(), grad_b_shape.end());
+
+        if (grad_b_ndim != 1 || grad_b_dims[0] != out_features) {
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
+    }
+    
+    // Calculate batch size
+    int batch_size = 1;
+    for (size_t i = 0; i < x_dims.size() - 1; i++) {
+        batch_size *= x_dims[i];
+    }
+    
+    bool compute_grad_x = (grad_x_desc != nullptr);
+    bool compute_grad_w = (grad_w_desc != nullptr);
+    bool compute_grad_b = (grad_b_desc != nullptr);
+    
+    *desc_ptr = new Descriptor(
+        grad_y_dtype, grad_y_dims, x_dims, w_dims,
+        batch_size, in_features, out_features,
+        compute_grad_x, compute_grad_w, compute_grad_b,
+        handle->device, handle->device_id);
+    
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *grad_x,
+    void *grad_w,
+    void *grad_b,
+    const void *grad_y,
+    const void *x,
+    const void *w,
+    void *stream) const {
+
+    if (!grad_y || !x || !w) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    
+    if (_compute_grad_x && !grad_x) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    if (_compute_grad_w && !grad_w) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    if (_compute_grad_b && !grad_b) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    // Dispatch based on data type
+    switch (_dtype) {
+        case INFINI_DTYPE_F16:
+            return linearBackwardMetax<__half>(grad_x, grad_w, grad_b, grad_y, x, w, stream);
+        case INFINI_DTYPE_F32:
+            return linearBackwardMetax<float>(grad_x, grad_w, grad_b, grad_y, x, w, stream);
+        case INFINI_DTYPE_BF16:
+            return linearBackwardMetax<__hpcc_bfloat16>(grad_x, grad_w, grad_b, grad_y, x, w, stream);
+        default:
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+}
+
+// Metax kernel for computing grad_x
+template<typename T>
+__global__ void linearBackwardGradXKernel(
+    T *grad_x,
+    const T *grad_y,
+    const T *w,
+    int batch_size,
+    int in_features,
+    int out_features) {
+    
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total_inputs = batch_size * in_features;
+    
+    if (idx < total_inputs) {
+        int batch_idx = idx / in_features;
+        int in_idx = idx % in_features;
+        
+        T sum = T{};
+        
+        // grad_x[batch_idx][in_idx] = sum(grad_y[batch_idx][out_idx] * w[out_idx][in_idx])
+        for (int out_idx = 0; out_idx < out_features; out_idx++) {
+            T grad_y_val = grad_y[batch_idx * out_features + out_idx];
+            T w_val = w[out_idx * in_features + in_idx];
+            sum += grad_y_val * w_val;
+        }
+        
+        grad_x[batch_idx * in_features + in_idx] = sum;
+    }
+}
+
+// Metax kernel for computing grad_w
+template<typename T>
+__global__ void linearBackwardGradWKernel(
+    T *grad_w,
+    const T *grad_y,
+    const T *x,
+    int batch_size,
+    int in_features,
+    int out_features) {
+    
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total_weights = out_features * in_features;
+    
+    if (idx < total_weights) {
+        int out_idx = idx / in_features;
+        int in_idx = idx % in_features;
+        
+        T sum = T{};
+        
+        // grad_w[out_idx][in_idx] = sum(grad_y[batch_idx][out_idx] * x[batch_idx][in_idx])
+        for (int batch_idx = 0; batch_idx < batch_size; batch_idx++) {
+            T grad_y_val = grad_y[batch_idx * out_features + out_idx];
+            T x_val = x[batch_idx * in_features + in_idx];
+            sum += grad_y_val * x_val;
+        }
+        
+        grad_w[out_idx * in_features + in_idx] = sum;
+    }
+}
+
+// Metax kernel for computing grad_b
+template<typename T>
+__global__ void linearBackwardGradBKernel(
+    T *grad_b,
+    const T *grad_y,
+    int batch_size,
+    int out_features) {
+    
+    int out_idx = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    if (out_idx < out_features) {
+        T sum = T{};
+        
+        // grad_b[out_idx] = sum(grad_y[batch_idx][out_idx])
+        for (int batch_idx = 0; batch_idx < batch_size; batch_idx++) {
+            sum += grad_y[batch_idx * out_features + out_idx];
+        }
+        
+        grad_b[out_idx] = sum;
+    }
+}
+
+template <typename T>
+infiniStatus_t Descriptor::linearBackwardMetax(
+    void *grad_x_data,
+    void *grad_w_data,
+    void *grad_b_data,
+    const void *grad_y_data,
+    const void *x_data,
+    const void *w_data,
+    void *stream) const {
+
+    auto metax_stream = static_cast<hcStream_t>(stream);
+    
+    const int block_size = 256;
+    
+    // Compute grad_x if needed
+    if (_compute_grad_x) {
+        int total_inputs = _batch_size * _in_features;
+        int grid_size = (total_inputs + block_size - 1) / block_size;
+        
+        linearBackwardGradXKernel<T><<<grid_size, block_size, 0, metax_stream>>>(
+            static_cast<T*>(grad_x_data),
+            static_cast<const T*>(grad_y_data),
+            static_cast<const T*>(w_data),
+            _batch_size,
+            _in_features,
+            _out_features);
+    }
+    
+    // Compute grad_w if needed
+    if (_compute_grad_w) {
+        int total_weights = _out_features * _in_features;
+        int grid_size = (total_weights + block_size - 1) / block_size;
+        
+        linearBackwardGradWKernel<T><<<grid_size, block_size, 0, metax_stream>>>(
+            static_cast<T*>(grad_w_data),
+            static_cast<const T*>(grad_y_data),
+            static_cast<const T*>(x_data),
+            _batch_size,
+            _in_features,
+            _out_features);
+    }
+    
+    // Compute grad_b if needed
+    if (_compute_grad_b) {
+        int grid_size = (_out_features + block_size - 1) / block_size;
+        
+        linearBackwardGradBKernel<T><<<grid_size, block_size, 0, metax_stream>>>(
+            static_cast<T*>(grad_b_data),
+            static_cast<const T*>(grad_y_data),
+            _batch_size,
+            _out_features);
+    }
+    
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace op::linear_backward::metax

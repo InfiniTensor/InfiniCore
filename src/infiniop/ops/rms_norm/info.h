@@ -46,39 +46,21 @@ public:
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
 
-        const size_t y_ndim = y_desc->ndim();
-        const size_t x_ndim = x_desc->ndim();
-        const size_t w_ndim = w_desc->ndim();
-
-        if (y_ndim != x_ndim || w_ndim != 1) {
+        if (y_desc->ndim() != 2 || x_desc->ndim() != 2 || w_desc->ndim() != 1) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
 
-        size_t batch = 1;
-        size_t nhead = 1;
-        size_t dim = 0;
-
-        if (y_ndim == 2) {
-            batch = y_desc->dim(0);
-            dim = y_desc->dim(1);
-
-            if (x_desc->dim(0) != batch || x_desc->dim(1) != dim || w_desc->dim(0) != dim) {
-                return INFINI_STATUS_BAD_TENSOR_SHAPE;
-            }
-        } else if (y_ndim == 3) {
-            batch = y_desc->dim(0);
-            nhead = y_desc->dim(1);
-            dim = y_desc->dim(2);
-
-            if (x_desc->dim(0) != batch || x_desc->dim(1) != nhead || x_desc->dim(2) != dim || w_desc->dim(0) != dim) {
-                return INFINI_STATUS_BAD_TENSOR_SHAPE;
-            }
-        } else {
+        size_t batch = y_desc->shape()[0];
+        size_t dim = y_desc->shape()[1];
+        if (x_desc->shape()[0] != batch || x_desc->shape()[1] != dim || w_desc->shape()[0] != dim) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
 
-        // Check contiguity of the last dimension
-        if (y_desc->stride(y_ndim - 1) != 1 || x_desc->stride(x_ndim - 1) != 1 || w_desc->stride(w_ndim - 1) != 1) {
+        if (w_desc->stride(0) != 1) {
+            return INFINI_STATUS_BAD_TENSOR_STRIDES;
+        }
+
+        if (x_desc->stride(1) != 1 || y_desc->stride(1) != 1) {
             return INFINI_STATUS_BAD_TENSOR_STRIDES;
         }
 
