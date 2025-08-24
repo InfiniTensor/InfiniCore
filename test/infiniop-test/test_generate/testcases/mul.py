@@ -2,30 +2,36 @@ import numpy as np
 import gguf
 from typing import List
 
-from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides
+from .. import (
+    InfiniopTestWriter,
+    InfiniopTestCase,
+    np_dtype_to_ggml,
+    gguf_strides,
+    contiguous_gguf_strides,
+)
 
-def mul(
-    a: np.ndarray,
-    b: np.ndarray
-):
+
+def mul(a: np.ndarray, b: np.ndarray):
     return np.multiply(a, b)
+
 
 def random_tensor(shape, dtype):
     rate = 1e-3
     var = 0.5 * rate  # 数值范围在[-5e-4, 5e-4]
     return rate * np.random.rand(*shape).astype(dtype) - var
 
+
 class MulTestCase(InfiniopTestCase):
     def __init__(
         self,
         a: np.ndarray,
-        shape_a: List[int] | None,        
+        shape_a: List[int] | None,
         stride_a: List[int] | None,
         b: np.ndarray,
-        shape_b: List[int] | None,       
+        shape_b: List[int] | None,
         stride_b: List[int] | None,
         c: np.ndarray,
-        shape_c: List[int] | None,    
+        shape_c: List[int] | None,
         stride_c: List[int] | None,
     ):
         super().__init__("mul")
@@ -39,7 +45,6 @@ class MulTestCase(InfiniopTestCase):
         self.shape_c = shape_c
         self.stride_c = stride_c
 
-
     def write_test(self, test_writer: "InfiniopTestWriter"):
         super().write_test(test_writer)
         if self.shape_a is not None:
@@ -49,12 +54,22 @@ class MulTestCase(InfiniopTestCase):
         if self.shape_c is not None:
             test_writer.add_array(test_writer.gguf_key("c.shape"), self.shape_c)
         if self.stride_a is not None:
-            test_writer.add_array(test_writer.gguf_key("a.strides"), gguf_strides(*self.stride_a))
+            test_writer.add_array(
+                test_writer.gguf_key("a.strides"), gguf_strides(*self.stride_a)
+            )
         if self.stride_b is not None:
-            test_writer.add_array(test_writer.gguf_key("b.strides"), gguf_strides(*self.stride_b))
+            test_writer.add_array(
+                test_writer.gguf_key("b.strides"), gguf_strides(*self.stride_b)
+            )
         test_writer.add_array(
             test_writer.gguf_key("c.strides"),
-            gguf_strides(*self.stride_c if self.stride_c is not None else contiguous_gguf_strides(self.shape_c))
+            gguf_strides(
+                *(
+                    self.stride_c
+                    if self.stride_c is not None
+                    else contiguous_gguf_strides(self.shape_c)
+                )
+            ),
         )
 
         test_writer.add_tensor(
@@ -68,7 +83,7 @@ class MulTestCase(InfiniopTestCase):
         )
         a_fp64 = self.a.astype(np.float64)
         b_fp64 = self.b.astype(np.float64)
-        
+
         ans_fp64 = np.multiply(a_fp64, b_fp64)
         ans = mul(self.a, self.b)
         test_writer.add_tensor(
@@ -80,7 +95,8 @@ class MulTestCase(InfiniopTestCase):
             raw_dtype=np_dtype_to_ggml(ans_fp64.dtype),
         )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     test_writer = InfiniopTestWriter("mul.gguf")
     test_cases = []
 
@@ -96,16 +112,15 @@ if __name__ == '__main__':
         ((2048, 2560), (2560, 1), (1, 2048), (2560, 1)),
         ((4, 48, 64), (64 * 48, 64, 1), (1, 4, 192), None),
         ((4, 48, 64), None, (1, 4, 192), (48 * 64, 64, 1)),
-    ]   
+    ]
     _TENSOR_DTYPES_ = [np.float32, np.float16]
-    
+
     for dtype in _TENSOR_DTYPES_:
         for shape, stride_a, stride_b, stride_c in _TEST_CASES_:
             a = random_tensor(shape, dtype)
             b = random_tensor(shape, dtype)
             c = np.empty(tuple(0 for _ in shape), dtype=dtype)
 
-                
             test_cases.append(
                 MulTestCase(
                     a=a,
@@ -118,7 +133,7 @@ if __name__ == '__main__':
                     shape_c=shape,
                     stride_c=stride_c,
                 )
-            )   
-    
+            )
+
     test_writer.add_tests(test_cases)
     test_writer.save()
