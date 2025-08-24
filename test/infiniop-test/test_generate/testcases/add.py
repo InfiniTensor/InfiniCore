@@ -4,7 +4,14 @@ import gguf
 from typing import List
 from numpy.lib.stride_tricks import as_strided
 
-from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides, process_zero_stride_tensor
+from .. import (
+    InfiniopTestWriter,
+    InfiniopTestCase,
+    np_dtype_to_ggml,
+    gguf_strides,
+    contiguous_gguf_strides,
+    process_zero_stride_tensor,
+)
 
 
 def add(
@@ -26,7 +33,6 @@ class AddTestCase(InfiniopTestCase):
         c: np.ndarray,
         shape_c: List[int] | None,
         stride_c: List[int] | None,
-
     ):
         super().__init__("add")
         self.a = a
@@ -39,7 +45,6 @@ class AddTestCase(InfiniopTestCase):
         self.shape_c = shape_c
         self.stride_c = stride_c
 
-
     def write_test(self, test_writer: "InfiniopTestWriter"):
         super().write_test(test_writer)
         if self.shape_a is not None:
@@ -49,12 +54,22 @@ class AddTestCase(InfiniopTestCase):
         if self.shape_c is not None:
             test_writer.add_array(test_writer.gguf_key("c.shape"), self.shape_c)
         if self.stride_a is not None:
-            test_writer.add_array(test_writer.gguf_key("a.strides"), gguf_strides(*self.stride_a))
+            test_writer.add_array(
+                test_writer.gguf_key("a.strides"), gguf_strides(*self.stride_a)
+            )
         if self.stride_b is not None:
-            test_writer.add_array(test_writer.gguf_key("b.strides"), gguf_strides(*self.stride_b))
+            test_writer.add_array(
+                test_writer.gguf_key("b.strides"), gguf_strides(*self.stride_b)
+            )
         test_writer.add_array(
             test_writer.gguf_key("c.strides"),
-            gguf_strides(*self.stride_c if self.stride_c is not None else contiguous_gguf_strides(self.shape_c))
+            gguf_strides(
+                *(
+                    self.stride_c
+                    if self.stride_c is not None
+                    else contiguous_gguf_strides(self.shape_c)
+                )
+            ),
         )
         test_writer.add_tensor(
             test_writer.gguf_key("a"), self.a, raw_dtype=np_dtype_to_ggml(self.a.dtype)
@@ -114,7 +129,6 @@ if __name__ == "__main__":
                 stride_c=stride_c,
             )
             test_cases.append(test_case)
-            
+
     test_writer.add_tests(test_cases)
     test_writer.save()
-    
