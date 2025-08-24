@@ -1,0 +1,451 @@
+#include "conv_backward_metax.h"
+#include "../../../devices/metax/metax_common.h"
+#include "../../../devices/metax/metax_handle.h"
+#include "../cuda/bias_grad_kernel.cuh"
+#include "../info.h"
+
+infiniStatus_t launch_bias_grad_kernel(const void *grad_output, void *grad_bias,
+                                       const int *grad_output_dims,
+                                       size_t conv_ndim,
+                                       hcdnnDataType_t data_type,
+                                       hcStream_t stream) {
+  // 只处理 bf16 类型
+  if (data_type != HCDNN_DATA_BFLOAT16) {
+    return INFINI_STATUS_BAD_TENSOR_DTYPE;
+  }
+
+  int batch_size = grad_output_dims[0];
+  int channels = grad_output_dims[1];
+  int spatial_size = 1;
+
+  // 计算空间维度大小
+  for (size_t i = 2; i < conv_ndim + 2; ++i) {
+    spatial_size *= grad_output_dims[i];
+  }
+
+  dim3 block(256);
+  dim3 grid((channels + block.x - 1) / block.x);
+
+  // 直接调用 bf16 kernel
+  compute_bias_grad_kernel<__hpcc_bfloat16><<<grid, block, 0, stream>>>(
+      reinterpret_cast<const __hpcc_bfloat16 *>(grad_output),
+      reinterpret_cast<__hpcc_bfloat16 *>(grad_bias), batch_size, channels,
+      spatial_size);
+
+  return INFINI_STATUS_SUCCESS;
+}
+
+#define DESTROY_HCDNN_DESCRIPTOR(desc_ptr, destroy_func) \
+    do {                                                 \
+        if (desc_ptr) {                                  \
+            destroy_func(desc_ptr);                      \
+            desc_ptr = nullptr;                          \
+        }                                                \
+    } while (0)
+
+#define CLEANUP_HCDNN_DESCRIPTORS()                                               \
+    do {                                                                          \
+        DESTROY_HCDNN_DESCRIPTOR(input_desc, hcdnnDestroyTensorDescriptor);       \
+        DESTROY_HCDNN_DESCRIPTOR(grad_output_desc, hcdnnDestroyTensorDescriptor); \
+        DESTROY_HCDNN_DESCRIPTOR(weight_desc, hcdnnDestroyFilterDescriptor);      \
+        DESTROY_HCDNN_DESCRIPTOR(grad_input_desc, hcdnnDestroyTensorDescriptor);  \
+        DESTROY_HCDNN_DESCRIPTOR(grad_weight_desc, hcdnnDestroyFilterDescriptor); \
+        DESTROY_HCDNN_DESCRIPTOR(grad_bias_desc, hcdnnDestroyTensorDescriptor);   \
+        DESTROY_HCDNN_DESCRIPTOR(conv_desc, hcdnnDestroyConvolutionDescriptor);   \
+    } while (0)
+
+namespace op::conv_backward::metax {
+
+struct Descriptor::Opaque {
+    std::shared_ptr<device::metax::Handle::Internal> internal;
+    size_t workspace_size = 0;
+
+#ifdef ENABLE_HCDNN_API
+    // hcdnn描述符（对应cudnn描述符）
+    hcdnnTensorDescriptor_t input_desc = nullptr;
+    hcdnnTensorDescriptor_t grad_output_desc = nullptr;
+    hcdnnFilterDescriptor_t weight_desc = nullptr;
+    hcdnnTensorDescriptor_t grad_input_desc = nullptr;
+    hcdnnFilterDescriptor_t grad_weight_desc = nullptr;
+    hcdnnTensorDescriptor_t grad_bias_desc = nullptr;
+    hcdnnConvolutionDescriptor_t conv_desc = nullptr;
+
+    // 反向数据和滤波器算法
+    hcdnnConvolutionBwdDataAlgo_t bwd_data_algo;
+    hcdnnConvolutionBwdFilterAlgo_t bwd_filter_algo;
+    size_t bwd_data_workspace_size = 0;
+    size_t bwd_filter_workspace_size = 0;
+    size_t conv_ndim = 0;
+#endif
+
+private:
+    Opaque(std::shared_ptr<device::metax::Handle::Internal> internal_ptr)
+        : internal(internal_ptr) {}
+
+#ifdef ENABLE_HCDNN_API
+    infiniStatus_t gethcdnnDataType(infiniDtype_t data_type,
+                                    hcdnnDataType_t &hcdnn_data_type) const {
+        switch (data_type) {
+        case INFINI_DTYPE_F16:
+            hcdnn_data_type = HCDNN_DATA_HALF;
+            break;
+        case INFINI_DTYPE_F32:
+            hcdnn_data_type = HCDNN_DATA_FLOAT;
+            break;
+        case INFINI_DTYPE_BF16:
+            hcdnn_data_type = HCDNN_DATA_BFLOAT16;
+            break;
+        default:
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    // 计算张量步幅（与cuDNN逻辑一致，从最后一维开始计算）
+    infiniStatus_t calculateStrides(int ndim, const int *dims, std::vector<int> &strides) const {
+        strides.resize(ndim);
+        strides[ndim - 1] = 1; // 最后一维步幅为1
+        for (int i = ndim - 2; i >= 0; --i) {
+            strides[i] = strides[i + 1] * dims[i + 1];
+        }
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    infiniStatus_t createTensorAndFilterDescriptors(
+        const op::conv_backward::ConvBackwardInfo &info,
+        hcdnnDataType_t hcdnn_data_type,
+        infiniopTensorDescriptor_t bias_desc) {
+
+        int ndim = static_cast<int>(info.ndim + 2);
+
+        std::vector<int> input_dims = {static_cast<int>(info.batch), static_cast<int>(info.in_channels)};
+        for (size_t i = 0; i < info.ndim; ++i) {
+            input_dims.push_back(static_cast<int>(info.input_dims[i]));
+        }
+        std::vector<int> input_strides;
+        CHECK_STATUS(calculateStrides(ndim, input_dims.data(), input_strides));
+
+        std::vector<int> grad_output_dims = {static_cast<int>(info.batch), static_cast<int>(info.out_channels)};
+        for (size_t i = 0; i < info.ndim; ++i) {
+            grad_output_dims.push_back(static_cast<int>(info.grad_output_dims[i]));
+        }
+        std::vector<int> grad_output_strides;
+        CHECK_STATUS(calculateStrides(ndim, grad_output_dims.data(), grad_output_strides));
+
+        std::vector<int> weight_dims = {static_cast<int>(info.out_channels), static_cast<int>(info.in_channels / info.groups)};
+        for (size_t i = 0; i < info.ndim; ++i) {
+            weight_dims.push_back(static_cast<int>(info.weight_dims[i]));
+        }
+
+        if (info.ndim == 1) {
+            input_dims.push_back(1);
+            input_strides.push_back(1);
+            grad_output_dims.push_back(1);
+            grad_output_strides.push_back(1);
+            weight_dims.push_back(1);
+        }
+
+        CHECK_MCDNN(hcdnnCreateTensorDescriptor(&input_desc));
+        CHECK_MCDNN(hcdnnSetTensorNdDescriptor(
+            input_desc, hcdnn_data_type, input_dims.size(), input_dims.data(), input_strides.data()));
+
+        CHECK_MCDNN(hcdnnCreateTensorDescriptor(&grad_output_desc));
+        CHECK_MCDNN(hcdnnSetTensorNdDescriptor(
+            grad_output_desc, hcdnn_data_type, grad_output_dims.size(), grad_output_dims.data(), grad_output_strides.data()));
+
+        CHECK_MCDNN(hcdnnCreateFilterDescriptor(&weight_desc));
+        CHECK_MCDNN(hcdnnSetFilterNdDescriptor(
+            weight_desc, hcdnn_data_type, HCDNN_TENSOR_NCHW, weight_dims.size(), weight_dims.data()));
+
+        CHECK_MCDNN(hcdnnCreateTensorDescriptor(&grad_input_desc));
+        CHECK_MCDNN(hcdnnSetTensorNdDescriptor(
+            grad_input_desc, hcdnn_data_type, input_dims.size(), input_dims.data(), input_strides.data()));
+
+        CHECK_MCDNN(hcdnnCreateFilterDescriptor(&grad_weight_desc));
+        CHECK_MCDNN(hcdnnSetFilterNdDescriptor(
+            grad_weight_desc, hcdnn_data_type, HCDNN_TENSOR_NCHW, weight_dims.size(), weight_dims.data()));
+
+        if (bias_desc) {
+            int bias_ndim = (info.ndim == 1) ? 4 : ndim;
+            std::vector<int> bias_dims(bias_ndim, 1);
+            bias_dims[1] = static_cast<int>(bias_desc->dim(0));
+
+            std::vector<int> bias_strides(bias_ndim, 1);
+            for (int i = bias_ndim - 2; i >= 0; --i) {
+                bias_strides[i] = bias_strides[i + 1] * bias_dims[i + 1];
+            }
+
+            CHECK_MCDNN(hcdnnCreateTensorDescriptor(&grad_bias_desc));
+            CHECK_MCDNN(hcdnnSetTensorNdDescriptor(
+                grad_bias_desc, hcdnn_data_type, bias_ndim, bias_dims.data(), bias_strides.data()));
+        }
+
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    infiniStatus_t createConvDescriptor(const op::conv_backward::ConvBackwardInfo &info,
+                                        hcdnnDataType_t hcdnn_data_type) {
+        int conv_dim = (info.ndim == 1) ? 2 : static_cast<int>(info.ndim); // 1D卷积按2D处理
+        std::vector<int> pad_vec(info.pads.begin(), info.pads.end());
+        std::vector<int> stride_vec(info.strides.begin(), info.strides.end());
+        std::vector<int> dilation_vec(info.dilations.begin(), info.dilations.end());
+
+        if (info.ndim == 1) {
+            pad_vec.push_back(0);
+            stride_vec.push_back(1);
+            dilation_vec.push_back(1);
+        }
+
+        CHECK_MCDNN(hcdnnCreateConvolutionDescriptor(&conv_desc));
+        hcdnnDataType_t compute_type = (hcdnn_data_type == HCDNN_DATA_HALF || hcdnn_data_type == HCDNN_DATA_BFLOAT16)
+                                         ? HCDNN_DATA_FLOAT
+                                         : hcdnn_data_type;
+        CHECK_MCDNN(hcdnnSetConvolutionNdDescriptor(
+            conv_desc, conv_dim, pad_vec.data(), stride_vec.data(),
+            dilation_vec.data(), HCDNN_CROSS_CORRELATION, compute_type));
+        CHECK_MCDNN(hcdnnSetConvolutionGroupCount(conv_desc, static_cast<int>(info.groups)));
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    infiniStatus_t initializehcdnnContext(
+        const op::conv_backward::ConvBackwardInfo &info,
+        infiniDtype_t data_type,
+        infiniopTensorDescriptor_t bias_desc) {
+        hcdnnDataType_t hcdnn_data_type;
+        CHECK_STATUS(gethcdnnDataType(data_type, hcdnn_data_type));
+        CHECK_STATUS(createTensorAndFilterDescriptors(info, hcdnn_data_type, bias_desc));
+        CHECK_STATUS(createConvDescriptor(info, hcdnn_data_type));
+
+        internal->useMcdnn(nullptr, [&](hcdnnHandle_t h) {
+            // 1. 查找反向数据算法
+            int requested_algo_count = 8;
+            int returned_algo_count = 0;
+            hcdnnConvolutionBwdDataAlgoPerf_t bwd_data_perf[8];
+
+            hcdnnStatus_t status = hcdnnFindConvolutionBackwardDataAlgorithm(
+                h, weight_desc, grad_output_desc, conv_desc, grad_input_desc,
+                requested_algo_count, &returned_algo_count, bwd_data_perf);
+
+            bool found = false;
+            if (status == HCDNN_STATUS_SUCCESS && returned_algo_count > 0) {
+                for (int i = 0; i < returned_algo_count; i++) {
+                    if (bwd_data_perf[i].status == HCDNN_STATUS_SUCCESS) {
+                        bwd_data_algo = bwd_data_perf[i].algo;
+                        bwd_data_workspace_size = bwd_data_perf[i].memory;
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if (!found) {
+                // 未找到有效算法，使用默认算法
+                bwd_data_algo = HCDNN_CONVOLUTION_BWD_DATA_ALGO_1;
+                CHECK_MCDNN(hcdnnGetConvolutionBackwardDataWorkspaceSize(
+                    h, weight_desc, grad_output_desc, conv_desc, grad_input_desc,
+                    bwd_data_algo, &bwd_data_workspace_size));
+            }
+
+            // 2. 查找反向权重算法
+            hcdnnConvolutionBwdFilterAlgoPerf_t bwd_filter_perf[8];
+            status = hcdnnFindConvolutionBackwardFilterAlgorithm(
+                h, input_desc, grad_output_desc, conv_desc, grad_weight_desc,
+                requested_algo_count, &returned_algo_count, bwd_filter_perf);
+
+            found = false;
+            if (status == HCDNN_STATUS_SUCCESS && returned_algo_count > 0) {
+                for (int i = 0; i < returned_algo_count; i++) {
+                    if (bwd_filter_perf[i].status == HCDNN_STATUS_SUCCESS) {
+                        bwd_filter_algo = bwd_filter_perf[i].algo;
+                        bwd_filter_workspace_size = bwd_filter_perf[i].memory;
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if (!found) {
+                // 未找到有效算法，使用默认算法
+                bwd_filter_algo = HCDNN_CONVOLUTION_BWD_FILTER_ALGO_1;
+                CHECK_MCDNN(hcdnnGetConvolutionBackwardFilterWorkspaceSize(
+                    h, input_desc, grad_output_desc, conv_desc, grad_weight_desc,
+                    bwd_filter_algo, &bwd_filter_workspace_size));
+            }
+            return INFINI_STATUS_SUCCESS;
+        });
+
+        // 工作空间大小取两者最大值
+        workspace_size = std::max(bwd_data_workspace_size, bwd_filter_workspace_size);
+        conv_ndim = info.ndim;
+        return INFINI_STATUS_SUCCESS;
+    }
+#endif
+
+public:
+    Opaque(Opaque &&other) noexcept
+        : internal(std::move(other.internal)),
+          workspace_size(other.workspace_size)
+#ifdef ENABLE_HCDNN_API
+          ,
+          input_desc(other.input_desc), grad_output_desc(other.grad_output_desc), weight_desc(other.weight_desc), grad_input_desc(other.grad_input_desc), grad_weight_desc(other.grad_weight_desc), grad_bias_desc(other.grad_bias_desc), conv_desc(other.conv_desc), bwd_data_algo(other.bwd_data_algo), bwd_filter_algo(other.bwd_filter_algo), bwd_data_workspace_size(other.bwd_data_workspace_size), bwd_filter_workspace_size(other.bwd_filter_workspace_size)
+            , conv_ndim(other.conv_ndim)
+#endif
+    {
+#ifdef ENABLE_HCDNN_API
+        other.input_desc = nullptr;
+        other.grad_output_desc = nullptr;
+        other.weight_desc = nullptr;
+        other.grad_input_desc = nullptr;
+        other.grad_weight_desc = nullptr;
+        other.grad_bias_desc = nullptr;
+        other.conv_desc = nullptr;
+        other.bwd_data_algo = static_cast<hcdnnConvolutionBwdDataAlgo_t>(0);
+        other.bwd_filter_algo = static_cast<hcdnnConvolutionBwdFilterAlgo_t>(0);
+        other.bwd_data_workspace_size = 0;
+        other.bwd_filter_workspace_size = 0;
+        other.conv_ndim = 0;
+#endif
+        other.workspace_size = 0;
+    }
+
+    ~Opaque() {
+#ifdef ENABLE_HCDNN_API
+        CLEANUP_HCDNN_DESCRIPTORS();
+#endif
+    }
+
+    static inline utils::Result<Opaque>
+    create(std::shared_ptr<device::metax::Handle::Internal> internal_ptr,
+           const op::conv_backward::ConvBackwardInfo &info,
+           infiniDtype_t data_type, infiniopTensorDescriptor_t bias_desc) {
+#ifdef ENABLE_HCDNN_API
+        Opaque opaque(internal_ptr);
+        auto status = opaque.initializehcdnnContext(info, data_type, bias_desc);
+        if (status != INFINI_STATUS_SUCCESS) {
+            return status;
+        }
+        return utils::Result<Opaque>(std::move(opaque));
+#else
+        return INFINI_STATUS_NOT_IMPLEMENTED;
+#endif
+    }
+};
+
+Descriptor::~Descriptor() {
+    if (_opaque) {
+        delete _opaque;
+    }
+}
+
+infiniStatus_t Descriptor::create(infiniopHandle_t handle_,
+                                  Descriptor **desc_ptr,
+                                  infiniopTensorDescriptor_t grad_output_desc,
+                                  infiniopTensorDescriptor_t input_desc,
+                                  infiniopTensorDescriptor_t weight_desc,
+                                  infiniopTensorDescriptor_t bias_desc,
+                                  void *pads, void *strides, void *dilations,
+                                  size_t groups) {
+#ifdef ENABLE_HCDNN_API
+    auto handle = reinterpret_cast<device::metax::Handle *>(handle_);
+    auto dtype = input_desc->dtype();
+
+    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_BF16);
+
+    auto info_result = op::conv_backward::ConvBackwardInfo::create(
+        grad_output_desc, input_desc, weight_desc, pads, strides, dilations, groups);
+    CHECK_RESULT(info_result);
+    auto info = info_result.take();
+
+    auto opaque_result = Opaque::create(handle->internal(), info, dtype, bias_desc);
+    CHECK_RESULT(opaque_result);
+    auto opaque = new Opaque(opaque_result.take());
+
+    *desc_ptr = new Descriptor(dtype, opaque->workspace_size, opaque,
+                               handle->device, handle->device_id);
+
+    return INFINI_STATUS_SUCCESS;
+#else
+    return INFINI_STATUS_NOT_IMPLEMENTED;
+#endif
+}
+
+infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size,
+                                     void *grad_input, void *grad_weight,
+                                     void *grad_bias, const void *grad_output,
+                                     const void *input, const void *weight,
+                                     void *stream) const {
+#ifdef ENABLE_HCDNN_API
+    const float alpha = 1.0f, beta = 0.0f;
+    auto internal = _opaque->internal;
+
+    if (workspace_size < _workspace_size) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+
+    CHECK_STATUS(_opaque->internal->useMcdnn((hcStream_t)stream, [&](hcdnnHandle_t handle) {
+        if (!grad_input || !grad_weight || !grad_output || !input || !weight) {
+            return INFINI_STATUS_BAD_PARAM;
+        }
+
+        CHECK_MCDNN(hcdnnConvolutionBackwardData(
+            handle,
+            &alpha,
+            _opaque->weight_desc,
+            weight,
+            _opaque->grad_output_desc,
+            grad_output,
+            _opaque->conv_desc,
+            _opaque->bwd_data_algo,
+            workspace,
+            _opaque->bwd_data_workspace_size,
+            &beta,
+            _opaque->grad_input_desc,
+            grad_input));
+
+        CHECK_MCDNN(hcdnnConvolutionBackwardFilter(
+            handle,
+            &alpha,
+            _opaque->input_desc,
+            input,
+            _opaque->grad_output_desc,
+            grad_output,
+            _opaque->conv_desc,
+            _opaque->bwd_filter_algo,
+            workspace,
+            _opaque->bwd_filter_workspace_size,
+            &beta,
+            _opaque->grad_weight_desc,
+            grad_weight));
+
+        if (_opaque->grad_bias_desc && grad_bias) {
+            hcdnnDataType_t grad_output_type;
+            int grad_output_nbDims;
+            int grad_output_dims[5], grad_output_strides[5];
+
+            int query_ndim = (_opaque->conv_ndim == 3) ? 5 : 4;
+
+            hcdnnStatus_t status = hcdnnGetTensorNdDescriptor(
+                _opaque->grad_output_desc, query_ndim, &grad_output_type,
+                &grad_output_nbDims, grad_output_dims, grad_output_strides);
+            if (grad_output_type == HCDNN_DATA_BFLOAT16) {
+                CHECK_STATUS(launch_bias_grad_kernel(
+                    grad_output, grad_bias, grad_output_dims, _opaque->conv_ndim,
+                    grad_output_type, (hcStream_t)stream));
+            } else {
+                CHECK_MCDNN(hcdnnConvolutionBackwardBias(
+                    handle,
+                    &alpha,
+                    _opaque->grad_output_desc,
+                    grad_output,
+                    &beta,
+                    _opaque->grad_bias_desc,
+                    grad_bias));
+            }
+        }
+        return INFINI_STATUS_SUCCESS;
+    }));
+    return INFINI_STATUS_SUCCESS;
+#else
+    return INFINI_STATUS_NOT_IMPLEMENTED;
+#endif
+}
+
+} // namespace op::conv_backward::metax

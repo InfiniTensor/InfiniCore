@@ -7,7 +7,11 @@
 #include "infiniop/ops/causal_softmax.h"
 #include "infiniop/ops/clip.h"
 #include "infiniop/ops/conv.h"
+#include "infiniop/ops/conv_backward.h"
 #include "infiniop/ops/gemm.h"
+#include "infiniop/ops/interpolate_nearest.h"
+#include "infiniop/ops/maxpool.h"
+#include "infiniop/ops/maxpool_backward.h"
 #include "infiniop/ops/mul.h"
 #include "infiniop/ops/random_sample.h"
 #include "infiniop/ops/rearrange.h"
@@ -17,5 +21,9 @@
 #include "infiniop/ops/sub.h"
 #include "infiniop/ops/swiglu.h"
 #include "infiniop/tensor_descriptor.h"
+
+#include "infiniop/ops/averagepool.h"
+#include "infiniop/ops/averagepool_backward.h"
+#include "infiniop/ops/cross_entropy_loss.h"
 
 #endif // __INFINIOP_API_H__

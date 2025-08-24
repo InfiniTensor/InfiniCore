@@ -24,6 +24,13 @@ def run_tests(args):
         "rope.py",
         "sub.py",
         "swiglu.py",
+        "averagepool_backward.py",
+        "averagepool.py",
+        "maxpool_backward.py",
+        "maxpool.py",
+        "interpolate_nearest.py",
+        "conv_backward.py",
+        "cross_entropy_loss.py",
     ]:
         result = subprocess.run(
             f"python {test} {args} --debug", text=True, encoding="utf-8", shell=True
