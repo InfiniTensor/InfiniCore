@@ -1,0 +1,300 @@
+#include "reduce_mean_metax.h"
+#include "../../../devices/metax/metax_common.h"
+#include "../../../devices/metax/metax_handle.h"
+#include "../../../tensor.h"
+#include "../../../../utils/custom_types.h"
+#include "../../../devices/metax/metax_kernel_common.h"
+#include <hcr/hc_runtime_api.h>
+
+namespace op::reduce_mean::metax {
+
+// Device-side type conversion functions
+template<typename T>
+__device__ __forceinline__ float device_cast_to_float(const T& val) {
+    return static_cast<float>(val);
+}
+
+template<>
+__device__ __forceinline__ float device_cast_to_float<fp16_t>(const fp16_t& val) {
+    uint16_t h = val._v;
+    uint32_t sign = (h & 0x8000) << 16;
+    int32_t exponent = (h >> 10) & 0x1F;
+    uint32_t mantissa = h & 0x3FF;
+
+    uint32_t f32;
+    if (exponent == 31) {
+        if (mantissa != 0) {
+            f32 = sign | 0x7F800000 | (mantissa << 13);
+        } else {
+            f32 = sign | 0x7F800000;
+        }
+    } else if (exponent == 0) {
+        if (mantissa == 0) {
+            f32 = sign;
+        } else {
+            exponent = -14;
+            while ((mantissa & 0x400) == 0) {
+                mantissa <<= 1;
+                exponent--;
+            }
+            mantissa &= 0x3FF;
+            f32 = sign | ((exponent + 127) << 23) | (mantissa << 13);
+        }
+    } else {
+        f32 = sign | ((exponent + 127 - 15) << 23) | (mantissa << 13);
+    }
+
+    float result;
+    memcpy(&result, &f32, sizeof(result));
+    return result;
+}
+
+template<>
+__device__ __forceinline__ float device_cast_to_float<bf16_t>(const bf16_t& val) {
+    uint32_t bits32 = static_cast<uint32_t>(val._v) << 16;
+    float result;
+    memcpy(&result, &bits32, sizeof(result));
+    return result;
+}
+
+template<typename T>
+__device__ __forceinline__ T device_cast_from_float(float val) {
+    return static_cast<T>(val);
+}
+
+template<>
+__device__ __forceinline__ fp16_t device_cast_from_float<fp16_t>(float val) {
+    uint32_t bits;
+    memcpy(&bits, &val, sizeof(float));
+    
+    uint32_t sign = bits & 0x80000000;
+    uint32_t exp = (bits & 0x7F800000) >> 23;
+    uint32_t mantissa = bits & 0x007FFFFF;
+    
+    uint16_t result_bits;
+    
+    if (exp == 0) {
+        result_bits = static_cast<uint16_t>(sign >> 16);
+    } else if (exp == 0xFF) {
+        result_bits = static_cast<uint16_t>((sign >> 16) | 0x7C00 | (mantissa ? 0x0200 : 0));
+    } else {
+        int new_exp = static_cast<int>(exp) - 127 + 15;
+        if (new_exp <= 0) {
+            result_bits = static_cast<uint16_t>(sign >> 16);
+        } else if (new_exp >= 0x1F) {
+            result_bits = static_cast<uint16_t>((sign >> 16) | 0x7C00);
+        } else {
+            result_bits = static_cast<uint16_t>((sign >> 16) | (new_exp << 10) | (mantissa >> 13));
+        }
+    }
+    
+    fp16_t result;
+    memcpy(&result, &result_bits, sizeof(uint16_t));
+    return result;
+}
+
+template<>
+__device__ __forceinline__ bf16_t device_cast_from_float<bf16_t>(float val) {
+    uint32_t bits32;
+    memcpy(&bits32, &val, sizeof(bits32));
+    const uint32_t rounding_bias = 0x00007FFF + ((bits32 >> 16) & 1);
+    uint16_t result_bits = static_cast<uint16_t>((bits32 + rounding_bias) >> 16);
+    
+    bf16_t result;
+    memcpy(&result, &result_bits, sizeof(uint16_t));
+    return result;
+}
+
+// ReduceMean kernel
+template <typename T>
+__global__ void reduceMeanKernel(
+    T *__restrict__ output,
+    const T *__restrict__ input,
+    size_t num_reductions,
+    size_t reduce_size,
+    ptrdiff_t reduce_stride,
+    const size_t *input_shape,
+    const ptrdiff_t *input_strides,
+    const ptrdiff_t *output_strides,
+    size_t ndim,
+    size_t reduce_dim) {
+    
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    if (idx < num_reductions) {
+        // Calculate the input and output offsets for this reduction
+        size_t input_offset = 0;
+        size_t output_offset = 0;
+        size_t temp_idx = idx;
+        
+        for (size_t i = 0; i < ndim; i++) {
+            if (i != reduce_dim) {
+                size_t coord = temp_idx % input_shape[i];
+                temp_idx /= input_shape[i];
+                input_offset += coord * input_strides[i];
+                output_offset += coord * output_strides[i];
+            }
+        }
+        
+        // Find the starting position for this reduction
+        const T *input_ptr = input + input_offset;
+        
+        // Calculate the sum
+        float sum = 0.0f;
+        for (size_t i = 0; i < reduce_size; i++) {
+            float val = device_cast_to_float(input_ptr[i * reduce_stride]);
+            sum += val;
+        }
+        
+        // Calculate mean
+        float mean_val = sum / static_cast<float>(reduce_size);
+        
+        output[output_offset] = device_cast_from_float<T>(mean_val);
+    }
+}
+
+template <typename T>
+infiniStatus_t launchReduceMeanKernel(
+    const ReduceMeanInfo &info,
+    void *output,
+    const void *input,
+    hcStream_t stream) {
+    
+    const int BLOCK_SIZE = 256;
+    
+    // Calculate number of reductions needed
+    size_t num_reductions = info.output_size;
+    size_t reduce_size = info.input_shape[info.reduce_dim];
+    ptrdiff_t reduce_stride = info.input_strides[info.reduce_dim];
+    
+    // Allocate device memory for shape and strides
+    size_t *d_input_shape;
+    ptrdiff_t *d_input_strides, *d_output_strides;
+    
+    hcMalloc(reinterpret_cast<void**>(&d_input_shape), info.ndim * sizeof(size_t));
+    hcMalloc(reinterpret_cast<void**>(&d_input_strides), info.ndim * sizeof(ptrdiff_t));
+    hcMalloc(reinterpret_cast<void**>(&d_output_strides), info.ndim * sizeof(ptrdiff_t));
+    
+    hcMemcpy(d_input_shape, info.input_shape.data(), info.ndim * sizeof(size_t), hcMemcpyHostToDevice);
+    hcMemcpy(d_input_strides, info.input_strides.data(), info.ndim * sizeof(ptrdiff_t), hcMemcpyHostToDevice);
+    hcMemcpy(d_output_strides, info.output_strides.data(), info.ndim * sizeof(ptrdiff_t), hcMemcpyHostToDevice);
+    
+    // Calculate grid size
+    size_t grid_size = (num_reductions + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    
+    // Launch kernel
+    reduceMeanKernel<T><<<grid_size, BLOCK_SIZE, 0, stream>>>(
+        static_cast<T*>(output),
+        static_cast<const T*>(input),
+        num_reductions,
+        reduce_size,
+        reduce_stride,
+        d_input_shape,
+        d_input_strides,
+        d_output_strides,
+        info.ndim,
+        info.reduce_dim);
+    
+    // Clean up device memory
+    hcFree(d_input_shape);
+    hcFree(d_input_strides);
+    hcFree(d_output_strides);
+    
+    return INFINI_STATUS_SUCCESS;
+}
+
+template <typename T>
+infiniStatus_t Descriptor::reduceMeanMetax(
+    void *output_data,
+    const void *input_data,
+    void *stream) const {
+    
+    hcStream_t hc_stream = static_cast<hcStream_t>(stream);
+    
+    return launchReduceMeanKernel<T>(
+        _info,
+        output_data,
+        input_data,
+        hc_stream);
+}
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t output_desc,
+    infiniopTensorDescriptor_t input_desc,
+    size_t dim) {
+    
+    // Validate input parameters
+    if (!handle || !desc_ptr || !output_desc || !input_desc) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    
+    // Get tensor information
+    auto input_tensor = reinterpret_cast<InfiniopTensorDescriptor*>(input_desc);
+    auto output_tensor = reinterpret_cast<InfiniopTensorDescriptor*>(output_desc);
+    
+    if (dim >= input_tensor->ndim()) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    
+    // Create ReduceMeanInfo
+    ReduceMeanInfo info;
+    info.ndim = input_tensor->ndim();
+    info.reduce_dim = dim;
+    info.dtype = input_tensor->dtype();
+    
+    // Copy shapes and strides
+    info.input_shape.resize(info.ndim);
+    info.output_shape.resize(info.ndim);
+    info.input_strides.resize(info.ndim);
+    info.output_strides.resize(info.ndim);
+    
+    for (size_t i = 0; i < info.ndim; i++) {
+        info.input_shape[i] = input_tensor->shape()[i];
+        info.input_strides[i] = input_tensor->strides()[i];
+        
+        if (i == dim) {
+            info.output_shape[i] = 1;
+            info.output_strides[i] = 0;
+        } else {
+            info.output_shape[i] = input_tensor->shape()[i];
+            info.output_strides[i] = output_tensor->strides()[i];
+        }
+    }
+    
+    info.input_size = 1;
+    for (size_t i = 0; i < info.ndim; i++) {
+        info.input_size *= info.input_shape[i];
+    }
+    info.output_size = 1;
+    for (size_t i = 0; i < info.ndim; i++) {
+        info.output_size *= info.output_shape[i];
+    }
+    
+    // Create descriptor
+    *desc_ptr = new Descriptor(handle->device, handle->device_id, std::move(info), 0);
+    
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace, size_t workspace_size,
+    void *output,
+    const void *input,
+    void *stream) const {
+    
+    switch (_info.dtype) {
+        case INFINI_DTYPE_F16:
+            return reduceMeanMetax<fp16_t>(output, input, stream);
+        case INFINI_DTYPE_F32:
+            return reduceMeanMetax<float>(output, input, stream);
+        case INFINI_DTYPE_BF16:
+            return reduceMeanMetax<bf16_t>(output, input, stream);
+        default:
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace op::reduce_mean::metax

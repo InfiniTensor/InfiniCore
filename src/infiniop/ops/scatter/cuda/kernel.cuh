@@ -98,3 +98,38 @@ cudaError_t launch_scatter_kernel(
 }
 
 } // namespace op::scatter::cuda
+
+//  ------------------------------- start: perform operator on CUDA --------------------------------
+template <unsigned int BLOCK_SIZE, typename Tdata>
+__device__ void scatterKernel(
+    Tdata * output,
+    const Tdata * src,
+    const int64_t * index,
+    size_t ndim,
+    size_t index_scatter_size,
+    ptrdiff_t * output_strides,
+    ptrdiff_t * src_strides,
+    ptrdiff_t * index_strides,
+    ptrdiff_t * contiguous_strides,
+    int scatter_dim
+) {
+        auto output_ptr = output;
+        auto src_ptr = src;
+        auto index_ptr = index;        
+        size_t rem = blockIdx.x;
+        for(int d = ndim - 1; d >= 0; d --) {
+            if (d == scatter_dim)
+                continue;
+            size_t dim_index = rem / contiguous_strides[d];
+            rem = rem % contiguous_strides[d];
+            output_ptr += dim_index * output_strides[d];
+            src_ptr += dim_index * src_strides[d];
+            index_ptr += dim_index * index_strides[d];
+        }
+        for (size_t c = threadIdx.x; c < index_scatter_size; c += BLOCK_SIZE) {
+            int64_t scatter_number = *(index_ptr + c * index_strides[scatter_dim]);
+            *(output_ptr + scatter_number * output_strides[scatter_dim]) = \
+                *(src_ptr + c * src_strides[scatter_dim]);
+        }
+}
+//  -------------------------------- end: perform operator on CUDA ---------------------------------

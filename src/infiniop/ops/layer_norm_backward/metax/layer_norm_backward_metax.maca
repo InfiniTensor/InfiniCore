@@ -1,0 +1,419 @@
+#include "layer_norm_backward_metax.h"
+#include "../../../devices/metax/metax_handle.h"
+#include "../../../devices/metax/metax_common.h"
+#include "../../../devices/metax/metax_kernel_common.h"
+#include "../../../tensor.h"
+#include "../../../../utils/custom_types.h"
+
+// 设备端数据类型转换函数
+template<typename T>
+__device__ float device_cast_to_float(T val) {
+    return static_cast<float>(val);
+}
+
+template<>
+__device__ float device_cast_to_float<fp16_t>(fp16_t val) {
+    // Convert custom fp16_t to __half first, then to float
+    __half h_val;
+    memcpy(&h_val, &val, sizeof(__half));
+    return __half2float(h_val);
+}
+
+template<>
+__device__ float device_cast_to_float<bf16_t>(bf16_t val) {
+    // Convert custom bf16_t to __hpcc_bfloat16 first, then to float
+    __hpcc_bfloat16 bf_val;
+    memcpy(&bf_val, &val, sizeof(__hpcc_bfloat16));
+    return __bfloat162float(bf_val);
+}
+
+template<typename T>
+__device__ T device_cast_from_float(float val) {
+    return static_cast<T>(val);
+}
+
+template<>
+__device__ fp16_t device_cast_from_float<fp16_t>(float val) {
+    // Convert float to __half first, then to custom fp16_t
+    __half h_val = __float2half(val);
+    fp16_t result;
+    memcpy(&result, &h_val, sizeof(fp16_t));
+    return result;
+}
+
+template<>
+__device__ bf16_t device_cast_from_float<bf16_t>(float val) {
+    // Convert float to __hpcc_bfloat16 first, then to custom bf16_t
+    __hpcc_bfloat16 bf_val = __float2bfloat16(val);
+    bf16_t result;
+    memcpy(&result, &bf_val, sizeof(bf16_t));
+    return result;
+}
+
+// LayerNorm Backward CUDA核函数
+template<unsigned int BLOCK_SIZE, typename T>
+__global__ void layerNormBackwardKernel(
+    T *__restrict__ grad_input,
+    T *__restrict__ grad_weight,
+    T *__restrict__ grad_bias,
+    const T *__restrict__ grad_output,
+    const T *__restrict__ input,
+    const T *__restrict__ weight,
+    const T *__restrict__ input_std_deviation,
+    const T *__restrict__ input_standardization,
+    size_t batch_size,
+    size_t normalized_size,
+    float eps,
+    bool has_bias) {
+    
+    int batch_idx = blockIdx.x;
+    if (batch_idx >= batch_size) return;
+    
+    int tid = threadIdx.x;
+    
+    // 计算当前batch的起始位置
+    const T* batch_grad_output = grad_output + batch_idx * normalized_size;
+    const T* batch_input = input + batch_idx * normalized_size;
+    const T* batch_standardization = input_standardization + batch_idx * normalized_size;
+    T* batch_grad_input = grad_input + batch_idx * normalized_size;
+    
+    float std_dev = device_cast_to_float(input_std_deviation[batch_idx]);
+    float inv_std = 1.0f / std_dev;
+    
+    // 使用共享内存进行reduction
+    __shared__ float shared_sum1[BLOCK_SIZE];  // sum(grad_output * standardization)
+    __shared__ float shared_sum2[BLOCK_SIZE];  // sum(grad_output)
+    
+    // 计算 sum(grad_output * standardization) 和 sum(grad_output)
+    float sum1 = 0.0f;
+    float sum2 = 0.0f;
+    
+    for (int i = tid; i < normalized_size; i += BLOCK_SIZE) {
+        float grad_out = device_cast_to_float(batch_grad_output[i]);
+        float standardized = device_cast_to_float(batch_standardization[i]);
+        
+        sum1 += grad_out * standardized;
+        sum2 += grad_out;
+    }
+    
+    shared_sum1[tid] = sum1;
+    shared_sum2[tid] = sum2;
+    __syncthreads();
+    
+    // Reduction求和
+    for (int stride = BLOCK_SIZE / 2; stride > 0; stride >>= 1) {
+        if (tid < stride) {
+            shared_sum1[tid] += shared_sum1[tid + stride];
+            shared_sum2[tid] += shared_sum2[tid + stride];
+        }
+        __syncthreads();
+    }
+    
+    float total_sum1 = shared_sum1[0];
+    float total_sum2 = shared_sum2[0];
+    __syncthreads();
+    
+    // 计算grad_input
+    for (int i = tid; i < normalized_size; i += BLOCK_SIZE) {
+        float grad_out = device_cast_to_float(batch_grad_output[i]);
+        float standardized = device_cast_to_float(batch_standardization[i]);
+        
+        float grad_in = inv_std * (grad_out - (total_sum2 / normalized_size) - 
+                                  standardized * (total_sum1 / normalized_size));
+        
+        batch_grad_input[i] = device_cast_from_float<T>(grad_in);
+    }
+}
+
+// 计算grad_weight和grad_bias的核函数
+template<unsigned int BLOCK_SIZE, typename T>
+__global__ void layerNormBackwardWeightBiasKernel(
+    T *__restrict__ grad_weight,
+    T *__restrict__ grad_bias,
+    const T *__restrict__ grad_output,
+    const T *__restrict__ input_standardization,
+    size_t batch_size,
+    size_t normalized_size,
+    bool has_bias) {
+    
+    int idx = blockIdx.x * BLOCK_SIZE + threadIdx.x;
+    if (idx >= normalized_size) return;
+    
+    float sum_grad_weight = 0.0f;
+    float sum_grad_bias = 0.0f;
+    
+    // 对所有batch求和
+    for (int batch = 0; batch < batch_size; ++batch) {
+        int offset = batch * normalized_size + idx;
+        float grad_out = device_cast_to_float(grad_output[offset]);
+        float standardized = device_cast_to_float(input_standardization[offset]);
+        
+        sum_grad_weight += grad_out * standardized;
+        if (has_bias) {
+            sum_grad_bias += grad_out;
+        }
+    }
+    
+    grad_weight[idx] = device_cast_from_float<T>(sum_grad_weight);
+    if (has_bias) {
+        grad_bias[idx] = device_cast_from_float<T>(sum_grad_bias);
+    }
+}
+
+// 启动LayerNorm Backward核函数
+template<unsigned int BLOCK_SIZE>
+void launchLayerNormBackwardKernel(
+    const op::layer_norm_backward::LayerNormBackwardInfo &info,
+    void *grad_input,
+    void *grad_weight,
+    void *grad_bias,
+    const void *grad_output,
+    const void *input,
+    const void *weight,
+    const void *input_std_deviation,
+    const void *input_standardization,
+    void *stream) {
+    
+    auto cuda_stream = reinterpret_cast<hcStream_t>(stream);
+    
+    // 启动grad_input计算核函数
+    dim3 grid1(info.batch_size());
+    dim3 block1(BLOCK_SIZE);
+    
+    // 启动grad_weight和grad_bias计算核函数
+    dim3 grid2((info.dim() + BLOCK_SIZE - 1) / BLOCK_SIZE);
+    dim3 block2(BLOCK_SIZE);
+    
+    switch (info.dtype) {
+    case INFINI_DTYPE_F32:
+        layerNormBackwardKernel<BLOCK_SIZE, float><<<grid1, block1, 0, cuda_stream>>>(
+            reinterpret_cast<float*>(grad_input),
+            reinterpret_cast<float*>(grad_weight),
+            reinterpret_cast<float*>(grad_bias),
+            reinterpret_cast<const float*>(grad_output),
+            reinterpret_cast<const float*>(input),
+            reinterpret_cast<const float*>(weight),
+            reinterpret_cast<const float*>(input_std_deviation),
+            reinterpret_cast<const float*>(input_standardization),
+            info.batch_size(), info.dim(),
+            info.eps, info.has_bias);
+        
+        layerNormBackwardWeightBiasKernel<BLOCK_SIZE, float><<<grid2, block2, 0, cuda_stream>>>(
+            reinterpret_cast<float*>(grad_weight),
+            reinterpret_cast<float*>(grad_bias),
+            reinterpret_cast<const float*>(grad_output),
+            reinterpret_cast<const float*>(input_standardization),
+            info.batch_size(), info.dim(),
+            info.has_bias);
+        break;
+        
+    case INFINI_DTYPE_F16:
+        layerNormBackwardKernel<BLOCK_SIZE, fp16_t><<<grid1, block1, 0, cuda_stream>>>(
+            reinterpret_cast<fp16_t*>(grad_input),
+            reinterpret_cast<fp16_t*>(grad_weight),
+            reinterpret_cast<fp16_t*>(grad_bias),
+            reinterpret_cast<const fp16_t*>(grad_output),
+            reinterpret_cast<const fp16_t*>(input),
+            reinterpret_cast<const fp16_t*>(weight),
+            reinterpret_cast<const fp16_t*>(input_std_deviation),
+            reinterpret_cast<const fp16_t*>(input_standardization),
+            info.batch_size(), info.dim(),
+            info.eps, info.has_bias);
+        
+        layerNormBackwardWeightBiasKernel<BLOCK_SIZE, fp16_t><<<grid2, block2, 0, cuda_stream>>>(
+            reinterpret_cast<fp16_t*>(grad_weight),
+            reinterpret_cast<fp16_t*>(grad_bias),
+            reinterpret_cast<const fp16_t*>(grad_output),
+            reinterpret_cast<const fp16_t*>(input_standardization),
+            info.batch_size(), info.dim(),
+            info.has_bias);
+        break;
+        
+    case INFINI_DTYPE_BF16:
+        layerNormBackwardKernel<BLOCK_SIZE, bf16_t><<<grid1, block1, 0, cuda_stream>>>(
+            reinterpret_cast<bf16_t*>(grad_input),
+            reinterpret_cast<bf16_t*>(grad_weight),
+            reinterpret_cast<bf16_t*>(grad_bias),
+            reinterpret_cast<const bf16_t*>(grad_output),
+            reinterpret_cast<const bf16_t*>(input),
+            reinterpret_cast<const bf16_t*>(weight),
+            reinterpret_cast<const bf16_t*>(input_std_deviation),
+            reinterpret_cast<const bf16_t*>(input_standardization),
+            info.batch_size(), info.dim(),
+            info.eps, info.has_bias);
+        
+        layerNormBackwardWeightBiasKernel<BLOCK_SIZE, bf16_t><<<grid2, block2, 0, cuda_stream>>>(
+            reinterpret_cast<bf16_t*>(grad_weight),
+            reinterpret_cast<bf16_t*>(grad_bias),
+            reinterpret_cast<const bf16_t*>(grad_output),
+            reinterpret_cast<const bf16_t*>(input_standardization),
+            info.batch_size(), info.dim(),
+            info.has_bias);
+        break;
+    default:
+        // 不支持的数据类型
+        break;
+    }
+}
+
+namespace op::layer_norm_backward::metax {
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t grad_input_desc,
+    infiniopTensorDescriptor_t grad_weight_desc,
+    infiniopTensorDescriptor_t grad_bias_desc,
+    infiniopTensorDescriptor_t grad_output_desc,
+    infiniopTensorDescriptor_t input_desc,
+    infiniopTensorDescriptor_t weight_desc,
+    infiniopTensorDescriptor_t input_std_deviation_desc,
+    infiniopTensorDescriptor_t input_standardization_desc,
+    float epsilon) {
+    
+    // 验证输入参数
+    if (!handle_ || !desc_ptr || !grad_input_desc || !grad_output_desc || !input_desc || 
+        !weight_desc || !input_std_deviation_desc || !input_standardization_desc) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    
+    if (epsilon <= 0.0f) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    
+    auto handle = reinterpret_cast<device::metax::Handle *>(handle_);
+    
+    // 使用LayerNormBackwardInfo的create方法
+    auto result = op::layer_norm_backward::LayerNormBackwardInfo::create(
+        grad_input_desc, grad_weight_desc, grad_bias_desc, grad_output_desc,
+        input_desc, weight_desc, input_std_deviation_desc, input_standardization_desc,
+        epsilon);
+    
+    CHECK_RESULT(result);
+    
+    op::layer_norm_backward::LayerNormBackwardInfo info = result.take();
+    
+    // LayerNorm Backward不需要额外的workspace
+    size_t workspace_size = 0;
+    
+    *desc_ptr = new Descriptor(
+        std::move(info),
+        workspace_size,
+        handle->device,
+        handle->device_id);
+    
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::get_workspace_size(size_t *size) const {
+    if (!size) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    *size = _workspace_size;
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace, size_t workspace_size,
+    void *grad_input,
+    void *grad_weight,
+    void *grad_bias,
+    const void *grad_output,
+    const void *input,
+    const void *weight,
+    const void *input_std_deviation,
+    const void *input_standardization,
+    void *stream) const {
+    
+    if (!grad_input || !grad_output || !input || !weight || 
+        !input_std_deviation || !input_standardization) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    
+    if (_info.has_bias && !grad_bias) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    
+    // 根据数据类型调用相应的模板函数
+    switch (_info.dtype) {
+    case INFINI_DTYPE_F32:
+        return layerNormBackwardMetax<float>(_info, grad_input, grad_weight, grad_bias,
+                                           grad_output, input, weight, input_std_deviation,
+                                           input_standardization, stream);
+    case INFINI_DTYPE_F16:
+        return layerNormBackwardMetax<fp16_t>(_info, grad_input, grad_weight, grad_bias,
+                                            grad_output, input, weight, input_std_deviation,
+                                            input_standardization, stream);
+    case INFINI_DTYPE_BF16:
+        return layerNormBackwardMetax<bf16_t>(_info, grad_input, grad_weight, grad_bias,
+                                             grad_output, input, weight, input_std_deviation,
+                                             input_standardization, stream);
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+}
+
+// 模板函数实现
+template<typename T>
+infiniStatus_t layerNormBackwardMetax(
+    const LayerNormBackwardInfo &info,
+    void *grad_input,
+    void *grad_weight,
+    void *grad_bias,
+    const void *grad_output,
+    const void *input,
+    const void *weight,
+    const void *input_std_deviation,
+    const void *input_standardization,
+    void *stream) {
+    
+    // 使用固定的block size
+    constexpr unsigned int BLOCK_SIZE = 256;
+    launchLayerNormBackwardKernel<BLOCK_SIZE>(
+        info, grad_input, grad_weight, grad_bias, grad_output,
+        input, weight, input_std_deviation, input_standardization, stream);
+    
+    // 检查错误
+     CHECK_METAX(hcGetLastError());
+    
+    return INFINI_STATUS_SUCCESS;
+}
+
+// 显式实例化模板
+template infiniStatus_t layerNormBackwardMetax<float>(
+    const LayerNormBackwardInfo &info,
+    void *grad_input,
+    void *grad_weight,
+    void *grad_bias,
+    const void *grad_output,
+    const void *input,
+    const void *weight,
+    const void *input_std_deviation,
+    const void *input_standardization,
+    void *stream);
+
+template infiniStatus_t layerNormBackwardMetax<fp16_t>(
+    const LayerNormBackwardInfo &info,
+    void *grad_input,
+    void *grad_weight,
+    void *grad_bias,
+    const void *grad_output,
+    const void *input,
+    const void *weight,
+    const void *input_std_deviation,
+    const void *input_standardization,
+    void *stream);
+
+template infiniStatus_t layerNormBackwardMetax<bf16_t>(
+    const LayerNormBackwardInfo &info,
+    void *grad_input,
+    void *grad_weight,
+    void *grad_bias,
+    const void *grad_output,
+    const void *input,
+    const void *weight,
+    const void *input_std_deviation,
+    const void *input_standardization,
+    void *stream);
+
+} // namespace op::layer_norm_backward::metax

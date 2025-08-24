@@ -739,3 +739,280 @@ def linear_backward_(lib):
     ]
 
 
+@OpRegister.operator
+def rms_norm_backward_(lib):
+    lib.infiniopCreateRMSNormBackwardDescriptor.restype = c_int32
+    lib.infiniopCreateRMSNormBackwardDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,  # input_grad_desc
+        infiniopTensorDescriptor_t,  # weight_grad_desc
+        infiniopTensorDescriptor_t,  # output_grad_desc
+        infiniopTensorDescriptor_t,  # input_desc
+        infiniopTensorDescriptor_t,  # weight_desc
+        c_float,                     # epsilon
+    ]
+
+    lib.infiniopGetRMSNormBackwardWorkspaceSize.restype = c_int32
+    lib.infiniopGetRMSNormBackwardWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopRMSNormBackward.restype = c_int32
+    lib.infiniopRMSNormBackward.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,  # workspace
+        c_size_t,  # workspace_size
+        c_void_p,  # input_grad
+        c_void_p,  # weight_grad
+        c_void_p,  # output_grad
+        c_void_p,  # input
+        c_void_p,  # weight
+        c_void_p,  # stream
+    ]
+
+    lib.infiniopDestroyRMSNormBackwardDescriptor.restype = c_int32
+    lib.infiniopDestroyRMSNormBackwardDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
+def layer_norm_(lib):
+    lib.infiniopCreateLayerNormDescriptor.restype = c_int32
+    lib.infiniopCreateLayerNormDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,  # output
+        infiniopTensorDescriptor_t,  # input
+        infiniopTensorDescriptor_t,  # weight
+        infiniopTensorDescriptor_t,  # bias
+        infiniopTensorDescriptor_t,  # input_std_deviation
+        infiniopTensorDescriptor_t,  # input_standardization
+        c_float,                     # eps
+    ]
+
+    lib.infiniopGetLayerNormWorkspaceSize.restype = c_int32
+    lib.infiniopGetLayerNormWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopLayerNorm.restype = c_int32
+    lib.infiniopLayerNorm.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,  # workspace
+        c_size_t,  # workspace_size
+        c_void_p,  # output
+        c_void_p,  # input
+        c_void_p,  # weight
+        c_void_p,  # bias
+        c_void_p,  # input_std_deviation
+        c_void_p,  # input_standardization
+        c_void_p,  # stream
+    ]
+
+    lib.infiniopDestroyLayerNormDescriptor.restype = c_int32
+    lib.infiniopDestroyLayerNormDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
+def layer_norm_backward_(lib):
+    lib.infiniopCreateLayerNormBackwardDescriptor.restype = c_int32
+    lib.infiniopCreateLayerNormBackwardDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,  # grad_input
+        infiniopTensorDescriptor_t,  # grad_weight
+        infiniopTensorDescriptor_t,  # grad_bias
+        infiniopTensorDescriptor_t,  # grad_output
+        infiniopTensorDescriptor_t,  # input
+        infiniopTensorDescriptor_t,  # weight
+        infiniopTensorDescriptor_t,  # input_std_deviation
+        infiniopTensorDescriptor_t,  # input_standardization
+        c_float,                     # eps
+    ]
+
+    lib.infiniopGetLayerNormBackwardWorkspaceSize.restype = c_int32
+    lib.infiniopGetLayerNormBackwardWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopLayerNormBackward.restype = c_int32
+    lib.infiniopLayerNormBackward.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,  # workspace
+        c_size_t,  # workspace_size
+        c_void_p,  # grad_input
+        c_void_p,  # grad_weight
+        c_void_p,  # grad_bias
+        c_void_p,  # grad_output
+        c_void_p,  # input
+        c_void_p,  # weight
+        c_void_p,  # input_std_deviation
+        c_void_p,  # input_standardization
+        c_void_p,  # stream
+    ]
+
+    lib.infiniopDestroyLayerNormBackwardDescriptor.restype = c_int32
+    lib.infiniopDestroyLayerNormBackwardDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
+def batch_norm_(lib):
+    lib.infiniopCreateBatchNormDescriptor.restype = c_int32
+    lib.infiniopCreateBatchNormDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,  # output
+        infiniopTensorDescriptor_t,  # input
+        infiniopTensorDescriptor_t,  # weight
+        infiniopTensorDescriptor_t,  # bias
+        infiniopTensorDescriptor_t,  # running_mean
+        infiniopTensorDescriptor_t,  # running_var
+        c_float,                     # momentum
+        c_float,                     # eps
+    ]
+
+    lib.infiniopGetBatchNormWorkspaceSize.restype = c_int32
+    lib.infiniopGetBatchNormWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopBatchNorm.restype = c_int32
+    lib.infiniopBatchNorm.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,  # workspace
+        c_size_t,  # workspace_size
+        c_void_p,  # output
+        c_void_p,  # input
+        c_void_p,  # weight
+        c_void_p,  # bias
+        c_void_p,  # running_mean
+        c_void_p,  # running_var
+        c_void_p,  # stream
+    ]
+
+    lib.infiniopDestroyBatchNormDescriptor.restype = c_int32
+    lib.infiniopDestroyBatchNormDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
+def batch_norm_backward_(lib):
+    lib.infiniopCreateBatchNormBackwardDescriptor.restype = c_int32
+    lib.infiniopCreateBatchNormBackwardDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,  # grad_input
+        infiniopTensorDescriptor_t,  # grad_weight
+        infiniopTensorDescriptor_t,  # grad_bias
+        infiniopTensorDescriptor_t,  # grad_output
+        infiniopTensorDescriptor_t,  # input
+        infiniopTensorDescriptor_t,  # weight
+        infiniopTensorDescriptor_t,  # running_mean
+        infiniopTensorDescriptor_t,  # running_var
+        c_float,                     # momentum
+        c_float,                     # eps
+    ]
+
+    lib.infiniopGetBatchNormBackwardWorkspaceSize.restype = c_int32
+    lib.infiniopGetBatchNormBackwardWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopBatchNormBackward.restype = c_int32
+    lib.infiniopBatchNormBackward.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,  # workspace
+        c_size_t,  # workspace_size
+        c_void_p,  # grad_input
+        c_void_p,  # grad_weight
+        c_void_p,  # grad_bias
+        c_void_p,  # grad_output
+        c_void_p,  # input
+        c_void_p,  # weight
+        c_void_p,  # running_mean
+        c_void_p,  # running_var
+        c_void_p,  # stream
+    ]
+
+    lib.infiniopDestroyBatchNormBackwardDescriptor.restype = c_int32
+    lib.infiniopDestroyBatchNormBackwardDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
+def reduce_max_(lib):
+    lib.infiniopCreateReduceMaxDescriptor.restype = c_int32
+    lib.infiniopCreateReduceMaxDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_int32,
+    ]
+
+    lib.infiniopGetReduceMaxWorkspaceSize.restype = c_int32
+    lib.infiniopGetReduceMaxWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopReduceMax.restype = c_int32
+    lib.infiniopReduceMax.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyReduceMaxDescriptor.restype = c_int32
+    lib.infiniopDestroyReduceMaxDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
+def reduce_mean_(lib):
+    lib.infiniopCreateReduceMeanDescriptor.restype = c_int32
+    lib.infiniopCreateReduceMeanDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,  # input
+        infiniopTensorDescriptor_t,  # output
+        c_size_t,                    # dim
+    ]
+
+    lib.infiniopGetReduceMeanWorkspaceSize.restype = c_int32
+    lib.infiniopGetReduceMeanWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopReduceMean.restype = c_int32
+    lib.infiniopReduceMean.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,  # workspace
+        c_size_t,  # workspace_size
+        c_void_p,  # input
+        c_void_p,  # output
+        c_void_p,  # stream
+    ]
+
+    lib.infiniopDestroyReduceMeanDescriptor.restype = c_int32
+    lib.infiniopDestroyReduceMeanDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]

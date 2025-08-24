@@ -17,6 +17,9 @@
 #ifdef ENABLE_METAX_API
 #include "metax/rearrange_metax.h"
 #endif
+#ifdef ENABLE_MOORE_API
+#include "moore/rearrange_moore.h"
+#endif
 
 __C infiniStatus_t infiniopCreateRearrangeDescriptor(
     infiniopHandle_t handle,
@@ -51,6 +54,9 @@ __C infiniStatus_t infiniopCreateRearrangeDescriptor(
 #endif
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -90,6 +96,9 @@ __C infiniStatus_t infiniopRearrange(
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -125,6 +134,9 @@ __C infiniStatus_t infiniopDestroyRearrangeDescriptor(
 #endif
 #ifdef ENABLE_METAX_API
         DELETE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MOORE_API
+        DELETE(INFINI_DEVICE_MOORE, moore);
 #endif
 
     default:

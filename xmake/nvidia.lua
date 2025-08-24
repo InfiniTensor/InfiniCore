@@ -40,9 +40,9 @@ target("infiniop-nvidia")
         end
     else
         add_cuflags("-Xcompiler=-Wall", "-Xcompiler=-Werror")
-        add_cuflags("-Xcompiler=-fPIC", {force = true})
+        add_cuflags("-Xcompiler=-fPIC")
         add_cuflags("--extended-lambda")
-        add_culdflags("-Xcompiler=-fPIC", {force = true})
+        add_culdflags("-Xcompiler=-fPIC")
         add_cxxflags("-fPIC")
         add_cuflags("--expt-relaxed-constexpr")
         if CUDNN_ROOT ~= nil then
