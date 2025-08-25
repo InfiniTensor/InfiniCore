@@ -19,6 +19,8 @@ public:
 
     Tensor(const void *data, std::initializer_list<Size> shape, std::initializer_list<Stride> strides) : Tensor{data, decltype(shape_){shape}, decltype(strides_){strides}} {}
 
+    Tensor(const void *data, const Size *shape, const Stride *strides, Size ndim) : data_{data}, shape_{shape, shape + ndim}, strides_{strides, strides + ndim}, ndim_{shape_.size()} {}
+
     Tensor(const T value) : value_{value}, data_{&value_}, ndim_{0} {}
 
     operator NineToothedTensor() { return {const_cast<Data>(data_), shape_.data(), strides_.data()}; }
