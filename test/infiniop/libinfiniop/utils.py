@@ -66,31 +66,50 @@ class TestTensor(CTensor):
                 torch_strides.append(strides[i])
             else:
                 torch_shape.append(shape[i])
+        # Use compatibility mode for unsupported unsigned types
+        use_compat = dt in [InfiniDtype.U16, InfiniDtype.U32, InfiniDtype.U64]
+        torch_dtype = to_torch_dtype(dt, compatability_mode=use_compat)
+        
         if mode == "random":
-            self._torch_tensor = torch.rand(
-                torch_shape, dtype=to_torch_dtype(dt), device=torch_device_map[device]
-            )
+            if torch_dtype in [torch.int8, torch.int16, torch.int32, torch.int64, torch.uint8, torch.uint16, torch.uint32, torch.uint64]:
+                # For integer types, use randint to avoid the "check_uniform_bounds" error
+                self._torch_tensor = torch.randint(
+                    0, 10, torch_shape, dtype=torch_dtype, device=torch_device_map[device]
+                )
+            elif torch_dtype == torch.bool:
+                # For boolean type, use randint with 0 or 1
+                self._torch_tensor = torch.randint(
+                    0, 2, torch_shape, dtype=torch_dtype, device=torch_device_map[device]
+                )
+            else:
+                # For floating point types, use rand
+                self._torch_tensor = torch.rand(
+                    torch_shape, dtype=torch_dtype, device=torch_device_map[device]
+                )
         elif mode == "zeros":
             self._torch_tensor = torch.zeros(
-                torch_shape, dtype=to_torch_dtype(dt), device=torch_device_map[device]
+                torch_shape, dtype=torch_dtype, device=torch_device_map[device]
             )
         elif mode == "ones":
             self._torch_tensor = torch.ones(
-                torch_shape, dtype=to_torch_dtype(dt), device=torch_device_map[device]
+                torch_shape, dtype=torch_dtype, device=torch_device_map[device]
             )
         elif mode == "manual":
             assert set_tensor is not None
             assert torch_shape == list(set_tensor.shape)
             assert torch_strides == list(set_tensor.stride())
-            self._torch_tensor = set_tensor.to(to_torch_dtype(dt)).to(
+            self._torch_tensor = set_tensor.to(torch_dtype).to(
                 torch_device_map[device]
             )
         else:
             raise ValueError("Unsupported mode")
 
-        if scale is not None:
+        # Skip scale and bias for integer types to avoid PyTorch compatibility issues
+        if scale is not None and dt not in [InfiniDtype.I8, InfiniDtype.I16, InfiniDtype.I32, InfiniDtype.I64,
+                                           InfiniDtype.U8, InfiniDtype.U16, InfiniDtype.U32, InfiniDtype.U64, InfiniDtype.BOOL]:
             self._torch_tensor *= scale
-        if bias is not None:
+        if bias is not None and dt not in [InfiniDtype.I8, InfiniDtype.I16, InfiniDtype.I32, InfiniDtype.I64,
+                                          InfiniDtype.U8, InfiniDtype.U16, InfiniDtype.U32, InfiniDtype.U64, InfiniDtype.BOOL]:
             self._torch_tensor += bias
 
         if strides is not None:
@@ -148,6 +167,8 @@ def to_torch_dtype(dt: InfiniDtype, compatability_mode=False):
         return torch.int32 if compatability_mode else torch.uint32
     elif dt == InfiniDtype.U64:
         return torch.int64 if compatability_mode else torch.uint64
+    elif dt == InfiniDtype.BOOL:
+        return torch.bool
     else:
         raise ValueError("Unsupported data type")
 
@@ -427,11 +448,18 @@ def print_discrepancy(
     nan_mismatch = (
         actual_isnan ^ expected_isnan if equal_nan else actual_isnan | expected_isnan
     )
-    diff_mask = nan_mismatch | (
-        torch.abs(actual - expected) > (atol + rtol * torch.abs(expected))
-    )
+    
+    # Handle bool tensors specially since they don't support subtraction
+    if actual.dtype == torch.bool:
+        diff_mask = nan_mismatch | (actual != expected)
+        delta = (actual != expected).float()  # Convert to float for display
+    else:
+        diff_mask = nan_mismatch | (
+            torch.abs(actual - expected) > (atol + rtol * torch.abs(expected))
+        )
+        delta = actual - expected
+    
     diff_indices = torch.nonzero(diff_mask, as_tuple=False)
-    delta = actual - expected
 
     # Display format: widths for columns
     col_width = [18, 20, 20, 20]
@@ -467,12 +495,21 @@ def print_discrepancy(
         print(
             f"  - Mismatched elements: {len(diff_indices)} / {actual.numel()} ({len(diff_indices) / actual.numel() * 100}%)"
         )
-        print(
-            f"  - Min(actual) : {torch.min(actual):<{col_width[1]}} | Max(actual) : {torch.max(actual):<{col_width[2]}}"
-        )
-        print(
-            f"  - Min(desired): {torch.min(expected):<{col_width[1]}} | Max(desired): {torch.max(expected):<{col_width[2]}}"
-        )
+        # Handle bool tensors for min/max display
+        if actual.dtype == torch.bool:
+            print(
+                f"  - Min(actual) : {torch.min(actual.float()):<{col_width[1]}} | Max(actual) : {torch.max(actual.float()):<{col_width[2]}}"
+            )
+            print(
+                f"  - Min(desired): {torch.min(expected.float()):<{col_width[1]}} | Max(desired): {torch.max(expected.float()):<{col_width[2]}}"
+            )
+        else:
+            print(
+                f"  - Min(actual) : {torch.min(actual):<{col_width[1]}} | Max(actual) : {torch.max(actual):<{col_width[2]}}"
+            )
+            print(
+                f"  - Min(desired): {torch.min(expected):<{col_width[1]}} | Max(desired): {torch.max(expected):<{col_width[2]}}"
+            )
         print(
             f"  - Min(delta)  : {torch.min(delta):<{col_width[1]}} | Max(delta)  : {torch.max(delta):<{col_width[2]}}"
         )

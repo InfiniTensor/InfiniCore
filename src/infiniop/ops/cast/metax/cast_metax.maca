@@ -1,0 +1,289 @@
+#include "cast_metax.h"
+
+#include "../../../elementwise/metax/elementwise_metax.h"
+#include "../../../../utils/custom_types.h"
+
+using cuda_bfloat16 = hpcc_bfloat16;
+using half = __half;
+
+namespace op::cast::metax {
+
+template<typename OutputType, typename InputType>
+struct CastOp;  // 前向声明
+
+// Adapter with templated operator() to satisfy heterogeneous elementwiseKernel
+template<typename OutputType, typename InputType>
+struct CastOpAdapter {
+    static constexpr size_t num_inputs = 1;
+    template<typename Tout, typename Tin>
+    __device__ __forceinline__ Tout operator()(const Tin &input) const {
+        return CastOp<Tout, Tin>{}(input);
+    }
+};
+
+// Cast operator for MetaX backend
+template<typename OutputType, typename InputType>
+struct CastOp {
+    static constexpr size_t num_inputs = 1;
+    
+    __device__ __forceinline__ OutputType operator()(const InputType &input) const {
+        return static_cast<OutputType>(input);
+    }
+};
+
+// Specializations for half and bfloat16 conversions
+template<>
+struct CastOp<__half, float> {
+    static constexpr size_t num_inputs = 1;
+    __device__ __forceinline__ __half operator()(const float &input) const {
+        return __float2half(input);
+    }
+};
+
+template<>
+struct CastOp<float, __half> {
+    static constexpr size_t num_inputs = 1;
+    __device__ __forceinline__ float operator()(const __half &input) const {
+        return __half2float(input);
+    }
+};
+
+template<>
+struct CastOp<cuda_bfloat16, float> {
+    static constexpr size_t num_inputs = 1;
+    __device__ __forceinline__ cuda_bfloat16 operator()(const float &input) const {
+        return __float2bfloat16(input);
+    }
+};
+
+template<>
+struct CastOp<float, cuda_bfloat16> {
+    static constexpr size_t num_inputs = 1;
+    __device__ __forceinline__ float operator()(const cuda_bfloat16 &input) const {
+        return __bfloat162float(input);
+    }
+};
+
+template<>
+struct CastOp<__half, double> {
+    static constexpr size_t num_inputs = 1;
+    __device__ __forceinline__ __half operator()(const double &input) const {
+        return __float2half(static_cast<float>(input));
+    }
+};
+
+template<>
+struct CastOp<double, __half> {
+    static constexpr size_t num_inputs = 1;
+    __device__ __forceinline__ double operator()(const __half &input) const {
+        return static_cast<double>(__half2float(input));
+    }
+};
+
+template<>
+struct CastOp<cuda_bfloat16, double> {
+    static constexpr size_t num_inputs = 1;
+    __device__ __forceinline__ cuda_bfloat16 operator()(const double &input) const {
+        return __float2bfloat16(static_cast<float>(input));
+    }
+};
+
+template<>
+struct CastOp<double, cuda_bfloat16> {
+    static constexpr size_t num_inputs = 1;
+    __device__ __forceinline__ double operator()(const cuda_bfloat16 &input) const {
+        return static_cast<double>(__bfloat162float(input));
+    }
+};
+
+template<>
+struct CastOp<cuda_bfloat16, __half> {
+    static constexpr size_t num_inputs = 1;
+    __device__ __forceinline__ cuda_bfloat16 operator()(const __half &input) const {
+        return __float2bfloat16(__half2float(input));
+    }
+};
+
+template<>
+struct CastOp<__half, cuda_bfloat16> {
+    static constexpr size_t num_inputs = 1;
+    __device__ __forceinline__ __half operator()(const cuda_bfloat16 &input) const {
+        return __float2half(__bfloat162float(input));
+    }
+};
+
+// -----------------------------
+// Integer  ↔  cuda_bfloat16
+// -----------------------------
+#define CAST_BF16_TO_INT(INT_T) \
+template<> struct CastOp<INT_T, cuda_bfloat16> { \
+    static constexpr size_t num_inputs = 1; \
+    __device__ __forceinline__ INT_T operator()(const cuda_bfloat16 &input) const { \
+        return static_cast<INT_T>(__bfloat162float(input)); \
+    } \
+};
+
+#define CAST_INT_TO_BF16(INT_T) \
+template<> struct CastOp<cuda_bfloat16, INT_T> { \
+    static constexpr size_t num_inputs = 1; \
+    __device__ __forceinline__ cuda_bfloat16 operator()(const INT_T &input) const { \
+        return __float2bfloat16(static_cast<float>(input)); \
+    } \
+};
+
+// Signed integers
+CAST_BF16_TO_INT(int8_t)  CAST_INT_TO_BF16(int8_t)
+CAST_BF16_TO_INT(int16_t) CAST_INT_TO_BF16(int16_t)
+CAST_BF16_TO_INT(int32_t) CAST_INT_TO_BF16(int32_t)
+CAST_BF16_TO_INT(int64_t) CAST_INT_TO_BF16(int64_t)
+// Unsigned integers
+CAST_BF16_TO_INT(uint8_t) CAST_INT_TO_BF16(uint8_t)
+CAST_BF16_TO_INT(uint16_t) CAST_INT_TO_BF16(uint16_t)
+CAST_BF16_TO_INT(uint32_t) CAST_INT_TO_BF16(uint32_t)
+CAST_BF16_TO_INT(uint64_t) CAST_INT_TO_BF16(uint64_t)
+
+#undef CAST_BF16_TO_INT
+#undef CAST_INT_TO_BF16
+
+} // namespace op::cast::metax
+
+namespace op::cast::metax {
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t output_desc,
+    std::vector<infiniopTensorDescriptor_t> input_descs) {
+    
+    auto handle = reinterpret_cast<device::metax::Handle *>(handle_);
+    auto input_dtype = input_descs.at(0)->dtype();
+    auto output_dtype = output_desc->dtype();
+    
+    const auto &input_shape = input_descs.at(0)->shape();
+    const auto &output_shape = output_desc->shape();
+    
+    // Check that input and output shapes are the same
+    if (input_shape != output_shape) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    
+    // Create elementwise info
+    auto info_result = op::elementwise::ElementwiseInfo::create(output_desc, input_descs);
+    CHECK_RESULT(info_result);
+    auto info = info_result.take();
+    auto workspace_size = info.getMetaMemSize() + info.getInputSize() * sizeof(void *);
+    
+    auto device_impl_result = op::elementwise::metax::DeviceImpl::create(handle->internal());
+    CHECK_RESULT(device_impl_result);
+    
+    *desc_ptr = new Descriptor(
+        input_dtype,
+        output_dtype,
+        std::move(info),
+        device_impl_result.take(),
+        workspace_size,
+        handle->device,
+        handle->device_id);
+    
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace, size_t workspace_size,
+    void *output,
+    std::vector<const void *> inputs,
+    void *stream) const {
+    
+    if (!_device_info) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    #define CAST_CASE(INPUT_TYPE, OUTPUT_TYPE, INPUT_DTYPE, OUTPUT_DTYPE) \
+        if (_input_dtype == INPUT_DTYPE && _output_dtype == OUTPUT_DTYPE) { \
+            return _device_info->calculate<256, CastOpAdapter<OUTPUT_TYPE, INPUT_TYPE>, OUTPUT_TYPE, INPUT_TYPE>(_info, workspace, output, inputs, stream); \
+        }
+
+    // Float16 conversions
+    CAST_CASE(half, float, INFINI_DTYPE_F16, INFINI_DTYPE_F32)
+    CAST_CASE(float, half, INFINI_DTYPE_F32, INFINI_DTYPE_F16)
+    CAST_CASE(half, double, INFINI_DTYPE_F16, INFINI_DTYPE_F64)
+    CAST_CASE(double, half, INFINI_DTYPE_F64, INFINI_DTYPE_F16)
+    
+    // BFloat16 conversions
+    CAST_CASE(cuda_bfloat16, float, INFINI_DTYPE_BF16, INFINI_DTYPE_F32)
+    CAST_CASE(float, cuda_bfloat16, INFINI_DTYPE_F32, INFINI_DTYPE_BF16)
+    CAST_CASE(cuda_bfloat16, double, INFINI_DTYPE_BF16, INFINI_DTYPE_F64)
+    CAST_CASE(double, cuda_bfloat16, INFINI_DTYPE_F64, INFINI_DTYPE_BF16)
+    CAST_CASE(half, cuda_bfloat16, INFINI_DTYPE_F16, INFINI_DTYPE_BF16)
+    CAST_CASE(cuda_bfloat16, half, INFINI_DTYPE_BF16, INFINI_DTYPE_F16)
+    
+    // Float/Double conversions
+    CAST_CASE(float, double, INFINI_DTYPE_F32, INFINI_DTYPE_F64)
+    CAST_CASE(double, float, INFINI_DTYPE_F64, INFINI_DTYPE_F32)
+    
+    // Integer conversions
+    CAST_CASE(int8_t, int16_t, INFINI_DTYPE_I8, INFINI_DTYPE_I16)
+    CAST_CASE(int8_t, int32_t, INFINI_DTYPE_I8, INFINI_DTYPE_I32)
+    CAST_CASE(int8_t, int64_t, INFINI_DTYPE_I8, INFINI_DTYPE_I64)
+    CAST_CASE(int16_t, int8_t, INFINI_DTYPE_I16, INFINI_DTYPE_I8)
+    CAST_CASE(int16_t, int32_t, INFINI_DTYPE_I16, INFINI_DTYPE_I32)
+    CAST_CASE(int16_t, int64_t, INFINI_DTYPE_I16, INFINI_DTYPE_I64)
+    CAST_CASE(int32_t, int8_t, INFINI_DTYPE_I32, INFINI_DTYPE_I8)
+    CAST_CASE(int32_t, int16_t, INFINI_DTYPE_I32, INFINI_DTYPE_I16)
+    CAST_CASE(int32_t, int64_t, INFINI_DTYPE_I32, INFINI_DTYPE_I64)
+    CAST_CASE(int64_t, int8_t, INFINI_DTYPE_I64, INFINI_DTYPE_I8)
+    CAST_CASE(int64_t, int16_t, INFINI_DTYPE_I64, INFINI_DTYPE_I16)
+    CAST_CASE(int64_t, int32_t, INFINI_DTYPE_I64, INFINI_DTYPE_I32)
+    
+    // Unsigned integer conversions
+    CAST_CASE(uint8_t, uint16_t, INFINI_DTYPE_U8, INFINI_DTYPE_U16)
+    CAST_CASE(uint8_t, uint32_t, INFINI_DTYPE_U8, INFINI_DTYPE_U32)
+    CAST_CASE(uint8_t, uint64_t, INFINI_DTYPE_U8, INFINI_DTYPE_U64)
+    CAST_CASE(uint16_t, uint8_t, INFINI_DTYPE_U16, INFINI_DTYPE_U8)
+    CAST_CASE(uint16_t, uint32_t, INFINI_DTYPE_U16, INFINI_DTYPE_U32)
+    CAST_CASE(uint16_t, uint64_t, INFINI_DTYPE_U16, INFINI_DTYPE_U64)
+    CAST_CASE(uint32_t, uint8_t, INFINI_DTYPE_U32, INFINI_DTYPE_U8)
+    CAST_CASE(uint32_t, uint16_t, INFINI_DTYPE_U32, INFINI_DTYPE_U16)
+    CAST_CASE(uint32_t, uint64_t, INFINI_DTYPE_U32, INFINI_DTYPE_U64)
+    CAST_CASE(uint64_t, uint8_t, INFINI_DTYPE_U64, INFINI_DTYPE_U8)
+    CAST_CASE(uint64_t, uint16_t, INFINI_DTYPE_U64, INFINI_DTYPE_U16)
+    CAST_CASE(uint64_t, uint32_t, INFINI_DTYPE_U64, INFINI_DTYPE_U32)
+    
+    // Integer to float conversions
+    CAST_CASE(int32_t, float, INFINI_DTYPE_I32, INFINI_DTYPE_F32)
+    CAST_CASE(int64_t, double, INFINI_DTYPE_I64, INFINI_DTYPE_F64)
+    CAST_CASE(int32_t, half, INFINI_DTYPE_I32, INFINI_DTYPE_F16)
+    CAST_CASE(int64_t, half, INFINI_DTYPE_I64, INFINI_DTYPE_F16)
+    CAST_CASE(int64_t, float, INFINI_DTYPE_I64, INFINI_DTYPE_F32)
+    CAST_CASE(int64_t, cuda_bfloat16, INFINI_DTYPE_I64, INFINI_DTYPE_BF16)
+    
+    // Float to integer conversions
+    CAST_CASE(float, int32_t, INFINI_DTYPE_F32, INFINI_DTYPE_I32)
+    CAST_CASE(float, int64_t, INFINI_DTYPE_F32, INFINI_DTYPE_I64)
+    CAST_CASE(double, int64_t, INFINI_DTYPE_F64, INFINI_DTYPE_I64)
+    CAST_CASE(half, int32_t, INFINI_DTYPE_F16, INFINI_DTYPE_I32)
+    CAST_CASE(half, int64_t, INFINI_DTYPE_F16, INFINI_DTYPE_I64)
+    CAST_CASE(cuda_bfloat16, int64_t, INFINI_DTYPE_BF16, INFINI_DTYPE_I64)
+    
+    // uint8 conversions
+    CAST_CASE(uint8_t, float, INFINI_DTYPE_U8, INFINI_DTYPE_F32)
+    CAST_CASE(uint8_t, double, INFINI_DTYPE_U8, INFINI_DTYPE_F64)
+    CAST_CASE(uint8_t, half, INFINI_DTYPE_U8, INFINI_DTYPE_F16)
+    CAST_CASE(uint8_t, cuda_bfloat16, INFINI_DTYPE_U8, INFINI_DTYPE_BF16)
+    CAST_CASE(uint8_t, int32_t, INFINI_DTYPE_U8, INFINI_DTYPE_I32)
+    CAST_CASE(uint8_t, int64_t, INFINI_DTYPE_U8, INFINI_DTYPE_I64)
+    CAST_CASE(float, uint8_t, INFINI_DTYPE_F32, INFINI_DTYPE_U8)
+    CAST_CASE(double, uint8_t, INFINI_DTYPE_F64, INFINI_DTYPE_U8)
+    CAST_CASE(half, uint8_t, INFINI_DTYPE_F16, INFINI_DTYPE_U8)
+    CAST_CASE(cuda_bfloat16, uint8_t, INFINI_DTYPE_BF16, INFINI_DTYPE_U8)
+    CAST_CASE(int32_t, uint8_t, INFINI_DTYPE_I32, INFINI_DTYPE_U8)
+    CAST_CASE(int64_t, uint8_t, INFINI_DTYPE_I64, INFINI_DTYPE_U8)
+    
+    #undef CAST_CASE
+    
+    return INFINI_STATUS_BAD_TENSOR_DTYPE;
+}
+
+Descriptor::~Descriptor() = default;
+
+} // namespace op::cast::metax

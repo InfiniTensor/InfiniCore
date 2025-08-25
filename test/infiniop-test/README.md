@@ -18,7 +18,7 @@ xmake build infiniop-test
 
 ```bash
 cd /test/infiniop-test/
-python -m test_generate.testcases.gemm
+python -m test_generate.testcases.exp
 ```
 
 - 测试测例
@@ -32,7 +32,7 @@ infiniop-test --help
 示例：在CPU上测试`gemm.gguf`测例文件，预热20次，测试1000次。
 
 ```bash
-infiniop-test gemm.gguf --cpu --warmup 20 --run 1000
+infiniop-test exp.gguf --nvidia --run 1
 ```
 
 ## 自定义测例
