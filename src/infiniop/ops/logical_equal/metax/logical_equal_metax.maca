@@ -1,0 +1,65 @@
+#include "../../../elementwise/metax/elementwise_metax.h"
+
+#include "../cuda/kernel.cuh"
+#include "infinicore.h"
+#include "logical_equal_metax.h"
+#include <cstdint>
+
+namespace op::logical_equal::metax {
+Descriptor::~Descriptor() = default;
+
+infiniStatus_t Descriptor::create(infiniopHandle_t handle_,
+                                  Descriptor **desc_ptr,
+                                  infiniopTensorDescriptor_t output_desc,
+                                  std::vector<infiniopTensorDescriptor_t> input_descs) {
+    auto handle = reinterpret_cast<device::metax::Handle *>(handle_);
+    auto dtype = output_desc->dtype();
+
+    const auto &a_desc = input_descs.at(0);
+    const auto &b_desc = input_descs.at(1);
+    const auto c_shape = output_desc->shape();
+    const auto a_shape = a_desc->shape();
+    const auto b_shape = b_desc->shape();
+
+    CHECK_DTYPE(dtype, INFINI_DTYPE_BOOL, INFINI_DTYPE_I8, INFINI_DTYPE_I16,
+                INFINI_DTYPE_I32, INFINI_DTYPE_I64, INFINI_DTYPE_BF16,
+                INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64);
+
+    CHECK_SAME_SHAPE(c_shape, a_shape, b_shape);
+
+    // create CPU elementwise descriptor
+    CREATE_ELEMENTWISE_METAX_DESCRIPTOR(handle, dtype, output_desc, input_descs);
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *output,
+    std::vector<const void *> inputs,
+    void *stream) const {
+
+    if (workspace_size < _workspace_size) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+#define CASE(CASE, TYPE) \
+    case CASE:           \
+        return _device_info->calculate<256, cuda::LogicalEqualOp, TYPE>(_info, workspace, output, inputs, stream);
+
+    switch (_dtype) {
+        CASE(INFINI_DTYPE_BOOL, bool)
+        CASE(INFINI_DTYPE_I8, int8_t)
+        CASE(INFINI_DTYPE_I16, int16_t)
+        CASE(INFINI_DTYPE_I32, int32_t)
+        CASE(INFINI_DTYPE_I64, int64_t)
+        CASE(INFINI_DTYPE_F16, half)
+        CASE(INFINI_DTYPE_BF16, cuda_bfloat16)
+        CASE(INFINI_DTYPE_F32, float)
+        CASE(INFINI_DTYPE_F64, double_t)
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+    return INFINI_STATUS_SUCCESS;
+}
+} // namespace op::logical_equal::metax
