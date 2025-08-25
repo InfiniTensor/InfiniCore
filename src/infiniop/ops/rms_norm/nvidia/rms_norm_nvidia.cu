@@ -10,6 +10,7 @@
 
 #ifdef ENABLE_NINETOOTHED
 #include "../../../../../build/ninetoothed/rms_norm.h"
+#include "../../../ninetoothed/utils.h"
 #endif
 
 template <unsigned int BLOCK_SIZE, typename Tcompute, typename Tdata, typename Tweight>
@@ -129,38 +130,20 @@ infiniStatus_t Descriptor::calculate(
     }
 #else
     const auto &ndim{_info.ndim()};
-    uint64_t dim_ = dim;
 
-    std::vector<uint64_t> empty_shape_vec(ndim);
-    std::vector<int64_t> empty_strides_vec(ndim);
-    const auto &empty_shape{empty_shape_vec.data()};
-    const auto &empty_strides{empty_strides_vec.data()};
+    auto input{ninetoothed::Tensor{x, _info.shape, _info.x_strides}};
+    auto weight{ninetoothed::Tensor{w, {_info.shape[ndim - 1]}, {_info.x_strides[ndim - 1]}}.expand_as(input)};
+    auto eps{ninetoothed::Tensor<float>{_info.epsilon}};
+    auto output{ninetoothed::Tensor{y, _info.shape, _info.y_strides}};
+    auto num_normalized_elements{ninetoothed::Tensor<uint64_t>{dim}};
 
-    auto &x_shape_vec{_info.shape};
-    auto &x_strides_vec{_info.x_strides};
-    auto x_data{x};
-    auto x_shape{x_shape_vec.data()};
-    auto x_strides{x_strides_vec.data()};
-    const NineToothedTensor input{const_cast<void *>(x_data), const_cast<uint64_t *>(x_shape), const_cast<int64_t *>(x_strides)};
-    auto &w_shape_vec{_info.shape};
-    std::vector<int64_t> w_strides_vec(ndim);
-    w_strides_vec[ndim - 1] = 1;
-    auto w_data{w};
-    auto w_shape{w_shape_vec.data()};
-    auto w_strides{w_strides_vec.data()};
-    const NineToothedTensor weight{const_cast<void *>(w_data), const_cast<uint64_t *>(w_shape), const_cast<int64_t *>(w_strides)};
-    const NineToothedTensor eps{const_cast<float *>(&_info.epsilon), empty_shape, empty_strides};
-    auto &y_shape_vec{_info.shape};
-    auto &y_strides_vec{_info.y_strides};
-    auto y_data{y};
-    auto y_shape{y_shape_vec.data()};
-    auto y_strides{y_strides_vec.data()};
-    const NineToothedTensor output{y_data, const_cast<uint64_t *>(y_shape), const_cast<int64_t *>(y_strides)};
-    const NineToothedTensor num_normalized_elements{const_cast<uint64_t *>(&dim_), empty_shape, empty_strides};
     constexpr auto num_normalized_dims{1};
+    const auto &input_dtype{_info.atype};
+    const auto &weight_dtype{_info.wtype};
+    const auto &output_dtype{_info.atype};
     constexpr auto block_size{1024};
 
-    if (launch_rms_norm(stream, input, weight, eps, output, num_normalized_elements, ndim, num_normalized_dims, _info.atype, _info.wtype, _info.atype, block_size)) {
+    if (launch_rms_norm(stream, input, weight, eps, output, num_normalized_elements, ndim, num_normalized_dims, input_dtype, weight_dtype, output_dtype, block_size)) {
         return INFINI_STATUS_INTERNAL_ERROR;
     }
 #endif
