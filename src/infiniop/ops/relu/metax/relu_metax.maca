@@ -2,6 +2,7 @@
 
 #include "../../../../../build/ninetoothed/relu.h"
 #include "../../../devices/metax/metax_common.h"
+#include "../../../ninetoothed/utils.h"
 #include "relu_metax.h"
 
 namespace op::relu::metax {
@@ -42,22 +43,10 @@ infiniStatus_t Descriptor::calculate(
     }
 
     const auto &ndim{_info.getNdim()};
-    const auto &x_shape_{_info.getInputShape(0)};
-    const auto &x_strides_{_info.getInputStrides(0)};
-    std::vector<uint64_t> x_shape_vec{x_shape_, x_shape_ + ndim};
-    std::vector<int64_t> x_strides_vec{x_strides_, x_strides_ + ndim};
-    auto x_data{const_cast<void *>(inputs[0])};
-    auto x_shape{x_shape_vec.data()};
-    auto x_strides{x_strides_vec.data()};
-    const NineToothedTensor x{x_data, x_shape, x_strides};
-    const auto &y_shape_{_info.getOutputShape()};
-    const auto &y_strides_{_info.getOutputStrides()};
-    std::vector<uint64_t> y_shape_vec{y_shape_, y_shape_ + ndim};
-    std::vector<int64_t> y_strides_vec{y_strides_, y_strides_ + ndim};
-    auto y_data{output};
-    auto y_shape{y_shape_vec.data()};
-    auto y_strides{y_strides_vec.data()};
-    const NineToothedTensor y{y_data, y_shape, y_strides};
+
+    auto x{ninetoothed::Tensor{inputs[0], _info.getInputShape(0), _info.getInputStrides(0), ndim}};
+    auto y{ninetoothed::Tensor{output, _info.getOutputShape(), _info.getOutputStrides(), ndim}};
+
     constexpr auto block_size{1024};
 
     switch (_dtype) {
