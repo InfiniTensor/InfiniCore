@@ -1,6 +1,9 @@
 #ifndef __INFINIOP_REDUCE_CUDA_H__
 #define __INFINIOP_REDUCE_CUDA_H__
 
+#include <cub/block/block_reduce.cuh>
+#include <cuda_runtime.h>
+
 /*
  * Device functions for reduction operations on CUDA.
  *

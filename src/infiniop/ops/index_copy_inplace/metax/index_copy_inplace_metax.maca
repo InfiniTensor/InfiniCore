@@ -1,0 +1,342 @@
+#include "index_copy_inplace_metax.h"
+#include "../../../devices/metax/metax_common.h"
+#include "../../../devices/metax/metax_handle.h"
+#include "../../../tensor.h"
+#include "../../../../utils/custom_types.h"
+#include <vector>
+#include <algorithm>
+
+namespace op::index_copy_inplace::metax {
+
+Descriptor::~Descriptor() = default;
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t input_desc,
+    infiniopTensorDescriptor_t output_desc,
+    int dim,
+    infiniopTensorDescriptor_t index_desc) {
+
+    auto handle = reinterpret_cast<device::metax::Handle *>(handle_);
+    auto dtype = input_desc->dtype();
+    auto index_dtype = index_desc->dtype();
+
+    // Check data types - 支持所有合法类型
+    if (dtype != INFINI_DTYPE_F16 && dtype != INFINI_DTYPE_F32 && dtype != INFINI_DTYPE_F64 &&
+        dtype != INFINI_DTYPE_BF16 && dtype != INFINI_DTYPE_I8 && dtype != INFINI_DTYPE_I16 &&
+        dtype != INFINI_DTYPE_I32 && dtype != INFINI_DTYPE_I64 && dtype != INFINI_DTYPE_U8 &&
+        dtype != INFINI_DTYPE_U16 && dtype != INFINI_DTYPE_U32 && dtype != INFINI_DTYPE_U64 &&
+        dtype != INFINI_DTYPE_BOOL) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
+    // Check that input and output have same dtype
+    if (input_desc->dtype() != output_desc->dtype()) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
+    // Check that index is integer type
+    if (index_dtype != INFINI_DTYPE_I32 && index_dtype != INFINI_DTYPE_I64) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
+    // Check dimension bounds
+    auto input_shape = input_desc->shape();
+    auto output_shape = output_desc->shape();
+    if (dim < 0 || dim >= static_cast<int>(input_shape.size())) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    if (dim < 0 || dim >= static_cast<int>(output_shape.size())) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    // Check that input and output have same number of dimensions
+    if (input_shape.size() != output_shape.size()) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+
+    // Check that all dimensions except dim are the same
+    for (size_t i = 0; i < input_shape.size(); ++i) {
+        if (i != static_cast<size_t>(dim) && input_shape[i] != output_shape[i]) {
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
+    }
+
+    // Check that index tensor is 1D
+    auto index_shape = index_desc->shape();
+    if (index_shape.size() != 1) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+
+    // Check that index size matches input dimension size
+    if (index_shape[0] != input_shape[dim]) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+
+    *desc_ptr = new Descriptor(
+        dtype,
+        index_dtype,
+        input_desc->shape(),
+        output_desc->shape(),
+        index_desc->shape(),
+        input_desc->strides(),
+        output_desc->strides(),
+        index_desc->strides(),
+        dim,
+        handle->device,
+        handle->device_id
+    );
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    const void *input,
+    void *output,
+    const void *index,
+    void *stream) const {
+
+    // Dispatch based on data type and index type
+    if (_index_dtype == INFINI_DTYPE_I32) {
+        switch (_dtype) {
+        case INFINI_DTYPE_F16:
+            return indexCopyInplaceMetax<fp16_t, int32_t>(input, output, index, stream);
+        case INFINI_DTYPE_F32:
+            return indexCopyInplaceMetax<float, int32_t>(input, output, index, stream);
+        case INFINI_DTYPE_F64:
+            return indexCopyInplaceMetax<double, int32_t>(input, output, index, stream);
+        case INFINI_DTYPE_BF16:
+            return indexCopyInplaceMetax<bf16_t, int32_t>(input, output, index, stream);
+        case INFINI_DTYPE_I8:
+            return indexCopyInplaceMetax<int8_t, int32_t>(input, output, index, stream);
+        case INFINI_DTYPE_I16:
+            return indexCopyInplaceMetax<int16_t, int32_t>(input, output, index, stream);
+        case INFINI_DTYPE_I32:
+            return indexCopyInplaceMetax<int32_t, int32_t>(input, output, index, stream);
+        case INFINI_DTYPE_I64:
+            return indexCopyInplaceMetax<int64_t, int32_t>(input, output, index, stream);
+        case INFINI_DTYPE_U8:
+            return indexCopyInplaceMetax<uint8_t, int32_t>(input, output, index, stream);
+        case INFINI_DTYPE_U16:
+            return indexCopyInplaceMetax<uint16_t, int32_t>(input, output, index, stream);
+        case INFINI_DTYPE_U32:
+            return indexCopyInplaceMetax<uint32_t, int32_t>(input, output, index, stream);
+        case INFINI_DTYPE_U64:
+            return indexCopyInplaceMetax<uint64_t, int32_t>(input, output, index, stream);
+        case INFINI_DTYPE_BOOL:
+            return indexCopyInplaceMetax<bool, int32_t>(input, output, index, stream);
+        default:
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
+    } else if (_index_dtype == INFINI_DTYPE_I64) {
+        switch (_dtype) {
+        case INFINI_DTYPE_F16:
+            return indexCopyInplaceMetax<fp16_t, int64_t>(input, output, index, stream);
+        case INFINI_DTYPE_F32:
+            return indexCopyInplaceMetax<float, int64_t>(input, output, index, stream);
+        case INFINI_DTYPE_F64:
+            return indexCopyInplaceMetax<double, int64_t>(input, output, index, stream);
+        case INFINI_DTYPE_BF16:
+            return indexCopyInplaceMetax<bf16_t, int64_t>(input, output, index, stream);
+        case INFINI_DTYPE_I8:
+            return indexCopyInplaceMetax<int8_t, int64_t>(input, output, index, stream);
+        case INFINI_DTYPE_I16:
+            return indexCopyInplaceMetax<int16_t, int64_t>(input, output, index, stream);
+        case INFINI_DTYPE_I32:
+            return indexCopyInplaceMetax<int32_t, int64_t>(input, output, index, stream);
+        case INFINI_DTYPE_I64:
+            return indexCopyInplaceMetax<int64_t, int64_t>(input, output, index, stream);
+        case INFINI_DTYPE_U8:
+            return indexCopyInplaceMetax<uint8_t, int64_t>(input, output, index, stream);
+        case INFINI_DTYPE_U16:
+            return indexCopyInplaceMetax<uint16_t, int64_t>(input, output, index, stream);
+        case INFINI_DTYPE_U32:
+            return indexCopyInplaceMetax<uint32_t, int64_t>(input, output, index, stream);
+        case INFINI_DTYPE_U64:
+            return indexCopyInplaceMetax<uint64_t, int64_t>(input, output, index, stream);
+        case INFINI_DTYPE_BOOL:
+            return indexCopyInplaceMetax<bool, int64_t>(input, output, index, stream);
+        default:
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
+    }
+
+    return INFINI_STATUS_BAD_TENSOR_DTYPE;
+}
+
+// METAX kernel for index copy inplace
+template<typename T, typename IndexT>
+__global__ void indexCopyInplaceKernel(
+    const T *input_data,
+    T *output_data,
+    const IndexT *index_data,
+    const int *input_shape,
+    const int *output_shape,
+    const int *index_shape,
+    const int *input_strides,
+    const int *output_strides,
+    const int *index_strides,
+    int dim,
+    int ndim,
+    size_t total_elements) {
+    
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= total_elements) return;
+    
+    // Calculate input coordinates from linear index
+    int in_coords[8]; // Support up to 8D tensors
+    int temp = idx;
+    for (int d = ndim - 1; d >= 0; --d) {
+        in_coords[d] = temp % input_shape[d];
+        temp /= input_shape[d];
+    }
+    
+    // Get the index value for the current position in the specified dimension
+    int src_idx = in_coords[dim];
+    if (src_idx >= index_shape[0]) {
+        return; // Skip if source index is out of bounds
+    }
+    
+    // Get the target index from the index tensor
+    IndexT target_idx = index_data[src_idx * index_strides[0]];
+    
+    // Check bounds for target index
+    if (target_idx < 0 || target_idx >= output_shape[dim]) {
+        return; // Skip out of bounds target indices
+    }
+    
+    // Calculate output coordinates (copy input coords and modify dim)
+    int out_coords[8];
+    for (int d = 0; d < ndim; ++d) {
+        out_coords[d] = in_coords[d];
+    }
+    out_coords[dim] = static_cast<int>(target_idx);
+    
+    // Calculate linear indices
+    size_t input_linear_idx = 0;
+    size_t output_linear_idx = 0;
+    for (int d = 0; d < ndim; ++d) {
+        input_linear_idx += in_coords[d] * input_strides[d];
+        output_linear_idx += out_coords[d] * output_strides[d];
+    }
+    
+    // Copy the data
+    output_data[output_linear_idx] = input_data[input_linear_idx];
+}
+
+template <typename T, typename IndexT>
+infiniStatus_t Descriptor::indexCopyInplaceMetax(
+    const void *input_data,
+    void *output_data,
+    const void *index_data,
+    void *stream) const {
+
+    const T *input = static_cast<const T *>(input_data);
+    T *output = static_cast<T *>(output_data);
+    const IndexT *index = static_cast<const IndexT *>(index_data);
+    auto hc_stream = static_cast<hcStream_t>(stream);
+
+    // Calculate total elements in input tensor
+    size_t total_elements = 1;
+    for (auto dim : _input_shape) {
+        total_elements *= dim;
+    }
+
+    int ndim = static_cast<int>(_input_shape.size());
+
+    // Allocate device memory for shape and stride arrays
+    int *d_input_shape, *d_output_shape, *d_index_shape;
+    int *d_input_strides, *d_output_strides, *d_index_strides;
+
+    int block_size = 256;
+    int grid_size = (total_elements + block_size - 1) / block_size;
+
+    hcError_t err;
+    err = hcMalloc((void**)&d_input_shape, ndim * sizeof(int));
+    if (err != hcSuccess) return INFINI_STATUS_INTERNAL_ERROR;
+    err = hcMalloc((void**)&d_output_shape, ndim * sizeof(int));
+    if (err != hcSuccess) {
+        hcFree(d_input_shape);
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
+    err = hcMalloc((void**)&d_index_shape, sizeof(int));
+    if (err != hcSuccess) {
+        hcFree(d_input_shape);
+        hcFree(d_output_shape);
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
+    err = hcMalloc((void**)&d_input_strides, ndim * sizeof(int));
+    if (err != hcSuccess) {
+        hcFree(d_input_shape);
+        hcFree(d_output_shape);
+        hcFree(d_index_shape);
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
+    err = hcMalloc((void**)&d_output_strides, ndim * sizeof(int));
+    if (err != hcSuccess) {
+        hcFree(d_input_shape);
+        hcFree(d_output_shape);
+        hcFree(d_index_shape);
+        hcFree(d_input_strides);
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
+    err = hcMalloc((void**)&d_index_strides, sizeof(int));
+    if (err != hcSuccess) {
+        hcFree(d_input_shape);
+        hcFree(d_output_shape);
+        hcFree(d_index_shape);
+        hcFree(d_input_strides);
+        hcFree(d_output_strides);
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
+
+    std::vector<int> h_input_shape(_input_shape.begin(), _input_shape.end());
+    std::vector<int> h_output_shape(_output_shape.begin(), _output_shape.end());
+    std::vector<int> h_input_strides(_input_strides.begin(), _input_strides.end());
+    std::vector<int> h_output_strides(_output_strides.begin(), _output_strides.end());
+    int h_index_shape = _index_shape[0];
+    int h_index_stride = _index_strides[0];
+
+    err = hcMemcpyAsync(d_input_shape, h_input_shape.data(), ndim * sizeof(int), hcMemcpyHostToDevice, hc_stream);
+    if (err != hcSuccess) goto cleanup;
+    err = hcMemcpyAsync(d_output_shape, h_output_shape.data(), ndim * sizeof(int), hcMemcpyHostToDevice, hc_stream);
+    if (err != hcSuccess) goto cleanup;
+    err = hcMemcpyAsync(d_index_shape, &h_index_shape, sizeof(int), hcMemcpyHostToDevice, hc_stream);
+    if (err != hcSuccess) goto cleanup;
+    err = hcMemcpyAsync(d_input_strides, h_input_strides.data(), ndim * sizeof(int), hcMemcpyHostToDevice, hc_stream);
+    if (err != hcSuccess) goto cleanup;
+    err = hcMemcpyAsync(d_output_strides, h_output_strides.data(), ndim * sizeof(int), hcMemcpyHostToDevice, hc_stream);
+    if (err != hcSuccess) goto cleanup;
+    err = hcMemcpyAsync(d_index_strides, &h_index_stride, sizeof(int), hcMemcpyHostToDevice, hc_stream);
+    if (err != hcSuccess) goto cleanup;
+
+    // Launch kernel
+    indexCopyInplaceKernel<T, IndexT><<<grid_size, block_size, 0, hc_stream>>>(
+        input,
+        output,
+        index,
+        d_input_shape, d_output_shape, d_index_shape,
+        d_input_strides, d_output_strides, d_index_strides,
+        _dim, ndim, total_elements);
+
+    err = hcGetLastError();
+    if (err != hcSuccess) goto cleanup;
+
+    err = hcStreamSynchronize(hc_stream);
+    if (err != hcSuccess) goto cleanup;
+
+cleanup:
+    hcFree(d_input_shape);
+    hcFree(d_output_shape);
+    hcFree(d_index_shape);
+    hcFree(d_input_strides);
+    hcFree(d_output_strides);
+    hcFree(d_index_strides);
+
+    return (err == hcSuccess) ? INFINI_STATUS_SUCCESS : INFINI_STATUS_INTERNAL_ERROR;
+}
+
+} // namespace op::index_copy_inplace::metax

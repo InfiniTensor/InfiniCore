@@ -14,16 +14,28 @@ def run_tests(args):
     for test in [
         "add.py",
         "attention.py",
+        "batch_norm.py",
+        "batch_norm_backward.py",
         "causal_softmax.py",
         "clip.py",
+        "gather.py",
         "gemm.py",
+        "index_copy_inplace.py",
+        "layer_norm.py",
+        "layer_norm_backward.py",
+        "linear.py",
+        "linear_backward.py",
         "mul.py",
         "random_sample.py",
         "rearrange.py",
+        "reduce_max.py",
+        "reduce_mean.py",
         "rms_norm.py",
         "rope.py",
         "sub.py",
         "swiglu.py",
+        "tril.py",
+        "triu.py",
     ]:
         result = subprocess.run(
             f"python {test} {args} --debug", text=True, encoding="utf-8", shell=True
