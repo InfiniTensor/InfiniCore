@@ -18,6 +18,8 @@ def run_tests(args):
         "clip.py",
         "gemm.py",
         "mul.py",
+        "paged_attention.py",
+        "paged_caching.py",
         "random_sample.py",
         "rearrange.py",
         "rms_norm.py",
