@@ -95,7 +95,7 @@ def attention_backward(q, k, v, grad_out, attn_mask, mask_type):
         key=k_shaped,
         value=v_shaped,
         attn_mask=attn_mask,
-        enable_gqa=True,
+        # enable_gqa=True,
     )
     
     out.backward(grad_out_shaped)
