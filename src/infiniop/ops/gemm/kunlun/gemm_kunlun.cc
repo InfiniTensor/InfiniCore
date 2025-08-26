@@ -1,6 +1,7 @@
 #include "gemm_kunlun.h"
 #include "../../../../utils.h"
 #include "../../../devices/kunlun/kunlun_common.h"
+#include "../../../devices/kunlun/kunlun_handle.h"
 
 namespace op::gemm::kunlun {
 

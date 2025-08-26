@@ -1,5 +1,7 @@
-#include "../pool.h"
-#include "kunlun_handle.h"
+#ifndef __KUNLUN_COMMON_H__
+#define __KUNLUN_COMMON_H__
+
+#include "../../../utils.h"
 #include <xpu/runtime.h>
 #include <xpu/runtime_ex.h>
 #include <xpu/xdnn.h>
@@ -12,15 +14,4 @@ typedef xdnn::Context *xdnnHandle_t;
 
 #define CHECK_KUNLUN(API) CHECK_INTERNAL(API, XPU_SUCCESS)
 
-namespace device::kunlun {
-
-class Handle::Internal {
-    Pool<xdnnHandle_t> dnn_handles;
-    template <typename T>
-    using Fn = std::function<infiniStatus_t(T)>;
-
-public:
-    infiniStatus_t useXdnn(kunlunStream_t stream, const Fn<xdnnHandle_t> &f) const;
-};
-
-} // namespace device::kunlun
+#endif

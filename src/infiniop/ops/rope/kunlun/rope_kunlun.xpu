@@ -1,20 +1,20 @@
 #ifndef __ROPE_KUNLUN_KERNEL_XPU__
 #define __ROPE_KUNLUN_KERNEL_XPU__
 
-#include "../../../devices/kunlun/kunlun_kernel_common.h"
 #include "../../../devices/kunlun/kunlun_common.h"
 #include "../../../devices/kunlun/kunlun_handle.h"
+#include "../../../devices/kunlun/kunlun_kernel_common.h"
 #include "rope_kunlun.h"
 #include <memory>
 
 template <typename T, typename Tindex>
-__global__ void RoPEKernel(T *destination, const T *source, 
-                const Tindex *pos_ids, const T *sin_table, const T *cos_table, 
-                uint32_t seqlen,  uint32_t nhead, uint32_t dhead,
-                int32_t x_stride_seqlen, int32_t x_stride_nhead,
-                int32_t y_stride_seqlen, int32_t y_stride_nhead,
-                XPUStream stream){
-    //ndim = 3
+__global__ void RoPEKernel(T *destination, const T *source,
+                           const Tindex *pos_ids, const T *sin_table, const T *cos_table,
+                           uint32_t seqlen, uint32_t nhead, uint32_t dhead,
+                           int32_t x_stride_seqlen, int32_t x_stride_nhead,
+                           int32_t y_stride_seqlen, int32_t y_stride_nhead,
+                           XPUStream stream) {
+    // ndim = 3
     uint32_t other_size = seqlen * nhead;
 
     int cid = core_id();
@@ -41,7 +41,7 @@ __global__ void RoPEKernel(T *destination, const T *source,
     int remain_dhead = dhead % buf_size;
     int repeat = (dhead - remain_dhead) / buf_size;
 
-    for(int i = ind_start; i < ind_start + step; i++){
+    for (int i = ind_start; i < ind_start + step; i++) {
         int ind_i = i;
         int ind_d = 0;
         int ind_s = 0;
@@ -52,7 +52,7 @@ __global__ void RoPEKernel(T *destination, const T *source,
         ind_s += (ind_i % seqlen) * x_stride_seqlen;
         GM2LM(pos_ids + (ind_i % seqlen), pos_local, 1 * sizeof(Tindex));
         int index = static_cast<int>(pos_local[0]) * dhead / 2;
-        for(int r = 0; r < repeat + (remain_dhead > 0 ? 1 : 0); r++){
+        for (int r = 0; r < repeat + (remain_dhead > 0 ? 1 : 0); r++) {
             int read_len = (r < repeat ? buf_size : remain_dhead);
             int dk = read_len / 2;
             int start_d = ind_d + r * buf_size;
@@ -61,14 +61,13 @@ __global__ void RoPEKernel(T *destination, const T *source,
             GM2LM(source + start_s, x_local, read_len * sizeof(T));
             GM2LM(sin_table + sin_cos_index, sin_local, dk * sizeof(T));
             GM2LM(cos_table + sin_cos_index, cos_local, dk * sizeof(T));
-            if constexpr (xpu_std::is_same<T, float>::value || xpu_std::is_same<T, half>::value){
-                for(int k = 0; k < dk; k++){
+            if constexpr (xpu_std::is_same<T, float>::value || xpu_std::is_same<T, half>::value) {
+                for (int k = 0; k < dk; k++) {
                     y_local[2 * k] = x_local[2 * k] * cos_local[k] - x_local[2 * k + 1] * sin_local[k];
                     y_local[2 * k + 1] = x_local[2 * k] * sin_local[k] + x_local[2 * k + 1] * cos_local[k];
                 }
-            }
-            else if(xpu_std::is_same<T, bfloat16_t>::value){
-                for(int k = 0; k < dk; k++){
+            } else if (xpu_std::is_same<T, bfloat16_t>::value) {
+                for (int k = 0; k < dk; k++) {
                     float x_0 = __bfloat162float(x_local[2 * k]);
                     float x_1 = __bfloat162float(x_local[2 * k + 1]);
                     float sin_f = __bfloat162float(sin_local[k]);
@@ -84,23 +83,22 @@ __global__ void RoPEKernel(T *destination, const T *source,
 }
 
 template <typename T, typename Tindex>
-void RoPE(void *destination, const void *source, 
-                const void *pos_ids, const void *sin_table, const void *cos_table, 
-                uint32_t seqlen,  uint32_t nhead, uint32_t dhead,
-                int32_t x_stride_seqlen, int32_t x_stride_nhead,
-                int32_t y_stride_seqlen, int32_t y_stride_nhead,
-                XPUStream stream){
-    RoPEKernel<T, Tindex><<<8, 64, stream>>>((T *)destination, (T *)source, 
-                (Tindex *)pos_ids, (T *)sin_table, (T *)cos_table, 
-                seqlen,  nhead, dhead,
-                x_stride_seqlen, x_stride_nhead,
-                y_stride_seqlen, y_stride_nhead, stream);           
-    
+void RoPE(void *destination, const void *source,
+          const void *pos_ids, const void *sin_table, const void *cos_table,
+          uint32_t seqlen, uint32_t nhead, uint32_t dhead,
+          int32_t x_stride_seqlen, int32_t x_stride_nhead,
+          int32_t y_stride_seqlen, int32_t y_stride_nhead,
+          XPUStream stream) {
+    RoPEKernel<T, Tindex><<<8, 64, stream>>>((T *)destination, (T *)source,
+                                             (Tindex *)pos_ids, (T *)sin_table, (T *)cos_table,
+                                             seqlen, nhead, dhead,
+                                             x_stride_seqlen, x_stride_nhead,
+                                             y_stride_seqlen, y_stride_nhead, stream);
 }
-#define LAUNCH_KERNEL(T, Tindex) \
+#define LAUNCH_KERNEL(T, Tindex)                         \
     RoPE<T, Tindex>(y, x, pos_ids, sin_table, cos_table, \
-                    seqlen, nhead, dhead, \
-                    x_stride_seqlen, x_stride_nhead, \
+                    seqlen, nhead, dhead,                \
+                    x_stride_seqlen, x_stride_nhead,     \
                     y_stride_seqlen, y_stride_nhead, reinterpret_cast<kunlunStream_t>(stream));
 
 namespace op::rope::kunlun {
