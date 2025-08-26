@@ -61,13 +61,12 @@ infiniStatus_t launchKernel(void *out, const void *q, const void *k_cache, const
                     size_t num_kv_heads, float scale, size_t max_num_blocks_per_seq, size_t block_size,
                     ptrdiff_t q_stride, ptrdiff_t kv_block_stride, ptrdiff_t kv_head_stride,
                     cudaStream_t stream) {
-    printf("launchKernel; num_heads: %zu, num_seqs: %zu, num_kv_heads: %zu, scale: %f, max_num_blocks_per_seq: %zu, block_size: %zu, q_stride: %zu, kv_block_stride: %zu, kv_head_stride: %zu\n", num_heads, num_seqs, num_kv_heads, scale, max_num_blocks_per_seq, block_size, q_stride, kv_block_stride, kv_head_stride);
     dim3 grid(uint32_t(num_heads), uint32_t(num_seqs), 1);
     dim3 block(NUM_THREADS);
+    size_t shared_mem_size = (HEAD_SIZE + max_num_blocks_per_seq * block_size + 2) * sizeof(float);
 
     // size_t shared_mem_size = 16;
     if (dtype == INFINI_DTYPE_F16) {
-        size_t shared_mem_size = (HEAD_SIZE + max_num_blocks_per_seq * block_size + 2) * sizeof(half);
         // size_t shared_mem_size = (HEAD_SIZE + max_num_blocks_per_seq * block_size + 2) * sizeof(Tcompute);
         pagedAttention<half, float, HEAD_SIZE, NUM_THREADS>
             <<<grid, block, shared_mem_size, stream>>>(
@@ -78,7 +77,7 @@ infiniStatus_t launchKernel(void *out, const void *q, const void *k_cache, const
                 q_stride, kv_block_stride, kv_head_stride
             );
     } else if (dtype == INFINI_DTYPE_BF16) {
-        size_t shared_mem_size = (HEAD_SIZE + max_num_blocks_per_seq * block_size + 2) * sizeof(__nv_bfloat16);
+        // size_t shared_mem_size = (HEAD_SIZE + max_num_blocks_per_seq * block_size + 2) * sizeof(float);
         pagedAttention<__nv_bfloat16, float, HEAD_SIZE, NUM_THREADS>
             <<<grid, block, shared_mem_size, stream>>>(
                 (__nv_bfloat16*)out, (const __nv_bfloat16*)q, (const __nv_bfloat16*)k_cache, (const __nv_bfloat16*)v_cache, 
@@ -87,7 +86,7 @@ infiniStatus_t launchKernel(void *out, const void *q, const void *k_cache, const
                 q_stride, kv_block_stride, kv_head_stride
             );
     } else if (dtype == INFINI_DTYPE_F32) {
-        size_t shared_mem_size = (HEAD_SIZE + max_num_blocks_per_seq * block_size + 2) * sizeof(float);
+        // size_t shared_mem_size = (HEAD_SIZE + max_num_blocks_per_seq * block_size + 2) * sizeof(float);
         pagedAttention<float, float, HEAD_SIZE, NUM_THREADS>
             <<<grid, block, shared_mem_size, stream>>>(
                 (float*)out, (const float*)q, (const float*)k_cache, (const float*)v_cache, 

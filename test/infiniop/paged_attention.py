@@ -94,10 +94,10 @@ def ref_single_query_cached_kv_attention(query, key_cache, value_cache, block_ta
 _TEST_CASES_ = [
     # (7, 40, 40, 128, 16, 1024, True),
     # (1, 1, 1, 128, 16, 1024, False),
-    (1, 40, 40, 128, 16, 1024, False),
+    (5, 40, 40, 128, 16, 1024, False),
     # (5, 8, 8, 128, 16, 1024, True),
     # (5, 64, 8, 80, 16, 2048, True),
-    # (5, 64, 8, 80, 16, 2048, False),
+    (5, 64, 8, 128, 16, 2048, False),
 ]
 
 # Data types for testing
@@ -146,11 +146,10 @@ def test(
     k_cache = TestTensor((num_blocks, num_kv_heads, block_size, head_size), None, dtype, device)
     v_cache = TestTensor((num_blocks, num_kv_heads, block_size, head_size), None, dtype, device)
 
-
-    seq_lens_direct = 724
+    seq_lens_direct = 1023
+    # seq_lens_direct = 725
     seq_lens_torch = torch.randint(seq_lens_direct, seq_lens_direct+1, (num_seqs,), dtype=torch.int32)
     # seq_lens_torch = torch.randint(max_seq_len-1, max_seq_len, (num_seqs,), dtype=torch.int32)
-    print(f"seq_lens_torch: {seq_lens_torch}")
     seq_lens = TestTensor.from_torch(seq_lens_torch, InfiniDtype.I32, device)
 
     
@@ -222,10 +221,10 @@ def test(
     out.destroy_desc()
     k_cache.destroy_desc()
     v_cache.destroy_desc()
-    # block_tables.destroy_desc()
-    # seq_lens.destroy_desc()
-    # if use_alibi: 
-    #     alibi_slopes.destroy_desc()
+    block_tables.destroy_desc()
+    seq_lens.destroy_desc()
+    if use_alibi: 
+        alibi_slopes.destroy_desc()
 
     # Define the library call as a lambda for profiling
     def lib_paged_attention():
@@ -248,6 +247,7 @@ def test(
     if DEBUG:
         debug(out.actual_tensor(), ans, atol=atol, rtol=rtol)
     assert torch.allclose(out.actual_tensor(), ans, atol=atol, rtol=rtol)
+    # print(f"out.actual_tensor() : {out.actual_tensor()}, ans: {ans}")
     
     # Profiling workflow
     if PROFILE:

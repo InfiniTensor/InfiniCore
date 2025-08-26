@@ -55,14 +55,10 @@ __device__ void pagedAttentionKernel(
     //================================================================================
     // 1. Setup & Query Loading (No changes in this section)
     //================================================================================
-    if (blockIdx.x == 0 && threadIdx.x == 0) {
-        printf("pagedAttentionKernel;\n");
-    }
-    __syncthreads();
     const int seq_idx = blockIdx.y;
     const int head_idx = blockIdx.x;
     const int num_heads = gridDim.x;
-    const int batch_size = gridDim.y;
+    // const int batch_size = gridDim.y;
     const int32_t seq_len = seq_lens_[seq_idx];
     if (seq_len == 0) return;
 
@@ -85,33 +81,14 @@ __device__ void pagedAttentionKernel(
         q_shared[i] = static_cast<Tcompute>(q_ptr[i]);
     }
     __syncthreads();
-    if (blockIdx.x == 0 && threadIdx.x == 0) {
-        printf("q_shared over;\n");
-    }
-    __syncthreads();
-
-    const int32_t physical_block_num1 = block_table[62];
-    
-    if (blockIdx.x == 0 && threadIdx.x == 0) {
-        printf("k_shared start;%d\n", physical_block_num1);
-    }
-    __syncthreads();
-
     //================================================================================
     // 2. Compute QK Dot Product & Find Max Logit
     //================================================================================
     for (size_t token_idx = threadIdx.x; token_idx < seq_len; token_idx += NUM_THREADS) {
         const int32_t block_idx = token_idx / block_size;
         const int32_t token_in_block_idx = token_idx % block_size;
-        if (token_idx == seq_len-1 || token_idx == 0) {
-            printf("block_idx: %d\n", block_idx);
-        }
-        // const int32_t physical_block_num = 0
         const int32_t physical_block_num = block_table[block_idx];
-        if (token_idx == seq_len-1 || token_idx == 0) {
-            printf("physical_block_num: %d\n", physical_block_num);
-        }
-        
+
         const Tdata* k_vec_ptr = k_cache_ + physical_block_num * kv_block_stride + kv_head_idx * kv_head_stride + token_in_block_idx * HEAD_SIZE;
         
         //================================================================================
@@ -144,18 +121,10 @@ __device__ void pagedAttentionKernel(
         
         logits[token_idx] = qk;
     }
-    if (blockIdx.x == 0 && threadIdx.x == 0) {
-        printf("compute global_qk_max start;\n");
-    }
-    __syncthreads();
 
     __shared__ Tcompute global_qk_max;
     Tcompute global_qk_max_0 = op::common_cuda::reduce_op::max<NUM_THREADS, Tcompute>(logits, seq_len);
     
-    if (blockIdx.x == 0 && threadIdx.x == 0) {
-        printf("Cmmon_cuda::reduce_op over;\n");
-    }
-    __syncthreads();
     if (threadIdx.x == 0) {
         global_qk_max = global_qk_max_0;
     }
@@ -183,10 +152,6 @@ __device__ void pagedAttentionKernel(
         logits[i] *= inv_sum;
     }
     __syncthreads();
-    if (blockIdx.x == 0 && threadIdx.x == 0) {
-        printf("gregate Values (V) weighted by probabil start;\n");
-    }
-    __syncthreads();
 
     //================================================================================
     // 4. Aggregate Values (V) weighted by probabilities 
@@ -211,10 +176,6 @@ __device__ void pagedAttentionKernel(
         }
         out_ptr[h_dim] = static_cast<Tdata>(acc);
     }
-    if (blockIdx.x == 0 && threadIdx.x == 0) {
-        printf("gregate Values (V) weighted by probabil over;\n");
-    }
-    __syncthreads();
 }
 
 } // namespace op::paged_attention::cuda
