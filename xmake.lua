@@ -198,6 +198,7 @@ target("infinirt")
     end
     if has_config("nv-gpu") then
         add_deps("infinirt-nvidia")
+        add_files("build/.objs/infinirt-nvidia/rules/dlcc.cuda/src/infinirt/cuda/infinirt_cuda.cu.o", {public = true})
     end
     if has_config("cambricon-mlu") then
         add_deps("infinirt-cambricon")
@@ -232,6 +233,8 @@ target("infiniop")
     end
     if has_config("nv-gpu") then
         add_deps("infiniop-nvidia")
+        add_files("build/.objs/infiniop-nvidia/rules/dlcc.cuda/src/infiniop/ops/*/nvidia/*.cu.o", {public = true})
+        add_files("build/.objs/infiniop-nvidia/rules/dlcc.cuda/src/infiniop/devices/nvidia/*.cu.o", {public = true})
     end
     if has_config("iluvatar-gpu") then
         add_deps("infiniop-iluvatar")
