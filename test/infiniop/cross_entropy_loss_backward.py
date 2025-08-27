@@ -181,7 +181,7 @@ def test(
     # Profiling workflow
     if PROFILE:
         # fmt: off
-        profile_operation("PyTorch", lambda: cross_entropy_loss_backward(input.torch_tensor(), grad_logits.torch_tensor()), device, NUM_PRERUN, NUM_ITERATIONS)
+        profile_operation("PyTorch", lambda: cross_entropy_loss_backward(probs.torch_tensor(), target.torch_tensor(), shape), device, NUM_PRERUN, NUM_ITERATIONS)
         profile_operation("    lib", lambda: lib_cross_entropy_loss_backward(), device, NUM_PRERUN, NUM_ITERATIONS)
         # fmt: on
     check_error(
