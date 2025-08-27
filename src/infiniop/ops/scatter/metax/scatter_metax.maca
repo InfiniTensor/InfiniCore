@@ -3,184 +3,9 @@
 #include "../../../devices/metax/metax_handle.h"
 #include "../../../tensor.h"
 #include "../../../../utils/custom_types.h"
-#include "../../../devices/metax/metax_kernel_common.h"
 #include <hcr/hc_runtime_api.h>
-#include <cstring>
 
 namespace op::scatter::metax {
-
-// Type conversion functions for F16/BF16 support
-template <typename T>
-__device__ float device_cast_to_float(T val) {
-    return static_cast<float>(val);
-}
-
-template <typename T>
-__device__ T device_cast_from_float(float val) {
-    return static_cast<T>(val);
-}
-
-// Specialization for fp16_t
-template <>
-__device__ float device_cast_to_float<fp16_t>(fp16_t val) {
-    // Convert fp16_t to float using bit manipulation for precise IEEE 754 conversion
-    uint16_t h = *reinterpret_cast<const uint16_t*>(&val);
-    uint32_t sign = (h & 0x8000) << 16;
-    uint32_t exp = (h & 0x7C00) >> 10;
-    uint32_t mant = h & 0x03FF;
-    
-    if (exp == 0) {
-        if (mant == 0) {
-            // Zero
-            return *reinterpret_cast<const float*>(&sign);
-        } else {
-            // Denormalized
-            exp = 127 - 15 + 1;
-            while ((mant & 0x0400) == 0) {
-                mant <<= 1;
-                exp--;
-            }
-            mant &= 0x03FF;
-        }
-    } else if (exp == 0x1F) {
-        // Infinity or NaN
-        exp = 0xFF;
-    } else {
-        // Normalized
-        exp += 127 - 15;
-    }
-    
-    uint32_t result = sign | (exp << 23) | (mant << 13);
-    return *reinterpret_cast<const float*>(&result);
-}
-
-template <>
-__device__ fp16_t device_cast_from_float<fp16_t>(float val) {
-    // Convert float to fp16_t using bit manipulation for precise conversion
-    uint32_t f = *reinterpret_cast<const uint32_t*>(&val);
-    uint32_t sign = (f & 0x80000000) >> 16;
-    uint32_t exp = (f & 0x7F800000) >> 23;
-    uint32_t mant = f & 0x007FFFFF;
-    
-    if (exp == 0) {
-        // Zero or denormalized
-        uint16_t result = sign;
-        return *reinterpret_cast<const fp16_t*>(&result);
-    } else if (exp == 0xFF) {
-        // Infinity or NaN
-        uint16_t result = sign | 0x7C00 | (mant ? 0x0200 : 0);
-        return *reinterpret_cast<const fp16_t*>(&result);
-    } else {
-        // Normalized
-        int new_exp = exp - 127 + 15;
-        if (new_exp <= 0) {
-            // Underflow to zero
-            uint16_t result = sign;
-            return *reinterpret_cast<const fp16_t*>(&result);
-        } else if (new_exp >= 0x1F) {
-            // Overflow to infinity
-            uint16_t result = sign | 0x7C00;
-            return *reinterpret_cast<const fp16_t*>(&result);
-        } else {
-            uint16_t result = sign | (new_exp << 10) | (mant >> 13);
-            return *reinterpret_cast<const fp16_t*>(&result);
-        }
-    }
-}
-
-// Specialization for bf16_t
-template <>
-__device__ float device_cast_to_float<bf16_t>(bf16_t val) {
-    // Convert bf16_t to float by shifting bits
-    uint16_t h = *reinterpret_cast<const uint16_t*>(&val);
-    uint32_t f = static_cast<uint32_t>(h) << 16;
-    return *reinterpret_cast<const float*>(&f);
-}
-
-template <>
-__device__ bf16_t device_cast_from_float<bf16_t>(float val) {
-    // Convert float to bf16_t by truncating mantissa
-    uint32_t f = *reinterpret_cast<const uint32_t*>(&val);
-    uint16_t h = static_cast<uint16_t>(f >> 16);
-    return *reinterpret_cast<const bf16_t*>(&h);
-}
-
-template <typename T, typename IndexT>
-__global__ void scatterKernel(
-    const size_t *input_shape,
-    const size_t *output_shape,
-    const size_t *src_shape,
-    const ptrdiff_t *input_strides,
-    const ptrdiff_t *output_strides,
-    const ptrdiff_t *index_strides,
-    const ptrdiff_t *src_strides,
-    size_t dim,
-    size_t ndim,
-    T *output,
-    const T *input,
-    const IndexT *index,
-    const T *src,
-    size_t total_input_elements,
-    size_t total_src_elements) {
-    
-    int tid = blockIdx.x * blockDim.x + threadIdx.x;
-    
-    // Step 1: Copy input to output (initialization)
-    if (tid < total_input_elements) {
-        output[tid] = input[tid];
-    }
-    
-    __syncthreads();
-    
-    // Step 2: Scatter operation - iterate over src elements
-    if (tid < total_src_elements) {
-        // Convert linear index to multi-dimensional coordinates
-        size_t linear_idx = tid;
-        size_t coords[8]; // Assume max 8 dimensions
-        size_t temp_idx = linear_idx;
-        
-        for (int d = ndim - 1; d >= 0; d--) {
-            coords[d] = temp_idx % src_shape[d];
-            temp_idx /= src_shape[d];
-        }
-        
-        // Calculate src offset
-        size_t src_offset = 0;
-        for (size_t d = 0; d < ndim; d++) {
-            src_offset += coords[d] * src_strides[d];
-        }
-        
-        // Calculate index offset
-        size_t index_offset = 0;
-        for (size_t d = 0; d < ndim; d++) {
-            index_offset += coords[d] * index_strides[d];
-        }
-        
-        // Get scatter index and perform bounds check
-        IndexT scatter_index = *((const IndexT*)((const char*)index + index_offset));
-        if (scatter_index < 0 || scatter_index >= static_cast<IndexT>(output_shape[dim])) {
-            return; // Skip invalid indices
-        }
-        
-        // Calculate output offset - for scatter operation, use scatter_index in dim dimension
-        size_t output_offset = 0;
-        for (size_t d = 0; d < ndim; d++) {
-            if (d == dim) {
-                output_offset += scatter_index * output_strides[d];
-            } else {
-                output_offset += coords[d] * output_strides[d];
-            }
-        }
-        
-        // Get source value and convert to float for computation
-        T src_val = *((const T*)((const char*)src + src_offset));
-        float src_float = device_cast_to_float(src_val);
-        
-        // Convert back to target type and store
-        T result = device_cast_from_float<T>(src_float);
-        *((T*)((char*)output + output_offset)) = result;
-    }
-}
 
 Descriptor::~Descriptor() = default;
 
@@ -193,54 +18,126 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t src_desc,
     int dim) {
 
-    auto handle = reinterpret_cast<device::metax::Handle *>(handle_);
-    auto dtype = input_desc->dtype();
-    auto index_dtype = index_desc->dtype();
-
-    // Check data types - support all legal types
-    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64, INFINI_DTYPE_BF16,
-                INFINI_DTYPE_I8, INFINI_DTYPE_I16, INFINI_DTYPE_I32, INFINI_DTYPE_I64,
-                INFINI_DTYPE_U8, INFINI_DTYPE_U16, INFINI_DTYPE_U32, INFINI_DTYPE_U64);
-
-    // Check index data types
-    CHECK_DTYPE(index_dtype, INFINI_DTYPE_I32, INFINI_DTYPE_I64);
-
-    // Validate tensor shapes and dimensions
-    if (dim < 0 || dim >= static_cast<int>(input_desc->ndim())) {
+    if (!handle_ || !desc_ptr || !input_desc || !output_desc || !index_desc || !src_desc) {
         return INFINI_STATUS_BAD_PARAM;
     }
 
+    auto handle = static_cast<device::metax::Handle *>(handle_);
+    
     // Get tensor shapes and strides
-    std::vector<size_t> input_shape, output_shape, src_shape;
-    std::vector<ptrdiff_t> input_strides, output_strides, index_strides, src_strides;
-
-    for (size_t i = 0; i < input_desc->ndim(); i++) {
-        input_shape.push_back(input_desc->shape()[i]);
-        input_strides.push_back(input_desc->strides()[i]);
+    auto input_shape = input_desc->shape();
+    auto output_shape = output_desc->shape();
+    auto index_shape = index_desc->shape();
+    auto src_shape = src_desc->shape();
+    auto input_strides = input_desc->strides();
+    auto output_strides = output_desc->strides();
+    auto index_strides = index_desc->strides();
+    auto src_strides = src_desc->strides();
+    
+    // Validate dimensions
+    if (dim < 0 || dim >= static_cast<int>(input_shape.size())) {
+        return INFINI_STATUS_BAD_PARAM;
     }
-
-    for (size_t i = 0; i < output_desc->ndim(); i++) {
-        output_shape.push_back(output_desc->shape()[i]);
-        output_strides.push_back(output_desc->strides()[i]);
+    
+    // Check data types
+    auto input_dtype = input_desc->dtype();
+    auto output_dtype = output_desc->dtype();
+    auto src_dtype = src_desc->dtype();
+    auto index_dtype = index_desc->dtype();
+    
+    if (input_dtype != output_dtype || input_dtype != src_dtype) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
-
-    for (size_t i = 0; i < index_desc->ndim(); i++) {
-        index_strides.push_back(index_desc->strides()[i]);
+    
+    if (index_dtype != INFINI_DTYPE_I32 && index_dtype != INFINI_DTYPE_I64) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
-
-    for (size_t i = 0; i < src_desc->ndim(); i++) {
-        src_shape.push_back(src_desc->shape()[i]);
-        src_strides.push_back(src_desc->strides()[i]);
+    
+    // Check supported data types
+    if (input_dtype != INFINI_DTYPE_F16 && input_dtype != INFINI_DTYPE_F32 &&
+        input_dtype != INFINI_DTYPE_F64 && input_dtype != INFINI_DTYPE_BF16 &&
+        input_dtype != INFINI_DTYPE_I8 && input_dtype != INFINI_DTYPE_I16 &&
+        input_dtype != INFINI_DTYPE_I32 && input_dtype != INFINI_DTYPE_I64 &&
+        input_dtype != INFINI_DTYPE_U8 && input_dtype != INFINI_DTYPE_U16 &&
+        input_dtype != INFINI_DTYPE_U32 && input_dtype != INFINI_DTYPE_U64 &&
+        input_dtype != INFINI_DTYPE_BOOL) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
-
+    
+    // Validate shapes
+    if (input_shape.size() != output_shape.size() || src_shape.size() != index_shape.size()) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+    
     *desc_ptr = new Descriptor(
-        input_desc, output_desc, index_desc, src_desc, dim,
-        input_shape, output_shape, src_shape,
+        input_dtype, index_dtype,
+        input_shape, output_shape, index_shape, src_shape,
         input_strides, output_strides, index_strides, src_strides,
-        dtype, index_dtype,
-        handle_->device, handle_->device_id);
-
+        dim,
+        handle->device, handle->device_id);
+    
     return INFINI_STATUS_SUCCESS;
+}
+
+// Metax kernel for scatter operation
+template<typename T, typename IndexT>
+__global__ void scatterKernel(
+    T *output,
+    const T *src,
+    const IndexT *index,
+    size_t total_elements,
+    size_t dim,
+    size_t output_dim_size,
+    const size_t *src_shape,
+    const ptrdiff_t *src_strides,
+    const ptrdiff_t *output_strides,
+    const ptrdiff_t *index_strides,
+    size_t ndim) {
+    
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    if (idx < total_elements) {
+        // Convert linear index to multi-dimensional coordinates
+        size_t temp_idx = idx;
+        size_t coords[16]; // Support up to 16 dimensions
+        
+        // Bounds check for dimensions
+        if (ndim > 16) return;
+        
+        for (int d = ndim - 1; d >= 0; d--) {
+            coords[d] = temp_idx % src_shape[d];
+            temp_idx /= src_shape[d];
+        }
+        
+        // Calculate index offset first
+        ptrdiff_t index_offset = 0;
+        for (size_t d = 0; d < ndim; d++) {
+            index_offset += coords[d] * index_strides[d];
+        }
+        
+        // Get scatter index and perform bounds check
+        IndexT scatter_index = index[index_offset];
+        if (scatter_index >= 0 && scatter_index < static_cast<IndexT>(output_dim_size)) {
+            // Calculate src offset
+            size_t src_offset = 0;
+            for (size_t d = 0; d < ndim; d++) {
+                src_offset += coords[d] * src_strides[d];
+            }
+            
+            // Calculate output offset
+            size_t output_offset = 0;
+            for (size_t d = 0; d < ndim; d++) {
+                if (d == dim) {
+                    output_offset += scatter_index * output_strides[d];
+                } else {
+                    output_offset += coords[d] * output_strides[d];
+                }
+            }
+            
+            // Copy data using direct element access
+            output[output_offset] = src[src_offset];
+        }
+    }
 }
 
 infiniStatus_t Descriptor::calculate(
@@ -252,169 +149,147 @@ infiniStatus_t Descriptor::calculate(
     const void *src,
     void *stream) const {
 
-    auto hc_stream = reinterpret_cast<hcStream_t>(stream);
+    if (!output || !input || !index || !src) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
 
-    switch (_dtype) {
-        case INFINI_DTYPE_F16:
-            if (_index_dtype == INFINI_DTYPE_I32) {
-                return scatterMetax<fp16_t, int32_t>(output, input, index, src, stream);
-            } else {
-                return scatterMetax<fp16_t, int64_t>(output, input, index, src, stream);
-            }
-        case INFINI_DTYPE_BF16:
-            if (_index_dtype == INFINI_DTYPE_I32) {
-                return scatterMetax<bf16_t, int32_t>(output, input, index, src, stream);
-            } else {
-                return scatterMetax<bf16_t, int64_t>(output, input, index, src, stream);
-            }
-        case INFINI_DTYPE_F32:
-            if (_index_dtype == INFINI_DTYPE_I32) {
-                return scatterMetax<float, int32_t>(output, input, index, src, stream);
-            } else {
-                return scatterMetax<float, int64_t>(output, input, index, src, stream);
-            }
-        case INFINI_DTYPE_F64:
-            if (_index_dtype == INFINI_DTYPE_I32) {
-                return scatterMetax<double, int32_t>(output, input, index, src, stream);
-            } else {
-                return scatterMetax<double, int64_t>(output, input, index, src, stream);
-            }
-        case INFINI_DTYPE_I8:
-            if (_index_dtype == INFINI_DTYPE_I32) {
-                return scatterMetax<int8_t, int32_t>(output, input, index, src, stream);
-            } else {
-                return scatterMetax<int8_t, int64_t>(output, input, index, src, stream);
-            }
-        case INFINI_DTYPE_I16:
-            if (_index_dtype == INFINI_DTYPE_I32) {
-                return scatterMetax<int16_t, int32_t>(output, input, index, src, stream);
-            } else {
-                return scatterMetax<int16_t, int64_t>(output, input, index, src, stream);
-            }
-        case INFINI_DTYPE_I32:
-            if (_index_dtype == INFINI_DTYPE_I32) {
-                return scatterMetax<int32_t, int32_t>(output, input, index, src, stream);
-            } else {
-                return scatterMetax<int32_t, int64_t>(output, input, index, src, stream);
-            }
-        case INFINI_DTYPE_I64:
-            if (_index_dtype == INFINI_DTYPE_I32) {
-                return scatterMetax<int64_t, int32_t>(output, input, index, src, stream);
-            } else {
-                return scatterMetax<int64_t, int64_t>(output, input, index, src, stream);
-            }
-        case INFINI_DTYPE_U8:
-            if (_index_dtype == INFINI_DTYPE_I32) {
-                return scatterMetax<uint8_t, int32_t>(output, input, index, src, stream);
-            } else {
-                return scatterMetax<uint8_t, int64_t>(output, input, index, src, stream);
-            }
-        case INFINI_DTYPE_U16:
-            if (_index_dtype == INFINI_DTYPE_I32) {
-                return scatterMetax<uint16_t, int32_t>(output, input, index, src, stream);
-            } else {
-                return scatterMetax<uint16_t, int64_t>(output, input, index, src, stream);
-            }
-        case INFINI_DTYPE_U32:
-            if (_index_dtype == INFINI_DTYPE_I32) {
-                return scatterMetax<uint32_t, int32_t>(output, input, index, src, stream);
-            } else {
-                return scatterMetax<uint32_t, int64_t>(output, input, index, src, stream);
-            }
-        case INFINI_DTYPE_U64:
-            if (_index_dtype == INFINI_DTYPE_I32) {
-                return scatterMetax<uint64_t, int32_t>(output, input, index, src, stream);
-            } else {
-                return scatterMetax<uint64_t, int64_t>(output, input, index, src, stream);
-            }
-        default:
-            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    // Copy input to output first
+    size_t output_elements = 1;
+    for (size_t dim : _output_shape) {
+        output_elements *= dim;
+    }
+    size_t output_size = output_elements * infiniSizeOf(_input_dtype);
+    auto metax_stream = static_cast<hcStream_t>(stream);
+    hcMemcpyAsync(output, input, output_size, hcMemcpyDeviceToDevice, metax_stream);
+    
+    // Dispatch based on data type and index type
+    if (_index_dtype == INFINI_DTYPE_I32) {
+        switch (_input_dtype) {
+            case INFINI_DTYPE_F16:
+                return scatterMetax<__half, int32_t>(output, src, index, stream);
+            case INFINI_DTYPE_F32:
+                return scatterMetax<float, int32_t>(output, src, index, stream);
+            case INFINI_DTYPE_F64:
+                return scatterMetax<double, int32_t>(output, src, index, stream);
+            case INFINI_DTYPE_BF16:
+                return scatterMetax<__hpcc_bfloat16, int32_t>(output, src, index, stream);
+            case INFINI_DTYPE_I8:
+                return scatterMetax<int8_t, int32_t>(output, src, index, stream);
+            case INFINI_DTYPE_I16:
+                return scatterMetax<int16_t, int32_t>(output, src, index, stream);
+            case INFINI_DTYPE_I32:
+                return scatterMetax<int32_t, int32_t>(output, src, index, stream);
+            case INFINI_DTYPE_I64:
+                return scatterMetax<int64_t, int32_t>(output, src, index, stream);
+            case INFINI_DTYPE_U8:
+                return scatterMetax<uint8_t, int32_t>(output, src, index, stream);
+            case INFINI_DTYPE_U16:
+                return scatterMetax<uint16_t, int32_t>(output, src, index, stream);
+            case INFINI_DTYPE_U32:
+                return scatterMetax<uint32_t, int32_t>(output, src, index, stream);
+            case INFINI_DTYPE_U64:
+                return scatterMetax<uint64_t, int32_t>(output, src, index, stream);
+            case INFINI_DTYPE_BOOL:
+                return scatterMetax<bool, int32_t>(output, src, index, stream);
+            default:
+                return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
+    } else if (_index_dtype == INFINI_DTYPE_I64) {
+        switch (_input_dtype) {
+            case INFINI_DTYPE_F16:
+                return scatterMetax<__half, int64_t>(output, src, index, stream);
+            case INFINI_DTYPE_F32:
+                return scatterMetax<float, int64_t>(output, src, index, stream);
+            case INFINI_DTYPE_F64:
+                return scatterMetax<double, int64_t>(output, src, index, stream);
+            case INFINI_DTYPE_BF16:
+                return scatterMetax<__hpcc_bfloat16, int64_t>(output, src, index, stream);
+            case INFINI_DTYPE_I8:
+                return scatterMetax<int8_t, int64_t>(output, src, index, stream);
+            case INFINI_DTYPE_I16:
+                return scatterMetax<int16_t, int64_t>(output, src, index, stream);
+            case INFINI_DTYPE_I32:
+                return scatterMetax<int32_t, int64_t>(output, src, index, stream);
+            case INFINI_DTYPE_I64:
+                return scatterMetax<int64_t, int64_t>(output, src, index, stream);
+            case INFINI_DTYPE_U8:
+                return scatterMetax<uint8_t, int64_t>(output, src, index, stream);
+            case INFINI_DTYPE_U16:
+                return scatterMetax<uint16_t, int64_t>(output, src, index, stream);
+            case INFINI_DTYPE_U32:
+                return scatterMetax<uint32_t, int64_t>(output, src, index, stream);
+            case INFINI_DTYPE_U64:
+                return scatterMetax<uint64_t, int64_t>(output, src, index, stream);
+            case INFINI_DTYPE_BOOL:
+                return scatterMetax<bool, int64_t>(output, src, index, stream);
+            default:
+                return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
     }
     
-    return INFINI_STATUS_SUCCESS;
+    return INFINI_STATUS_BAD_TENSOR_DTYPE;
 }
 
 template <typename T, typename IndexT>
 infiniStatus_t Descriptor::scatterMetax(
     void *output_data,
-    const void *input_data,
-    const void *index_data,
     const void *src_data,
+    const void *index_data,
     void *stream) const {
 
-    auto hc_stream = reinterpret_cast<hcStream_t>(stream);
-
-    // Calculate total elements
-    size_t total_input_elements = 1;
-    for (size_t d = 0; d < _input_shape.size(); d++) {
-        total_input_elements *= _input_shape[d];
+    auto metax_stream = static_cast<hcStream_t>(stream);
+    
+    // Calculate total elements in src
+    size_t total_elements = 1;
+    for (size_t dim : _src_shape) {
+        total_elements *= dim;
     }
-
-    size_t total_src_elements = 1;
-    for (size_t d = 0; d < _src_shape.size(); d++) {
-        total_src_elements *= _src_shape[d];
+    
+    if (total_elements == 0) {
+        return INFINI_STATUS_SUCCESS;
     }
-
-    // Launch kernel
-    size_t max_elements = std::max(total_input_elements, total_src_elements);
-    int block_size = 256;
-    int grid_size = (max_elements + block_size - 1) / block_size;
-
+    
     // Allocate device memory for shape and stride arrays
-    size_t *d_input_shape, *d_output_shape, *d_src_shape;
-    ptrdiff_t *d_input_strides, *d_output_strides, *d_index_strides, *d_src_strides;
+    size_t *d_src_shape;
+    ptrdiff_t *d_src_strides, *d_output_strides, *d_index_strides;
     
-    size_t ndim = _src_shape.size();
+    hcMalloc((void**)&d_src_shape, _src_shape.size() * sizeof(size_t));
+    hcMalloc((void**)&d_src_strides, _src_strides.size() * sizeof(ptrdiff_t));
+    hcMalloc((void**)&d_output_strides, _output_strides.size() * sizeof(ptrdiff_t));
+    hcMalloc((void**)&d_index_strides, _index_strides.size() * sizeof(ptrdiff_t));
     
-    hcMalloc((void**)&d_input_shape, ndim * sizeof(size_t));
-    hcMalloc((void**)&d_output_shape, ndim * sizeof(size_t));
-    hcMalloc((void**)&d_src_shape, ndim * sizeof(size_t));
-    hcMalloc((void**)&d_input_strides, ndim * sizeof(ptrdiff_t));
-    hcMalloc((void**)&d_output_strides, ndim * sizeof(ptrdiff_t));
-    hcMalloc((void**)&d_index_strides, ndim * sizeof(ptrdiff_t));
-    hcMalloc((void**)&d_src_strides, ndim * sizeof(ptrdiff_t));
+    // Copy data to device
+    hcMemcpyAsync(d_src_shape, _src_shape.data(), _src_shape.size() * sizeof(size_t), hcMemcpyHostToDevice, metax_stream);
+    hcMemcpyAsync(d_src_strides, _src_strides.data(), _src_strides.size() * sizeof(ptrdiff_t), hcMemcpyHostToDevice, metax_stream);
+    hcMemcpyAsync(d_output_strides, _output_strides.data(), _output_strides.size() * sizeof(ptrdiff_t), hcMemcpyHostToDevice, metax_stream);
+    hcMemcpyAsync(d_index_strides, _index_strides.data(), _index_strides.size() * sizeof(ptrdiff_t), hcMemcpyHostToDevice, metax_stream);
     
-    hcMemcpy(d_input_shape, _input_shape.data(), ndim * sizeof(size_t), hcMemcpyHostToDevice);
-    hcMemcpy(d_output_shape, _output_shape.data(), ndim * sizeof(size_t), hcMemcpyHostToDevice);
-    hcMemcpy(d_src_shape, _src_shape.data(), ndim * sizeof(size_t), hcMemcpyHostToDevice);
-    hcMemcpy(d_input_strides, _input_strides.data(), ndim * sizeof(ptrdiff_t), hcMemcpyHostToDevice);
-    hcMemcpy(d_output_strides, _output_strides.data(), ndim * sizeof(ptrdiff_t), hcMemcpyHostToDevice);
-    hcMemcpy(d_index_strides, _index_strides.data(), ndim * sizeof(ptrdiff_t), hcMemcpyHostToDevice);
-    hcMemcpy(d_src_strides, _src_strides.data(), ndim * sizeof(ptrdiff_t), hcMemcpyHostToDevice);
-
-    scatterKernel<T, IndexT><<<grid_size, block_size, 0, hc_stream>>>(
-        d_input_shape, d_output_shape, d_src_shape,
-        d_input_strides, d_output_strides, d_index_strides, d_src_strides,
-        _dim, ndim,
-        reinterpret_cast<T*>(output_data),
-        reinterpret_cast<const T*>(input_data),
-        reinterpret_cast<const IndexT*>(index_data),
-        reinterpret_cast<const T*>(src_data),
-        total_input_elements,
-        total_src_elements);
-        
-    hcError_t err = hcGetLastError();
-    if (err != hcSuccess) {
-        // Free device memory before returning
-        hcFree(d_input_shape);
-        hcFree(d_output_shape);
-        hcFree(d_src_shape);
-        hcFree(d_input_strides);
-        hcFree(d_output_strides);
-        hcFree(d_index_strides);
-        hcFree(d_src_strides);
-        return INFINI_STATUS_INTERNAL_ERROR;
-    }
-        
-    // Free device memory
-    hcFree(d_input_shape);
-    hcFree(d_output_shape);
+    // Launch kernel
+    const int block_size = 256;
+    const int grid_size = (total_elements + block_size - 1) / block_size;
+    
+    scatterKernel<T, IndexT><<<grid_size, block_size, 0, metax_stream>>>(
+        static_cast<T*>(output_data),
+        static_cast<const T*>(src_data),
+        static_cast<const IndexT*>(index_data),
+        total_elements,
+        _dim,
+        _output_shape[_dim],
+        d_src_shape,
+        d_src_strides,
+        d_output_strides,
+        d_index_strides,
+        _src_shape.size());
+    
+    // Wait for kernel completion
+    hcStreamSynchronize(metax_stream);
+    
+    // Clean up device memory
     hcFree(d_src_shape);
-    hcFree(d_input_strides);
+    hcFree(d_src_strides);
     hcFree(d_output_strides);
     hcFree(d_index_strides);
-    hcFree(d_src_strides);
-
+    
     return INFINI_STATUS_SUCCESS;
 }
 

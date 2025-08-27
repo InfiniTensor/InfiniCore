@@ -71,6 +71,9 @@ __C infiniStatus_t infiniopGetRMSNormBackwardWorkspaceSize(infiniopRMSNormBackwa
 #ifdef ENABLE_ILUVATAR_API
         GET(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax);
+#endif
     }
 
 #undef GET
@@ -97,6 +100,9 @@ __C infiniStatus_t infiniopRMSNormBackward(infiniopRMSNormBackwardDescriptor_t d
 #ifdef ENABLE_ILUVATAR_API
         CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax);
+#endif
     }
 
 #undef CALCULATE
@@ -120,6 +126,9 @@ __C infiniStatus_t infiniopDestroyRMSNormBackwardDescriptor(infiniopRMSNormBackw
 #endif
 #ifdef ENABLE_ILUVATAR_API
         DESTROY(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        DESTROY(INFINI_DEVICE_METAX, metax);
 #endif
     }
 

@@ -2,258 +2,66 @@
 #include "../../../devices/metax/metax_common.h"
 #include "../../../devices/metax/metax_kernel_common.h"
 #include "../../../../utils.h"
+#include "batch_norm_backward_kernel.cuh"
 
 namespace op::batch_norm_backward::metax {
 
-// 设备端数据类型转换函数
-template<typename T>
-__device__ float device_cast_to_float(T val);
-
-template<>
-__device__ float device_cast_to_float<fp16_t>(fp16_t val) {
-    // Convert custom fp16_t to __half first, then to float
-    __half h_val;
-    memcpy(&h_val, &val, sizeof(__half));
-    return __half2float(h_val);
-}
-
-template<>
-__device__ float device_cast_to_float<bf16_t>(bf16_t val) {
-    // Convert custom bf16_t to __hpcc_bfloat16 first, then to float
-    __hpcc_bfloat16 bf_val;
-    memcpy(&bf_val, &val, sizeof(__hpcc_bfloat16));
-    return __bfloat162float(bf_val);
-}
-
-template<>
-__device__ float device_cast_to_float<float>(float val) {
-    return val;
-}
-
-template<typename T>
-__device__ T device_cast_from_float(float val);
-
-template<>
-__device__ fp16_t device_cast_from_float<fp16_t>(float val) {
-    // Convert float to __half first, then to custom fp16_t
-    __half h_val = __float2half(val);
-    fp16_t result;
-    memcpy(&result, &h_val, sizeof(fp16_t));
-    return result;
-}
-
-template<>
-__device__ bf16_t device_cast_from_float<bf16_t>(float val) {
-    // Convert float to __hpcc_bfloat16 first, then to custom bf16_t
-    __hpcc_bfloat16 bf_val = __float2bfloat16(val);
-    bf16_t result;
-    memcpy(&result, &bf_val, sizeof(bf16_t));
-    return result;
-}
-
-template<>
-__device__ float device_cast_from_float<float>(float val) {
-    return val;
-}
-
-// BatchNorm Backward核函数
-template<typename T>
-__global__ void batchNormBackwardKernel(
-    T *__restrict__ grad_input,
-    T *__restrict__ grad_weight,
-    T *__restrict__ grad_bias,
-    const T *__restrict__ grad_output,
-    const T *__restrict__ input,
-    const T *__restrict__ weight,
-    const T *__restrict__ running_mean,
-    const T *__restrict__ running_var,
-    T *__restrict__ workspace_mean,
-    T *__restrict__ workspace_var,
-    size_t batch_size,
-    size_t channels,
-    size_t spatial_size,
-    float eps,
-    bool has_bias) {
-    
-    int channel_idx = blockIdx.x;
-    int thread_idx = threadIdx.x;
-    int block_size = blockDim.x;
-    
-    if (channel_idx >= channels) return;
-    
-    size_t total_elements = batch_size * spatial_size;
-    
-    // 计算当前通道的均值（使用输入数据）
-    float sum = 0.0f;
-    for (size_t i = thread_idx; i < total_elements; i += block_size) {
-        size_t batch_idx = i / spatial_size;
-        size_t spatial_idx = i % spatial_size;
-        size_t input_idx = batch_idx * channels * spatial_size + channel_idx * spatial_size + spatial_idx;
-        sum += device_cast_to_float(input[input_idx]);
-    }
-    
-    // 块内归约求和
-    __shared__ float shared_sum[1024];
-    shared_sum[thread_idx] = sum;
-    __syncthreads();
-    
-    for (int stride = block_size / 2; stride > 0; stride /= 2) {
-        if (thread_idx < stride) {
-            shared_sum[thread_idx] += shared_sum[thread_idx + stride];
-        }
-        __syncthreads();
-    }
-    
-    float mean = 0.0f;
-    if (thread_idx == 0) {
-        mean = shared_sum[0] / total_elements;
-        workspace_mean[channel_idx] = device_cast_from_float<T>(mean);
-    }
-    __syncthreads();
-    mean = device_cast_to_float(workspace_mean[channel_idx]);
-    
-    // 计算方差
-    float var_sum = 0.0f;
-    for (size_t i = thread_idx; i < total_elements; i += block_size) {
-        size_t batch_idx = i / spatial_size;
-        size_t spatial_idx = i % spatial_size;
-        size_t input_idx = batch_idx * channels * spatial_size + channel_idx * spatial_size + spatial_idx;
-        float diff = device_cast_to_float(input[input_idx]) - mean;
-        var_sum += diff * diff;
-    }
-    
-    // 块内归约求方差
-    shared_sum[thread_idx] = var_sum;
-    __syncthreads();
-    
-    for (int stride = block_size / 2; stride > 0; stride /= 2) {
-        if (thread_idx < stride) {
-            shared_sum[thread_idx] += shared_sum[thread_idx + stride];
-        }
-        __syncthreads();
-    }
-    
-    float variance = 0.0f;
-    if (thread_idx == 0) {
-        variance = shared_sum[0] / total_elements;
-        workspace_var[channel_idx] = device_cast_from_float<T>(variance);
-    }
-    __syncthreads();
-    variance = device_cast_to_float(workspace_var[channel_idx]);
-    
-    float inv_std = 1.0f / sqrtf(variance + eps);
-    
-    // 计算grad_weight和grad_bias
-    if (grad_weight && grad_bias) {
-        float grad_weight_sum = 0.0f;
-        float grad_bias_sum = 0.0f;
-        
-        for (size_t i = thread_idx; i < total_elements; i += block_size) {
-            size_t batch_idx = i / spatial_size;
-            size_t spatial_idx = i % spatial_size;
-            size_t input_idx = batch_idx * channels * spatial_size + channel_idx * spatial_size + spatial_idx;
-            
-            float grad_out_val = device_cast_to_float(grad_output[input_idx]);
-            float normalized = (device_cast_to_float(input[input_idx]) - mean) * inv_std;
-            
-            grad_weight_sum += grad_out_val * normalized;
-            grad_bias_sum += grad_out_val;
-        }
-        
-        // 归约grad_weight
-        shared_sum[thread_idx] = grad_weight_sum;
-        __syncthreads();
-        
-        for (int stride = block_size / 2; stride > 0; stride /= 2) {
-            if (thread_idx < stride) {
-                shared_sum[thread_idx] += shared_sum[thread_idx + stride];
-            }
-            __syncthreads();
-        }
-        
-        if (thread_idx == 0) {
-            grad_weight[channel_idx] = device_cast_from_float<T>(shared_sum[0]);
-        }
-        
-        // 归约grad_bias
-        if (has_bias) {
-            shared_sum[thread_idx] = grad_bias_sum;
-            __syncthreads();
-            
-            for (int stride = block_size / 2; stride > 0; stride /= 2) {
-                if (thread_idx < stride) {
-                    shared_sum[thread_idx] += shared_sum[thread_idx + stride];
-                }
-                __syncthreads();
-            }
-            
-            if (thread_idx == 0) {
-                grad_bias[channel_idx] = device_cast_from_float<T>(shared_sum[0]);
-            }
-        }
-    }
-    
-    // 计算grad_input
-    if (grad_input) {
-        float weight_val = device_cast_to_float(weight[channel_idx]);
-        
-        for (size_t i = thread_idx; i < total_elements; i += block_size) {
-            size_t batch_idx = i / spatial_size;
-            size_t spatial_idx = i % spatial_size;
-            size_t input_idx = batch_idx * channels * spatial_size + channel_idx * spatial_size + spatial_idx;
-            
-            float grad_out_val = device_cast_to_float(grad_output[input_idx]);
-            float grad_in_val = grad_out_val * weight_val * inv_std;
-            
-            grad_input[input_idx] = device_cast_from_float<T>(grad_in_val);
-        }
-    }
-}
-
-// 启动核函数的辅助函数
-template<typename T>
+/**
+ * @brief Launch BatchNorm backward kernel for MetaX devices
+ * 
+ * @tparam T Data type for input/output tensors
+ */
+template <typename T>
 infiniStatus_t launchBatchNormBackwardKernel(
-    const BatchNormBackwardInfo &info,
-    void *grad_input,
-    void *grad_weight,
-    void *grad_bias,
-    const void *grad_output,
-    const void *input,
-    const void *weight,
-    const void *running_mean,
-    const void *running_var,
-    void *workspace,
-    void *stream) {
+    T *grad_input,
+    T *grad_weight,
+    T *grad_bias,
+    const T *grad_output,
+    const T *input,
+    const T *weight,
+    const T *running_mean,
+    const T *running_var,
+    const BatchNormBackwardInfo& info,
+    hcStream_t stream
+) {
+    constexpr unsigned int BLOCK_SIZE = 256;
     
-    size_t dtype_size = infiniSizeOf(info.dtype);
-    void *workspace_mean = workspace;
-    void *workspace_var = static_cast<char*>(workspace) + info._channels * dtype_size;
+    size_t batch_size = info._batch_size;
+    size_t channels = info._channels;
+    size_t spatial_size = info._spatial_size;
+    float momentum = info.momentum;
+    float eps = info.eps;
     
-    dim3 grid(info._channels);
-    dim3 block(256);
+    // 每个channel使用一个block
+    dim3 grid(channels);
+    dim3 block(BLOCK_SIZE);
     
-    batchNormBackwardKernel<T><<<grid, block, 0, reinterpret_cast<hcStream_t>(stream)>>>(
-        reinterpret_cast<T*>(grad_input),
-        reinterpret_cast<T*>(grad_weight),
-        reinterpret_cast<T*>(grad_bias),
-        reinterpret_cast<const T*>(grad_output),
-        reinterpret_cast<const T*>(input),
-        reinterpret_cast<const T*>(weight),
-        reinterpret_cast<const T*>(running_mean),
-        reinterpret_cast<const T*>(running_var),
-        reinterpret_cast<T*>(workspace_mean),
-        reinterpret_cast<T*>(workspace_var),
-        info._batch_size, info._channels, info._spatial_size,
-        info.eps, info.has_bias);
+    batchNormBackwardKernel<BLOCK_SIZE, T><<<grid, block, 0, stream>>>(
+        grad_input, grad_weight, grad_bias,
+        grad_output, input, weight,
+        running_mean, running_var,
+        batch_size, channels, spatial_size,
+        momentum, eps);
     
-    CHECK_METAX(hcGetLastError());
+    // Check kernel launch error
+    hcError_t err = hcGetLastError();
+    if (err != hcSuccess) {
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
+    
+    // Wait for kernel completion
+    err = hcStreamSynchronize(stream);
+    if (err != hcSuccess) {
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
     
     return INFINI_STATUS_SUCCESS;
 }
 
-// Descriptor类的create方法实现
+Descriptor::~Descriptor() = default;
+
 infiniStatus_t Descriptor::create(
-    infiniopHandle_t handle,
+    infiniopHandle_t handle_,
     Descriptor **desc_ptr,
     infiniopTensorDescriptor_t grad_input_desc,
     infiniopTensorDescriptor_t grad_weight_desc,
@@ -264,10 +72,12 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t running_mean_desc,
     infiniopTensorDescriptor_t running_var_desc,
     float momentum,
-    float eps) {
-    
-    if (!handle || !desc_ptr || !grad_input_desc || !grad_output_desc || !input_desc || 
-        !weight_desc || !running_mean_desc || !running_var_desc) {
+    float eps
+) {
+    // 验证输入参数
+    if (!handle_ || !desc_ptr || !grad_input_desc || !grad_weight_desc || 
+        !grad_bias_desc || !grad_output_desc || !input_desc || !weight_desc ||
+        !running_mean_desc || !running_var_desc) {
         return INFINI_STATUS_BAD_PARAM;
     }
     
@@ -275,6 +85,7 @@ infiniStatus_t Descriptor::create(
         return INFINI_STATUS_BAD_PARAM;
     }
     
+    auto handle = static_cast<device::metax::Handle *>(handle_);
     auto dtype = input_desc->dtype();
     
     // 检查数据类型支持
@@ -282,87 +93,66 @@ infiniStatus_t Descriptor::create(
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
     
+    // 检查数据类型一致性
+    if (input_desc->dtype() != grad_input_desc->dtype() ||
+        input_desc->dtype() != grad_output_desc->dtype() ||
+        input_desc->dtype() != weight_desc->dtype() ||
+        input_desc->dtype() != grad_weight_desc->dtype() ||
+        input_desc->dtype() != grad_bias_desc->dtype() ||
+        input_desc->dtype() != running_mean_desc->dtype() ||
+        input_desc->dtype() != running_var_desc->dtype()) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    
     // 检查形状兼容性
     if (input_desc->ndim() < 2) {
         return INFINI_STATUS_BAD_PARAM;
     }
     
-    // 创建BatchNormBackwardInfo
-    BatchNormBackwardInfo info;
-    info._batch_size = input_desc->dim(0);
-    info._channels = input_desc->dim(1);
-    
-    // 计算spatial_size
-    info._spatial_size = 1;
-    for (size_t i = 2; i < input_desc->ndim(); ++i) {
-        info._spatial_size *= input_desc->dim(i);
-    }
-    
-    info.total_elements = info._batch_size * info._channels * info._spatial_size;
-    info.input_size = input_desc->numel();
-    info.output_size = grad_output_desc->numel();
-    info.dtype = dtype;
-    info.wtype = weight_desc->dtype();
-    info.btype = grad_bias_desc ? grad_bias_desc->dtype() : dtype;
-    info.atype = dtype;
-    info.momentum = momentum;
-    info.eps = eps;
-    info.has_bias = (grad_bias_desc != nullptr);
-    
-    // 复制形状和步长信息
-    info.grad_input_shape = grad_input_desc->shape();
-    info.grad_output_shape = grad_output_desc->shape();
-    info.input_shape = input_desc->shape();
-    info.weight_shape = weight_desc->shape();
-    info.running_mean_shape = running_mean_desc->shape();
-    info.running_var_shape = running_var_desc->shape();
-    info.shape = input_desc->shape();
-    
-    if (grad_weight_desc) {
-        info.grad_weight_shape = grad_weight_desc->shape();
-    }
-    if (grad_bias_desc) {
-        info.grad_bias_shape = grad_bias_desc->shape();
-    }
-    
-    info.grad_input_strides = grad_input_desc->strides();
-    info.grad_output_strides = grad_output_desc->strides();
-    info.input_strides = input_desc->strides();
-    info.weight_strides = weight_desc->strides();
-    info.running_mean_strides = running_mean_desc->strides();
-    info.running_var_strides = running_var_desc->strides();
-    
-    if (grad_weight_desc) {
-        info.grad_weight_strides = grad_weight_desc->strides();
-    }
-    if (grad_bias_desc) {
-        info.grad_bias_strides = grad_bias_desc->strides();
-    }
-    
-    // 计算workspace大小
-    size_t dtype_size = infiniSizeOf(dtype);
-    size_t workspace_size = 2 * info._channels * dtype_size; // mean + var
-    
-    *desc_ptr = new Descriptor(
-        std::move(info),
-        workspace_size,
-        handle->device, handle->device_id);
-    
-    return INFINI_STATUS_SUCCESS;
-}
-
-// get_workspace_size方法实现
-infiniStatus_t Descriptor::get_workspace_size(size_t *size) const {
-    if (!size) {
+    // 输入和梯度输出形状应该相同
+    if (input_desc->ndim() != grad_output_desc->ndim() ||
+        input_desc->ndim() != grad_input_desc->ndim()) {
         return INFINI_STATUS_BAD_PARAM;
     }
-    *size = workspace_size;
+    
+    for (size_t i = 0; i < input_desc->ndim(); ++i) {
+        if (input_desc->dim(i) != grad_output_desc->dim(i) ||
+            input_desc->dim(i) != grad_input_desc->dim(i)) {
+            return INFINI_STATUS_BAD_PARAM;
+        }
+    }
+    
+    // weight, bias, running_mean, running_var 应该是1D张量，长度为channels
+    size_t channels = input_desc->dim(1);
+    if (weight_desc->ndim() != 1 || weight_desc->dim(0) != channels ||
+        grad_weight_desc->ndim() != 1 || grad_weight_desc->dim(0) != channels ||
+        grad_bias_desc->ndim() != 1 || grad_bias_desc->dim(0) != channels ||
+        running_mean_desc->ndim() != 1 || running_mean_desc->dim(0) != channels ||
+        running_var_desc->ndim() != 1 || running_var_desc->dim(0) != channels) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    
+    // 创建BatchNormBackwardInfo
+    auto result = BatchNormBackwardInfo::create(
+        grad_input_desc, grad_weight_desc, grad_bias_desc,
+        grad_output_desc, input_desc, weight_desc,
+        running_mean_desc, running_var_desc, momentum, eps);
+    if (!result) {
+        return result.status();
+    }
+    auto info = result.take();
+    
+    // MetaX实现不需要额外的workspace
+    size_t workspace_size = 0;
+    
+    *desc_ptr = new Descriptor(info, workspace_size, handle->device, handle->device_id);
+    
     return INFINI_STATUS_SUCCESS;
 }
 
-// calculate方法实现
 infiniStatus_t Descriptor::calculate(
-    void *workspace, size_t workspace_size_param,
+    void *workspace,
+    size_t workspace_size,
     void *grad_input,
     void *grad_weight,
     void *grad_bias,
@@ -371,68 +161,89 @@ infiniStatus_t Descriptor::calculate(
     const void *weight,
     const void *running_mean,
     const void *running_var,
+    void *stream
+) const {
+    if (!grad_input || !grad_weight || !grad_bias || !grad_output || 
+        !input || !weight || !running_mean || !running_var) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    
+    hcStream_t hc_stream = static_cast<hcStream_t>(stream);
+    
+    // 根据数据类型分发
+    switch (_info.dtype) {
+        case INFINI_DTYPE_F32:
+            return calculate_batch_norm_backward<float>(
+                workspace, grad_input, grad_weight, grad_bias,
+                grad_output, input, weight, running_mean, running_var,
+                _info, stream
+            );
+        case INFINI_DTYPE_F16:
+            return calculate_batch_norm_backward<__half>(
+                workspace, grad_input, grad_weight, grad_bias,
+                grad_output, input, weight, running_mean, running_var,
+                _info, stream
+            );
+        case INFINI_DTYPE_BF16:
+            return calculate_batch_norm_backward<__hpcc_bfloat16>(
+                workspace, grad_input, grad_weight, grad_bias,
+                grad_output, input, weight, running_mean, running_var,
+                _info, stream
+            );
+        default:
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+}
+
+template <typename T>
+infiniStatus_t Descriptor::calculate_batch_norm_backward(
+    void *workspace,
+    void *grad_input_data,
+    void *grad_weight_data,
+    void *grad_bias_data,
+    const void *grad_output_data,
+    const void *input_data,
+    const void *weight_data,
+    const void *running_mean_data,
+    const void *running_var_data,
+    const BatchNormBackwardInfo &info,
     void *stream) const {
     
-    if (!grad_output || !input || !weight || !running_mean || !running_var) {
-        return INFINI_STATUS_BAD_PARAM;
+    auto grad_input = static_cast<T*>(grad_input_data);
+    auto grad_weight = static_cast<T*>(grad_weight_data);
+    auto grad_bias = static_cast<T*>(grad_bias_data);
+    auto grad_output = static_cast<const T*>(grad_output_data);
+    auto input = static_cast<const T*>(input_data);
+    auto weight = static_cast<const T*>(weight_data);
+    auto running_mean = static_cast<const T*>(running_mean_data);
+    auto running_var = static_cast<const T*>(running_var_data);
+    auto hc_stream = static_cast<hcStream_t>(stream);
+    
+    // Launch BatchNorm backward kernel
+    infiniStatus_t status = launchBatchNormBackwardKernel<T>(
+        grad_input, grad_weight, grad_bias,
+        grad_output, input, weight,
+        running_mean, running_var,
+        info, hc_stream
+    );
+    if (status != INFINI_STATUS_SUCCESS) {
+        return status;
     }
     
-    if (workspace_size_param < workspace_size) {
-        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
-    }
-    
-    switch (info.dtype) {
-    case INFINI_DTYPE_F16:
-        return batchNormBackwardMetax<fp16_t>(info, grad_input, grad_weight, grad_bias,
-                                             grad_output, input, weight, running_mean, running_var, workspace, stream);
-    case INFINI_DTYPE_F32:
-        return batchNormBackwardMetax<float>(info, grad_input, grad_weight, grad_bias,
-                                            grad_output, input, weight, running_mean, running_var, workspace, stream);
-    case INFINI_DTYPE_BF16:
-        return batchNormBackwardMetax<bf16_t>(info, grad_input, grad_weight, grad_bias,
-                                             grad_output, input, weight, running_mean, running_var, workspace, stream);
-    default:
-        return INFINI_STATUS_BAD_TENSOR_DTYPE;
-    }
+    return INFINI_STATUS_SUCCESS;
 }
 
-// 模板函数实现
-template<typename T>
-infiniStatus_t batchNormBackwardMetax(
-    const BatchNormBackwardInfo &info,
-    void *grad_input,
-    void *grad_weight,
-    void *grad_bias,
-    const void *grad_output,
-    const void *input,
-    const void *weight,
-    const void *running_mean,
-    const void *running_var,
-    void *workspace,
-    void *stream) {
-    
-    return launchBatchNormBackwardKernel<T>(
-        info, grad_input, grad_weight, grad_bias,
-        grad_output, input, weight, running_mean, running_var, workspace, stream);
-}
+// 显式实例化模板
+template infiniStatus_t Descriptor::calculate_batch_norm_backward<float>(
+    void *, void *, void *, void *, const void *, const void *, const void *,
+    const void *, const void *, const BatchNormBackwardInfo &, void *) const;
 
-// 显式实例化
-template infiniStatus_t batchNormBackwardMetax<fp16_t>(
-    const BatchNormBackwardInfo &info,
-    void *grad_input, void *grad_weight, void *grad_bias,
-    const void *grad_output, const void *input, const void *weight,
-    const void *running_mean, const void *running_var, void *workspace, void *stream);
+template infiniStatus_t Descriptor::calculate_batch_norm_backward<__half>(
+    void *, void *, void *, void *, const void *, const void *, const void *,
+    const void *, const void *, const BatchNormBackwardInfo &, void *) const;
 
-template infiniStatus_t batchNormBackwardMetax<float>(
-    const BatchNormBackwardInfo &info,
-    void *grad_input, void *grad_weight, void *grad_bias,
-    const void *grad_output, const void *input, const void *weight,
-    const void *running_mean, const void *running_var, void *workspace, void *stream);
-
-template infiniStatus_t batchNormBackwardMetax<bf16_t>(
-    const BatchNormBackwardInfo &info,
-    void *grad_input, void *grad_weight, void *grad_bias,
-    const void *grad_output, const void *input, const void *weight,
-    const void *running_mean, const void *running_var, void *workspace, void *stream);
+template infiniStatus_t Descriptor::calculate_batch_norm_backward<__hpcc_bfloat16>(
+    void *, void *, void *, void *, const void *, const void *, const void *,
+    const void *, const void *, const BatchNormBackwardInfo &, void *) const;
 
 } // namespace op::batch_norm_backward::metax

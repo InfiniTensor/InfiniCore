@@ -321,6 +321,7 @@ def test(
                 input.data(),
                 index.data(),
                 src.data(),
+                None,  # stream parameter
             )
         )
 

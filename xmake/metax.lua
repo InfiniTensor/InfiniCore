@@ -17,7 +17,7 @@ rule("maca")
         local htcc = path.join(MACA_ROOT, "htgpu_llvm/bin/htcc")
         local includedirs = table.concat(target:get("includedirs"), " ")
 
-        local args = { "-x", "hpcc", "-c", sourcefile, "-o", objectfile, "-I" .. MACA_ROOT .. "/include", "-O3", "-fPIC", "-std=c++17"}
+        local args = { "-x", "hpcc", "-c", sourcefile, "-o", objectfile, "-I" .. MACA_ROOT .. "/include", "-O3", "-fPIC", "-Werror", "-std=c++17"}
 
         for _, includedir in ipairs(target:get("includedirs")) do
             table.insert(args, "-I" .. includedir)
@@ -41,10 +41,6 @@ target("infiniop-metax")
     add_cxflags("-lstdc++", "-fPIC", "-Wno-defaulted-function-deleted", "-Wno-strict-aliasing")
     add_files("../src/infiniop/devices/metax/*.cc", "../src/infiniop/ops/*/metax/*.cc")
     add_files("../src/infiniop/ops/*/metax/*.maca", {rule = "maca"})
-    -- 排除 causal_softmax 算子
-    remove_files("../src/infiniop/ops/causal_softmax/metax/*.cc", "../src/infiniop/ops/causal_softmax/metax/*.maca")
-    -- 排除 rms_norm 算子（编译问题）
-    remove_files("../src/infiniop/ops/rms_norm/metax/*.cc", "../src/infiniop/ops/rms_norm/metax/*.maca")
 
     if has_config("ninetoothed") then
         add_files("../build/ninetoothed/*.c", {cxflags = {"-include stdlib.h", "-Wno-return-type"}})

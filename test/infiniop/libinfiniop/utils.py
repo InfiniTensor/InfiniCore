@@ -575,7 +575,17 @@ def test_operator(device, test_func, test_cases, tensor_dtypes):
         to be passed to `test_func`.
     - tensor_dtypes (list): A list of tensor data types (e.g., `torch.float32`) to test.
     """
-    LIBINFINIOP.infinirtSetDevice(device, ctypes.c_int(0))
+    status = LIBINFINIOP.infinirtSetDevice(device, ctypes.c_int(0))
+    if status != 0:
+        print(f"Error: infinirtSetDevice failed with status {status}")
+        print(f"Device: {device}, Device ID: 0")
+        if status == 3:
+            print("Error code 3: INFINI_STATUS_BAD_PARAM - Invalid parameter")
+        elif status == 6:
+            print("Error code 6: INFINI_STATUS_DEVICE_NOT_FOUND - Device not found")
+        elif status == 7:
+            print("Error code 7: INFINI_STATUS_DEVICE_NOT_INITIALIZED - Device not initialized")
+        raise RuntimeError(f"Failed to set device {device} with error code {status}")
     handle = create_handle()
     tensor_dtypes = filter_tensor_dtypes_by_device(device, tensor_dtypes)
     try:
