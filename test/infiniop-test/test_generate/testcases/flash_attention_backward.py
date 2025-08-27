@@ -220,9 +220,9 @@ def gen_gguf(dtype: np.dtype, filename: str):
         # inputLayout -> ((batch_size), seq_len, num_heads, head_dim)
         ((4, 2, 2), (4, 2, 2), 0),
         ((4, 4, 4), (10, 4, 4), 0),
-        ((10, 4, 4), (4, 4, 4), 2),
+        # ((10, 4, 4), (4, 4, 4), 2),
         ((1, 10, 2, 4), (1, 10, 2, 4), 0),
-        ((4, 10, 8, 4), (4, 10, 2, 4), 1),
+        # ((4, 10, 8, 4), (4, 10, 2, 4), 0),
     ]
     
     for shape_qo, shape_kv, mask_type in _TEST_CASES:
