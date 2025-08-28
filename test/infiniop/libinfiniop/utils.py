@@ -66,10 +66,53 @@ class TestTensor(CTensor):
                 torch_strides.append(strides[i])
             else:
                 torch_shape.append(shape[i])
+                
+        torch_dtype = to_torch_dtype(dt)
         if mode == "random":
-            self._torch_tensor = torch.rand(
-                torch_shape, dtype=to_torch_dtype(dt), device=torch_device_map[device]
-            )
+            if torch_dtype == torch.bool:
+                # 对于布尔类型，先生成0和1的整数张量，再转换为布尔类型
+                self._torch_tensor = torch.randint(0, 2, torch_shape, 
+                                                dtype=torch.int32, 
+                                                device=torch_device_map[device])
+                self._torch_tensor = self._torch_tensor.to(torch.bool)
+            elif torch_dtype in (torch.uint8, torch.uint16, torch.uint32, torch.uint64, torch.int8, torch.int16, torch.int32, torch.int64):
+                # 对于整数类型，使用randint
+                dtype_info = torch.iinfo(torch_dtype)
+                
+                # 计算一个安全的范围，避免溢出
+                if dtype_info.min < 0:
+                    # 有符号整数
+                    safe_range = min(10000, dtype_info.max // 2)
+                    low = -safe_range
+                    high = safe_range + 1
+                else:
+                    # 无符号整数
+                    if torch_dtype == torch.uint8:
+                        # 对于8位无符号整数，可以使用全范围
+                        low = 0
+                        high = dtype_info.max + 1
+                    elif torch_dtype == torch.uint16:
+                        # 对于16位无符号整数，使用较大的范围
+                        low = 0
+                        high = min(65536, dtype_info.max + 1)
+                    else:
+                        # 对于32位和64位无符号整数，使用较小的范围以避免溢出
+                        safe_range = min(10000, dtype_info.max // 2)
+                        low = 0
+                        high = safe_range + 1
+                
+                self._torch_tensor = torch.randint(
+                    low=low,
+                    high=high,
+                    size=torch_shape,
+                    dtype=torch_dtype,
+                    device=torch_device_map[device]
+                )
+            else:
+                # 对于浮点类型，使用rand
+                self._torch_tensor = torch.rand(
+                    torch_shape, dtype=torch_dtype, device=torch_device_map[device]
+                )
         elif mode == "zeros":
             self._torch_tensor = torch.zeros(
                 torch_shape, dtype=to_torch_dtype(dt), device=torch_device_map[device]
@@ -87,14 +130,16 @@ class TestTensor(CTensor):
             )
         else:
             raise ValueError("Unsupported mode")
-
         if scale is not None:
             self._torch_tensor *= scale
         if bias is not None:
             self._torch_tensor += bias
 
         if strides is not None:
-            self._data_tensor = rearrange_tensor(self._torch_tensor, torch_strides)
+            if not is_signed_integer_dtype(dt) and is_integer_dtype(dt):
+                self._data_tensor = rearrange_tensor_extend_uint(self._torch_tensor, torch_strides)
+            else:
+                self._data_tensor = rearrange_tensor(self._torch_tensor, torch_strides)
         else:
             self._data_tensor = self._torch_tensor.clone()
 
@@ -119,6 +164,13 @@ class TestTensor(CTensor):
         return TestTensor(
             shape_, strides_, dt, device, mode="manual", set_tensor=torch_tensor
         )
+
+
+def is_integer_dtype(dt):
+    return dt in [InfiniDtype.I32, InfiniDtype.I64, InfiniDtype.U32, InfiniDtype.U64]
+
+def is_signed_integer_dtype(dt):
+    return dt in [InfiniDtype.I32, InfiniDtype.I64]
 
 
 def to_torch_dtype(dt: InfiniDtype, compatability_mode=False):
@@ -148,6 +200,8 @@ def to_torch_dtype(dt: InfiniDtype, compatability_mode=False):
         return torch.int32 if compatability_mode else torch.uint32
     elif dt == InfiniDtype.U64:
         return torch.int64 if compatability_mode else torch.uint64
+    elif dt == InfiniDtype.BOOL:
+        return torch.bool
     else:
         raise ValueError("Unsupported data type")
 
@@ -221,6 +275,78 @@ def rearrange_tensor(tensor, new_strides):
 
     # Copy the original data to the new tensor
     new_tensor.view(-1).index_add_(0, new_positions, tensor.view(-1))
+    new_tensor.set_(new_tensor.untyped_storage(), offset, shape, tuple(new_strides))
+
+    return new_tensor
+
+
+
+def rearrange_tensor_extend_uint(tensor, new_strides):
+    """
+    Rearranges the given tensor to have new strides by copying data into a new memory layout.
+    Supports all dtypes including torch.uint32.
+    """
+    import torch
+
+    shape = tensor.shape
+    ndim = len(shape)
+
+    # 计算新张量所需的 flat size（内存空间大小）
+    left = 0
+    right = 0
+    for i in range(ndim):
+        if new_strides[i] > 0:
+            right += new_strides[i] * (shape[i] - 1)
+        else:
+            raise ValueError("Negative strides are not supported yet")
+
+    # 新张量的 flat size（包含所有偏移的最大位置 +1）
+    flat_size = right + 1
+
+    # 创建一个扁平的新张量
+    new_tensor = torch.zeros(flat_size, dtype=tensor.dtype, device=tensor.device)
+
+    # 创建所有维度的坐标网格
+    indices = [torch.arange(s, device=tensor.device) for s in shape]
+    mesh = torch.meshgrid(*indices, indexing="ij")
+    coords = [m.flatten() for m in mesh]  # 每个维度展平成一维
+    new_positions += offset
+    # 计算新位置的线性索引 offset = i0 * s0 + i1 * s1 + ...
+    # new_positions = sum(coords[i] * new_strides[i] for i in range(ndim))
+
+    # # 从原始张量中提取数据并写入新内存布局（避免 index_add_）
+    # flat_src = tensor.contiguous().view(-1)
+    # flat_dst = new_tensor.view(-1)
+    # for i in range(new_positions.numel()):
+    #     flat_dst[new_positions[i]] = flat_src[i]
+
+    # # 用新布局构造最终张量
+    # new_tensor = new_tensor.as_strided(shape, new_strides)
+    unsupported_types = (torch.uint16, torch.uint32, torch.uint64)
+    
+    if tensor.dtype in unsupported_types:
+        # For unsupported types, convert to a compatible type, perform the operation, then convert back
+        # Determine the compatible type
+        if tensor.dtype == torch.uint16:
+            compatible_dtype = torch.int16
+        elif tensor.dtype == torch.uint32:
+            compatible_dtype = torch.int32
+        else:  # torch.uint64
+            compatible_dtype = torch.int64
+        
+        # Convert tensors to compatible type
+        tensor_converted = tensor.to(compatible_dtype)
+        new_tensor_converted = new_tensor.to(compatible_dtype)
+        
+        # Perform the index_add_ operation
+        new_tensor_converted.view(-1).index_add_(0, new_positions, tensor_converted.view(-1))
+        
+        # Convert the result back to the original dtype
+        new_tensor.copy_(new_tensor_converted.to(tensor.dtype))
+    else:
+        # For supported types, use index_add_ directly
+        new_tensor.view(-1).index_add_(0, new_positions, tensor.view(-1))
+    
     new_tensor.set_(new_tensor.untyped_storage(), offset, shape, tuple(new_strides))
 
     return new_tensor

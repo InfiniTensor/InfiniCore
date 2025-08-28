@@ -1,0 +1,74 @@
+
+#include "sigmoid_backward_metax.h"
+
+#include "../../../elementwise/metax/elementwise_metax.h"
+
+#include "../cuda/kernel.cuh"
+
+namespace op::sigmoid_backward::metax {
+
+// 析构函数，默认实现
+Descriptor::~Descriptor() = default;
+
+// 创建sigmoid_backward算子的描述符
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t out_desc,
+    std::vector<infiniopTensorDescriptor_t> input_desc_vec) {
+
+    // 将句柄转换为 metax 设备句柄
+    auto handle = reinterpret_cast<device::metax::Handle *>(handle_);
+    // 获取输出张量的数据类型
+    auto dtype = out_desc->dtype();
+
+    // 获取输入和输出张量的描述符和形状
+    const auto &grad_output_desc = input_desc_vec.at(0);
+    const auto &x_desc = input_desc_vec.at(1);
+    const auto &c_shape = out_desc->shape();
+    const auto &grad_output_shape = grad_output_desc->shape();
+    const auto &x_shape = x_desc->shape();
+
+    // 检查数据类型是否支持
+    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64, INFINI_DTYPE_BF16);
+
+    // 检查输入输出张量形状是否一致
+    CHECK_SAME_SHAPE(c_shape, x_shape, grad_output_shape);
+
+    // 创建 CUDA 上的 elementwise 描述符
+    CREATE_ELEMENTWISE_METAX_DESCRIPTOR(handle, dtype, out_desc, input_desc_vec)
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+// 执行sigmoid_backward计算
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *output,
+    std::vector<const void *> inputs,
+    void *stream) const {
+
+    // 检查工作空间是否足够
+    if (workspace_size < _workspace_size) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+
+    // 根据数据类型选择对应的 CUDA kernel 进行计算
+    switch (_dtype) {
+    case INFINI_DTYPE_F16:
+        return _device_info->calculate<256, cuda::SigmoidBackwardOp, half>(_info, workspace, output, inputs, stream);
+    case INFINI_DTYPE_BF16:
+        return _device_info->calculate<256, cuda::SigmoidBackwardOp, cuda_bfloat16>(_info, workspace, output, inputs, stream);
+    case INFINI_DTYPE_F32:
+        return _device_info->calculate<256, cuda::SigmoidBackwardOp, float>(_info, workspace, output, inputs, stream);
+    case INFINI_DTYPE_F64:
+        return _device_info->calculate<256, cuda::SigmoidBackwardOp, double>(_info, workspace, output, inputs, stream);
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
+    return INFINI_STATUS_SUCCESS;
+}
+}
+
