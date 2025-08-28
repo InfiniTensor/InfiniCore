@@ -17,7 +17,7 @@ xmake build infiniop-test
 在`/test/infiniop-test/`目录执行矩阵乘测例生成脚本，执行结束以后会在`/test/infiniop-test/`目录生成`gemm.gguf`测例文件。
 
 ```bash
-cd /test/infiniop-test/
+cd ./test/infiniop-test/
 python -m test_generate.testcases.gemm
 ```
 

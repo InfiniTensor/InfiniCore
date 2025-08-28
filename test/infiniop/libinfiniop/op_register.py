@@ -489,3 +489,35 @@ def conv_(lib):
     lib.infiniopDestroyConvDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
+
+
+@OpRegister.operator
+def sigmoid_(lib):
+    lib.infiniopCreateSigmoidDescriptor.restype = c_int32
+    lib.infiniopCreateSigmoidDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetSigmoidWorkspaceSize.restype = c_int32
+    lib.infiniopGetSigmoidWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopSigmoid.restype = c_int32
+    lib.infiniopSigmoid.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroySigmoidDescriptor.restype = c_int32
+    lib.infiniopDestroySigmoidDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
