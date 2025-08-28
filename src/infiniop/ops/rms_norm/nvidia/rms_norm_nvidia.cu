@@ -8,6 +8,11 @@
 
 #include "../cuda/kernel.cuh"
 
+#ifdef ENABLE_NINETOOTHED
+#include "../../../../../build/ninetoothed/rms_norm.h"
+#include "../../../ninetoothed/utils.h"
+#endif
+
 template <unsigned int BLOCK_SIZE, typename Tcompute, typename Tdata, typename Tweight>
 INFINIOP_CUDA_KERNEL rmsnormKernel(
     Tdata *__restrict__ y,
@@ -112,6 +117,7 @@ infiniStatus_t Descriptor::calculate(
     size_t nhead = _info.shape.size() > 2 ? _info.shape[1] : 1;
     auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
 
+#ifndef ENABLE_NINETOOTHED
     // launch kernel with different block sizes
     if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_1024) {
         CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_1024>(batch_size, nhead, dim, y, _info.atype, stride_y_batch, stride_y_nhead, x, stride_x_batch, stride_x_nhead, w, _info.wtype, _info.epsilon, cuda_stream));
@@ -122,6 +128,25 @@ infiniStatus_t Descriptor::calculate(
     } else {
         return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
     }
+#else
+    const auto &ndim{_info.ndim()};
+
+    auto input{ninetoothed::Tensor{x, _info.shape, _info.x_strides}};
+    auto weight{ninetoothed::Tensor{w, {_info.shape[ndim - 1]}, {_info.x_strides[ndim - 1]}}.expand_as(input)};
+    auto eps{ninetoothed::Tensor<float>{_info.epsilon}};
+    auto output{ninetoothed::Tensor{y, _info.shape, _info.y_strides}};
+    auto num_normalized_elements{ninetoothed::Tensor<uint64_t>{dim}};
+
+    constexpr auto num_normalized_dims{1};
+    const auto &input_dtype{_info.atype};
+    const auto &weight_dtype{_info.wtype};
+    const auto &output_dtype{_info.atype};
+    constexpr auto block_size{1024};
+
+    if (launch_rms_norm(stream, input, weight, eps, output, num_normalized_elements, ndim, num_normalized_dims, input_dtype, weight_dtype, output_dtype, block_size)) {
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
+#endif
     return INFINI_STATUS_SUCCESS;
 }
 } // namespace op::rms_norm::nvidia
