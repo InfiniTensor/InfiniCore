@@ -1,10 +1,18 @@
 import numpy as np
 from typing import List
 
-from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides
+from .. import (
+    InfiniopTestWriter,
+    InfiniopTestCase,
+    np_dtype_to_ggml,
+    gguf_strides,
+    contiguous_gguf_strides,
+)
+
 
 def random_tensor(shape: tuple, dtype: np.dtype) -> np.ndarray:
     return np.random.uniform(-1.0, 1.0, shape).astype(dtype) * 0.001
+
 
 def rms_norm(x: np.ndarray, w: np.ndarray, epsilon: float) -> np.ndarray:
     """
@@ -16,12 +24,13 @@ def rms_norm(x: np.ndarray, w: np.ndarray, epsilon: float) -> np.ndarray:
     Returns:
         输出张量, 形状与 input 相同
     """
-    squared = x ** 2
+    squared = x**2
     mean = np.mean(squared, axis=-1, keepdims=True)
     rms = np.sqrt(mean + epsilon)
-    
+
     normalized = x / rms
     return normalized * w
+
 
 class RMSNormTestCase(InfiniopTestCase):
     def __init__(
@@ -40,9 +49,9 @@ class RMSNormTestCase(InfiniopTestCase):
         self.y = y
         self.shape = shape
         self.epsilon = epsilon
-        self.x_strides=x_strides
-        self.y_strides=y_strides
-        
+        self.x_strides = x_strides
+        self.y_strides = y_strides
+
     def write_test(self, test_writer: "InfiniopTestWriter"):
         super().write_test(test_writer)
         test_writer.add_float32(test_writer.gguf_key("epsilon"), self.epsilon)
@@ -50,10 +59,18 @@ class RMSNormTestCase(InfiniopTestCase):
             test_writer.add_array(test_writer.gguf_key("x.shape"), self.shape)
             test_writer.add_array(test_writer.gguf_key("y.shape"), self.shape)
         if self.x_strides is not None:
-            test_writer.add_array(test_writer.gguf_key("x.strides"), gguf_strides(*self.x_strides))
+            test_writer.add_array(
+                test_writer.gguf_key("x.strides"), gguf_strides(*self.x_strides)
+            )
         test_writer.add_array(
             test_writer.gguf_key("y.strides"),
-            gguf_strides(*self.y_strides if self.y_strides is not None else contiguous_gguf_strides(self.shape))
+            gguf_strides(
+                *(
+                    self.y_strides
+                    if self.y_strides is not None
+                    else contiguous_gguf_strides(self.shape)
+                )
+            ),
         )
         test_writer.add_tensor(
             test_writer.gguf_key("x"),
@@ -70,12 +87,15 @@ class RMSNormTestCase(InfiniopTestCase):
             self.y,
             raw_dtype=np_dtype_to_ggml(self.y.dtype),
         )
-        ans = rms_norm(self.x.astype(np.float64), self.w.astype(np.float64), self.epsilon)
+        ans = rms_norm(
+            self.x.astype(np.float64), self.w.astype(np.float64), self.epsilon
+        )
         test_writer.add_tensor(
             test_writer.gguf_key("ans"),
             ans,
             raw_dtype=np_dtype_to_ggml(np.float64),
         )
+
 
 if __name__ == "__main__":
     test_writer = InfiniopTestWriter("rms_norm.gguf")
@@ -116,9 +136,9 @@ if __name__ == "__main__":
                 shape=shape,
                 x_strides=x_strides,
                 y_strides=y_strides,
-                epsilon=epsilon
+                epsilon=epsilon,
             )
-            test_cases.append(test_case)        
+            test_cases.append(test_case)
 
     test_writer.add_tests(test_cases)
     test_writer.save()
