@@ -1,0 +1,201 @@
+#include "../cuda/kernel.cuh"
+#include "../../../devices/metax/metax_common.h"
+#include "../cast.h"
+#include "cast_metax.h"
+#include "../info.h"
+
+namespace op::cast::metax {
+
+struct Descriptor::Opaque {
+    std::shared_ptr<device::metax::Handle::Internal> internal;
+};
+
+Descriptor::~Descriptor() {
+    delete _opaque;
+}
+
+template <typename T> struct MapHcType { using Type = T; };
+template <> struct MapHcType<fp16_t> { using Type = half; };
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t out_desc,
+    infiniopTensorDescriptor_t in_desc) {
+    auto handle = reinterpret_cast<device::metax::Handle *>(handle_);
+
+    auto info_r = CastInfo::create(out_desc, in_desc);
+    CHECK_RESULT(info_r);
+    auto info = info_r.take();
+
+    size_t workspace_size = 0;
+
+    *desc_ptr = new Descriptor(
+        info,
+        workspace_size,
+        new Opaque{handle->internal()},
+        handle->device, handle->device_id);
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+size_t Descriptor::workspaceSize() const {
+    return _min_workspace_size;
+}
+
+template <class ToutHost, class TinHost>
+static inline infiniStatus_t metax_cast_impl_incremental(
+    void *output_, const void *input_, 
+    const op::cast::CastInfo &info, 
+    void *stream_) {
+
+    int bs = 256, grid = 0;
+    hcError_t propErr;
+    int device_id_local = 0;
+    using DevTout = typename MapHcType<ToutHost>::Type;
+    using DevTin  = typename MapHcType<TinHost>::Type;
+
+    auto out_dev = reinterpret_cast<DevTout *>(output_);
+    auto in_dev  = reinterpret_cast<const DevTin *>(input_);
+    auto stream = reinterpret_cast<hcStream_t>(stream_);
+
+    int ndim = static_cast<int>(info.shape.size());
+    if (ndim == 0) {
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    std::vector<size_t> h_shape(info.shape.begin(), info.shape.end());
+    std::vector<size_t> h_div(ndim);
+    h_div[ndim - 1] = 1;
+    for (int d = ndim - 2; d >= 0; --d) {
+        h_div[d] = h_div[d + 1] * h_shape[d + 1];
+    }
+
+    std::vector<long long> h_in_stride(ndim), h_out_stride(ndim);
+    for (int d = 0; d < ndim; ++d) {
+        h_in_stride[d] = static_cast<long long>(info.in_stride[d]);
+        h_out_stride[d] = static_cast<long long>(info.out_stride[d]);
+    }
+
+    size_t *d_shape = nullptr;
+    size_t *d_div = nullptr;
+    long long *d_in_stride = nullptr;
+    long long *d_out_stride = nullptr;
+
+    hcError_t err = hcSuccess;
+    err = hcMalloc(reinterpret_cast<void **>(&d_shape), sizeof(size_t) * ndim);
+    if (err != hcSuccess) goto cleanup;
+    err = hcMalloc(reinterpret_cast<void **>(&d_div), sizeof(size_t) * ndim);
+    if (err != hcSuccess) goto cleanup;
+    err = hcMalloc(reinterpret_cast<void **>(&d_in_stride), sizeof(long long) * ndim);
+    if (err != hcSuccess) goto cleanup;
+    err = hcMalloc(reinterpret_cast<void **>(&d_out_stride), sizeof(long long) * ndim);
+    if (err != hcSuccess) goto cleanup;
+
+    err = hcMemcpyAsync(d_shape, h_shape.data(), sizeof(size_t) * ndim, hcMemcpyHostToDevice, stream);
+    if (err != hcSuccess) goto cleanup;
+    err = hcMemcpyAsync(d_div, h_div.data(), sizeof(size_t) * ndim, hcMemcpyHostToDevice, stream);
+    if (err != hcSuccess) goto cleanup;
+    err = hcMemcpyAsync(d_in_stride, h_in_stride.data(), sizeof(long long) * ndim, hcMemcpyHostToDevice, stream);
+    if (err != hcSuccess) goto cleanup;
+    err = hcMemcpyAsync(d_out_stride, h_out_stride.data(), sizeof(long long) * ndim, hcMemcpyHostToDevice, stream);
+    if (err != hcSuccess) goto cleanup;
+
+    device_id_local = 0;
+    propErr = hcGetDevice(&device_id_local);
+    if (propErr == hcSuccess) {
+        hcDeviceProp_t prop;
+        if (hcGetDeviceProperties(&prop, device_id_local) == hcSuccess) {
+            bs = std::min(bs, static_cast<int>(prop.maxThreadsPerBlock) / 2);
+        } else {
+            if (bs > 256) bs = 256;
+        }
+    } else {
+        if (bs > 256) bs = 256;
+    }
+
+    if (bs <= 0) bs = 256;
+    grid = static_cast<int>((info.n + bs - 1) / bs);
+    if (grid <= 0) grid = 1;
+
+    cast_kernel<DevTout, DevTin><<<grid, bs, 0, stream>>>(
+        out_dev, in_dev, info.n, d_shape, d_div, d_in_stride, d_out_stride, ndim);
+
+    err = hcGetLastError();
+    if (err != hcSuccess) goto cleanup;
+
+    err = hcStreamSynchronize(stream);
+    if (err != hcSuccess) goto cleanup;
+
+    hcFree(d_shape);
+    hcFree(d_div);
+    hcFree(d_in_stride);
+    hcFree(d_out_stride);
+    return INFINI_STATUS_SUCCESS;
+
+cleanup:
+    hcFree(d_shape);
+    hcFree(d_div);
+    hcFree(d_in_stride);
+    hcFree(d_out_stride);
+    return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *output,
+    const void *input,
+    void *stream) const {
+
+    if (output == const_cast<void*>(input)) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    #define CASE_OUT(DT_OUT, TOUT)                                    \
+        case DT_OUT: {                                                \
+            switch (_info.dt_in) {                                    \
+            case INFINI_DTYPE_I32:                                    \
+                metax_cast_impl_incremental<TOUT, int32_t>(output, input, _info, stream); \
+                break;                                                \
+            case INFINI_DTYPE_I64:                                    \
+                metax_cast_impl_incremental<TOUT, int64_t>(output, input, _info, stream); \
+                break;                                                \
+            case INFINI_DTYPE_U32:                                    \
+                metax_cast_impl_incremental<TOUT, uint32_t>(output, input, _info, stream); \
+                break;                                                \
+            case INFINI_DTYPE_U64:                                    \
+                metax_cast_impl_incremental<TOUT, uint64_t>(output, input, _info, stream); \
+                break;                                                \
+            case INFINI_DTYPE_F16:                                    \
+                metax_cast_impl_incremental<TOUT, fp16_t>(output, input, _info, stream); \
+                break;                                                \
+            case INFINI_DTYPE_F32:                                    \
+                metax_cast_impl_incremental<TOUT, float>(output, input, _info, stream); \
+                break;                                                \
+            case INFINI_DTYPE_F64:                                    \
+                metax_cast_impl_incremental<TOUT, double>(output, input, _info, stream); \
+                break;                                                \
+            default:                                                  \
+                return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;                 \
+            }                                                         \
+            break;                                                    \
+        }
+
+    switch (_info.dt_out) {
+        CASE_OUT(INFINI_DTYPE_I32, int32_t);
+        CASE_OUT(INFINI_DTYPE_I64, int64_t);
+        CASE_OUT(INFINI_DTYPE_U32, uint32_t);
+        CASE_OUT(INFINI_DTYPE_U64, uint64_t);
+        CASE_OUT(INFINI_DTYPE_F16, fp16_t);
+        CASE_OUT(INFINI_DTYPE_F32, float);
+        CASE_OUT(INFINI_DTYPE_F64, double);
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    }
+
+    #undef CASE_OUT
+    return INFINI_STATUS_SUCCESS;
+}
+
+}; // namespace op::cast::metax
