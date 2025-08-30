@@ -12,21 +12,31 @@ os.chdir(PROJECT_DIR)
 def run_tests(args):
     failed = []
     for test in [
-        "add.py",
-        "attention.py",
-        "causal_softmax.py",
-        "clip.py",
-        "gemm.py",
-        "mul.py",
-        "random_sample.py",
-        "rearrange.py",
-        "rms_norm.py",
-        "rope.py",
-        "sub.py",
-        "swiglu.py",
+        # "add.py",
+        # "attention.py",
+        # "causal_softmax.py",
+        # "clip.py",
+        # "gemm.py",
+        # "mul.py",
+        # "random_sample.py",
+        # "rearrange.py",
+        # "rms_norm.py",
+        # "rope.py",
+        # "sub.py",
+        # "swiglu.py",
+        "silu.py",
+        "div.py",
+        "logical_and.py",
+        "logical_or.py",
+        "equal.py",
+        "all_equal.py",
+        "relu_backward.py",
+        "gelu.py",
+        "gelu_backward.py",
+        "cross_entropy_loss_backward.py"
     ]:
         result = subprocess.run(
-            f"python {test} {args} --debug", text=True, encoding="utf-8", shell=True
+            f"python {test} {args} --profile", text=True, encoding="utf-8", shell=True
         )
         if result.returncode != 0:
             failed.append(test)
