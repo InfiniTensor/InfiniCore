@@ -192,6 +192,8 @@ target_end()
 
 target("infinirt")
     set_kind("shared")
+    add_cxflags("-fPIC")
+    add_ldflags("-fPIC")
 
     if has_config("cpu") then
         add_deps("infinirt-cpu")

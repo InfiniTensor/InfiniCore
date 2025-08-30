@@ -2,9 +2,12 @@
 #define __INFINIOP_ELEMENTWISE_CUDA_H__
 
 #include "../../../utils.h"
+#include "elementwise_nvidia_api.cuh"
+
+#ifdef __CUDACC__
+
 #include "../../devices/nvidia/nvidia_common.cuh"
 #include "../../devices/nvidia/nvidia_kernel_common.cuh"
-#include "elementwise_nvidia_api.cuh"
 
 namespace op::elementwise::nvidia {
 
@@ -265,9 +268,9 @@ private:
      * @param info                   Elementwise operation metadata (shapes, strides, flags, etc.).
      * @param workspace              Pointer to device workspace memory for storing metadata and input pointers.
      * @param h_inputs_arr           Host array of input tensor pointers.
-     * @param d_inputs_arr           Input reference to device array of input tensor pointers.
-     * @param d_input_contiguous     Input reference to device array indicating whether each input is contiguous.
-     * @param d_input_broadcasted    Input reference to device array indicating whether each input is broadcasted.
+     * @param d_inputs_arr           Output reference to device array of input tensor pointers.
+     * @param d_input_contiguous     Output reference to device array indicating whether each input is contiguous.
+     * @param d_input_broadcasted    Output reference to device array indicating whether each input is broadcasted.
      * @param d_output_shape         Output reference to device array holding the output tensor shape.
      * @param d_output_strides       Output reference to device array holding output tensor strides.
      * @param d_input_shapes         Output reference to flattened input tensor shapes (N * ndim).
@@ -415,5 +418,7 @@ infiniStatus_t DeviceImpl::calculate(const op::elementwise::ElementwiseInfo &inf
 }
 
 } // namespace op::elementwise::nvidia
+
+#endif // __CUDACC__
 
 #endif // __INFINIOP_ELEMENTWISE_CUDA_H__
