@@ -110,6 +110,16 @@ if has_config("metax-gpu") then
     includes("xmake/metax.lua")
 end
 
+option("hcdnn")
+    set_default(true)
+    set_showmenu(true)
+    set_description("Whether to compile hcdnn for Metax GPU")
+option_end()
+
+if has_config("hcdnn") then
+    add_defines("ENABLE_HCDNN_API")
+end
+
 -- 摩尔线程
 option("moore-gpu")
     set_default(false)

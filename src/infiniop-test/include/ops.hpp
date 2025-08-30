@@ -16,6 +16,13 @@ DECLARE_INFINIOP_TEST(add)
 DECLARE_INFINIOP_TEST(causal_softmax)
 DECLARE_INFINIOP_TEST(rearrange)
 DECLARE_INFINIOP_TEST(sub)
+DECLARE_INFINIOP_TEST(cross_entropy_loss)
+DECLARE_INFINIOP_TEST(averagepool)
+DECLARE_INFINIOP_TEST(averagepool_backward)
+DECLARE_INFINIOP_TEST(interpolate_nearest)
+DECLARE_INFINIOP_TEST(conv_backward)
+DECLARE_INFINIOP_TEST(maxpool)
+DECLARE_INFINIOP_TEST(maxpool_backward)
 
 #define REGISTER_INFINIOP_TEST(name)                      \
     {                                                     \
@@ -30,19 +37,26 @@ DECLARE_INFINIOP_TEST(sub)
 /*
  * Register all the tests here
  */
-#define TEST_BUILDER_MAPPINGS                  \
-    {                                          \
-        REGISTER_INFINIOP_TEST(gemm)           \
-        REGISTER_INFINIOP_TEST(random_sample)  \
-        REGISTER_INFINIOP_TEST(add)            \
-        REGISTER_INFINIOP_TEST(mul)            \
-        REGISTER_INFINIOP_TEST(clip)           \
-        REGISTER_INFINIOP_TEST(swiglu)         \
-        REGISTER_INFINIOP_TEST(rope)           \
-        REGISTER_INFINIOP_TEST(rms_norm)       \
-        REGISTER_INFINIOP_TEST(causal_softmax) \
-        REGISTER_INFINIOP_TEST(rearrange)      \
-        REGISTER_INFINIOP_TEST(sub)            \
+#define TEST_BUILDER_MAPPINGS                        \
+    {                                                \
+        REGISTER_INFINIOP_TEST(gemm)                 \
+        REGISTER_INFINIOP_TEST(random_sample)        \
+        REGISTER_INFINIOP_TEST(add)                  \
+        REGISTER_INFINIOP_TEST(mul)                  \
+        REGISTER_INFINIOP_TEST(clip)                 \
+        REGISTER_INFINIOP_TEST(swiglu)               \
+        REGISTER_INFINIOP_TEST(rope)                 \
+        REGISTER_INFINIOP_TEST(rms_norm)             \
+        REGISTER_INFINIOP_TEST(causal_softmax)       \
+        REGISTER_INFINIOP_TEST(rearrange)            \
+        REGISTER_INFINIOP_TEST(sub)                  \
+        REGISTER_INFINIOP_TEST(cross_entropy_loss)   \
+        REGISTER_INFINIOP_TEST(averagepool)          \
+        REGISTER_INFINIOP_TEST(averagepool_backward) \
+        REGISTER_INFINIOP_TEST(interpolate_nearest)  \
+        REGISTER_INFINIOP_TEST(conv_backward)        \
+        REGISTER_INFINIOP_TEST(maxpool)              \
+        REGISTER_INFINIOP_TEST(maxpool_backward)     \
     }
 
 namespace infiniop_test {
