@@ -2,7 +2,13 @@ import numpy as np
 import gguf
 from typing import List, Optional, Tuple
 
-from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides
+from .. import (
+    InfiniopTestWriter,
+    InfiniopTestCase,
+    np_dtype_to_ggml,
+    gguf_strides,
+    contiguous_gguf_strides,
+)
 
 
 def clip(
@@ -35,7 +41,7 @@ def random_tensor(shape, dtype):
     Returns:
         Random tensor with the specified shape and dtype
     """
-    return (np.random.rand(*shape).astype(dtype) * 4.0 - 2.0)
+    return np.random.rand(*shape).astype(dtype) * 4.0 - 2.0
 
 
 class ClipTestCase(InfiniopTestCase):
@@ -52,7 +58,7 @@ class ClipTestCase(InfiniopTestCase):
         max_val: np.ndarray,
         max_stride: Optional[List[int]],
         y: np.ndarray,
-        y_shape:  Optional[List[int]],
+        y_shape: Optional[List[int]],
         y_stride: Optional[List[int]],
     ):
         super().__init__("clip")
@@ -63,7 +69,7 @@ class ClipTestCase(InfiniopTestCase):
         self.max_val = max_val
         self.max_stride = max_stride
         self.y = y
-        self.y_shape=y_shape
+        self.y_shape = y_shape
         self.y_stride = y_stride
 
     def write_test(self, test_writer: "InfiniopTestWriter"):
@@ -71,56 +77,63 @@ class ClipTestCase(InfiniopTestCase):
 
         # Add strides as arrays if they exist
         if self.x_stride is not None:
-            test_writer.add_array(test_writer.gguf_key("x.strides"), gguf_strides(*self.x_stride))
+            test_writer.add_array(
+                test_writer.gguf_key("x.strides"), gguf_strides(*self.x_stride)
+            )
         if self.min_stride is not None:
-            test_writer.add_array(test_writer.gguf_key("min_val.strides"), gguf_strides(*self.min_stride))
+            test_writer.add_array(
+                test_writer.gguf_key("min_val.strides"), gguf_strides(*self.min_stride)
+            )
         if self.max_stride is not None:
-            test_writer.add_array(test_writer.gguf_key("max_val.strides"), gguf_strides(*self.max_stride))
+            test_writer.add_array(
+                test_writer.gguf_key("max_val.strides"), gguf_strides(*self.max_stride)
+            )
         if self.y_shape is not None:
             test_writer.add_array(test_writer.gguf_key("y.shape"), self.y_shape)
         test_writer.add_array(
             test_writer.gguf_key("y.strides"),
-            gguf_strides(*self.y_stride if self.y_stride is not None else contiguous_gguf_strides(self.y_shape))
+            gguf_strides(
+                *(
+                    self.y_stride
+                    if self.y_stride is not None
+                    else contiguous_gguf_strides(self.y_shape)
+                )
+            ),
         )
 
         # Add tensors to the test
         test_writer.add_tensor(
-            test_writer.gguf_key("x"),
-            self.x,
-            raw_dtype=np_dtype_to_ggml(self.x.dtype)
+            test_writer.gguf_key("x"), self.x, raw_dtype=np_dtype_to_ggml(self.x.dtype)
         )
 
         test_writer.add_tensor(
             test_writer.gguf_key("min_val"),
             self.min_val,
-            raw_dtype=np_dtype_to_ggml(self.min_val.dtype)
+            raw_dtype=np_dtype_to_ggml(self.min_val.dtype),
         )
 
         test_writer.add_tensor(
             test_writer.gguf_key("max_val"),
             self.max_val,
-            raw_dtype=np_dtype_to_ggml(self.max_val.dtype)
+            raw_dtype=np_dtype_to_ggml(self.max_val.dtype),
         )
 
         test_writer.add_tensor(
-            test_writer.gguf_key("y"),
-            self.y,
-            raw_dtype=np_dtype_to_ggml(self.y.dtype)
+            test_writer.gguf_key("y"), self.y, raw_dtype=np_dtype_to_ggml(self.y.dtype)
         )
 
         # Calculate the expected result
         ans = clip(
             self.x.astype(np.float64),
             self.min_val.astype(np.float64),
-            self.max_val.astype(np.float64)
+            self.max_val.astype(np.float64),
         )
 
         # Add the expected result to the test
         test_writer.add_tensor(
-            test_writer.gguf_key("ans"),
-            ans,
-            raw_dtype=gguf.GGMLQuantizationType.F64
+            test_writer.gguf_key("ans"), ans, raw_dtype=gguf.GGMLQuantizationType.F64
         )
+
 
 if __name__ == "__main__":
     test_writer = InfiniopTestWriter("clip.gguf")
@@ -130,23 +143,23 @@ if __name__ == "__main__":
 
     # Test case shapes
     shapes = [
-        (10,),                # 1D tensor
-        (5, 10),              # 2D tensor
-        (2, 3, 4),            # 3D tensor
-        (7, 13),              # Prime dimensions
-        (1, 1),               # Minimum shape
-        (100, 100),           # Large shape
-        (16, 16, 16),         # Large 3D
+        (10,),  # 1D tensor
+        (5, 10),  # 2D tensor
+        (2, 3, 4),  # 3D tensor
+        (7, 13),  # Prime dimensions
+        (1, 1),  # Minimum shape
+        (100, 100),  # Large shape
+        (16, 16, 16),  # Large 3D
     ]
 
     # Test case min/max values
     min_max_values = [
-        (-1.0, 1.0),          # Standard range
-        (0.0, 2.0),           # Positive range
-        (-2.0, 0.0),          # Negative range
-        (-1000.0, 1000.0),    # Large range
-        (-0.001, 0.001),      # Small range
-        (0.0, 0.0),           # min=max
+        (-1.0, 1.0),  # Standard range
+        (0.0, 2.0),  # Positive range
+        (-2.0, 0.0),  # Negative range
+        (-1000.0, 1000.0),  # Large range
+        (-0.001, 0.001),  # Small range
+        (0.0, 0.0),  # min=max
     ]
 
     # Data types to test
@@ -171,7 +184,7 @@ if __name__ == "__main__":
                         max_stride=None,
                         y=y,
                         y_shape=shape,
-                        y_stride=None
+                        y_stride=None,
                     )
                 )
 
@@ -199,7 +212,7 @@ if __name__ == "__main__":
                     max_stride=row_stride,
                     y=y,
                     y_shape=shape,
-                    y_stride=row_stride
+                    y_stride=row_stride,
                 )
             )
 
@@ -219,7 +232,7 @@ if __name__ == "__main__":
                     max_stride=col_stride,
                     y=y,
                     y_shape=shape,
-                    y_stride=col_stride
+                    y_stride=col_stride,
                 )
             )
 
@@ -239,7 +252,7 @@ if __name__ == "__main__":
                     max_stride=row_stride,
                     y=y,
                     y_shape=shape,
-                    y_stride=col_stride
+                    y_stride=col_stride,
                 )
             )
 

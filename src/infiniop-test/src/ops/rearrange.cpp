@@ -12,9 +12,9 @@ struct Test::Attributes {
 std::shared_ptr<Test> Test::build(
     std::unordered_map<std::string, std::vector<uint8_t>> attributes,
     std::unordered_map<std::string, std::shared_ptr<Tensor>> tensors,
-    double rtol, double atol) {
+    double rtol, double atol, bool equal_nan) {
 
-    auto test = std::shared_ptr<Test>(new Test(rtol, atol));
+    auto test = std::shared_ptr<Test>(new Test(rtol, atol, equal_nan));
     test->_attributes = new Attributes();
     if (!check_names(attributes, Test::attribute_names()) || !check_names(tensors, Test::tensor_names())) {
         throw std::runtime_error("Invalid Test");

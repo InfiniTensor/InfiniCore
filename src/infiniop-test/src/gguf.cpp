@@ -53,7 +53,9 @@ GGUFFileReader::GGUFFileReader(const std::string &filepath) {
     try {
         _file = std::make_shared<FileMapping>(filepath);
     } catch (const std::exception &e) {
-        throw e;
+        // throw e;
+        std::cerr << "Error: " << e.what() << std::endl;
+        // throw e;
     }
     _data = _file->ptr();
     _cursor = reinterpret_cast<uint8_t *>(_data);
