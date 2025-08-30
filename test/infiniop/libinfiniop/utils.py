@@ -78,6 +78,8 @@ class TestTensor(CTensor):
             self._torch_tensor = torch.ones(
                 torch_shape, dtype=to_torch_dtype(dt), device=torch_device_map[device]
             )
+        elif mode == "randint":
+            self._torch_tensor = torch.randint(-2000000000,2000000000, torch_shape,dtype=to_torch_dtype(dt), device=torch_device_map[device])
         elif mode == "manual":
             assert set_tensor is not None
             assert torch_shape == list(set_tensor.shape)

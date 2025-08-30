@@ -34,7 +34,7 @@ public:
         }
         if (atype == INFINI_DTYPE_F16 || atype == INFINI_DTYPE_BF16) {
             // For half-precision types (FP16/BF16), weights can be the same half-precision type or FP32
-            if (wtype != atype && wtype != INFINI_DTYPE_F32) {
+            if (wtype != atype && wtype != INFINI_DTYPE_F32 && wtype != INFINI_DTYPE_BF16 && wtype != INFINI_DTYPE_F16) {
                 return INFINI_STATUS_BAD_TENSOR_DTYPE;
             }
         } else if (atype == INFINI_DTYPE_F32 || atype == INFINI_DTYPE_F64) {
