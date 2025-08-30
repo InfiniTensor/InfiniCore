@@ -1,3 +1,6 @@
+from enum import IntEnum
+
+
 class InfiniDtype:
     INVALID = 0
     BYTE = 1
@@ -43,3 +46,9 @@ InfiniDtypeNames = {
     InfiniDtype.C64: "C64",
     InfiniDtype.BF16: "BF16",
 }
+
+
+class InfiniDivMode(IntEnum):
+    DEFAULT = 0
+    TRUNC = 1
+    FLOOR = 2
