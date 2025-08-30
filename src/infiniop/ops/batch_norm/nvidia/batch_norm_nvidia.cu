@@ -1,0 +1,186 @@
+#include "../../../devices/nvidia/nvidia_handle.cuh"
+#include "../../../devices/nvidia/nvidia_common.cuh"
+#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
+
+#include "batch_norm_nvidia.cuh"
+
+#include <cub/block/block_reduce.cuh>
+#include "../../../reduce/cuda/reduce.cuh"
+#include "../cuda/kernel.cuh"
+
+
+#include "../info.h"
+
+namespace op::batch_norm::nvidia {
+
+//  ---------------------- start: launchKernel: call kernel function of CUDA -----------------------
+template <unsigned int BLOCK_SIZE, typename Tdata, typename Tcompute>
+INFINIOP_CUDA_KERNEL launchKernel(
+    Tdata * output,
+    Tdata * running_mean,
+    Tdata * running_var,
+    const Tdata * input,
+    const Tdata * weight,
+    const Tdata * bias,
+
+    size_t batch_size,
+    size_t channel_size,
+    size_t dim_size,
+    ptrdiff_t running_mean_stride,
+    ptrdiff_t running_var_stride,
+    ptrdiff_t weight_stride,
+    ptrdiff_t bias_stride,
+
+    float momentum,
+    float eps
+) {
+
+    batchNormKernel<BLOCK_SIZE, Tdata, Tcompute>(
+        output,
+        running_mean,
+        running_var,
+        input,
+        weight,
+        bias,
+
+        batch_size,
+        channel_size,
+        dim_size,
+
+        running_mean_stride,
+        running_var_stride,
+        weight_stride,
+        bias_stride,
+
+        momentum,
+        eps
+    );
+}
+//  ----------------------- end: launchKernel: call kernel function of CUDA ------------------------
+
+//  ----------------------------------- start: call launchKernel -----------------------------------
+template<unsigned int BLOCK_SIZE, typename Tdata>
+infiniStatus_t calculate_batch_norm(
+    const BatchNormInfo &info,
+    Tdata * output,
+    Tdata * running_mean,
+    Tdata * running_var,
+    const Tdata * input,
+    const Tdata * weight,
+    const Tdata * bias,
+
+    cudaStream_t stream
+) {
+    launchKernel<BLOCK_SIZE, Tdata, float><<<info.channel_size, BLOCK_SIZE, 0, stream>>>(
+        output,
+        running_mean,
+        running_var,
+        input,
+        weight,
+        bias,
+
+        info.batch_size,
+        info.channel_size,
+        info.dim_size,
+
+        info.running_mean_stride,
+        info.running_var_stride,
+        info.weight_stride,
+        info.bias_stride,
+        info.momentum,
+        info.eps
+    );
+    return INFINI_STATUS_SUCCESS;
+}
+//  ------------------------------------ end: call launchKernel ------------------------------------
+
+
+struct Descriptor::Opaque {
+    std::shared_ptr<device::nvidia::Handle::Internal> internal;
+};
+
+Descriptor::~Descriptor() {
+    delete _opaque;
+}
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t output_desc,
+    infiniopTensorDescriptor_t running_mean_desc,
+    infiniopTensorDescriptor_t running_var_desc,
+    infiniopTensorDescriptor_t input_desc,
+    infiniopTensorDescriptor_t weight_desc,
+    infiniopTensorDescriptor_t bias_desc,
+    float momentum,
+    float eps
+) {
+    auto handle = reinterpret_cast<device::nvidia::Handle *>(handle_);
+//  --------------------- start: check data type and calculate workspace size ----------------------
+    auto dtype = output_desc->dtype();
+    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_BF16);
+    size_t WorkSpaceSize = 0;
+//  ---------------------- end: check data type and calculate workspace size -----------------------
+    auto result = BatchNormInfo::createBatchNormInfo(
+        output_desc,
+        running_mean_desc,
+        running_var_desc,
+        input_desc,
+        weight_desc,
+        bias_desc,
+        momentum,
+        eps
+    );
+    CHECK_RESULT(result);
+    const BatchNormInfo &info = result.take();
+    *desc_ptr = new Descriptor(
+        dtype, std::move(info), WorkSpaceSize,
+        new Opaque{handle->internal()},
+        handle->device, handle->device_id
+    );    
+    return INFINI_STATUS_SUCCESS;
+}
+
+
+infiniStatus_t Descriptor::calculate(
+    void * workspace,
+    size_t workspace_size,
+    void * output,
+    void * running_mean,
+    void * running_var,
+    const void * input,
+    const void * weight,
+    const void * bias,
+    void *stream_
+) const {
+    if (workspace_size < _workspace_size) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+    cudaStream_t stream = (cudaStream_t)stream_;
+
+    #define CALCULATE_BATCH_NORM(BLOCK_SIZE, TDATA) \
+        calculate_batch_norm<BLOCK_SIZE, TDATA>(_info, (TDATA *)output, (TDATA *)running_mean, (TDATA *)running_var, (const TDATA *)input, (const TDATA *)weight, (const TDATA *)bias, stream)
+    #define CALCULATE_BATCH_NORM_WITH_BLOCK_SIZE(BLOCK_SIZE)          \
+    {                                                                 \
+        if (_info.dtype == INFINI_DTYPE_F16)                          \
+            return CALCULATE_BATCH_NORM(BLOCK_SIZE, half);            \
+        else if (_info.dtype == INFINI_DTYPE_F32)                     \
+            return CALCULATE_BATCH_NORM(BLOCK_SIZE, float);           \
+        else if (_info.dtype == INFINI_DTYPE_BF16)                    \
+            return CALCULATE_BATCH_NORM(BLOCK_SIZE, __nv_bfloat16);   \
+        else                                                          \
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;                    \
+    }
+    
+    if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_1024)
+        CALCULATE_BATCH_NORM_WITH_BLOCK_SIZE(CUDA_BLOCK_SIZE_1024)
+    else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_512)
+        CALCULATE_BATCH_NORM_WITH_BLOCK_SIZE(CUDA_BLOCK_SIZE_512)
+    else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_4096)
+        CALCULATE_BATCH_NORM_WITH_BLOCK_SIZE(CUDA_BLOCK_SIZE_4096)
+    else
+        return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
+
+    return INFINI_STATUS_SUCCESS;
+}
+} // namespace op::batch_norm::nvidia

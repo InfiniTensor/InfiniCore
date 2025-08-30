@@ -16,6 +16,13 @@ DECLARE_INFINIOP_TEST(add)
 DECLARE_INFINIOP_TEST(causal_softmax)
 DECLARE_INFINIOP_TEST(rearrange)
 DECLARE_INFINIOP_TEST(sub)
+DECLARE_INFINIOP_TEST(reduce_max)
+DECLARE_INFINIOP_TEST(reduce_mean)
+DECLARE_INFINIOP_TEST(batch_norm)
+DECLARE_INFINIOP_TEST(batch_norm_backward)
+DECLARE_INFINIOP_TEST(layer_norm)
+DECLARE_INFINIOP_TEST(layer_norm_backward)
+DECLARE_INFINIOP_TEST(rms_norm_backward)
 
 #define REGISTER_INFINIOP_TEST(name)                      \
     {                                                     \
@@ -43,6 +50,13 @@ DECLARE_INFINIOP_TEST(sub)
         REGISTER_INFINIOP_TEST(causal_softmax) \
         REGISTER_INFINIOP_TEST(rearrange)      \
         REGISTER_INFINIOP_TEST(sub)            \
+        REGISTER_INFINIOP_TEST(reduce_max)                  \
+        REGISTER_INFINIOP_TEST(reduce_mean)                 \
+        REGISTER_INFINIOP_TEST(batch_norm)                  \
+        REGISTER_INFINIOP_TEST(batch_norm_backward)         \
+        REGISTER_INFINIOP_TEST(layer_norm)                  \
+        REGISTER_INFINIOP_TEST(layer_norm_backward)         \
+        REGISTER_INFINIOP_TEST(rms_norm_backward)           \
     }
 
 namespace infiniop_test {
