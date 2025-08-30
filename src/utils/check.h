@@ -59,4 +59,22 @@
 
 #define CHECK_SAME_STRIDES(FIRST, ...) CHECK_SAME_VEC(INFINI_STATUS_BAD_TENSOR_STRIDES, FIRST, __VA_ARGS__)
 
+#define CHECK_REDUCE_SHAPE(INPUT_SHAPE, DIM, EXPECTED_SHAPE) \
+    do {                                                     \
+        if (INPUT_SHAPE.empty()) {                           \
+            if (!EXPECTED_SHAPE.empty()) {                   \
+                return INFINI_STATUS_BAD_TENSOR_SHAPE;       \
+            }                                                \
+            break;                                           \
+        }                                                    \
+        if (DIM >= INPUT_SHAPE.size()) {                     \
+            return INFINI_STATUS_BAD_PARAM;                  \
+        }                                                    \
+        std::vector<size_t> reduced_shape = INPUT_SHAPE;     \
+        reduced_shape[DIM] = 1;                              \
+        if (reduced_shape != EXPECTED_SHAPE) {               \
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;           \
+        }                                                    \
+    } while (0)
+
 #endif // INFINIUTILS_CHECK_H
