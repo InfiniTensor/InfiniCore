@@ -2,7 +2,7 @@
 #include "../../../../utils.h"
 #include "../../../devices/kunlun/kunlun_common.h"
 #include "../../../devices/kunlun/kunlun_handle.h"
-#include <xpu/refactor/context/xpu_act_type.h>
+
 namespace op::conv::kunlun {
 
 struct Descriptor::Opaque {
@@ -96,7 +96,7 @@ infiniStatus_t conv_kernel(
                                                                                 stride, pad,
                                                                                 dilation, 1, nullptr,
                                                                                 nullptr, nullptr, true, bias_F32,
-                                                                                nullptr, baidu::xpu::api::Activation_t::LINEAR,
+                                                                                nullptr, xdnn::Activation_t::LINEAR,
                                                                                 nullptr)));
                 return INFINI_STATUS_SUCCESS;
             }));
@@ -117,7 +117,7 @@ infiniStatus_t conv_kernel(
                                                                                 stride, pad,
                                                                                 dilation, 1, nullptr,
                                                                                 nullptr, nullptr, true, bias_F32,
-                                                                                nullptr, baidu::xpu::api::Activation_t::LINEAR, nullptr,
+                                                                                nullptr, xdnn::Activation_t::LINEAR, nullptr,
                                                                                 nullptr, -1)));
                 return INFINI_STATUS_SUCCESS;
             }));
@@ -137,7 +137,7 @@ infiniStatus_t conv_kernel(
                                                                                 stride, pad,
                                                                                 dilation, 1, nullptr,
                                                                                 nullptr, nullptr, true, bias_F32,
-                                                                                nullptr, baidu::xpu::api::Activation_t::LINEAR,
+                                                                                nullptr, xdnn::Activation_t::LINEAR,
                                                                                 nullptr)));
                 return INFINI_STATUS_SUCCESS;
             }));
