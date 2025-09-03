@@ -8,11 +8,17 @@
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
 #include "nvidia/random_sample_nvidia.cuh"
 #endif
+#ifdef ENABLE_CAMBRICON_API
+#include "bang/random_sample_bang.h"
+#endif
 #ifdef ENABLE_METAX_API
 #include "metax/random_sample_metax.h"
 #endif
 #ifdef ENABLE_ASCEND_API
 #include "ascend/random_sample_aclnn.h"
+#endif
+#ifdef ENABLE_MOORE_API
+#include "moore/random_sample_moore.h"
 #endif
 
 __C infiniStatus_t
@@ -41,11 +47,17 @@ infiniopCreateRandomSampleDescriptor(
 #ifdef ENABLE_ILUVATAR_API
         CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
+#ifdef ENABLE_CAMBRICON_API
+        CREATE(INFINI_DEVICE_CAMBRICON, bang);
+#endif
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_ASCEND_API
         CREATE(INFINI_DEVICE_ASCEND, ascend);
+#endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore);
 #endif
 
     default:
@@ -77,11 +89,17 @@ __C infiniStatus_t infiniopGetRandomSampleWorkspaceSize(
 #ifdef ENABLE_ILUVATAR_API
         GET(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
+#ifdef ENABLE_CAMBRICON_API
+        GET(INFINI_DEVICE_CAMBRICON, bang);
+#endif
 #ifdef ENABLE_METAX_API
         GET(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_ASCEND_API
         GET(INFINI_DEVICE_ASCEND, ascend);
+#endif
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, moore);
 #endif
 
     default:
@@ -123,11 +141,17 @@ __C infiniStatus_t infiniopRandomSample(
 #ifdef ENABLE_ILUVATAR_API
         CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
+#ifdef ENABLE_CAMBRICON_API
+        CALCULATE(INFINI_DEVICE_CAMBRICON, bang);
+#endif
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_ASCEND_API
         CALCULATE(INFINI_DEVICE_ASCEND, ascend);
+#endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore);
 #endif
 
     default:
@@ -156,11 +180,17 @@ __C infiniStatus_t infiniopDestroyRandomSampleDescriptor(
 #ifdef ENABLE_ILUVATAR_API
         DELETE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
+#ifdef ENABLE_CAMBRICON_API
+        DELETE(INFINI_DEVICE_CAMBRICON, bang);
+#endif
 #ifdef ENABLE_METAX_API
         DELETE(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_ASCEND_API
         DELETE(INFINI_DEVICE_ASCEND, ascend);
+#endif
+#ifdef ENABLE_MOORE_API
+        DELETE(INFINI_DEVICE_MOORE, moore);
 #endif
 
     default:

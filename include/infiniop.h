@@ -7,6 +7,7 @@
 #include "infiniop/ops/causal_softmax.h"
 #include "infiniop/ops/clip.h"
 #include "infiniop/ops/conv.h"
+#include "infiniop/ops/dequantize.h"
 #include "infiniop/ops/flash_attention.h"
 #include "infiniop/ops/flash_attention_backward.h"
 #include "infiniop/ops/gemm.h"
@@ -16,8 +17,10 @@
 #include "infiniop/ops/relu.h"
 #include "infiniop/ops/rms_norm.h"
 #include "infiniop/ops/rope.h"
+#include "infiniop/ops/rope_v2.h"
 #include "infiniop/ops/sub.h"
 #include "infiniop/ops/swiglu.h"
+#include "infiniop/ops/topkrouter.h"
 #include "infiniop/tensor_descriptor.h"
 
 #endif // __INFINIOP_API_H__

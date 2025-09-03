@@ -11,8 +11,8 @@
 
 #define CHECK_MOORE(API) CHECK_INTERNAL(API, musaSuccess)
 
-using musa_bfloat16 = mt_bfloat16;
-using musa_bfloat162 = mt_bfloat162;
+using cuda_bfloat16 = mt_bfloat16;
+using cuda_bfloat162 = mt_bfloat162;
 
 namespace device::moore {
 
@@ -50,6 +50,11 @@ indexToOffset(
 __forceinline__ __device__ float
 exp_(const float val) {
     return expf(val);
+}
+
+__forceinline__ __device__ long double
+exp_(const long double val) {
+    return exp(val);
 }
 
 __forceinline__ __device__ double

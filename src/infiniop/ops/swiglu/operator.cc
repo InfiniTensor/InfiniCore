@@ -20,6 +20,9 @@
 #ifdef ENABLE_ASCEND_API
 #include "ascend/swiglu_ascend.h"
 #endif
+#ifdef ENABLE_MOORE_API
+#include "moore/swiglu_moore.h"
+#endif
 
 __C infiniStatus_t infiniopCreateSwiGLUDescriptor(
     infiniopHandle_t handle,
@@ -60,10 +63,8 @@ __C infiniStatus_t infiniopCreateSwiGLUDescriptor(
 #ifdef ENABLE_ASCEND_API
         CREATE(INFINI_DEVICE_ASCEND, ascend);
 #endif
-#ifdef ENABLE_MTHREADS_GPU
-    case DevMthreadsGpu:
-        return musaCreateSwiGLUDescriptor(
-            handle, (SwiGLUMusaDescriptor_t *)desc_ptr, c_desc, a_desc, b_desc);
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore);
 #endif
 
     default:
@@ -102,10 +103,8 @@ __C infiniStatus_t infiniopGetSwiGLUWorkspaceSize(infiniopSwiGLUDescriptor_t des
 #ifdef ENABLE_ASCEND_API
         GET(INFINI_DEVICE_ASCEND, ascend);
 #endif
-#ifdef ENABLE_MTHREADS_GPU
-    case DevMthreadsGpu: {
-        return musaGetSwiGLUWorkspaceSize((SwiGLUMusaDescriptor_t)desc, size);
-    }
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, moore);
 #endif
     }
 
@@ -151,9 +150,8 @@ __C infiniStatus_t infiniopSwiGLU(
 #ifdef ENABLE_ASCEND_API
         CALCULATE(INFINI_DEVICE_ASCEND, ascend);
 #endif
-#ifdef ENABLE_MTHREADS_GPU
-    case DevMthreadsGpu:
-        return musaSwiGLU((SwiGLUMusaDescriptor_t)desc, c, a, b, stream);
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore);
 #endif
 
     default:
@@ -194,9 +192,8 @@ infiniopDestroySwiGLUDescriptor(infiniopSwiGLUDescriptor_t desc) {
 #ifdef ENABLE_ASCEND_API
         DELETE(INFINI_DEVICE_ASCEND, ascend)
 #endif
-#ifdef ENABLE_MTHREADS_GPU
-    case DevMthreadsGpu:
-        return musaDestroySwiGLUDescriptor((SwiGLUMusaDescriptor_t)desc);
+#ifdef ENABLE_MOORE_API
+        DELETE(INFINI_DEVICE_MOORE, moore);
 #endif
 
     default:

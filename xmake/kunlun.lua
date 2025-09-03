@@ -3,14 +3,19 @@ local KUNLUN_HOME = os.getenv("KUNLUN_HOME")
 local XRE_DIR = path.join(KUNLUN_HOME, "xre")
 local XTDK_DIR = path.join(KUNLUN_HOME, "xtdk")
 local XDNN_DIR = path.join(KUNLUN_HOME, "xhpc", "xdnn")
+local XBLAS_DIR = path.join(KUNLUN_HOME, "xhpc", "xblas")
 
 -- Add include dirs
-add_includedirs(path.join(XRE_DIR, "include"))
-add_includedirs(path.join(XDNN_DIR, "include"))
-add_includedirs(path.join(XTDK_DIR, "include"))
+add_includedirs(path.join(XRE_DIR, "include"), {public = true})
+add_includedirs(path.join(XDNN_DIR, "include"), {public = true})
+add_includedirs(path.join(XTDK_DIR, "include"), {public = true})
+add_includedirs(path.join(XBLAS_DIR, "include"), {public = true})
+
+-- Add link dirs
 add_linkdirs(path.join(XRE_DIR, "so"))
 add_linkdirs(path.join(XDNN_DIR, "so"))
-add_links("xpurt", "xpuapi")
+add_linkdirs(path.join(XBLAS_DIR, "so"))
+add_links("xpurt", "xpuapi", "xpu_blas")
 
 rule("xpu")
     set_extensions(".xpu")
@@ -72,7 +77,7 @@ target("infiniop-kunlun")
         add_files(xpu_files, {
             rule = "xpu",
             includedirs = {
-                path.join(os.projectdir, "include"),
+                path.join(os.projectdir(), "include"),
                 path.join(XRE_DIR, "include"),
                 path.join(XDNN_DIR, "include"),
                 path.join(XTDK_DIR, "include")

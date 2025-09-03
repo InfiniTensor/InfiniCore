@@ -288,6 +288,9 @@ target("infiniccl")
     if has_config("ascend-npu") then
         add_deps("infiniccl-ascend")
     end
+    if has_config("cambricon-mlu") then
+        add_deps("infiniccl-cambricon")
+    end
     if has_config("metax-gpu") then
         add_deps("infiniccl-metax")
     end
@@ -295,6 +298,10 @@ target("infiniccl")
         add_deps("infiniccl-iluvatar")
     end
 
+    if has_config("moore-gpu") then
+        add_deps("infiniccl-moore")
+    end
+    
     set_languages("cxx17")
 
     add_files("src/infiniccl/*.cc")

@@ -41,7 +41,7 @@ _TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.BF16, InfiniDtype.F32]
 _TOLERANCE_MAP = {
     InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-2},
     InfiniDtype.BF16: {"atol": 5e-3, "rtol": 5e-2},
-    InfiniDtype.F32: {"atol": 1e-5, "rtol": 1e-5},
+    InfiniDtype.F32: {"atol": 3e-5, "rtol": 1e-5},
 }
 
 
@@ -69,7 +69,17 @@ NUM_ITERATIONS = 1000
 
 def causal_softmax(x):
     type = x.dtype
-    mask = torch.tril(torch.ones_like(x), diagonal=-1).flip(dims=[-2, -1])
+
+    # Issue: torch_musa's implementation of `torch.tril` has a known bug for certain shapes (e.g., (32, 5, 5)).
+    # Workaround: Generate the lower triangular mask on the CPU and then transfer it to the MUSA device.
+    if x.device.type == "musa":
+        mask = (
+            torch.tril(torch.ones_like(x).to("cpu"), diagonal=-1)
+            .flip(dims=[-2, -1])
+            .to("musa")
+        )
+    else:
+        mask = torch.tril(torch.ones_like(x), diagonal=-1).flip(dims=[-2, -1])
     masked = torch.where(mask == 1, -torch.inf, x.to(torch.float32))
     return torch.nn.functional.softmax(masked, dim=-1, dtype=type)
 

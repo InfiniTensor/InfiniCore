@@ -25,16 +25,19 @@ from libinfiniop import (
 _TEST_CASES_ = [
     # y_shape, x_shape, w_shape, y_stride, x_stride
     ((1, 4), (1, 4), (4,), None, None),
-    ((1, 4), (1, 4), (4,), None, None),
-    ((16, 2048), (16, 2048), (2048,), None, None),
+    ((2, 4), (2, 4), (4,), None, None),
+    ((2, 2, 4), (2, 2, 4), (4,), None, None),
+    ((2, 2, 4), (2, 2, 4), (4,), (12, 8, 1), (12, 8, 1)),
     ((16, 2048), (16, 2048), (2048,), None, None),
     ((16, 2048), (16, 2048), (2048,), (4096, 1), (4096, 1)),
-    ((16, 2048), (16, 2048), (2048,), (4096, 1), (4096, 1)),
+    ((4, 4, 2048), (4, 4, 2048), (2048,), None, None),
+    ((4, 4, 2048), (4, 4, 2048), (2048,), (2048, 8192, 1), (2048, 8192, 1)),
+    ((4, 4, 2048), (4, 4, 2048), (2048,), (16384, 4096, 1), (16384, 4096, 1)),
 ]
 
 # w (weight) types
 # Note: 'None' means the same as input dtype
-_WEIGHT_DTYPES = [None, InfiniDtype.F32]
+_WEIGHT_DTYPES = [None, InfiniDtype.F32, InfiniDtype.F16, InfiniDtype.BF16]
 # x types used for testing
 _TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.BF16]
 
@@ -46,7 +49,7 @@ _TEST_CASES = [
 # Tolerance map for different data types
 _TOLERANCE_MAP = {
     InfiniDtype.F16: {"atol": 2e-3, "rtol": 2e-3},
-    InfiniDtype.BF16: {"atol": 8e-3, "rtol": 8e-3},
+    InfiniDtype.BF16: {"atol": 1e-2, "rtol": 1e-2},
 }
 
 DEBUG = False

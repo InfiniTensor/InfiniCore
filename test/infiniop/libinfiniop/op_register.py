@@ -474,6 +474,42 @@ def rope_(lib):
 
 
 @OpRegister.operator
+def rope_v2_(lib):
+    lib.infiniopCreateRoPEv2Descriptor.restype = c_int32
+    lib.infiniopCreateRoPEv2Descriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetRoPEv2WorkspaceSize.restype = c_int32
+    lib.infiniopGetRoPEv2WorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopRoPEv2.restype = c_int32
+    lib.infiniopRoPEv2.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyRoPEv2Descriptor.restype = c_int32
+    lib.infiniopDestroyRoPEv2Descriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def sub_(lib):
     lib.infiniopCreateSubDescriptor.restype = c_int32
     lib.infiniopCreateSubDescriptor.argtypes = [
@@ -573,5 +609,76 @@ def conv_(lib):
     ]
     lib.infiniopDestroyConvDescriptor.restype = c_int32
     lib.infiniopDestroyConvDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+    
+@OpRegister.operator
+def topkrouter_(lib):
+    lib.infiniopCreateTopkrouterDescriptor.restype = c_int32
+    lib.infiniopCreateTopkrouterDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t
+    ]
+
+    lib.infiniopGetTopkrouterWorkspaceSize.restype = c_int32
+    lib.infiniopGetTopkrouterWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopTopkrouter.restype = c_int32
+    lib.infiniopTopkrouter.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_float,
+        c_size_t,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyTopkrouterDescriptor.restype = c_int32
+    lib.infiniopDestroyTopkrouterDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+
+@OpRegister.operator
+def dequantize_(lib):
+    lib.infiniopCreateDequantizeDescriptor.restype = c_int32
+    lib.infiniopCreateDequantizeDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+    lib.infiniopGetDequantizeWorkspaceSize.restype = c_int32
+    lib.infiniopGetDequantizeWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopDequantize.restype = c_int32
+    lib.infiniopDequantize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_size_t,
+        c_size_t,
+        c_size_t,
+        c_void_p,
+    ]
+    lib.infiniopDestroyDequantizeDescriptor.restype = c_int32
+    lib.infiniopDestroyDequantizeDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]

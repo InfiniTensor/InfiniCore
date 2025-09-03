@@ -102,7 +102,7 @@ bool InfiniopTensorDescriptor::isMergable(size_t dim_start, size_t dim_end) cons
     auto ndim_ = shape_.size();
 
     for (size_t i = 1; i < ndim_; i++) {
-        if (stride(i - 1) != static_cast<ptrdiff_t>(dim(i)) * stride(i)) {
+        if (strides_[i - 1] != static_cast<ptrdiff_t>(shape_[i]) * strides_[i]) {
             return false;
         }
     }

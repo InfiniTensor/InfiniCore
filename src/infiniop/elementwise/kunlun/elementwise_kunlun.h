@@ -3,6 +3,7 @@
 
 #include "../../../utils.h"
 #include "../../devices/kunlun/kunlun_common.h"
+#include "../../devices/kunlun/kunlun_handle.h"
 #include "../../devices/kunlun/kunlun_kernel_common.h"
 #include "elementwise_kunlun_api.h"
 

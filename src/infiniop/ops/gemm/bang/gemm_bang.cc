@@ -67,9 +67,7 @@ infiniStatus_t Descriptor::create(
     auto handle = reinterpret_cast<device::bang::cambricon::Handle *>(handle_);
     auto dtype = c_desc->dtype();
 
-    if (dtype != INFINI_DTYPE_F16 && dtype != INFINI_DTYPE_F32) {
-        return INFINI_STATUS_BAD_TENSOR_DTYPE;
-    }
+    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_BF16, INFINI_DTYPE_F32);
 
     auto result = MatmulInfo::create(c_desc, a_desc, b_desc, MatrixLayout::ROW_MAJOR);
     CHECK_RESULT(result);

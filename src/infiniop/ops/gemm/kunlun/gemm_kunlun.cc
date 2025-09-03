@@ -1,10 +1,10 @@
 #include "gemm_kunlun.h"
-#include "../../../../utils.h"
 #include "../../../devices/kunlun/kunlun_common.h"
+#include "../../../devices/kunlun/kunlun_xblas.h"
 
 namespace op::gemm::kunlun {
 
-typedef device::kunlun::Handle::Internal HandleInternal;
+typedef device::kunlun::blas::Handle::Internal HandleInternal;
 
 struct Descriptor::Opaque {
     std::shared_ptr<HandleInternal> internal;
@@ -20,14 +20,12 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t c_desc,
     infiniopTensorDescriptor_t a_desc,
     infiniopTensorDescriptor_t b_desc) {
-    auto handle = reinterpret_cast<device::kunlun::Handle *>(handle_);
+    auto handle = reinterpret_cast<device::kunlun::blas::Handle *>(handle_);
     auto dtype = c_desc->dtype();
 
-    if (dtype != INFINI_DTYPE_F16 && dtype != INFINI_DTYPE_F32) {
-        return INFINI_STATUS_BAD_TENSOR_DTYPE;
-    }
+    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_BF16);
 
-    auto result = MatmulInfo::create(c_desc, a_desc, b_desc, MatrixLayout::ROW_MAJOR);
+    auto result = MatmulInfo::create(c_desc, a_desc, b_desc, MatrixLayout::COL_MAJOR);
     CHECK_RESULT(result);
 
     *desc_ptr = new Descriptor(
@@ -37,75 +35,74 @@ infiniStatus_t Descriptor::create(
     return INFINI_STATUS_SUCCESS;
 }
 
-template <class Tdata>
-infiniStatus_t calculate(
-    MatmulInfo info,
-    std::shared_ptr<HandleInternal> internal,
-    infiniDtype_t dtype,
-    void *c,
-    float beta,
-    const void *a,
-    const void *b,
-    float alpha,
-    kunlunStream_t stream) {
-
-    if (info.is_transed) {
-        std::swap(a, b);
-    }
-
-    auto transA = info.a_matrix.col_stride == 1 ? false : true;
-    auto transB = info.b_matrix.col_stride == 1 ? false : true;
-
-    auto unit = infiniSizeOf(dtype);
-
-    CHECK_STATUS(internal->useXdnn(
-        (kunlunStream_t)stream,
-        [&](xdnnHandle_t handle) {
-            for (size_t i = 0; i < info.batch; i++) {
-                CHECK_KUNLUN((xdnn::fc_fusion<Tdata, Tdata, Tdata, int16_t>(
-                    handle,
-                    (Tdata *)((char *)a + i * info.a_matrix.stride * unit),
-                    (Tdata *)((char *)b + i * info.b_matrix.stride * unit),
-                    (Tdata *)((char *)c + i * info.c_matrix.stride * unit),
-                    info.m,
-                    info.n,
-                    info.k,
-                    transA,
-                    transB,
-                    nullptr,
-                    nullptr,
-                    nullptr,
-                    info.a_matrix.ld(),
-                    info.b_matrix.ld(),
-                    info.c_matrix.ld(),
-                    alpha,
-                    beta,
-                    nullptr,
-                    xdnn::Activation_t::LINEAR,
-                    nullptr)));
-            }
-            return INFINI_STATUS_SUCCESS;
-        }));
-    return INFINI_STATUS_SUCCESS;
-}
-
 infiniStatus_t Descriptor::calculate(
     void *workspace,
-    size_t worksapce_size,
+    size_t workspace_size,
     void *c,
     float beta,
     const void *a,
     const void *b,
     float alpha,
     void *stream) const {
+
+    cudaDataType a_type, b_type, c_type;
+    cublasComputeType_t compute_type;
+
     switch (_dtype) {
     case INFINI_DTYPE_F16:
-        return op::gemm::kunlun::calculate<float16>(_info, _opaque->internal, _dtype, c, beta, a, b, alpha, (kunlunStream_t)stream);
+        a_type = b_type = c_type = CUDA_R_16F;
+        compute_type = CUBLAS_COMPUTE_32F;
+        break;
+    case INFINI_DTYPE_BF16:
+        a_type = b_type = c_type = CUDA_R_16BF;
+        compute_type = CUBLAS_COMPUTE_32F;
+        break;
     case INFINI_DTYPE_F32:
-        return op::gemm::kunlun::calculate<float>(_info, _opaque->internal, _dtype, c, beta, a, b, alpha, (kunlunStream_t)stream);
+        a_type = b_type = c_type = CUDA_R_32F;
+        compute_type = CUBLAS_COMPUTE_32F_FAST_TF32;
+        break;
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
+
+    if (_info.is_transed) {
+        std::swap(a, b);
+    }
+
+    auto op_a = _info.a_matrix.row_stride == 1 ? CUBLAS_OP_N : CUBLAS_OP_T;
+    auto op_b = _info.b_matrix.row_stride == 1 ? CUBLAS_OP_N : CUBLAS_OP_T;
+
+    CHECK_STATUS(_opaque->internal->useCublas(
+        (cudaStream_t)stream,
+        [&](cublasHandle_t handle) {
+            CHECK_CUBLAS(
+                cublasGemmStridedBatchedEx(
+                    handle,
+                    op_a,
+                    op_b,
+                    static_cast<int>(_info.m),
+                    static_cast<int>(_info.n),
+                    static_cast<int>(_info.k),
+                    &alpha,
+                    a,
+                    a_type,
+                    static_cast<int>(_info.a_matrix.ld()),
+                    _info.a_matrix.stride,
+                    b,
+                    b_type,
+                    static_cast<int>(_info.b_matrix.ld()),
+                    _info.b_matrix.stride,
+                    &beta,
+                    c,
+                    c_type,
+                    static_cast<int>(_info.c_matrix.ld()),
+                    _info.c_matrix.stride,
+                    static_cast<int>(_info.batch),
+                    compute_type,
+                    CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+            return INFINI_STATUS_SUCCESS;
+        }));
+    return INFINI_STATUS_SUCCESS;
 }
 
 } // namespace op::gemm::kunlun

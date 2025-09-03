@@ -11,7 +11,8 @@ auto Handle::internal() const -> const std::shared_ptr<Internal> & {
     return _internal;
 }
 
-Handle::Internal::Internal(int device_id) {
+Handle::Internal::Internal(int device_id)
+    : _device_id(device_id) {
     musaDeviceProp prop;
     musaGetDeviceProperties(&prop, device_id);
     _warp_size = prop.warpSize;
@@ -45,7 +46,7 @@ infiniStatus_t Handle::Internal::useMudnn(musaStream_t stream, const Fn<::musa::
     if (opt_handle.has_value()) {
         handle = std::move(*opt_handle);
     } else {
-        handle = std::make_unique<::musa::dnn::Handle>();
+        handle = std::make_unique<::musa::dnn::Handle>(_device_id);
     }
     CHECK_MUDNN(handle->SetStream(stream));
     CHECK_STATUS(f(*handle));

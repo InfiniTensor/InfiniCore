@@ -21,11 +21,13 @@ class Handle::Internal {
         _block_size[3],
         _grid_size[3];
 
+    int _device_id;
     template <typename T>
     using Fn = std::function<infiniStatus_t(T)>;
 
 public:
-    Internal(int);
+    Internal(int device_id);
+
     infiniStatus_t useMublas(musaStream_t stream, const Fn<mublasHandle_t> &f) const;
     infiniStatus_t useMudnn(musaStream_t stream, const Fn<::musa::dnn::Handle &> &f) const;
 
