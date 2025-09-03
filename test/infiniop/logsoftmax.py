@@ -33,8 +33,7 @@ _TEST_CASES_ = [
     ((32, 20, 512), (20480, 512, 1), None),
     ((28, 15, 15), None, None),
     ((1, 1000), None, None),
-    ((16, 50257), None, None),  # GPT-like vocab size
-    # Additional 3D test cases for batch-probs alignment
+    ((16, 50257), None, None),
     ((4, 8, 256), None, None),
     ((2, 16, 1024), None, None),
 ]
@@ -45,23 +44,24 @@ _TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.BF16, InfiniDtype.F32]
 # Tolerance map for different data types
 _TOLERANCE_MAP = {
     InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-2},
-    InfiniDtype.BF16: {"atol": 5e-3, "rtol": 5e-2},
+    InfiniDtype.BF16: {"atol": 5e-3, "rtol": 1e-2},
     InfiniDtype.F32: {"atol": 1e-5, "rtol": 1e-5},
 }
 
-# Mixed precision test cases - support flexible output dtypes
+# Mixed precision test cases - support y_dtype == x_dtype or y_dtype == F32
 _MIXED_PRECISION_CASES = [
-    (InfiniDtype.F16, InfiniDtype.F32),  # fp16 input, fp32 output
-    (InfiniDtype.BF16, InfiniDtype.F32), # bf16 input, fp32 output
-    (InfiniDtype.F32, InfiniDtype.F16),  # fp32 input, fp16 output
-    (InfiniDtype.F32, InfiniDtype.BF16), # fp32 input, bf16 output
-    (InfiniDtype.F16, InfiniDtype.F16),  # fp16 input, fp16 output
-    (InfiniDtype.BF16, InfiniDtype.BF16), # bf16 input, bf16 output
+    (InfiniDtype.F16, InfiniDtype.F32),
+    (InfiniDtype.BF16, InfiniDtype.F32),
+    (InfiniDtype.F16, InfiniDtype.F16),
+    (InfiniDtype.BF16, InfiniDtype.BF16),
+    (InfiniDtype.F32, InfiniDtype.F32),
 ]
+
 
 class Inplace(Enum):
     OUT_OF_PLACE = auto()
     INPLACE_X = auto()
+
 
 _INPLACE = [
     Inplace.INPLACE_X,
@@ -101,7 +101,7 @@ def test(
 
     x = TestTensor(shape, x_stride, dtype, device)
     ans = logsoftmax(x.actual_tensor())
-    
+
     # Convert answer to match input dtype for default behavior
     if dtype == InfiniDtype.F16:
         ans = ans.to(torch.float16)
@@ -154,12 +154,12 @@ def test(
 
     # Use tolerance based on input dtype for numerical stability
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
-    
+
     # Always print debug info for failed cases
     actual = y.actual_tensor()
     max_diff = torch.max(torch.abs(actual - ans))
     is_close = torch.allclose(actual, ans, atol=atol, rtol=rtol)
-    
+
     if DEBUG or not is_close:
         print(f"\n=== Debug Info ===")
         print(f"Shape: {shape}, Stride: {x_stride}, Dtype: {dtype}")
@@ -173,7 +173,7 @@ def test(
         print(f"First few values - Expected: {ans.flatten()[:5]}")
         if DEBUG:
             debug(actual, ans, atol=atol, rtol=rtol)
-    
+
     assert is_close
 
     # Profiling workflow
@@ -203,7 +203,7 @@ def test_mixed_precision(
 
     x = TestTensor(shape, x_stride, x_dtype, device)
     ans = logsoftmax(x.actual_tensor())
-    
+
     # Convert answer to target dtype for comparison
     if y_dtype == InfiniDtype.F16:
         ans = ans.to(torch.float16)
@@ -213,6 +213,12 @@ def test_mixed_precision(
         ans = ans.to(torch.float32)
 
     if inplace == Inplace.INPLACE_X:
+        # For inplace operations, input and output must have the same dtype
+        if x_dtype != y_dtype:
+            print(
+                f"Skipping inplace test: x_dtype ({InfiniDtypeNames[x_dtype]}) != y_dtype ({InfiniDtypeNames[y_dtype]})"
+            )
+            return
         y = x
     else:
         y = TestTensor(shape, y_stride, y_dtype, device)
@@ -256,17 +262,14 @@ def test_mixed_precision(
     if sync is not None:
         sync()
 
-    # Use tolerance based on the lower precision dtype for mixed precision cases
-    # The precision is limited by whichever dtype has lower precision
-    precision_order = {InfiniDtype.F32: 3, InfiniDtype.BF16: 2, InfiniDtype.F16: 1}
-    limiting_dtype = x_dtype if precision_order[x_dtype] <= precision_order[y_dtype] else y_dtype
-    atol, rtol = get_tolerance(_TOLERANCE_MAP, limiting_dtype)
-    
+    # Use tolerance based on output dtype for mixed precision cases
+    atol, rtol = get_tolerance(_TOLERANCE_MAP, y_dtype)
+
     # Ensure both tensors have the same dtype for comparison
     y_tensor = y.actual_tensor()
     if y_tensor.dtype != ans.dtype:
         y_tensor = y_tensor.to(ans.dtype)
-    
+
     if DEBUG:
         debug(y_tensor, ans, atol=atol, rtol=rtol)
     assert torch.allclose(y_tensor, ans, atol=atol, rtol=rtol)
@@ -293,14 +296,17 @@ if __name__ == "__main__":
     for device in get_test_devices(args):
         # Test standard cases (fp32 output)
         test_operator(device, test, _TEST_CASES, _TENSOR_DTYPES)
-        
+
         # Test mixed precision cases
         from libinfiniop import create_handle, destroy_handle, get_sync_func
+
         handle = create_handle()
         sync = get_sync_func(device)
         try:
             for x_dtype, y_dtype in _MIXED_PRECISION_CASES:
-                for shape, x_stride, y_stride, inplace in _TEST_CASES[:5]:  # Test subset for mixed precision
+                for shape, x_stride, y_stride, inplace in _TEST_CASES[
+                    :5
+                ]:  # Test subset for mixed precision
                     test_mixed_precision(
                         handle,
                         device,
