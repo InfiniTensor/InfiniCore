@@ -1,8 +1,8 @@
 #include "logsoftmax_cpu.h"
 #include "../../../devices/cpu/common_cpu.h"
 #include "../../../reduce/cpu/reduce.h"
-#include <cmath>
 #include <algorithm>
+#include <cmath>
 
 namespace op::logsoftmax::cpu {
 
@@ -24,7 +24,7 @@ infiniStatus_t logsoftmax(const LogSoftmaxInfo *info, Ty *y, const Tx *x) {
 #pragma omp parallel for
     for (ptrdiff_t batch = 0; batch < ptrdiff_t(info->batch_size); batch++) {
         ptrdiff_t y_offset, x_offset;
-        
+
         if (info->ndim == 3) {
             // For 3D tensors, convert linear batch index back to 2D indices
             ptrdiff_t batch_idx = batch / info->seq_len;
@@ -36,7 +36,7 @@ infiniStatus_t logsoftmax(const LogSoftmaxInfo *info, Ty *y, const Tx *x) {
             y_offset = batch * info->y_stride_b;
             x_offset = batch * info->x_stride_b;
         }
-        
+
         Ty *y_ = y + y_offset;
         const Tx *x_ = x + x_offset;
 
@@ -71,9 +71,9 @@ infiniStatus_t logsoftmax(const LogSoftmaxInfo *info, Ty *y, const Tx *x) {
             } else {
                 x_val = x_[i * info->x_stride_p];
             }
-            
+
             float result = x_val - max_val - log_sum;
-            
+
             if constexpr (std::is_same<Ty, fp16_t>::value || std::is_same<Ty, bf16_t>::value) {
                 y_[i * info->y_stride_p] = utils::cast<Ty>(result);
             } else {

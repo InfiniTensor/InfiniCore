@@ -6,10 +6,6 @@
 
 #include "../cuda/kernel.cuh"
 
-
-
-
-
 namespace op::logsoftmax::nvidia {
 
 struct Descriptor::Opaque {
@@ -42,7 +38,7 @@ infiniStatus_t launchKernel(void *y, const void *x, infiniDtype_t x_dtype, infin
                             ptrdiff_t x_stride_0, ptrdiff_t x_stride_1,
                             cudaStream_t stream) {
     dim3 grid(uint32_t(batch_size), 1, 1);
-    
+
     // Handle mixed precision cases
     if (x_dtype == INFINI_DTYPE_F16 && y_dtype == INFINI_DTYPE_F32) {
         logSoftmax<BLOCK_SIZE, float, half, float>

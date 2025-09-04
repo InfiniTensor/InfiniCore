@@ -12,17 +12,19 @@ __device__ void logSoftmaxKernel(
     ptrdiff_t x_stride_b, ptrdiff_t x_stride_p,
     ptrdiff_t y_stride_0, ptrdiff_t y_stride_1,
     ptrdiff_t x_stride_0, ptrdiff_t x_stride_1) {
-    
+
     typedef cub::BlockReduce<Tcompute, BLOCK_SIZE> BlockReduce;
     __shared__ typename BlockReduce::TempStorage temp_storage;
     __shared__ Tcompute shared_max_val;
     __shared__ Tcompute shared_sum_exp;
-    
+
     int batch_idx = blockIdx.x;
     int tid = threadIdx.x;
-    
-    if (batch_idx >= batch_size) return;
-    
+
+    if (batch_idx >= batch_size) {
+        return;
+    }
+
     // Calculate correct memory offsets for 3D tensors
     ptrdiff_t y_offset, x_offset;
     if (ndim == 3) {
@@ -36,14 +38,14 @@ __device__ void logSoftmaxKernel(
         y_offset = batch_idx * y_stride_b;
         x_offset = batch_idx * x_stride_b;
     }
-    
+
     const Tdata_in *x_batch = x + x_offset;
     Tdata_out *y_batch = y + y_offset;
-    
+
     // Find maximum value for numerical stability
     Tcompute max_val = static_cast<Tcompute>(-INFINITY);
     for (int i = tid; i < probs_size; i += BLOCK_SIZE) {
-        if (i < probs_size) {  // Add boundary check
+        if (i < probs_size) { // Add boundary check
             Tcompute val = static_cast<Tcompute>(x_batch[i * x_stride_p]);
             if constexpr (std::is_same_v<Tcompute, float>) {
                 max_val = fmaxf(max_val, val);
@@ -57,11 +59,11 @@ __device__ void logSoftmaxKernel(
         shared_max_val = max_val;
     }
     __syncthreads();
-    
+
     // Compute sum of exp(x - max)
     Tcompute sum_exp = static_cast<Tcompute>(0.0);
     for (int i = tid; i < probs_size; i += BLOCK_SIZE) {
-        if (i < probs_size) {  // Add boundary check
+        if (i < probs_size) { // Add boundary check
             Tcompute val = static_cast<Tcompute>(x_batch[i * x_stride_p]);
             if constexpr (std::is_same_v<Tcompute, float>) {
                 sum_exp += expf(val - shared_max_val);
@@ -75,8 +77,8 @@ __device__ void logSoftmaxKernel(
         shared_sum_exp = sum_exp;
     }
     __syncthreads();
-    
-    // Compute log_softmax = x - max - log(sum_exp)  
+
+    // Compute log_softmax = x - max - log(sum_exp)
     Tcompute log_sum_exp;
     if constexpr (std::is_same_v<Tcompute, float>) {
         log_sum_exp = logf(shared_sum_exp);
@@ -84,7 +86,7 @@ __device__ void logSoftmaxKernel(
         log_sum_exp = log(shared_sum_exp);
     }
     for (int i = tid; i < probs_size; i += BLOCK_SIZE) {
-        if (i < probs_size) {  // Add boundary check
+        if (i < probs_size) { // Add boundary check
             Tcompute val = static_cast<Tcompute>(x_batch[i * x_stride_p]);
             Tcompute result = val - shared_max_val - log_sum_exp;
             y_batch[i * y_stride_p] = static_cast<Tdata_out>(result);

@@ -21,12 +21,12 @@ __C infiniStatus_t infiniopCreateLogSoftmaxDescriptor(
     infiniopTensorDescriptor_t y_desc,
     infiniopTensorDescriptor_t x_desc) {
 
-#define CREATE(CASE, NAMESPACE)                                                       \
-    case CASE:                                                                        \
-        return op::logsoftmax::NAMESPACE::Descriptor::create(                         \
-            handle,                                                                   \
-            reinterpret_cast<op::logsoftmax::NAMESPACE::Descriptor **>(desc_ptr),     \
-            y_desc,                                                                   \
+#define CREATE(CASE, NAMESPACE)                                                   \
+    case CASE:                                                                    \
+        return op::logsoftmax::NAMESPACE::Descriptor::create(                     \
+            handle,                                                               \
+            reinterpret_cast<op::logsoftmax::NAMESPACE::Descriptor **>(desc_ptr), \
+            y_desc,                                                               \
             x_desc);
 
     switch (handle->device) {
@@ -51,9 +51,9 @@ __C infiniStatus_t infiniopCreateLogSoftmaxDescriptor(
 
 __C infiniStatus_t infiniopGetLogSoftmaxWorkspaceSize(infiniopLogSoftmaxDescriptor_t desc, size_t *size) {
 
-#define GET(CASE, NAMESPACE)                                                                          \
-    case CASE:                                                                                        \
-        *size = reinterpret_cast<op::logsoftmax::NAMESPACE::Descriptor *>(desc)->workspaceSize();     \
+#define GET(CASE, NAMESPACE)                                                                      \
+    case CASE:                                                                                    \
+        *size = reinterpret_cast<op::logsoftmax::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
         return INFINI_STATUS_SUCCESS;
 
     switch (desc->device_type) {
@@ -83,9 +83,9 @@ __C infiniStatus_t infiniopLogSoftmax(
     const void *x,
     void *stream) {
 
-#define CALCULATE(CASE, NAMESPACE)                                                             \
-    case CASE:                                                                                 \
-        return reinterpret_cast<op::logsoftmax::NAMESPACE::Descriptor *>(desc)->calculate(     \
+#define CALCULATE(CASE, NAMESPACE)                                                         \
+    case CASE:                                                                             \
+        return reinterpret_cast<op::logsoftmax::NAMESPACE::Descriptor *>(desc)->calculate( \
             workspace, workspace_size, y, x, stream);
 
     switch (desc->device_type) {
@@ -110,9 +110,9 @@ __C infiniStatus_t infiniopLogSoftmax(
 
 __C infiniStatus_t infiniopDestroyLogSoftmaxDescriptor(infiniopLogSoftmaxDescriptor_t desc) {
 
-#define DESTROY(CASE, NAMESPACE)                                                    \
-    case CASE:                                                                      \
-        delete reinterpret_cast<op::logsoftmax::NAMESPACE::Descriptor *>(desc);     \
+#define DESTROY(CASE, NAMESPACE)                                                \
+    case CASE:                                                                  \
+        delete reinterpret_cast<op::logsoftmax::NAMESPACE::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS;
 
     switch (desc->device_type) {
