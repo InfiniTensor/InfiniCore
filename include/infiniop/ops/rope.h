@@ -3,6 +3,13 @@
 
 #include "../operator_descriptor.h"
 
+typedef enum {
+    INFINIOP_ROPE_ALGO_GPT_J = 0,    // GPT-J style RoPE algorithm (Interleave even and odd dimensions)
+    INFINIOP_ROPE_ALGO_GPT_NEOX = 1, // GPT-NeoX style RoPE algorithm (First half dimensions for sin, second half for cos)
+    // Count
+    INFINIOP_ROPE_ALGO_COUNT = 2,
+} infiniopRoPEAlgo_t;
+
 typedef struct InfiniopDescriptor *infiniopRoPEDescriptor_t;
 
 __C __export infiniStatus_t infiniopCreateRoPEDescriptor(
@@ -12,7 +19,8 @@ __C __export infiniStatus_t infiniopCreateRoPEDescriptor(
     infiniopTensorDescriptor_t x,
     infiniopTensorDescriptor_t pos_ids,
     infiniopTensorDescriptor_t sin_table,
-    infiniopTensorDescriptor_t cos_table);
+    infiniopTensorDescriptor_t cos_table,
+    infiniopRoPEAlgo_t algo);
 
 __C __export infiniStatus_t infiniopGetRoPEWorkspaceSize(infiniopRoPEDescriptor_t desc, size_t *size);
 

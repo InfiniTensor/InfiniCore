@@ -361,6 +361,8 @@ def rope_(lib):
         infiniopTensorDescriptor_t,
         infiniopTensorDescriptor_t,
         infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_int32,
     ]
 
     lib.infiniopGetRoPEWorkspaceSize.restype = c_int32
@@ -379,46 +381,11 @@ def rope_(lib):
         c_void_p,
         c_void_p,
         c_void_p,
+        c_void_p,
     ]
 
     lib.infiniopDestroyRoPEDescriptor.restype = c_int32
     lib.infiniopDestroyRoPEDescriptor.argtypes = [
-        infiniopOperatorDescriptor_t,
-    ]
-
-
-@OpRegister.operator
-def rope_v2_(lib):
-    lib.infiniopCreateRoPEv2Descriptor.restype = c_int32
-    lib.infiniopCreateRoPEv2Descriptor.argtypes = [
-        infiniopHandle_t,
-        POINTER(infiniopOperatorDescriptor_t),
-        infiniopTensorDescriptor_t,
-        infiniopTensorDescriptor_t,
-        infiniopTensorDescriptor_t,
-        infiniopTensorDescriptor_t,
-    ]
-
-    lib.infiniopGetRoPEv2WorkspaceSize.restype = c_int32
-    lib.infiniopGetRoPEv2WorkspaceSize.argtypes = [
-        infiniopOperatorDescriptor_t,
-        POINTER(c_size_t),
-    ]
-
-    lib.infiniopRoPEv2.restype = c_int32
-    lib.infiniopRoPEv2.argtypes = [
-        infiniopOperatorDescriptor_t,
-        c_void_p,
-        c_size_t,
-        c_void_p,
-        c_void_p,
-        c_void_p,
-        c_void_p,
-        c_void_p,
-    ]
-
-    lib.infiniopDestroyRoPEv2Descriptor.restype = c_int32
-    lib.infiniopDestroyRoPEv2Descriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
 
