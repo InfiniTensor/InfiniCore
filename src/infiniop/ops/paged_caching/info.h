@@ -19,7 +19,7 @@ public:
 
     // --- Shape Dimensions ---
     size_t num_tokens;
-    size_t num_heads;
+    size_t num_kv_heads;
     size_t head_size;
     size_t block_size;
 
@@ -42,6 +42,7 @@ public:
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
         if (slot_mapping_desc->dtype() != INFINI_DTYPE_I32) {
+            printf("slot_mapping must be int32_t.\n");
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
 
@@ -50,25 +51,34 @@ public:
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
         
-        PagedCachingInfo info;
-        info.dtype = dtype;
+        // PagedCachingInfo info;
         
         // --- Extract shape dimensions ---
         auto k_shape = k_desc->shape();
         auto k_cache_shape = k_cache_desc->shape();
         
-        info.num_tokens = slot_mapping_desc->shape()[0];
-        info.num_heads = k_shape[1];
-        info.head_size = k_shape[2];
-        info.block_size = k_cache_shape[2]; // Assuming [num_blocks, num_heads, block_size, head_size] layout
+        size_t num_tokens = slot_mapping_desc->shape()[0];
+        size_t num_kv_heads = k_shape[1];
+        size_t head_size = k_shape[2];
+        size_t block_size = k_cache_shape[2]; // Assuming [num_blocks, num_heads, block_size, head_size] layout
 
         // --- Extract strides for memory access ---
-        info.k_src_stride = k_desc->stride(0);
-        info.v_src_stride = v_desc->stride(0);
-        info.k_cache_block_stride = k_cache_desc->stride(0);
-        info.v_cache_block_stride = v_cache_desc->stride(0);
+        ptrdiff_t k_src_stride = k_desc->stride(0);
+        ptrdiff_t v_src_stride = v_desc->stride(0);
+        ptrdiff_t k_cache_block_stride = k_cache_desc->stride(0);
+        ptrdiff_t v_cache_block_stride = v_cache_desc->stride(0);
 
-        return utils::Result<PagedCachingInfo>(info);
+        return utils::Result<PagedCachingInfo>(PagedCachingInfo{
+            dtype,
+            num_tokens,
+            num_kv_heads,
+            head_size,
+            block_size,
+            k_src_stride,
+            v_src_stride,
+            k_cache_block_stride,
+            v_cache_block_stride
+        });
     }
 };
 

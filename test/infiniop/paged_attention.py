@@ -201,7 +201,7 @@ def test(
         handle, ctypes.byref(descriptor),
         out.descriptor, q.descriptor, k_cache.descriptor, v_cache.descriptor,
         block_tables.descriptor, seq_lens.descriptor, alibi_slopes_desc,
-        scale, max_blocks_per_seq
+        scale
     ))
     
         # block_tables_ptr, seq_lens_ptr, alibi_slopes_ptr, c_float(scale)

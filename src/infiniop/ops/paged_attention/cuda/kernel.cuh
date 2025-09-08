@@ -121,6 +121,7 @@ __device__ void pagedAttentionKernel(
         
         logits[token_idx] = qk;
     }
+    __syncthreads();
 
     __shared__ Tcompute global_qk_max;
     Tcompute global_qk_max_0 = op::common_cuda::reduce_op::max<NUM_THREADS, Tcompute>(logits, seq_len);

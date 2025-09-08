@@ -27,16 +27,15 @@ template <
 >
 __device__ void pagedCachingKernel(
     // ----- Output Tensors -----
-    Tdata*  k_cache_ptr,         // Pointer to the destination K cache pool
-    Tdata*  v_cache_ptr,         // Pointer to the destination V cache pool
+    Tdata*  k_cache_ptr,         // Pointer to the destination K cache pool [num_blocks, nkvh, block_size, dh] 
+    Tdata*  v_cache_ptr,         // Pointer to the destination V cache pool [num_blocks, nkvh, block_size, dh] 
     // ----- Input Tensors -----
     const Tdata*  k_ptr,         // Pointer to the source Keys, shape [ntok, nkvh, dh]
     const Tdata*  v_ptr,         // Pointer to the source Values, shape [ntok, nkvh, dh]
-    const int*  slot_mapping_ptr, // Pointer to the slot mapping, shape [ntok]
+    const int32_t*  slot_mapping_ptr, // Pointer to the slot mapping, shape [ntok]
     // ----- Metadata -----
-    const int num_heads,                      // Number of key/value heads (nkvh)
-    const int head_size,                      // Dimension of each head (dh)
-    const int block_size,                     // Number of tokens per block in the KV cache
+    const size_t head_size,                      // Dimension of each head (dh)
+    const size_t block_size,                     // Number of tokens per block in the KV cache
     // ----- Stride Information -----
     const ptrdiff_t k_src_stride,             // Stride between tokens in the source K tensor
     const ptrdiff_t v_src_stride,             // Stride between tokens in the source V tensor
@@ -48,27 +47,20 @@ __device__ void pagedCachingKernel(
     //================================================================================
     
     // Each block processes one token.
-    const int token_idx = blockIdx.x;
-    const int head_idx  = blockIdx.y;
+    const int token_idx = blockIdx.y;
+    const int head_idx  = blockIdx.x;
+    // const int num_kv_heads = gridDim.y;
 
     // Retrieve the destination slot for the current token.
-    const int slot_idx = slot_mapping_ptr[token_idx];
+    const int32_t slot_idx = slot_mapping_ptr[token_idx];
 
     // Handle padding: if slot_idx is negative, this token is padding and should be ignored.
     if (slot_idx < 0) {
         return;
     }
-
-    // if (blockIdx.x == 0 && threadIdx.x == 0) {
-    //     printf("[Block %d, Thread %d] Debug Start\n", blockIdx.x, threadIdx.x);
-    //     printf("  - token_idx: %d\n", token_idx);
-    //     printf("  - slot_idx from mapping: %d\n", slot_idx);
-    //     printf("  - Metadata: num_heads=%d, head_size=%d, block_size=%d\n", num_heads, head_size, block_size);
-    // }
-
     // Calculate the physical block index and the offset within that block.
-    const int physical_block_idx = slot_idx / block_size;
-    const int block_offset = slot_idx % block_size;
+    const int32_t physical_block_idx = slot_idx / block_size;
+    const int32_t block_offset = slot_idx % block_size;
 
     // Calculate base pointers for source and destination for this specific token.
     const Tdata* k_src_head_ptr = k_ptr + token_idx * k_src_stride + head_idx * head_size;
@@ -84,54 +76,6 @@ __device__ void pagedCachingKernel(
 
     Tdata* v_cache_block_base_ptr = v_cache_ptr + physical_block_idx * v_cache_block_stride;
     Tdata* v_dst_head_ptr = v_cache_block_base_ptr + head_idx * cache_head_stride + block_offset * head_size;
-
-
-    // if (blockIdx.x == 0 && threadIdx.x == 0) {
-    //     printf("[Block %d, Thread %d] Address Calculation\n", blockIdx.x, threadIdx.x);
-    //     printf("  - physical_block_idx: %d\n", physical_block_idx);
-    //     printf("  - block_offset: %d\n", block_offset);
-    //     printf("  - k_src_stride: %ld, v_src_stride: %ld\n", k_src_stride, v_src_stride);
-    //     printf("  - k_cache_block_stride: %ld, v_cache_block_stride: %ld\n", k_cache_block_stride, v_cache_block_stride);
-    //     printf("  - Calculated dst_token_offset_k: %d\n", dst_token_offset_k);
-    //     printf("  - Source Ptr (k): %p\n", k_src_token_ptr);
-    //     printf("  - Dest Ptr (k_cache): %p\n", k_cache_dst_ptr);
-    // }
-
-
-    // //================================================================================
-    // // 2. Perform Vectorized Data Copy
-    // //================================================================================
-
-    // // Total number of elements to copy for one token (all heads).
-    // const int total_elements_per_token = num_heads * head_size;
-
-    // // Use vectorization to copy data more efficiently.
-    // // For Tdata=half (2 bytes), float4 (16 bytes) can process 8 elements at once.
-    // constexpr int VEC_SIZE = sizeof(float4) / sizeof(Tdata);
-
-    // // Cast pointers to the vectorized type.
-    // const float4* k_src_vec_ptr = reinterpret_cast<const float4*>(k_src_token_ptr);
-    // const float4* v_src_vec_ptr = reinterpret_cast<const float4*>(v_src_token_ptr);
-    // float4* k_cache_dst_vec_ptr = reinterpret_cast<float4*>(k_cache_dst_ptr);
-    // float4* v_cache_dst_vec_ptr = reinterpret_cast<float4*>(v_cache_dst_ptr);
-
-    // // if (blockIdx.x == 0 && threadIdx.x == 0) {
-    // //     printf("[Block %d, Thread %d] Vectorized Copy Start\n", blockIdx.x, threadIdx.x);
-    // //     printf("  - Total elements per token: %d\n", total_elements_per_token);
-    // //     printf("  - Vector size: %d\n", VEC_SIZE);
-    // //     printf("  - float4 size: %d\n", sizeof(float4));
-    // //     printf("  - Tdata size: %d\n", sizeof(Tdata));
-    // //     // printf("  - Vector size: %d\n", k_src_vec_ptr[i]);
-    // // }
-
-    // // Each thread copies one vector (VEC_SIZE elements) per iteration.
-    // // The loop iterates over the vectorized chunks of data for the token.
-    // for (int i = threadIdx.x; i < total_elements_per_token / VEC_SIZE; i += NUM_THREADS) {
-
-    //     k_cache_dst_vec_ptr[i] = k_src_vec_ptr[i];
-    //     v_cache_dst_vec_ptr[i] = v_src_vec_ptr[i];
-    // }
-    // }
 
     //================================================================================
     // 2. Perform Element-wise Data Copy (Safe, Non-Vectorized)
