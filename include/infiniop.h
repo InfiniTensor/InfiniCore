@@ -31,5 +31,14 @@
 #include "infiniop/ops/where.h"
 #include "infiniop/ops/leaky_relu.h"
 #include "infiniop/ops/cast.h"
+#include "infiniop/ops/div.h"
+#include "infiniop/ops/silu.h"
+#include "infiniop/ops/and.h"
+#include "infiniop/ops/or.h"
+#include "infiniop/ops/equal.h"
+#include "infiniop/ops/relu_backward.h"
+#include "infiniop/ops/gelu.h"
+#include "infiniop/ops/gelu_backward.h"
+#include "infiniop/ops/cross_entropy_loss_backward.h"
 
 #endif // __INFINIOP_API_H__

@@ -36,6 +36,15 @@ def run_tests(args):
         "where.py",
         "leaky_relu.py",
         "cast.py",
+        "div.py",
+        "silu.py",
+        "and.py",
+        "or.py",
+        "equal.py",
+        "relu_backward.py",
+        "gelu.py",
+        "gelu_backward.py",
+        "cross_entropy_loss_backward.py",
     ]:
         result = subprocess.run(
             f"python {test} {args} --debug", text=True, encoding="utf-8", shell=True
