@@ -24,6 +24,9 @@ def run_tests(args):
         "rope.py",
         "sub.py",
         "swiglu.py",
+        "sigmoid.py",
+        "topkrouter.py",
+        "topksoftmax.py",
     ]:
         result = subprocess.run(
             f"python {test} {args} --debug", text=True, encoding="utf-8", shell=True
