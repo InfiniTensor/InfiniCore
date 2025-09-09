@@ -1,5 +1,5 @@
-#ifndef _Topkrouter_KERNEL_CUH__
-#define _Topkrouter_KERNEL_CUH__
+#ifndef _TOPKROUTER_KERNEL_CUH__
+#define _TOPKROUTER_KERNEL_CUH__
 #include <cfloat>
 #include <cub/block/block_load.cuh>
 #include <cub/block/block_radix_sort.cuh>
@@ -36,17 +36,14 @@ struct CustomLess {
     }
 };
 
-//
-// deepseek的topk
-//
 template <typename T, int BLOCK_THREADS = 256>
-__global__ void topkrouter_kernel(float *values_topk,          // 输出值, 形状[N, topk]
-                                  int *indices_topk,           // 输出索引, 形状[N, topk]
-                                  T *input,                    // 输入数据 [N, width]
-                                  float *d_correction_bias,    // 输入数据 [width]
-                                  float routed_scaling_factor, //
-                                  const size_t N,              // 总行数,toen数量
-                                  const size_t width,          // 每行元素数量
+__global__ void topkrouter_kernel(float *values_topk,             // 输出数据, 形状[N, topk]
+                                  int *indices_topk,              // 输出索引, 形状[N, topk]
+                                  const T *input,                 // 输入数据 [N, width]
+                                  const float *d_correction_bias, // 输入数据 [width]
+                                  const float routed_scaling_factor,
+                                  const size_t N,
+                                  const size_t width,
                                   const size_t topk
 
 ) {
@@ -99,7 +96,6 @@ __global__ void topkrouter_kernel(float *values_topk,          // 输出值, 形
     // ----------------------------------------------------------- //
     //              每个组中,前两个数据的和                            //
     // ----------------------------------------------------------- //
-
     __syncthreads();
     if (0 == lane_id) {
         share_data_group[warp_id] = share_data[warp_id * warp_threads] + share_data[warp_id * warp_threads + 1];
@@ -116,8 +112,10 @@ __global__ void topkrouter_kernel(float *values_topk,          // 输出值, 形
             thread_indices[0] = lane_id;
         }
 
-        __shared__ typename WarpMergeSortT::TempStorage temp_storage[1];
-        WarpMergeSortT(temp_storage[0]).Sort(thread_values, thread_indices, CustomLess());
+        {
+            __shared__ typename WarpMergeSortT::TempStorage temp_storage[1];
+            WarpMergeSortT(temp_storage[0]).Sort(thread_values, thread_indices, CustomLess());
+        }
         if (lane_id < 4) {
             int indices = thread_indices[0];
             share_data_group_mask[indices] = 1.0f;
@@ -147,13 +145,13 @@ __global__ void topkrouter_kernel(float *values_topk,          // 输出值, 形
             int index = thread_indices[0];
             value = sigmoid_func(data_input[index]);
         }
-
-        typedef cub::WarpReduce<float, warp_threads> WarpReduce;
-        __shared__ typename WarpReduce::TempStorage temp_storage;
-        // 使用有效项group 进行部分归约
-        float warp_sum = WarpReduce(temp_storage).Sum(value);
-        if (0 == tid) {
-            share_sum = warp_sum + 1e-20;
+        {
+            typedef cub::WarpReduce<float, warp_threads> WarpReduce;
+            __shared__ typename WarpReduce::TempStorage temp_storage;
+            float warp_sum = WarpReduce(temp_storage).Sum(value);
+            if (0 == tid) {
+                share_sum = warp_sum + 1e-9f;
+            }
         }
         __syncwarp();
 

@@ -23,9 +23,9 @@ public:
         infiniopTensorDescriptor_t scales_desc,
         infiniopTensorDescriptor_t zeros_desc) {
 
-        int _in_c = qweight_desc->dim(0);
-        int _qout_c = qweight_desc->dim(1);
-        int _G = scales_desc->dim(0);
+        int _in_c = static_cast<int>(qweight_desc->dim(0));
+        int _qout_c = static_cast<int>(qweight_desc->dim(1));
+        int _G = static_cast<int>(scales_desc->dim(0));
 
         return utils::Result<DequantizeInfo>(DequantizeInfo{
             _in_c,

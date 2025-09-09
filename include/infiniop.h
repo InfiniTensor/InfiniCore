@@ -18,7 +18,9 @@
 #include "infiniop/ops/rope_v2.h"
 #include "infiniop/ops/sub.h"
 #include "infiniop/ops/swiglu.h"
+#include "infiniop/ops/sigmoid.h"
 #include "infiniop/ops/topkrouter.h"
+#include "infiniop/ops/topksoftmax.h"
 #include "infiniop/tensor_descriptor.h"
 
 #endif // __INFINIOP_API_H__
