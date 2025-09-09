@@ -45,6 +45,13 @@ def run_tests(args):
         "gelu.py",
         "gelu_backward.py",
         "cross_entropy_loss_backward.py",
+        "index_copy_inplace.py",
+        "gather.py",
+        "scatter.py",
+        "tril.py",
+        "triu.py",
+        "linear.py",
+        "linear_backward.py",
     ]:
         result = subprocess.run(
             f"python {test} {args} --debug", text=True, encoding="utf-8", shell=True

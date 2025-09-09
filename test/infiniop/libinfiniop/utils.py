@@ -162,6 +162,8 @@ class TestTensor(CTensor):
 
 
 def to_torch_dtype(dt: InfiniDtype, compatability_mode=False):
+    if dt == InfiniDtype.BOOL: # support torch.bool input dtype
+        return torch.bool    
     if dt == InfiniDtype.I8:
         return torch.int8
     elif dt == InfiniDtype.I16:
@@ -229,6 +231,8 @@ def rearrange_tensor(tensor, new_strides):
     Given a PyTorch tensor and a list of new strides, return a new PyTorch tensor with the given strides.
     """
     import torch
+    if list(tensor.stride()) == list(new_strides):# support self-define strides as the input of TestTensor
+        return tensor    
 
     shape = tensor.shape
 

@@ -40,5 +40,12 @@
 #include "infiniop/ops/gelu.h"
 #include "infiniop/ops/gelu_backward.h"
 #include "infiniop/ops/cross_entropy_loss_backward.h"
+#include "infiniop/ops/index_copy_inplace.h"
+#include "infiniop/ops/gather.h"
+#include "infiniop/ops/scatter.h"
+#include "infiniop/ops/tril.h"
+#include "infiniop/ops/triu.h"
+#include "infiniop/ops/linear.h"
+#include "infiniop/ops/linear_backward.h"
 
 #endif // __INFINIOP_API_H__
