@@ -168,6 +168,92 @@ def conv_(lib):
 
 
 @OpRegister.operator
+def flash_attention_(lib):
+    lib.infiniopCreateFlashAttentionDescriptor.restype = c_int32
+    lib.infiniopCreateFlashAttentionDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_int32,
+    ]
+    
+    lib.infiniopGetFlashAttentionWorkspaceSize.restype = c_int32
+    lib.infiniopGetFlashAttentionWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopFlashAttention.restype = c_int32
+    lib.infiniopFlashAttention.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyFlashAttentionDescriptor.restype = c_int32
+    lib.infiniopDestroyFlashAttentionDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+    
+
+@OpRegister.operator
+def flash_attention_backward_(lib):
+    lib.infiniopCreateFlashAttentionBackwardDescriptor.restype = c_int32
+    lib.infiniopCreateFlashAttentionBackwardDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_int32,
+    ]
+    
+    lib.infiniopGetFlashAttentionBackwardWorkspaceSize.restype = c_int32
+    lib.infiniopGetFlashAttentionBackwardWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    
+    lib.infiniopFlashAttentionBackward.restype = c_int32
+    lib.infiniopFlashAttentionBackward.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyFlashAttentionBackwardDescriptor.restype = c_int32
+    lib.infiniopDestroyFlashAttentionBackwardDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+    
+
+@OpRegister.operator
 def gemm_(lib):
     lib.infiniopCreateGemmDescriptor.restype = c_int32
     lib.infiniopCreateGemmDescriptor.argtypes = [

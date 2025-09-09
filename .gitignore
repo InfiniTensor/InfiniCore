@@ -20,5 +20,5 @@ cache/
 # JSON
 *.json
 
-#GGUF
+# GGUF
 *.gguf

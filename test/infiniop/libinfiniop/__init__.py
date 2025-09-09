@@ -12,3 +12,4 @@ from .devices import *
 from .utils import *
 from .datatypes import *
 from .structs import *
+from .masktypes import *
