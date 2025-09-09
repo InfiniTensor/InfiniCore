@@ -51,15 +51,27 @@ class Inplace(Enum):
     INPLACE_X = auto()
 
 
+class Algorithm(Enum):
+    GPT_J = 0
+    GPT_NEOX = 1
+
+
 _INPLACE = [
     Inplace.OUT_OF_PLACE,
     Inplace.INPLACE_X,
 ]
 
+
+_ALGO = [
+    Algorithm.GPT_J,
+    Algorithm.GPT_NEOX,
+]
+
 _TEST_CASES = [
-    test_case + (inplace_item,)
+    test_case + (inplace_item, algo_item)
     for test_case in _TEST_CASES_
     for inplace_item in _INPLACE
+    for algo_item in _ALGO
 ]
 
 DEBUG = False
@@ -68,27 +80,45 @@ NUM_PRERUN = 10
 NUM_ITERATIONS = 1000
 
 
-def rotary_embedding(ans, t, sin, cos, device):
-    dh = t.shape[2]
+def rotary_embedding(ans, t, sin, cos, device, algo):
+    def _torch_rope(sin, cos, t1, t2):
+        cos = cos.unsqueeze(1)  # [seq_len, 1, dh // 2]
+        sin = sin.unsqueeze(1)  # [seq_len, 1, dh // 2]
+        if device == InfiniDeviceEnum.CPU:
+            (t1, t2, cos, sin) = (
+                t1.float(),
+                t2.float(),
+                cos.float(),
+                sin.float(),
+            )
+
+        t_out_1 = t1 * cos - t2 * sin
+        t_out_2 = t1 * sin + t2 * cos
+
+        return t_out_1, t_out_2
+
+
+    dh = t.shape[-1]
     dt = t.dtype
     assert dh % 2 == 0, "Embedding dimension must be even."
-    t_even = t[..., 0::2]  # [seq_len, n_head, dh // 2]
-    t_odd = t[..., 1::2]  # [seq_len, n_head, dh // 2]
-    cos = cos.unsqueeze(1)  # [seq_len, 1, dh // 2]
-    sin = sin.unsqueeze(1)  # [seq_len, 1, dh // 2]
-    if device == InfiniDeviceEnum.CPU:
-        (t_even, t_odd, cos, sin) = (
-            t_even.float(),
-            t_odd.float(),
-            cos.float(),
-            sin.float(),
-        )
 
-    t_out_even = t_even * cos - t_odd * sin
-    t_out_odd = t_even * sin + t_odd * cos
+    if algo == Algorithm.GPT_J:
+        t_even = t[..., 0::2]  # [seq_len, n_head, dh // 2]
+        t_odd = t[..., 1::2]  # [seq_len, n_head, dh // 2]
 
-    ans[..., 0::2] = t_out_even.to(dt)
-    ans[..., 1::2] = t_out_odd.to(dt)
+        t_out_even, t_out_odd = _torch_rope(sin, cos, t_even, t_odd)
+
+        ans[..., 0::2] = t_out_even.to(dt)
+        ans[..., 1::2] = t_out_odd.to(dt)
+    else:
+        half_dim = dh // 2   
+        t_first = t[..., :half_dim]
+        t_second = t[..., half_dim:]
+
+        t_out_first, t_out_second = _torch_rope(sin, cos, t_first, t_second)
+
+        ans[..., :half_dim] = t_out_first.to(dt)
+        ans[..., half_dim:] = t_out_second.to(dt)
 
 
 def sin_cos_table(pos, dim, device, theta, dtype):
@@ -108,6 +138,7 @@ def test(
     x_strides=None,
     y_strides=None,
     inplace=Inplace.OUT_OF_PLACE,
+    algo=Algorithm.GPT_J,
     dtype=torch.float32,
     sync=None,
 ):
@@ -120,7 +151,7 @@ def test(
         y = TestTensor(shape, y_strides, dtype, device)
 
     print(
-        f"Testing Rotary Positional Embedding on {InfiniDeviceNames[device]} with shape:{shape} x_strides:{x_strides} y_strides:{y_strides} and dtype:{InfiniDtypeNames[dtype]} inplace:{inplace}"
+        f"Testing Rotary Positional Embedding on {InfiniDeviceNames[device]} with shape:{shape} x_strides:{x_strides} y_strides:{y_strides} and dtype:{InfiniDtypeNames[dtype]} inplace:{inplace} algo:{algo}"
     )
     theta = 1e5
     pos = TestTensor.from_torch(torch.arange(0, x.shape[0]), InfiniDtype.I32, device)
@@ -134,6 +165,7 @@ def test(
         sin_table.torch_tensor(),
         cos_table.torch_tensor(),
         device,
+        algo,
     )
 
     descriptor = infiniopOperatorDescriptor_t()
@@ -150,6 +182,7 @@ def test(
             pos.descriptor,
             sin_table.descriptor,
             cos_table.descriptor,
+            algo.value,
         )
     )
 

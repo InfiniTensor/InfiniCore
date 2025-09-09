@@ -5,7 +5,7 @@
 
 #include "../cuda/kernel.cuh"
 
-template <typename Tdata, typename Tindex, typename Tangle>
+template <bool IsGPTJ, typename Tdata, typename Tindex, typename Tangle>
 INFINIOP_METAX_KERNEL ropeThreadPerItemKernel(
     Tdata *y_,
     const Tdata *x_,
@@ -17,7 +17,7 @@ INFINIOP_METAX_KERNEL ropeThreadPerItemKernel(
     ptrdiff_t y_stride_nhead,
     ptrdiff_t x_stride_seqlen,
     ptrdiff_t x_stride_nhead) {
-    ropeThreadPerItemBlock(
+    ropeThreadPerItemBlock<IsGPTJ>(
         y_, x_, pos_ids,
         sin_table, cos_table,
         table_dim,
@@ -42,11 +42,12 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t x_desc,
     infiniopTensorDescriptor_t pos_desc,
     infiniopTensorDescriptor_t sin_desc,
-    infiniopTensorDescriptor_t cos_desc) {
+    infiniopTensorDescriptor_t cos_desc,
+    infiniopRoPEAlgo_t algo) {
 
     auto handle = reinterpret_cast<device::metax::Handle *>(handle_);
 
-    auto info = RoPEInfo::createRoPEInfo(y_desc, x_desc, pos_desc, sin_desc, cos_desc);
+    auto info = RoPEInfo::createRoPEInfo(y_desc, x_desc, pos_desc, sin_desc, cos_desc, algo);
     CHECK_RESULT(info);
 
     // Create descriptor
@@ -72,10 +73,17 @@ infiniStatus_t calculateRoPE(const RoPEInfo &info,
     auto dimx = uint32_t(info.seqlen),
          dimy = uint32_t(info.nhead);
     int nthreads = std::max(int(info.table_dim), block_size);
+    bool is_gpt_j = info.algo == infiniopRoPEAlgo_t::INFINIOP_ROPE_ALGO_GPT_J;
 
-    ropeThreadPerItemKernel<<<dim3(dimx, dimy), nthreads, 0, stream>>>(
-        y, x, pos_ids, sin_table, cos_table, info.table_dim,
-        info.y_stride_seqlen, info.y_stride_nhead, info.x_stride_seqlen, info.x_stride_nhead);
+    if (is_gpt_j) {
+        ropeThreadPerItemKernel<true><<<dim3(dimx, dimy), nthreads, 0, stream>>>(
+            y, x, pos_ids, sin_table, cos_table, info.table_dim,
+            info.y_stride_seqlen, info.y_stride_nhead, info.x_stride_seqlen, info.x_stride_nhead);
+    } else {
+        ropeThreadPerItemKernel<false><<<dim3(dimx, dimy), nthreads, 0, stream>>>(
+            y, x, pos_ids, sin_table, cos_table, info.table_dim,
+            info.y_stride_seqlen, info.y_stride_nhead, info.x_stride_seqlen, info.x_stride_nhead);
+    }
 
     return INFINI_STATUS_SUCCESS;
 }
