@@ -2,6 +2,14 @@
 #include <cstdint>
 #include <cstring>
 
+bool _f16_to_bool(fp16_t val) {
+    uint16_t h = val._v;
+    const uint16_t exponent_mask = 0x7C00; // 指数掩码 (5 bits)
+    const uint16_t mantissa_mask = 0x03FF; // 尾数掩码 (10 bits)
+    // 判断条件：当指数和尾数全为0时表示浮点0值（无论正负）
+    return (h & (exponent_mask | mantissa_mask)) != 0;
+}
+
 float _f16_to_f32(fp16_t val) {
     uint16_t h = val._v;
     uint32_t sign = (h & 0x8000) << 16;
@@ -60,6 +68,13 @@ fp16_t _f32_to_f16(float val) {
         // Too small for subnormal: return signed zero
         return fp16_t{(uint16_t)sign};
     }
+}
+
+bool _bf16_to_bool(bf16_t val) {
+    // 提取指数和尾数部分（忽略符号位）
+    const uint16_t exponent_and_mantissa = val._v & 0x7FFF;
+    // 当指数和尾数部分全为0时表示浮点0值
+    return exponent_and_mantissa != 0;
 }
 
 float _bf16_to_f32(bf16_t val) {

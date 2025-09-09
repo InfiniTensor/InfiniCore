@@ -4,7 +4,13 @@ import gguf
 from typing import List
 from enum import Enum, auto
 
-from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides
+from .. import (
+    InfiniopTestWriter,
+    InfiniopTestCase,
+    np_dtype_to_ggml,
+    gguf_strides,
+    contiguous_gguf_strides,
+)
 
 
 def causal_softmax(x):
@@ -37,8 +43,8 @@ class CausalSoftmaxTestCase(InfiniopTestCase):
         super().__init__("causal_softmax")
         self.x = x
         self.y = y
-        self.shape_x=shape_x
-        self.shape_y=shape_y
+        self.shape_x = shape_x
+        self.shape_y = shape_y
         self.stride_x = stride_x
         self.stride_y = stride_y
 
@@ -49,10 +55,18 @@ class CausalSoftmaxTestCase(InfiniopTestCase):
         if self.shape_y is not None:
             test_writer.add_array(test_writer.gguf_key("y.shape"), self.shape_y)
         if self.stride_x is not None:
-            test_writer.add_array(test_writer.gguf_key("x.strides"), gguf_strides(*self.stride_x))
+            test_writer.add_array(
+                test_writer.gguf_key("x.strides"), gguf_strides(*self.stride_x)
+            )
         test_writer.add_array(
             test_writer.gguf_key("y.strides"),
-            gguf_strides(*self.stride_y if self.stride_y is not None else contiguous_gguf_strides(self.shape_y))
+            gguf_strides(
+                *(
+                    self.stride_y
+                    if self.stride_y is not None
+                    else contiguous_gguf_strides(self.shape_y)
+                )
+            ),
         )
         test_writer.add_tensor(
             test_writer.gguf_key("x"),
@@ -102,6 +116,6 @@ if __name__ == "__main__":
                 stride_y,
             )
             test_cases.append(test_case)
-            
+
     test_writer.add_tests(test_cases)
     test_writer.save()

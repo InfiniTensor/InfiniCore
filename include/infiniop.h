@@ -22,5 +22,14 @@
 #include "infiniop/ops/topkrouter.h"
 #include "infiniop/ops/topksoftmax.h"
 #include "infiniop/tensor_descriptor.h"
+#include "infiniop/ops/exp.h"
+#include "infiniop/ops/sin.h"
+#include "infiniop/ops/cos.h"
+#include "infiniop/ops/tanh.h"
+#include "infiniop/ops/sigmoid_backward.h"
+#include "infiniop/ops/hardswish.h"
+#include "infiniop/ops/where.h"
+#include "infiniop/ops/leaky_relu.h"
+#include "infiniop/ops/cast.h"
 
 #endif // __INFINIOP_API_H__

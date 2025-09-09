@@ -4,11 +4,17 @@ import gguf
 from typing import List
 
 
-from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides
+from .. import (
+    InfiniopTestWriter,
+    InfiniopTestCase,
+    np_dtype_to_ggml,
+    gguf_strides,
+    contiguous_gguf_strides,
+)
 
 
 def rotary_embedding(t, sin, cos):
-    dh = t.shape[2] 
+    dh = t.shape[2]
     assert dh % 2 == 0, "Embedding dimension must be even."
 
     t_even = t[..., 0::2]  # [seq_len, n_head, dh // 2]
@@ -30,7 +36,9 @@ def rotary_embedding(t, sin, cos):
 def sin_cos_table(pos, dim, theta, dtype):
     assert dim % 2 == 0, "Embedding dimension must be even."
 
-    freqs = 1.0 / (theta ** (np.arange(0, dim, 2)[: (dim // 2)].astype(np.float32) / dim))
+    freqs = 1.0 / (
+        theta ** (np.arange(0, dim, 2)[: (dim // 2)].astype(np.float32) / dim)
+    )
 
     angles = np.outer(pos, freqs)
 
@@ -79,19 +87,33 @@ class RoPETestCase(InfiniopTestCase):
             test_writer.add_array(test_writer.gguf_key("x.shape"), self.shape_x)
         test_writer.add_array(
             test_writer.gguf_key("y.strides"),
-            gguf_strides(*self.stride_y if self.stride_y is not None else contiguous_gguf_strides(self.shape_y))
+            gguf_strides(
+                *(
+                    self.stride_y
+                    if self.stride_y is not None
+                    else contiguous_gguf_strides(self.shape_y)
+                )
+            ),
         )
         if self.stride_x is not None:
-            test_writer.add_array(test_writer.gguf_key("x.strides"), gguf_strides(*self.stride_x))
+            test_writer.add_array(
+                test_writer.gguf_key("x.strides"), gguf_strides(*self.stride_x)
+            )
 
         test_writer.add_tensor(
-            test_writer.gguf_key("pos_ids"), self.pos_ids, raw_dtype=np_dtype_to_ggml(self.pos_ids.dtype)
+            test_writer.gguf_key("pos_ids"),
+            self.pos_ids,
+            raw_dtype=np_dtype_to_ggml(self.pos_ids.dtype),
         )
         test_writer.add_tensor(
-            test_writer.gguf_key("sin_table"), self.sin_table, raw_dtype=np_dtype_to_ggml(self.sin_table.dtype)
+            test_writer.gguf_key("sin_table"),
+            self.sin_table,
+            raw_dtype=np_dtype_to_ggml(self.sin_table.dtype),
         )
         test_writer.add_tensor(
-            test_writer.gguf_key("cos_table"), self.cos_table, raw_dtype=np_dtype_to_ggml(self.cos_table.dtype)
+            test_writer.gguf_key("cos_table"),
+            self.cos_table,
+            raw_dtype=np_dtype_to_ggml(self.cos_table.dtype),
         )
         ans = rotary_embedding(
             self.x.astype(np.float64),
@@ -101,8 +123,6 @@ class RoPETestCase(InfiniopTestCase):
         test_writer.add_tensor(
             test_writer.gguf_key("ans"), ans, raw_dtype=gguf.GGMLQuantizationType.F64
         )
-
-
 
 
 if __name__ == "__main__":
@@ -130,7 +150,9 @@ if __name__ == "__main__":
             x = np.random.rand(*shape).astype(dtype)
             y = np.empty(tuple(0 for _ in shape), dtype=dtype)
             pos_ids = np.arange(0, x.shape[0], dtype=np.int32)
-            sin_table, cos_table = sin_cos_table(pos_ids, x.shape[2], theta=1e5, dtype=dtype)
+            sin_table, cos_table = sin_cos_table(
+                pos_ids, x.shape[2], theta=1e5, dtype=dtype
+            )
             test_case = RoPETestCase(
                 y=y,
                 x=x,
