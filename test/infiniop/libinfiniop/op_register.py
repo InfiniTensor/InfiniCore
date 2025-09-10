@@ -490,8 +490,6 @@ def swiglu_(lib):
         infiniopOperatorDescriptor_t,
     ]
 
-
-
 @OpRegister.operator
 def conv_(lib):
     lib.infiniopCreateConvDescriptor.restype = c_int32
@@ -596,7 +594,7 @@ def topkrouter_(lib):
         infiniopHandle_t,
         POINTER(infiniopOperatorDescriptor_t),
         infiniopTensorDescriptor_t,
-        infiniopTensorDescriptor_t
+        infiniopTensorDescriptor_t,
     ]
 
     lib.infiniopGetTopkrouterWorkspaceSize.restype = c_int32
@@ -1358,6 +1356,29 @@ def linear_backward_(lib):
     lib.infiniopDestroyLinearBackwardDescriptor.argtypes = [infiniopOperatorDescriptor_t]
 
 @OpRegister.operator
+def softplus_(lib):
+    lib.infiniopCreateSoftplusDescriptor.restype = c_int32
+    lib.infiniopCreateSoftplusDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+
+    ]
+    lib.infiniopSoftplus.restype = c_int32
+    lib.infiniopSoftplus.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroySoftplusDescriptor.restype = c_int32
+    lib.infiniopDestroySoftplusDescriptor.argtypes = [infiniopOperatorDescriptor_t]
+    
+
+@OpRegister.operator
 def recurrent_gated_delta_rule_(lib):
     lib.infiniopCreateRecurrentGatedDeltaRuleDescriptor.restype = c_int32
     lib.infiniopCreateRecurrentGatedDeltaRuleDescriptor.argtypes = [
@@ -1395,3 +1416,5 @@ def recurrent_gated_delta_rule_(lib):
     ]
     lib.infiniopDestroyRecurrentGatedDeltaRuleDescriptor.restype = c_int32
     lib.infiniopDestroyRecurrentGatedDeltaRuleDescriptor.argtypes = [infiniopOperatorDescriptor_t]
+
+

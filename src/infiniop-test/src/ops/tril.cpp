@@ -14,7 +14,7 @@ struct Test::Attributes {
 
 std::shared_ptr<Test> Test::build(
     std::unordered_map<std::string, std::vector<uint8_t>> attributes,
-    std::unordered_map<std::string, std::shared_ptr<Tensor>> tensors,
+    std::unordered_map<std::string, std::shared_ptr<Tensor>> tensors
     double rtol, double atol, bool equal_nan) {
     auto test = std::shared_ptr<Test>(new Test(rtol, atol, equal_nan));
     test->_attributes = new Attributes();

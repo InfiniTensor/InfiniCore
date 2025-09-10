@@ -16,6 +16,7 @@
 #include "infiniop/ops/rms_norm.h"
 #include "infiniop/ops/rope.h"
 #include "infiniop/ops/rope_v2.h"
+#include "infiniop/ops/softplus.h"
 #include "infiniop/ops/sub.h"
 #include "infiniop/ops/swiglu.h"
 #include "infiniop/ops/sigmoid.h"
