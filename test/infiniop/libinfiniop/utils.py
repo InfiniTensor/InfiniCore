@@ -66,23 +66,26 @@ class TestTensor(CTensor):
                 torch_strides.append(strides[i])
             else:
                 torch_shape.append(shape[i])
-
         is_bool = dt == InfiniDtype.BOOL
-        if is_bool:
-            dt = InfiniDtype.F32
-
         is_int = (
             dt == InfiniDtype.I8
             or dt == InfiniDtype.I16
             or dt == InfiniDtype.I32
             or dt == InfiniDtype.I64
+            or dt == InfiniDtype.U8
+            or dt == InfiniDtype.U16
+            or dt == InfiniDtype.U32
+            or dt == InfiniDtype.U64
         )
-
         if mode == "random":
-            if is_int:
+            if is_bool:
                 self._torch_tensor = torch.randint(
-                    0,
-                    100,
+                    0, 1, torch_shape, dtype=torch.bool, device=torch_device_map[device]
+                )
+            elif is_int:
+                self._torch_tensor = torch.randint(
+                    -10,
+                    10,
                     torch_shape,
                     dtype=to_torch_dtype(dt),
                     device=torch_device_map[device],
@@ -177,6 +180,8 @@ def to_torch_dtype(dt: InfiniDtype, compatability_mode=False):
         return torch.float32
     elif dt == InfiniDtype.F64:
         return torch.float64
+    elif dt == InfiniDtype.BOOL:
+        return torch.bool
     elif dt == InfiniDtype.BOOL:
         return torch.bool
     # TODO: These following types may not be supported by older
@@ -366,6 +371,11 @@ def debug(actual, desired, atol=0, rtol=1e-2, equal_nan=False, verbose=True):
 
     # 如果是BF16，全部转成FP32再比对
     if actual.dtype == torch.bfloat16 or desired.dtype == torch.bfloat16:
+        actual = actual.to(torch.float32)
+        desired = desired.to(torch.float32)
+
+    # 如果是BOOL，全部转成FP32再比对
+    if actual.dtype == torch.bool or desired.dtype == torch.bool:
         actual = actual.to(torch.float32)
         desired = desired.to(torch.float32)
 
