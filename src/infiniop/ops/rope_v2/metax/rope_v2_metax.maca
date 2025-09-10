@@ -1,5 +1,5 @@
 #include "../../../devices/metax/metax_common.h"
-#include "rope_metax.h"
+#include "rope_v2_metax.h"
 
 #include "../../../devices/metax/metax_kernel_common.h"
 
@@ -25,7 +25,7 @@ INFINIOP_METAX_KERNEL ropeThreadPerItemKernel(
         x_stride_seqlen, x_stride_nhead);
 }
 
-namespace op::rope::metax {
+namespace op::rope_v2::metax {
 
 struct Descriptor::Opaque {
     std::shared_ptr<device::metax::Handle::Internal> internal;
@@ -46,7 +46,7 @@ infiniStatus_t Descriptor::create(
 
     auto handle = reinterpret_cast<device::metax::Handle *>(handle_);
 
-    auto info = RoPEInfo::createRoPEInfo(y_desc, x_desc, pos_desc, sin_desc, cos_desc);
+    auto info = RoPEv2Info::createRoPEv2Info(y_desc, x_desc, pos_desc, sin_desc, cos_desc);
     CHECK_RESULT(info);
 
     // Create descriptor
@@ -61,7 +61,7 @@ infiniStatus_t Descriptor::create(
 }
 
 template <typename Tdata, typename Tindex>
-infiniStatus_t calculateRoPE(const RoPEInfo &info,
+infiniStatus_t calculateRoPE(const RoPEv2Info &info,
                              int block_size,
                              Tdata *y,
                              const Tdata *x,
@@ -141,4 +141,4 @@ infiniStatus_t Descriptor::calculate(
 #undef ROPE_TYPE
 #undef CALCULATE_ROPE
 
-} // namespace op::rope::metax
+} // namespace op::rope_v2::metax
