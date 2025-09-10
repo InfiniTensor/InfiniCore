@@ -163,6 +163,38 @@ def clip_(lib):
 
 
 @OpRegister.operator
+def logsoftmax_(lib):
+    lib.infiniopCreateLogSoftmaxDescriptor.restype = c_int32
+    lib.infiniopCreateLogSoftmaxDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetLogSoftmaxWorkspaceSize.restype = c_int32
+    lib.infiniopGetLogSoftmaxWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopLogSoftmax.restype = c_int32
+    lib.infiniopLogSoftmax.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyLogSoftmaxDescriptor.restype = c_int32
+    lib.infiniopDestroyLogSoftmaxDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def conv_(lib):
     pass
 
