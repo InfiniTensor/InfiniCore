@@ -3,7 +3,6 @@
 
 #include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 #include <cub/block/block_reduce.cuh>
-
 #include "../../../reduce/cuda/reduce.cuh"
 
 #include "../cuda/kernel.cuh"

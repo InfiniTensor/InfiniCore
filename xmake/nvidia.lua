@@ -8,6 +8,12 @@ target("infiniop-nvidia")
     add_deps("infini-utils")
     on_install(function (target) end)
 
+    -- if is_mode("debug") then
+    --     print("Enabling CUDA debug flags (-g -G)")
+    --     add_cuflags("-g", "-G")
+    --     set_optimize("none")
+    -- end
+
     set_policy("build.cuda.devlink", true)
     set_toolchains("cuda")
     add_links("cudart", "cublas")
