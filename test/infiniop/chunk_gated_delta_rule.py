@@ -50,16 +50,15 @@ def ref_chunk_gated_delta_rule(
     batch_size, num_heads, sequence_length, k_head_dim = key.shape
     print(batch_size, sequence_length, num_heads, k_head_dim)
     v_head_dim = value.shape[-1]
-    print("before pad", query.shape, key.shape, value.shape, beta.shape, g.shape)
+    # print("before pad", query.shape, key.shape, value.shape, beta.shape, g.shape)
     
-    # The production implementation pads the HEAD dimension, not the sequence dimension
     pad_size = (chunk_size - sequence_length % chunk_size) % chunk_size
     query = F.pad(query, (0, 0, 0, pad_size))
     key = F.pad(key, (0, 0, 0, pad_size))
     value = F.pad(value, (0, 0, 0,  pad_size))
     beta = F.pad(beta, (0, pad_size))
     g = F.pad(g, (0,  pad_size))
-    print("after pad", query.shape, key.shape, value.shape, beta.shape, g.shape)
+    # print("after pad", query.shape, key.shape, value.shape, beta.shape, g.shape)
     
     tot_seqs = sequence_length + pad_size
     scale = 1 / (query.shape[-1] ** 0.5)
@@ -113,7 +112,7 @@ def ref_chunk_gated_delta_rule(
         last_recurrent_state = None
         
     core_attn_out = core_attn_out.reshape(core_attn_out.shape[0], core_attn_out.shape[1], -1, core_attn_out.shape[-1])
-    core_attn_out = core_attn_out[:, :, :num_heads] # Unpad
+    core_attn_out = core_attn_out[:, :, :sequence_length] # Unpad
     core_attn_out = core_attn_out.transpose(1, 2).contiguous().to(initial_dtype)
     
     if last_recurrent_state is not None:
@@ -128,7 +127,8 @@ def ref_chunk_gated_delta_rule(
 # (B, T, H, Dk, Dv, chunk_size, use_qk_l2norm)
 # T (seq_len) must be > 1 for this operator
 _TEST_CASES_ = [
-    (2, 511, 40, 64, 64, 16, True),
+    (2, 511, 40, 64, 64, 8, True),
+    # (2, 511, 40, 64, 64, 16, True),
     (4, 1024, 64, 128, 128, 64, False),
     (1, 63, 32, 80, 80, 16, True),
     (8, 2047, 32, 128, 128, 32, True),
@@ -234,6 +234,9 @@ def test(
 
     # Verify correctness
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
+    print("atol", atol, "rtol", rtol)
+    print("out", out.actual_tensor())
+    print("ans_out", ans_out)
     
     if DEBUG:
         print("--- Verifying Output Tensor ---")

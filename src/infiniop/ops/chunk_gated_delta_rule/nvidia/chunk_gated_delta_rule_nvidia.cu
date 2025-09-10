@@ -78,7 +78,33 @@ infiniStatus_t launchKernel(
     dim3 grid(uint32_t(B), uint32_t(H), 1);
     dim3 block(NUM_THREADS);
     // Shared memory for local Q, K, and one reduction value
-    size_t shared_mem_size = (Dk + Dk + NUM_THREADS) * sizeof(float);
+    // size_t shared_mem_size = (Dk + Dk + NUM_THREADS) * sizeof(float);
+
+    using Tcompute = float;
+    using BlockScan = cub::BlockScan<Tcompute, NUM_THREADS>;
+    // size_t shared_mem_size = (
+    //     // Q, K, V, k_cumdecay
+    //     chunk_size * (3 * Dk + 5 * Dv) +
+    //     // g, beta, g_cumsum
+    //     chunk_size * 3 +
+    //     // decay_mask, attn
+    //     2 * chunk_size * chunk_size +
+    //     // inter_chunk_state
+    //     Dk * Dv
+    // ) * sizeof(Tcompute) + sizeof(typename BlockScan::TempStorage);
+
+    size_t shared_mem_size = (
+        // Q, K, V, k_cumdecay
+        chunk_size * (3 * Dk + 5 * Dv) +
+        // g, beta, g_cumsum
+        chunk_size * 3 +
+        // decay_mask, attn
+        2 * chunk_size * chunk_size +
+        // inter_chunk_state
+        Dk * Dv +
+        // temp buffer for scan loop
+        chunk_size
+    ) * sizeof(Tcompute) + sizeof(typename BlockScan::TempStorage);
 
     if (dtype == INFINI_DTYPE_F16) {
         chunkGatedDeltaRule<half, float, Dk, Dv, NUM_THREADS>
