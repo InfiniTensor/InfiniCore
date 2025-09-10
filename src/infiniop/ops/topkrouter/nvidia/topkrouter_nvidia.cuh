@@ -1,5 +1,5 @@
-#ifndef __Topkrouter_CUDA_H__
-#define __Topkrouter_CUDA_H__
+#ifndef __TOPKROUTER_CUDA_H__
+#define __TOPKROUTER_CUDA_H__
 
 #include "../topkrouter.h"
 
