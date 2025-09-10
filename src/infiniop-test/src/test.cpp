@@ -49,7 +49,7 @@ std::string Result::toString() const {
 std::vector<std::shared_ptr<Result>> runAllTests(const GGUFFileReader &gguf_reader,
                                                  infiniDevice_t device, int device_id,
                                                  size_t warm_ups, size_t iterations,
-                                                 double rtol, double atol) {
+                                                 double rtol, double atol, bool equal_nan) {
     auto meta = gguf_reader.getAttributeMap();
     auto count_meta = meta.find("test_count");
     if (count_meta == meta.end()) {
@@ -60,7 +60,7 @@ std::vector<std::shared_ptr<Result>> runAllTests(const GGUFFileReader &gguf_read
     auto results = std::vector<std::shared_ptr<Result>>(count);
     try {
         for (size_t i = 0; i < count; i++) {
-            results[i] = runTest(gguf_reader, device, device_id, warm_ups, iterations, rtol, atol, i);
+            results[i] = runTest(gguf_reader, device, device_id, warm_ups, iterations, rtol, atol, i, equal_nan);
         }
     } catch (const std::exception &e) {
         std::cerr << "Error: " << e.what() << std::endl;
@@ -72,7 +72,7 @@ std::vector<std::shared_ptr<Result>> runAllTests(const GGUFFileReader &gguf_read
 std::shared_ptr<Result> runTest(const GGUFFileReader &gguf_reader,
                                 infiniDevice_t device, int device_id,
                                 size_t warm_ups, size_t iterations,
-                                double rtol, double atol, size_t test_id) {
+                                double rtol, double atol, size_t test_id, bool equal_nan) {
     auto meta = gguf_reader.getAttributeMap();
     auto tensor_info = gguf_reader.getTensorInfoMap();
     auto name_meta = meta.find("test." + std::to_string(test_id) + ".op_name");
@@ -107,7 +107,7 @@ std::shared_ptr<Result> runTest(const GGUFFileReader &gguf_reader,
         }
         std::shared_ptr<infiniop_test::base::Test> test;
         try {
-            test = builder.build(attrs, tensors, rtol, atol);
+            test = builder.build(attrs, tensors, rtol, atol, equal_nan);
         } catch (const std::exception &e) {
             return TEST_INIT_FAILED(op_name + "/n" + e.what());
         }
@@ -141,7 +141,7 @@ void incrementOffset(ptrdiff_t &offset_1, const std::vector<ptrdiff_t> &strides_
     }
 }
 
-void allClose(std::shared_ptr<Tensor> actual_, std::shared_ptr<Tensor> expected_, double rtol, double atol) {
+void allClose(std::shared_ptr<Tensor> actual_, std::shared_ptr<Tensor> expected_, double rtol, double atol, bool equal_nan) {
     auto actual = actual_->to(INFINI_DEVICE_CPU);
     auto expected = expected_->to(INFINI_DEVICE_CPU);
     auto shape = actual->shape();
@@ -158,12 +158,22 @@ void allClose(std::shared_ptr<Tensor> actual_, std::shared_ptr<Tensor> expected_
     for (size_t i = 0; i < total; i++) {
         double a_ = getVal((char *)actual->data() + actual_offset, actual->ggml_type());
         double e_ = getVal((char *)expected->data() + expected_offset, expected->ggml_type());
-        if (std::fabs(a_ - e_) > atol && std::fabs(a_ - e_) > rtol * std::fmax(std::fabs(a_), std::fabs(e_))) {
-            if (num_failed == 0) {
-                first_failed_msg = "First failed at index " + std::to_string(i) + " with value " + std::to_string(a_) + " but should be " + std::to_string(e_) + ".";
+        if (std::isnan(a_) || std::isnan(e_)) {
+            if ((equal_nan && (std::isnan(a_) != std::isnan(e_))) || !equal_nan) {
+                num_failed++;
+                if (num_failed == 0) {
+                    first_failed_msg = "First failed at index " + std::to_string(i) + " with value " + std::to_string(a_) + " but should be " + std::to_string(e_) + ".";
+                }
             }
-            num_failed++;
+        } else {
+            if (std::fabs(a_ - e_) > atol && std::fabs(a_ - e_) > rtol * std::fmax(std::fabs(a_), std::fabs(e_))) {
+                if (num_failed == 0) {
+                    first_failed_msg = "First failed at index " + std::to_string(i) + " with value " + std::to_string(a_) + " but should be " + std::to_string(e_) + ".";
+                }
+                num_failed++;
+            }
         }
+
         incrementOffset(actual_offset, actual->strides(), ggmlTypeSize(actual->ggml_type()),
                         expected_offset, expected->strides(), ggmlTypeSize(expected->ggml_type()),
                         counter, shape);

@@ -16,8 +16,8 @@ struct Test::Attributes {
 std::shared_ptr<Test> Test::build(
     std::unordered_map<std::string, std::vector<uint8_t>> attributes,
     std::unordered_map<std::string, std::shared_ptr<Tensor>> tensors,
-    double rtol, double atol) {
-    auto test = std::shared_ptr<Test>(new Test(rtol, atol));
+    double rtol, double atol, bool equal_nan) {
+    auto test = std::shared_ptr<Test>(new Test(rtol, atol, equal_nan));
     test->_attributes = new Attributes();
 
     if (attributes.find("epsilon") == attributes.end()
@@ -72,7 +72,7 @@ std::shared_ptr<infiniop_test::Result> Test::run(
              return TEST_FAILED(OP_EXECUTION_FAILED, "RMSNorm execution failed"));
 
     try {
-        allClose(y, _attributes->ans, _rtol, _atol);
+        allClose(y, _attributes->ans, _rtol, _atol, _equal_nan);
     } catch (const std::exception &e) {
         return TEST_FAILED(RESULT_INCORRECT, e.what());
     }
@@ -117,7 +117,7 @@ std::string Test::toString() const {
     oss << "- w: " << _attributes->w->info() << std::endl;
     oss << "- y: " << _attributes->y->info() << std::endl;
     oss << std::scientific << std::setprecision(2);
-    oss << "- rtol=" << _rtol << ", atol=" << _atol << std::endl;
+    oss << "- rtol=" << _rtol << ", atol=" << _atol << ", equal_nan=" << _equal_nan << std::endl;
     return oss.str();
 }
 

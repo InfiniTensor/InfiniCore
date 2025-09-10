@@ -1,8 +1,8 @@
 #include "gguf.hpp"
 #include "test.hpp"
+#include <cstring>
 #include <infinirt.h>
 #include <iostream>
-
 struct ParsedArgs {
     std::string file_path;                          // Mandatory argument: test.gguf file path
     infiniDevice_t device_type = INFINI_DEVICE_CPU; // Default to CPU
@@ -11,12 +11,13 @@ struct ParsedArgs {
     int iterations = 0;                             // Default to 0 if not given
     double atol = 0.0015;                           // Default absolute tolerance
     double rtol = 0.001;                            // Default relative tolerance
+    bool equal_nan = false;                         // Default relative tolerance
 };
 
 void printUsage() {
     std::cout << "Usage:" << std::endl
               << std::endl;
-    std::cout << "infiniop-test <test.gguf> [--<device>[:id]] [--warmup <warmups>] [--run <iterations>] [--atol <atol>] [--rtol <rtol>]" << std::endl
+    std::cout << "infiniop-test <test.gguf> [--<device>[:id]] [--warmup <warmups>] [--run <iterations>] [--atol <atol>] [--rtol <rtol>] [--equal-nan <equal nan>]" << std::endl
               << std::endl;
     std::cout << "  <test.gguf>>" << std::endl;
     std::cout << "    Path to the test gguf file" << std::endl
@@ -35,6 +36,9 @@ void printUsage() {
               << std::endl;
     std::cout << "  --rtol <relative_tolerance>" << std::endl;
     std::cout << "    (Optional) Relative tolerance for correctness check. Default to 0.001" << std::endl
+              << std::endl;
+    std::cout << "  --equal-nan <compare NaNs as equal>" << std::endl;
+    std::cout << "    (Optional) If True, then two NaNs will be considered equal. Default to False" << std::endl
               << std::endl;
     exit(-1);
 }
@@ -91,6 +95,11 @@ ParsedArgs parseArgs(int argc, char *argv[]) {
             else if (arg == "--rtol" && i + 1 < argc) {
                 args.rtol = std::stod(argv[++i]);
             }
+            else if (arg == "--equal-nan" && i + 1 < argc) {
+                args.equal_nan = (strcmp(argv[++i], "True") == 0 || strcmp(argv[i], "true") == 0)
+                                   ? true
+                                   : false;
+            }
             else {
                 printUsage();
             }
@@ -119,7 +128,7 @@ int main(int argc, char *argv[]) {
             reader,
             (infiniDevice_t)args.device_type, args.device_id,
             args.warmups, args.iterations,
-            args.rtol, args.atol);
+            args.rtol, args.atol, args.equal_nan);
 
         std::cout << "=====================================" << std::endl;
         for (auto result : results) {

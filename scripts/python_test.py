@@ -28,6 +28,15 @@ def run_tests(args):
         "sigmoid.py",
         "topkrouter.py",
         "topksoftmax.py",
+        "exp.py",
+        "sin.py",
+        "cos.py",
+        "tanh.py",
+        "sigmoid_backward.py",
+        "hardswish.py",
+        "where.py",
+        "leaky_relu.py",
+        "cast.py",
     ]:
         result = subprocess.run(
             f"python {test} {args} --debug", text=True, encoding="utf-8", shell=True

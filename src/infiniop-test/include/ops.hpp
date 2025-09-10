@@ -19,6 +19,15 @@ DECLARE_INFINIOP_TEST(sub)
 DECLARE_INFINIOP_TEST(sigmoid)
 DECLARE_INFINIOP_TEST(topkrouter)
 DECLARE_INFINIOP_TEST(topksoftmax)
+DECLARE_INFINIOP_TEST(exp)
+DECLARE_INFINIOP_TEST(sin)
+DECLARE_INFINIOP_TEST(cos)
+DECLARE_INFINIOP_TEST(tanh)
+DECLARE_INFINIOP_TEST(sigmoid_backward)
+DECLARE_INFINIOP_TEST(hardswish)
+DECLARE_INFINIOP_TEST(where)
+DECLARE_INFINIOP_TEST(leakyrelu)
+DECLARE_INFINIOP_TEST(cast)
 
 #define REGISTER_INFINIOP_TEST(name)                      \
     {                                                     \
@@ -33,22 +42,32 @@ DECLARE_INFINIOP_TEST(topksoftmax)
 /*
  * Register all the tests here
  */
-#define TEST_BUILDER_MAPPINGS                  \
-    {                                          \
-        REGISTER_INFINIOP_TEST(gemm)           \
-        REGISTER_INFINIOP_TEST(random_sample)  \
-        REGISTER_INFINIOP_TEST(add)            \
-        REGISTER_INFINIOP_TEST(mul)            \
-        REGISTER_INFINIOP_TEST(clip)           \
-        REGISTER_INFINIOP_TEST(swiglu)         \
-        REGISTER_INFINIOP_TEST(rope)           \
-        REGISTER_INFINIOP_TEST(rms_norm)       \
-        REGISTER_INFINIOP_TEST(causal_softmax) \
-        REGISTER_INFINIOP_TEST(rearrange)      \
-        REGISTER_INFINIOP_TEST(sub)            \
-        REGISTER_INFINIOP_TEST(sigmoid)        \
-        REGISTER_INFINIOP_TEST(topkrouter)     \
-        REGISTER_INFINIOP_TEST(topksoftmax)    \
+
+#define TEST_BUILDER_MAPPINGS                    \
+    {                                            \
+        REGISTER_INFINIOP_TEST(gemm)             \
+        REGISTER_INFINIOP_TEST(random_sample)    \
+        REGISTER_INFINIOP_TEST(add)              \
+        REGISTER_INFINIOP_TEST(mul)              \
+        REGISTER_INFINIOP_TEST(clip)             \
+        REGISTER_INFINIOP_TEST(swiglu)           \
+        REGISTER_INFINIOP_TEST(rope)             \
+        REGISTER_INFINIOP_TEST(rms_norm)         \
+        REGISTER_INFINIOP_TEST(causal_softmax)   \
+        REGISTER_INFINIOP_TEST(rearrange)        \
+        REGISTER_INFINIOP_TEST(sub)              \
+        REGISTER_INFINIOP_TEST(sigmoid)          \
+        REGISTER_INFINIOP_TEST(topkrouter)       \
+        REGISTER_INFINIOP_TEST(topksoftmax)      \
+        REGISTER_INFINIOP_TEST(exp)              \
+        REGISTER_INFINIOP_TEST(sin)              \
+        REGISTER_INFINIOP_TEST(cos)              \
+        REGISTER_INFINIOP_TEST(tanh)             \
+        REGISTER_INFINIOP_TEST(sigmoid_backward) \
+        REGISTER_INFINIOP_TEST(hardswish)        \
+        REGISTER_INFINIOP_TEST(where)            \
+        REGISTER_INFINIOP_TEST(leakyrelu)        \
+        REGISTER_INFINIOP_TEST(cast)             \
     }
 
 namespace infiniop_test {

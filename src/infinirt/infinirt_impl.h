@@ -30,7 +30,6 @@
     infiniStatus_t freeAsync(void *ptr, infinirtStream_t stream) IMPL;
 
 #define INFINIRT_DEVICE_API_IMPL INFINIRT_DEVICE_API(, )
-#define INFINIRT_DEVICE_API_NOOP INFINIRT_DEVICE_API({ return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED; }, \
-                                                     {*count = 0; return INFINI_STATUS_SUCCESS; })
+#define INFINIRT_DEVICE_API_NOOP INFINIRT_DEVICE_API({ return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED; }, {*count = 0; return INFINI_STATUS_SUCCESS; })
 
 #endif // __INFINIRT_IMPL_H__
