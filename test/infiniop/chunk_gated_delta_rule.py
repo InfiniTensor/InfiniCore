@@ -201,8 +201,8 @@ def test(
         out.descriptor, final_state.descriptor,
         q.descriptor, k.descriptor, v.descriptor,
         g.descriptor, beta.descriptor, initial_state.descriptor,
-        ctypes.c_int(chunk_size),
-        ctypes.c_bool(use_qk_l2norm)
+        ctypes.c_bool(use_qk_l2norm),
+        ctypes.c_size_t(chunk_size)
     ))
     
     # Get workspace size
