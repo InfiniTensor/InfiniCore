@@ -1,7 +1,7 @@
 #ifndef __INFINIOP_ROPE_METAX_H__
 #define __INFINIOP_ROPE_METAX_H__
 
-#include "../rope.h"
+#include "../rope_v2.h"
 
 DESCRIPTOR(metax)
 

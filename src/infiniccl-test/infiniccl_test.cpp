@@ -11,6 +11,7 @@
 #define TEST_INFINI_THREAD(API__) CHECK_API_OR(API__, INFINI_STATUS_SUCCESS, return nullptr)
 
 const size_t MAX_COUNT = 8ULL * 1024 * 1024;
+// const size_t MAX_COUNT = 512 * 1024; // for metax
 
 const size_t TEST_COUNTS[] = {
     128,
@@ -19,7 +20,7 @@ const size_t TEST_COUNTS[] = {
     MAX_COUNT,
 };
 
-const infiniDtype_t TEST_DTYPES[] = {INFINI_DTYPE_F32, INFINI_DTYPE_F16};
+const infiniDtype_t TEST_DTYPES[] = {INFINI_DTYPE_F32, INFINI_DTYPE_F16, INFINI_DTYPE_BF16};
 
 const size_t WARM_UPS = 10;
 
@@ -51,6 +52,11 @@ void setData(infiniDtype_t dtype, void *data, size_t count, float val) {
             ((fp16_t *)data)[i] = utils::cast<fp16_t>(val);
         }
         break;
+    case INFINI_DTYPE_BF16:
+        for (size_t i = 0; i < count; i++) {
+            ((bf16_t *)data)[i] = utils::cast<bf16_t>(val);
+        }
+        break;
     default:
         std::abort();
         break;
@@ -62,6 +68,12 @@ int checkData(const T *actual_, const T *expected_, size_t count) {
     int failed = 0;
     for (size_t i = 0; i < count; i++) {
         if constexpr (std::is_same<T, fp16_t>::value) {
+            float actual = utils::cast<float>(actual_[i]);
+            float expected = utils::cast<float>(expected_[i]);
+            if (std::abs(actual - expected) > 1e-4) {
+                failed += 1;
+            }
+        } else if constexpr (std::is_same<T, bf16_t>::value) {
             float actual = utils::cast<float>(actual_[i]);
             float expected = utils::cast<float>(expected_[i]);
             if (std::abs(actual - expected) > 1e-4) {
@@ -82,6 +94,8 @@ int checkData(const void *actual, const void *expected, infiniDtype_t dtype, siz
         return checkData((const float *)actual, (const float *)expected, count);
     case INFINI_DTYPE_F16:
         return checkData((const fp16_t *)actual, (const fp16_t *)expected, count);
+    case INFINI_DTYPE_BF16:
+        return checkData((const bf16_t *)actual, (const bf16_t *)expected, count);
     default:
         std::abort();
         return 1;
