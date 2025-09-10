@@ -1357,3 +1357,41 @@ def linear_backward_(lib):
     lib.infiniopDestroyLinearBackwardDescriptor.restype = c_int32
     lib.infiniopDestroyLinearBackwardDescriptor.argtypes = [infiniopOperatorDescriptor_t]
 
+@OpRegister.operator
+def recurrent_gated_delta_rule_(lib):
+    lib.infiniopCreateRecurrentGatedDeltaRuleDescriptor.restype = c_int32
+    lib.infiniopCreateRecurrentGatedDeltaRuleDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_bool,
+    ]
+    lib.infiniopGetRecurrentGatedDeltaRuleWorkspaceSize.restype = c_int32
+    lib.infiniopGetRecurrentGatedDeltaRuleWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]    
+    lib.infiniopRecurrentGatedDeltaRule.restype = c_int32
+    lib.infiniopRecurrentGatedDeltaRule.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyRecurrentGatedDeltaRuleDescriptor.restype = c_int32
+    lib.infiniopDestroyRecurrentGatedDeltaRuleDescriptor.argtypes = [infiniopOperatorDescriptor_t]
