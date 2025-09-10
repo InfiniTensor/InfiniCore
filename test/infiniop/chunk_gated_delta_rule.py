@@ -47,19 +47,21 @@ def ref_chunk_gated_delta_rule(
         x.transpose(1, 2).contiguous().to(torch.float32) for x in (query, key, value, beta, g)
     ]
 
-    # trans
     batch_size, num_heads, sequence_length, k_head_dim = key.shape
+    print(batch_size, sequence_length, num_heads, k_head_dim)
     v_head_dim = value.shape[-1]
+    print("before pad", query.shape, key.shape, value.shape, beta.shape, g.shape)
     
     # The production implementation pads the HEAD dimension, not the sequence dimension
-    pad_size = (chunk_size - num_heads % chunk_size) % chunk_size
-    query = F.pad(query, (0, 0, 0, 0, 0, pad_size))
-    key = F.pad(key, (0, 0, 0, 0, 0, pad_size))
-    value = F.pad(value, (0, 0, 0, 0, 0, pad_size))
-    beta = F.pad(beta, (0, 0, 0, pad_size))
-    g = F.pad(g, (0, 0, 0, pad_size))
+    pad_size = (chunk_size - sequence_length % chunk_size) % chunk_size
+    query = F.pad(query, (0, 0, 0, pad_size))
+    key = F.pad(key, (0, 0, 0, pad_size))
+    value = F.pad(value, (0, 0, 0,  pad_size))
+    beta = F.pad(beta, (0, pad_size))
+    g = F.pad(g, (0,  pad_size))
+    print("after pad", query.shape, key.shape, value.shape, beta.shape, g.shape)
     
-    tot_heads = num_heads + pad_size
+    tot_seqs = sequence_length + pad_size
     scale = 1 / (query.shape[-1] ** 0.5)
     query = query * scale
 
@@ -88,14 +90,14 @@ def ref_chunk_gated_delta_rule(
     k_cumdecay = attn @ (k_beta * g.exp().unsqueeze(-1))
     
     last_recurrent_state = (
-        torch.zeros(batch_size, sequence_length, k_head_dim, v_head_dim, device=value.device, dtype=torch.float32)
+        torch.zeros(batch_size, num_heads, k_head_dim, v_head_dim, device=value.device, dtype=torch.float32)
         if initial_state is None
         else initial_state.to(torch.float32)
     )
     core_attn_out = torch.zeros_like(value)
     mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=1)
 
-    for i in range(0, tot_heads // chunk_size):
+    for i in range(0, tot_seqs // chunk_size):
         q_i, k_i, v_i = query[:, :, i], key[:, :, i], value[:, :, i]
         attn_intra = (q_i @ k_i.transpose(-1, -2) * decay_mask[:, :, i]).masked_fill_(mask, 0)
         v_prime = (k_cumdecay[:, :, i]) @ last_recurrent_state
@@ -171,13 +173,13 @@ def test(
     beta_sigmoid = torch.randn(B, T, H, dtype=torch.float32)
     beta = TestTensor.from_torch(torch.sigmoid(beta_sigmoid), dtype, device)
     
-    # initial_state shape is (B, T, Dk, Dv) - Note the T dimension
-    initial_state = TestTensor((B, T, Dk, Dv), None, dtype, device)
+    # initial_state shape is (B, H, Dk, Dv) - Note the T dimension
+    initial_state = TestTensor((B, H, Dk, Dv), None, dtype, device)
 
     # Output tensors
     out = TestTensor((B, T, H, Dv), None, dtype, device)
-    # final_state shape is (B, T, Dk, Dv)
-    final_state = TestTensor((B, T, Dk, Dv), None, dtype, device)
+    # final_state shape is (B, H, Dk, Dv)
+    final_state = TestTensor((B, H, Dk, Dv), None, dtype, device)
 
     # Run reference implementation
     ans_out, ans_final_state = ref_chunk_gated_delta_rule(
@@ -192,62 +194,62 @@ def test(
     if sync:
         sync()
 
-    # # Create operator descriptor
-    # descriptor = infiniopOperatorDescriptor_t()
-    # check_error(LIBINFINIOP.infiniopCreateChunkGatedDeltaRuleDescriptor(
-    #     handle, ctypes.byref(descriptor),
-    #     out.descriptor, final_state.descriptor,
-    #     q.descriptor, k.descriptor, v.descriptor,
-    #     g.descriptor, beta.descriptor, initial_state.descriptor,
-    #     ctypes.c_int(chunk_size),
-    #     ctypes.c_bool(use_qk_l2norm)
-    # ))
+    # Create operator descriptor
+    descriptor = infiniopOperatorDescriptor_t()
+    check_error(LIBINFINIOP.infiniopCreateChunkGatedDeltaRuleDescriptor(
+        handle, ctypes.byref(descriptor),
+        out.descriptor, final_state.descriptor,
+        q.descriptor, k.descriptor, v.descriptor,
+        g.descriptor, beta.descriptor, initial_state.descriptor,
+        ctypes.c_int(chunk_size),
+        ctypes.c_bool(use_qk_l2norm)
+    ))
     
-    # # Get workspace size
-    # workspace_size = c_uint64(0)
-    # check_error(
-    #     LIBINFINIOP.infiniopGetChunkGatedDeltaRuleWorkspaceSize(
-    #         descriptor, ctypes.byref(workspace_size)
-    #     )
-    # )
-    # workspace = TestWorkspace(workspace_size.value, q.device)
+    # Get workspace size
+    workspace_size = c_uint64(0)
+    check_error(
+        LIBINFINIOP.infiniopGetChunkGatedDeltaRuleWorkspaceSize(
+            descriptor, ctypes.byref(workspace_size)
+        )
+    )
+    workspace = TestWorkspace(workspace_size.value, q.device)
 
-    # # Invalidate descriptors
-    # # ... (destroy all descriptors) ...
+    # Invalidate descriptors
+    # ... (destroy all descriptors) ...
 
-    # # Define the library call
-    # def lib_chunk_gated_delta_rule():
-    #     check_error(LIBINFINIOP.infiniopChunkGatedDeltaRule(
-    #         descriptor, workspace.data(), workspace_size.value,
-    #         out.data(), final_state.data(),
-    #         q.data(), k.data(), v.data(),
-    #         g.data(), beta.data(), initial_state.data(), None
-    #     ))
+    # Define the library call
+    def lib_chunk_gated_delta_rule():
+        check_error(LIBINFINIOP.infiniopChunkGatedDeltaRule(
+            descriptor, workspace.data(), workspace_size.value,
+            out.data(), final_state.data(),
+            q.data(), k.data(), v.data(),
+            g.data(), beta.data(), initial_state.data(), None
+        ))
     
-    # # Execute the custom operator
-    # lib_chunk_gated_delta_rule()
+    # Execute the custom operator
+    lib_chunk_gated_delta_rule()
     
-    # if sync:
-    #     sync()
+    if sync:
+        sync()
 
-    # # Verify correctness
-    # atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
+    # Verify correctness
+    atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     
-    # if DEBUG:
-    #     print("--- Verifying Output Tensor ---")
-    #     debug(out.actual_tensor(), ans_out, atol=atol, rtol=rtol)
-    # assert torch.allclose(out.actual_tensor(), ans_out, atol=atol, rtol=rtol)
+    if DEBUG:
+        print("--- Verifying Output Tensor ---")
+        debug(out.actual_tensor(), ans_out, atol=atol, rtol=rtol)
+    assert torch.allclose(out.actual_tensor(), ans_out, atol=atol, rtol=rtol)
     
-    # if DEBUG:
-    #     print("--- Verifying Final State Tensor ---")
-    #     debug(final_state.actual_tensor(), ans_final_state, atol=atol, rtol=rtol)
-    # assert torch.allclose(final_state.actual_tensor(), ans_final_state, atol=atol, rtol=rtol)
+    if DEBUG:
+        print("--- Verifying Final State Tensor ---")
+        debug(final_state.actual_tensor(), ans_final_state, atol=atol, rtol=rtol)
+    assert torch.allclose(final_state.actual_tensor(), ans_final_state, atol=atol, rtol=rtol)
     
-    # # Profiling
-    # # ... (profiling logic) ...
+    # Profiling
+    # ... (profiling logic) ...
     
-    # # Clean up
-    # check_error(LIBINFINIOP.infiniopDestroyChunkGatedDeltaRuleDescriptor(descriptor))
+    # Clean up
+    check_error(LIBINFINIOP.infiniopDestroyChunkGatedDeltaRuleDescriptor(descriptor))
 
 
 if __name__ == "__main__":
