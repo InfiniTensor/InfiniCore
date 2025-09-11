@@ -82,7 +82,7 @@ infiniStatus_t launchKernel(
 
     using Tcompute = float;
     using BlockScan = cub::BlockScan<Tcompute, NUM_THREADS>;
-    using BlockReduce = cub::BlockReduce<Tcompute, NUM_THREADS>;
+    // using BlockReduce = cub::BlockReduce<Tcompute, NUM_THREADS>;
 
     // size_t shared_mem_size = (
     //     chunk_size * (3 * Dk + Dv + 3) + 
@@ -102,18 +102,29 @@ infiniStatus_t launchKernel(
     //     Dk * Dv
     // ) * sizeof(Tcompute) + sizeof(typename BlockScan::TempStorage) + sizeof(typename BlockReduce::TempStorage);
 
+    // size_t shared_mem_size = (
+    //     // q_s, k_s, k_beta_s, k_cumdecay_s
+    //     chunk_size * 4 * Dk +
+    //     // v_s, value_prime_s, v_prime_s (v_new_s is still here from prev version)
+    //     chunk_size * 4 * Dv +
+    //     // g_s, beta_s, g_cumsum_s
+    //     chunk_size * 3 +
+    //     // attn_s
+    //     chunk_size * chunk_size +
+    //     // inter_chunk_state_s
+    //     Dk * Dv
+    // ) * sizeof(Tcompute) + sizeof(typename BlockScan::TempStorage) + sizeof(typename BlockReduce::TempStorage);
     size_t shared_mem_size = (
         // q_s, k_s, k_beta_s, k_cumdecay_s
         chunk_size * 4 * Dk +
-        // v_s, value_prime_s, v_prime_s (v_new_s is still here from prev version)
+        // v_s, value_prime_s, v_prime_s, attn_inter_s
         chunk_size * 4 * Dv +
         // g_s, beta_s, g_cumsum_s
         chunk_size * 3 +
         // attn_s
-        chunk_size * chunk_size +
-        // inter_chunk_state_s
-        Dk * Dv
-    ) * sizeof(Tcompute) + sizeof(typename BlockScan::TempStorage) + sizeof(typename BlockReduce::TempStorage);
+        chunk_size * chunk_size
+        // NOTE: Dk * Dv term for inter_chunk_state_s has been removed.
+    ) * sizeof(Tcompute) + sizeof(typename BlockScan::TempStorage);
 
     if (dtype == INFINI_DTYPE_F16) {
         chunkGatedDeltaRule<half, float, Dk, Dv, NUM_THREADS>
