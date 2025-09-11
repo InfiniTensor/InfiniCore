@@ -572,11 +572,28 @@ __device__ void chunkGatedDeltaRuleKernel(
                 Tcompute decay_factor = expf(g_final_cumsum - g_cumsum_s[t]);
                 // --- START MODIFICATION 3 ---
                 // Use k_beta_s for the update, not k_s
-                update_val += (k_beta_s[t * Dk + dk] * decay_factor) * v_new_s[t * Dv + dv];
+                update_val += (k_s[t * Dk + dk] * decay_factor) * v_new_s[t * Dv + dv];
                 // --- END MODIFICATION 3 ---
             }
             atomicAdd(&inter_chunk_state_s[i], update_val);
         }
+
+        
+        // ==================== DEBUG PRINT 2a =====================
+        __syncthreads();
+        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
+            printf("--- CUDA Kernel:  decay_factor) * v_new_s chunk_idx0 (= (tast_recurrent_state * decay_mask_s[t * chunk_size + j]) * v_new_j;) ---\n");
+            for (size_t i = 0; i < chunk_size; ++i) {
+                for (size_t j = 0; j < chunk_size; ++j) {
+                // for (size_t j = Dv-chunk_size; j < Dv; ++j) {
+                    printf("%8.4f, %llu ", (float)inter_chunk_state_s[i * Dv + j], (unsigned long long)(i * Dv + j));
+                }
+                printf("\n");
+            }
+            printf("------------------------------------------\n");
+        }
+        __syncthreads();
+        // =========================================================
 
         
             
@@ -611,6 +628,8 @@ __device__ void chunkGatedDeltaRuleKernel(
     //     printf("------------------------------------------\n");
     // }
     // // ======================================================
+
+    
 
     // === Phase 3: Write Final State ===
     __syncthreads();
