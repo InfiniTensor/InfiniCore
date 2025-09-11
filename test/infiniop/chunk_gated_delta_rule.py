@@ -38,7 +38,6 @@ def ref_chunk_gated_delta_rule(
     use_qk_l2norm_in_kernel=False,
 ):
     initial_dtype = query.dtype
-
     if use_qk_l2norm_in_kernel:
         query = F.normalize(query, p=2, dim=-1)
         key = F.normalize(key, p=2, dim=-1)
