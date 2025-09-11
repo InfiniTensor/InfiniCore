@@ -80,11 +80,44 @@ __device__ void chunkGatedDeltaRuleKernel(
             inter_chunk_state_s[i] = 0.0f;
         }
     }
+    // ==================== DEBUG PRINT 2a =====================
+        __syncthreads();
+        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0) {
+            printf("--- CUDA Kernel: initial_state (= (dot_qk * decay_mask_s[t * chunk_size + j]) * v_new_j;) ---\n");
+            for (size_t i = 0; i < Dk; ++i) {
+                for (size_t j = 0; j < Dv; ++j) {
+                // for (size_t j = Dv-chunk_size; j < Dv; ++j) {
+                    printf("%8.4f, %llu ", (float)initial_state[i * Dk + j], (unsigned long long)(i * Dk + j));
+                }
+                printf("\n");
+            }
+            printf("------------------------------------------\n");
+        }
+        __syncthreads();
+    // =========================================================
+
 
     // --- Main loop over chunks of the sequence ---
     for (size_t chunk_idx = 0; chunk_idx < num_chunks; ++chunk_idx) {
         __syncthreads(); // Ensure state is ready and previous chunk's writes are visible
         size_t chunk_offset = chunk_idx * chunk_size;
+
+        // ==================== DEBUG PRINT 2a =====================
+        __syncthreads();
+        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 1) {
+            printf("--- CUDA Kernel: inter_chunk_state_s (= (dot_qk * decay_mask_s[t * chunk_size + j]) * v_new_j;) ---\n");
+            for (size_t i = 0; i < chunk_size; ++i) {
+                for (size_t j = 0; j < chunk_size; ++j) {
+                // for (size_t j = Dv-chunk_size; j < Dv; ++j) {
+                    printf("%8.4f, %llu ", (float)inter_chunk_state_s[i * Dv + j], (unsigned long long)(i * Dv + j));
+                }
+                printf("\n");
+            }
+            printf("------------------------------------------\n");
+        }
+        __syncthreads();
+        // =========================================================
+
 
         // --- 2.1: Collaborative Loading of chunk data (with updated indexing) ---
         // --- MODIFICATION START: Updated memory indexing for [B, H, T, D] layout ---
@@ -141,6 +174,7 @@ __device__ void chunkGatedDeltaRuleKernel(
         //     printf("------------------------------------------\n");
         // }
         // __syncthreads();
+
 
 
         // Load V (Layout: [B, H, T, Dv])
@@ -296,7 +330,7 @@ __device__ void chunkGatedDeltaRuleKernel(
         // printf("check ok.\n");
         // ==================== DEBUG PRINT 2a =====================
         __syncthreads();
-        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
+        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 1) {
             printf("--- CUDA Kernel: attn_s (Tcompute beta_val = beta_s[i];) ---\n");
             for (size_t i = 0; i < chunk_size; ++i) {
                 for (size_t j = 0; j < chunk_size; ++j) {
@@ -333,11 +367,11 @@ __device__ void chunkGatedDeltaRuleKernel(
 
         // ==================== DEBUG PRINT 2a =====================
         __syncthreads();
-        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
+        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 1) {
             printf("--- CUDA Kernel: value_prime_s (Tcompute beta_val = beta_s[i];) ---\n");
             for (size_t i = 0; i < chunk_size; ++i) {
                 for (size_t j = 0; j < chunk_size; ++j) {
-                    printf("%8.4f ", (float)value_prime_s[i * chunk_size + j]);
+                    printf("%8.4f ", (float)value_prime_s[i * Dv + j]);
                 }
                 printf("\n");
             }
@@ -346,20 +380,20 @@ __device__ void chunkGatedDeltaRuleKernel(
         __syncthreads();
         // =========================================================
 
-        // ==================== DEBUG PRINT 2a =====================
-        __syncthreads();
-        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
-            printf("--- CUDA Kernel: k_cumdecay_s (Tcompute beta_val = beta_s[i];) ---\n");
-            for (size_t i = 0; i < chunk_size; ++i) {
-                for (size_t j = 0; j < chunk_size; ++j) {
-                    printf("%8.4f ", (float)k_cumdecay_s[i * chunk_size + j]);
-                }
-                printf("\n");
-            }
-            printf("------------------------------------------\n");
-        }
-        __syncthreads();
-        // =========================================================
+        // // ==================== DEBUG PRINT 2a =====================
+        // __syncthreads();
+        // if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
+        //     printf("--- CUDA Kernel: k_cumdecay_s (Tcompute beta_val = beta_s[i];) ---\n");
+        //     for (size_t i = 0; i < chunk_size; ++i) {
+        //         for (size_t j = 0; j < chunk_size; ++j) {
+        //             printf("%8.4f ", (float)k_cumdecay_s[i * chunk_size + j]);
+        //         }
+        //         printf("\n");
+        //     }
+        //     printf("------------------------------------------\n");
+        // }
+        // __syncthreads();
+        // // =========================================================
 
         // --- 2.4: Inter-Chunk Interaction ---
         // Calculate v_prime
@@ -401,6 +435,72 @@ __device__ void chunkGatedDeltaRuleKernel(
         // }
         // // ======================================================
 
+        // // ==================== DEBUG PRINT 2a =====================
+        // __syncthreads();
+        // if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 1) {
+        //     printf("--- CUDA Kernel: v_new_s (= (dot_qk * decay_mask_s[t * chunk_size + j]) * v_new_j;) ---\n");
+        //     for (size_t i = 0; i < chunk_size; ++i) {
+        //         // for (size_t j = 0; j < chunk_size; ++j) {
+        //         for (size_t j = Dv-chunk_size; j < Dv; ++j) {
+        //             printf("%8.4f, %llu ", (float)v_new_s[i * Dv + j], (unsigned long long)(i * Dv + j));
+        //         }
+        //         printf("\n");
+        //     }
+        //     printf("------------------------------------------\n");
+        // }
+        // __syncthreads();
+        // // =========================================================
+        // // ==================== DEBUG PRINT 2a =====================
+        // __syncthreads();
+        // if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 1) {
+        //     printf("--- CUDA Kernel: attn_inter_s (= (dot_qk * decay_mask_s[t * chunk_size + j]) * v_new_j;) ---\n");
+        //     for (size_t i = 0; i < chunk_size; ++i) {
+        //         // for (size_t j = 0; j < chunk_size; ++j) {
+        //         for (size_t j = Dv-chunk_size; j < Dv; ++j) {
+        //             printf("%8.4f, %llu ", (float)attn_inter_s[i * Dv + j], (unsigned long long)(i * Dv + j));
+        //         }
+        //         printf("\n");
+        //     }
+        //     printf("------------------------------------------\n");
+        // }
+        // __syncthreads();
+        // // =========================================================
+        // ==================== DEBUG PRINT 2a =====================
+        __syncthreads();
+        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 1) {
+            printf("--- CUDA Kernel: v_prime_s (= (dot_qk * decay_mask_s[t * chunk_size + j]) * v_new_j;) ---\n");
+            for (size_t i = 0; i < chunk_size; ++i) {
+                // for (size_t j = 0; j < chunk_size; ++j) {
+                for (size_t j = Dv-chunk_size; j < Dv; ++j) {
+                    printf("%8.4f, %llu ", (float)v_prime_s[i * Dv + j], (unsigned long long)(i * Dv + j));
+                }
+                printf("\n");
+            }
+            printf("------------------------------------------\n");
+        }
+        __syncthreads();
+        // =========================================================+
+
+
+
+
+
+        // ==================== DEBUG PRINT 2a =====================
+        __syncthreads();
+        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 1) {
+            printf("--- CUDA Kernel: attn_inter_s final ---\n");
+            for (size_t i = 0; i < chunk_size; ++i) {
+                // for (size_t j = 0; j < chunk_size; ++j) {
+                for (size_t j = 0; j < chunk_size; ++j) {
+                    printf("%8.4f, %llu ", (float)attn_inter_s[i * Dv + j], (unsigned long long)(i * Dv + j));
+                }
+                printf("\n");
+            }
+            printf("------------------------------------------\n");
+        }
+        __syncthreads();
+        // =========================================================
+
         // --- 2.5: Final Output Calculation and Writeback ---
         // NOTE: This section correctly implements the reference algorithm, but the algorithm
         // itself involves redundant computation (re-calculating simple attention).
@@ -409,6 +509,7 @@ __device__ void chunkGatedDeltaRuleKernel(
             if (global_t < T) {
                 // --- MODIFICATION START: Updated memory indexing for output ---
                 ptrdiff_t out_offset = (batch_idx * H * T * Dv) + (head_idx * T * Dv) + (global_t * Dv);
+                Tdata output_it;
                 // --- MODIFICATION END ---
                 for (size_t d_v = 0; d_v < Dv; ++d_v) {
                     Tcompute intra_sum = 0.0f;
@@ -418,7 +519,15 @@ __device__ void chunkGatedDeltaRuleKernel(
                         Tcompute v_new_j = v_new_s[j * Dv + d_v];
                         intra_sum += (dot_qk * decay_mask_s[t * chunk_size + j]) * v_new_j;
                     }
+                    
+                    
                     out[out_offset + d_v] = static_cast<Tdata>(attn_inter_s[t * Dv + d_v] + intra_sum);
+                    // output_it = static_cast<Tdata>(attn_inter_s[t * Dv + d_v] + intra_sum);
+                    // if (batch_idx == 0 && head_idx == 0 && d_v == 0){
+                    //     printf("intra_sum: %8.4f, attn_inter_s: %8.4f, idx: %llu, t: %llu\n", (float)intra_sum, (float)attn_inter_s[t * Dv + d_v], 
+                    //     (unsigned long long)(t * Dv + d_v), (unsigned long long)(t));
+                    // }
+                    // out[out_offset + d_v] = output_it;
                 }
             }
         }

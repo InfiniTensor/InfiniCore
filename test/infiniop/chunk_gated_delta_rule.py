@@ -144,19 +144,32 @@ def ref_chunk_gated_delta_rule(
 
     value = attn @ v_beta
     k_cumdecay = attn @ (k_beta * g.exp().unsqueeze(-1))
+    #     # ==================== DEBUG PRINT 2b =====================
+    # print("--- Python ref value_prime ( torch.eye(chunk_size, dtype=attn.dtype, d) ---")
+    # print(value.shape)
+    # print(value[0, 0, 0, :, :chunk_size])
+    # # print(value[0, 0, :, -chunk_size:])
+    # # =========================================================
+    #     # ==================== DEBUG PRINT 2b =====================
+    # print("--- Python ref k_cumdecay ( torch.eye(chunk_size, dtype=attn.dtype, d) ---")
+    # print(k_cumdecay.shape)
+    # print(k_cumdecay[0, 0, 0, :, :chunk_size])
+    # print(k_cumdecay[0, 0, 0, :, -chunk_size:])
+    # # =========================================================
     
     last_recurrent_state = (
         torch.zeros(batch_size, num_heads, k_head_dim, v_head_dim, device=value.device, dtype=torch.float32)
         if initial_state is None
         else initial_state.to(torch.float32)
     )
+    print(initial_state, initial_state.shape, "initial_state")
     # print("--- Python ref value (b=0, h=0, chunk=0) ---")
     # print(value[0, 0, 0, :, :])
     # # =========================================================
     # print("--- Python ref k_cumdecay (b=0, h=0, chunk=0) ---")
     # print(k_cumdecay[0, 0, 0, :, :])
     # # =========================================================
-    print(k_cumdecay.shape)
+    # print(k_cumdecay.shape)
 
     core_attn_out = torch.zeros_like(value)
     mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=1)
@@ -167,6 +180,14 @@ def ref_chunk_gated_delta_rule(
         v_prime = (k_cumdecay[:, :, i]) @ last_recurrent_state
         v_new = v_i - v_prime
         attn_inter = (q_i * g[:, :, i, :, None].exp()) @ last_recurrent_state
+
+            # ==================== DEBUG PRINT 2b =====================
+        if i == 0:
+            print("--- Python ref attn_inter ( torch.eye(chunk_size, dtype=attn.dtype, d) ---")
+            print(attn_inter.shape)
+            print(attn_inter[0, 0, :, :chunk_size])
+            print(attn_inter[0, 0, :, -chunk_size:])
+        # =========================================================
         core_attn_out[:, :, i] = attn_inter + attn_intra @ v_new
         last_recurrent_state = (
             last_recurrent_state * g[:, :, i, -1, None, None].exp()
@@ -326,8 +347,10 @@ def test(
     # Verify correctness
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     print("atol", atol, "rtol", rtol)
-    print("out", out.actual_tensor())
-    print("ans_out", ans_out)
+    # print("out", out.actual_tensor())
+    # print("ans_out", ans_out)
+    print("shape", out.actual_tensor().shape, ans_out.shape)
+    print("continuous", out.actual_tensor().is_contiguous(), ans_out.is_contiguous())
     
     if DEBUG:
         print("--- Verifying Output Tensor ---")
