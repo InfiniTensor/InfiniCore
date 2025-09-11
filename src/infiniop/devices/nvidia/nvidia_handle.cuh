@@ -17,11 +17,13 @@
 namespace device::nvidia {
 
 class Handle::Internal {
+public:
     Pool<cublasHandle_t> blas_handles;
 #ifdef ENABLE_CUDNN_API
     Pool<cudnnHandle_t> dnn_handles;
 #endif
 
+private:
     int _warp_size,
         _max_threads_per_block,
         _block_size[3],

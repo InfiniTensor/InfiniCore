@@ -1418,3 +1418,40 @@ def recurrent_gated_delta_rule_(lib):
     lib.infiniopDestroyRecurrentGatedDeltaRuleDescriptor.argtypes = [infiniopOperatorDescriptor_t]
 
 
+@OpRegister.operator
+def conv1d_(lib):
+    lib.infiniopCreateConv1dDescriptor.restype = c_int32
+    lib.infiniopCreateConv1dDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_size_t,
+    ]
+    lib.infiniopGetConv1dWorkspaceSize.restype = c_int32
+    lib.infiniopGetConv1dWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopConv1d.restype = c_int32
+    lib.infiniopConv1d.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyConv1dDescriptor.restype = c_int32
+    lib.infiniopDestroyConv1dDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+

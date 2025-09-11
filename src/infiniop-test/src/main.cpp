@@ -111,7 +111,14 @@ ParsedArgs parseArgs(int argc, char *argv[]) {
     return args;
 }
 
+int test_conv1d_prefill(InfiniopHandle handle);
+
 int main(int argc, char *argv[]) {
+    InfiniopHandle handle;
+    infiniop_create(&handle);
+    test_conv1d_prefill(handle);
+    infiniop_destroy(handle);
+    return 0;
     ParsedArgs args = parseArgs(argc, argv);
     int failed = 0;
     try {
