@@ -102,17 +102,17 @@ __device__ void chunkGatedDeltaRuleKernel(
         }
 
         
-        __syncthreads();
-        // ==================== DEBUG PRINT 2a =====================
-        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
-            printf("--- CUDA Kernel: g_s (BEFORE scan) ---\n");
-            for (size_t j = 0; j < chunk_size; ++j) {
-                printf("%8.4f ", (float)g_s[j]);
-            }
-            printf("------------------------------------------\n");
-        }
-        __syncthreads();
-        // =========================================================
+        // __syncthreads();
+        // // ==================== DEBUG PRINT 2a =====================
+        // if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
+        //     printf("--- CUDA Kernel: g_s (BEFORE scan) ---\n");
+        //     for (size_t j = 0; j < chunk_size; ++j) {
+        //         printf("%8.4f ", (float)g_s[j]);
+        //     }
+        //     printf("------------------------------------------\n");
+        // }
+        // __syncthreads();
+        // // =========================================================
 
         // Load Q and K (Layout: [B, H, T, Dk])
         for (size_t i = thread_idx; i < chunk_size * Dk; i += BLOCK_THREADS) {
@@ -129,20 +129,20 @@ __device__ void chunkGatedDeltaRuleKernel(
             }
         }
         
-        __syncthreads();
-        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
-            printf("--- CUDA Kernel: attn_s (BEFORE scan) ---\n");
-            for (size_t i = 0; i < chunk_size; ++i) {
-                for (size_t j = 0; j < chunk_size; ++j) {
-                    printf("%8.4f ", (float)k_s[i * chunk_size + j]);
-                }
-                printf("\n");
-            }
-            printf("------------------------------------------\n");
-        }
-        __syncthreads();
+        // __syncthreads();
+        // if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
+        //     printf("--- CUDA Kernel: attn_s (BEFORE scan) ---\n");
+        //     for (size_t i = 0; i < chunk_size; ++i) {
+        //         for (size_t j = 0; j < chunk_size; ++j) {
+        //             printf("%8.4f ", (float)k_s[i * chunk_size + j]);
+        //         }
+        //         printf("\n");
+        //     }
+        //     printf("------------------------------------------\n");
+        // }
+        // __syncthreads();
 
-        
+
         // Load V (Layout: [B, H, T, Dv])
         for (size_t i = thread_idx; i < chunk_size * Dv; i += BLOCK_THREADS) {
              size_t t_local = i / Dv;
@@ -157,20 +157,6 @@ __device__ void chunkGatedDeltaRuleKernel(
         }
         // --- MODIFICATION END ---
         __syncthreads();
-
-        // ==================== DEBUG PRINT 2a =====================
-        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
-            printf("--- CUDA Kernel: attn_s (BEFORE scan) ---\n");
-            for (size_t i = 0; i < chunk_size; ++i) {
-                for (size_t j = 0; j < chunk_size; ++j) {
-                    printf("%8.4f ", (float)k_s[i * chunk_size + j]);
-                }
-                printf("\n");
-            }
-            printf("------------------------------------------\n");
-        }
-        __syncthreads();
-        // =========================================================
 
         // --- 2.2: Optional L2 Normalization ---
         if (use_qk_l2norm) {
@@ -196,20 +182,6 @@ __device__ void chunkGatedDeltaRuleKernel(
             __syncthreads();
         }
 
-        // ==================== DEBUG PRINT 2a =====================
-        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
-            printf("--- CUDA Kernel: attn_s (BEFORE scan) ---\n");
-            for (size_t i = 0; i < chunk_size; ++i) {
-                for (size_t j = 0; j < chunk_size; ++j) {
-                    printf("%8.4f ", (float)k_s[i * chunk_size + j]);
-                }
-                printf("\n");
-            }
-            printf("------------------------------------------\n");
-        }
-        __syncthreads();
-        // =========================================================
-
         // 2.3.1: Perform parallel prefix sum (cumsum) on g_s using CUB
         Tcompute g_val = (thread_idx < chunk_size) ? g_s[thread_idx] : 0.0f;
         Tcompute g_cumsum_val;
@@ -218,6 +190,7 @@ __device__ void chunkGatedDeltaRuleKernel(
             g_cumsum_s[thread_idx] = g_cumsum_val;
         }
         __syncthreads(); 
+
 
         // 2.3.2: Compute decay_mask, k_beta, v_beta, and scaled q
         for (size_t i = thread_idx; i < chunk_size * chunk_size; i += BLOCK_THREADS) {
@@ -241,12 +214,13 @@ __device__ void chunkGatedDeltaRuleKernel(
         }
         __syncthreads();
 
+
         // 2.3.3: Compute attn = -((k_beta @ k^T) * decay_mask)
         for (size_t i = thread_idx; i < chunk_size * chunk_size; i += BLOCK_THREADS) {
             size_t row = i / chunk_size;
             size_t col = i % chunk_size;
             Tcompute dot_prod = 0.0f;
-            if (col <= row) {
+            if (col < row) {
                 // --- START MODIFICATION 2 ---
                 // Correctly compute dot product of k_beta (row) and k (col)
                 for(size_t d = 0; d < Dk; ++d) {
@@ -259,6 +233,8 @@ __device__ void chunkGatedDeltaRuleKernel(
             }
         }
         __syncthreads();
+
+        
 
 
         // // ==================== DEBUG PRINT 2a =====================
@@ -274,6 +250,22 @@ __device__ void chunkGatedDeltaRuleKernel(
         // }
         // __syncthreads();
         // // =========================================================
+        
+        // // ==================== DEBUG PRINT 2a =====================
+        // __syncthreads();
+        // if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
+        //     printf("--- CUDA Kernel: attn_s (before Tcompute beta_val = beta_s[i];) ---\n");
+        //     for (size_t i = 0; i < chunk_size; ++i) {
+        //         for (size_t j = 0; j < chunk_size; ++j) {
+        //             printf("%8.4f ", (float)attn_s[i * chunk_size + j]);
+        //         }
+        //         printf("\n");
+        //     }
+        //     printf("------------------------------------------\n");
+        // }
+        // __syncthreads();
+        // // =========================================================
+
 
         // 2.3.4: The complex scan loop for attn matrix
         // NOTE: The following sequential loop remains a performance bottleneck due to the algorithm's nature.
@@ -300,6 +292,22 @@ __device__ void chunkGatedDeltaRuleKernel(
         // }
         // // =========================================================
         // __syncthreads();
+        
+        // printf("check ok.\n");
+        // ==================== DEBUG PRINT 2a =====================
+        __syncthreads();
+        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
+            printf("--- CUDA Kernel: attn_s (Tcompute beta_val = beta_s[i];) ---\n");
+            for (size_t i = 0; i < chunk_size; ++i) {
+                for (size_t j = 0; j < chunk_size; ++j) {
+                    printf("%8.4f ", (float)attn_s[i * chunk_size + j]);
+                }
+                printf("\n");
+            }
+            printf("------------------------------------------\n");
+        }
+        __syncthreads();
+        // =========================================================
 
         if (thread_idx < chunk_size) {
             attn_s[thread_idx * chunk_size + thread_idx] += 1.0f;
@@ -313,13 +321,45 @@ __device__ void chunkGatedDeltaRuleKernel(
             for(size_t d=0; d<chunk_size; ++d) dot_prod += attn_s[row * chunk_size + d] * v_s[d * Dv + col_v];
             value_prime_s[i] = dot_prod;
         }
+        
+
         for (size_t i = thread_idx; i < chunk_size * Dk; i += BLOCK_THREADS) {
             size_t row = i / Dk; int col_k = i % Dk;
             Tcompute dot_prod = 0.0f;
-            for(size_t d=0; d<chunk_size; ++d) dot_prod += attn_s[row * chunk_size + d] * k_s[d * Dk + col_k] * expf(g_cumsum_s[d]);
+            for(size_t d=0; d<chunk_size; ++d) dot_prod += attn_s[row * chunk_size + d] * k_beta_s[d * Dk + col_k] * expf(g_cumsum_s[d]);
             k_cumdecay_s[i] = dot_prod;
         }
         __syncthreads();
+
+        // ==================== DEBUG PRINT 2a =====================
+        __syncthreads();
+        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
+            printf("--- CUDA Kernel: value_prime_s (Tcompute beta_val = beta_s[i];) ---\n");
+            for (size_t i = 0; i < chunk_size; ++i) {
+                for (size_t j = 0; j < chunk_size; ++j) {
+                    printf("%8.4f ", (float)value_prime_s[i * chunk_size + j]);
+                }
+                printf("\n");
+            }
+            printf("------------------------------------------\n");
+        }
+        __syncthreads();
+        // =========================================================
+
+        // ==================== DEBUG PRINT 2a =====================
+        __syncthreads();
+        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
+            printf("--- CUDA Kernel: k_cumdecay_s (Tcompute beta_val = beta_s[i];) ---\n");
+            for (size_t i = 0; i < chunk_size; ++i) {
+                for (size_t j = 0; j < chunk_size; ++j) {
+                    printf("%8.4f ", (float)k_cumdecay_s[i * chunk_size + j]);
+                }
+                printf("\n");
+            }
+            printf("------------------------------------------\n");
+        }
+        __syncthreads();
+        // =========================================================
 
         // --- 2.4: Inter-Chunk Interaction ---
         // Calculate v_prime
