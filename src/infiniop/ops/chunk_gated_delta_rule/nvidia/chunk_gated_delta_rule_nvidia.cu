@@ -83,28 +83,36 @@ infiniStatus_t launchKernel(
     using Tcompute = float;
     using BlockScan = cub::BlockScan<Tcompute, NUM_THREADS>;
     using BlockReduce = cub::BlockReduce<Tcompute, NUM_THREADS>;
+
     // size_t shared_mem_size = (
-    //     // Q, K, V, k_cumdecay
-    //     chunk_size * (3 * Dk + 5 * Dv) +
-    //     // g, beta, g_cumsum
-    //     chunk_size * 3 +
-    //     // decay_mask, attn
-    //     2 * chunk_size * chunk_size +
-    //     // inter_chunk_state
+    //     chunk_size * (3 * Dk + Dv + 3) + 
+    //     chunk_size * chunk_size +
     //     Dk * Dv
-    // ) * sizeof(Tcompute) + sizeof(typename BlockScan::TempStorage);
+    // ) * sizeof(Tcompute) + sizeof(typename BlockScan::TempStorage) + sizeof(typename BlockReduce::TempStorage);
+    // size_t shared_mem_size = (
+    //     // q_s, k_s, k_beta_s, k_cumdecay_s
+    //     chunk_size * 4 * Dk +
+    //     // v_s, value_prime_s, v_prime_s, attn_inter_s
+    //     chunk_size * 4 * Dv +
+    //     // g_s, beta_s, g_cumsum_s
+    //     chunk_size * 3 +
+    //     // attn_s (removed decay_mask_s)
+    //     chunk_size * chunk_size +
+    //     // inter_chunk_state_s
+    //     Dk * Dv
+    // ) * sizeof(Tcompute) + sizeof(typename BlockScan::TempStorage) + sizeof(typename BlockReduce::TempStorage);
 
     size_t shared_mem_size = (
-        // Q, K, V, k_cumdecay
-        chunk_size * (3 * Dk + 6 * Dv) +
-        // g, beta, g_cumsum
+        // q_s, k_s, k_beta_s, k_cumdecay_s
+        chunk_size * 4 * Dk +
+        // v_s, value_prime_s, v_prime_s (v_new_s is still here from prev version)
+        chunk_size * 4 * Dv +
+        // g_s, beta_s, g_cumsum_s
         chunk_size * 3 +
-        // decay_mask, attn
-        2 * chunk_size * chunk_size +
-        // inter_chunk_state
-        Dk * Dv +
-        // temp buffer for scan loop
-        chunk_size
+        // attn_s
+        chunk_size * chunk_size +
+        // inter_chunk_state_s
+        Dk * Dv
     ) * sizeof(Tcompute) + sizeof(typename BlockScan::TempStorage) + sizeof(typename BlockReduce::TempStorage);
 
     if (dtype == INFINI_DTYPE_F16) {
