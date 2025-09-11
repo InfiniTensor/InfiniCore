@@ -80,29 +80,11 @@ __device__ void chunkGatedDeltaRuleKernel(
             inter_chunk_state_s[i] = 0.0f;
         }
     }
-    // // ==================== DEBUG PRINT 2a =====================
-    //     __syncthreads();
-    //     if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0) {
-    //         printf("--- CUDA Kernel: initial_state (= (dot_qk * decay_mask_s[t * chunk_size + j]) * v_new_j;) ---\n");
-    //         for (size_t i = 0; i < Dk; ++i) {
-    //             for (size_t j = 0; j < Dv; ++j) {
-    //             // for (size_t j = Dv-chunk_size; j < Dv; ++j) {
-    //                 printf("%8.4f, %llu ", (float)initial_state[i * Dk + j], (unsigned long long)(i * Dk + j));
-    //             }
-    //             printf("\n");
-    //         }
-    //         printf("------------------------------------------\n");
-    //     }
-    //     __syncthreads();
-    // // =========================================================
-
 
     // --- Main loop over chunks of the sequence ---
     for (size_t chunk_idx = 0; chunk_idx < num_chunks; ++chunk_idx) {
         __syncthreads(); // Ensure state is ready and previous chunk's writes are visible
         size_t chunk_offset = chunk_idx * chunk_size;
-
-
 
         // --- 2.1: Collaborative Loading of chunk data (with updated indexing) ---
         // --- MODIFICATION START: Updated memory indexing for [B, H, T, D] layout ---
@@ -119,19 +101,6 @@ __device__ void chunkGatedDeltaRuleKernel(
             }
         }
 
-        
-        // __syncthreads();
-        // // ==================== DEBUG PRINT 2a =====================
-        // if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
-        //     printf("--- CUDA Kernel: g_s (BEFORE scan) ---\n");
-        //     for (size_t j = 0; j < chunk_size; ++j) {
-        //         printf("%8.4f ", (float)g_s[j]);
-        //     }
-        //     printf("------------------------------------------\n");
-        // }
-        // __syncthreads();
-        // // =========================================================
-
         // Load Q and K (Layout: [B, H, T, Dk])
         for (size_t i = thread_idx; i < chunk_size * Dk; i += BLOCK_THREADS) {
             size_t t_local = i / Dk;
@@ -146,21 +115,6 @@ __device__ void chunkGatedDeltaRuleKernel(
                 k_s[i] = 0.0f;
             }
         }
-        
-        // __syncthreads();
-        // if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
-        //     printf("--- CUDA Kernel: attn_s (BEFORE scan) ---\n");
-        //     for (size_t i = 0; i < chunk_size; ++i) {
-        //         for (size_t j = 0; j < chunk_size; ++j) {
-        //             printf("%8.4f ", (float)k_s[i * chunk_size + j]);
-        //         }
-        //         printf("\n");
-        //     }
-        //     printf("------------------------------------------\n");
-        // }
-        // __syncthreads();
-
-
 
         // Load V (Layout: [B, H, T, Dv])
         for (size_t i = thread_idx; i < chunk_size * Dv; i += BLOCK_THREADS) {
@@ -253,39 +207,6 @@ __device__ void chunkGatedDeltaRuleKernel(
         }
         __syncthreads();
 
-        
-
-
-        // // ==================== DEBUG PRINT 2a =====================
-        // if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
-        //     printf("--- CUDA Kernel: attn_s (BEFORE scan) ---\n");
-        //     for (size_t i = 0; i < chunk_size; ++i) {
-        //         for (size_t j = 0; j < chunk_size; ++j) {
-        //             printf("%8.4f ", (float)attn_s[i * chunk_size + j]);
-        //         }
-        //         printf("\n");
-        //     }
-        //     printf("------------------------------------------\n");
-        // }
-        // __syncthreads();
-        // // =========================================================
-        
-        // // ==================== DEBUG PRINT 2a =====================
-        // __syncthreads();
-        // if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
-        //     printf("--- CUDA Kernel: attn_s (before Tcompute beta_val = beta_s[i];) ---\n");
-        //     for (size_t i = 0; i < chunk_size; ++i) {
-        //         for (size_t j = 0; j < chunk_size; ++j) {
-        //             printf("%8.4f ", (float)attn_s[i * chunk_size + j]);
-        //         }
-        //         printf("\n");
-        //     }
-        //     printf("------------------------------------------\n");
-        // }
-        // __syncthreads();
-        // // =========================================================
-
-
         // 2.3.4: The complex scan loop for attn matrix
         // NOTE: The following sequential loop remains a performance bottleneck due to the algorithm's nature.
         for (size_t i = 1; i < chunk_size; ++i) {
@@ -298,35 +219,6 @@ __device__ void chunkGatedDeltaRuleKernel(
             }
             __syncthreads();
         }
-        //         // ==================== DEBUG PRINT 2b =====================
-        // if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
-        //     printf("--- CUDA Kernel: attn_s (AFTER scan) ---\n");
-        //     for (size_t i = 0; i < chunk_size; ++i) {
-        //         for (size_t j = 0; j < chunk_size; ++j) {
-        //             printf("%8.4f ", (float)attn_s[i * chunk_size + j]);
-        //         }
-        //         printf("\n");
-        //     }
-        //     printf("------------------------------------------\n");
-        // }
-        // // =========================================================
-        // __syncthreads();
-        
-        // printf("check ok.\n");
-        // ==================== DEBUG PRINT 2a =====================
-        __syncthreads();
-        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 1) {
-            printf("--- CUDA Kernel: attn_s (Tcompute beta_val = beta_s[i];) ---\n");
-            for (size_t i = 0; i < chunk_size; ++i) {
-                for (size_t j = 0; j < chunk_size; ++j) {
-                    printf("%8.4f ", (float)attn_s[i * chunk_size + j]);
-                }
-                printf("\n");
-            }
-            printf("------------------------------------------\n");
-        }
-        __syncthreads();
-        // =========================================================
 
         if (thread_idx < chunk_size) {
             attn_s[thread_idx * chunk_size + thread_idx] += 1.0f;
@@ -349,36 +241,6 @@ __device__ void chunkGatedDeltaRuleKernel(
             k_cumdecay_s[i] = dot_prod;
         }
         __syncthreads();
-
-        // ==================== DEBUG PRINT 2a =====================
-        __syncthreads();
-        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 1) {
-            printf("--- CUDA Kernel: value_prime_s (Tcompute beta_val = beta_s[i];) ---\n");
-            for (size_t i = 0; i < chunk_size; ++i) {
-                for (size_t j = 0; j < chunk_size; ++j) {
-                    printf("%8.4f ", (float)value_prime_s[i * Dv + j]);
-                }
-                printf("\n");
-            }
-            printf("------------------------------------------\n");
-        }
-        __syncthreads();
-        // =========================================================
-
-        // // ==================== DEBUG PRINT 2a =====================
-        // __syncthreads();
-        // if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
-        //     printf("--- CUDA Kernel: k_cumdecay_s (Tcompute beta_val = beta_s[i];) ---\n");
-        //     for (size_t i = 0; i < chunk_size; ++i) {
-        //         for (size_t j = 0; j < chunk_size; ++j) {
-        //             printf("%8.4f ", (float)k_cumdecay_s[i * chunk_size + j]);
-        //         }
-        //         printf("\n");
-        //     }
-        //     printf("------------------------------------------\n");
-        // }
-        // __syncthreads();
-        // // =========================================================
 
         // --- 2.4: Inter-Chunk Interaction ---
         // Calculate v_prime
@@ -404,88 +266,6 @@ __device__ void chunkGatedDeltaRuleKernel(
         }
         __syncthreads();
 
-
-        // // ==================== DEBUG PRINT 3 =====================
-        // if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
-        //     printf("--- CUDA Kernel: v_new_s (chunk 0) ---\n");
-        //     // Print the first 8 tokens and their first 4 dimensions
-        //     for (size_t t = 0; t < 8; ++t) {
-        //         printf("t=%zu: ", t);
-        //         for (size_t d = 0; d < 4; ++d) {
-        //             printf("%8.4f ", (float)v_new_s[t * Dv + d]);
-        //         }
-        //         printf("\n");
-        //     }
-        //     printf("------------------------------------------\n");
-        // }
-        // // ======================================================
-
-        // // ==================== DEBUG PRINT 2a =====================
-        // __syncthreads();
-        // if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 1) {
-        //     printf("--- CUDA Kernel: v_new_s (= (dot_qk * decay_mask_s[t * chunk_size + j]) * v_new_j;) ---\n");
-        //     for (size_t i = 0; i < chunk_size; ++i) {
-        //         // for (size_t j = 0; j < chunk_size; ++j) {
-        //         for (size_t j = Dv-chunk_size; j < Dv; ++j) {
-        //             printf("%8.4f, %llu ", (float)v_new_s[i * Dv + j], (unsigned long long)(i * Dv + j));
-        //         }
-        //         printf("\n");
-        //     }
-        //     printf("------------------------------------------\n");
-        // }
-        // __syncthreads();
-        // // =========================================================
-        // // ==================== DEBUG PRINT 2a =====================
-        // __syncthreads();
-        // if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 1) {
-        //     printf("--- CUDA Kernel: attn_inter_s (= (dot_qk * decay_mask_s[t * chunk_size + j]) * v_new_j;) ---\n");
-        //     for (size_t i = 0; i < chunk_size; ++i) {
-        //         // for (size_t j = 0; j < chunk_size; ++j) {
-        //         for (size_t j = Dv-chunk_size; j < Dv; ++j) {
-        //             printf("%8.4f, %llu ", (float)attn_inter_s[i * Dv + j], (unsigned long long)(i * Dv + j));
-        //         }
-        //         printf("\n");
-        //     }
-        //     printf("------------------------------------------\n");
-        // }
-        // __syncthreads();
-        // // =========================================================
-        // ==================== DEBUG PRINT 2a =====================
-        __syncthreads();
-        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 1) {
-            printf("--- CUDA Kernel: v_prime_s (= (dot_qk * decay_mask_s[t * chunk_size + j]) * v_new_j;) ---\n");
-            for (size_t i = 0; i < chunk_size; ++i) {
-                // for (size_t j = 0; j < chunk_size; ++j) {
-                for (size_t j = Dv-chunk_size; j < Dv; ++j) {
-                    printf("%8.4f, %llu ", (float)v_prime_s[i * Dv + j], (unsigned long long)(i * Dv + j));
-                }
-                printf("\n");
-            }
-            printf("------------------------------------------\n");
-        }
-        __syncthreads();
-        // =========================================================+
-
-
-
-
-
-        // ==================== DEBUG PRINT 2a =====================
-        __syncthreads();
-        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 1) {
-            printf("--- CUDA Kernel: attn_inter_s final ---\n");
-            for (size_t i = 0; i < chunk_size; ++i) {
-                // for (size_t j = 0; j < chunk_size; ++j) {
-                for (size_t j = 0; j < chunk_size; ++j) {
-                    printf("%8.4f, %llu ", (float)attn_inter_s[i * Dv + j], (unsigned long long)(i * Dv + j));
-                }
-                printf("\n");
-            }
-            printf("------------------------------------------\n");
-        }
-        __syncthreads();
-        // =========================================================
-
         // --- 2.5: Final Output Calculation and Writeback ---
         // NOTE: This section correctly implements the reference algorithm, but the algorithm
         // itself involves redundant computation (re-calculating simple attention).
@@ -504,15 +284,7 @@ __device__ void chunkGatedDeltaRuleKernel(
                         Tcompute v_new_j = v_new_s[j * Dv + d_v];
                         intra_sum += (dot_qk * decay_mask_s[t * chunk_size + j]) * v_new_j;
                     }
-                    
-                    
                     out[out_offset + d_v] = static_cast<Tdata>(attn_inter_s[t * Dv + d_v] + intra_sum);
-                    // output_it = static_cast<Tdata>(attn_inter_s[t * Dv + d_v] + intra_sum);
-                    // if (batch_idx == 0 && head_idx == 0 && d_v == 0){
-                    //     printf("intra_sum: %8.4f, attn_inter_s: %8.4f, idx: %llu, t: %llu\n", (float)intra_sum, (float)attn_inter_s[t * Dv + d_v], 
-                    //     (unsigned long long)(t * Dv + d_v), (unsigned long long)(t));
-                    // }
-                    // out[out_offset + d_v] = output_it;
                 }
             }
         }
@@ -520,44 +292,6 @@ __device__ void chunkGatedDeltaRuleKernel(
         // --- 2.6: Update inter_chunk_state for the next iteration ---
         Tcompute g_final_cumsum = g_cumsum_s[chunk_size - 1];
         
-        // // Step 1: Decay the old state
-        // for (size_t i = thread_idx; i < Dk * Dv; i += BLOCK_THREADS) {
-        //     inter_chunk_state_s[i] *= expf(g_final_cumsum);
-        // }
-        // __syncthreads();
-
-        
-
-        // // --- MODIFICATION START: Replaced atomicAdd with efficient parallel reduction ---
-        // // Step 2: Compute and add the contribution from the current chunk.
-        // // We loop through each element of the state matrix S. For each element, the entire
-        // // thread block collaborates to compute the update sum in parallel.
-        // for (size_t i = 0; i < Dk * Dv; ++i) {
-        //     size_t dk = i / Dv; 
-        //     size_t dv = i % Dv;
-            
-        //     // Step 2.1: Each thread computes its partial sum over the chunk dimension 't'.
-        //     Tcompute partial_sum = 0.0f;
-        //     for (size_t t = thread_idx; t < chunk_size; t += BLOCK_THREADS) {
-        //         Tcompute decay_factor = expf(g_final_cumsum - g_cumsum_s[t]);
-        //         partial_sum += (k_beta_s[t * Dk + dk] * decay_factor) * v_new_s[t * Dv + dv];
-        //     }
-            
-        //     // Step 2.2: The block reduces all partial sums into a single total sum.
-        //     Tcompute total_update_sum;
-        //     BlockReduce(*reduce_storage).Sum(partial_sum, total_update_sum);
-
-
-        //     // Step 2.3: A single thread adds the final sum to the state. This avoids atomic conflicts.
-        //     if (thread_idx == 0) {
-        //         inter_chunk_state_s[i] += total_update_sum;
-        //     }
-
-
-        //     // Step 2.4: Sync after each state element update to ensure the next reduction is correct.
-        //     // This is necessary because CUB collectives use shared memory implicitly.
-        //     __syncthreads();
-        // }
         // Step 1: Decay the old state
         for (size_t i = thread_idx; i < Dk * Dv; i += BLOCK_THREADS) {
             inter_chunk_state_s[i] *= expf(g_final_cumsum);
@@ -577,59 +311,8 @@ __device__ void chunkGatedDeltaRuleKernel(
             }
             atomicAdd(&inter_chunk_state_s[i], update_val);
         }
-
         
-        // ==================== DEBUG PRINT 2a =====================
-        __syncthreads();
-        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
-            printf("--- CUDA Kernel:  decay_factor) * v_new_s chunk_idx0 (= (tast_recurrent_state * decay_mask_s[t * chunk_size + j]) * v_new_j;) ---\n");
-            for (size_t i = 0; i < chunk_size; ++i) {
-                for (size_t j = 0; j < chunk_size; ++j) {
-                // for (size_t j = Dv-chunk_size; j < Dv; ++j) {
-                    printf("%8.4f, %llu ", (float)inter_chunk_state_s[i * Dv + j], (unsigned long long)(i * Dv + j));
-                }
-                printf("\n");
-            }
-            printf("------------------------------------------\n");
-        }
-        __syncthreads();
-        // =========================================================
-
-        
-            
-        // ==================== DEBUG PRINT 2a =====================
-        __syncthreads();
-        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
-            printf("--- CUDA Kernel: inter_chunk_state_s chunk_idx0 (= (dot_qk * decay_mask_s[t * chunk_size + j]) * v_new_j;) ---\n");
-            for (size_t i = 0; i < chunk_size; ++i) {
-                for (size_t j = 0; j < chunk_size; ++j) {
-                // for (size_t j = Dv-chunk_size; j < Dv; ++j) {
-                    printf("%8.4f, %llu ", (float)inter_chunk_state_s[i * Dv + j], (unsigned long long)(i * Dv + j));
-                }
-                printf("\n");
-            }
-            printf("------------------------------------------\n");
-        }
-        __syncthreads();
-        // =========================================================
     }
-    // // ==================== DEBUG PRINT 4 =====================
-    // __syncthreads();
-    // if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 ) {
-    //     printf("--- CUDA Kernel: inter_chunk_state_s (chunk 0) ---\n");
-    //     // Print the first 8 tokens and their first 4 dimensions
-    //     for (size_t t = 0; t < 8; ++t) {
-    //         printf("t=%zu: ", t);
-    //         for (size_t d = 0; d < 4; ++d) {
-    //             printf("%8.4f ", (float)inter_chunk_state_s[t * Dv + d]);
-    //         }
-    //         printf("\n");
-    //     }
-    //     printf("------------------------------------------\n");
-    // }
-    // // ======================================================
-
-    
 
     // === Phase 3: Write Final State ===
     __syncthreads();
