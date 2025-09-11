@@ -33,7 +33,7 @@ public:
            infiniopTensorDescriptor_t v_desc,
            infiniopTensorDescriptor_t g_desc,
            infiniopTensorDescriptor_t beta_desc,
-           infiniopTensorDescriptor_t initial_state_desc,
+           const std::optional<infiniopTensorDescriptor_t>& initial_state_desc,
            bool use_qk_l2norm,
            size_t chunk_size) {
         
@@ -43,15 +43,13 @@ public:
         // Check for consistent data types across all tensors
         if (out_desc->dtype() != dtype || final_state_desc->dtype() != dtype ||
             k_desc->dtype() != dtype || v_desc->dtype() != dtype ||
-            g_desc->dtype() != dtype || beta_desc->dtype() != dtype ||
-            initial_state_desc->dtype() != dtype) {
+            g_desc->dtype() != dtype || beta_desc->dtype() != dtype) {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
 
         // Check tensor dimensions
         if (q_desc->ndim() != 4 || k_desc->ndim() != 4 || v_desc->ndim() != 4 ||
-            g_desc->ndim() != 3 || beta_desc->ndim() != 3 ||
-            initial_state_desc->ndim() != 4 || out_desc->ndim() != 4 ||
+            g_desc->ndim() != 3 || beta_desc->ndim() != 3 || out_desc->ndim() != 4 ||
             final_state_desc->ndim() != 4) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }

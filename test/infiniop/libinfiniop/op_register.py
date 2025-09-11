@@ -1431,7 +1431,7 @@ def chunk_gated_delta_rule_(lib):
         infiniopTensorDescriptor_t,
         infiniopTensorDescriptor_t,
         infiniopTensorDescriptor_t,
-        infiniopTensorDescriptor_t,
+        c_void_p,
         c_bool,
         c_size_t,
     ]

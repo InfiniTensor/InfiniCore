@@ -22,6 +22,10 @@ __C infiniStatus_t infiniopCreateChunkGatedDeltaRuleDescriptor(
     bool use_qk_l2norm,
     size_t chunk_size
 ) {
+
+    std::optional<infiniopTensorDescriptor_t> initial_state_opt = 
+        (initial_state_desc == nullptr) ? std::nullopt : std::optional(initial_state_desc);
+
 #define CREATE(CASE, NAMESPACE)                                                \
     case CASE:                                                                 \
         return op::chunk_gated_delta_rule::NAMESPACE::Descriptor::create(  \
@@ -30,7 +34,7 @@ __C infiniStatus_t infiniopCreateChunkGatedDeltaRuleDescriptor(
                 op::chunk_gated_delta_rule::NAMESPACE::Descriptor **>(     \
                 desc_ptr),                                                     \
             out_desc, final_state_desc, q_desc, k_desc, v_desc, g_desc,         \
-            beta_desc, initial_state_desc, use_qk_l2norm, chunk_size);
+            beta_desc, initial_state_opt, use_qk_l2norm, chunk_size);
 
     switch (handle->device) {
 #ifdef ENABLE_NVIDIA_API

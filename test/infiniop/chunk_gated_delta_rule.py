@@ -150,7 +150,7 @@ _TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.BF16, InfiniDtype.F32]
 
 # Tolerance map
 _TOLERANCE_MAP = {
-    InfiniDtype.F16: {"atol": 1e-2, "rtol": 1e-2}, # Higher tolerance due to complex ops
+    InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3}, # Higher tolerance due to complex ops
     InfiniDtype.BF16: {"atol": 5e-2, "rtol": 5e-2},
     InfiniDtype.F32: {"atol": 1e-4, "rtol": 1e-4},
 }
@@ -183,9 +183,17 @@ def test(
     g = TestTensor.from_torch(F.logsigmoid(g_logsigmoid), dtype, device)
     beta_sigmoid = torch.randn(B, H, T, dtype=torch.float32)
     beta = TestTensor.from_torch(torch.sigmoid(beta_sigmoid), dtype, device)
+    
+    # initial_state = TestTensor((B, H, Dk, Dv), None, dtype, device)
+    initial_state = None
 
-    # initial_state shape is (B, H, Dk, Dv) - Note the T dimension
-    initial_state = TestTensor((B, H, Dk, Dv), None, dtype, device)
+    initial_state_desc = ctypes.c_void_p(0)
+    initial_state_data = ctypes.c_void_p(0)
+    initial_state_torch = None
+    if initial_state is not None:
+        initial_state_desc = initial_state.descriptor
+        initial_state_data = initial_state.data()
+        initial_state_torch = initial_state.torch_tensor()
 
     # Output tensors
     out = TestTensor((B, H, T, Dv), None, dtype, device)
@@ -197,7 +205,7 @@ def test(
         q.torch_tensor(), k.torch_tensor(), v.torch_tensor(),
         g.torch_tensor(), beta.torch_tensor(),
         chunk_size=chunk_size,
-        initial_state=initial_state.torch_tensor(),
+        initial_state=initial_state_torch,
         output_final_state=True, 
         use_qk_l2norm_in_kernel=use_qk_l2norm
     )
@@ -211,7 +219,7 @@ def test(
         handle, ctypes.byref(descriptor),
         out.descriptor, final_state.descriptor,
         q.descriptor, k.descriptor, v.descriptor,
-        g.descriptor, beta.descriptor, initial_state.descriptor,
+        g.descriptor, beta.descriptor, initial_state_desc,
         ctypes.c_bool(use_qk_l2norm),
         ctypes.c_size_t(chunk_size)
     ))
@@ -232,7 +240,8 @@ def test(
     v.destroy_desc()
     g.destroy_desc()
     beta.destroy_desc()
-    initial_state.destroy_desc()
+    if initial_state is not None:
+        initial_state.destroy_desc()
     out.destroy_desc()
     final_state.destroy_desc()
 
@@ -243,7 +252,7 @@ def test(
             descriptor, workspace.data(), workspace_size.value,
             out.data(), final_state.data(),
             q.data(), k.data(), v.data(),
-            g.data(), beta.data(), initial_state.data(), None
+            g.data(), beta.data(), initial_state_data, None
         ))
     
     # Execute the custom operator

@@ -46,7 +46,7 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t v_desc,
     infiniopTensorDescriptor_t g_desc,
     infiniopTensorDescriptor_t beta_desc,
-    infiniopTensorDescriptor_t initial_state_desc,
+    const std::optional<infiniopTensorDescriptor_t>& initial_state_desc,
     bool use_qk_l2norm,
     size_t chunk_size
 ) {
