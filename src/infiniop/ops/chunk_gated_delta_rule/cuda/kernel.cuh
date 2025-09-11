@@ -80,21 +80,21 @@ __device__ void chunkGatedDeltaRuleKernel(
             inter_chunk_state_s[i] = 0.0f;
         }
     }
-    // ==================== DEBUG PRINT 2a =====================
-        __syncthreads();
-        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0) {
-            printf("--- CUDA Kernel: initial_state (= (dot_qk * decay_mask_s[t * chunk_size + j]) * v_new_j;) ---\n");
-            for (size_t i = 0; i < Dk; ++i) {
-                for (size_t j = 0; j < Dv; ++j) {
-                // for (size_t j = Dv-chunk_size; j < Dv; ++j) {
-                    printf("%8.4f, %llu ", (float)initial_state[i * Dk + j], (unsigned long long)(i * Dk + j));
-                }
-                printf("\n");
-            }
-            printf("------------------------------------------\n");
-        }
-        __syncthreads();
-    // =========================================================
+    // // ==================== DEBUG PRINT 2a =====================
+    //     __syncthreads();
+    //     if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0) {
+    //         printf("--- CUDA Kernel: initial_state (= (dot_qk * decay_mask_s[t * chunk_size + j]) * v_new_j;) ---\n");
+    //         for (size_t i = 0; i < Dk; ++i) {
+    //             for (size_t j = 0; j < Dv; ++j) {
+    //             // for (size_t j = Dv-chunk_size; j < Dv; ++j) {
+    //                 printf("%8.4f, %llu ", (float)initial_state[i * Dk + j], (unsigned long long)(i * Dk + j));
+    //             }
+    //             printf("\n");
+    //         }
+    //         printf("------------------------------------------\n");
+    //     }
+    //     __syncthreads();
+    // // =========================================================
 
 
     // --- Main loop over chunks of the sequence ---
@@ -102,21 +102,6 @@ __device__ void chunkGatedDeltaRuleKernel(
         __syncthreads(); // Ensure state is ready and previous chunk's writes are visible
         size_t chunk_offset = chunk_idx * chunk_size;
 
-        // ==================== DEBUG PRINT 2a =====================
-        __syncthreads();
-        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 1) {
-            printf("--- CUDA Kernel: inter_chunk_state_s (= (dot_qk * decay_mask_s[t * chunk_size + j]) * v_new_j;) ---\n");
-            for (size_t i = 0; i < chunk_size; ++i) {
-                for (size_t j = 0; j < chunk_size; ++j) {
-                // for (size_t j = Dv-chunk_size; j < Dv; ++j) {
-                    printf("%8.4f, %llu ", (float)inter_chunk_state_s[i * Dv + j], (unsigned long long)(i * Dv + j));
-                }
-                printf("\n");
-            }
-            printf("------------------------------------------\n");
-        }
-        __syncthreads();
-        // =========================================================
 
 
         // --- 2.1: Collaborative Loading of chunk data (with updated indexing) ---
@@ -535,40 +520,81 @@ __device__ void chunkGatedDeltaRuleKernel(
         // --- 2.6: Update inter_chunk_state for the next iteration ---
         Tcompute g_final_cumsum = g_cumsum_s[chunk_size - 1];
         
+        // // Step 1: Decay the old state
+        // for (size_t i = thread_idx; i < Dk * Dv; i += BLOCK_THREADS) {
+        //     inter_chunk_state_s[i] *= expf(g_final_cumsum);
+        // }
+        // __syncthreads();
+
+        
+
+        // // --- MODIFICATION START: Replaced atomicAdd with efficient parallel reduction ---
+        // // Step 2: Compute and add the contribution from the current chunk.
+        // // We loop through each element of the state matrix S. For each element, the entire
+        // // thread block collaborates to compute the update sum in parallel.
+        // for (size_t i = 0; i < Dk * Dv; ++i) {
+        //     size_t dk = i / Dv; 
+        //     size_t dv = i % Dv;
+            
+        //     // Step 2.1: Each thread computes its partial sum over the chunk dimension 't'.
+        //     Tcompute partial_sum = 0.0f;
+        //     for (size_t t = thread_idx; t < chunk_size; t += BLOCK_THREADS) {
+        //         Tcompute decay_factor = expf(g_final_cumsum - g_cumsum_s[t]);
+        //         partial_sum += (k_beta_s[t * Dk + dk] * decay_factor) * v_new_s[t * Dv + dv];
+        //     }
+            
+        //     // Step 2.2: The block reduces all partial sums into a single total sum.
+        //     Tcompute total_update_sum;
+        //     BlockReduce(*reduce_storage).Sum(partial_sum, total_update_sum);
+
+
+        //     // Step 2.3: A single thread adds the final sum to the state. This avoids atomic conflicts.
+        //     if (thread_idx == 0) {
+        //         inter_chunk_state_s[i] += total_update_sum;
+        //     }
+
+
+        //     // Step 2.4: Sync after each state element update to ensure the next reduction is correct.
+        //     // This is necessary because CUB collectives use shared memory implicitly.
+        //     __syncthreads();
+        // }
         // Step 1: Decay the old state
         for (size_t i = thread_idx; i < Dk * Dv; i += BLOCK_THREADS) {
             inter_chunk_state_s[i] *= expf(g_final_cumsum);
         }
         __syncthreads();
 
-        // --- MODIFICATION START: Replaced atomicAdd with efficient parallel reduction ---
-        // Step 2: Compute and add the contribution from the current chunk.
-        // We loop through each element of the state matrix S. For each element, the entire
-        // thread block collaborates to compute the update sum in parallel.
-        for (size_t i = 0; i < Dk * Dv; ++i) {
-            size_t dk = i / Dv; 
-            size_t dv = i % Dv;
-            
-            // Step 2.1: Each thread computes its partial sum over the chunk dimension 't'.
-            Tcompute partial_sum = 0.0f;
-            for (size_t t = thread_idx; t < chunk_size; t += BLOCK_THREADS) {
+        // Step 2: Add the contribution from the current chunk
+        for (size_t i = thread_idx; i < Dk * Dv; i += BLOCK_THREADS) {
+            size_t dk = i / Dv; size_t dv = i % Dv;
+            Tcompute update_val = 0.0f;
+            for (size_t t = 0; t < chunk_size; ++t) {
                 Tcompute decay_factor = expf(g_final_cumsum - g_cumsum_s[t]);
-                partial_sum += (k_beta_s[t * Dk + dk] * decay_factor) * v_new_s[t * Dv + dv];
+                // --- START MODIFICATION 3 ---
+                // Use k_beta_s for the update, not k_s
+                update_val += (k_beta_s[t * Dk + dk] * decay_factor) * v_new_s[t * Dv + dv];
+                // --- END MODIFICATION 3 ---
             }
-            
-            // Step 2.2: The block reduces all partial sums into a single total sum.
-            Tcompute total_update_sum;
-            BlockReduce(*reduce_storage).Sum(partial_sum, total_update_sum);
-
-            // Step 2.3: A single thread adds the final sum to the state. This avoids atomic conflicts.
-            if (thread_idx == 0) {
-                inter_chunk_state_s[i] += total_update_sum;
-            }
-
-            // Step 2.4: Sync after each state element update to ensure the next reduction is correct.
-            // This is necessary because CUB collectives use shared memory implicitly.
-            __syncthreads();
+            atomicAdd(&inter_chunk_state_s[i], update_val);
         }
+
+        
+            
+        // ==================== DEBUG PRINT 2a =====================
+        __syncthreads();
+        if (batch_idx == 0 && head_idx == 0 && threadIdx.x == 0 && chunk_idx == 0) {
+            printf("--- CUDA Kernel: inter_chunk_state_s chunk_idx0 (= (dot_qk * decay_mask_s[t * chunk_size + j]) * v_new_j;) ---\n");
+            for (size_t i = 0; i < chunk_size; ++i) {
+                for (size_t j = 0; j < chunk_size; ++j) {
+                // for (size_t j = Dv-chunk_size; j < Dv; ++j) {
+                    printf("%8.4f, %llu ", (float)inter_chunk_state_s[i * Dv + j], (unsigned long long)(i * Dv + j));
+                }
+                printf("\n");
+            }
+            printf("------------------------------------------\n");
+        }
+        __syncthreads();
+        // =========================================================
     }
     // // ==================== DEBUG PRINT 4 =====================
     // __syncthreads();

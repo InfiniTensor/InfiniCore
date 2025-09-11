@@ -347,10 +347,10 @@ def test(
     # Verify correctness
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     print("atol", atol, "rtol", rtol)
-    # print("out", out.actual_tensor())
-    # print("ans_out", ans_out)
-    print("shape", out.actual_tensor().shape, ans_out.shape)
-    print("continuous", out.actual_tensor().is_contiguous(), ans_out.is_contiguous())
+    print("out", out.actual_tensor())
+    print("ans_out", ans_out)
+    # print("shape", out.actual_tensor().shape, ans_out.shape)
+    # print("continuous", out.actual_tensor().is_contiguous(), ans_out.is_contiguous())
     
     if DEBUG:
         print("--- Verifying Output Tensor ---")
