@@ -38,13 +38,22 @@ def ref_chunk_gated_delta_rule(
     use_qk_l2norm_in_kernel=False,
 ):
     initial_dtype = query.dtype
+    # ==================== DEBUG PRINT 2b =====================
+    print("--- Python ref key (BEFORE l2, b=0, h=0, chunk=0) ---")
+    print(key[0, 0, :, :chunk_size])
+    # =========================================================
     if use_qk_l2norm_in_kernel:
         query = F.normalize(query, p=2, dim=-1)
         key = F.normalize(key, p=2, dim=-1)
     
+    
     # The production implementation expects (B, T, H, D) and transposes internally
+    # query, key, value, beta, g = [
+    #     x.transpose(1, 2).contiguous().to(torch.float32) for x in (query, key, value, beta, g)
+    # ]
+
     query, key, value, beta, g = [
-        x.transpose(1, 2).contiguous().to(torch.float32) for x in (query, key, value, beta, g)
+        x.contiguous().to(torch.float32) for x in (query, key, value, beta, g)
     ]
 
     batch_size, num_heads, sequence_length, k_head_dim = key.shape
@@ -72,6 +81,19 @@ def ref_chunk_gated_delta_rule(
         x.reshape(x.shape[0], x.shape[1], -1, chunk_size, x.shape[-1]) for x in (query, key, value, k_beta, v_beta)
     ]
     g = g.reshape(g.shape[0], g.shape[1], -1, chunk_size)
+
+
+    
+    # ==================== DEBUG PRINT 2b =====================
+    print("--- Python ref g (AFTER l2, b=0, h=0, chunk=0) ---")
+    print(g[0, 0, 0, :])
+    # =========================================================
+    
+    # ==================== DEBUG PRINT 2b =====================
+    print("--- Python ref key (AFTER l2, b=0, h=0, chunk=0) ---")
+    print(key[0, 0, 0, :, :chunk_size])
+    # =========================================================
+
     mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=0)
 
     # ... (The rest of the complex logic from the reference implementation)
@@ -79,11 +101,34 @@ def ref_chunk_gated_delta_rule(
     # We will trust the reference implementation as the ground truth.
     g = g.cumsum(dim=-1)
     decay_mask = ((g.unsqueeze(-1) - g.unsqueeze(-2)).tril().exp().float()).tril()
+
+    # # ==================== DEBUG PRINT =====================
+    # print("--- Python ref decay_mask (b=0, h=0, chunk=0) ---")
+    # print(decay_mask[0, 0, 0, :, :]) # Print for batch 0, head 0, chunk 0
+    # # ======================================================
+
     attn = -((k_beta @ key.transpose(-1, -2)) * decay_mask).masked_fill(mask, 0)
+    # for i in range(1, chunk_size):
+    #     row = attn[..., i, :i].clone()
+    #     sub = attn[..., :i, :i].clone()
+    #     attn[..., i, :i] = row + (row.unsqueeze(-1) * sub).sum(-2)
+    
+    
+    # ==================== DEBUG PRINT 2a =====================
+    print("--- Python ref attn (BEFORE scan, b=0, h=0, chunk=0) ---")
+    print(attn[0, 0, 0, :, :])
+    # =========================================================
+
     for i in range(1, chunk_size):
         row = attn[..., i, :i].clone()
         sub = attn[..., :i, :i].clone()
         attn[..., i, :i] = row + (row.unsqueeze(-1) * sub).sum(-2)
+
+    # ==================== DEBUG PRINT 2b =====================
+    print("--- Python ref attn (AFTER scan, b=0, h=0, chunk=0) ---")
+    print(attn[0, 0, 0, :, :])
+    # =========================================================
+
     attn = attn + torch.eye(chunk_size, dtype=attn.dtype, device=attn.device)
     value = attn @ v_beta
     k_cumdecay = attn @ (k_beta * g.exp().unsqueeze(-1))
@@ -113,7 +158,8 @@ def ref_chunk_gated_delta_rule(
         
     core_attn_out = core_attn_out.reshape(core_attn_out.shape[0], core_attn_out.shape[1], -1, core_attn_out.shape[-1])
     core_attn_out = core_attn_out[:, :, :sequence_length] # Unpad
-    core_attn_out = core_attn_out.transpose(1, 2).contiguous().to(initial_dtype)
+    # core_attn_out = core_attn_out.transpose(1, 2).contiguous().to(initial_dtype)
+    core_attn_out = core_attn_out.contiguous().to(initial_dtype)
     
     if last_recurrent_state is not None:
         last_recurrent_state = last_recurrent_state.contiguous().to(initial_dtype)
@@ -163,21 +209,46 @@ def test(
         f"dtype={InfiniDtypeNames[dtype]}, use_qk_l2norm={use_qk_l2norm}"
     )
 
-    # Input tensors are in (B, T, H, D) layout as they come from the model layers
-    q = TestTensor((B, T, H, Dk), None, dtype, device)
-    k = TestTensor((B, T, H, Dk), None, dtype, device)
-    v = TestTensor((B, T, H, Dv), None, dtype, device)
+    # # Input tensors are in (B, T, H, D) layout as they come from the model layers
+    # q = TestTensor((B, T, H, Dk), None, dtype, device)
+    # k = TestTensor((B, T, H, Dk), None, dtype, device)
+    # v = TestTensor((B, T, H, Dv), None, dtype, device)
     
-    g_logsigmoid = torch.randn(B, T, H, dtype=torch.float32)
-    g = TestTensor.from_torch(F.logsigmoid(g_logsigmoid), dtype, device)
-    beta_sigmoid = torch.randn(B, T, H, dtype=torch.float32)
-    beta = TestTensor.from_torch(torch.sigmoid(beta_sigmoid), dtype, device)
+    # g_logsigmoid = torch.randn(B, T, H, dtype=torch.float32)
+    # g = TestTensor.from_torch(F.logsigmoid(g_logsigmoid), dtype, device)
+    # beta_sigmoid = torch.randn(B, T, H, dtype=torch.float32)
+    # beta = TestTensor.from_torch(torch.sigmoid(beta_sigmoid), dtype, device)
+
+
+    # # Input tensors are in (B, T, H, D) layout as they come from the model layers
+    # q = TestTensor((B, H, T, Dk), None, dtype, device)
+    # k = TestTensor((B, H, T, Dk), None, dtype, device)
+    # v = TestTensor((B, H, T, Dv), None, dtype, device)
+    
+    # g_logsigmoid = torch.randn(B, H, T, dtype=torch.float32)
+    # g = TestTensor.from_torch(F.logsigmoid(g_logsigmoid), dtype, device)
+    # beta_sigmoid = torch.randn(B, H, T, dtype=torch.float32)
+    # beta = TestTensor.from_torch(torch.sigmoid(beta_sigmoid), dtype, device)
+
+    q = torch.ones(B, H, T, Dk, dtype=torch.float32, device=device)
+    k = torch.ones(B, H, T, Dk, dtype=torch.float32, device=device)
+    v = torch.ones(B, H, T, Dv, dtype=torch.float32, device=device)
+    g = torch.ones(B, H, T, dtype=torch.float32, device=device)*0.2
+    beta = torch.ones(B, H, T, dtype=torch.float32, device=device)*0.2
+
+
+    q = TestTensor.from_torch(q, dtype, device)
+    k = TestTensor.from_torch(k, dtype, device)
+    v = TestTensor.from_torch(v, dtype, device)
+    g = TestTensor.from_torch(g, dtype, device)
+    beta = TestTensor.from_torch(beta, dtype, device)
+    
     
     # initial_state shape is (B, H, Dk, Dv) - Note the T dimension
     initial_state = TestTensor((B, H, Dk, Dv), None, dtype, device)
 
     # Output tensors
-    out = TestTensor((B, T, H, Dv), None, dtype, device)
+    out = TestTensor((B, H, T, Dv), None, dtype, device)
     # final_state shape is (B, H, Dk, Dv)
     final_state = TestTensor((B, H, Dk, Dv), None, dtype, device)
 

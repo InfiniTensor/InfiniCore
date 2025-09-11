@@ -82,6 +82,7 @@ infiniStatus_t launchKernel(
 
     using Tcompute = float;
     using BlockScan = cub::BlockScan<Tcompute, NUM_THREADS>;
+    using BlockReduce = cub::BlockReduce<Tcompute, NUM_THREADS>;
     // size_t shared_mem_size = (
     //     // Q, K, V, k_cumdecay
     //     chunk_size * (3 * Dk + 5 * Dv) +
@@ -95,7 +96,7 @@ infiniStatus_t launchKernel(
 
     size_t shared_mem_size = (
         // Q, K, V, k_cumdecay
-        chunk_size * (3 * Dk + 5 * Dv) +
+        chunk_size * (3 * Dk + 6 * Dv) +
         // g, beta, g_cumsum
         chunk_size * 3 +
         // decay_mask, attn
@@ -104,7 +105,7 @@ infiniStatus_t launchKernel(
         Dk * Dv +
         // temp buffer for scan loop
         chunk_size
-    ) * sizeof(Tcompute) + sizeof(typename BlockScan::TempStorage);
+    ) * sizeof(Tcompute) + sizeof(typename BlockScan::TempStorage) + sizeof(typename BlockReduce::TempStorage);
 
     if (dtype == INFINI_DTYPE_F16) {
         chunkGatedDeltaRule<half, float, Dk, Dv, NUM_THREADS>
