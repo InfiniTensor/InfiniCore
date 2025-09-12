@@ -184,8 +184,9 @@ def test(
     beta_sigmoid = torch.randn(B, H, T, dtype=torch.float32)
     beta = TestTensor.from_torch(torch.sigmoid(beta_sigmoid), dtype, device)
     
-    # initial_state = TestTensor((B, H, Dk, Dv), None, dtype, device)
-    initial_state = None
+    initial_state = TestTensor((B, H, Dk, Dv), None, dtype, device)
+    # initial_state = None
+    # final_state = initial_state
 
     initial_state_desc = ctypes.c_void_p(0)
     initial_state_data = ctypes.c_void_p(0)
