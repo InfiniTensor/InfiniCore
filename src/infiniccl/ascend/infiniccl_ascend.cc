@@ -27,6 +27,8 @@ inline HcclDataType getAscendDtype(infiniDtype_t datatype) {
         return HCCL_DATA_TYPE_FP32;
     case INFINI_DTYPE_F16:
         return HCCL_DATA_TYPE_FP16;
+    case INFINI_DTYPE_BF16:
+        return HCCL_DATA_TYPE_BFP16;
     default:
         std::cerr << "Unsupported data type: " << datatype << std::endl;
         std::abort();
@@ -86,9 +88,7 @@ infiniStatus_t allReduce(
     infinicclComm_t comm,
     infinirtStream_t stream) {
 
-    if (datatype != INFINI_DTYPE_F32 && datatype != INFINI_DTYPE_F16) {
-        return INFINI_STATUS_BAD_PARAM;
-    }
+    CHECK_DTYPE(datatype, INFINI_DTYPE_F32, INFINI_DTYPE_F16, INFINI_DTYPE_BF16);
 
     CHECK_HCCL(HcclAllReduce(sendbuf, recvbuf, (uint64_t)count,
                              getAscendDtype(datatype), getHcclRedOp(op),
