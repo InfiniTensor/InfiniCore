@@ -14,7 +14,8 @@ __C __export infiniStatus_t infiniopCreateConvDescriptor(infiniopHandle_t handle
                                                          void *pads,
                                                          void *strides,
                                                          void *dilations,
-                                                         size_t n);
+                                                         size_t n,
+                                                         size_t group_size);
 
 __C __export infiniStatus_t infiniopGetConvWorkspaceSize(infiniopConvDescriptor_t desc, size_t *size);
 

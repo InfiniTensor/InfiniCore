@@ -124,11 +124,15 @@ private:
                                           const std::vector<int> &output_dims,
                                           const std::vector<int> &filter_dims,
                                           cudnnDataType_t cudnn_data_type,
-                                          int actual_tensor_ndim) {
+                                          int actual_tensor_ndim,
+                                          int group_size) {
         CHECK_CUDNN(cudnnCreateTensorDescriptor(&x_desc));
         CHECK_CUDNN(cudnnCreateTensorDescriptor(&y_desc));
         CHECK_CUDNN(cudnnCreateFilterDescriptor(&w_desc));
         CHECK_CUDNN(cudnnCreateConvolutionDescriptor(&conv_desc));
+        CHECK_CUDNN(cudnnSetConvolutionGroupCount(conv_desc, group_size));
+        std::vector<int> w_dims(filter_dims.begin(), filter_dims.end());
+        w_dims[1] /= group_size;
 
         CHECK_CUDNN(cudnnSetTensorNdDescriptorEx(
             x_desc, CUDNN_TENSOR_NCHW, cudnn_data_type,
@@ -138,7 +142,7 @@ private:
             actual_tensor_ndim, output_dims.data()));
         CHECK_CUDNN(cudnnSetFilterNdDescriptor(
             w_desc, cudnn_data_type, CUDNN_TENSOR_NCHW,
-            actual_tensor_ndim, filter_dims.data()));
+            actual_tensor_ndim, w_dims.data()));
 
         return INFINI_STATUS_SUCCESS;
     }
@@ -316,7 +320,7 @@ public:
         CHECK_STATUS(getCudnnDataType(data_type, cudnn_data_type));
 
         CHECK_STATUS(createBasicDescriptors(input_dims_arr, output_dims_arr,
-                                            filter_dims_arr, cudnn_data_type, actual_tensor_ndim));
+                                            filter_dims_arr, cudnn_data_type, actual_tensor_ndim, info.group_size()));
 
         CHECK_STATUS(createBiasDescriptors(info, cudnn_data_type, actual_tensor_ndim));
 
@@ -366,7 +370,8 @@ infiniStatus_t Descriptor::create(
     const void *pads,
     const void *strides,
     const void *dilations,
-    size_t n) {
+    size_t n,
+    size_t group_size) {
 #ifdef ENABLE_CUDNN_API
     auto handle = reinterpret_cast<device::nvidia::Handle *>(handle_);
     auto dtype = y_desc->dtype();
@@ -374,7 +379,7 @@ infiniStatus_t Descriptor::create(
     CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_BF16);
 
     auto result = ConvInfo::create(handle_, y_desc, x_desc, w_desc, b_desc,
-                                   pads, strides, dilations, n);
+                                   pads, strides, dilations, n, group_size);
 
     CHECK_RESULT(result);
     auto conv_info = result.take();

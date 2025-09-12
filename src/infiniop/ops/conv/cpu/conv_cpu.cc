@@ -45,14 +45,15 @@ infiniStatus_t Descriptor::create(
     const void *pads,
     const void *strides,
     const void *dilations,
-    size_t n) {
+    size_t n,
+    size_t group_size) {
     auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
     auto dtype = y_desc->dtype();
 
     CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_BF16);
 
     auto result = ConvInfo::create(handle_, y_desc, x_desc, w_desc, b_desc,
-                                   pads, strides, dilations, n);
+                                   pads, strides, dilations, n, group_size);
     CHECK_RESULT(result);
 
     size_t WorkSpaceSize = 0;
@@ -176,19 +177,23 @@ void applyConv(
     const size_t *x_shape) {
     const ptrdiff_t batch_size = static_cast<ptrdiff_t>(info.batch());
     const ptrdiff_t out_channels = static_cast<ptrdiff_t>(info.out_channels());
+    const ptrdiff_t in_channels = static_cast<ptrdiff_t>(info.in_channels());
+    const ptrdiff_t group_size = static_cast<ptrdiff_t>(info.group_size());
+    const ptrdiff_t channels_per_group = in_channels / group_size;
     const ptrdiff_t total_iterations = batch_size * out_channels;
 
 #pragma omp parallel for schedule(dynamic)
     for (ptrdiff_t iter = 0; iter < total_iterations; ++iter) {
-        const ptrdiff_t i = iter / out_channels; // batch index
-        const ptrdiff_t j = iter % out_channels; // output channel index
+        const ptrdiff_t i = iter / out_channels;             // batch index
+        const ptrdiff_t j = iter % out_channels;             // output channel index
+        const ptrdiff_t g = j / (out_channels / group_size); // group index
 
-        const size_t y_index = static_cast<size_t>(i) * info.out_channels() + static_cast<size_t>(j);
+        const size_t y_index = static_cast<size_t>(i) * info.out_channels() + j;
 
-        // 内层循环：遍历输入通道
-        for (size_t k = 0; k < info.in_channels(); ++k) {
-            const size_t x_index = static_cast<size_t>(i) * info.in_channels() + k;
-            const size_t w_index = static_cast<size_t>(j) * info.in_channels() + k;
+        // Process only channels in the current group
+        for (ptrdiff_t k = g * channels_per_group; k < (g + 1) * channels_per_group; ++k) {
+            const size_t x_index = static_cast<size_t>(i) * in_channels + k;
+            const size_t w_index = j * in_channels + (k % channels_per_group);
             _applyConv(info, y, x, w, x_shape, x_index, w_index, y_index, 2);
         }
     }

@@ -42,7 +42,8 @@
             const void *pads,                                    \
             const void *strides,                                 \
             const void *dilations,                               \
-            size_t n);                                           \
+            size_t n,                                            \
+            size_t group_size);                                  \
                                                                  \
         infiniStatus_t calculate(                                \
             void *workspace, size_t workspace_size,              \

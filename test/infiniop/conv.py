@@ -1,6 +1,5 @@
 import torch
 import ctypes
-from ctypes import c_uint64
 
 from libinfiniop import (
     LIBINFINIOP,
@@ -18,7 +17,6 @@ from libinfiniop import (
     InfiniDeviceNames,
     infiniopOperatorDescriptor_t,
 )
-from enum import Enum, auto
 from typing import List, Tuple
 import math
 from torch.nn import functional as F
@@ -35,6 +33,15 @@ _TEST_CASES = [
         (32, 3, 4),
         (12, 4, 1),
         (32, 3, 5),
+        (15, 5, 1),
+        (1,),
+        (1,),
+        (1,),
+    ),
+    (
+        (32, 2, 4),
+        (12, 4, 1),
+        (32, 1, 5),
         (15, 5, 1),
         (1,),
         (1,),
@@ -59,6 +66,15 @@ _TEST_CASES = [
         (1, 1),
     ),
     (
+        (32, 4, 32, 32),
+        (32 * 32 * 3, 32 * 32, 32, 1),
+        (64, 1, 5, 5),
+        (75, 25, 5, 1),
+        (2, 2),
+        (2, 2),
+        (1, 1),
+    ),
+    (
         (1, 1, 4, 4, 4),
         (64, 64, 16, 4, 1),
         (1, 1, 5, 5, 5),
@@ -71,6 +87,15 @@ _TEST_CASES = [
         (32, 3, 32, 32, 32),
         (32 * 32 * 32 * 3, 32 * 32 * 32, 32 * 32, 32, 1),
         (64, 3, 5, 5, 5),
+        (375, 125, 25, 5, 1),
+        (3, 2, 2),
+        (4, 3, 3),
+        (2, 2, 1),
+    ),
+    (
+        (32, 4, 32, 32, 32),
+        (32 * 32 * 32 * 3, 32 * 32 * 32, 32 * 32, 32, 1),
+        (64, 2, 5, 5, 5),
         (375, 125, 25, 5, 1),
         (3, 2, 2),
         (4, 3, 3),
@@ -95,24 +120,24 @@ NUM_PRERUN = 10
 NUM_ITERATIONS = 1000
 
 
-def conv(x, w, stride, padding, dilation, y_tensor, bias=None):
+def conv(x, w, stride, padding, dilation, y_tensor, bias=None, groups=1):
     match len(x.shape) - 2:
         case 1:
             y_tensor.copy_(
                 F.conv1d(
-                    x, w, bias=bias, stride=stride, padding=padding, dilation=dilation
+                    x, w, bias=bias, stride=stride, padding=padding, dilation=dilation, groups=groups
                 )
             )
         case 2:
             y_tensor.copy_(
                 F.conv2d(
-                    x, w, bias=bias, stride=stride, padding=padding, dilation=dilation
+                    x, w, bias=bias, stride=stride, padding=padding, dilation=dilation, groups=groups
                 )
             )
         case 3:
             y_tensor.copy_(
                 F.conv3d(
-                    x, w, bias=bias, stride=stride, padding=padding, dilation=dilation
+                    x, w, bias=bias, stride=stride, padding=padding, dilation=dilation, groups=groups
                 )
             )
         case _:
@@ -176,13 +201,15 @@ def test(
     y_shape, y_stride = inferShapeStride(x_shape, w_shape, pads, strides, dilations)
     y = TestTensor(y_shape, y_stride, dt=tensor_dtype, device=device)
 
+    groups = int(x_shape[1] / w_shape[1])
+
     b = (
         TestTensor((w.shape[0],), (1,), dt=tensor_dtype, device=device, scale=0.01)
         if w.shape[0] > 1
         else None
     )
     print(
-        f"Testing Conv on {InfiniDeviceNames[device]} with x_shape: {x_shape}, w_shape: {w_shape}, b_shape: {w_shape[0]}, pads: {pads}, strides: {strides}, dilations: {dilations}, x_stride: {x_stride} dtype:{InfiniDtypeNames[tensor_dtype]}"
+        f"Testing Conv on {InfiniDeviceNames[device]} with x_shape: {x_shape}, w_shape: {w_shape}, b_shape: {w_shape[0]}, pads: {pads}, strides: {strides}, dilations: {dilations}, x_stride: {x_stride}, group: {groups}, dtype:{InfiniDtypeNames[tensor_dtype]}"
     )
     conv(
         x.torch_tensor(),
@@ -192,6 +219,7 @@ def test(
         dilations,
         y.torch_tensor(),
         b.torch_tensor() if b is not None else None,
+        groups
     )
 
     if sync is not None:
@@ -210,6 +238,7 @@ def test(
             tuple_to_void_p(strides),
             tuple_to_void_p(dilations),
             len(pads),
+            groups,
         )
     )
 
@@ -243,8 +272,8 @@ def test(
     lib_conv()
     atol, rtol = get_tolerance(_TOLERANCE_MAP, tensor_dtype)
     if DEBUG:
-        debug(y.actual_tensor(), y.torch_tensor(), atol=atol, rtol=rtol)
-    assert torch.allclose(y.actual_tensor(), y.torch_tensor(), atol=atol, rtol=rtol)
+        debug(y.actual_tensor(), y.torch_tensor(), atol=atol, rtol=rtol, equal_nan=True)
+    assert torch.allclose(y.actual_tensor(), y.torch_tensor(), atol=atol, rtol=rtol, equal_nan=True)
 
     # Profiling workflow
     if PROFILE:

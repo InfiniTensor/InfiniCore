@@ -25,6 +25,7 @@ private:
     size_t _spatial_sizes;
     size_t _bias_dims_size;
     size_t _padded_shape_size;
+    size_t _group_size;
 
     ConvInfo(std::vector<size_t> meta,
              size_t ndim,
@@ -33,7 +34,8 @@ private:
              size_t out_channels,
              size_t spatial_sizes,
              size_t bias_dims_size,
-             size_t padded_shape_size)
+             size_t padded_shape_size,
+             size_t group_size)
         : _meta(std::move(meta)),
           _ndim(ndim),
           _batch(batch),
@@ -41,7 +43,8 @@ private:
           _out_channels(out_channels),
           _spatial_sizes(spatial_sizes),
           _bias_dims_size(bias_dims_size),
-          _padded_shape_size(padded_shape_size) {}
+          _padded_shape_size(padded_shape_size),
+          _group_size(group_size) {}
 
 public:
     inline size_t ndim() const { return _ndim; }
@@ -51,6 +54,7 @@ public:
     inline size_t spatial_sizes() const { return _spatial_sizes; }
     inline size_t bias_dims_size() const { return _bias_dims_size; }
     inline size_t padded_shape_size() const { return _padded_shape_size; }
+    inline size_t group_size() const { return _group_size; }
 
     inline size_t getMetaMemSize() const {
         return _meta.size() * sizeof(size_t);
@@ -118,7 +122,8 @@ public:
         const void *pads,
         const void *strides,
         const void *dilations,
-        size_t n);
+        size_t n,
+        size_t group_size);
 };
 
 inline utils::Result<size_t> calculateConvOutputSize(
@@ -158,7 +163,8 @@ inline utils::Result<ConvInfo> ConvInfo::create(
     const void *pads,
     const void *strides,
     const void *dilations,
-    size_t n) {
+    size_t n,
+    size_t group_size) {
 
     auto dtype = y_desc->dtype();
     if (dtype != x_desc->dtype() || dtype != w_desc->dtype()) {
@@ -176,7 +182,7 @@ inline utils::Result<ConvInfo> ConvInfo::create(
     size_t in_channels = x_desc->shape()[1];
     size_t out_channels = w_desc->shape()[0];
 
-    if (y_desc->shape()[0] != batch || y_desc->shape()[1] != out_channels || w_desc->shape()[1] != in_channels) {
+    if (y_desc->shape()[0] != batch || y_desc->shape()[1] != out_channels || w_desc->shape()[1] != in_channels / group_size) {
         return INFINI_STATUS_BAD_TENSOR_SHAPE;
     }
 
@@ -247,7 +253,7 @@ inline utils::Result<ConvInfo> ConvInfo::create(
     }
 
     ConvInfo info(std::move(meta), ndim, batch, in_channels, out_channels,
-                  spatial_sizes, bias_dims_size, padded_shape_size);
+                  spatial_sizes, bias_dims_size, padded_shape_size, group_size);
 
     return utils::Result<ConvInfo>(info);
 }
