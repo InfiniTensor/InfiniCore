@@ -18,7 +18,8 @@ __C __export infiniStatus_t infiniopCreateConvDescriptor(infiniopHandle_t handle
                                                          void *pads,
                                                          void *strides,
                                                          void *dilations,
-                                                         size_t n) {
+                                                         size_t n,
+                                                         size_t group_size) {
 #define CREATE(CASE, NAMESPACE)                                             \
     case CASE:                                                              \
         return op::conv::NAMESPACE::Descriptor::create(                     \
@@ -31,7 +32,9 @@ __C __export infiniStatus_t infiniopCreateConvDescriptor(infiniopHandle_t handle
             pads,                                                           \
             strides,                                                        \
             dilations,                                                      \
-            n)
+            n,                                                              \
+            group_size)
+
     switch (handle->device) {
 #ifdef ENABLE_CPU_API
         CREATE(INFINI_DEVICE_CPU, cpu);

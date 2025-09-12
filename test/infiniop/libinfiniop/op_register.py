@@ -163,11 +163,6 @@ def clip_(lib):
 
 
 @OpRegister.operator
-def conv_(lib):
-    pass
-
-
-@OpRegister.operator
 def gemm_(lib):
     lib.infiniopCreateGemmDescriptor.restype = c_int32
     lib.infiniopCreateGemmDescriptor.argtypes = [
@@ -503,6 +498,7 @@ def conv_(lib):
         c_void_p,
         c_void_p,
         c_void_p,
+        c_size_t,
         c_size_t,
     ]
     lib.infiniopGetConvWorkspaceSize.restype = c_int32
