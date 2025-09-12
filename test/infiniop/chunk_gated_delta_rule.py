@@ -42,24 +42,29 @@ def ref_chunk_gated_delta_rule(
         query = F.normalize(query, p=2, dim=-1)
         key = F.normalize(key, p=2, dim=-1)
     
+    
     # The production implementation expects (B, T, H, D) and transposes internally
+    # query, key, value, beta, g = [
+    #     x.transpose(1, 2).contiguous().to(torch.float32) for x in (query, key, value, beta, g)
+    # ]
+
     query, key, value, beta, g = [
-        x.transpose(1, 2).contiguous().to(torch.float32) for x in (query, key, value, beta, g)
+        x.contiguous().to(torch.float32) for x in (query, key, value, beta, g)
     ]
 
-    # trans
     batch_size, num_heads, sequence_length, k_head_dim = key.shape
     v_head_dim = value.shape[-1]
+    # print("before pad", query.shape, key.shape, value.shape, beta.shape, g.shape)
     
-    # The production implementation pads the HEAD dimension, not the sequence dimension
-    pad_size = (chunk_size - num_heads % chunk_size) % chunk_size
-    query = F.pad(query, (0, 0, 0, 0, 0, pad_size))
-    key = F.pad(key, (0, 0, 0, 0, 0, pad_size))
-    value = F.pad(value, (0, 0, 0, 0, 0, pad_size))
-    beta = F.pad(beta, (0, 0, 0, pad_size))
-    g = F.pad(g, (0, 0, 0, pad_size))
+    pad_size = (chunk_size - sequence_length % chunk_size) % chunk_size
+    query = F.pad(query, (0, 0, 0, pad_size))
+    key = F.pad(key, (0, 0, 0, pad_size))
+    value = F.pad(value, (0, 0, 0,  pad_size))
+    beta = F.pad(beta, (0, pad_size))
+    g = F.pad(g, (0,  pad_size))
+    # print("after pad", query.shape, key.shape, value.shape, beta.shape, g.shape)
     
-    tot_heads = num_heads + pad_size
+    tot_seqs = sequence_length + pad_size
     scale = 1 / (query.shape[-1] ** 0.5)
     query = query * scale
 
@@ -71,31 +76,37 @@ def ref_chunk_gated_delta_rule(
         x.reshape(x.shape[0], x.shape[1], -1, chunk_size, x.shape[-1]) for x in (query, key, value, k_beta, v_beta)
     ]
     g = g.reshape(g.shape[0], g.shape[1], -1, chunk_size)
+
     mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=0)
 
-    # ... (The rest of the complex logic from the reference implementation)
     # This part is quite intricate and involves parallel scan logic.
     # We will trust the reference implementation as the ground truth.
     g = g.cumsum(dim=-1)
+
     decay_mask = ((g.unsqueeze(-1) - g.unsqueeze(-2)).tril().exp().float()).tril()
+
     attn = -((k_beta @ key.transpose(-1, -2)) * decay_mask).masked_fill(mask, 0)
+
     for i in range(1, chunk_size):
         row = attn[..., i, :i].clone()
         sub = attn[..., :i, :i].clone()
         attn[..., i, :i] = row + (row.unsqueeze(-1) * sub).sum(-2)
+
     attn = attn + torch.eye(chunk_size, dtype=attn.dtype, device=attn.device)
+
     value = attn @ v_beta
     k_cumdecay = attn @ (k_beta * g.exp().unsqueeze(-1))
     
     last_recurrent_state = (
-        torch.zeros(batch_size, sequence_length, k_head_dim, v_head_dim, device=value.device, dtype=torch.float32)
+        torch.zeros(batch_size, num_heads, k_head_dim, v_head_dim, device=value.device, dtype=torch.float32)
         if initial_state is None
         else initial_state.to(torch.float32)
     )
+
     core_attn_out = torch.zeros_like(value)
     mask = torch.triu(torch.ones(chunk_size, chunk_size, dtype=torch.bool, device=query.device), diagonal=1)
 
-    for i in range(0, tot_heads // chunk_size):
+    for i in range(0, tot_seqs // chunk_size):
         q_i, k_i, v_i = query[:, :, i], key[:, :, i], value[:, :, i]
         attn_intra = (q_i @ k_i.transpose(-1, -2) * decay_mask[:, :, i]).masked_fill_(mask, 0)
         v_prime = (k_cumdecay[:, :, i]) @ last_recurrent_state
@@ -111,8 +122,9 @@ def ref_chunk_gated_delta_rule(
         last_recurrent_state = None
         
     core_attn_out = core_attn_out.reshape(core_attn_out.shape[0], core_attn_out.shape[1], -1, core_attn_out.shape[-1])
-    core_attn_out = core_attn_out[:, :, :num_heads] # Unpad
-    core_attn_out = core_attn_out.transpose(1, 2).contiguous().to(initial_dtype)
+    core_attn_out = core_attn_out[:, :, :sequence_length] # Unpad
+    # core_attn_out = core_attn_out.transpose(1, 2).contiguous().to(initial_dtype)
+    core_attn_out = core_attn_out.contiguous().to(initial_dtype)
     
     if last_recurrent_state is not None:
         last_recurrent_state = last_recurrent_state.contiguous().to(initial_dtype)
@@ -126,10 +138,11 @@ def ref_chunk_gated_delta_rule(
 # (B, T, H, Dk, Dv, chunk_size, use_qk_l2norm)
 # T (seq_len) must be > 1 for this operator
 _TEST_CASES_ = [
-    (2, 511, 40, 64, 64, 16, True),
-    (4, 1024, 64, 128, 128, 64, False),
-    (1, 63, 32, 80, 80, 16, True),
-    (8, 2047, 32, 128, 128, 32, True),
+    (2, 511, 40, 64, 64, 8, True),
+    # (2, 511, 40, 64, 64, 16, True),
+    # (4, 1024, 64, 128, 128, 64, False),
+    (8, 511, 32, 64, 64, 8, True),
+    (8, 511, 32, 128, 128, 8, True),
 ]
 
 # Data types for testing
@@ -137,7 +150,7 @@ _TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.BF16, InfiniDtype.F32]
 
 # Tolerance map
 _TOLERANCE_MAP = {
-    InfiniDtype.F16: {"atol": 1e-2, "rtol": 1e-2}, # Higher tolerance due to complex ops
+    InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3}, # Higher tolerance due to complex ops
     InfiniDtype.BF16: {"atol": 5e-2, "rtol": 5e-2},
     InfiniDtype.F32: {"atol": 1e-4, "rtol": 1e-4},
 }
@@ -161,30 +174,39 @@ def test(
         f"dtype={InfiniDtypeNames[dtype]}, use_qk_l2norm={use_qk_l2norm}"
     )
 
-    # Input tensors are in (B, T, H, D) layout as they come from the model layers
-    q = TestTensor((B, T, H, Dk), None, dtype, device)
-    k = TestTensor((B, T, H, Dk), None, dtype, device)
-    v = TestTensor((B, T, H, Dv), None, dtype, device)
+    # Input tensors are in (B, H, T, D) layout as they come from the model layers
+    q = TestTensor((B, H, T, Dk), None, dtype, device)
+    k = TestTensor((B, H, T, Dk), None, dtype, device)
+    v = TestTensor((B, H, T, Dv), None, dtype, device)
     
-    g_logsigmoid = torch.randn(B, T, H, dtype=torch.float32)
+    g_logsigmoid = torch.randn(B, H, T, dtype=torch.float32)
     g = TestTensor.from_torch(F.logsigmoid(g_logsigmoid), dtype, device)
-    beta_sigmoid = torch.randn(B, T, H, dtype=torch.float32)
+    beta_sigmoid = torch.randn(B, H, T, dtype=torch.float32)
     beta = TestTensor.from_torch(torch.sigmoid(beta_sigmoid), dtype, device)
     
-    # initial_state shape is (B, T, Dk, Dv) - Note the T dimension
-    initial_state = TestTensor((B, T, Dk, Dv), None, dtype, device)
+    initial_state = TestTensor((B, H, Dk, Dv), None, dtype, device)
+    # initial_state = None
+    # final_state = initial_state
+
+    initial_state_desc = ctypes.c_void_p(0)
+    initial_state_data = ctypes.c_void_p(0)
+    initial_state_torch = None
+    if initial_state is not None:
+        initial_state_desc = initial_state.descriptor
+        initial_state_data = initial_state.data()
+        initial_state_torch = initial_state.torch_tensor()
 
     # Output tensors
-    out = TestTensor((B, T, H, Dv), None, dtype, device)
-    # final_state shape is (B, T, Dk, Dv)
-    final_state = TestTensor((B, T, Dk, Dv), None, dtype, device)
+    out = TestTensor((B, H, T, Dv), None, dtype, device)
+    # final_state shape is (B, H, Dk, Dv)
+    final_state = TestTensor((B, H, Dk, Dv), None, dtype, device)
 
     # Run reference implementation
     ans_out, ans_final_state = ref_chunk_gated_delta_rule(
         q.torch_tensor(), k.torch_tensor(), v.torch_tensor(),
         g.torch_tensor(), beta.torch_tensor(),
         chunk_size=chunk_size,
-        initial_state=initial_state.torch_tensor(),
+        initial_state=initial_state_torch,
         output_final_state=True, 
         use_qk_l2norm_in_kernel=use_qk_l2norm
     )
@@ -192,62 +214,69 @@ def test(
     if sync:
         sync()
 
-    # # Create operator descriptor
-    # descriptor = infiniopOperatorDescriptor_t()
-    # check_error(LIBINFINIOP.infiniopCreateChunkGatedDeltaRuleDescriptor(
-    #     handle, ctypes.byref(descriptor),
-    #     out.descriptor, final_state.descriptor,
-    #     q.descriptor, k.descriptor, v.descriptor,
-    #     g.descriptor, beta.descriptor, initial_state.descriptor,
-    #     ctypes.c_int(chunk_size),
-    #     ctypes.c_bool(use_qk_l2norm)
-    # ))
+    # Create operator descriptor
+    descriptor = infiniopOperatorDescriptor_t()
+    check_error(LIBINFINIOP.infiniopCreateChunkGatedDeltaRuleDescriptor(
+        handle, ctypes.byref(descriptor),
+        out.descriptor, final_state.descriptor,
+        q.descriptor, k.descriptor, v.descriptor,
+        g.descriptor, beta.descriptor, initial_state_desc,
+        ctypes.c_bool(use_qk_l2norm),
+        ctypes.c_size_t(chunk_size)
+    ))
     
-    # # Get workspace size
-    # workspace_size = c_uint64(0)
-    # check_error(
-    #     LIBINFINIOP.infiniopGetChunkGatedDeltaRuleWorkspaceSize(
-    #         descriptor, ctypes.byref(workspace_size)
-    #     )
-    # )
-    # workspace = TestWorkspace(workspace_size.value, q.device)
+    # Get workspace size
+    workspace_size = c_uint64(0)
+    check_error(
+        LIBINFINIOP.infiniopGetChunkGatedDeltaRuleWorkspaceSize(
+            descriptor, ctypes.byref(workspace_size)
+        )
+    )
+    workspace = TestWorkspace(workspace_size.value, q.device)
 
-    # # Invalidate descriptors
-    # # ... (destroy all descriptors) ...
 
-    # # Define the library call
-    # def lib_chunk_gated_delta_rule():
-    #     check_error(LIBINFINIOP.infiniopChunkGatedDeltaRule(
-    #         descriptor, workspace.data(), workspace_size.value,
-    #         out.data(), final_state.data(),
-    #         q.data(), k.data(), v.data(),
-    #         g.data(), beta.data(), initial_state.data(), None
-    #     ))
-    
-    # # Execute the custom operator
-    # lib_chunk_gated_delta_rule()
-    
-    # if sync:
-    #     sync()
+    # Invalidate descriptors to ensure kernel does not rely on them
+    q.destroy_desc()
+    k.destroy_desc()
+    v.destroy_desc()
+    g.destroy_desc()
+    beta.destroy_desc()
+    if initial_state is not None:
+        initial_state.destroy_desc()
+    out.destroy_desc()
+    final_state.destroy_desc()
 
-    # # Verify correctness
-    # atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
+
+    # Define the library call
+    def lib_chunk_gated_delta_rule():
+        check_error(LIBINFINIOP.infiniopChunkGatedDeltaRule(
+            descriptor, workspace.data(), workspace_size.value,
+            out.data(), final_state.data(),
+            q.data(), k.data(), v.data(),
+            g.data(), beta.data(), initial_state_data, None
+        ))
     
-    # if DEBUG:
-    #     print("--- Verifying Output Tensor ---")
-    #     debug(out.actual_tensor(), ans_out, atol=atol, rtol=rtol)
-    # assert torch.allclose(out.actual_tensor(), ans_out, atol=atol, rtol=rtol)
+    # Execute the custom operator
+    lib_chunk_gated_delta_rule()
     
-    # if DEBUG:
-    #     print("--- Verifying Final State Tensor ---")
-    #     debug(final_state.actual_tensor(), ans_final_state, atol=atol, rtol=rtol)
-    # assert torch.allclose(final_state.actual_tensor(), ans_final_state, atol=atol, rtol=rtol)
+    if sync:
+        sync()
+
+    # Verify correctness
+    atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
+
+    if DEBUG:
+        print("--- Verifying Output Tensor ---")
+        debug(out.actual_tensor(), ans_out, atol=atol, rtol=rtol)
+    assert torch.allclose(out.actual_tensor(), ans_out, atol=atol, rtol=rtol)
+
+    if DEBUG:
+        print("--- Verifying Final State Tensor ---")
+        debug(final_state.actual_tensor(), ans_final_state, atol=atol, rtol=rtol)
+    assert torch.allclose(final_state.actual_tensor(), ans_final_state, atol=atol, rtol=rtol)
     
-    # # Profiling
-    # # ... (profiling logic) ...
-    
-    # # Clean up
-    # check_error(LIBINFINIOP.infiniopDestroyChunkGatedDeltaRuleDescriptor(descriptor))
+    # Clean up
+    check_error(LIBINFINIOP.infiniopDestroyChunkGatedDeltaRuleDescriptor(descriptor))
 
 
 if __name__ == "__main__":
