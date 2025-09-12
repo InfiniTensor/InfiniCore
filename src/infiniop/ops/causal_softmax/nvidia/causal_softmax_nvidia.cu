@@ -76,6 +76,12 @@ infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size,
                                      const void *x,
                                      void *stream_) const {
     cudaStream_t stream = (cudaStream_t)stream_;
+#ifdef ENABLE_HYGON_API
+    // Hygon DCU forces using 512 block size to avoid launch bounds conflict
+    CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_512>(
+        y, x, _info.dtype, _info.batch_size, _info.seq_len, _info.total_seq_len,
+        _info.y_stride_b, _info.y_stride_i, _info.x_stride_b, _info.x_stride_i, stream));
+#else
     if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_1024) {
         CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_1024>(
             y, x, _info.dtype, _info.batch_size, _info.seq_len, _info.total_seq_len,
@@ -91,6 +97,7 @@ infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size,
     } else {
         return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
     }
+#endif
     return INFINI_STATUS_SUCCESS;
 }
 

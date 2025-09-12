@@ -50,7 +50,7 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
 | `--metax-gpu=[y\|n]`     | 是否编译沐曦 GPU 接口实现         | n
 | `--moore-gpu=[y\|n]`     | 是否编译摩尔线程 GPU 接口实现     | n
 | `--iluvatar-gpu=[y\|n]`  | 是否编译沐曦 GPU 接口实现         | n
-| `--sugon-dcu=[y\|n]`     | 是否编译曙光 DCU 接口实现         | n
+| `--hygon-dcu=[y\|n]`     | 是否编译曙光 DCU 接口实现         | n
 | `--kunlun-xpu=[y\|n]`    | 是否编译昆仑 XPU 接口实现         | n
 | `--ninetoothed=[y\|n]`   | 是否编译九齿实现                 | n
 | `--ccl=[y\|n]`           | 是否编译 InfiniCCL 通信库接口实现 | n
