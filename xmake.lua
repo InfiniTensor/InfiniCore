@@ -122,15 +122,16 @@ if has_config("moore-gpu") then
     includes("xmake/moore.lua")
 end
 
--- 海光
-option("sugon-dcu")
+-- 海光DCU
+option("hygon-dcu")
     set_default(false)
     set_showmenu(true)
-    set_description("Whether to compile implementations for Sugon DCU")
+    set_description("Whether to compile implementations for Hygon DCU")
 option_end()
 
-if has_config("sugon-dcu") then
-    add_defines("ENABLE_SUGON_CUDA_API")
+if has_config("hygon-dcu") then
+    add_defines("ENABLE_HYGON_API")
+    includes("xmake/hygon.lua")
 end
 
 -- 昆仑芯
@@ -217,6 +218,9 @@ target("infinirt")
     if has_config("kunlun-xpu") then
         add_deps("infinirt-kunlun")
     end
+    if has_config("hygon-dcu") then
+        add_deps("infinirt-hygon")
+    end
     set_languages("cxx17")
     set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
     add_files("src/infinirt/*.cc")
@@ -236,20 +240,6 @@ target("infiniop")
     if has_config("iluvatar-gpu") then
         add_deps("infiniop-iluvatar")
     end
-    if has_config("sugon-dcu") then
-        local builddir = string.format(
-            "build/%s/%s/%s",
-            get_config("plat"),
-            get_config("arch"),
-            get_config("mode")
-        )
-        add_shflags("-s", "-shared", "-fPIC")
-        add_links("cublas", "cudnn", "cudadevrt", "cudart_static", "rt", "pthread", "dl")
-        -- Using -linfiniop-nvidia will fail, manually link the target using full path
-        add_deps("nv-gpu", {inherit = false})
-        add_links(builddir.."/libinfiniop-nvidia.a")
-        set_toolchains("sugon-dcu-linker")
-    end
 
     if has_config("cambricon-mlu") then
         add_deps("infiniop-cambricon")
@@ -265,6 +255,9 @@ target("infiniop")
     end
     if has_config("kunlun-xpu") then
         add_deps("infiniop-kunlun")
+    end
+    if has_config("hygon-dcu") then
+        add_deps("infiniop-hygon")
     end
     set_languages("cxx17")
     add_files("src/infiniop/devices/handle.cc")
@@ -300,6 +293,9 @@ target("infiniccl")
 
     if has_config("moore-gpu") then
         add_deps("infiniccl-moore")
+    end
+    if has_config("hygon-dcu") then
+        add_deps("infiniccl-hygon")
     end
     
     set_languages("cxx17")
