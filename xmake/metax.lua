@@ -2,7 +2,11 @@
 local MACA_ROOT = os.getenv("MACA_PATH") or os.getenv("MACA_HOME") or os.getenv("MACA_ROOT")
 add_includedirs(MACA_ROOT .. "/include")
 add_linkdirs(MACA_ROOT .. "/lib")
-add_links("hcdnn", "hcblas", "hcruntime")
+if has_config("use_mc") then
+    add_links("mcdnn", "mcblas", "mcruntime")
+else
+    add_links("hcdnn", "hcblas", "hcruntime")
+end
 
 rule("maca")
     set_extensions(".maca")
@@ -14,11 +18,16 @@ rule("maca")
     on_build_file(function (target, sourcefile)
         local objectfile = target:objectfile(sourcefile)
         os.mkdir(path.directory(objectfile))
-        local htcc = path.join(MACA_ROOT, "htgpu_llvm/bin/htcc")
+        local args
+        local htcc
+        if has_config("use_mc") then
+            htcc = path.join(MACA_ROOT, "mxgpu_llvm/bin/mxcc")
+            args = { "-x", "maca", "-c", sourcefile, "-o", objectfile, "-I" .. MACA_ROOT .. "/include", "-O3", "-fPIC", "-Werror", "-std=c++17"}
+        else
+            htcc = path.join(MACA_ROOT, "htgpu_llvm/bin/htcc")
+            args = { "-x", "hpcc", "-c", sourcefile, "-o", objectfile, "-I" .. MACA_ROOT .. "/include", "-O3", "-fPIC", "-Werror", "-std=c++17"}
+        end
         local includedirs = table.concat(target:get("includedirs"), " ")
-
-        local args = { "-x", "hpcc", "-c", sourcefile, "-o", objectfile, "-I" .. MACA_ROOT .. "/include", "-O3", "-fPIC", "-Werror", "-std=c++17"}
-
         for _, includedir in ipairs(target:get("includedirs")) do
             table.insert(args, "-I" .. includedir)
         end
@@ -66,7 +75,11 @@ target("infiniccl-metax")
         add_cxflags("-fPIC")
     end
     if has_config("ccl") then
-        add_links("libhccl.so")
+        if has_config("use_mc") then
+            add_links("libmccl.so")
+        else
+            add_links("libhccl.so")
+        end
         add_files("../src/infiniccl/metax/*.cc")
     end
     set_languages("cxx17")
