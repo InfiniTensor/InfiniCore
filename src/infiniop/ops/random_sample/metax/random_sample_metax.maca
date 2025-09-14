@@ -1,3 +1,4 @@
+#include "../../../devices/metax/metax_ht2mc.h"
 #include "../../../devices/metax/metax_common.h"
 #include "../../../devices/metax/metax_handle.h"
 #include "../info.h"

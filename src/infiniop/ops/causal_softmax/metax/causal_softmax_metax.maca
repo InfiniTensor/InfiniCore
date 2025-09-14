@@ -1,7 +1,11 @@
 #include "../../../devices/metax/metax_common.h"
 #include "causal_softmax_metax.h"
 
-#include <hccub/block/block_reduce.cuh>
+#ifdef ENABLE_METAX_MC_API
+    #include <cub/block/block_reduce.cuh>
+#else
+    #include <hccub/block/block_reduce.cuh>
+#endif
 #include "../../../devices/metax/metax_kernel_common.h"
 
 #include "../../../reduce/cuda/reduce.cuh"

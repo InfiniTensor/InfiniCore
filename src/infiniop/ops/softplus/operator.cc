@@ -8,9 +8,6 @@
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
 #include "nvidia/softplus_nvidia.cuh"
 #endif
-#ifdef ENABLE_METAX_API
-#include "metax/softplus_metax.h"
-#endif
 
 __C infiniStatus_t infiniopCreateSoftplusDescriptor(
     infiniopHandle_t handle,
