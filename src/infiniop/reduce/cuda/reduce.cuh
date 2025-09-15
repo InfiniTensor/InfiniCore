@@ -52,13 +52,22 @@ __device__ __forceinline__ Tdata max(const Tdata *data_ptr, size_t count) {
     Tdata max_ = data_ptr[0];
 
     for (size_t i = threadIdx.x; i < count; i += BLOCK_SIZE) {
+#ifdef ENABLE_HYGON_API
+        max_ = (data_ptr[i] > max_) ? data_ptr[i] : max_;
+#else
         max_ = cub::Max()(max_, data_ptr[i]);
+#endif
     }
 
     using BlockReduce = cub::BlockReduce<Tdata, BLOCK_SIZE>;
     __shared__ typename BlockReduce::TempStorage temp_storage;
 
+#ifdef ENABLE_HYGON_API
+    return BlockReduce(temp_storage).Reduce(
+        max_, [](const Tdata &a, const Tdata &b) { return (a > b) ? a : b; }, BLOCK_SIZE);
+#else
     return BlockReduce(temp_storage).Reduce(max_, cub::Max(), BLOCK_SIZE);
+#endif
 }
 
 } // namespace op::common_cuda::reduce_op

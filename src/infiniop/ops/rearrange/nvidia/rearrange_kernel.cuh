@@ -2,6 +2,7 @@
 #define __REARRANGE_CUDA_KERNEL_H__
 
 #include "../../../devices/nvidia/nvidia_common.cuh"
+#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 
 #define ARRAY_TYPE_STRIDE ptrdiff_t
 #define ARRAY_TYPE_SIZE size_t
@@ -30,7 +31,7 @@ struct Constraint {
 
 // 定义宏生成内核函数
 #define DEFINE_REARRANGE_KERNEL(Tmem_type, constraint_num, block_array_size, grid_array_size)                                                                                    \
-    extern "C" __global__ void rearrange_unit_##Tmem_type##_block_##block_array_size##_grid_##grid_array_size##_constrain_##constraint_num(                                      \
+    extern "C" INFINIOP_CUDA_KERNEL rearrange_unit_##Tmem_type##_block_##block_array_size##_grid_##grid_array_size##_constrain_##constraint_num(                                 \
         void *__restrict__ dst,                                                                                                                                                  \
         const void *__restrict__ src,                                                                                                                                            \
         const size_t block_dim,                                                                                                                                                  \

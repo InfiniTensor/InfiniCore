@@ -1,5 +1,8 @@
-#ifdef ENABLE_SUGON_CUDA_API
-#define INFINIOP_CUDA_KERNEL __launch_bounds__(512) __global__ void
+#ifndef __INFINIOP_CUDA_KERNEL_COMMON_CUH__
+#define __INFINIOP_CUDA_KERNEL_COMMON_CUH__
+
+#if defined(ENABLE_HYGON_API)
+#define INFINIOP_CUDA_KERNEL __launch_bounds__(1024) __global__ void
 #else
 #define INFINIOP_CUDA_KERNEL __global__ void
 #endif
@@ -15,8 +18,14 @@
 
 #define CHECK_CUDA(API) CHECK_INTERNAL(API, cudaSuccess)
 
+#ifdef ENABLE_HYGON_API
+// Hygon DCU uses different bfloat16 type definitions
+using cuda_bfloat16 = __nv_bfloat16;
+using cuda_bfloat162 = __nv_bfloat162;
+#else
 using cuda_bfloat16 = nv_bfloat16;
 using cuda_bfloat162 = nv_bfloat162;
+#endif
 
 namespace device::nvidia {
 
@@ -41,7 +50,7 @@ exp_(const float val) {
     return expf(val);
 }
 
-#ifndef ENABLE_ILUVATAR_API
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 __forceinline__ __device__ long double
 exp_(const long double val) {
     return expl(val);
@@ -62,3 +71,5 @@ __forceinline__ __device__ __nv_bfloat16
 exp_(const __nv_bfloat16 x) {
     return hexp(x);
 }
+
+#endif // __INFINIOP_CUDA_KERNEL_COMMON_CUH__
