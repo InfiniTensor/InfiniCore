@@ -5,7 +5,7 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/cpu_handle.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/nvidia_handle.h"
 #endif
 #ifdef ENABLE_CAMBRICON_API
@@ -62,6 +62,9 @@ __C infiniStatus_t infiniopCreateHandle(infiniopHandle_t *handle_ptr) {
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, metax);
 #endif
+#ifdef ENABLE_HYGON_API
+        CREATE(INFINI_DEVICE_HYGON, hygon);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -101,6 +104,9 @@ __C infiniStatus_t infiniopDestroyHandle(infiniopHandle_t handle) {
 #endif
 #ifdef ENABLE_METAX_API
         DELETE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_HYGON_API
+        DELETE(INFINI_DEVICE_HYGON, hygon);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
