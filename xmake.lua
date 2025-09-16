@@ -312,22 +312,22 @@ target("infiniccl")
     set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
 target_end()
 
+target("infinicore_c_api")
+    set_kind("phony")
+    add_deps("infiniop", "infinirt", "infiniccl")
+    after_build(function (target) print(YELLOW .. "[Congratulations!] Now you can install the libraries with \"xmake install\"" .. NC) end)
+target_end()
+
 target("infinicore")
     add_rules("python.library", {soabi = true})
     add_packages("pybind11")
 
     set_kind("shared")
-    add_deps("infiniop", "infinirt", "infiniccl")
+    add_deps("infinicore_c_api")
 
     add_files("src/infinicore/*.cc")
 
     set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
-target_end()
-
-target("all")
-    set_kind("phony")
-    add_deps("infiniop", "infinirt", "infiniccl")
-    after_build(function (target) print(YELLOW .. "[Congratulations!] Now you can install the libraries with \"xmake install\"" .. NC) end)
 target_end()
 
 -- Tests
