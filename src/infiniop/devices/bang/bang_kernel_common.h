@@ -23,35 +23,6 @@ __mlu_device__ half to_half(const T &v) {
 }
 
 /**
- * @brief Converts a flattened index to a reduced offset considering broadcasting.
- *
- * This function is used when dealing with broadcasted tensors where the input
- * has been broadcast to match the output shape. It calculates the offset in
- * the original (non-broadcasted) tensor.
- *
- * @param flat_index The flattened index in the output tensor
- * @param ndim Number of dimensions
- * @param broadcasted_strides Strides of the broadcasted tensor
- * @param target_strides Strides of the original (non-broadcasted) tensor
- * @return size_t Offset in the original tensor's memory
- */
-inline __mlu_device__ size_t indexToReducedOffset(
-    size_t flat_index,
-    size_t ndim,
-    const ptrdiff_t *broadcasted_strides,
-    const ptrdiff_t *target_strides) {
-
-    size_t res = 0;
-    for (size_t i = 0; i < ndim; ++i) {
-        // Calculate contribution from each dimension
-        res += flat_index / broadcasted_strides[i] * target_strides[i];
-        // Remove the contribution from this dimension
-        flat_index %= broadcasted_strides[i];
-    }
-    return res;
-}
-
-/**
  * @brief Converts a flattened index to a memory offset considering tensor striding.
  *
  * This is the general case for non-contiguous tensors where elements are not
@@ -106,11 +77,7 @@ struct InputIndexer {
         size_t global_idx = idx + element_idx;
         return input_contiguous[input_id]
                  ? global_idx // Simple case: contiguous memory
-                 : (input_broadcasted[input_id]
-                        // Handle broadcasted case
-                        ? indexToReducedOffset(global_idx, ndim, output_strides, input_strides + input_id * ndim)
-                        // General non-contiguous case
-                        : indexToOffset(global_idx, ndim, input_shapes + input_id * ndim, input_strides + input_id * ndim));
+                 : indexToOffset(global_idx, ndim, input_shapes + input_id * ndim, input_strides + input_id * ndim);
     }
 };
 

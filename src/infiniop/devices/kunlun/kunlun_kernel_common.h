@@ -44,22 +44,6 @@ __device__ inline void loadsm(__shared_ptr__ const T *p, T *v, int len) {
 }
 
 /**
- * @brief Convert data type. All data is in local memory
- * @param v: input value
- * @return output value
- */
-template <typename Tout, typename Tin>
-__device__ inline Tout to(Tin v) {
-    if constexpr (std::is_same<Tin, half>::value) {
-        return __half2float(v);
-    } else if constexpr (std::is_same<Tin, bfloat16_t>::value) {
-        return __bfloat162float(v);
-    } else {
-        return static_cast<Tout>(v);
-    }
-}
-
-/**
  * @brief atomicAdd for kunlun xpu
  * @param ptr: pointer to shared memory
  * @param value: value to add
@@ -119,27 +103,6 @@ inline __device__ T atomicMax(__shared_ptr__ T *ptr, T value) {
     mfence_sm();
     ticket_unlock_mix();
     return old;
-}
-
-/**
- * @brief Get index of broadcasted input
- * flat_index: flatten index of output tensor
- * ndim: dim of output tensor
- * broadcasted_strides: strides of output tensor
- * target_strides: strides of input tensor
- */
-inline __device__ int indexToReducedOffset(
-    int flat_index,                        // output flatten index
-    int ndim,                              // output dims
-    const _ptrdiff_t *broadcasted_strides, // output strides
-    const _ptrdiff_t *target_strides) {    // strides of inputs
-
-    int res = 0;
-    for (int i = 0; i < ndim; ++i) {
-        res += flat_index / broadcasted_strides[i].value * target_strides[i].value;
-        flat_index %= broadcasted_strides[i].value;
-    }
-    return res;
 }
 
 /**

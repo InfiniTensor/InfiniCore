@@ -13,12 +13,17 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t x_desc,
     infiniopTensorDescriptor_t pos_desc,
     infiniopTensorDescriptor_t sin_desc,
-    infiniopTensorDescriptor_t cos_desc) {
+    infiniopTensorDescriptor_t cos_desc,
+    infiniopRoPEAlgo_t algo) {
 
     auto handle = reinterpret_cast<device::bang::Handle *>(handle_);
 
-    auto info = RoPEInfo::createRoPEInfo(y_desc, x_desc, pos_desc, sin_desc, cos_desc);
+    auto info = RoPEInfo::createRoPEInfo(y_desc, x_desc, pos_desc, sin_desc, cos_desc, algo);
     CHECK_RESULT(info);
+
+    if (algo != INFINIOP_ROPE_ALGO_GPT_J) {
+        return INFINI_STATUS_NOT_IMPLEMENTED;
+    }
 
     // Create descriptor
     *desc_ptr = new Descriptor(

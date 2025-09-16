@@ -14,12 +14,12 @@ __device__ inline Tcompute sumSquared(__shared_ptr__ const Tdata *data_ptr, size
 
     for (size_t i = core_id(); i < count; i += BLOCK_SIZE) {
         Tdata xi = data_ptr[i];
-        ss += to<Tcompute>(xi) * to<Tcompute>(xi);
+        ss += Tcompute(xi) * Tcompute(xi);
     }
 
     __shared__ Tcompute temp_storage;
     if (core_id() == 0) {
-        temp_storage = to<Tcompute>(0.f);
+        temp_storage = Tcompute(0.f);
     }
     sync_cluster();
 
@@ -36,12 +36,12 @@ __device__ inline Tcompute sum(__shared_ptr__ const Tdata *data_ptr, size_t coun
 
     for (size_t i = core_id(); i < count; i += BLOCK_SIZE) {
         Tdata xi = data_ptr[i];
-        ss += to<Tcompute>(xi);
+        ss += Tcompute(xi);
     }
 
     __shared__ Tcompute temp_storage;
     if (core_id() == 0) {
-        temp_storage = to<Tcompute>(0.f);
+        temp_storage = Tcompute(0.f);
     }
     sync_cluster();
 
@@ -58,7 +58,7 @@ __device__ inline Tdata max(__shared_ptr__ const Tdata *data_ptr, size_t count) 
 
     for (size_t i = core_id(); i < count; i += BLOCK_SIZE) {
         Tdata xi = data_ptr[i];
-        max_val = fmax(max_val, to<Tdata>(xi));
+        max_val = fmax(max_val, Tdata(xi));
     }
 
     __shared__ Tdata temp_storage;

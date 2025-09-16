@@ -4,6 +4,7 @@
 #include "../../../utils.h"
 #include "../../operator.h"
 #include "../../tensor.h"
+#include "infiniop/ops/rope.h"
 
 #define DESCRIPTOR(NAMESPACE)                                    \
                                                                  \
@@ -37,7 +38,8 @@
             infiniopTensorDescriptor_t x_desc,                   \
             infiniopTensorDescriptor_t pos_desc,                 \
             infiniopTensorDescriptor_t sin_desc,                 \
-            infiniopTensorDescriptor_t cos_desc);                \
+            infiniopTensorDescriptor_t cos_desc,                 \
+            infiniopRoPEAlgo_t algo);                            \
                                                                  \
         infiniStatus_t calculate(                                \
             void *workspace,                                     \
@@ -63,15 +65,18 @@ public:
         y_stride_nhead,
         x_stride_seqlen,
         x_stride_nhead;
+    infiniopRoPEAlgo_t algo;
 
-    static utils::Result<RoPEInfo> createRoPEInfo(
+    static utils::Result<RoPEInfo>
+    createRoPEInfo(
         infiniopTensorDescriptor_t y_desc,
         infiniopTensorDescriptor_t x_desc,
         infiniopTensorDescriptor_t pos_desc,
         infiniopTensorDescriptor_t sin_desc,
-        infiniopTensorDescriptor_t cos_desc) {
+        infiniopTensorDescriptor_t cos_desc,
+        infiniopRoPEAlgo_t algo) {
         CHECK_OR_RETURN(
-            y_desc != nullptr && pos_desc != nullptr && sin_desc != nullptr && cos_desc != nullptr,
+            y_desc != nullptr && pos_desc != nullptr && sin_desc != nullptr && cos_desc != nullptr && algo < infiniopRoPEAlgo_t::INFINIOP_ROPE_ALGO_COUNT,
             INFINI_STATUS_NULL_POINTER);
 
         const infiniDtype_t data_type = y_desc->dtype();
@@ -118,6 +123,7 @@ public:
             y_desc->stride(1),
             x_desc->stride(0),
             x_desc->stride(1),
+            algo,
         });
     }
 };

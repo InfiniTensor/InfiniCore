@@ -1,3 +1,4 @@
+#include "infiniop/ops/rope.h"
 #include "ops.hpp"
 #include "utils.hpp"
 #include <infinirt.h>
@@ -6,6 +7,8 @@
 
 namespace infiniop_test::rope {
 struct Test::Attributes {
+    infiniopRoPEAlgo_t algo;
+
     std::shared_ptr<Tensor> y;
     std::shared_ptr<Tensor> x;
     std::shared_ptr<Tensor> pos_ids;
@@ -21,7 +24,7 @@ std::shared_ptr<Test> Test::build(
     auto test = std::shared_ptr<Test>(new Test(rtol, atol));
     test->_attributes = new Attributes();
 
-    if (tensors.find("y") == tensors.end()
+    if (!check_names(attributes, Test::attribute_names()) || tensors.find("y") == tensors.end()
         || tensors.find("x") == tensors.end()
         || tensors.find("pos_ids") == tensors.end()
         || tensors.find("sin_table") == tensors.end()
@@ -29,6 +32,8 @@ std::shared_ptr<Test> Test::build(
         || tensors.find("ans") == tensors.end()) {
         throw std::runtime_error("Invalid Test");
     }
+
+    test->_attributes->algo = *reinterpret_cast<infiniopRoPEAlgo_t *>(attributes["algo"].data());
 
     test->_attributes->y = tensors["y"];
     test->_attributes->x = tensors["x"];
@@ -43,6 +48,7 @@ std::shared_ptr<Test> Test::build(
 std::shared_ptr<infiniop_test::Result> Test::run(
     infiniopHandle_t handle, infiniDevice_t device, int device_id, size_t warm_ups, size_t iterations) {
     infiniopRoPEDescriptor_t op_desc;
+    infiniopRoPEAlgo_t algo = _attributes->algo;
     auto y = _attributes->y->to(device, device_id);
     auto x = _attributes->x->to(device, device_id);
     auto pos_ids = _attributes->pos_ids->to(device, device_id);
@@ -54,7 +60,8 @@ std::shared_ptr<infiniop_test::Result> Test::run(
                                           x->desc(),
                                           pos_ids->desc(),
                                           sin_table->desc(),
-                                          cos_table->desc()),
+                                          cos_table->desc(),
+                                          algo),
              return TEST_FAILED(OP_CREATION_FAILED, "Failed to create op descriptor."));
 
     size_t workspace_size;
@@ -101,7 +108,7 @@ std::shared_ptr<infiniop_test::Result> Test::run(
 }
 
 std::vector<std::string> Test::attribute_names() {
-    return {};
+    return {"algo"};
 }
 
 std::vector<std::string> Test::tensor_names() {
@@ -120,6 +127,7 @@ std::string Test::toString() const {
     oss << "- pos_ids: " << _attributes->pos_ids->info() << std::endl;
     oss << "- sin_table: " << _attributes->sin_table->info() << std::endl;
     oss << "- cos_table: " << _attributes->cos_table->info() << std::endl;
+    oss << "- algo: " << _attributes->algo << std::endl;
     oss << std::scientific << std::setprecision(2);
     oss << "- rtol=" << _rtol << ", atol=" << _atol << std::endl;
     return oss.str();

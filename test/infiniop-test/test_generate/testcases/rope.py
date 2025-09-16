@@ -2,27 +2,48 @@ from ast import List
 import numpy as np
 import gguf
 from typing import List
-
+from enum import Enum
 
 from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides
 
+class Algorithm(Enum):
+    GPT_J = 0
+    GPT_NEOX = 1
 
-def rotary_embedding(t, sin, cos):
-    dh = t.shape[2] 
+
+def rotary_embedding(t, sin, cos, algo):
+    def _rope(sin, cos, t1, t2):
+        cos = np.expand_dims(cos, axis=1)  # [seq_len, 1, dh // 2]
+        sin = np.expand_dims(sin, axis=1)  # [seq_len, 1, dh // 2]
+
+        t_out_1 = t1 * cos - t2 * sin
+        t_out_2 = t1 * sin + t2 * cos
+
+        return t_out_1, t_out_2
+
+
+    dh = t.shape[-1]
     assert dh % 2 == 0, "Embedding dimension must be even."
 
-    t_even = t[..., 0::2]  # [seq_len, n_head, dh // 2]
-    t_odd = t[..., 1::2]  # [seq_len, n_head, dh // 2]
-
-    cos = np.expand_dims(cos, axis=1)  # [seq_len, 1, dh // 2]
-    sin = np.expand_dims(sin, axis=1)  # [seq_len, 1, dh // 2]
-
-    t_out_even = t_even * cos - t_odd * sin
-    t_out_odd = t_even * sin + t_odd * cos
-
     t_out = np.empty_like(t)
-    t_out[..., 0::2] = t_out_even
-    t_out[..., 1::2] = t_out_odd
+
+    if algo == Algorithm.GPT_J.value:
+        t_even = t[..., 0::2]  # [seq_len, n_head, dh // 2]
+        t_odd = t[..., 1::2]  # [seq_len, n_head, dh // 2]
+
+        t_out_even, t_out_odd = _rope(sin, cos, t_even, t_odd)
+
+        t_out[..., 0::2] = t_out_even
+        t_out[..., 1::2] = t_out_odd
+    else:
+        half_dim = dh // 2   
+        t_first = t[..., :half_dim]
+        t_second = t[..., half_dim:]
+
+        t_out_first, t_out_second = _rope(sin, cos, t_first, t_second)
+
+        t_out[..., :half_dim] = t_out_first
+        t_out[..., half_dim:] = t_out_second
 
     return t_out
 
@@ -52,6 +73,7 @@ class RoPETestCase(InfiniopTestCase):
         pos_ids: np.ndarray,
         sin_table: np.ndarray,
         cos_table: np.ndarray,
+        algo: int,
     ):
         super().__init__("rope")
         self.y = y
@@ -63,10 +85,12 @@ class RoPETestCase(InfiniopTestCase):
         self.pos_ids = pos_ids
         self.sin_table = sin_table
         self.cos_table = cos_table
+        self.algo = algo
 
     def write_test(self, test_writer: "InfiniopTestWriter"):
         super().write_test(test_writer)
 
+        test_writer.add_int32(test_writer.gguf_key("algo"), self.algo)
         test_writer.add_tensor(
             test_writer.gguf_key("y"), self.y, raw_dtype=np_dtype_to_ggml(self.y.dtype)
         )
@@ -97,6 +121,7 @@ class RoPETestCase(InfiniopTestCase):
             self.x.astype(np.float64),
             self.sin_table.astype(np.float64),
             self.cos_table.astype(np.float64),
+            self.algo,
         )
         test_writer.add_tensor(
             test_writer.gguf_key("ans"), ans, raw_dtype=gguf.GGMLQuantizationType.F64
@@ -121,27 +146,35 @@ if __name__ == "__main__":
         ((3, 32, 128), (8000, 200, 1), (7000, 128, 1)),
     ]
 
+
+    _ALGO = [
+        Algorithm.GPT_J,
+        Algorithm.GPT_NEOX,
+    ]
+
     _TENSOR_DTYPES_ = [np.float16, np.float32]
     test_writer = InfiniopTestWriter("rope.gguf")
     test_cases = []
 
-    for dtype in _TENSOR_DTYPES_:
-        for shape, stride_x, stride_y in _TEST_CASES_:
-            x = np.random.rand(*shape).astype(dtype)
-            y = np.empty(tuple(0 for _ in shape), dtype=dtype)
-            pos_ids = np.arange(0, x.shape[0], dtype=np.int32)
-            sin_table, cos_table = sin_cos_table(pos_ids, x.shape[2], theta=1e5, dtype=dtype)
-            test_case = RoPETestCase(
-                y=y,
-                x=x,
-                shape_y=shape,
-                shape_x=shape,
-                stride_y=stride_y,
-                stride_x=stride_x,
-                pos_ids=pos_ids,
-                sin_table=sin_table,
-                cos_table=cos_table,
-            )
-            test_cases.append(test_case)
+    for algo in _ALGO:
+        for dtype in _TENSOR_DTYPES_:
+            for shape, stride_x, stride_y in _TEST_CASES_:
+                x = np.random.rand(*shape).astype(dtype)
+                y = np.empty(tuple(0 for _ in shape), dtype=dtype)
+                pos_ids = np.arange(0, x.shape[0], dtype=np.int32)
+                sin_table, cos_table = sin_cos_table(pos_ids, x.shape[2], theta=1e5, dtype=dtype)
+                test_case = RoPETestCase(
+                    y=y,
+                    x=x,
+                    shape_y=shape,
+                    shape_x=shape,
+                    stride_y=stride_y,
+                    stride_x=stride_x,
+                    pos_ids=pos_ids,
+                    sin_table=sin_table,
+                    cos_table=cos_table,
+                    algo=algo.value,
+                )
+                test_cases.append(test_case)
     test_writer.add_tests(test_cases)
     test_writer.save()

@@ -8,7 +8,7 @@
  * which ensuring code alignment across different hardware platforms.
  */
 
-template <typename Tdata, typename Tindex, typename Tangle>
+template <bool IsGPTJ, typename Tdata, typename Tindex, typename Tangle>
 __device__ void ropeThreadPerItemBlock(
     Tdata *y_,
     const Tdata *x_,
@@ -29,40 +29,72 @@ __device__ void ropeThreadPerItemBlock(
     for (size_t i = threadIdx.x; i < table_dim; i += blockDim.x) {
         Tangle sin__ = sin_table[table_offset + i],
                cos__ = cos_table[table_offset + i];
-        if constexpr (std::is_same<Tdata, half>::value) {
-            auto &y = reinterpret_cast<half2 &>(y_[y_offset + 2 * i]);
-            auto &x = reinterpret_cast<const half2 &>(x_[x_offset + 2 * i]);
-            Tangle y0 = x.x * cos__ - x.y * sin__,
-                   y1 = x.x * sin__ + x.y * cos__;
-            y = half2(y0, y1);
-        } else if constexpr (std::is_same<Tdata, cuda_bfloat16>::value) {
-            auto &y = reinterpret_cast<cuda_bfloat162 &>(y_[y_offset + 2 * i]);
-            auto &x = reinterpret_cast<const cuda_bfloat162 &>(x_[x_offset + 2 * i]);
 
-            /*
-             * The original code used CUDA-specific functions (__low2bfloat16, __high2bfloat16)
-             * to extract bfloat16 values from a packed variable.
-             *
-             * This code has been modified for the MUSA platform, which does not support
-             * these CUDA built-in functions. Instead, MUSA provides a different set of
-             * built-in functions (`__low2float`, `__high2float`) that directly convert
-             * the bfloat16 values to float.
-             *
-             * This change ensures cross-platform compatibility and resolves compilation errors.
-             */
+        if constexpr (IsGPTJ) {
+            if constexpr (std::is_same<Tdata, half>::value) {
+                auto &y = reinterpret_cast<half2 &>(y_[y_offset + 2 * i]);
+                auto &x = reinterpret_cast<const half2 &>(x_[x_offset + 2 * i]);
+                Tangle y0 = x.x * cos__ - x.y * sin__,
+                       y1 = x.x * sin__ + x.y * cos__;
+                y = half2(y0, y1);
+            } else if constexpr (std::is_same<Tdata, cuda_bfloat16>::value) {
+                auto &y = reinterpret_cast<cuda_bfloat162 &>(y_[y_offset + 2 * i]);
+                auto &x = reinterpret_cast<const cuda_bfloat162 &>(x_[x_offset + 2 * i]);
 
-            Tangle x0 = __low2float(x);
-            Tangle x1 = __high2float(x);
+                /*
+                 * The original code used CUDA-specific functions (__low2bfloat16, __high2bfloat16)
+                 * to extract bfloat16 values from a packed variable.
+                 *
+                 * This code has been modified for the MUSA platform, which does not support
+                 * these CUDA built-in functions. Instead, MUSA provides a different set of
+                 * built-in functions (`__low2float`, `__high2float`) that directly convert
+                 * the bfloat16 values to float.
+                 *
+                 * This change ensures cross-platform compatibility and resolves compilation errors.
+                 */
 
-            Tangle y0 = x0 * cos__ - x1 * sin__;
-            Tangle y1 = x0 * sin__ + x1 * cos__;
+                Tangle x0 = __low2float(x);
+                Tangle x1 = __high2float(x);
 
-            y = __floats2bfloat162_rn(y0, y1);
+                Tangle y0 = x0 * cos__ - x1 * sin__;
+                Tangle y1 = x0 * sin__ + x1 * cos__;
+
+                y = __floats2bfloat162_rn(y0, y1);
+            } else {
+                Tangle x0 = x_[x_offset + 2 * i],
+                       x1 = x_[x_offset + 2 * i + 1];
+                y_[y_offset + 2 * i] = Tdata(x0 * cos__ - x1 * sin__);
+                y_[y_offset + 2 * i + 1] = Tdata(x0 * sin__ + x1 * cos__);
+            }
         } else {
-            Tangle x0 = x_[x_offset + 2 * i],
-                   x1 = x_[x_offset + 2 * i + 1];
-            y_[y_offset + 2 * i] = Tdata(x0 * cos__ - x1 * sin__);
-            y_[y_offset + 2 * i + 1] = Tdata(x0 * sin__ + x1 * cos__);
+            size_t pos0 = i;
+            size_t pos1 = i + table_dim;
+
+            if constexpr (std::is_same<Tdata, half>::value) {
+                Tangle x0 = __half2float(x_[x_offset + pos0]);
+                Tangle x1 = __half2float(x_[x_offset + pos1]);
+
+                Tangle y0 = x0 * cos__ - x1 * sin__;
+                Tangle y1 = x0 * sin__ + x1 * cos__;
+
+                y_[y_offset + pos0] = __float2half(y0);
+                y_[y_offset + pos1] = __float2half(y1);
+            } else if constexpr (std::is_same<Tdata, cuda_bfloat16>::value) {
+                Tangle x0 = __bfloat162float(x_[x_offset + pos0]);
+                Tangle x1 = __bfloat162float(x_[x_offset + pos1]);
+
+                Tangle y0 = x0 * cos__ - x1 * sin__;
+                Tangle y1 = x0 * sin__ + x1 * cos__;
+
+                y_[y_offset + pos0] = __float2bfloat16(y0);
+                y_[y_offset + pos1] = __float2bfloat16(y1);
+            } else {
+                Tangle x0 = x_[x_offset + pos0];
+                Tangle x1 = x_[x_offset + pos1];
+
+                y_[y_offset + pos0] = x0 * cos__ - x1 * sin__;
+                y_[y_offset + pos1] = x0 * sin__ + x1 * cos__;
+            }
         }
     }
 }

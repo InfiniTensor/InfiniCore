@@ -31,9 +31,7 @@ struct InputIndexer {
     inline __device__ int operator()(int input_id) const {
         return input_contiguous[input_id]
                  ? idx
-                 : (input_broadcasted[input_id]
-                        ? indexToReducedOffset(idx, ndim, output_strides, input_strides + input_id * ndim)
-                        : indexToOffset(idx, ndim, input_shapes + input_id * ndim, input_strides + input_id * ndim));
+                 : indexToOffset(idx, ndim, input_shapes + input_id * ndim, input_strides + input_id * ndim);
     }
 };
 

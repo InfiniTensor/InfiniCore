@@ -12,11 +12,12 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t x_desc,
     infiniopTensorDescriptor_t pos_desc,
     infiniopTensorDescriptor_t sin_desc,
-    infiniopTensorDescriptor_t cos_desc) {
+    infiniopTensorDescriptor_t cos_desc,
+    infiniopRoPEAlgo_t algo) {
 
     auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
 
-    auto info = RoPEInfo::createRoPEInfo(y_desc, x_desc, pos_desc, sin_desc, cos_desc);
+    auto info = RoPEInfo::createRoPEInfo(y_desc, x_desc, pos_desc, sin_desc, cos_desc, algo);
     CHECK_RESULT(info);
 
     // Create descriptor
@@ -46,8 +47,8 @@ infiniStatus_t calculateRoPE(const RoPEInfo &info,
             size_t table_offset = pos_id * info.table_dim;
 
             for (size_t i = 0; i < info.table_dim; i++) {
-                size_t pos0 = 2 * i;
-                size_t pos1 = 2 * i + 1;
+                size_t pos0 = info.algo == infiniopRoPEAlgo_t::INFINIOP_ROPE_ALGO_GPT_J ? 2 * i : i;
+                size_t pos1 = info.algo == infiniopRoPEAlgo_t::INFINIOP_ROPE_ALGO_GPT_J ? 2 * i + 1 : i + info.table_dim;
 
                 if constexpr (std::is_same<Tdata, fp16_t>::value || std::is_same<Tdata, bf16_t>::value) {
                     float x0 = utils::cast<float>(x[x_offset + pos0]),

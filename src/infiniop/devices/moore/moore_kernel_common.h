@@ -16,21 +16,6 @@ using cuda_bfloat162 = mt_bfloat162;
 
 namespace device::moore {
 
-// return the memory offset of original tensor, given the flattened index of broadcasted tensor
-__forceinline__ __device__ __host__ size_t
-indexToReducedOffset(
-    size_t flat_index,
-    size_t ndim,
-    const ptrdiff_t *broadcasted_strides,
-    const ptrdiff_t *target_strides) {
-    size_t res = 0;
-    for (size_t i = 0; i < ndim; ++i) {
-        res += flat_index / broadcasted_strides[i] * target_strides[i];
-        flat_index %= broadcasted_strides[i];
-    }
-    return res;
-}
-
 // get the memory offset of the given element in a tensor given its flat index
 __forceinline__ __device__ __host__ size_t
 indexToOffset(

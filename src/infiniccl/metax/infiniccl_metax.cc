@@ -23,6 +23,8 @@ inline hcclDataType_t getHcclDtype(infiniDtype_t datatype) {
         return hcclFloat;
     case INFINI_DTYPE_F16:
         return hcclHalf;
+    case INFINI_DTYPE_BF16:
+        return hcclBfloat16;
     default:
         std::abort();
         return hcclHalf;
@@ -83,9 +85,7 @@ infiniStatus_t allReduce(
     infinicclComm_t comm,
     infinirtStream_t stream) {
 
-    if (datatype != INFINI_DTYPE_F32 && datatype != INFINI_DTYPE_F16) {
-        return INFINI_STATUS_BAD_PARAM;
-    }
+    CHECK_DTYPE(datatype, INFINI_DTYPE_F32, INFINI_DTYPE_F16, INFINI_DTYPE_BF16);
 
     CHECK_HCCL(hcclAllReduce(sendbuf, recvbuf, count, getHcclDtype(datatype),
                              getHcclRedOp(op), getHcclComm(comm), getMacaStream(stream)));

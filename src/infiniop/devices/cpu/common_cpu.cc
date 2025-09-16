@@ -2,19 +2,6 @@
 
 namespace op::common_cpu {
 
-size_t indexToReducedOffset(
-    size_t flat_index,
-    size_t ndim,
-    const ptrdiff_t *broadcasted_strides,
-    const ptrdiff_t *target_strides) {
-    size_t res = 0;
-    for (size_t i = 0; i < ndim; ++i) {
-        res += flat_index / broadcasted_strides[i] * target_strides[i];
-        flat_index %= broadcasted_strides[i];
-    }
-    return res;
-}
-
 size_t indexToOffset(
     size_t flat_index,
     size_t ndim,

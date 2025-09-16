@@ -54,7 +54,7 @@ __device__ void causalSoftmaxBlock(
     // Apply softmax
     for (size_t col = core_id(); col < width; col += BLOCK_SIZE) {
         if (sum_ != 0) {
-            y[col] = to<Tdata>(to<Tcompute>(y[col]) / sum_);
+            y[col] = Tdata(Tcompute(y[col]) / sum_);
         } else {
             y[col] = Tdata(0);
         }

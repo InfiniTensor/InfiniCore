@@ -31,7 +31,8 @@ __C infiniStatus_t infiniopCreateRoPEDescriptor(
     infiniopTensorDescriptor_t x,
     infiniopTensorDescriptor_t pos_ids,
     infiniopTensorDescriptor_t sin_table,
-    infiniopTensorDescriptor_t cos_table) {
+    infiniopTensorDescriptor_t cos_table,
+    infiniopRoPEAlgo_t algo) {
 
 #define CREATE(CASE, NAMESPACE)                                             \
     case CASE:                                                              \
@@ -42,7 +43,8 @@ __C infiniStatus_t infiniopCreateRoPEDescriptor(
             x,                                                              \
             pos_ids,                                                        \
             sin_table,                                                      \
-            cos_table)
+            cos_table,                                                      \
+            algo)
 
     switch (handle->device) {
 #ifdef ENABLE_CPU_API

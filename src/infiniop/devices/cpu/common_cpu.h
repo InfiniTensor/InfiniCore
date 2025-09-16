@@ -15,9 +15,6 @@
 
 namespace op::common_cpu {
 
-// return the memory offset of original tensor, given the flattened index of broadcasted tensor
-size_t indexToReducedOffset(size_t flat_index, size_t ndim, const ptrdiff_t *broadcasted_strides, const ptrdiff_t *target_strides);
-
 // return the memory offset a tensor given flattened index
 size_t indexToOffset(size_t flat_index, size_t ndim, const size_t *shape, const ptrdiff_t *strides);
 

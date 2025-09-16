@@ -27,7 +27,7 @@ __device__ void rmsnormBlock(
     for (size_t i = core_id(); i < dim; i += BLOCK_SIZE) {
         Tdata xi = x[i];
         Tweight wi = w[i];
-        y[i] = static_cast<Tdata>(to<Tcompute>(xi) * to<Tcompute>(wi) * rms);
+        y[i] = Tdata(Tcompute(xi) * Tcompute(wi) * rms);
     }
     sync_cluster();
 }

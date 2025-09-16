@@ -44,6 +44,9 @@ target("infiniop-moore")
     add_cxflags("-lstdc++", "-fPIC", "-Wno-comment")
     add_files("../src/infiniop/devices/moore/*.cc")
     add_files("../src/infiniop/ops/*/moore/*.mu", {rule = "mu"})
+
+    -- Add source files for Moore muBLAS/muDNN GEMM backends.
+    add_files("../src/infiniop/ops/gemm/moore/*/*.mu", {rule = "mu"})
 target_end()
 
 target("infinirt-moore")

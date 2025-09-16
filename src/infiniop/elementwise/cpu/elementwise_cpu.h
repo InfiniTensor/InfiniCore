@@ -127,9 +127,7 @@ void calculate_impl(const op::elementwise::ElementwiseInfo &info,
         auto get_input_idx = [&](size_t input_id) {
             return info.getInputContiguous()[input_id]
                      ? i
-                     : (info.getInputBroadcasted()[input_id]
-                            ? op::common_cpu::indexToReducedOffset(i, info.getNdim(), info.getOutputStrides(), info.getInputStrides(input_id))
-                            : op::common_cpu::indexToOffset(i, info.getNdim(), info.getInputShape(input_id), info.getInputStrides(input_id)));
+                     : op::common_cpu::indexToOffset(i, info.getNdim(), info.getInputShape(input_id), info.getInputStrides(input_id));
         };
 
         out[out_idx] = utils::cast<Tout>(
@@ -162,7 +160,7 @@ void calculate_impl(const op::elementwise::ElementwiseInfo &info,
     std::array<const Tdata *, sizeof...(Is)> ins = {reinterpret_cast<const Tdata *>(inputs[Is])...};
     const ptrdiff_t output_size = info.getOutputSize();
 
-#pragma omp parallel for
+#pragma omp parallel for if (output_size > 1024)
     for (ptrdiff_t i = 0; i < output_size; ++i) {
         size_t out_idx = info.isOutputContiguous()
                            ? i
@@ -171,9 +169,7 @@ void calculate_impl(const op::elementwise::ElementwiseInfo &info,
         auto get_input_idx = [&](size_t input_id) {
             return info.getInputContiguous()[input_id]
                      ? i
-                     : (info.getInputBroadcasted()[input_id]
-                            ? op::common_cpu::indexToReducedOffset(i, info.getNdim(), info.getOutputStrides(), info.getInputStrides(input_id))
-                            : op::common_cpu::indexToOffset(i, info.getNdim(), info.getInputShape(input_id), info.getInputStrides(input_id)));
+                     : op::common_cpu::indexToOffset(i, info.getNdim(), info.getInputShape(input_id), info.getInputStrides(input_id));
         };
 
         if constexpr (std::is_same_v<Tdata, fp16_t> || std::is_same_v<Tdata, bf16_t>) {

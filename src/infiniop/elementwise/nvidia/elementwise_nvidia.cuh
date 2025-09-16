@@ -60,9 +60,7 @@ struct InputIndexer {
     __device__ __forceinline__ size_t operator()(size_t input_id) const {
         return input_contiguous[input_id]
                  ? idx
-                 : (input_broadcasted[input_id]
-                        ? device::nvidia::indexToReducedOffset(idx, ndim, output_strides, input_strides + input_id * ndim)
-                        : device::nvidia::indexToOffset(idx, ndim, input_shapes + input_id * ndim, input_strides + input_id * ndim));
+                 : device::nvidia::indexToOffset(idx, ndim, input_shapes + input_id * ndim, input_strides + input_id * ndim);
     }
 };
 

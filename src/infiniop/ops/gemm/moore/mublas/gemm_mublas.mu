@@ -1,8 +1,8 @@
-#include "../../../devices/moore/moore_common.h"
-#include "../../../devices/moore/moore_handle.h"
-#include "gemm_moore.h"
+#include "../../../../devices/moore/moore_common.h"
+#include "../../../../devices/moore/moore_handle.h"
+#include "gemm_mublas.h"
 
-namespace op::gemm::moore {
+namespace op::gemm::mublas {
 
 struct Descriptor::Opaque {
     std::shared_ptr<device::moore::Handle::Internal> internal;
@@ -122,4 +122,4 @@ infiniStatus_t Descriptor::calculate(
     return INFINI_STATUS_SUCCESS;
 }
 
-} // namespace op::gemm::moore
+} // namespace op::gemm::mublas
