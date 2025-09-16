@@ -31,7 +31,7 @@ jobs:
         xmake-version: latest
 
     - name: Build & Install
-      run: python scripts/install.py --omp=y
+      run: python scripts/install.py --omp=y -y
 
     - name: install python packages
       run: |
