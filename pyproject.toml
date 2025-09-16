@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "InfiniCore"
+version = "0.1.0"
+description = "InfiniCore 是一个跨平台统一编程工具集，为不同芯片平台的功能（包括计算、运行时、通信等）提供统一 C 语言接口。"
+readme = "README.md"
+dependencies = []
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/InfiniTensor/InfiniCore"
+Issues = "https://github.com/InfiniTensor/InfiniCore/issues"
+
+[tool.ruff]
+src = [".", "src"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
