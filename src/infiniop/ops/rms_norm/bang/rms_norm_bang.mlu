@@ -68,19 +68,70 @@ __mlu_global__ void rmsnorm(T *output, const T *input, const Tw *weight,
             __memcpy(input_cache, input + input_offset + processed_elements, current_batch * sizeof(T), GDRAM2NRAM);
             __memcpy(weight_cache, weight + processed_elements, current_batch * sizeof(Tw), GDRAM2NRAM);
 
-            // Normalization and scaling
-            if constexpr (std::is_same<T, bfloat16_t>::value && std::is_same<Tw, float>::value) {
-                // Special handling for BF16 input with F32 weights
-                __bang_bfloat162float((float *)input_cache, input_cache, current_batch);
-                __bang_mul((float *)input_cache, (float *)input_cache, weight_cache, current_batch);
-                __bang_mul_scalar((float *)input_cache, (float *)input_cache, inv_rms, current_batch);
-                __bang_float2bfloat16(input_cache, (float *)input_cache, current_batch);
-            } else {
-                if constexpr (std::is_same<T, half>::value && std::is_same<Tw, float>::value) {
-                    __bang_float2half_dn((T *)weight_cache, weight_cache, current_batch);
+            // Handle all type combinations
+            if constexpr (std::is_same<T, bfloat16_t>::value) {
+                // BF16 input
+                if constexpr (std::is_same<Tw, float>::value) {
+                    // BF16 input, F32 weight
+                    __bang_bfloat162float((float *)input_cache, input_cache, current_batch);
+                    __bang_mul((float *)input_cache, (float *)input_cache, weight_cache, current_batch);
+                    __bang_mul_scalar((float *)input_cache, (float *)input_cache, inv_rms, current_batch);
+                    __bang_float2bfloat16(input_cache, (float *)input_cache, current_batch);
+                } else if constexpr (std::is_same<Tw, half>::value) {
+                    // BF16 input, F16 weight
+                    __bang_bfloat162float((float *)input_cache, input_cache, current_batch);
+                    __bang_half2float((float *)weight_cache, weight_cache, current_batch);
+                    __bang_mul((float *)input_cache, (float *)input_cache, (float *)weight_cache, current_batch);
+                    __bang_mul_scalar((float *)input_cache, (float *)input_cache, inv_rms, current_batch);
+                    __bang_float2bfloat16(input_cache, (float *)input_cache, current_batch);
+                } else {
+                    // BF16 input, BF16 weight
+                    __bang_bfloat162float((float *)input_cache, input_cache, current_batch);
+                    __bang_bfloat162float((float *)weight_cache, weight_cache, current_batch);
+                    __bang_mul((float *)input_cache, (float *)input_cache, (float *)weight_cache, current_batch);
+                    __bang_mul_scalar((float *)input_cache, (float *)input_cache, inv_rms, current_batch);
+                    __bang_float2bfloat16(input_cache, (float *)input_cache, current_batch);
                 }
-                __bang_mul(input_cache, input_cache, (T *)weight_cache, current_batch);
-                __bang_mul_scalar(input_cache, input_cache, inv_rms, current_batch);
+            } else if constexpr (std::is_same<T, half>::value) {
+                // F16 input
+                if constexpr (std::is_same<Tw, float>::value) {
+                    // F16 input, F32 weight
+                    __bang_half2float((float *)input_cache, input_cache, current_batch);
+                    __bang_mul((float *)input_cache, (float *)input_cache, weight_cache, current_batch);
+                    __bang_mul_scalar((float *)input_cache, (float *)input_cache, inv_rms, current_batch);
+                    __bang_float2half(input_cache, (float *)input_cache, current_batch);
+                } else if constexpr (std::is_same<Tw, bfloat16_t>::value) {
+                    // F16 input, BF16 weight
+                    __bang_half2float((float *)input_cache, input_cache, current_batch);
+                    __bang_bfloat162float((float *)weight_cache, weight_cache, current_batch);
+                    __bang_mul((float *)input_cache, (float *)input_cache, (float *)weight_cache, current_batch);
+                    __bang_mul_scalar((float *)input_cache, (float *)input_cache, inv_rms, current_batch);
+                    __bang_float2half(input_cache, (float *)input_cache, current_batch);
+                } else {
+                    // F16 input, F16 weight
+                    __bang_half2float((float *)input_cache, input_cache, current_batch);
+                    __bang_half2float((float *)weight_cache, weight_cache, current_batch);
+                    __bang_mul((float *)input_cache, (float *)input_cache, (float *)weight_cache, current_batch);
+                    __bang_mul_scalar((float *)input_cache, (float *)input_cache, inv_rms, current_batch);
+                    __bang_float2half(input_cache, (float *)input_cache, current_batch);
+                }
+            } else {
+                // F32 input
+                if constexpr (std::is_same<Tw, half>::value) {
+                    // F32 input, F16 weight
+                    __bang_half2float((float *)weight_cache, weight_cache, current_batch);
+                    __bang_mul(input_cache, input_cache, (float *)weight_cache, current_batch);
+                    __bang_mul_scalar(input_cache, input_cache, inv_rms, current_batch);
+                } else if constexpr (std::is_same<Tw, bfloat16_t>::value) {
+                    // F32 input, BF16 weight
+                    __bang_bfloat162float((float *)weight_cache, weight_cache, current_batch);
+                    __bang_mul(input_cache, input_cache, (float *)weight_cache, current_batch);
+                    __bang_mul_scalar(input_cache, input_cache, inv_rms, current_batch);
+                } else {
+                    // F32 input, F32 weight
+                    __bang_mul(input_cache, input_cache, weight_cache, current_batch);
+                    __bang_mul_scalar(input_cache, input_cache, inv_rms, current_batch);
+                }
             }
 
             // Store results
@@ -178,18 +229,24 @@ infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size,
     int core_per_cluster = _opaque->internal->getCorePerCluster();
     int cluster_count = _opaque->internal->getClusterCount();
 
-    // Dispatch based on data types
+    // Dispatch based on data types - support all combinations
     if (_info.atype == INFINI_DTYPE_F16) {
         if (_info.wtype == INFINI_DTYPE_F16) {
             rmsnormUnion<half, half>(workspace, core_per_cluster, cluster_count, queue, y, x, w, _info.shape.data(), _info.y_strides.data(), _info.x_strides.data(), _info.epsilon, _info.ndim());
         } else if (_info.wtype == INFINI_DTYPE_F32) {
             rmsnormUnion<half, float>(workspace, core_per_cluster, cluster_count, queue, y, x, w, _info.shape.data(), _info.y_strides.data(), _info.x_strides.data(), _info.epsilon, _info.ndim());
+        } else if (_info.wtype == INFINI_DTYPE_BF16) {
+            rmsnormUnion<half, bfloat16_t>(workspace, core_per_cluster, cluster_count, queue, y, x, w, _info.shape.data(), _info.y_strides.data(), _info.x_strides.data(), _info.epsilon, _info.ndim());
         } else {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
     } else if (_info.atype == INFINI_DTYPE_F32) {
         if (_info.wtype == INFINI_DTYPE_F32) {
             rmsnormUnion<float, float>(workspace, core_per_cluster, cluster_count, queue, y, x, w, _info.shape.data(), _info.y_strides.data(), _info.x_strides.data(), _info.epsilon, _info.ndim());
+        } else if (_info.wtype == INFINI_DTYPE_F16) {
+            rmsnormUnion<float, half>(workspace, core_per_cluster, cluster_count, queue, y, x, w, _info.shape.data(), _info.y_strides.data(), _info.x_strides.data(), _info.epsilon, _info.ndim());
+        } else if (_info.wtype == INFINI_DTYPE_BF16) {
+            rmsnormUnion<float, bfloat16_t>(workspace, core_per_cluster, cluster_count, queue, y, x, w, _info.shape.data(), _info.y_strides.data(), _info.x_strides.data(), _info.epsilon, _info.ndim());
         } else {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
@@ -198,6 +255,8 @@ infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size,
             rmsnormUnion<bfloat16_t, bfloat16_t>(workspace, core_per_cluster, cluster_count, queue, y, x, w, _info.shape.data(), _info.y_strides.data(), _info.x_strides.data(), _info.epsilon, _info.ndim());
         } else if (_info.wtype == INFINI_DTYPE_F32) {
             rmsnormUnion<bfloat16_t, float>(workspace, core_per_cluster, cluster_count, queue, y, x, w, _info.shape.data(), _info.y_strides.data(), _info.x_strides.data(), _info.epsilon, _info.ndim());
+        } else if (_info.wtype == INFINI_DTYPE_F16) {
+            rmsnormUnion<bfloat16_t, half>(workspace, core_per_cluster, cluster_count, queue, y, x, w, _info.shape.data(), _info.y_strides.data(), _info.x_strides.data(), _info.epsilon, _info.ndim());
         } else {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
