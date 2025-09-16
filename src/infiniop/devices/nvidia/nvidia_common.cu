@@ -104,4 +104,16 @@ infiniStatus_t Handle::create(InfiniopHandle **handle_ptr, int device_id) {
 
 } // namespace iluvatar
 
+namespace hygon {
+
+Handle::Handle(int device_id)
+    : nvidia::Handle(INFINI_DEVICE_HYGON, device_id) {}
+
+infiniStatus_t Handle::create(InfiniopHandle **handle_ptr, int device_id) {
+    *handle_ptr = new Handle(device_id);
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace hygon
+
 } // namespace device
