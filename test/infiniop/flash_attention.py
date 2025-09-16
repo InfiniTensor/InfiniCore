@@ -18,10 +18,18 @@ from libinfiniop import (
     InfiniDeviceEnum,
     InfiniDeviceNames,
     infiniopOperatorDescriptor_t,
-    infiniopAttentionMaskType,
-    InfiniopAttentionMaskTypeNames,
 )
 
+class infiniopAttentionMaskType:
+    NONE = 0
+    FULL = 1
+    CAUSAL = 2
+
+InfiniopAttentionMaskTypeNames = {
+    infiniopAttentionMaskType.NONE: "NONE",
+    infiniopAttentionMaskType.FULL: "FULL",
+    infiniopAttentionMaskType.CAUSAL: "CAUSAL",
+}
 
 _TEST_CASES = [
     # (
@@ -34,6 +42,7 @@ _TEST_CASES = [
     ((10, 4, 4), (4, 4, 4), 2),
     ((1, 10, 2, 4), (1, 10, 2, 4), 0),
     ((4, 10, 8, 4), (4, 10, 2, 4), 1),
+    ((16, 1024, 8, 64), (16, 1024, 2, 64), 0),
 ]
 
 _TENSOR_DTYPES = [

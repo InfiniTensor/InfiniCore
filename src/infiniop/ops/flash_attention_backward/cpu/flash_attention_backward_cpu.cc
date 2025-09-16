@@ -320,9 +320,6 @@ infiniStatus_t flashAttentionBackward(
                 for (size_t tx = 0; tx < B_r; ++tx) {
                     // write dK_j, dV_j
                     for (size_t x = 0; x < head_dim; ++x) {
-                        // size_t offset = bx * kv_stride_b * group + by * kv_stride_n;
-                        // grad_k[offset + (j * B_c + tx) * kv_stride_s * group + x] = utils::cast<T>(grad_k_j[tx * head_dim + x]);
-                        // grad_v[offset + (j * B_c + tx) * kv_stride_s * group + x] = utils::cast<T>(grad_v_j[tx * head_dim + x]);
                         grad_k[kv_offset + (j * B_c + tx) * kv_stride_s + x] = utils::cast<T>(utils::cast<float>(grad_k[kv_offset + (j * B_c + tx) * kv_stride_s + x]) + grad_k_j[tx * head_dim + x]);
                         grad_v[kv_offset + (j * B_c + tx) * kv_stride_s + x] = utils::cast<T>(utils::cast<float>(grad_v[kv_offset + (j * B_c + tx) * kv_stride_s + x]) + grad_v_j[tx * head_dim + x]);
                     }

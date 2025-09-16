@@ -72,10 +72,4 @@ typedef enum {
     INFINI_DTYPE_BF16 = 19,
 } infiniDtype_t;
 
-typedef enum {
-    INFINIOP_ATTENTION_MASK_TYPE_NONE = 0,
-    INFINIOP_ATTENTION_MASK_TYPE_FULL = 1,
-    INFINIOP_ATTENTION_MASK_TYPE_CAUSAL = 2,
-} infiniopAttentionMaskType_t;
-
 #endif // __INFINICORE_API_H__

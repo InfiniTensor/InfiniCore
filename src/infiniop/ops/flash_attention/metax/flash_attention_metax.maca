@@ -153,6 +153,7 @@ infiniStatus_t Descriptor::calculate(
             hcMalloc(&mask_temp, seq_len_q * seq_len_kv * sizeof(float));
             hcMemcpy(mask_temp, _info.mask, seq_len_q * seq_len_kv * sizeof(float), hcMemcpyHostToDevice);
             mask_input = mask_temp;
+            hcFree(mask_temp);
         } else {
             mask_input = mask;
         }

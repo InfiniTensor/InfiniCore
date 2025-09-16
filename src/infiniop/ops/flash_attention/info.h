@@ -4,6 +4,7 @@
 #include "../../../utils.h"
 #include "../../operator.h"
 #include "../../tensor.h"
+#include "infiniop/ops/flash_attention.h"
 #include <cmath>
 #include <vector>
 

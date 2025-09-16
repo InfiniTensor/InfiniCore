@@ -131,8 +131,8 @@ infiniStatus_t Descriptor::calculate(
     const void *mask,
     void *stream) const {
 
-    size_t B_r = 4;
-    size_t B_c = 4;
+    size_t B_r = 32;
+    size_t B_c = 32;
 
     size_t batch_size = _info.batch_size;
     size_t seq_len_q = _info.seq_len_q;
@@ -149,6 +149,7 @@ infiniStatus_t Descriptor::calculate(
             cudaMalloc(&mask_temp, seq_len_q * seq_len_kv * sizeof(float));
             cudaMemcpy(mask_temp, _info.mask, seq_len_q * seq_len_kv * sizeof(float), cudaMemcpyHostToDevice);
             mask_input = mask_temp;
+            cudaFree(mask_temp);
         } else {
             mask_input = mask;
         }

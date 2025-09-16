@@ -50,10 +50,6 @@ __device__ void flashAttentionBlock(
                     v_j[y * head_dim + x] = v_[kv_offset + (y + j * B_c) * kv_stride_s + x];
                 }
             }
-            // for (size_t x = 0; x < head_dim; ++x) {
-            //     k_j[tx * head_dim + x] = k_[kv_offset + (tx + j * B_c) * kv_stride_s + x];
-            //     v_j[tx * head_dim + x] = v_[kv_offset + (tx + j * B_c) * kv_stride_s + x];
-            // }
             __syncthreads();
 
             Tdata row_m = -INFINITY;
@@ -61,9 +57,6 @@ __device__ void flashAttentionBlock(
                 if (j * B_c + y >= seq_len_kv) {
                     break;
                 }
-
-                // Causal mask
-                // if (i * B_r + tx < j * B_c + y) break;
 
                 // mask
                 if (mask_ != nullptr && mask_[(i * B_r + tx) * seq_len_kv + j * B_c + y] == -INFINITY) {
@@ -78,17 +71,7 @@ __device__ void flashAttentionBlock(
                 }
                 sum *= softmax_scale;
 
-                // if (mask_ != nullptr) {
-                //     sum += mask_[(i * B_r + tx) * seq_len_kv + j * B_c + y];
-                // }
-
                 s_i[tx * B_c + y] = sum;
-
-                // if constexpr (std::is_same_v<Tdata, half> || std::is_same_v<Tdata, __nv_bfloat16>) {
-                //     row_m = __hmax(row_m, sum);
-                // } else {
-                //     row_m = max(row_m, sum);
-                // }
 
                 if constexpr (std::is_same_v<Tdata, half>) {
                     row_m = __float2half(max(__half2float(row_m), __half2float(sum)));
@@ -101,11 +84,6 @@ __device__ void flashAttentionBlock(
 
             // m_i^(j) = max(m_i^(j - 1), rowmax(S_i^(j)))
             Tdata new_row_m;
-            // if constexpr (std::is_same_v<Tdata, half> || std::is_same_v<Tdata, __nv_bfloat16>) {
-            //     new_row_m = __hmax(row_m_prev, row_m);
-            // } else {
-            //     new_row_m = max(row_m_prev, row_m);
-            // }
 
             if constexpr (std::is_same_v<Tdata, half>) {
                 new_row_m = __float2half(max(__half2float(row_m_prev), __half2float(row_m)));
@@ -121,9 +99,6 @@ __device__ void flashAttentionBlock(
                 if (j * B_c + y >= seq_len_kv) {
                     break;
                 }
-
-                // Causal mask
-                // if (i * B_r + tx < j * B_c + y) break;
 
                 // mask
                 if (mask_ != nullptr && mask_[(i * B_r + tx) * seq_len_kv + j * B_c + y] == -INFINITY) {
@@ -173,9 +148,6 @@ __device__ void flashAttentionBlock(
                         break;
                     }
 
-                    // Causal mask
-                    // if (i * B_r + tx < j * B_c + y) break;
-
                     // mask
                     if (mask_ != nullptr && mask_[(i * B_r + tx) * seq_len_kv + j * B_c + y] == -INFINITY) {
                         continue;
@@ -202,7 +174,6 @@ __device__ void flashAttentionBlock(
         } else {
             l_[l_offset + i * B_r + tx] = row_m_prev + logf(row_l_prev);
         }
-        // printf("bx: %llu, by: %llu, tx: %llu, i: %llu, l_[%llu]: %f\n", bx, by, tx, i, l_offset + i * B_r + tx, l_[l_offset + i * B_r + tx]);
     }
 }
 

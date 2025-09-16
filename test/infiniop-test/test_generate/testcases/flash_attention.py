@@ -180,6 +180,7 @@ def gen_gguf(dtype: np.dtype, filename: str):
         ((10, 4, 4), (4, 4, 4), 2),
         ((1, 10, 2, 4), (1, 10, 2, 4), 0),
         ((4, 10, 8, 4), (4, 10, 2, 4), 1),
+        ((16, 1024, 8, 64), (16, 1024, 2, 64), 0),
     ]
     for shape_qo, shape_kv, mask_type in _TEST_CASES_:
         q = (np.random.rand(*shape_qo) * 0.1).astype(dtype)

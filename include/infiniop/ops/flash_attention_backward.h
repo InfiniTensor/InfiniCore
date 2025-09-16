@@ -2,6 +2,7 @@
 #define __INFINIOP_FLASH_ATTENTION_BACKWARD_H__
 
 #include "../operator_descriptor.h"
+#include "flash_attention.h"
 
 typedef struct InfiniopDescriptor *infiniopFlashAttentionBackwardDescriptor_t;
 

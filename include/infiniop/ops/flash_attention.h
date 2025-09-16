@@ -3,6 +3,12 @@
 
 #include "../operator_descriptor.h"
 
+typedef enum {
+    INFINIOP_ATTENTION_MASK_TYPE_NONE = 0,
+    INFINIOP_ATTENTION_MASK_TYPE_FULL = 1,
+    INFINIOP_ATTENTION_MASK_TYPE_CAUSAL = 2,
+} infiniopAttentionMaskType_t;
+
 typedef struct InfiniopDescriptor *infiniopFlashAttentionDescriptor_t;
 
 __C __export infiniStatus_t infiniopCreateFlashAttentionDescriptor(
