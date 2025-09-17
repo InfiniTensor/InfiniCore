@@ -139,6 +139,8 @@ class TestTensor(CTensor):
 
 
 def to_torch_dtype(dt: InfiniDtype, compatability_mode=False):
+    if dt == InfiniDtype.BOOL: # support torch.bool input dtype
+        return torch.bool       
     if dt == InfiniDtype.I8:
         return torch.int8
     elif dt == InfiniDtype.I16:

@@ -1,0 +1,163 @@
+#include "../../../devices/nvidia/nvidia_handle.cuh"
+#include "../../../devices/nvidia/nvidia_common.cuh"
+#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
+#include "equal_nvidia.cuh"
+#include "../cuda/kernel.cuh"
+#include "../info.h"
+
+namespace op::equal::nvidia {
+
+//  ---------------------- start: launchKernel: call kernel function of CUDA -----------------------
+template <unsigned int BLOCK_SIZE, typename Tdata>
+INFINIOP_CUDA_KERNEL launchKernel(
+    bool * c,
+    const Tdata * a,
+    const Tdata * b,
+    size_t ndim,
+    size_t total_size,
+    ptrdiff_t* contiguous_strides,
+    ptrdiff_t* a_strides,
+    ptrdiff_t* b_strides
+) {
+    equalKernel<BLOCK_SIZE, Tdata>(
+        c,
+        a,
+        b,
+        ndim,
+        total_size,
+        contiguous_strides,
+        a_strides,
+        b_strides
+    );
+}
+//  ----------------------- end: launchKernel: call kernel function of CUDA ------------------------
+
+//  ----------------------------------- start: call launchKernel -----------------------------------
+template<unsigned int BLOCK_SIZE, typename Tdata>
+infiniStatus_t calculate_equal(
+    const EqualInfo &info,
+    bool * c,
+    const Tdata * a,
+    const Tdata * b,
+    cudaStream_t stream,
+    void * workspace
+) {
+    size_t ndim = info.ndim;
+    ptrdiff_t * contiguous_strides = new ptrdiff_t[ndim];
+    size_t last_dim = 1, last_stride = 1;
+    for(size_t d = 0; d < ndim; d ++)
+    {
+        contiguous_strides[d] = last_dim * last_stride;
+        last_dim = info.a_shape[d];
+        last_stride = contiguous_strides[d];
+    }
+    size_t total_size = last_dim * last_stride;
+
+
+    ptrdiff_t * contiguous_strides_cuda = reinterpret_cast<ptrdiff_t*>(workspace);
+    ptrdiff_t * a_strides_cuda = contiguous_strides_cuda + ndim;
+    ptrdiff_t * b_strides_cuda = a_strides_cuda + ndim;
+
+    CHECK_CUDA(cudaMemcpyAsync(contiguous_strides_cuda, contiguous_strides, sizeof(ptrdiff_t) * ndim, cudaMemcpyHostToDevice, stream));
+    CHECK_CUDA(cudaMemcpyAsync(a_strides_cuda, info.a_strides.data(), sizeof(ptrdiff_t) * ndim, cudaMemcpyHostToDevice, stream));
+    CHECK_CUDA(cudaMemcpyAsync(b_strides_cuda, info.b_strides.data(), sizeof(ptrdiff_t) * ndim, cudaMemcpyHostToDevice, stream));
+    
+    launchKernel<BLOCK_SIZE, Tdata><<<1, BLOCK_SIZE, 0, stream>>>(
+        c,
+        a,
+        b,
+        info.ndim,
+        total_size,
+        contiguous_strides_cuda,
+        a_strides_cuda,
+        b_strides_cuda
+    );
+    
+    return INFINI_STATUS_SUCCESS;
+}
+//  ------------------------------------ end: call launchKernel ------------------------------------
+
+
+struct Descriptor::Opaque {
+    std::shared_ptr<device::nvidia::Handle::Internal> internal;
+};
+
+Descriptor::~Descriptor() {
+    delete _opaque;
+}
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t c_desc,
+    infiniopTensorDescriptor_t a_desc,
+    infiniopTensorDescriptor_t b_desc
+) {
+    auto handle = reinterpret_cast<device::nvidia::Handle *>(handle_);
+//  --------------------- start: check data type and calculate workspace size ----------------------
+    auto dtype = a_desc->dtype();
+    auto result = EqualInfo::createEqualInfo(
+        c_desc,
+        a_desc,
+        b_desc
+    );
+    CHECK_RESULT(result);
+    const EqualInfo &info = result.take();
+    size_t WorkSpaceSize = sizeof(ptrdiff_t) * info.ndim * 3;
+//  ---------------------- end: check data type and calculate workspace size -----------------------
+    *desc_ptr = new Descriptor(
+        dtype, std::move(info), WorkSpaceSize,
+        new Opaque{handle->internal()},
+        handle->device, handle->device_id
+    );    
+    return INFINI_STATUS_SUCCESS;
+}
+
+
+infiniStatus_t Descriptor::calculate(
+    void * workspace,
+    size_t workspace_size,
+    void * c,
+    const void * a,
+    const void * b,
+    void *stream_
+) const {
+    
+    if (workspace_size < _workspace_size) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+    cudaStream_t stream = (cudaStream_t)stream_;
+
+    #define CALCULATE_EQUAL(TDATA) \
+        calculate_equal<256, TDATA>(_info, (bool *)c, (const TDATA *)a, (const TDATA *)b, stream, workspace)
+    switch (_info.dtype) {                   
+        case INFINI_DTYPE_U8:                       
+            return CALCULATE_EQUAL(uint8_t);  
+        case INFINI_DTYPE_U16:                      
+            return CALCULATE_EQUAL(uint16_t); 
+        case INFINI_DTYPE_U32:                      
+            return CALCULATE_EQUAL(uint32_t); 
+        case INFINI_DTYPE_U64:                      
+            return CALCULATE_EQUAL(uint64_t); 
+        case INFINI_DTYPE_I8:                       
+            return CALCULATE_EQUAL(int8_t);   
+        case INFINI_DTYPE_I16:                      
+            return CALCULATE_EQUAL(int16_t);  
+        case INFINI_DTYPE_I32:                      
+            return CALCULATE_EQUAL(int32_t);
+        case INFINI_DTYPE_I64:
+            return CALCULATE_EQUAL(int64_t);
+        case INFINI_DTYPE_F16:
+            return CALCULATE_EQUAL(half);
+        case INFINI_DTYPE_F32:
+            return CALCULATE_EQUAL(float);     
+        case INFINI_DTYPE_BF16:
+            return CALCULATE_EQUAL(cuda_bfloat16);         
+        default:
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+    return INFINI_STATUS_SUCCESS;
+
+    #undef CALCULATE_EQUAL
+}
+} // namespace op::equal::nvidia
