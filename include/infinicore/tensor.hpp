@@ -20,11 +20,11 @@ public:
 
     Tensor(const Shape &shape, const DataType &dtype, const Device &device);
 
-    const Shape &get_shape() const;
+    const Shape &getShape() const;
 
-    const DataType &get_dtype() const;
+    const DataType &getDtype() const;
 
-    const Device &get_device() const;
+    const Device &getDevice() const;
 
 private:
     Shape shape_;

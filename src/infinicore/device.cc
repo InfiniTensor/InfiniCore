@@ -4,25 +4,25 @@ namespace infinicore {
 
 Device::Device(const Type &type, const Index &index) : type_{type}, index_{index} {}
 
-const Device::Type &Device::get_type() const {
+const Device::Type &Device::getType() const {
     return type_;
 }
 
-const Device::Index &Device::get_index() const {
+const Device::Index &Device::getIndex() const {
     return index_;
 }
 
-std::string Device::to_string() const {
-    return to_string(type_) + ":" + std::to_string(index_);
+std::string Device::toString() const {
+    return toString(type_) + ":" + std::to_string(index_);
 }
 
-std::string Device::to_string(const Type &type) {
+std::string Device::toString(const Type &type) {
     switch (type) {
-    case Type::cpu:
+    case Type::CPU:
         return "cpu";
-    case Type::cuda:
+    case Type::CUDA:
         return "cuda";
-    case Type::meta:
+    case Type::META:
         return "meta";
     }
 

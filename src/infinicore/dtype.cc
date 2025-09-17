@@ -2,29 +2,29 @@
 
 namespace infinicore {
 
-std::string to_string(const DataType &dtype) {
+std::string toString(const DataType &dtype) {
     std::string str{"infinicore."};
 
     switch (dtype) {
-    case DataType::bfloat16:
+    case DataType::BFLOAT16:
         str += "bfloat16";
         break;
-    case DataType::float16:
+    case DataType::FLOAT16:
         str += "float16";
         break;
-    case DataType::float32:
+    case DataType::FLOAT32:
         str += "float32";
         break;
-    case DataType::float64:
+    case DataType::FLOAT64:
         str += "float64";
         break;
-    case DataType::int32:
+    case DataType::INT32:
         str += "int32";
         break;
-    case DataType::int64:
+    case DataType::INT64:
         str += "int64";
         break;
-    case DataType::uint8:
+    case DataType::UINT8:
         str += "uint8";
         break;
     }

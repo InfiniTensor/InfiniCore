@@ -6,16 +6,16 @@
 namespace infinicore {
 
 enum class DataType {
-    bfloat16 = INFINI_DTYPE_BF16,
-    float16 = INFINI_DTYPE_F16,
-    float32 = INFINI_DTYPE_F32,
-    float64 = INFINI_DTYPE_F64,
-    int32 = INFINI_DTYPE_I32,
-    int64 = INFINI_DTYPE_I64,
-    uint8 = INFINI_DTYPE_U8,
+    BFLOAT16 = INFINI_DTYPE_BF16,
+    FLOAT16 = INFINI_DTYPE_F16,
+    FLOAT32 = INFINI_DTYPE_F32,
+    FLOAT64 = INFINI_DTYPE_F64,
+    INT32 = INFINI_DTYPE_I32,
+    INT64 = INFINI_DTYPE_I64,
+    UINT8 = INFINI_DTYPE_U8,
 };
 
-std::string to_string(const DataType &dtype);
+std::string toString(const DataType &dtype);
 
 } // namespace infinicore
 
