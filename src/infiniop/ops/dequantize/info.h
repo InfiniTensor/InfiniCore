@@ -11,11 +11,11 @@ class DequantizeInfo {
     DequantizeInfo() = default;
 
 public:
-    int _in_c, _qout_c, _G;
+    int _in_features, _out_features, _num_groups;
 
-    int in_c() const { return _in_c; }
-    int qout_c() const { return _qout_c; }
-    int G() const { return _G; }
+    int in_features() const { return _in_features; }
+    int out_features() const { return _out_features; }
+    int num_groups() const { return _num_groups; }
 
     static utils::Result<DequantizeInfo> create(
         infiniopTensorDescriptor_t out_desc,
@@ -23,14 +23,14 @@ public:
         infiniopTensorDescriptor_t scales_desc,
         infiniopTensorDescriptor_t zeros_desc) {
 
-        int _in_c = qweight_desc->dim(0);
-        int _qout_c = qweight_desc->dim(1);
-        int _G = scales_desc->dim(0);
+        int _in_features = qweight_desc->dim(0);
+        int _out_features = qweight_desc->dim(1);
+        int _num_groups = scales_desc->dim(0);
 
         return utils::Result<DequantizeInfo>(DequantizeInfo{
-            _in_c,
-            _qout_c,
-            _G});
+            _in_features,
+            _out_features,
+            _num_groups});
     }
 };
 

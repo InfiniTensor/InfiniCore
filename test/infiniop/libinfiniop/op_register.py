@@ -587,9 +587,6 @@ def dequantize_(lib):
         c_void_p,
         c_void_p,
         c_void_p,
-        c_size_t,
-        c_size_t,
-        c_size_t,
         c_void_p,
     ]
     lib.infiniopDestroyDequantizeDescriptor.restype = c_int32

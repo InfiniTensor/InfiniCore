@@ -8,7 +8,7 @@
 
 __global__ void __launch_bounds__(64)
     dequantize_weights(int *__restrict__ B, half *__restrict__ scaling_factors,
-                       int *__restrict__ zeros, half *__restrict__ C, int G) {
+                       int *__restrict__ zeros, half *__restrict__ C, int group_size) {
     static constexpr uint32_t ZERO = 0x0;
     half B_shared[32 * (128 + 8)];
 
@@ -23,9 +23,9 @@ __global__ void __launch_bounds__(64)
     int index2 = col + row * N;
     int *B_ptr2 = B + index2;
 
-    int index3 = col + (int)(row / G) * N;
+    int index3 = col + (int)(row / group_size) * N;
     int *zeros_ptr2 = zeros + index3;
-    int index4 = 8 * col + (int)(row / G) * N * 8;
+    int index4 = 8 * col + (int)(row / group_size) * N * 8;
     half *scaling_factors_ptr2 = scaling_factors + index4;
 
     uint32_t zeros_loaded = *(uint32_t *)(zeros_ptr2);
@@ -103,32 +103,21 @@ Descriptor::calculate(
     const void *qweight,
     const void *scales,
     const void *zeros,
-    int split_k_iters,
-    int thx,
-    int thy,
     void *stream) const {
-    int in_c = _info.in_c();
-    int qout_c = _info.qout_c();
-    int out_c = qout_c * 8;
-    int G = in_c / _info.G();
+    int in_features = _info.in_features();
+    int out_features = _info.out_features();
+    int group_size = in_features / _info.num_groups();
 
-    int x_thread = thx;
-    int y_thread = thy;
+    // ==================== 默认配置, 固定为 8 ====================
+    constexpr int BLOCK_X = 8;
+    constexpr int BLOCK_Y = 8;
 
-    int x_blocks = 1;
-    int y_blocks = 1;
-    if (thx == 0) {
-        x_thread = qout_c;
-    }
-    if (thy == 0) {
-        y_thread = in_c;
-    }
-    if (thx == 0 && thy == 0) {
-        x_thread = 8;
-        y_thread = 8;
-        x_blocks = (int)(qout_c / 8);
-        y_blocks = (int)(in_c / 8);
-    }
+    int x_blocks = (out_features + BLOCK_X - 1) / BLOCK_X;
+    int y_blocks = (in_features + BLOCK_Y - 1) / BLOCK_Y;
+
+    dim3 num_blocks(x_blocks, y_blocks);
+    dim3 threads_per_block(BLOCK_X, BLOCK_Y);
+    // =====================================================
 
     half *out_ = reinterpret_cast<half *>(out);
 
@@ -136,11 +125,8 @@ Descriptor::calculate(
     half *scales_ = const_cast<half *>(reinterpret_cast<const half *>(scales));
     int *zeros_ = const_cast<int *>(reinterpret_cast<const int *>(zeros));
 
-    dim3 num_blocks(x_blocks, y_blocks);
-    dim3 threads_per_block(x_thread, y_thread);
-
     dequantize_weights<<<num_blocks, threads_per_block, 0, reinterpret_cast<cudaStream_t>(stream)>>>(
-        qweight_, scales_, zeros_, out_, G);
+        qweight_, scales_, zeros_, out_, group_size);
 
     return INFINI_STATUS_SUCCESS;
 }

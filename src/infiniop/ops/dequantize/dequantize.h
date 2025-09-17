@@ -46,9 +46,6 @@
             const void *qweight,                                 \
             const void *scales,                                  \
             const void *zeros,                                   \
-            int split_k_iters,                                   \
-            int thx,                                             \
-            int thy,                                             \
             void *stream) const;                                 \
     };                                                           \
     }

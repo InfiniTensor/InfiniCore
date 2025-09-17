@@ -2,7 +2,7 @@
 
 __device__ uint4 dequantize_s4_to_fp16x2(uint32_t const &source) {
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 750
-    assert(false);
+#error "dequantize_s4_to_fp16x2 requires CUDA compute capability >= 7.5"
 #else
     uint4 result;
 

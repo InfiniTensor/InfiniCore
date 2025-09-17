@@ -21,9 +21,6 @@ __C __export infiniStatus_t infiniopDequantize(infiniopDequantizeDescriptor_t de
                                                const void *qweight,
                                                const void *scales,
                                                const void *zeros,
-                                               size_t split_k_iters,
-                                               size_t thx,
-                                               size_t thy,
                                                void *stream);
 
 __C __export infiniStatus_t infiniopDestroyDequantizeDescriptor(infiniopDequantizeDescriptor_t desc);

@@ -60,15 +60,12 @@ __C infiniStatus_t infiniopDequantize(
     const void *qweight,
     const void *scales,
     const void *zeros,
-    size_t split_k_iters,
-    size_t thx,
-    size_t thy,
     void *stream) {
 
 #define CALCULATE(CASE, NAMESPACE)                                                   \
     case CASE:                                                                       \
         return reinterpret_cast<const op::dequantize::NAMESPACE::Descriptor *>(desc) \
-            ->calculate(workspace, workspace_size, out, qweight, scales, zeros, split_k_iters, thx, thy, stream)
+            ->calculate(workspace, workspace_size, out, qweight, scales, zeros, stream)
 
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API
