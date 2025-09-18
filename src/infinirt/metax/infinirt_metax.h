@@ -1,5 +1,6 @@
 #ifndef __INFINIRT_MACA_H__
 #define __INFINIRT_MACA_H__
+#include "../../infiniop/devices/metax/metax_ht2mc.h"
 #include "../infinirt_impl.h"
 
 namespace infinirt::metax {
