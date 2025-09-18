@@ -5,6 +5,9 @@
 #ifdef ENABLE_NVIDIA_API
 #include "nvidia/dequantize_w42f16_nvidia.cuh"
 #endif
+#ifdef ENABLE_ILUVATAR_API
+#include "iluvatar/dequantize_w42f16_iluvatar.cuh"
+#endif
 
 __C infiniStatus_t infiniopCreateDequantizeDescriptor(
     infiniopHandle_t handle,
@@ -28,6 +31,9 @@ __C infiniStatus_t infiniopCreateDequantizeDescriptor(
 #ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
+#ifdef ENABLE_ILUVATAR_API
+        CREATE(INFINI_DEVICE_ILUVATAR, iluvatar);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -45,6 +51,9 @@ __C infiniStatus_t infiniopGetDequantizeWorkspaceSize(infiniopDequantizeDescript
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API
         GET(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        GET(INFINI_DEVICE_ILUVATAR, iluvatar);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -71,6 +80,9 @@ __C infiniStatus_t infiniopDequantize(
 #ifdef ENABLE_NVIDIA_API
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
+#ifdef ENABLE_ILUVATAR_API
+        CALCULATE(INFINI_DEVICE_ILUVATAR, iluvatar);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -89,6 +101,9 @@ infiniopDestroyDequantizeDescriptor(infiniopDequantizeDescriptor_t desc) {
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API
         DELETE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        DELETE(INFINI_DEVICE_ILUVATAR, iluvatar);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
