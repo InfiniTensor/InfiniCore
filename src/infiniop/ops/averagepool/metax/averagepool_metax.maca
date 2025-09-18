@@ -1,0 +1,332 @@
+#include "../../../devices/metax/metax_common.h"
+#include "../../../devices/metax/metax_handle.h"
+#include "averagepool_metax.h"
+#include "../cuda/averagepool_kernel.cuh"
+#include <cstdio>
+
+infiniStatus_t launch_avgpool_pytorch_kernel(
+    const op::averagepool::AvgPoolInfo& info,
+    const void* input, void* output,
+    infiniDtype_t data_type, hcStream_t stream) {
+    
+    int batch_size = static_cast<int>(info.batch);
+    int channels = static_cast<int>(info.channels);
+    
+    if (info.ndim == 1) {
+        // 1D平均池化
+        int input_length = static_cast<int>(info.input_dims[0]);
+        int output_length = static_cast<int>(info.output_dims[0]);
+        int kernel_size = static_cast<int>(info.kernel_sizes[0]);
+        int stride = static_cast<int>(info.strides[0]);
+        int padding = static_cast<int>(info.pads[0]);
+        
+        dim3 blockSize(256);
+        dim3 gridSize(batch_size, channels, (output_length + blockSize.x - 1) / blockSize.x);
+        
+        switch (data_type) {
+        case INFINI_DTYPE_F32:
+            avgpool1d_pytorch_compatible_kernel<float><<<gridSize, blockSize, 0, stream>>>(
+                static_cast<const float*>(input), static_cast<float*>(output),
+                batch_size, channels, input_length, output_length,
+                kernel_size, stride, padding);
+            break;
+        case INFINI_DTYPE_F16:
+            avgpool1d_pytorch_compatible_kernel<half><<<gridSize, blockSize, 0, stream>>>(
+                static_cast<const half*>(input), static_cast<half*>(output),
+                batch_size, channels, input_length, output_length,
+                kernel_size, stride, padding);
+            break;
+        case INFINI_DTYPE_BF16:
+            avgpool1d_pytorch_compatible_kernel<__hpcc_bfloat16><<<gridSize, blockSize, 0, stream>>>(
+                static_cast<const __hpcc_bfloat16*>(input), static_cast<__hpcc_bfloat16*>(output),
+                batch_size, channels, input_length, output_length,
+                kernel_size, stride, padding);
+            break;
+        default:
+            return INFINI_STATUS_NOT_IMPLEMENTED;
+        }
+        
+    } else if (info.ndim == 2) {
+        // 2D平均池化
+        int input_height = static_cast<int>(info.input_dims[0]);
+        int input_width = static_cast<int>(info.input_dims[1]);
+        int output_height = static_cast<int>(info.output_dims[0]);
+        int output_width = static_cast<int>(info.output_dims[1]);
+        int kernel_h = static_cast<int>(info.kernel_sizes[0]);
+        int kernel_w = static_cast<int>(info.kernel_sizes[1]);
+        int stride_h = static_cast<int>(info.strides[0]);
+        int stride_w = static_cast<int>(info.strides[1]);
+        int pad_h = static_cast<int>(info.pads[0]);
+        int pad_w = static_cast<int>(info.pads[1]);
+        
+        int total_output_elements = output_height * output_width;
+        dim3 blockSize(256);
+        dim3 gridSize(batch_size, channels, (total_output_elements + blockSize.x - 1) / blockSize.x);
+        
+        switch (data_type) {
+        case INFINI_DTYPE_F32:
+            avgpool2d_pytorch_compatible_kernel<float><<<gridSize, blockSize, 0, stream>>>(
+                static_cast<const float*>(input), static_cast<float*>(output),
+                batch_size, channels, input_height, input_width,
+                output_height, output_width, kernel_h, kernel_w,
+                stride_h, stride_w, pad_h, pad_w);
+            break;
+        case INFINI_DTYPE_F16:
+            avgpool2d_pytorch_compatible_kernel<half><<<gridSize, blockSize, 0, stream>>>(
+                static_cast<const half*>(input), static_cast<half*>(output),
+                batch_size, channels, input_height, input_width,
+                output_height, output_width, kernel_h, kernel_w,
+                stride_h, stride_w, pad_h, pad_w);
+            break;
+        case INFINI_DTYPE_BF16:
+            avgpool2d_pytorch_compatible_kernel<__hpcc_bfloat16><<<gridSize, blockSize, 0, stream>>>(
+                static_cast<const __hpcc_bfloat16*>(input), static_cast<__hpcc_bfloat16*>(output),
+                batch_size, channels, input_height, input_width,
+                output_height, output_width, kernel_h, kernel_w,
+                stride_h, stride_w, pad_h, pad_w);
+            break;
+        default:
+            return INFINI_STATUS_NOT_IMPLEMENTED;
+        }
+        
+    } else if (info.ndim == 3) {
+        // 3D平均池化
+        int input_depth = static_cast<int>(info.input_dims[0]);
+        int input_height = static_cast<int>(info.input_dims[1]);
+        int input_width = static_cast<int>(info.input_dims[2]);
+        int output_depth = static_cast<int>(info.output_dims[0]);
+        int output_height = static_cast<int>(info.output_dims[1]);
+        int output_width = static_cast<int>(info.output_dims[2]);
+        int kernel_d = static_cast<int>(info.kernel_sizes[0]);
+        int kernel_h = static_cast<int>(info.kernel_sizes[1]);
+        int kernel_w = static_cast<int>(info.kernel_sizes[2]);
+        int stride_d = static_cast<int>(info.strides[0]);
+        int stride_h = static_cast<int>(info.strides[1]);
+        int stride_w = static_cast<int>(info.strides[2]);
+        int pad_d = static_cast<int>(info.pads[0]);
+        int pad_h = static_cast<int>(info.pads[1]);
+        int pad_w = static_cast<int>(info.pads[2]);
+        
+        int total_output_elements = output_depth * output_height * output_width;
+        dim3 blockSize(256);
+        dim3 gridSize(batch_size, channels, (total_output_elements + blockSize.x - 1) / blockSize.x);
+        
+        switch (data_type) {
+        case INFINI_DTYPE_F32:
+            avgpool3d_pytorch_compatible_kernel<float><<<gridSize, blockSize, 0, stream>>>(
+                static_cast<const float*>(input), static_cast<float*>(output),
+                batch_size, channels, input_depth, input_height, input_width,
+                output_depth, output_height, output_width,
+                kernel_d, kernel_h, kernel_w, stride_d, stride_h, stride_w,
+                pad_d, pad_h, pad_w);
+            break;
+        case INFINI_DTYPE_F16:
+            avgpool3d_pytorch_compatible_kernel<half><<<gridSize, blockSize, 0, stream>>>(
+                static_cast<const half*>(input), static_cast<half*>(output),
+                batch_size, channels, input_depth, input_height, input_width,
+                output_depth, output_height, output_width,
+                kernel_d, kernel_h, kernel_w, stride_d, stride_h, stride_w,
+                pad_d, pad_h, pad_w);
+            break;
+        case INFINI_DTYPE_BF16:
+            avgpool3d_pytorch_compatible_kernel<__hpcc_bfloat16><<<gridSize, blockSize, 0, stream>>>(
+                static_cast<const __hpcc_bfloat16*>(input), static_cast<__hpcc_bfloat16*>(output),
+                batch_size, channels, input_depth, input_height, input_width,
+                output_depth, output_height, output_width,
+                kernel_d, kernel_h, kernel_w, stride_d, stride_h, stride_w,
+                pad_d, pad_h, pad_w);
+            break;
+        default:
+            return INFINI_STATUS_NOT_IMPLEMENTED;
+        }
+        
+    } else {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    
+    return INFINI_STATUS_SUCCESS;
+}
+
+#define DESTROY_hcdnn_DESCRIPTOR(desc_ptr, destroy_func)                       \
+  do {                                                                         \
+    if (desc_ptr) {                                                            \
+      destroy_func(desc_ptr);                                                  \
+      desc_ptr = nullptr;                                                      \
+    }                                                                          \
+  } while (0)
+
+#define CLEANUP_hcdnn_DESCRIPTORS()                                            \
+  do {                                                                         \
+    DESTROY_hcdnn_DESCRIPTOR(input_desc, hcdnnDestroyTensorDescriptor);        \
+    DESTROY_hcdnn_DESCRIPTOR(output_desc, hcdnnDestroyTensorDescriptor);       \
+    DESTROY_hcdnn_DESCRIPTOR(pooling_desc, hcdnnDestroyPoolingDescriptor);     \
+  } while (0)
+
+namespace op::averagepool::metax {
+
+struct Descriptor::Opaque {
+  std::shared_ptr<device::metax::Handle::Internal> internal;
+  size_t workspace_size = 0;
+
+#ifdef ENABLE_HCDNN_API
+  hcdnnTensorDescriptor_t input_desc = nullptr;
+  hcdnnTensorDescriptor_t output_desc = nullptr;
+  hcdnnPoolingDescriptor_t pooling_desc = nullptr;
+#endif
+
+private:
+  Opaque(std::shared_ptr<device::metax::Handle::Internal> internal_ptr)
+      : internal(internal_ptr) {}
+
+#ifdef ENABLE_HCDNN_API
+  infiniStatus_t createPoolingDescriptors(const AvgPoolInfo &info,
+                                         hcdnnDataType_t hcdnn_data_type) {
+    CHECK_MCDNN(hcdnnCreateTensorDescriptor(&input_desc));
+    CHECK_MCDNN(hcdnnCreateTensorDescriptor(&output_desc));
+    CHECK_MCDNN(hcdnnCreatePoolingDescriptor(&pooling_desc));
+
+    std::vector<int> input_dims = {static_cast<int>(info.batch), static_cast<int>(info.channels)};
+    std::vector<int> output_dims = {static_cast<int>(info.batch), static_cast<int>(info.channels)};
+    for (size_t i = 0; i < info.ndim; ++i) {
+      input_dims.push_back(static_cast<int>(info.input_dims[i]));
+      output_dims.push_back(static_cast<int>(info.output_dims[i]));
+    }
+    while (input_dims.size() < 5)  input_dims.push_back(1);
+    while (output_dims.size() < 5) output_dims.push_back(1);
+    std::vector<int> input_strides(input_dims.size(), 1);
+    std::vector<int> output_strides(output_dims.size(), 1);
+    for (int i = input_dims.size() - 2; i >= 0; --i) {
+      input_strides[i] = input_strides[i + 1] * input_dims[i + 1];
+      output_strides[i] = output_strides[i + 1] * output_dims[i + 1];
+    }
+
+    CHECK_MCDNN(hcdnnSetTensorNdDescriptor(input_desc, hcdnn_data_type,
+                                           input_dims.size(), input_dims.data(), input_strides.data()));
+    CHECK_MCDNN(hcdnnSetTensorNdDescriptor(output_desc, hcdnn_data_type,
+                                           output_dims.size(), output_dims.data(), output_strides.data()));
+
+    return INFINI_STATUS_SUCCESS;
+  }
+
+  infiniStatus_t setupPoolingDescriptor(const AvgPoolInfo &info) {
+    std::vector<int> kernel_size, strides, pads;
+    for (size_t i = 0; i < info.ndim; ++i) {
+      kernel_size.push_back(static_cast<int>(info.kernel_sizes[i]));
+      strides.push_back(static_cast<int>(info.strides[i]));
+      pads.push_back(static_cast<int>(info.pads[i]));
+    }
+    while (kernel_size.size() < 3) kernel_size.push_back(1);
+    while (strides.size() < 3)     strides.push_back(1);
+    while (pads.size() < 3)        pads.push_back(0);
+    CHECK_MCDNN(hcdnnSetPoolingNdDescriptor(pooling_desc, HCDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING,
+                                            HCDNN_NOT_PROPAGATE_NAN, kernel_size.size(),
+                                            kernel_size.data(), pads.data(), strides.data()));
+    return INFINI_STATUS_SUCCESS;
+  }
+
+  infiniStatus_t initializehcdnnContext(AvgPoolInfo &info,
+                                       infiniDtype_t data_type) {
+    hcdnnDataType_t hcdnn_data_type = device::metax::getHcdnnDtype(data_type);
+    CHECK_STATUS(createPoolingDescriptors(info, hcdnn_data_type));
+    CHECK_STATUS(setupPoolingDescriptor(info));
+    workspace_size = 0;
+    return INFINI_STATUS_SUCCESS;
+  }
+#endif
+
+public:
+  Opaque(Opaque &&other) noexcept
+      : internal(std::move(other.internal)),
+        workspace_size(other.workspace_size)
+#ifdef ENABLE_HCDNN_API
+        , input_desc(other.input_desc)
+        , output_desc(other.output_desc)
+        , pooling_desc(other.pooling_desc)
+#endif
+  {
+#ifdef ENABLE_HCDNN_API
+    other.input_desc = nullptr;
+    other.output_desc = nullptr;
+    other.pooling_desc = nullptr;
+#endif
+    other.workspace_size = 0;
+  }
+
+  ~Opaque() {
+#ifdef ENABLE_HCDNN_API
+    CLEANUP_hcdnn_DESCRIPTORS();
+#endif
+  }
+
+  static inline utils::Result<Opaque>
+  create(std::shared_ptr<device::metax::Handle::Internal> internal_ptr,
+         AvgPoolInfo &info, infiniDtype_t data_type) {
+#ifdef ENABLE_HCDNN_API
+    Opaque opaque(internal_ptr);
+    auto status = opaque.initializehcdnnContext(info, data_type);
+    if (status != INFINI_STATUS_SUCCESS) {
+      return status;
+    }
+    return utils::Result<Opaque>(std::move(opaque));
+#else
+    return INFINI_STATUS_NOT_IMPLEMENTED;
+#endif
+  }
+};
+
+Descriptor::~Descriptor() {
+  if (_opaque) {
+    delete _opaque;
+  }
+}
+
+infiniStatus_t Descriptor::create(infiniopHandle_t handle_,
+                                  Descriptor **desc_ptr,
+                                  infiniopTensorDescriptor_t output_desc,
+                                  infiniopTensorDescriptor_t input_desc,
+                                  void *kernel_size, void *strides, void *pads,
+                                  bool ceil_mode) {
+#ifdef ENABLE_HCDNN_API
+  auto handle = reinterpret_cast<device::metax::Handle *>(handle_);
+  auto dtype = input_desc->dtype();
+  CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_BF16);
+  auto result = AvgPoolInfo::create(output_desc, input_desc, kernel_size,
+                                    strides, pads, ceil_mode);
+  CHECK_RESULT(result);
+  auto info = result.take();
+  auto opaque_result = Opaque::create(handle->internal(), info, dtype);
+  CHECK_RESULT(opaque_result);
+  auto opaque = new Opaque(opaque_result.take());
+
+  *desc_ptr = new Descriptor(dtype, std::move(info), opaque->workspace_size,
+                             opaque, handle->device, handle->device_id);
+  return INFINI_STATUS_SUCCESS;
+#else
+  return INFINI_STATUS_NOT_IMPLEMENTED;
+#endif
+}
+
+infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size,
+                                     void *output, const void *input,
+                                     void *stream) const {
+#ifdef ENABLE_HCDNN_API
+  if (_info.has_implicit_padding) {
+    // 使用自定义kernel实现PyTorch兼容的逻辑
+    return launch_avgpool_pytorch_kernel(_info, input, output, _dtype, (hcStream_t)stream);
+  } else {
+    const float alpha = 1.0f, beta = 0.0f;
+    CHECK_STATUS(_opaque->internal->useMcdnn(
+      (hcStream_t)stream, [&](hcdnnHandle_t handle) {
+        CHECK_MCDNN(hcdnnPoolingForward(handle, _opaque->pooling_desc, &alpha,
+                                        _opaque->input_desc, input, &beta,
+                                        _opaque->output_desc, output));
+        return INFINI_STATUS_SUCCESS;
+      }));
+    return INFINI_STATUS_SUCCESS;
+  }  
+#else
+  return INFINI_STATUS_NOT_IMPLEMENTED;
+#endif
+}
+
+} // namespace op::averagepool::metax

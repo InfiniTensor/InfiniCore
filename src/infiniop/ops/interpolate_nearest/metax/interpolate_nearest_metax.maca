@@ -1,0 +1,86 @@
+#include "../../../devices/metax/metax_common.h"
+#include "../../../devices/metax/metax_handle.h"
+#include "interpolate_nearest_metax.h"
+#include <cstddef>
+#include <cstdint>
+
+#include "../cuda/kernel.cuh"
+
+namespace op::interpolate_nearest::metax {
+
+struct Descriptor::Opaque {
+    std::shared_ptr<device::metax::Handle::Internal> internal;
+    Opaque(std::shared_ptr<device::metax::Handle::Internal> internal_) : internal(internal_) {}
+};
+
+Descriptor::~Descriptor() { delete _opaque; }
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t output_desc,
+    infiniopTensorDescriptor_t input_desc) {
+
+    auto handle = reinterpret_cast<device::metax::Handle *>(handle_);
+    auto dtype = output_desc->dtype();
+
+    if (dtype != INFINI_DTYPE_F16 && dtype != INFINI_DTYPE_F32 &&
+        dtype != INFINI_DTYPE_BF16 && dtype != INFINI_DTYPE_I8) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
+    InterpolateNearestInfo info;
+    CHECK_STATUS(InterpolateNearestInfo::create(&info, output_desc, input_desc));
+
+    *desc_ptr = new Descriptor(dtype, info, 0, new Opaque{handle->internal()}, handle->device, handle->device_id);
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+template <typename T>
+inline void launch_interpolate_nearest_kernel(T *output, const T *input, InterpolateNearestInfo info, int grid_size, int block_size, hcStream_t stream) {
+    interpolate_nearest_kernel<T><<<grid_size, block_size, 0, stream>>>(output, input, info);
+}
+
+infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size,
+                                     void *output, const void *input,
+                                     void *stream_) const {
+    hcStream_t stream = (hcStream_t)stream_;
+
+    int total_elements = calculate_total_elements(_info);
+    int block_size = 256;
+    int grid_size = (total_elements + block_size - 1) / block_size;
+
+    switch (_dtype) {
+    case INFINI_DTYPE_F32: {
+        auto typed_output = reinterpret_cast<float *>(output);
+        auto typed_input = reinterpret_cast<const float *>(input);
+        launch_interpolate_nearest_kernel<float>(typed_output, typed_input, _info, grid_size, block_size, stream);
+        break;
+    }
+    case INFINI_DTYPE_F16: {
+        auto typed_output = reinterpret_cast<half *>(output);
+        auto typed_input = reinterpret_cast<const half *>(input);
+        launch_interpolate_nearest_kernel<half>(typed_output, typed_input, _info, grid_size, block_size, stream);
+        break;
+    }
+    case INFINI_DTYPE_BF16: {
+        auto typed_output = reinterpret_cast<__hpcc_bfloat16 *>(output);
+        auto typed_input = reinterpret_cast<const __hpcc_bfloat16 *>(input);
+        launch_interpolate_nearest_kernel<__hpcc_bfloat16>(typed_output, typed_input, _info, grid_size, block_size, stream);
+        break;
+    }
+    case INFINI_DTYPE_I8: {
+        auto typed_output = reinterpret_cast<int8_t *>(output);
+        auto typed_input = reinterpret_cast<const int8_t *>(input);
+        launch_interpolate_nearest_kernel<int8_t>(typed_output, typed_input, _info, grid_size, block_size, stream);
+        break;
+    }
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace op::interpolate_nearest::metax
