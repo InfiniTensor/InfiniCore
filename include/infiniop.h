@@ -8,6 +8,8 @@
 #include "infiniop/ops/clip.h"
 #include "infiniop/ops/conv.h"
 #include "infiniop/ops/dequantize.h"
+#include "infiniop/ops/flash_attention.h"
+#include "infiniop/ops/flash_attention_backward.h"
 #include "infiniop/ops/gemm.h"
 #include "infiniop/ops/mul.h"
 #include "infiniop/ops/random_sample.h"

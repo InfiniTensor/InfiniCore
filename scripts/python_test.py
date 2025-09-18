@@ -25,6 +25,8 @@ def run_tests(args):
         "sub.py",
         "swiglu.py",
         "softplus.py",
+        "flash_attention.py",
+        "flash_attention_backward.py",
     ]:
         result = subprocess.run(
             f"python {test} {args} --debug", text=True, encoding="utf-8", shell=True
