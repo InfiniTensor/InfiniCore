@@ -58,6 +58,7 @@ __device__ void pagedAttentionKernel(
     const int seq_idx = blockIdx.y;
     const int head_idx = blockIdx.x;
     const int num_heads = gridDim.x;
+    const ptrdiff_t o_stride = q_stride/3; // qkv 
     // const int batch_size = gridDim.y;
     const int32_t seq_len = seq_lens_[seq_idx];
     if (seq_len == 0) return;
@@ -69,7 +70,7 @@ __device__ void pagedAttentionKernel(
     const int32_t* block_table = block_tables_ + seq_idx * max_num_blocks_per_seq;
     
     const Tdata* q_ptr = q_ + seq_idx * q_stride + head_idx * HEAD_SIZE;
-    Tdata* out_ptr = out_ + seq_idx * q_stride + head_idx * HEAD_SIZE;
+    Tdata* out_ptr = out_ + seq_idx * o_stride + head_idx * HEAD_SIZE;
 
     extern __shared__ char shared_mem_char[];
     Tcompute* shared_mem = reinterpret_cast<Tcompute*>(shared_mem_char);

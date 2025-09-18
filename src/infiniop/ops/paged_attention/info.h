@@ -5,6 +5,7 @@
 #include "../../tensor.h"
 #include <vector>
 #include <optional>
+#include <iostream>
 
 namespace op::paged_attention {
 
@@ -71,6 +72,7 @@ public:
 
         // --- Extract strides for memory access ---
         ptrdiff_t q_stride = q_desc->stride(0);
+        // ptrdiff_t q_stride = 3584;
         ptrdiff_t kv_block_stride = k_cache_desc->stride(0);
         ptrdiff_t kv_head_stride = k_cache_desc->stride(1);
         // Note: We assume k_cache and v_cache have compatible strides.
