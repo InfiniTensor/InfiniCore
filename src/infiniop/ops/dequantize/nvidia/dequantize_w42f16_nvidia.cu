@@ -1,3 +1,5 @@
+#ifdef ENABLE_NVIDIA_API
+
 #include "../../../devices/nvidia/nvidia_handle.cuh"
 #include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 #include "dequantize_w42f16_kernel.cuh"
@@ -132,3 +134,5 @@ Descriptor::calculate(
 }
 
 } // namespace op::dequantize::nvidia
+
+#endif
