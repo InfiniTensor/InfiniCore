@@ -8,29 +8,57 @@ namespace py = pybind11;
 namespace infinicore {
 
 PYBIND11_MODULE(infinicore, m) {
-    py::enum_<DataType>(m, "dtype")
-        .value("bfloat16", DataType::bfloat16)
-        .value("float16", DataType::float16)
-        .value("float32", DataType::float32)
-        .value("float64", DataType::float64)
-        .value("int32", DataType::int32)
-        .value("int64", DataType::int64)
-        .value("uint8", DataType::uint8)
-        .export_values();
+    py::class_<DataTypePy>(m, "dtype")
+        .def("__repr__", DataTypePy::toString);
 
-    py::class_<Device>(m, "Device")
-        .def(py::init<const Device::Type &, const Device::Index &>(),
-             py::arg("type"), py::arg("index") = 0)
-        .def_property_readonly("type", &Device::get_type)
-        .def_property_readonly("index", &Device::get_index)
-        .def("__repr__", static_cast<std::string (Device::*)() const>(&Device::to_string));
+    m.attr("float32") = DataTypePy{DataType::F32};
+    m.attr("float") = m.attr("float32");
+    m.attr("float64") = DataTypePy{DataType::F64};
+    m.attr("double") = m.attr("float64");
+    m.attr("complex32") = DataTypePy{DataType::C32};
+    m.attr("chalf") = m.attr("complex32");
+    m.attr("complex64") = DataTypePy{DataType::C64};
+    m.attr("cfloat") = m.attr("complex64");
+    m.attr("complex128") = DataTypePy{DataType::C128};
+    m.attr("cdouble") = m.attr("complex128");
+    m.attr("float16") = DataTypePy{DataType::F16};
+    m.attr("half") = m.attr("float16");
+    m.attr("bfloat16") = DataTypePy{DataType::BF16};
+    m.attr("uint8") = DataTypePy{DataType::U8};
+    m.attr("int8") = DataTypePy{DataType::I8};
+    m.attr("int16") = DataTypePy{DataType::I16};
+    m.attr("short") = m.attr("int16");
+    m.attr("int32") = DataTypePy{DataType::I32};
+    m.attr("int") = m.attr("int32");
+    m.attr("int64") = DataTypePy{DataType::I64};
+    m.attr("long") = m.attr("int64");
+    m.attr("bool") = DataTypePy{DataType::BOOL};
+
+    py::class_<DevicePy>(m, "device")
+        .def(py::init<const std::string &, Device::Index>(),
+             py::arg("type"), py::arg("index"))
+        .def_property_readonly("type", &DevicePy::getType)
+        .def_property_readonly("index", &DevicePy::getIndex)
+        .def("__repr__", &DevicePy::toRepresentation)
+        .def("__str__", &DevicePy::toString);
 
     py::class_<Tensor>(m, "Tensor")
-        .def(py::init<const Tensor::Shape &, const DataType &, const Device &>(),
-             py::arg("shape"), py::arg("dtype") = DataType::float32, py::arg("device") = Device{Device::Type::cpu})
-        .def_property_readonly("shape", &Tensor::get_shape)
-        .def_property_readonly("dtype", &Tensor::get_dtype)
-        .def_property_readonly("device", &Tensor::get_device);
+        .def_static("empty", &Tensor::empty,
+                    py::arg("shape"), py::arg("dtype"), py::arg("device"))
+        .def_static("zeros", &Tensor::zeros,
+                    py::arg("shape"), py::arg("dtype"), py::arg("device"))
+        .def_static("ones", &Tensor::ones,
+                    py::arg("shape"), py::arg("dtype"), py::arg("device"))
+
+        .def("shape", [](const Tensor &self) {
+            return self->shape();
+        })
+        .def("dtype", [](const Tensor &self) {
+            return self->dtype();
+        })
+        .def("device", [](const Tensor &self) {
+            return self->device();
+        });
 }
 
 } // namespace infinicore

@@ -319,13 +319,23 @@ target("infinicore_c_api")
 target_end()
 
 target("infinicore")
+    set_default(false)
     add_rules("python.library", {soabi = true})
     add_packages("pybind11")
 
     set_kind("shared")
-    add_deps("infinicore_c_api")
+    local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
+    add_includedirs(INFINI_ROOT.."/include", { public = true })
+
+    add_linkdirs(INFINI_ROOT.."/lib")
+    add_links("infiniop", "infinirt", "infiniccl")
 
     add_files("src/infinicore/*.cc")
+    add_files("src/infinicore/context/*.cc")
+    add_files("src/infinicore/context/*/*.cc")
+    add_files("src/infinicore/tensor/*.cc")
+    add_files("src/infinicore/op/*/*.cc")
+
 
     set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
 target_end()
