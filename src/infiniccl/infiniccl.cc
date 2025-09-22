@@ -5,6 +5,7 @@
 #include "./cuda/infiniccl_cuda.h"
 #include "./metax/infiniccl_metax.h"
 #include "./moore/infiniccl_moore.h"
+#include "./kunlun/infiniccl_kunlun.h"
 
 __C infiniStatus_t infinicclCommInitAll(
     infiniDevice_t device_type,
@@ -23,6 +24,7 @@ __C infiniStatus_t infinicclCommInitAll(
         COMM_INIT_ALL(INFINI_DEVICE_CAMBRICON, cambricon);
         COMM_INIT_ALL(INFINI_DEVICE_METAX, metax);
         COMM_INIT_ALL(INFINI_DEVICE_MOORE, moore);
+        COMM_INIT_ALL(INFINI_DEVICE_KUNLUN, kunlun);
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -46,7 +48,7 @@ __C infiniStatus_t infinicclCommDestroy(infinicclComm_t comm) {
         COMM_DESTROY(INFINI_DEVICE_CAMBRICON, cambricon);
         COMM_DESTROY(INFINI_DEVICE_METAX, metax);
         COMM_DESTROY(INFINI_DEVICE_MOORE, moore);
-
+        COMM_DESTROY(INFINI_DEVICE_KUNLUN, kunlun);
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -77,6 +79,7 @@ __C infiniStatus_t infinicclAllReduce(
         ALL_REDUCE(INFINI_DEVICE_CAMBRICON, cambricon);
         ALL_REDUCE(INFINI_DEVICE_METAX, metax);
         ALL_REDUCE(INFINI_DEVICE_MOORE, moore);
+        ALL_REDUCE(INFINI_DEVICE_KUNLUN, kunlun);
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

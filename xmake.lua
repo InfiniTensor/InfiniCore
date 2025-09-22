@@ -303,6 +303,9 @@ target("infiniccl")
     if has_config("moore-gpu") then
         add_deps("infiniccl-moore")
     end
+    if has_config("kunlun-xpu") then
+        add_deps("infiniccl-kunlun")
+    end
     
     set_languages("cxx17")
 

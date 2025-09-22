@@ -114,7 +114,7 @@ void *testAllReduceThread(void *arg) {
     TEST_INFINI_THREAD(infinirtMalloc(&buf, args->count * infiniSizeOf(args->dtype)));
     TEST_INFINI_THREAD(infinirtMemcpy(buf, args->data, args->count * infiniSizeOf(args->dtype), INFINIRT_MEMCPY_H2D));
     TEST_INFINI_THREAD(infinicclAllReduce(buf, buf, args->count, args->dtype, INFINICCL_SUM, args->comm, stream));
-    TEST_INFINI_THREAD(infinirtDeviceSynchronize());
+    TEST_INFINI_THREAD(infinirtStreamSynchronize(stream));
     TEST_INFINI_THREAD(infinirtMemcpy(output, buf, args->count * infiniSizeOf(args->dtype), INFINIRT_MEMCPY_D2H));
 
     if (checkData(output, args->ans, args->dtype, args->count) != 0) {
@@ -126,14 +126,14 @@ void *testAllReduceThread(void *arg) {
     for (size_t i = 0; i < WARM_UPS; i++) {
         TEST_INFINI_THREAD(infinicclAllReduce(buf, buf, args->count, args->dtype, INFINICCL_SUM, args->comm, stream));
     }
-    TEST_INFINI_THREAD(infinirtDeviceSynchronize());
+    TEST_INFINI_THREAD(infinirtStreamSynchronize(stream));
 
     // measure time
     auto start = std::chrono::high_resolution_clock::now();
     for (size_t i = 0; i < ITERATIONS; i++) {
         TEST_INFINI_THREAD(infinicclAllReduce(buf, buf, args->count, args->dtype, INFINICCL_SUM, args->comm, stream));
     }
-    TEST_INFINI_THREAD(infinirtDeviceSynchronize());
+    TEST_INFINI_THREAD(infinirtStreamSynchronize(stream));
     auto end = std::chrono::high_resolution_clock::now();
     double elapsed_ms = std::chrono::duration<double, std::milli>(end - start).count();
     *args->time = elapsed_ms / ITERATIONS;
@@ -159,12 +159,12 @@ int testAllReduce(infiniDevice_t device_type, int ndevice) {
     for (int i = 0; i < ndevice; i++) {
         device_ids[i] = i;
     }
-    TEST_INFINI(infinicclCommInitAll(device_type, comms.data(), ndevice, device_ids.data()));
 
     for (infiniDtype_t dtype : TEST_DTYPES) {
         setData(dtype, data, MAX_COUNT, 1.0f);
         setData(dtype, ans, MAX_COUNT, 1.0f * ndevice);
         for (size_t count : TEST_COUNTS) {
+            TEST_INFINI(infinicclCommInitAll(device_type, comms.data(), ndevice, device_ids.data()));
             std::cout << "Testing AllReduce with " << count << " elements of " << infiniDtypeToString(dtype) << std::endl;
             for (int rank = 0; rank < ndevice; rank++) {
                 thread_args[rank] = {rank, device_ids[rank], comms[rank], device_type, dtype, count, data, ans, &results[rank], &times[rank]};

@@ -4,6 +4,7 @@ local XRE_DIR = path.join(KUNLUN_HOME, "xre")
 local XTDK_DIR = path.join(KUNLUN_HOME, "xtdk")
 local XDNN_DIR = path.join(KUNLUN_HOME, "xhpc", "xdnn")
 local XBLAS_DIR = path.join(KUNLUN_HOME, "xhpc", "xblas")
+local XCCL_DIR = path.join(KUNLUN_HOME, "xccl")
 
 -- Add include dirs
 add_includedirs(path.join(XRE_DIR, "include"), {public = true})
@@ -15,6 +16,8 @@ add_includedirs(path.join(XBLAS_DIR, "include"), {public = true})
 add_linkdirs(path.join(XRE_DIR, "so"))
 add_linkdirs(path.join(XDNN_DIR, "so"))
 add_linkdirs(path.join(XBLAS_DIR, "so"))
+
+-- Add links
 add_links("xpurt", "xpuapi", "xpu_blas")
 
 rule("xpu")
@@ -94,5 +97,20 @@ target("infinirt-kunlun")
     -- Add include dirs
     add_files("$(projectdir)/src/infinirt/kunlun/*.cc")
     add_cxflags("-lstdc++ -Wall -Werror -fPIC")
+target_end()
 
+target("infiniccl-kunlun")
+    set_kind("static")
+    add_deps("infinirt")
+    add_deps("infini-utils")
+    set_warnings("all", "error")
+    set_languages("cxx17")
+    on_install(function (target) end)
+    if has_config("ccl") then
+        add_includedirs(path.join(XCCL_DIR, "include"))
+        add_linkdirs(path.join(XCCL_DIR, "so"))
+        add_links("bkcl")
+        add_files("$(projectdir)/src/infiniccl/kunlun/*.cc")
+        add_cxflags("-lstdc++ -fPIC")
+    end
 target_end()

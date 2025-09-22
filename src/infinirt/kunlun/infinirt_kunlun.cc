@@ -20,6 +20,8 @@ infiniStatus_t setDevice(int device_id) {
 }
 
 infiniStatus_t deviceSynchronize() {
+    // TODO: kunlun xpu has no device synchronization API
+    // xpu_wait() is waiting for default stream
     CHECK_KUNLUNRT(xpu_wait());
     return INFINI_STATUS_SUCCESS;
 }
@@ -109,11 +111,24 @@ infiniStatus_t memcpy(void *dst, const void *src, size_t size, infinirtMemcpyKin
 }
 
 infiniStatus_t memcpyAsync(void *dst, const void *src, size_t size, infinirtMemcpyKind_t kind, infinirtStream_t stream) {
-    // no async memcpy func in kunlun2
-    return memcpy(dst, src, size, kind);
+    switch (kind) {
+    case INFINIRT_MEMCPY_H2D:
+        CHECK_KUNLUNRT(xpu_memcpy_async(dst, src, static_cast<uint64_t>(size), XPUMemcpyKind::XPU_HOST_TO_DEVICE, (kunlunStream_t)stream));
+        return INFINI_STATUS_SUCCESS;
+    case INFINIRT_MEMCPY_D2H:
+        CHECK_KUNLUNRT(xpu_memcpy_async(dst, src, static_cast<uint64_t>(size), XPUMemcpyKind::XPU_DEVICE_TO_HOST, (kunlunStream_t)stream));
+        return INFINI_STATUS_SUCCESS;
+    case INFINIRT_MEMCPY_D2D:
+        CHECK_KUNLUNRT(xpu_memcpy_async(dst, src, static_cast<uint64_t>(size), XPUMemcpyKind::XPU_DEVICE_TO_DEVICE, (kunlunStream_t)stream));
+        return INFINI_STATUS_SUCCESS;
+    default:
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
 }
 
 infiniStatus_t mallocAsync(void **p_ptr, size_t size, infinirtStream_t stream) {
+    // kunlun3 does not support async memory allocation
+    // TODO: support async malloc
     CHECK_KUNLUNRT(xpu_malloc(p_ptr, static_cast<uint64_t>(size)));
     return INFINI_STATUS_SUCCESS;
 }
