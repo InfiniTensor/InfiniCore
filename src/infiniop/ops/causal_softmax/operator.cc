@@ -5,7 +5,7 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/causal_softmax_cpu.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/causal_softmax_nvidia.cuh"
 #endif
 #ifdef ENABLE_METAX_API
@@ -48,6 +48,9 @@ __C infiniStatus_t infiniopCreateCausalSoftmaxDescriptor(
 #ifdef ENABLE_ILUVATAR_API
         CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
+#ifdef ENABLE_HYGON_API
+        CREATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
 #ifdef ENABLE_CAMBRICON_API
         CREATE(INFINI_DEVICE_CAMBRICON, bang)
 #endif
@@ -83,6 +86,9 @@ __C infiniStatus_t infiniopGetCausalSoftmaxWorkspaceSize(infiniopCausalSoftmaxDe
 #endif
 #ifdef ENABLE_ILUVATAR_API
         GET(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_HYGON_API
+        GET(INFINI_DEVICE_HYGON, nvidia);
 #endif
 #ifdef ENABLE_METAX_API
         GET(INFINI_DEVICE_METAX, metax)
@@ -125,6 +131,9 @@ __C infiniStatus_t infiniopCausalSoftmax(
 #ifdef ENABLE_ILUVATAR_API
         CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
+#ifdef ENABLE_HYGON_API
+        CALCULATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
 #ifdef ENABLE_CAMBRICON_API
         CALCULATE(INFINI_DEVICE_CAMBRICON, bang)
 #endif
@@ -160,6 +169,9 @@ __C infiniStatus_t infiniopDestroyCausalSoftmaxDescriptor(infiniopCausalSoftmaxD
 #endif
 #ifdef ENABLE_ILUVATAR_API
         DESTROY(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_HYGON_API
+        DESTROY(INFINI_DEVICE_HYGON, nvidia);
 #endif
 #ifdef ENABLE_CAMBRICON_API
         DESTROY(INFINI_DEVICE_CAMBRICON, bang)

@@ -3,7 +3,7 @@
 #include "../infinirt_impl.h"
 
 namespace infinirt::cuda {
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
 INFINIRT_DEVICE_API_IMPL
 #else
 INFINIRT_DEVICE_API_NOOP

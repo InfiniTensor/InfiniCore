@@ -8,7 +8,7 @@
 #ifdef ENABLE_ASCEND_API
 #include "ascend/rearrange_ascend.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/rearrange_nvidia.cuh"
 #endif
 #ifdef ENABLE_CAMBRICON_API
@@ -51,6 +51,9 @@ __C infiniStatus_t infiniopCreateRearrangeDescriptor(
 #endif
 #ifdef ENABLE_ILUVATAR_API
         CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_HYGON_API
+        CREATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
 #ifdef ENABLE_CAMBRICON_API
         CREATE(INFINI_DEVICE_CAMBRICON, bang);
@@ -96,6 +99,9 @@ __C infiniStatus_t infiniopRearrange(
 #ifdef ENABLE_ILUVATAR_API
         CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
+#ifdef ENABLE_HYGON_API
+        CALCULATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
 #ifdef ENABLE_CAMBRICON_API
         CALCULATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
@@ -137,6 +143,9 @@ __C infiniStatus_t infiniopDestroyRearrangeDescriptor(
 #endif
 #ifdef ENABLE_ILUVATAR_API
         DELETE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_HYGON_API
+        DELETE(INFINI_DEVICE_HYGON, nvidia);
 #endif
 #ifdef ENABLE_CAMBRICON_API
         DELETE(INFINI_DEVICE_CAMBRICON, bang);
