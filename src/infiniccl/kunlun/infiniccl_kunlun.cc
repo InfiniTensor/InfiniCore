@@ -60,11 +60,6 @@ infiniStatus_t commInitAll(
     infinicclComm_t *comms,
     int ndevice,
     const int *device_ids) {
-    // Kunlun requires all devices to be initialized before calling HcclCommInitAll.
-    for (int i = ndevice - 1; i >= 0; i--) {
-        xpu_set_device(device_ids[i]);
-    }
-
     std::vector<bkclComm_t> bkcl_comms(ndevice);
     CHECK_BKCL(bkcl_comm_init_all(bkcl_comms.data(), ndevice, device_ids));
 
@@ -89,7 +84,6 @@ infiniStatus_t allReduce(
     infinicclReduceOp_t op,
     infinicclComm_t comm,
     infinirtStream_t stream) {
-
     CHECK_DTYPE(datatype, INFINI_DTYPE_F32, INFINI_DTYPE_F16, INFINI_DTYPE_BF16);
     CHECK_BKCL(bkcl_all_reduce(
         getBkclComm(comm),
