@@ -1,5 +1,7 @@
 #define INFINIOP_METAX_KERNEL __global__ void
 
+#include <hpcc_fp8.h>
+
 // Posible maximum number of threads per block for METAX architectures
 // Used for picking correct kernel launch configuration
 #define METAX_BLOCK_SIZE_1024 1024
@@ -9,6 +11,7 @@
 
 using cuda_bfloat16 = hpcc_bfloat16;
 using cuda_bfloat162 = hpcc_bfloat162;
+using cuda_fp8_e4m3 = __hpcc_fp8_e4m3;
 
 namespace device::metax {
 

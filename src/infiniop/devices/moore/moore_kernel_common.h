@@ -2,6 +2,7 @@
 
 #include <musa_bf16.h>
 #include <musa_fp16.h>
+#include <musa_fp8.h>
 
 // Posible maximum number of threads per block for MUSA architectures
 // Used for picking correct kernel launch configuration
@@ -13,6 +14,7 @@
 
 using cuda_bfloat16 = mt_bfloat16;
 using cuda_bfloat162 = mt_bfloat162;
+using cuda_fp8_e4m3 = __mt_fp8_e4m3;
 
 namespace device::moore {
 
