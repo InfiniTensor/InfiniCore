@@ -1,5 +1,6 @@
 #include "infinirt_kunlun.h"
 #include "../../utils.h"
+#include <cstring>
 #include <xpu/runtime.h>
 #include <xpu/runtime_ex.h>
 
@@ -105,6 +106,9 @@ infiniStatus_t memcpy(void *dst, const void *src, size_t size, infinirtMemcpyKin
     case INFINIRT_MEMCPY_D2D:
         CHECK_KUNLUNRT(xpu_memcpy(dst, src, static_cast<uint64_t>(size), XPUMemcpyKind::XPU_DEVICE_TO_DEVICE));
         return INFINI_STATUS_SUCCESS;
+    case INFINIRT_MEMCPY_H2H:
+        std::memcpy(dst, src, size);
+        return INFINI_STATUS_SUCCESS;
     default:
         return INFINI_STATUS_INTERNAL_ERROR;
     }
@@ -120,6 +124,9 @@ infiniStatus_t memcpyAsync(void *dst, const void *src, size_t size, infinirtMemc
         return INFINI_STATUS_SUCCESS;
     case INFINIRT_MEMCPY_D2D:
         CHECK_KUNLUNRT(xpu_memcpy_async(dst, src, static_cast<uint64_t>(size), XPUMemcpyKind::XPU_DEVICE_TO_DEVICE, (kunlunStream_t)stream));
+        return INFINI_STATUS_SUCCESS;
+    case INFINIRT_MEMCPY_H2H:
+        std::memcpy(dst, src, size);
         return INFINI_STATUS_SUCCESS;
     default:
         return INFINI_STATUS_INTERNAL_ERROR;
