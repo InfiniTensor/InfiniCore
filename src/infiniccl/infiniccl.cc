@@ -3,9 +3,9 @@
 #include "./ascend/infiniccl_ascend.h"
 #include "./cambricon/infiniccl_cambricon.h"
 #include "./cuda/infiniccl_cuda.h"
+#include "./kunlun/infiniccl_kunlun.h"
 #include "./metax/infiniccl_metax.h"
 #include "./moore/infiniccl_moore.h"
-#include "./kunlun/infiniccl_kunlun.h"
 
 __C infiniStatus_t infinicclCommInitAll(
     infiniDevice_t device_type,
