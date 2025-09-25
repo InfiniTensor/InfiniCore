@@ -6,6 +6,7 @@
 #include "infiniop/ops/attention.h"
 #include "infiniop/ops/causal_softmax.h"
 #include "infiniop/ops/clip.h"
+#include "infiniop/ops/logsoftmax.h"
 #include "infiniop/ops/conv.h"
 #include "infiniop/ops/dequantize_awq.h"
 #include "infiniop/ops/gemm.h"
