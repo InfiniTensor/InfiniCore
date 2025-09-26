@@ -583,3 +583,66 @@ def softplus_(lib):
     ]
     lib.infiniopDestroySoftplusDescriptor.restype = c_int32
     lib.infiniopDestroySoftplusDescriptor.argtypes = [infiniopOperatorDescriptor_t]
+
+
+@OpRegister.operator
+def zeros_(lib):
+    lib.infiniopCreateZerosDescriptor.restype = c_int32
+    lib.infiniopCreateZerosDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetZerosWorkspaceSize.restype = c_int32
+    lib.infiniopGetZerosWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopZeros.restype = c_int32
+    lib.infiniopZeros.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyZerosDescriptor.restype = c_int32
+    lib.infiniopDestroyZerosDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+@OpRegister.operator
+def ones_(lib):
+    lib.infiniopCreateOnesDescriptor.restype = c_int32
+    lib.infiniopCreateOnesDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetOnesWorkspaceSize.restype = c_int32
+    lib.infiniopGetOnesWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopOnes.restype = c_int32
+    lib.infiniopOnes.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyOnesDescriptor.restype = c_int32
+    lib.infiniopDestroyOnesDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]

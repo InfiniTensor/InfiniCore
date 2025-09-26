@@ -51,6 +51,8 @@ class TestTensor(CTensor):
         scale=None,
         bias=None,
         set_tensor=None,
+        randint_low=None,
+        randint_high=None,
     ):
         self.dt = dt
         self.device = device
@@ -80,7 +82,11 @@ class TestTensor(CTensor):
                 torch_shape, dtype=to_torch_dtype(dt), device=torch_device_map[device]
             )
         elif mode == "randint":
-            self._torch_tensor = torch.randint(-2000000000,2000000000, torch_shape,dtype=to_torch_dtype(dt), device=torch_device_map[device])
+            randint_low = -2000000000 if randint_low is None else randint_low
+            randint_high = 2000000000 if randint_high is None else randint_high
+            self._torch_tensor = torch.randint(randint_low,randint_high, torch_shape,dtype=to_torch_dtype(dt), device=torch_device_map[device])
+        elif mode == "float8_e4m3fn":
+            self._torch_tensor = torch.rand(shape, dtype=torch.float32, device=torch_device_map[device]).to(dtype=torch.float8_e4m3fn)
         elif mode == "manual":
             assert set_tensor is not None
             assert torch_shape == list(set_tensor.shape)
@@ -139,7 +145,11 @@ class TestTensor(CTensor):
 
 
 def to_torch_dtype(dt: InfiniDtype, compatability_mode=False):
-    if dt == InfiniDtype.I8:
+    if dt == InfiniDtype.BOOL:
+        return torch.bool
+    elif dt == InfiniDtype.BYTE:
+        return torch.uint8
+    elif dt == InfiniDtype.I8:
         return torch.int8
     elif dt == InfiniDtype.I16:
         return torch.int16
@@ -165,6 +175,8 @@ def to_torch_dtype(dt: InfiniDtype, compatability_mode=False):
         return torch.int32 if compatability_mode else torch.uint32
     elif dt == InfiniDtype.U64:
         return torch.int64 if compatability_mode else torch.uint64
+    elif dt == InfiniDtype.F8:
+        return torch.float8_e4m3fn
     else:
         raise ValueError("Unsupported data type")
 
@@ -269,7 +281,21 @@ def rearrange_tensor(tensor, new_strides):
     new_positions += offset
 
     # Copy the original data to the new tensor
-    new_tensor.view(-1).index_add_(0, new_positions, tensor.view(-1))
+    if tensor.dtype in [torch.bool, torch.uint8, torch.int8, torch.int16, torch.int32,torch.int64, torch.float16,torch.bfloat16,torch.float32,torch.float64]:
+        new_tensor.view(-1).index_add_(0, new_positions, tensor.view(-1))
+    elif tensor.dtype in [torch.uint16, torch.uint32, torch.uint64]:
+        new_tensor_int64 = new_tensor.to(dtype=torch.int64)
+        tensor_int64 = tensor.to(dtype=torch.int64)
+        new_tensor_int64.view(-1).index_add_(0, new_positions, tensor_int64.view(-1))
+        new_tensor = new_tensor_int64.to(dtype=tensor.dtype)
+    elif tensor.dtype in [torch.float8_e4m3fn]:
+        new_tensor_float64 = new_tensor.to(dtype=torch.float64)
+        tensor_float64  = tensor.to(dtype=torch.float64)
+        new_tensor_float64.view(-1).index_add_(0, new_positions, tensor_float64.view(-1))
+        new_tensor = new_tensor_float64.to(dtype=tensor.dtype)
+    else:
+        raise ValueError("Unsupported data type")
+    
     new_tensor.set_(new_tensor.untyped_storage(), offset, shape, tuple(new_strides))
 
     return new_tensor
@@ -479,11 +505,12 @@ def print_discrepancy(
     nan_mismatch = (
         actual_isnan ^ expected_isnan if equal_nan else actual_isnan | expected_isnan
     )
+
     diff_mask = nan_mismatch | (
-        torch.abs(actual - expected) > (atol + rtol * torch.abs(expected))
+        torch.abs(actual.to(dtype=torch.float64) - expected.to(dtype=torch.float64)) > (atol + rtol * torch.abs(expected.to(dtype=torch.float64)))
     )
     diff_indices = torch.nonzero(diff_mask, as_tuple=False)
-    delta = actual - expected
+    delta = actual.to(dtype=torch.float64) - expected.to(dtype=torch.float64)
 
     # Display format: widths for columns
     col_width = [18, 20, 20, 20]
