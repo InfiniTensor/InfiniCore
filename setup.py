@@ -17,8 +17,10 @@ PACKAGE_DIR = os.path.join(INSTALLATION_DIR, PACKAGE_NAME)
 
 class BuildPy(build_py):
     def run(self):
-        subprocess.run(["xmake", "build", "-y"])
+        subprocess.run(["xmake", "build"])
         subprocess.run(["xmake", "install"])
+        subprocess.run(["xmake", "build", "-y", "infinicore"])
+        subprocess.run(["xmake", "install", "infinicore"])
         built_lib = glob.glob(os.path.join(LIB_DIR, f"{PACKAGE_NAME}.*"))[0]
         os.makedirs(PACKAGE_DIR, exist_ok=True)
         self.copy_file(built_lib, PACKAGE_DIR)

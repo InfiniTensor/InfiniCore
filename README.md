@@ -28,6 +28,20 @@ API 定义以及使用方式详见 [`InfiniCore文档`](https://github.com/Infin
 
 ## 配置和使用
 
+### 子模块
+
+由于仓库中含有子模块，所以在克隆时请添加 `--recursive` 或 `--recurse-submodules`，如：
+
+```shell
+git clone --recursive https://github.com/InfiniTensor/InfiniCore.git
+```
+
+或者在普通克隆后进行更新：
+
+```shell
+git submodule update --init --recursive
+```
+
 ### 一键安装
 
 在 `script/` 目录中提供了 `install.py` 安装脚本。使用方式如下：

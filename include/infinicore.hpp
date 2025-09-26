@@ -1,6 +1,4 @@
-#ifndef __INFINICORE_API_HPP__
-#define __INFINICORE_API_HPP__
+#pragma once
 
+#include "infinicore/op/matmul.h"
 #include "infinicore/tensor.hpp"
-
-#endif

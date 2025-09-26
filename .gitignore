@@ -10,6 +10,7 @@ build/
 
 # Python
 __pycache__/
+*.egg-info/
 
 # Log
 *.log
@@ -22,3 +23,8 @@ cache/
 
 #GGUF
 *.gguf
+
+# Compressed
+*.gz
+*.zip
+*.tar
