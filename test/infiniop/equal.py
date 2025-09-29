@@ -83,6 +83,7 @@ def test(
         InfiniDtype.I32: torch.int32,
         InfiniDtype.I64: torch.int64
     }[dtype]
+    is_integer_dtype = torch_dtype in (torch.int32, torch.int64)
 
     print(
         f"Testing equal on {InfiniDeviceNames[device]} with input_shape:{input_shape},"
@@ -99,9 +100,16 @@ def test(
         set_tensor=torch_c
     )
 
-    torch_a = (torch.rand(input_shape) * 100 - 50).type(torch_dtype)
-    if a_strides is not None:
-        torch_a.as_strided_(input_shape, a_strides)
+    if a_strides is None:
+        torch_a = (torch.rand(input_shape) * 100 - 50).type(torch_dtype)
+    else:
+        # Allocate storage that can support the requested strides
+        torch_a = torch.empty_strided(input_shape, a_strides, dtype=torch_dtype)
+        if is_integer_dtype:
+            tmp_a = torch.randint(-50, 50, input_shape, dtype=torch_dtype)
+            torch_a.copy_(tmp_a)
+        else:
+            torch_a.uniform_(-50, 50)
     a = TestTensor(
         input_shape,
         torch_a.stride(),
@@ -111,11 +119,22 @@ def test(
         set_tensor=torch_a        
     )
     if identical == Identical.EQUAL:
-        torch_b = torch_a.clone()
+        if b_strides is None:
+            torch_b = torch_a.clone()
+        else:
+            # Create b with desired strides and copy values from a to ensure equality
+            torch_b = torch.empty_strided(input_shape, b_strides, dtype=torch_dtype)
+            torch_b.copy_((torch_a))
     else:
-        torch_b = (torch.rand(input_shape) * 100 - 50).type(torch_dtype)
-    if b_strides is not None:
-        torch_b.as_strided_(input_shape, b_strides)   
+        if b_strides is None:
+            torch_b = (torch.rand(input_shape) * 100 - 50).type(torch_dtype)
+        else:
+            torch_b = torch.empty_strided(input_shape, b_strides, dtype=torch_dtype)
+            if is_integer_dtype:
+                tmp_b = torch.randint(-50, 50, input_shape, dtype=torch_dtype)
+                torch_b.copy_(tmp_b)
+            else:
+                torch_b.uniform_(-50, 50)
  
     b = TestTensor(
         input_shape,
