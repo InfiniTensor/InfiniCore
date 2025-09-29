@@ -50,6 +50,9 @@ target("infiniop-iluvatar")
     -- set_languages("cxx17") 天数似乎不能用这个配置
     add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")
 
+    -- 天数平台不支持部分 NVIDIA PTX 指令，AWQ 反量化改用 CUDA C++ 实现
+    add_files("../src/infiniop/ops/dequantize_awq/iluvatar/*.cu")
+
     if has_config("ninetoothed") then
         add_files("../build/ninetoothed/*.c", {cxflags = {"-Wno-return-type"}})
     end
