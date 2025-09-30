@@ -57,11 +57,11 @@ infiniStatus_t Descriptor::calculate(
     auto c_ptr = reinterpret_cast<bool *>(c);
     *c_ptr = true;
 #pragma omp parallel for
-    for (size_t i = 0; i < total_size; i++) {
+    for (int i = 0; i < static_cast<int>(total_size); i++) {
         auto a_ptr = reinterpret_cast<const char *>(a);
         auto b_ptr = reinterpret_cast<const char *>(b);
-        size_t rem = i;
-        for (int d = _info.ndim - 1; d >= 0; d--) {
+        size_t rem = static_cast<size_t>(i);
+        for (int d = static_cast<int>(_info.ndim) - 1; d >= 0; d--) {
             size_t dim_index = rem / contiguous_strides[d];
             rem = rem % contiguous_strides[d];
             a_ptr += dim_index * _info.a_strides[d];
