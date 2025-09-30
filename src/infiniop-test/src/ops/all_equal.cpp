@@ -1,9 +1,9 @@
+#include "../../../include/infiniop/ops/all_equal.h"
 #include "ops.hpp"
 #include "utils.hpp"
 #include <infinirt.h>
 #include <iomanip>
 #include <iostream>
-#include "../../../include/infiniop/ops/all_equal.h"
 
 namespace infiniop_test::all_equal {
 struct Test::Attributes {
@@ -41,9 +41,9 @@ std::shared_ptr<infiniop_test::Result> Test::run(
     auto b = _attributes->b->to(device, device_id);
     auto c = _attributes->c->to(device, device_id);
     CHECK_OR(infiniopCreateAllEqualDescriptor(handle, &op_desc,
-                                         c->desc(),
-                                         a->desc(),
-                                         b->desc()),
+                                              c->desc(),
+                                              a->desc(),
+                                              b->desc()),
              return TEST_FAILED(OP_CREATION_FAILED, "Failed to create op descriptor."));
     size_t workspace_size;
     CHECK_OR(infiniopGetAllEqualWorkspaceSize(op_desc, &workspace_size),
@@ -52,10 +52,10 @@ std::shared_ptr<infiniop_test::Result> Test::run(
     CHECK_OR(infinirtMalloc(&workspace, workspace_size),
              return TEST_FAILED(OP_CREATION_FAILED, "Failed to allocate workspace."));
     CHECK_OR(infiniopAllEqual(op_desc, workspace, workspace_size,
-                         c->data(),
-                         a->data(),
-                         b->data(),
-                         nullptr),
+                              c->data(),
+                              a->data(),
+                              b->data(),
+                              nullptr),
              return TEST_FAILED(OP_EXECUTION_FAILED, "Failed during execution."));
 
     try {

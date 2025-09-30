@@ -17,17 +17,15 @@ __C infiniStatus_t infiniopCreateAllEqualDescriptor(
     infiniopAllEqualDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t c_desc,
     infiniopTensorDescriptor_t a_desc,
-    infiniopTensorDescriptor_t b_desc
-) {
-#define CREATE(CASE, NAMESPACE)                                                 \
-    case CASE:                                                                  \
-        return op::all_equal::NAMESPACE::Descriptor::create(                        \
-            handle,                                                             \
-            reinterpret_cast<op::all_equal::NAMESPACE::Descriptor **>(desc_ptr),    \
-            c_desc,                                                             \
-            a_desc,                                                             \
-            b_desc                                                              \
-        )
+    infiniopTensorDescriptor_t b_desc) {
+#define CREATE(CASE, NAMESPACE)                                                  \
+    case CASE:                                                                   \
+        return op::all_equal::NAMESPACE::Descriptor::create(                     \
+            handle,                                                              \
+            reinterpret_cast<op::all_equal::NAMESPACE::Descriptor **>(desc_ptr), \
+            c_desc,                                                              \
+            a_desc,                                                              \
+            b_desc)
 
     switch (handle->device) {
 
@@ -41,7 +39,7 @@ __C infiniStatus_t infiniopCreateAllEqualDescriptor(
         CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_METAX_API
-       CREATE(INFINI_DEVICE_METAX, metax);
+        CREATE(INFINI_DEVICE_METAX, metax);
 #endif
 
     default:
@@ -52,9 +50,9 @@ __C infiniStatus_t infiniopCreateAllEqualDescriptor(
 }
 
 __C infiniStatus_t infiniopGetAllEqualWorkspaceSize(infiniopAllEqualDescriptor_t desc, size_t *size) {
-#define GET(CASE, NAMESPACE)                                                                        \
-    case CASE:                                                                                      \
-        *size = reinterpret_cast<op::all_equal::NAMESPACE::Descriptor *>(desc)->workspaceSize();        \
+#define GET(CASE, NAMESPACE)                                                                     \
+    case CASE:                                                                                   \
+        *size = reinterpret_cast<op::all_equal::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
         return INFINI_STATUS_SUCCESS
 
     switch (desc->device_type) {
@@ -68,7 +66,7 @@ __C infiniStatus_t infiniopGetAllEqualWorkspaceSize(infiniopAllEqualDescriptor_t
         GET(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_METAX_API
-       GET(INFINI_DEVICE_METAX, metax);
+        GET(INFINI_DEVICE_METAX, metax);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -82,22 +80,20 @@ __C infiniStatus_t infiniopAllEqual(
     infiniopAllEqualDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
-    void * c,
-    const void * a,
-    const void * b,                
-    void *stream
-) {
+    void *c,
+    const void *a,
+    const void *b,
+    void *stream) {
 
-#define CALCULATE(CASE, NAMESPACE)                                                                  \
-    case CASE:                                                                                      \
-        return reinterpret_cast<const op::all_equal::NAMESPACE::Descriptor *>(desc)->calculate(         \
-            workspace,                                                                              \
-            workspace_size,                                                                         \
-            c,                                                                                      \
-            a,                                                                                      \
-            b,                                                                                      \
-            stream                                                                                  \
-        )
+#define CALCULATE(CASE, NAMESPACE)                                                              \
+    case CASE:                                                                                  \
+        return reinterpret_cast<const op::all_equal::NAMESPACE::Descriptor *>(desc)->calculate( \
+            workspace,                                                                          \
+            workspace_size,                                                                     \
+            c,                                                                                  \
+            a,                                                                                  \
+            b,                                                                                  \
+            stream)
 
     switch (desc->device_type) {
 
@@ -111,7 +107,7 @@ __C infiniStatus_t infiniopAllEqual(
         CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_METAX_API
-       CALCULATE(INFINI_DEVICE_METAX, metax);
+        CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
 
     default:
@@ -124,9 +120,9 @@ __C infiniStatus_t infiniopAllEqual(
 __C infiniStatus_t
 infiniopDestroyAllEqualDescriptor(infiniopAllEqualDescriptor_t desc) {
 
-#define DELETE(CASE, NAMESPACE)                                                           \
-    case CASE:                                                                            \
-        delete reinterpret_cast<const op::all_equal::NAMESPACE::Descriptor *>(desc);          \
+#define DELETE(CASE, NAMESPACE)                                                      \
+    case CASE:                                                                       \
+        delete reinterpret_cast<const op::all_equal::NAMESPACE::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS
 
     switch (desc->device_type) {
@@ -141,7 +137,7 @@ infiniopDestroyAllEqualDescriptor(infiniopAllEqualDescriptor_t desc) {
         DELETE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_METAX_API
-       DELETE(INFINI_DEVICE_METAX, metax);
+        DELETE(INFINI_DEVICE_METAX, metax);
 #endif
 
     default:

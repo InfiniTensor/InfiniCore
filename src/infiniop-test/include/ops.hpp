@@ -44,7 +44,7 @@ DECLARE_INFINIOP_TEST(all_equal)
         REGISTER_INFINIOP_TEST(causal_softmax) \
         REGISTER_INFINIOP_TEST(rearrange)      \
         REGISTER_INFINIOP_TEST(sub)            \
-        REGISTER_INFINIOP_TEST(all_equal)                       \
+        REGISTER_INFINIOP_TEST(all_equal)      \
     }
 
 namespace infiniop_test {

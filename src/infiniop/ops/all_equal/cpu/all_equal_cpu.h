@@ -5,5 +5,4 @@
 
 DESCRIPTOR(cpu)
 
-
 #endif // __ALL_EQUAL_CPU_H__
