@@ -585,22 +585,22 @@ def softplus_(lib):
     lib.infiniopDestroySoftplusDescriptor.argtypes = [infiniopOperatorDescriptor_t]
 
 @OpRegister.operator
-def equal_(lib):
-    lib.infiniopCreateEqualDescriptor.restype = c_int32
-    lib.infiniopCreateEqualDescriptor.argtypes = [
+def all_equal_(lib):
+    lib.infiniopCreateAllEqualDescriptor.restype = c_int32
+    lib.infiniopCreateAllEqualDescriptor.argtypes = [
         infiniopHandle_t,
         POINTER(infiniopOperatorDescriptor_t),
         infiniopTensorDescriptor_t,
         infiniopTensorDescriptor_t,
         infiniopTensorDescriptor_t,
     ]
-    lib.infiniopGetEqualWorkspaceSize.restype = c_int32
-    lib.infiniopGetEqualWorkspaceSize.argtypes = [
+    lib.infiniopGetAllEqualWorkspaceSize.restype = c_int32
+    lib.infiniopGetAllEqualWorkspaceSize.argtypes = [
         infiniopOperatorDescriptor_t,
         POINTER(c_size_t),
     ]    
-    lib.infiniopEqual.restype = c_int32
-    lib.infiniopEqual.argtypes = [
+    lib.infiniopAllEqual.restype = c_int32
+    lib.infiniopAllEqual.argtypes = [
         infiniopOperatorDescriptor_t,
         c_void_p,
         c_size_t,
@@ -609,6 +609,6 @@ def equal_(lib):
         c_void_p,
         c_void_p,
     ]
-    lib.infiniopDestroyEqualDescriptor.restype = c_int32
-    lib.infiniopDestroyEqualDescriptor.argtypes = [infiniopOperatorDescriptor_t]
+    lib.infiniopDestroyAllEqualDescriptor.restype = c_int32
+    lib.infiniopDestroyAllEqualDescriptor.argtypes = [infiniopOperatorDescriptor_t]
 

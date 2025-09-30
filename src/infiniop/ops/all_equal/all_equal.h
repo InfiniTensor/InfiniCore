@@ -1,5 +1,5 @@
-#ifndef __EQUAL_H__
-#define __EQUAL_H__
+#ifndef __ALL_EQUAL_H__
+#define __ALL_EQUAL_H__
 
 #include "../../../utils.h"
 #include "../../operator.h"
@@ -7,15 +7,15 @@
 #include "info.h"
 
 #define DESCRIPTOR(NAMESPACE)                                         \
-    namespace op::equal::NAMESPACE {                                  \
+    namespace op::all_equal::NAMESPACE {                                  \
     class Descriptor final : public InfiniopDescriptor {              \
         struct Opaque;                                                \
         Opaque *_opaque;                                              \
-        EqualInfo _info;                                              \
+        op::all_equal::AllEqualInfo _info;                                              \
         size_t _workspace_size;                                       \
         Descriptor(                                                   \
             infiniDtype_t dtype,                                      \
-            EqualInfo info,                                           \
+            op::all_equal::AllEqualInfo info,                                           \
             size_t workspace_size_,                                   \
             Opaque *opaque,                                           \
             infiniDevice_t device_type,                               \

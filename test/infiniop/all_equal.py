@@ -153,7 +153,7 @@ def test(
 
     descriptor = infiniopOperatorDescriptor_t()
     check_error(
-        LIBINFINIOP.infiniopCreateEqualDescriptor(
+        LIBINFINIOP.infiniopCreateAllEqualDescriptor(
             handle,
             ctypes.byref(descriptor),
             c.descriptor,
@@ -168,7 +168,7 @@ def test(
 
     workspace_size = c_uint64(0)
     check_error(
-        LIBINFINIOP.infiniopGetEqualWorkspaceSize(
+        LIBINFINIOP.infiniopGetAllEqualWorkspaceSize(
             descriptor, ctypes.byref(workspace_size)
         )
     )
@@ -176,7 +176,7 @@ def test(
 
     def lib_equal():
         check_error(
-            LIBINFINIOP.infiniopEqual(
+            LIBINFINIOP.infiniopAllEqual(
                 descriptor,
                 workspace.data(),
                 workspace.size(),
@@ -202,7 +202,7 @@ def test(
         ), device, NUM_PRERUN, NUM_ITERATIONS)
         profile_operation("    lib", lambda: lib_equal(), device, NUM_PRERUN, NUM_ITERATIONS)
         # fmt: on
-    check_error(LIBINFINIOP.infiniopDestroyEqualDescriptor(descriptor))
+    check_error(LIBINFINIOP.infiniopDestroyAllEqualDescriptor(descriptor))
 
 
 if __name__ == "__main__":
@@ -217,4 +217,4 @@ if __name__ == "__main__":
     for device in get_test_devices(args):
         test_operator(device, test, _TEST_CASES, _TENSOR_DTYPES)
 
-    print("\033[92mTest my equal passed!\033[0m")
+    print("\033[92mTest my all_equal passed!\033[0m")

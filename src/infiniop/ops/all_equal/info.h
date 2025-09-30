@@ -5,11 +5,11 @@
 #include "../../operator.h"
 #include "../../tensor.h"
 
-namespace op::equal {
+namespace op::all_equal {
 
-class EqualInfo {
+class AllEqualInfo {
 private:
-    EqualInfo() = default;
+    AllEqualInfo() = default;
 
 public:
 //  ---------------------------- start: define member variables of Info ----------------------------
@@ -21,7 +21,7 @@ public:
 
 //  ----------------------------- end: define member variables of Info -----------------------------
 
-    static utils::Result<EqualInfo> createEqualInfo(
+    static utils::Result<AllEqualInfo> createAllEqualInfo(
         infiniopTensorDescriptor_t c_desc,
         infiniopTensorDescriptor_t a_desc,
         infiniopTensorDescriptor_t b_desc
@@ -30,7 +30,7 @@ public:
         CHECK_OR_RETURN(c_desc->ndim() == 1 && c_desc->dim(0) == 1, INFINI_STATUS_BAD_TENSOR_SHAPE);
         CHECK_SAME_SHAPE(a_desc->shape(), b_desc->shape());
 //  -------------------------- end: check tensor shape and input validity --------------------------
-        return utils::Result<EqualInfo>(EqualInfo{
+        return utils::Result<AllEqualInfo>(AllEqualInfo{
 //  ------------------------------ start: create an instance of Info -------------------------------
             a_desc->ndim(),            
             a_desc->dtype(),

@@ -3,8 +3,9 @@
 #include <infinirt.h>
 #include <iomanip>
 #include <iostream>
+#include "../../../include/infiniop/ops/all_equal.h"
 
-namespace infiniop_test::equal {
+namespace infiniop_test::all_equal {
 struct Test::Attributes {
     std::shared_ptr<Tensor> a;
     std::shared_ptr<Tensor> b;
@@ -35,22 +36,22 @@ std::shared_ptr<Test> Test::build(
 
 std::shared_ptr<infiniop_test::Result> Test::run(
     infiniopHandle_t handle, infiniDevice_t device, int device_id, size_t warm_ups, size_t iterations) {
-    infiniopEqualDescriptor_t op_desc;
+    infiniopAllEqualDescriptor_t op_desc;
     auto a = _attributes->a->to(device, device_id);
     auto b = _attributes->b->to(device, device_id);
     auto c = _attributes->c->to(device, device_id);
-    CHECK_OR(infiniopCreateEqualDescriptor(handle, &op_desc,
+    CHECK_OR(infiniopCreateAllEqualDescriptor(handle, &op_desc,
                                          c->desc(),
                                          a->desc(),
                                          b->desc()),
              return TEST_FAILED(OP_CREATION_FAILED, "Failed to create op descriptor."));
     size_t workspace_size;
-    CHECK_OR(infiniopGetEqualWorkspaceSize(op_desc, &workspace_size),
+    CHECK_OR(infiniopGetAllEqualWorkspaceSize(op_desc, &workspace_size),
              return TEST_FAILED(OP_CREATION_FAILED, "Failed to get workspace size."));
     void *workspace;
     CHECK_OR(infinirtMalloc(&workspace, workspace_size),
              return TEST_FAILED(OP_CREATION_FAILED, "Failed to allocate workspace."));
-    CHECK_OR(infiniopEqual(op_desc, workspace, workspace_size,
+    CHECK_OR(infiniopAllEqual(op_desc, workspace, workspace_size,
                          c->data(),
                          a->data(),
                          b->data(),
@@ -67,7 +68,7 @@ std::shared_ptr<infiniop_test::Result> Test::run(
 
     elapsed_time = benchmark(
         [=]() {
-            infiniopEqual(
+            infiniopAllEqual(
                 op_desc, workspace, workspace_size,
                 c->data(),
                 a->data(),
@@ -106,4 +107,4 @@ Test::~Test() {
     delete _attributes;
 }
 
-} // namespace infiniop_test::equal
+} // namespace infiniop_test::all_equal

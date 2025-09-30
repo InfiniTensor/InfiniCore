@@ -1,9 +1,9 @@
-#include "equal_cpu.h"
+#include "all_equal_cpu.h"
 #include "../../../devices/cpu/common_cpu.h"
 #include "../../../reduce/cpu/reduce.h"
 #include "../info.h"
 
-namespace op::equal::cpu {
+namespace op::all_equal::cpu {
 
 Descriptor::~Descriptor() = default;
 
@@ -23,13 +23,13 @@ infiniStatus_t Descriptor::create(
     size_t WorkSpaceSize = 0;
 //  ---------------------- end: check data type and calculate workspace size -----------------------
 
-    auto result = EqualInfo::createEqualInfo(
+    auto result = AllEqualInfo::createAllEqualInfo(
         c_desc,
         a_desc,
         b_desc
     );
     CHECK_RESULT(result);
-    const EqualInfo &info = result.take();
+    const AllEqualInfo &info = result.take();
     
     *desc_ptr = new Descriptor(
         dtype, std::move(info), WorkSpaceSize,
