@@ -139,6 +139,8 @@ class TestTensor(CTensor):
 
 
 def to_torch_dtype(dt: InfiniDtype, compatability_mode=False):
+    if dt == InfiniDtype.BOOL: # support torch.bool input dtype
+        return torch.bool       
     if dt == InfiniDtype.I8:
         return torch.int8
     elif dt == InfiniDtype.I16:
@@ -269,7 +271,7 @@ def rearrange_tensor(tensor, new_strides):
     new_positions += offset
 
     # Copy the original data to the new tensor
-    new_tensor.view(-1).index_add_(0, new_positions, tensor.view(-1))
+    new_tensor.view(-1).index_add_(0, new_positions, tensor.reshape(-1))
     new_tensor.set_(new_tensor.untyped_storage(), offset, shape, tuple(new_strides))
 
     return new_tensor
