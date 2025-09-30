@@ -1,4 +1,5 @@
 add_rules("mode.debug", "mode.release")
+add_requires("boost", {configs = {stacktrace = true}})
 add_requires("pybind11")
 
 -- Define color codes
@@ -9,6 +10,7 @@ local NC = '\27[0m'  -- No Color
 set_encodings("utf-8")
 
 add_includedirs("include")
+add_includedirs("third_party/spdlog/include")
 
 if is_mode("debug") then
     add_defines("DEBUG_MODE")
@@ -317,16 +319,39 @@ target("infinicore_c_api")
     after_build(function (target) print(YELLOW .. "[Congratulations!] Now you can install the libraries with \"xmake install\"" .. NC) end)
 target_end()
 
-target("infinicore")
+target("_infinicore")
+    add_packages("boost")
+    if is_mode("debug") then
+        add_defines("BOOST_STACKTRACE_USE_BACKTRACE")
+        add_links("backtrace")
+    else
+        add_defines("BOOST_STACKTRACE_USE_NOOP")
+    end
+
+    set_default(false)
     add_rules("python.library", {soabi = true})
     add_packages("pybind11")
 
     set_kind("shared")
-    add_deps("infinicore_c_api")
+    local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
+    add_includedirs(INFINI_ROOT.."/include", { public = true })
+
+    add_linkdirs(INFINI_ROOT.."/lib")
+    add_links("infiniop", "infinirt", "infiniccl")
 
     add_files("src/infinicore/*.cc")
+    add_files("src/infinicore/context/*.cc")
+    add_files("src/infinicore/context/*/*.cc")
+    add_files("src/infinicore/tensor/*.cc")
+    add_files("src/infinicore/op/*/*.cc")
+    add_files("src/infinicore/pybind11/**.cc")
 
     set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
+target_end()
+
+target("infinicore")
+    set_kind("phony")
+    add_deps("_infinicore")
 target_end()
 
 -- Tests
