@@ -14,6 +14,7 @@ inline void bind(py::module &m) {
         .def_property_readonly("shape", [](const Tensor &tensor) { return tensor->shape(); })
         .def_property_readonly("strides", [](const Tensor &tensor) { return tensor->device(); })
         .def_property_readonly("ndim", [](const Tensor &tensor) { return tensor->ndim(); })
+        .def_property_readonly("dtype", [](const Tensor &tensor) { return tensor->dtype(); })
 
         .def("data_ptr", [](const Tensor &tensor) { return tensor->data(); })
         .def("size", [](const Tensor &tensor, std::size_t dim) { return tensor->size(dim); })
