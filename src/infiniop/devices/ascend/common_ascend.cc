@@ -64,6 +64,17 @@ aclnnTensorDescriptor::aclnnTensorDescriptor(aclDataType dtype, const std::vecto
                                    data);
 }
 
+static std::vector<int64_t> computeStrides(const std::vector<int64_t> &shape) {
+    std::vector<int64_t> strides(shape.size(), 1);
+    for (int64_t i = shape.size() - 2; i >= 0; i--) {
+        strides[i] = shape[i + 1] * strides[i + 1];
+    }
+    return strides;
+}
+
+aclnnTensorDescriptor::aclnnTensorDescriptor(aclDataType dtype, const std::vector<int64_t> &shape, void *data)
+    : aclnnTensorDescriptor(dtype, shape, computeStrides(shape), data) {}
+
 aclnnTensorDescriptor::~aclnnTensorDescriptor() {
     if (this->tensor) {
         aclDestroyTensor(this->tensor);
@@ -72,7 +83,9 @@ aclnnTensorDescriptor::~aclnnTensorDescriptor() {
 }
 
 aclDataType toAclDataType(infiniDtype_t dt) {
-    if (dt == INFINI_DTYPE_I8) {
+    if (dt == INFINI_DTYPE_BOOL) {
+        return aclDataType::ACL_BOOL;
+    } else if (dt == INFINI_DTYPE_I8) {
         return aclDataType::ACL_INT8;
     } else if (dt == INFINI_DTYPE_I16) {
         return aclDataType::ACL_INT16;

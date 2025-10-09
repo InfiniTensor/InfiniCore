@@ -9,6 +9,7 @@
 #include "infiniop/ops/clip.h"
 #include "infiniop/ops/conv.h"
 #include "infiniop/ops/expand.h"
+#include "infiniop/ops/flash_attention.h"
 #include "infiniop/ops/gemm.h"
 #include "infiniop/ops/global_avg_pool.h"
 #include "infiniop/ops/max_pool.h"

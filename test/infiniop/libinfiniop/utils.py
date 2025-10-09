@@ -21,6 +21,7 @@ def to_tensor(tensor, lib, force_unsigned=False):
     strides = (ctypes.c_int64 * ndim)(*(tensor.stride()))
     # fmt: off
     dt = (
+        InfiniDtype.BOOL if tensor.dtype == torch.bool else
         InfiniDtype.I8 if tensor.dtype == torch.int8 else
         InfiniDtype.I16 if tensor.dtype == torch.int16 else
         InfiniDtype.I32 if tensor.dtype == torch.int32 else
