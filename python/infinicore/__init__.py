@@ -24,7 +24,14 @@ from infinicore.dtype import (
     uint8,
 )
 from infinicore.ops.matmul import matmul
-from infinicore.tensor import empty, from_blob, ones, zeros
+from infinicore.tensor import (
+    empty,
+    strided_empty,
+    from_blob,
+    strided_from_blob,
+    ones,
+    zeros,
+)
 
 __all__ = [
     "device",
@@ -52,7 +59,9 @@ __all__ = [
     "uint8",
     "matmul",
     "empty",
+    "strided_empty",
     "from_blob",
+    "strided_from_blob",
     "ones",
     "zeros",
 ]

@@ -47,6 +47,12 @@ public:
                         const Device &device,
                         bool pin_memory = false);
 
+    static Tensor strided_empty(const Shape &shape,
+                                const Strides &strides,
+                                const DataType &dtype,
+                                const Device &device,
+                                bool pin_memory = false);
+
     static Tensor zeros(const Shape &shape,
                         const DataType &dtype,
                         const Device &device,
@@ -61,6 +67,12 @@ public:
                             const Shape &shape,
                             const DataType &dtype,
                             const Device &device);
+
+    static Tensor strided_from_blob(void *raw_ptr,
+                                    const Shape &shape,
+                                    const Strides &strides,
+                                    const DataType &dtype,
+                                    const Device &device);
 
     Tensor(const Tensor &) = default;
     Tensor(Tensor &&) = default;
@@ -209,6 +221,13 @@ protected:
         const Device &device,
         bool pin_memory = false);
 
+    static std::shared_ptr<TensorImpl> strided_empty(
+        const Shape &shape,
+        const Strides &strides,
+        const DataType &dtype,
+        const Device &device,
+        bool pin_memory = false);
+
     static std::shared_ptr<TensorImpl> zeros(
         const Shape &shape,
         const DataType &dtype,
@@ -224,6 +243,13 @@ protected:
     static std::shared_ptr<TensorImpl> from_blob(
         void *raw_ptr,
         const Shape &shape,
+        const DataType &dtype,
+        const Device &device);
+
+    static std::shared_ptr<TensorImpl> strided_from_blob(
+        void *raw_ptr,
+        const Shape &shape,
+        const Strides &strides,
         const DataType &dtype,
         const Device &device);
 

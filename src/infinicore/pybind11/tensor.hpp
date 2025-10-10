@@ -38,6 +38,12 @@ inline void bind(py::module &m) {
           py::arg("dtype"),
           py::arg("device"),
           py::arg("pin_memory") = false);
+    m.def("strided_empty", &Tensor::strided_empty,
+          py::arg("shape"),
+          py::arg("strides"),
+          py::arg("dtype"),
+          py::arg("device"),
+          py::arg("pin_memory") = false);
     m.def("zeros", &Tensor::zeros,
           py::arg("shape"),
           py::arg("dtype"),
@@ -49,7 +55,17 @@ inline void bind(py::module &m) {
           py::arg("device"),
           py::arg("pin_memory") = false);
 
-    m.def("from_blob", [](uintptr_t raw_ptr, Shape &shape, const DataType &dtype, const Device &device) { return Tensor{infinicore::Tensor::from_blob(reinterpret_cast<void *>(raw_ptr), shape, dtype, device)}; }, pybind11::arg("raw_ptr"), pybind11::arg("shape"), pybind11::arg("dtype"), pybind11::arg("device"));
+    m.def(
+        "from_blob", [](uintptr_t raw_ptr, Shape &shape, const DataType &dtype, const Device &device) {
+            return Tensor{infinicore::Tensor::from_blob(reinterpret_cast<void *>(raw_ptr), shape, dtype, device)};
+        },
+        pybind11::arg("raw_ptr"), pybind11::arg("shape"), pybind11::arg("dtype"), pybind11::arg("device"));
+
+    m.def(
+        "strided_from_blob", [](uintptr_t raw_ptr, Shape &shape, Strides &strides, const DataType &dtype, const Device &device) {
+            return Tensor{infinicore::Tensor::strided_from_blob(reinterpret_cast<void *>(raw_ptr), shape, strides, dtype, device)};
+        },
+        pybind11::arg("raw_ptr"), pybind11::arg("shape"), pybind11::arg("strides"), pybind11::arg("dtype"), pybind11::arg("device"));
 }
 
 } // namespace infinicore::tensor

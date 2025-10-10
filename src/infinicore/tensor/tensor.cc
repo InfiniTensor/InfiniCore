@@ -30,6 +30,14 @@ Tensor Tensor::empty(const Shape &shape,
     return Tensor{TensorImpl::empty(shape, dtype, device, pin_memory)};
 }
 
+Tensor Tensor::strided_empty(const Shape &shape,
+                             const Strides &strides,
+                             const DataType &dtype,
+                             const Device &device,
+                             bool pin_memory) {
+    return Tensor{TensorImpl::strided_empty(shape, strides, dtype, device, pin_memory)};
+}
+
 Tensor Tensor::zeros(const Shape &shape,
                      const DataType &dtype,
                      const Device &device,
@@ -46,6 +54,10 @@ Tensor Tensor::ones(const Shape &shape,
 
 Tensor Tensor::from_blob(void *raw_ptr, const Shape &shape, const DataType &dtype, const Device &device) {
     return Tensor{TensorImpl::from_blob(raw_ptr, shape, dtype, device)};
+}
+
+Tensor Tensor::strided_from_blob(void *raw_ptr, const Shape &shape, const Strides &strides, const DataType &dtype, const Device &device) {
+    return Tensor{TensorImpl::strided_from_blob(raw_ptr, shape, strides, dtype, device)};
 }
 
 TensorMetaData::TensorMetaData(const Shape &_shape, const Strides &_strides, const DataType &_dtype)
@@ -166,6 +178,47 @@ std::shared_ptr<TensorImpl> TensorImpl::empty(const Shape &shape,
     return t;
 }
 
+std::shared_ptr<TensorImpl> TensorImpl::strided_empty(
+    const Shape &shape,
+    const Strides &strides,
+    const DataType &dtype,
+    const Device &device,
+    bool pin_memory) {
+
+    auto impl = std::shared_ptr<TensorImpl>(new TensorImpl(shape, strides, dtype));
+    impl->data_.offset = 0;
+
+    context::setDevice(device);
+
+    size_t max_offset = 0;
+
+    for (size_t i = 0; i < shape.size(); ++i) {
+        if (shape[i] > 0) {
+            max_offset += (shape[i] - 1) * strides[i];
+        }
+    }
+
+    size_t required_elements = max_offset + 1;
+    size_t required_bytes = required_elements * dsize(dtype);
+
+    if (device == Device::Type::CPU) {
+        if (pin_memory) {
+            if (context::getDevice() == Device::Type::CPU) {
+                spdlog::warn("Tensor memory is not pinned by any device with CPU runtime.");
+                impl->data_.memory = context::allocateHostMemory(required_bytes);
+            } else {
+                impl->data_.memory = context::allocatePinnedHostMemory(required_bytes);
+            }
+        } else {
+            impl->data_.memory = context::allocateHostMemory(required_bytes);
+        }
+    } else {
+        impl->data_.memory = context::allocateMemory(required_bytes);
+    }
+
+    return impl;
+}
+
 std::shared_ptr<TensorImpl> TensorImpl::zeros(const Shape &shape,
                                               const DataType &dtype,
                                               const Device &device,
@@ -187,6 +240,18 @@ std::shared_ptr<TensorImpl> TensorImpl::from_blob(
     const DataType &dtype,
     const Device &device) {
     auto t = std::shared_ptr<TensorImpl>(new TensorImpl(shape, dtype));
+    t->data_.offset = 0;
+    t->data_.memory = std::make_shared<Memory>((std::byte *)raw_ptr, t->numel() * dsize(dtype), device, nullptr);
+    return t;
+}
+
+std::shared_ptr<TensorImpl> TensorImpl::strided_from_blob(
+    void *raw_ptr,
+    const Shape &shape,
+    const Strides &strides,
+    const DataType &dtype,
+    const Device &device) {
+    auto t = std::shared_ptr<TensorImpl>(new TensorImpl(shape, strides, dtype));
     t->data_.offset = 0;
     t->data_.memory = std::make_shared<Memory>((std::byte *)raw_ptr, t->numel() * dsize(dtype), device, nullptr);
     return t;
