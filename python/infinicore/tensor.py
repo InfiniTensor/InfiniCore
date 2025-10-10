@@ -23,7 +23,7 @@ class Tensor:
 
     @property
     def ndim(self):
-        return self._underlying.device
+        return self._underlying.ndim
 
     def data_ptr(self):
         return self._underlying.data_ptr
