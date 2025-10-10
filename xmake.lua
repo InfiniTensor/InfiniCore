@@ -332,6 +332,7 @@ target("_infinicore")
     set_default(false)
     add_rules("python.library", {soabi = true})
     add_packages("pybind11")
+    set_languages("cxx17")
 
     set_kind("shared")
     local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
