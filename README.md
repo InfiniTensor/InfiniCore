@@ -30,12 +30,23 @@ API 定义以及使用方式详见 [`InfiniCore文档`](https://github.com/Infin
 
 ### 一键安装
 
-在 `script/` 目录中提供了 `install.py` 安装脚本。使用方式如下：
+在 `script/` 目录中提供了 `install` 安装脚本。使用方式如下：
 
+linux 系统：在`terminal`中执行
 ```shell
 cd InfiniCore
-
+source scripts/install.sh [XMAKE_CONFIG_FLAGS]
+# 例如
+# source scripts/install.sh    配置 CPU（默认配置）
+# source scripts/install.sh --nv-gpu=true --cuda=$CUDA_HOME   配置 英伟达 加速卡
+```
+windows 系统：在`CMD`中执行
+```shell
+cd InfiniCore
 python scripts/install.py [XMAKE_CONFIG_FLAGS]
+# 例如
+# python scripts/install.py    配置 CPU（默认配置）
+# python scripts/install.py --nv-gpu=true --cuda=\""%CUDA_HOME%"\"   配置 英伟达 加速卡
 ```
 
 参数 `XMAKE_CONFIG_FLAGS` 是 xmake 构建配置，可配置下列可选项：
