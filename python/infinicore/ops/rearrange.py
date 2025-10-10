@@ -1,6 +1,6 @@
-import _infinicore
-
 from infinicore.tensor import Tensor
+
+from .. import _infinicore
 
 
 def rearrange(input, other, *, out=None):

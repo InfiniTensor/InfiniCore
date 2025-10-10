@@ -1,6 +1,4 @@
-import ctypes
-
-import _infinicore
+from . import _infinicore
 
 
 class Tensor:

@@ -1,4 +1,4 @@
-import _infinicore
+from . import _infinicore
 
 
 class dtype:

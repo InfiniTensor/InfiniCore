@@ -1,31 +1,26 @@
+import glob
 import os
 import shutil
 import subprocess
 from pathlib import Path
 
 from setuptools import setup
-from setuptools.command.build_py import build_py
-
-INSTALLATION_DIR = os.getenv("INFINI_ROOT", str(Path.home() / ".infini"))
-
-LIB_DIR = os.path.join(INSTALLATION_DIR, "lib")
-
-PYTHON_PACKAGE_DIR = os.path.join("python", "infinicore")
-
-LIB_PACKAGE_DIR = os.path.join(LIB_DIR, "infinicore")
+from setuptools.command.build import build
 
 
-class BuildPy(build_py):
+class Build(build):
     def run(self):
         subprocess.run(["xmake", "build"])
         subprocess.run(["xmake", "install"])
-        subprocess.run(["xmake", "build", "-y", "infinicore"])
-        subprocess.run(["xmake", "install", "infinicore"])
+        subprocess.run(["xmake", "build", "-y", "_infinicore"])
+        subprocess.run(["xmake", "install", "_infinicore"])
 
-        if os.path.exists(LIB_PACKAGE_DIR):
-            shutil.rmtree(LIB_PACKAGE_DIR)
+        installation_dir = os.getenv("INFINI_ROOT", str(Path.home() / ".infini"))
+        lib_dir = os.path.join(installation_dir, "lib")
+        lib_path = glob.glob(os.path.join(lib_dir, "_infinicore.*"))[0]
+        package_dir = os.path.join(self.build_lib, "infinicore")
+        os.makedirs(package_dir, exist_ok=True)
+        shutil.move(lib_path, package_dir)
 
-        shutil.copytree(PYTHON_PACKAGE_DIR, LIB_PACKAGE_DIR)
 
-
-setup(cmdclass={"build_py": BuildPy})
+setup(package_dir={"": "python"}, cmdclass={"build": Build})

@@ -351,10 +351,5 @@ target("_infinicore")
     set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
 target_end()
 
-target("infinicore")
-    set_kind("phony")
-    add_deps("_infinicore")
-target_end()
-
 -- Tests
 includes("xmake/test.lua")
