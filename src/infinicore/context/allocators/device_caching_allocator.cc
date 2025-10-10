@@ -2,7 +2,7 @@
 
 #include <infinirt.h>
 
-#include "infinicore/common/utils.hpp"
+#include "../../utils.hpp"
 
 namespace infinicore {
 DeviceCachingAllocator::DeviceCachingAllocator(Device device) : MemoryAllocator(), device_(device) {}

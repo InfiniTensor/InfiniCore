@@ -1,7 +1,8 @@
-#include "infinicore/common/utils.hpp"
+#include "infinicore/common/hash.hpp"
 #include "infinicore/op/common/cache.hpp"
 #include "infinicore/op/matmul.hpp"
 #include <infiniop.h>
+#include "../../utils.hpp"
 
 namespace infinicore::op::matmul_impl::infiniop {
 

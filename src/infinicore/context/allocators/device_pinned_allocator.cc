@@ -2,7 +2,7 @@
 
 #include <infinirt.h>
 
-#include "infinicore/common/utils.hpp"
+#include "../../utils.hpp"
 
 namespace infinicore {
 DevicePinnedHostAllocator::DevicePinnedHostAllocator(Device device) : MemoryAllocator(), owner_(device) {}

@@ -1,6 +1,6 @@
 #include "runtime.hpp"
 
-#include "infinicore/common/utils.hpp"
+#include "../../utils.hpp"
 
 #include "../allocators/device_caching_allocator.hpp"
 #include "../allocators/device_pinned_allocator.hpp"
@@ -82,6 +82,10 @@ void Runtime::memcpyD2H(void *dst, const void *src, size_t size) {
 
 void Runtime::memcpyD2D(void *dst, const void *src, size_t size) {
     INFINICORE_CHECK_ERROR(infinirtMemcpyAsync(dst, src, size, INFINIRT_MEMCPY_D2D, stream_));
+}
+
+std::string Runtime::toString() const {
+    return fmt::format("Runtime({})", device_.toString());
 }
 
 } // namespace infinicore

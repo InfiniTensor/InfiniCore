@@ -1,5 +1,5 @@
 #include "infinicore/tensor.hpp"
-#include "infinicore/common/utils.hpp"
+#include "../utils.hpp"
 #include "infinicore/context/context.hpp"
 #include "infinicore/dtype.hpp"
 

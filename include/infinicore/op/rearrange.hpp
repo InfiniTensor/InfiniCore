@@ -2,7 +2,6 @@
 
 #include "../device.hpp"
 #include "common/op.hpp"
-#include "infinicore/common/utils.hpp"
 
 namespace infinicore::op {
 class Rearrange {

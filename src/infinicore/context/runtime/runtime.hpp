@@ -38,6 +38,8 @@ public:
     void memcpyD2H(void *dst, const void *src, size_t size);
     void memcpyD2D(void *dst, const void *src, size_t size);
 
+    std::string toString() const;
+
     friend class ContextImpl;
 };
 } // namespace infinicore
