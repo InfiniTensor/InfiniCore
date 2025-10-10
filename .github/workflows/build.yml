@@ -19,6 +19,9 @@ jobs:
 
     - name: checkout code
       uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        fetch-depth: 0
 
     - name: Check Format
       run: |
