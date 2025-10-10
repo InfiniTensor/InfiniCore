@@ -12,7 +12,7 @@ namespace infinicore::tensor {
 inline void bind(py::module &m) {
     py::class_<Tensor>(m, "Tensor")
         .def_property_readonly("shape", [](const Tensor &tensor) { return tensor->shape(); })
-        .def_property_readonly("strides", [](const Tensor &tensor) { return tensor->device(); })
+        .def_property_readonly("strides", [](const Tensor &tensor) { return tensor->strides(); })
         .def_property_readonly("ndim", [](const Tensor &tensor) { return tensor->ndim(); })
         .def_property_readonly("dtype", [](const Tensor &tensor) { return tensor->dtype(); })
 
