@@ -24,6 +24,7 @@ from infinicore.dtype import (
     uint8,
 )
 from infinicore.ops.matmul import matmul
+from infinicore.ops.rearrange import rearrange
 from infinicore.tensor import (
     empty,
     strided_empty,
@@ -58,6 +59,7 @@ __all__ = [
     "short",
     "uint8",
     "matmul",
+    "rearrange",
     "empty",
     "strided_empty",
     "from_blob",
