@@ -27,15 +27,17 @@ from infinicore.ops.matmul import matmul
 from infinicore.ops.rearrange import rearrange
 from infinicore.tensor import (
     empty,
-    strided_empty,
     from_blob,
-    strided_from_blob,
     ones,
+    strided_empty,
+    strided_from_blob,
     zeros,
 )
 
 __all__ = [
+    # Classes.
     "device",
+    # Data Types.
     "bfloat16",
     "bool",
     "cdouble",
@@ -58,12 +60,13 @@ __all__ = [
     "long",
     "short",
     "uint8",
+    # Operations.
     "matmul",
     "rearrange",
     "empty",
-    "strided_empty",
     "from_blob",
-    "strided_from_blob",
     "ones",
+    "strided_empty",
+    "strided_from_blob",
     "zeros",
 ]
