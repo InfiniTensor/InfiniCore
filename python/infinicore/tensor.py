@@ -57,7 +57,7 @@ class Tensor:
         return self._underlying.is_is_pinned()
 
     def copy_(self, src):
-        return Tensor(self._underlying.copy_(src._underlying))
+        self._underlying.copy_(src._underlying)
 
     def to(self, *args, **kwargs):
         return Tensor(
@@ -65,7 +65,7 @@ class Tensor:
         )
 
     def as_strided(self, size, stride):
-        Tensor(self._underlying.as_strided(size, stride))
+        return Tensor(self._underlying.as_strided(size, stride))
 
     def contiguous(self):
         return Tensor(self._underlying.contiguous())
