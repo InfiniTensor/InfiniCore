@@ -66,6 +66,23 @@ class device:
 
                 index -= 1
 
+    @staticmethod
+    def _from_infinicore_device(infinicore_device):
+        type = _TORCH_DEVICE_MAP[infinicore_device.type]
+
+        base_index = 0
+
+        for infinicore_type, torch_type in _TORCH_DEVICE_MAP.items():
+            if torch_type != type:
+                continue
+
+            if infinicore_type == infinicore_device.type:
+                break
+
+            base_index += _infinicore.get_device_count(infinicore_device)
+
+        return device(type, base_index + infinicore_device.index)
+
 
 _TORCH_DEVICE_MAP = {
     _infinicore.Device.Type.CPU: "cpu",
@@ -76,5 +93,5 @@ _TORCH_DEVICE_MAP = {
     _infinicore.Device.Type.MOORE: "musa",
     _infinicore.Device.Type.ILUVATAR: "cuda",
     _infinicore.Device.Type.KUNLUN: "cuda",
-    _infinicore.Device.Type.SUGON: "cuda",
+    _infinicore.Device.Type.HYGON: "cuda",
 }

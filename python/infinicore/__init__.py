@@ -9,6 +9,7 @@ from infinicore.dtype import (
     complex64,
     complex128,
     double,
+    dtype,
     float,
     float16,
     float32,
@@ -37,6 +38,7 @@ from infinicore.tensor import (
 __all__ = [
     # Classes.
     "device",
+    "dtype",
     # Data Types.
     "bfloat16",
     "bool",

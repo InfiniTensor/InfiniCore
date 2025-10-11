@@ -20,7 +20,7 @@ inline void bind(py::module &m) {
         .value("MOORE", Device::Type::MOORE)
         .value("ILUVATAR", Device::Type::ILUVATAR)
         .value("KUNLUN", Device::Type::KUNLUN)
-        .value("SUGON", Device::Type::SUGON)
+        .value("HYGON", Device::Type::HYGON)
         .value("COUNT", Device::Type::COUNT);
 
     device

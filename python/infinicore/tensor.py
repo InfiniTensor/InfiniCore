@@ -1,11 +1,20 @@
+import infinicore.device
+import infinicore.dtype
+
 from . import _infinicore
 
 
 class Tensor:
-    def __init__(self, tensor):
+    def __init__(self, underlying):
         """An internal method. Please do not use this directly."""
 
-        self._underlying = tensor
+        self._underlying = underlying
+
+        self._dtype = infinicore.dtype(self._underlying.dtype)
+
+        self._device = infinicore.device._from_infinicore_device(
+            self._underlying.device
+        )
 
     @property
     def shape(self):
@@ -13,11 +22,11 @@ class Tensor:
 
     @property
     def dtype(self):
-        return self._underlying.dtype
+        return self._dtype
 
     @property
     def device(self):
-        return self._underlying.device
+        return self._device
 
     @property
     def ndim(self):

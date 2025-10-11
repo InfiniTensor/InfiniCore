@@ -37,8 +37,8 @@ std::string Device::toString(const Type &type) {
         return "ILUVATAR";
     case Type::KUNLUN:
         return "KUNLUN";
-    case Type::SUGON:
-        return "SUGON";
+    case Type::HYGON:
+        return "HYGON";
     }
 
     // TODO: Add error handling.
