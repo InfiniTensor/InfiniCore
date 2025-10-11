@@ -4,18 +4,6 @@ import infinicore
 from .datatypes import to_infinicore_dtype, to_torch_dtype
 
 
-def create_infinicore_tensor(torch_tensor, device_str):
-    """Create infinicore tensor from PyTorch tensor"""
-    infini_device = infinicore.device(device_str, 0)
-
-    return infinicore.from_blob(
-        torch_tensor.data_ptr(),
-        list(torch_tensor.shape),
-        dtype=to_infinicore_dtype(torch_tensor.dtype),
-        device=infini_device,
-    )
-
-
 def synchronize_device(torch_device):
     """Device synchronization"""
     if torch_device == "cuda":
@@ -149,42 +137,93 @@ def get_tolerance(tolerance_map, tensor_dtype, default_atol=0, default_rtol=1e-3
     return tolerance["atol"], tolerance["rtol"]
 
 
+def create_infinicore_tensor(torch_tensor, device_str):
+    """Create infinicore tensor from PyTorch tensor"""
+    infini_device = infinicore.device(device_str, 0)
+
+    return infinicore.from_blob(
+        torch_tensor.data_ptr(),
+        list(torch_tensor.shape),
+        dtype=to_infinicore_dtype(torch_tensor.dtype),
+        device=infini_device,
+    )
+
+
+def convert_infinicore_to_torch(infini_result, torch_reference):
+    """
+    Convert infinicore tensor to PyTorch tensor for comparison
+
+    Args:
+        infini_result: infinicore tensor result
+        torch_reference: PyTorch tensor reference (for shape and device)
+        dtype: infinicore data type
+        device_str: torch device string
+
+    Returns:
+        torch.Tensor: PyTorch tensor with infinicore data
+    """
+    torch_result_from_infini = torch.zeros(
+        torch_reference.shape,
+        dtype=to_torch_dtype(infini_result.dtype),
+        device=infini_result.device.type,
+    )
+    temp_tensor = create_infinicore_tensor(
+        torch_result_from_infini, infini_result.device.type
+    )
+    temp_tensor.copy_(infini_result)
+    return torch_result_from_infini
+
+
 def compare_results(
-    infini_result, torch_result, dtype, config, device_str, tolerance_map=None
+    infini_result, torch_result, atol=1e-5, rtol=1e-5, debug_mode=False
 ):
     """
-    Compare infinicore result with PyTorch reference result
+    Generic function to compare infinicore result with PyTorch reference result
 
     Args:
         infini_result: infinicore tensor result
         torch_result: PyTorch tensor reference result
-        dtype: infinicore data type
-        config: test config
-        device_str: torch device string
-        device: device enum
-        tolerance_map: optional tolerance map (defaults to config's tolerance_map)
+        atol: absolute tolerance
+        rtol: relative tolerance
+        debug_mode: whether to enable debug output
 
     Returns:
         bool: True if results match within tolerance
     """
     # Convert infinicore result to PyTorch tensor for comparison
-    torch_result_from_infini = torch.zeros(
-        torch_result.shape, dtype=to_torch_dtype(dtype), device=device_str
-    )
-    temp_tensor = create_infinicore_tensor(torch_result_from_infini, device_str)
-    temp_tensor.copy_(infini_result)
-
-    # Retrieve tolerance - use provided map or config's map
-    if tolerance_map is None:
-        tolerance_map = config.tolerance_map
-    atol, rtol = get_tolerance(tolerance_map, dtype)
+    torch_result_from_infini = convert_infinicore_to_torch(infini_result, torch_result)
 
     # Debug mode: detailed comparison
-    if config.debug:
+    if debug_mode:
         debug(torch_result_from_infini, torch_result, atol=atol, rtol=rtol)
 
     # Check if results match within tolerance
     return torch.allclose(torch_result_from_infini, torch_result, atol=atol, rtol=rtol)
+
+
+def create_test_comparator(config, dtype, tolerance_map=None):
+    """
+    Create a test-specific comparison function that handles test configuration
+
+    Args:
+        config: test configuration
+        dtype: infinicore data type
+        tolerance_map: optional tolerance map (defaults to config's tolerance_map)
+
+    Returns:
+        callable: function that takes (infini_result, torch_result) and returns bool
+    """
+    if tolerance_map is None:
+        tolerance_map = config.tolerance_map
+
+    atol, rtol = get_tolerance(tolerance_map, dtype)
+
+    def compare_test_results(infini_result, torch_result):
+        return compare_results(
+            infini_result, torch_result, atol=atol, rtol=rtol, debug_mode=config.debug
+        )
+
+    return compare_test_results
 
 
 def rearrange_tensor(tensor, new_strides):
