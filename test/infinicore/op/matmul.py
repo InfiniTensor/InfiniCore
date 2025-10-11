@@ -11,7 +11,7 @@ from framework import (
     TestRunner,
     TestCase,
     create_infinicore_tensor,
-    compare_results,
+    create_test_comparator,
     get_args,
     get_test_devices,
     profile_operation,
@@ -92,8 +92,11 @@ def test_matmul(device, test_case, dtype, config):
 
     infini_result = infini_matmul()
 
-    # Validate results using common method
-    is_valid = compare_results(infini_result, torch_result, dtype, config, device_str)
+    # Create test-specific comparator
+    compare_fn = create_test_comparator(config, dtype)
+
+    # Validate results using the test-specific comparator
+    is_valid = compare_fn(infini_result, torch_result)
     assert is_valid, "Matmul test failed"
 
     # Performance test
@@ -163,8 +166,11 @@ def test_matmul_inplace(device, test_case, dtype, config):
     # Execute in-place operation
     infini_matmul_inplace()
 
-    # Validate results using common method
-    is_valid = compare_results(infini_c, torch_preallocated, dtype, config, device_str)
+    # Create test-specific comparator
+    compare_fn = create_test_comparator(config, dtype)
+
+    # Validate results using the test-specific comparator
+    is_valid = compare_fn(infini_c, torch_preallocated)
     assert is_valid, "In-place matmul test failed"
 
     # Performance test

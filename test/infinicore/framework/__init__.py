@@ -2,10 +2,12 @@ from .base import TestConfig, TestRunner, TestCase
 from .utils import (
     create_infinicore_tensor,
     compare_results,
+    create_test_comparator,
     debug,
     get_tolerance,
     profile_operation,
     rearrange_tensor,
+    convert_infinicore_to_torch,
 )
 from .config import get_test_devices, get_args
 from .devices import InfiniDeviceEnum, InfiniDeviceNames, torch_device_map
@@ -17,6 +19,8 @@ __all__ = [
     "TestCase",
     "create_infinicore_tensor",
     "compare_results",
+    "create_test_comparator",
+    "convert_infinicore_to_torch",
     "debug",
     "get_tolerance",
     "profile_operation",
