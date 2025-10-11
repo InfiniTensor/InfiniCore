@@ -1,5 +1,5 @@
-#ifndef __topkrouter_INFO_H__
-#define __topkrouter_INFO_H__
+#ifndef __TOPKROUTER_INFO_H__
+#define __TOPKROUTER_INFO_H__
 
 #include "../../../utils.h"
 #include "../../tensor.h"
