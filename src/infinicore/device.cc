@@ -40,9 +40,6 @@ std::string Device::toString(const Type &type) {
     case Type::HYGON:
         return "HYGON";
     }
-
-    // TODO: Add error handling.
-    return "";
 }
 
 bool Device::operator==(const Device &other) const {
