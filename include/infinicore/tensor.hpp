@@ -121,6 +121,10 @@ public:
 
     std::string info() const;
 
+    void debug(const std::string &filename) const;
+
+    void debug() const;
+
     ///
     /// Data Transfer APIs
     ///

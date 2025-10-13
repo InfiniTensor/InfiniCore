@@ -17,7 +17,7 @@ inline void bind(py::module &m) {
         .def_property_readonly("dtype", [](const Tensor &tensor) { return tensor->dtype(); })
         .def_property_readonly("device", [](const Tensor &tensor) { return tensor->device(); })
 
-        .def("data_ptr", [](const Tensor &tensor) { return tensor->data(); })
+        .def("data_ptr", [](const Tensor &tensor) { return reinterpret_cast<uintptr_t>(tensor->data()); })
         .def("size", [](const Tensor &tensor, std::size_t dim) { return tensor->size(dim); })
         .def("stride", [](const Tensor &tensor, std::size_t dim) { return tensor->stride(dim); })
         .def("numel", [](const Tensor &tensor) { return tensor->numel(); })
@@ -25,6 +25,8 @@ inline void bind(py::module &m) {
         .def("is_contiguous", [](const Tensor &tensor) { return tensor->is_contiguous(); })
         .def("is_pinned", [](const Tensor &tensor) { return tensor->is_pinned(); })
         .def("info", [](const Tensor &tensor) { return tensor->info(); })
+        .def("debug", [](const Tensor &tensor) { return tensor->debug(); })
+        .def("debug", [](const Tensor &tensor, const std::string &filename) { return tensor->debug(filename); })
 
         .def("copy_", [](Tensor &tensor, const Tensor &other) { tensor->copy_from(other); })
         .def("to", [](const Tensor &tensor, const Device &device) { return tensor->to(device); })
