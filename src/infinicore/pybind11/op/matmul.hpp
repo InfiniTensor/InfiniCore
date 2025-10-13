@@ -23,4 +23,4 @@ inline void bind_matmul(py::module &m) {
           R"doc(In-place matrix multiplication.)doc");
 }
 
-} // namespace infinicore
+} // namespace infinicore::op

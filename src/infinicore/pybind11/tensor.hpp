@@ -16,7 +16,7 @@ inline void bind(py::module &m) {
         .def_property_readonly("ndim", [](const Tensor &tensor) { return tensor->ndim(); })
         .def_property_readonly("dtype", [](const Tensor &tensor) { return tensor->dtype(); })
 
-        .def("data_ptr", [](const Tensor &tensor) { return tensor->data(); })
+        .def("data_ptr", [](const Tensor &tensor) { return reinterpret_cast<uintptr_t>(tensor->data()); })
         .def("size", [](const Tensor &tensor, std::size_t dim) { return tensor->size(dim); })
         .def("stride", [](const Tensor &tensor, std::size_t dim) { return tensor->stride(dim); })
         .def("numel", [](const Tensor &tensor) { return tensor->numel(); })
@@ -24,6 +24,8 @@ inline void bind(py::module &m) {
         .def("is_contiguous", [](const Tensor &tensor) { return tensor->is_contiguous(); })
         .def("is_pinned", [](const Tensor &tensor) { return tensor->is_pinned(); })
         .def("info", [](const Tensor &tensor) { return tensor->info(); })
+        .def("debug", [](const Tensor &tensor) { return tensor->debug(); })
+        .def("debug", [](const Tensor &tensor, const std::string &filename) { return tensor->debug(filename); })
 
         .def("copy_", [](Tensor &tensor, const Tensor &other) { tensor->copy_from(other); })
         .def("to", [](const Tensor &tensor, const Device &device) { return tensor->to(device); })
@@ -49,7 +51,8 @@ inline void bind(py::module &m) {
           py::arg("device"),
           py::arg("pin_memory") = false);
 
-    m.def("from_blob", [](uintptr_t raw_ptr, Shape &shape, const DataType &dtype, const Device &device) { return Tensor{infinicore::Tensor::from_blob(reinterpret_cast<void *>(raw_ptr), shape, dtype, device)}; }, pybind11::arg("raw_ptr"), pybind11::arg("shape"), pybind11::arg("dtype"), pybind11::arg("device"));
+    m.def(
+        "from_blob", [](uintptr_t raw_ptr, Shape &shape, const DataType &dtype, const Device &device) { return Tensor{infinicore::Tensor::from_blob(reinterpret_cast<void *>(raw_ptr), shape, dtype, device)}; }, pybind11::arg("raw_ptr"), pybind11::arg("shape"), pybind11::arg("dtype"), pybind11::arg("device"));
 }
 
 } // namespace infinicore::tensor

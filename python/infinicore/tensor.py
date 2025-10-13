@@ -69,6 +69,17 @@ class Tensor:
     def view(self, shape):
         return Tensor(self._underlying.view(shape))
 
+    def debug(self, filename=None):
+        """Print tensor data or save to file for debugging
+        
+        Args:
+            filename: Optional filename to save raw binary data. If None, prints to stdout.
+        """
+        if filename is None:
+            self._underlying.debug()
+        else:
+            self._underlying.debug(filename)
+
 
 def empty(size, *, dtype=None, device=None, pin_memory=False):
     return Tensor(
