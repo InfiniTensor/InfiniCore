@@ -1,4 +1,8 @@
 from .base import TensorSpec, TestConfig, TestRunner, TestCase, BaseOperatorTest
+from .parameter_mapping import (
+    ParameterMapping,
+    create_test_cases,
+)
 from .utils import (
     create_infinicore_tensor,
     create_strided_infinicore_tensor,
@@ -21,6 +25,8 @@ __all__ = [
     "TestRunner",
     "TestCase",
     "BaseOperatorTest",
+    "ParameterMapping",
+    "create_test_cases",
     "create_infinicore_tensor",
     "create_strided_infinicore_tensor",
     "compare_results",
