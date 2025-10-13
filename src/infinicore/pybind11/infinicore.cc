@@ -4,7 +4,7 @@
 #include "context.hpp"
 #include "device.hpp"
 #include "dtype.hpp"
-#include "op.hpp"
+#include "ops.hpp"
 #include "tensor.hpp"
 
 namespace infinicore {
@@ -13,7 +13,7 @@ PYBIND11_MODULE(_infinicore, m) {
     context::bind(m);
     device::bind(m);
     dtype::bind(m);
-    op::bind(m);
+    ops::bind(m);
     tensor::bind(m);
 }
 

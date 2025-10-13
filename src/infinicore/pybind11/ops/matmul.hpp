@@ -2,11 +2,11 @@
 
 #include <pybind11/pybind11.h>
 
-#include "infinicore/op/matmul.hpp"
+#include "infinicore/ops/matmul.hpp"
 
 namespace py = pybind11;
 
-namespace infinicore::op {
+namespace infinicore::ops {
 
 inline void bind_matmul(py::module &m) {
     m.def("matmul",
@@ -23,4 +23,4 @@ inline void bind_matmul(py::module &m) {
           R"doc(In-place matrix multiplication.)doc");
 }
 
-} // namespace infinicore::op
+} // namespace infinicore::ops

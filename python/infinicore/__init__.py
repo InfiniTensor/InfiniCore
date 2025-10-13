@@ -25,6 +25,7 @@ from infinicore.dtype import (
     uint8,
 )
 from infinicore.ntops import use_ntops
+from infinicore.ops.add import add
 from infinicore.ops.matmul import matmul
 from infinicore.ops.rearrange import rearrange
 from infinicore.tensor import (
@@ -66,6 +67,7 @@ __all__ = [
     # `ntops` integration.
     "use_ntops",
     # Operations.
+    "add",
     "matmul",
     "rearrange",
     "empty",

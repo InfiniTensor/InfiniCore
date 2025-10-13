@@ -1,4 +1,4 @@
-#include "infinicore/op/ones.hpp"
+#include "infinicore/ops/ones.hpp"
 
 namespace infinicore::op {
 

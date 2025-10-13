@@ -1,7 +1,7 @@
 #include "../../utils.hpp"
 #include "infinicore/common/hash.hpp"
-#include "infinicore/op/common/cache.hpp"
-#include "infinicore/op/rearrange.hpp"
+#include "infinicore/ops/common/cache.hpp"
+#include "infinicore/ops/rearrange.hpp"
 #include <infiniop.h>
 
 namespace infinicore::op::rearrange_impl::infiniop {

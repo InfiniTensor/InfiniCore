@@ -1,5 +1,6 @@
 #pragma once
 
-#include "op/matmul.hpp"
-#include "op/ones.hpp"
-#include "op/rearrange.hpp"
+#include "ops/add.hpp"
+#include "ops/matmul.hpp"
+#include "ops/ones.hpp"
+#include "ops/rearrange.hpp"

@@ -1,4 +1,4 @@
-#include "infinicore/op/matmul.hpp"
+#include "infinicore/ops/matmul.hpp"
 
 namespace infinicore::op {
 
