@@ -24,6 +24,7 @@ from infinicore.dtype import (
     short,
     uint8,
 )
+from infinicore.ntops import use_ntops
 from infinicore.ops.matmul import matmul
 from infinicore.ops.rearrange import rearrange
 from infinicore.tensor import (
@@ -62,6 +63,8 @@ __all__ = [
     "long",
     "short",
     "uint8",
+    # `ntops` integration.
+    "use_ntops",
     # Operations.
     "matmul",
     "rearrange",
