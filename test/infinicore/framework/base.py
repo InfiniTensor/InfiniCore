@@ -1,18 +1,190 @@
 import torch
 import infinicore
-from .devices import InfiniDeviceNames
-from .utils import synchronize_device
+
+from abc import ABC, abstractmethod
+from typing import List, Dict, Any, Tuple, Union
+
+from .datatypes import to_torch_dtype, to_infinicore_dtype
+from .devices import InfiniDeviceNames, torch_device_map
+from .utils import (
+    create_infinicore_tensor,
+    create_test_comparator,
+    profile_operation,
+    synchronize_device,
+)
+
+
+class TensorSpec:
+    """Enhanced tensor specification supporting various input types"""
+
+    def __init__(
+        self,
+        shape=None,
+        dtype=None,
+        strides=None,
+        value=None,
+        is_scalar=False,
+        is_contiguous=True,
+    ):
+        self.shape = shape
+        self.dtype = dtype
+        self.strides = strides
+        self.value = value  # For scalar values
+        self.is_scalar = is_scalar
+        self.is_contiguous = is_contiguous  # Whether tensor should be contiguous
+
+    @classmethod
+    def from_tensor(cls, shape, dtype=None, strides=None, is_contiguous=True):
+        return cls(
+            shape=shape,
+            dtype=dtype,
+            strides=strides,
+            is_scalar=False,
+            is_contiguous=is_contiguous,
+        )
+
+    @classmethod
+    def from_scalar(cls, value, dtype=None):
+        return cls(value=value, dtype=dtype, is_scalar=True)
+
+    @classmethod
+    def from_strided_tensor(cls, shape, strides, dtype=None):
+        """Create a non-contiguous tensor specification with specific strides"""
+        return cls(
+            shape=shape,
+            dtype=dtype,
+            strides=strides,
+            is_scalar=False,
+            is_contiguous=False,
+        )
 
 
 class TestCase:
-    """Base test case class"""
+    """Enhanced test case supporting flexible input/output specifications"""
 
     def __init__(self, *args, **kwargs):
-        self.args = args
-        self.kwargs = kwargs
+        """
+        Flexible constructor supporting multiple input styles:
+
+        Style 1: Traditional tuple format (for backward compatibility)
+            TestCase((2, 3), (3, 4), (2, 4), None, None, None)
+
+        Style 2: Explicit specification
+            TestCase(
+                inputs=[TensorSpec.from_tensor((2, 3)), TensorSpec.from_tensor((3, 4))],
+                output=TensorSpec.from_tensor((2, 4))
+            )
+
+        Style 3: Mixed format with description
+            TestCase((2, 3), (3, 4), output=(2, 4), description="Basic matmul")
+        """
+        if args and isinstance(args[0], (list, tuple)) and len(args) >= 2:
+            # Traditional tuple format: (a_shape, b_shape, result_shape, a_stride, b_stride, c_stride)
+            if len(args) >= 3:
+                self._init_from_tuples(*args, **kwargs)
+            else:
+                self._init_from_mixed(args, kwargs)
+        elif "inputs" in kwargs:
+            # Explicit specification format
+            self._init_from_explicit(kwargs)
+        else:
+            # Mixed format
+            self._init_from_mixed(args, kwargs)
+
+    def _init_from_tuples(
+        self,
+        a_shape,
+        b_shape,
+        result_shape=None,
+        a_stride=None,
+        b_stride=None,
+        c_stride=None,
+        **kwargs,
+    ):
+        """Initialize from traditional tuple format"""
+        inputs = []
+
+        # First input
+        if a_stride is not None:
+            inputs.append(TensorSpec.from_strided_tensor(a_shape, a_stride))
+        else:
+            inputs.append(TensorSpec.from_tensor(a_shape))
+
+        # Second input
+        if b_stride is not None:
+            inputs.append(TensorSpec.from_strided_tensor(b_shape, b_stride))
+        else:
+            inputs.append(TensorSpec.from_tensor(b_shape))
+
+        # Output (if provided)
+        output = None
+        if result_shape is not None:
+            if c_stride is not None:
+                output = TensorSpec.from_strided_tensor(result_shape, c_stride)
+            else:
+                output = TensorSpec.from_tensor(result_shape)
+
+        self.inputs = inputs
+        self.output = output
+        self.kwargs = {k: v for k, v in kwargs.items() if k not in ["description"]}
+        self.description = kwargs.get("description", "")
+
+    def _init_from_mixed(self, args, kwargs):
+        """Initialize from mixed positional and keyword arguments"""
+        inputs = []
+        for arg in args:
+            if isinstance(arg, (list, tuple)):
+                # Shape tuple
+                inputs.append(TensorSpec.from_tensor(arg))
+            elif isinstance(arg, TensorSpec):
+                # Already a TensorSpec
+                inputs.append(arg)
+            else:
+                # Scalar or other value
+                inputs.append(arg)
+
+        self.inputs = inputs
+        self.output = kwargs.get("output")
+        if isinstance(self.output, (list, tuple)):
+            self.output = TensorSpec.from_tensor(self.output)
+        self.kwargs = {
+            k: v for k, v in kwargs.items() if k not in ["output", "description"]
+        }
+        self.description = kwargs.get("description", "")
+
+    def _init_from_explicit(self, kwargs):
+        """Initialize from explicit specification"""
+        self.inputs = kwargs.get("inputs", [])
+        self.output = kwargs.get("output")
+        self.kwargs = {
+            k: v
+            for k, v in kwargs.items()
+            if k not in ["inputs", "output", "description"]
+        }
+        self.description = kwargs.get("description", "")
 
     def __str__(self):
-        return f"TestCase{self.args}"
+        input_strs = []
+        for inp in self.inputs:
+            if hasattr(inp, "is_scalar") and inp.is_scalar:
+                input_strs.append(f"scalar({inp.value})")
+            elif hasattr(inp, "shape"):
+                if hasattr(inp, "is_contiguous") and not inp.is_contiguous:
+                    input_strs.append(f"strided_tensor{inp.shape}")
+                else:
+                    input_strs.append(f"tensor{inp.shape}")
+            else:
+                input_strs.append(str(inp))
+
+        base_str = f"TestCase(inputs=[{', '.join(input_strs)}]"
+        if self.output:
+            base_str += f", output=tensor{self.output.shape}"
+        if self.kwargs:
+            base_str += f", kwargs={self.kwargs}"
+        if self.description:
+            base_str += f", desc='{self.description}'"
+        base_str += ")"
+        return base_str
 
 
 class TestConfig:
@@ -50,7 +222,7 @@ class TestRunner:
             print(f"Testing on {InfiniDeviceNames[device]}")
             print(f"{'='*60}")
 
-            # filter unsupported data types
+            # Filter unsupported data types
             tensor_dtypes = self._filter_tensor_dtypes_by_device(
                 device, self.config.tensor_dtypes
             )
@@ -88,3 +260,247 @@ class TestRunner:
         else:
             print("\n\033[92mAll tests passed!\033[0m")
             return True
+
+
+class BaseOperatorTest(ABC):
+    """Enhanced base operator test supporting flexible input/output"""
+
+    def __init__(self, operator_name):
+        self.operator_name = operator_name
+        self.test_cases = self.get_test_cases()
+        self.tensor_dtypes = self.get_tensor_dtypes()
+        self.tolerance_map = self.get_tolerance_map()
+
+    @abstractmethod
+    def get_test_cases(self):
+        """Return list of TestCase objects"""
+        pass
+
+    @abstractmethod
+    def get_tensor_dtypes(self):
+        """Return supported data types"""
+        pass
+
+    @abstractmethod
+    def get_tolerance_map(self):
+        """Return tolerance configuration"""
+        pass
+
+    @abstractmethod
+    def torch_operator(self, *inputs, **kwargs):
+        """PyTorch operator implementation"""
+        pass
+
+    @abstractmethod
+    def infinicore_operator(self, *inputs, **kwargs):
+        """Infinicore operator implementation"""
+        pass
+
+    def create_strided_tensor(self, shape, strides, dtype, device_str):
+        """Create a non-contiguous tensor with specific strides"""
+        # Create a larger contiguous tensor and create a strided view
+        total_size = 1
+        for i in range(len(shape)):
+            total_size += (shape[i] - 1) * abs(strides[i])
+
+        # Create base contiguous tensor
+        base_tensor = torch.rand(total_size, dtype=dtype, device=device_str)
+
+        # Create strided tensor view
+        strided_tensor = torch.as_strided(base_tensor, shape, strides)
+        return strided_tensor
+
+    def prepare_inputs(self, test_case, device_str, dtype):
+        """Prepare input data - handles various input types including strided tensors"""
+        torch_dtype = to_torch_dtype(dtype)
+        inputs = []
+
+        for input_spec in test_case.inputs:
+            if isinstance(input_spec, TensorSpec):
+                if input_spec.is_scalar:
+                    # Handle scalar inputs
+                    inputs.append(input_spec.value)
+                else:
+                    # Handle tensor inputs
+                    shape = input_spec.shape
+                    tensor_dtype = (
+                        torch_dtype
+                        if input_spec.dtype is None
+                        else to_torch_dtype(input_spec.dtype)
+                    )
+
+                    if input_spec.is_contiguous or input_spec.strides is None:
+                        # Create contiguous tensor
+                        tensor = torch.rand(
+                            shape, dtype=tensor_dtype, device=device_str
+                        )
+                    else:
+                        # Create strided tensor
+                        tensor = self.create_strided_tensor(
+                            shape, input_spec.strides, tensor_dtype, device_str
+                        )
+
+                    inputs.append(tensor)
+            else:
+                # Handle raw values (scalars, lists, etc.)
+                inputs.append(input_spec)
+
+        return inputs, test_case.kwargs
+
+    def run_test(self, device, test_case, dtype, config):
+        """Generic test execution flow with flexible inputs - output is always contiguous"""
+        device_str = torch_device_map[device]
+
+        # Prepare inputs
+        inputs, kwargs = self.prepare_inputs(test_case, device_str, dtype)
+
+        # PyTorch reference result - output is always contiguous for out-of-place
+        def torch_op():
+            return self.torch_operator(*inputs, **kwargs)
+
+        torch_result = torch_op()
+
+        # Ensure PyTorch result is contiguous
+        if isinstance(torch_result, torch.Tensor) and not torch_result.is_contiguous():
+            torch_result = torch_result.contiguous()
+
+        # Convert tensor inputs to infinicore (skip scalars and non-tensors)
+        infini_inputs = []
+        for inp in inputs:
+            if isinstance(inp, torch.Tensor):
+                # For strided tensors, use strided infinicore tensor
+                if not inp.is_contiguous():
+                    infini_tensor = infinicore.strided_from_blob(
+                        inp.data_ptr(),
+                        list(inp.shape),
+                        list(inp.stride()),
+                        dtype=to_infinicore_dtype(inp.dtype),
+                        device=infinicore.device(device_str, 0),
+                    )
+                else:
+                    infini_tensor = create_infinicore_tensor(inp, device_str)
+                infini_inputs.append(infini_tensor)
+            else:
+                infini_inputs.append(inp)
+
+        # Infinicore result - output is always contiguous for out-of-place
+        def infini_op():
+            return self.infinicore_operator(*infini_inputs, **kwargs)
+
+        infini_result = infini_op()
+
+        # Result comparison
+        compare_fn = create_test_comparator(config, dtype)
+        is_valid = compare_fn(infini_result, torch_result)
+        assert is_valid, f"{self.operator_name} test failed"
+
+        # Performance testing
+        if config.bench:
+            profile_operation(
+                f"PyTorch {self.operator_name}",
+                torch_op,
+                device_str,
+                config.num_prerun,
+                config.num_iterations,
+            )
+            profile_operation(
+                f"Infinicore {self.operator_name}",
+                infini_op,
+                device_str,
+                config.num_prerun,
+                config.num_iterations,
+            )
+
+    def run_inplace_test(self, device, test_case, dtype, config):
+        """Generic in-place operation test execution flow - supports strided output"""
+        device_str = torch_device_map[device]
+
+        # Prepare inputs and output
+        inputs, kwargs = self.prepare_inputs(test_case, device_str, dtype)
+
+        if not test_case.output:
+            raise ValueError("In-place test requires output specification in test case")
+
+        # PyTorch in-place operation
+        output_shape = test_case.output.shape
+        output_dtype = (
+            to_torch_dtype(dtype)
+            if test_case.output.dtype is None
+            else to_torch_dtype(test_case.output.dtype)
+        )
+
+        if test_case.output.is_contiguous or test_case.output.strides is None:
+            # Create contiguous output tensor
+            torch_preallocated = torch.zeros(
+                output_shape, dtype=output_dtype, device=device_str
+            )
+        else:
+            # Create strided output tensor
+            torch_preallocated = self.create_strided_tensor(
+                output_shape, test_case.output.strides, output_dtype, device_str
+            )
+            # Zero out the strided tensor
+            torch_preallocated.zero_()
+
+        def torch_op_inplace():
+            self.torch_operator(*inputs, out=torch_preallocated, **kwargs)
+
+        torch_op_inplace()
+
+        # Infinicore in-place operation
+        infini_inputs = []
+        for inp in inputs:
+            if isinstance(inp, torch.Tensor):
+                if not inp.is_contiguous():
+                    infini_tensor = infinicore.strided_from_blob(
+                        inp.data_ptr(),
+                        list(inp.shape),
+                        list(inp.stride()),
+                        dtype=to_infinicore_dtype(inp.dtype),
+                        device=infinicore.device(device_str, 0),
+                    )
+                else:
+                    infini_tensor = create_infinicore_tensor(inp, device_str)
+                infini_inputs.append(infini_tensor)
+            else:
+                infini_inputs.append(inp)
+
+        # Create infinicore output tensor
+        if test_case.output.is_contiguous or test_case.output.strides is None:
+            infini_output = infinicore.empty(
+                output_shape, dtype=dtype, device=infinicore.device(device_str, 0)
+            )
+        else:
+            infini_output = infinicore.strided_empty(
+                output_shape,
+                test_case.output.strides,
+                dtype=dtype,
+                device=infinicore.device(device_str, 0),
+            )
+
+        def infini_op_inplace():
+            self.infinicore_operator(*infini_inputs, out=infini_output, **kwargs)
+
+        infini_op_inplace()
+
+        # Result comparison
+        compare_fn = create_test_comparator(config, dtype)
+        is_valid = compare_fn(infini_output, torch_preallocated)
+        assert is_valid, f"{self.operator_name} in-place test failed"
+
+        # Performance testing
+        if config.bench:
+            profile_operation(
+                f"PyTorch {self.operator_name} In-place",
+                torch_op_inplace,
+                device_str,
+                config.num_prerun,
+                config.num_iterations,
+            )
+            profile_operation(
+                f"Infinicore {self.operator_name} In-place",
+                infini_op_inplace,
+                device_str,
+                config.num_prerun,
+                config.num_iterations,
+            )
