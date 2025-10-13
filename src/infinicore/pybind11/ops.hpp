@@ -2,16 +2,18 @@
 
 #include <pybind11/pybind11.h>
 
-#include "op/matmul.hpp"
-#include "op/rearrange.hpp"
+#include "ops/add.hpp"
+#include "ops/matmul.hpp"
+#include "ops/rearrange.hpp"
 
 namespace py = pybind11;
 
-namespace infinicore::op {
+namespace infinicore::ops {
 
 inline void bind(py::module &m) {
+    bind_add(m);
     bind_matmul(m);
     bind_rearrange(m);
 }
 
-} // namespace infinicore::op
+} // namespace infinicore::ops

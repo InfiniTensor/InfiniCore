@@ -1,16 +1,16 @@
 #include "../../utils.hpp"
 #include "infinicore/common/hash.hpp"
+#include "infinicore/ops/add.hpp"
 #include "infinicore/ops/common/cache.hpp"
-#include "infinicore/ops/matmul.hpp"
 #include <infiniop.h>
 
-namespace infinicore::op::matmul_impl::infiniop {
+namespace infinicore::op::add_impl::infiniop {
 
-thread_local common::OpCache<size_t, infiniopGemmDescriptor_t> caches(
+thread_local common::OpCache<size_t, infiniopAddDescriptor_t> caches(
     100, // capacity
-    [](infiniopGemmDescriptor_t &desc) {
+    [](infiniopAddDescriptor_t &desc) {
         if (desc != nullptr) {
-            INFINICORE_CHECK_ERROR(infiniopDestroyGemmDescriptor(desc));
+            INFINICORE_CHECK_ERROR(infiniopDestroyAddDescriptor(desc));
             desc = nullptr;
         }
     });
@@ -24,10 +24,10 @@ void calculate(Tensor c, Tensor a, Tensor b) {
     auto &cache = caches.getCache(device_type, device_index);
 
     auto desc_opt = cache.get(seed);
-    infiniopGemmDescriptor_t desc = nullptr;
+    infiniopAddDescriptor_t desc = nullptr;
 
     if (!desc_opt) {
-        INFINICORE_CHECK_ERROR(infiniopCreateGemmDescriptor(
+        INFINICORE_CHECK_ERROR(infiniopCreateAddDescriptor(
             context::getInfiniopHandle(), &desc,
             c->desc(), a->desc(), b->desc()));
         cache.put(seed, desc);
@@ -36,17 +36,17 @@ void calculate(Tensor c, Tensor a, Tensor b) {
     }
 
     size_t workspace_size = 0;
-    INFINICORE_CHECK_ERROR(infiniopGetGemmWorkspaceSize(desc, &workspace_size));
+    INFINICORE_CHECK_ERROR(infiniopGetAddWorkspaceSize(desc, &workspace_size));
     std::shared_ptr<Memory> workspace = context::allocateMemory(workspace_size);
 
-    INFINICORE_CHECK_ERROR(infiniopGemm(
+    INFINICORE_CHECK_ERROR(infiniopAdd(
         desc, workspace->data(), workspace_size,
-        c->data(), a->data(), b->data(), 1.f, 0.f, context::getStream()));
+        c->data(), a->data(), b->data(), context::getStream()));
 }
 
 static bool registered = []() {
-    Matmul::dispatcher().registerAll(&calculate, false);
+    Add::dispatcher().registerAll(&calculate, false);
     return true;
 }();
 
-} // namespace infinicore::op::matmul_impl::infiniop
+} // namespace infinicore::op::add_impl::infiniop

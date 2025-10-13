@@ -1,4 +1,4 @@
-#include "infinicore/op/rearrange.hpp"
+#include "infinicore/ops/rearrange.hpp"
 
 namespace infinicore::op {
 

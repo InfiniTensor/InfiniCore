@@ -24,6 +24,7 @@ from infinicore.dtype import (
     short,
     uint8,
 )
+from infinicore.ops.add import add
 from infinicore.ops.matmul import matmul
 from infinicore.ops.rearrange import rearrange
 from infinicore.tensor import (
@@ -63,6 +64,7 @@ __all__ = [
     "short",
     "uint8",
     # Operations.
+    "add",
     "matmul",
     "rearrange",
     "empty",
