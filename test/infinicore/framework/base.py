@@ -62,106 +62,31 @@ class TensorSpec:
 class TestCase:
     """Enhanced test case supporting flexible input/output specifications"""
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, inputs, output=None, **kwargs):
         """
-        Flexible constructor supporting multiple input styles:
-
-        Style 1: Traditional tuple format (for backward compatibility)
-            TestCase((2, 3), (3, 4), (2, 4), None, None, None)
-
-        Style 2: Explicit specification
-            TestCase(
-                inputs=[TensorSpec.from_tensor((2, 3)), TensorSpec.from_tensor((3, 4))],
-                output=TensorSpec.from_tensor((2, 4))
-            )
-
-        Style 3: Mixed format with description
-            TestCase((2, 3), (3, 4), output=(2, 4), description="Basic matmul")
+        简化构造函数
+        Args:
+            inputs: List[TensorSpec] 或简单的形状元组
+            output: TensorSpec 或形状元组
         """
-        if args and isinstance(args[0], (list, tuple)) and len(args) >= 2:
-            # Traditional tuple format: (a_shape, b_shape, result_shape, a_stride, b_stride, c_stride)
-            if len(args) >= 3:
-                self._init_from_tuples(*args, **kwargs)
+        # 标准化 inputs
+        self.inputs = []
+        for inp in inputs:
+            if isinstance(inp, (list, tuple)):
+                self.inputs.append(TensorSpec.from_tensor(inp))
+            elif isinstance(inp, TensorSpec):
+                self.inputs.append(inp)
             else:
-                self._init_from_mixed(args, kwargs)
-        elif "inputs" in kwargs:
-            # Explicit specification format
-            self._init_from_explicit(kwargs)
+                self.inputs.append(inp)
+
+        # 标准化 output
+        if isinstance(output, (list, tuple)):
+            self.output = TensorSpec.from_tensor(output)
         else:
-            # Mixed format
-            self._init_from_mixed(args, kwargs)
+            self.output = output
 
-    def _init_from_tuples(
-        self,
-        a_shape,
-        b_shape,
-        result_shape=None,
-        a_stride=None,
-        b_stride=None,
-        c_stride=None,
-        **kwargs,
-    ):
-        """Initialize from traditional tuple format"""
-        inputs = []
-
-        # First input
-        if a_stride is not None:
-            inputs.append(TensorSpec.from_strided_tensor(a_shape, a_stride))
-        else:
-            inputs.append(TensorSpec.from_tensor(a_shape))
-
-        # Second input
-        if b_stride is not None:
-            inputs.append(TensorSpec.from_strided_tensor(b_shape, b_stride))
-        else:
-            inputs.append(TensorSpec.from_tensor(b_shape))
-
-        # Output (if provided)
-        output = None
-        if result_shape is not None:
-            if c_stride is not None:
-                output = TensorSpec.from_strided_tensor(result_shape, c_stride)
-            else:
-                output = TensorSpec.from_tensor(result_shape)
-
-        self.inputs = inputs
-        self.output = output
-        self.kwargs = {k: v for k, v in kwargs.items() if k not in ["description"]}
-        self.description = kwargs.get("description", "")
-
-    def _init_from_mixed(self, args, kwargs):
-        """Initialize from mixed positional and keyword arguments"""
-        inputs = []
-        for arg in args:
-            if isinstance(arg, (list, tuple)):
-                # Shape tuple
-                inputs.append(TensorSpec.from_tensor(arg))
-            elif isinstance(arg, TensorSpec):
-                # Already a TensorSpec
-                inputs.append(arg)
-            else:
-                # Scalar or other value
-                inputs.append(arg)
-
-        self.inputs = inputs
-        self.output = kwargs.get("output")
-        if isinstance(self.output, (list, tuple)):
-            self.output = TensorSpec.from_tensor(self.output)
-        self.kwargs = {
-            k: v for k, v in kwargs.items() if k not in ["output", "description"]
-        }
-        self.description = kwargs.get("description", "")
-
-    def _init_from_explicit(self, kwargs):
-        """Initialize from explicit specification"""
-        self.inputs = kwargs.get("inputs", [])
-        self.output = kwargs.get("output")
-        self.kwargs = {
-            k: v
-            for k, v in kwargs.items()
-            if k not in ["inputs", "output", "description"]
-        }
-        self.description = kwargs.get("description", "")
+        self.kwargs = kwargs
+        self.description = kwargs.pop("description", "")
 
     def __str__(self):
         input_strs = []
