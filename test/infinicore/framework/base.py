@@ -2,7 +2,7 @@ import torch
 import infinicore
 
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Tuple, Union
+from typing import List, Dict, Any, Tuple, Union, Callable, Optional
 
 from .datatypes import to_torch_dtype, to_infinicore_dtype
 from .devices import InfiniDeviceNames, torch_device_map
@@ -66,12 +66,12 @@ class TestCase:
 
     def __init__(self, inputs, output=None, **kwargs):
         """
-        简化构造函数
+        Simplified constructor
         Args:
-            inputs: List[TensorSpec] 或简单的形状元组
-            output: TensorSpec 或形状元组
+            inputs: List[TensorSpec] or simple shape tuples
+            output: TensorSpec or shape tuple
         """
-        # 标准化 inputs
+        # Normalize inputs
         self.inputs = []
         for inp in inputs:
             if isinstance(inp, (list, tuple)):
@@ -81,7 +81,7 @@ class TestCase:
             else:
                 self.inputs.append(inp)
 
-        # 标准化 output
+        # Normalize output
         if isinstance(output, (list, tuple)):
             self.output = TensorSpec.from_tensor(output)
         else:
@@ -142,11 +142,11 @@ class TestRunner:
         self.config = test_config
         self.failed_tests = []  # Track failures
 
-    def run_tests(self, devices, test_func):
+    def run_tests(self, devices, test_func, test_type="Test"):
         """Run tests and track failures"""
         for device in devices:
             print(f"\n{'='*60}")
-            print(f"Testing on {InfiniDeviceNames[device]}")
+            print(f"Testing {test_type} on {InfiniDeviceNames[device]}")
             print(f"{'='*60}")
 
             # Filter unsupported data types
@@ -213,15 +213,17 @@ class BaseOperatorTest(ABC):
         """Return tolerance configuration"""
         pass
 
-    @abstractmethod
-    def torch_operator(self, *inputs, **kwargs):
-        """PyTorch operator implementation"""
-        pass
+    def has_out_of_place_test(self):
+        """Check if out-of-place test functions are defined"""
+        return hasattr(self, "torch_operator_out_of_place") and hasattr(
+            self, "infinicore_operator_out_of_place"
+        )
 
-    @abstractmethod
-    def infinicore_operator(self, *inputs, **kwargs):
-        """Infinicore operator implementation"""
-        pass
+    def has_inplace_test(self):
+        """Check if in-place test functions are defined"""
+        return hasattr(self, "torch_operator_inplace") and hasattr(
+            self, "infinicore_operator_inplace"
+        )
 
     def create_strided_tensor(self, shape, strides, dtype, device_str):
         """Create a non-contiguous tensor with specific strides"""
@@ -274,16 +276,19 @@ class BaseOperatorTest(ABC):
 
         return inputs, test_case.kwargs
 
-    def run_test(self, device, test_case, dtype, config):
-        """Generic test execution flow with flexible inputs - output is always contiguous"""
+    def run_out_of_place_test(self, device, test_case, dtype, config):
+        """Generic out-of-place test execution flow"""
+        if not self.has_out_of_place_test():
+            raise NotImplementedError("Out-of-place test functions not defined")
+
         device_str = torch_device_map[device]
 
         # Prepare inputs
         inputs, kwargs = self.prepare_inputs(test_case, device_str, dtype)
 
-        # PyTorch reference result - output is always contiguous for out-of-place
+        # PyTorch reference result
         def torch_op():
-            return self.torch_operator(*inputs, **kwargs)
+            return self.torch_operator_out_of_place(*inputs, **kwargs)
 
         torch_result = torch_op()
 
@@ -310,28 +315,28 @@ class BaseOperatorTest(ABC):
             else:
                 infini_inputs.append(inp)
 
-        # Infinicore result - output is always contiguous for out-of-place
+        # Infinicore result
         def infini_op():
-            return self.infinicore_operator(*infini_inputs, **kwargs)
+            return self.infinicore_operator_out_of_place(*infini_inputs, **kwargs)
 
         infini_result = infini_op()
 
         # Result comparison
         compare_fn = create_test_comparator(config, dtype)
         is_valid = compare_fn(infini_result, torch_result)
-        assert is_valid, f"{self.operator_name} test failed"
+        assert is_valid, f"{self.operator_name} out-of-place test failed"
 
         # Performance testing
         if config.bench:
             profile_operation(
-                f"PyTorch {self.operator_name}",
+                f"PyTorch {self.operator_name} Out-of-place",
                 torch_op,
                 device_str,
                 config.num_prerun,
                 config.num_iterations,
             )
             profile_operation(
-                f"Infinicore {self.operator_name}",
+                f"Infinicore {self.operator_name} Out-of-place",
                 infini_op,
                 device_str,
                 config.num_prerun,
@@ -339,7 +344,10 @@ class BaseOperatorTest(ABC):
             )
 
     def run_inplace_test(self, device, test_case, dtype, config):
-        """Generic in-place operation test execution flow - supports strided output"""
+        """Generic in-place operation test execution flow"""
+        if not self.has_inplace_test():
+            raise NotImplementedError("In-place test functions not defined")
+
         device_str = torch_device_map[device]
 
         # Prepare inputs and output
@@ -370,7 +378,7 @@ class BaseOperatorTest(ABC):
             torch_preallocated.zero_()
 
         def torch_op_inplace():
-            self.torch_operator(*inputs, out=torch_preallocated, **kwargs)
+            self.torch_operator_inplace(*inputs, out=torch_preallocated, **kwargs)
 
         torch_op_inplace()
 
@@ -392,19 +400,7 @@ class BaseOperatorTest(ABC):
             else:
                 infini_inputs.append(inp)
 
-        # # Create infinicore output tensor
-        # if test_case.output.is_contiguous or test_case.output.strides is None:
-        #     infini_output = infinicore.empty(
-        #         output_shape, dtype=dtype, device=infinicore.device(device_str, 0)
-        #     )
-        # else:
-        #     infini_output = infinicore.strided_empty(
-        #         output_shape,
-        #         test_case.output.strides,
-        #         dtype=dtype,
-        #         device=infinicore.device(device_str, 0),
-        #     )
-
+        # Create infinicore output tensor
         torch_dummy = torch.zeros(output_shape, dtype=output_dtype, device=device_str)
         if test_case.output.is_contiguous or test_case.output.strides is None:
             infini_output = create_infinicore_tensor(torch_dummy, device_str)
@@ -413,7 +409,9 @@ class BaseOperatorTest(ABC):
             infini_output = create_strided_infinicore_tensor(torch_dummy, device_str)
 
         def infini_op_inplace():
-            self.infinicore_operator(*infini_inputs, out=infini_output, **kwargs)
+            self.infinicore_operator_inplace(
+                *infini_inputs, out=infini_output, **kwargs
+            )
 
         infini_op_inplace()
 

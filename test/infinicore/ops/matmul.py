@@ -3,9 +3,10 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import torch
 import infinicore
 from framework import create_test_cases
-from framework.templates import BinaryOperatorTest
+from framework.base import BaseOperatorTest
 from framework.runner import GenericTestRunner
 
 # ==============================================================================
@@ -50,15 +51,40 @@ _TOLERANCE_MAP = {
 }
 
 # ==============================================================================
-# Operator test class
+# Operator test class with specific test functions
 # ==============================================================================
 
 
-class MatmulTest(BinaryOperatorTest):
-    """Matmul test"""
+class MatmulTest(BaseOperatorTest):
+    """Matmul test with operator-specific test functions"""
 
     def __init__(self):
-        super().__init__("matmul", _TEST_CASES, _TENSOR_DTYPES, _TOLERANCE_MAP)
+        super().__init__("matmul")
+
+    def get_test_cases(self):
+        return _TEST_CASES
+
+    def get_tensor_dtypes(self):
+        return _TENSOR_DTYPES
+
+    def get_tolerance_map(self):
+        return _TOLERANCE_MAP
+
+    def torch_operator_inplace(self, a, b, out=None, **kwargs):
+        """PyTorch in-place matmul operation"""
+        torch.matmul(a, b, out=out)
+
+    def infinicore_operator_inplace(self, a, b, out=None, **kwargs):
+        """Infinicore in-place matmul operation"""
+        infinicore.matmul(a, b, out=out)
+
+    def torch_operator_out_of_place(self, a, b, **kwargs):
+        """PyTorch out-of-place matmul operation"""
+        return torch.matmul(a, b)
+
+    def infinicore_operator_out_of_place(self, a, b, **kwargs):
+        """Infinicore out-of-place matmul operation"""
+        return infinicore.matmul(a, b)
 
 
 # ==============================================================================
