@@ -3,19 +3,17 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import torch
 import infinicore
 from framework import create_test_cases
-from framework.templates import BinaryOperatorTest
+from framework.base import BaseOperatorTest
 from framework.runner import GenericTestRunner
 
 # ==============================================================================
 # Operator-specific configuration
 # ==============================================================================
 
-# Test cases in flexible format:
-# - Single shape tuple: (13, 4) → automatically expands to ((13, 4), None, None, None)
-# - Nested single shape: ((13, 4),) → automatically expands to ((13, 4), None, None, None)
-# - Full format: ((13, 4), None, None, None) or ((13, 4), (10, 1), (10, 1), (10, 1))
+# Test cases in flexible format
 _TEST_CASES_DATA = [
     ((13, 4)),
     ((13, 4), (10, 1), (10, 1), (10, 1)),
@@ -32,16 +30,14 @@ _TEST_CASES_DATA = [
 ]
 
 # Parameter mapping configuration for add operator
-# Format: (shape, a_stride, b_stride, c_stride)
-# Call signature: add(input, other)
 _ADD_PARAMETER_MAPPING = (
-    "add",  # operator_name
-    "add(input, other)",  # call_signature
-    [  # input_configs
-        {"shape": 0, "stride": 1},  # input: shape from index 0, stride from index 1
-        {"shape": 0, "stride": 2},  # other: shape from index 0, stride from index 2
+    "add",
+    "add(input, other)",
+    [
+        {"shape": 0, "stride": 1},
+        {"shape": 0, "stride": 2},
     ],
-    {"shape": 0, "stride": 3},  # output: shape from index 0, stride from index 3
+    {"shape": 0, "stride": 3},
 )
 
 # Parse test cases using add parameter mapping
@@ -58,15 +54,40 @@ _TOLERANCE_MAP = {
 }
 
 # ==============================================================================
-# Operator test class
+# Operator test class with specific test functions
 # ==============================================================================
 
 
-class AddTest(BinaryOperatorTest):
-    """Add test"""
+class AddTest(BaseOperatorTest):
+    """Add test with operator-specific test functions"""
 
     def __init__(self):
-        super().__init__("add", _TEST_CASES, _TENSOR_DTYPES, _TOLERANCE_MAP)
+        super().__init__("add")
+
+    def get_test_cases(self):
+        return _TEST_CASES
+
+    def get_tensor_dtypes(self):
+        return _TENSOR_DTYPES
+
+    def get_tolerance_map(self):
+        return _TOLERANCE_MAP
+
+    def torch_operator_inplace(self, a, b, out=None, **kwargs):
+        """PyTorch in-place add operation"""
+        torch.add(a, b, out=out)
+
+    def infinicore_operator_inplace(self, a, b, out=None, **kwargs):
+        """Infinicore in-place add operation"""
+        infinicore.add(a, b, out=out)
+
+    def torch_operator_out_of_place(self, a, b, **kwargs):
+        """PyTorch out-of-place add operation"""
+        return torch.add(a, b)
+
+    def infinicore_operator_out_of_place(self, a, b, **kwargs):
+        """Infinicore out-of-place add operation"""
+        return infinicore.add(a, b)
 
 
 # ==============================================================================
