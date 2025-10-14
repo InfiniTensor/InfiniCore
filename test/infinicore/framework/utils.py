@@ -162,19 +162,6 @@ def create_strided_infinicore_tensor(torch_tensor, device_str):
     )
 
 
-def is_tensor_contiguous(tensor):
-    """Check if a tensor (PyTorch or infinicore) is contiguous"""
-    if hasattr(tensor, "is_contiguous"):
-        return tensor.is_contiguous()
-    elif hasattr(tensor, "stride"):
-        # For PyTorch tensors
-        expected_stride = torch._C._compute_contiguous_strides(tensor.shape)
-        return list(tensor.stride()) == expected_stride
-    else:
-        # Assume contiguous by default
-        return True
-
-
 def convert_infinicore_to_torch(infini_result, torch_reference):
     """
     Convert infinicore tensor to PyTorch tensor for comparison
@@ -193,9 +180,16 @@ def convert_infinicore_to_torch(infini_result, torch_reference):
         dtype=to_torch_dtype(infini_result.dtype),
         device=infini_result.device.type,
     )
-    temp_tensor = create_infinicore_tensor(
-        torch_result_from_infini, infini_result.device.type
-    )
+    if infini_result.is_contiguous():
+        temp_tensor = create_infinicore_tensor(
+            torch_result_from_infini, infini_result.device.type
+        )
+    else:
+        rearrange_tensor(torch_result_from_infini, list(torch_reference.stride()))
+        temp_tensor = create_strided_infinicore_tensor(
+            torch_result_from_infini, infini_result.device.type
+        )
+
     temp_tensor.copy_(infini_result)
     return torch_result_from_infini
 

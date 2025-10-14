@@ -13,7 +13,6 @@ from .utils import (
     profile_operation,
     rearrange_tensor,
     convert_infinicore_to_torch,
-    is_tensor_contiguous,
 )
 from .config import get_test_devices, get_args
 from .devices import InfiniDeviceEnum, InfiniDeviceNames, torch_device_map
@@ -36,7 +35,6 @@ __all__ = [
     "get_tolerance",
     "profile_operation",
     "rearrange_tensor",
-    "is_tensor_contiguous",
     "get_test_devices",
     "get_args",
     "InfiniDeviceEnum",
