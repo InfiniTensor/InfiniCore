@@ -58,7 +58,7 @@ class Tensor:
         )
 
     def as_strided(self, size, stride):
-        Tensor(self._underlying.as_strided(size, stride))
+        return Tensor(self._underlying.as_strided(size, stride))
 
     def contiguous(self):
         return Tensor(self._underlying.contiguous())

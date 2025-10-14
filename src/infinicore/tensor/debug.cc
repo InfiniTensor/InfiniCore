@@ -6,6 +6,8 @@
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <memory>
+#include <limits>
 
 namespace infinicore {
 
@@ -93,6 +95,22 @@ void print_data_bf16(const uint16_t *data, const Shape &shape, const Strides &st
     }
 }
 
+// Template function for writing data recursively to binary file (handles non-contiguous tensors)
+template <typename T>
+void write_binary_data(std::ofstream &out, const T *data, const Shape &shape, const Strides &strides, size_t dim) {
+    if (dim == shape.size() - 1) {
+        // Write the innermost dimension
+        for (size_t i = 0; i < shape[dim]; i++) {
+            out.write(reinterpret_cast<const char *>(&data[i * strides[dim]]), sizeof(T));
+        }
+    } else {
+        // Recursively process higher dimensions
+        for (size_t i = 0; i < shape[dim]; i++) {
+            write_binary_data(out, data + i * strides[dim], shape, strides, dim + 1);
+        }
+    }
+}
+
 void TensorImpl::debug(const std::string &filename) const {
     // Synchronize device if needed
     context::syncDevice();
@@ -100,208 +118,113 @@ void TensorImpl::debug(const std::string &filename) const {
     std::cout << info() << std::endl;
 
     const std::byte *cpu_data = nullptr;
-    std::byte *allocated_memory = nullptr;
+    std::unique_ptr<std::byte[]> allocated_memory;  // RAII: 自动管理内存
 
     // Copy data to CPU if not already on CPU
     if (this->device().getType() != Device::Type::CPU) {
-        size_t mem_size = this->numel() * dsize(this->dtype());
-        allocated_memory = new std::byte[mem_size];
-        context::memcpyD2H(allocated_memory, this->data(), mem_size);
-        cpu_data = allocated_memory;
+        size_t numel = this->numel();
+        size_t element_size = dsize(this->dtype());
+        
+        // 检查乘法溢出
+        if (numel > 0 && element_size > std::numeric_limits<size_t>::max() / numel) {
+            std::cerr << "Error: Memory size calculation overflow for tensor with "
+                      << numel << " elements of size " << element_size << "\n";
+            return;
+        }
+        
+        size_t mem_size = numel * element_size;
+        allocated_memory = std::make_unique<std::byte[]>(mem_size);
+        context::memcpyD2H(allocated_memory.get(), this->data(), mem_size);
+        cpu_data = allocated_memory.get();
     } else {
         cpu_data = this->data();
     }
 
-    // If filename is provided, save to file
+    // If filename is provided, save to binary file
     if (!filename.empty()) {
-        // Determine file format based on extension
-        bool is_text_format = false;
-        size_t dot_pos = filename.find_last_of('.');
-        if (dot_pos != std::string::npos) {
-            std::string ext = filename.substr(dot_pos);
-            is_text_format = (ext == ".txt");
+        std::ofstream outFile(filename, std::ios::binary);
+        if (!outFile) {
+            std::cerr << "Error opening file for writing: " << filename << "\n";
+            return;  // allocated_memory 会自动释放（RAII）
         }
-
-        if (is_text_format) {
-            // Save as text format
-            std::ofstream outFile(filename);
-            if (!outFile) {
-                std::cerr << "Error opening file for writing: " << filename << "\n";
-                if (allocated_memory) {
-                    delete[] allocated_memory;
-                }
-                return;
-            }
-
-            // Write header with tensor information
-            outFile << "# Tensor Debug Output\n";
-            outFile << "# Shape: [";
-            for (size_t i = 0; i < this->shape().size(); ++i) {
-                outFile << this->shape()[i];
-                if (i < this->shape().size() - 1) {
-                    outFile << ", ";
-                }
-            }
-            outFile << "]\n";
-            outFile << "# Strides: [";
-            for (size_t i = 0; i < this->strides().size(); ++i) {
-                outFile << this->strides()[i];
-                if (i < this->strides().size() - 1) {
-                    outFile << ", ";
-                }
-            }
-            outFile << "]\n";
-            outFile << "# Dtype: " << toString(this->dtype()) << "\n";
-            outFile << "# Contiguous: " << (this->is_contiguous() ? "Yes" : "No") << "\n";
-            outFile << "# Elements: " << this->numel() << "\n";
-            outFile << "#\n";
-
-            // Helper function to write data recursively
-            std::function<void(const std::byte *, const Shape &, const Strides &, size_t, std::ofstream &)> write_data;
-
-            switch (this->dtype()) {
-            case DataType::F16:
-                write_data = [&write_data](const std::byte *data, const Shape &shape, const Strides &strides, size_t dim, std::ofstream &out) {
-                    const uint16_t *ptr = reinterpret_cast<const uint16_t *>(data);
-                    if (dim == shape.size() - 1) {
-                        for (size_t i = 0; i < shape[dim]; i++) {
-                            out << f16_to_f32(ptr[i * strides[dim]]);
-                            if (i < shape[dim] - 1) {
-                                out << " ";
-                            }
-                        }
-                        out << "\n";
-                    } else {
-                        for (size_t i = 0; i < shape[dim]; i++) {
-                            write_data(data + i * strides[dim] * sizeof(uint16_t), shape, strides, dim + 1, out);
-                        }
-                    }
-                };
-                break;
-            case DataType::F32:
-                write_data = [&write_data](const std::byte *data, const Shape &shape, const Strides &strides, size_t dim, std::ofstream &out) {
-                    const float *ptr = reinterpret_cast<const float *>(data);
-                    if (dim == shape.size() - 1) {
-                        for (size_t i = 0; i < shape[dim]; i++) {
-                            out << ptr[i * strides[dim]];
-                            if (i < shape[dim] - 1) {
-                                out << " ";
-                            }
-                        }
-                        out << "\n";
-                    } else {
-                        for (size_t i = 0; i < shape[dim]; i++) {
-                            write_data(data + i * strides[dim] * sizeof(float), shape, strides, dim + 1, out);
-                        }
-                    }
-                };
-                break;
-            case DataType::F64:
-                write_data = [&write_data](const std::byte *data, const Shape &shape, const Strides &strides, size_t dim, std::ofstream &out) {
-                    const double *ptr = reinterpret_cast<const double *>(data);
-                    if (dim == shape.size() - 1) {
-                        for (size_t i = 0; i < shape[dim]; i++) {
-                            out << ptr[i * strides[dim]];
-                            if (i < shape[dim] - 1) {
-                                out << " ";
-                            }
-                        }
-                        out << "\n";
-                    } else {
-                        for (size_t i = 0; i < shape[dim]; i++) {
-                            write_data(data + i * strides[dim] * sizeof(double), shape, strides, dim + 1, out);
-                        }
-                    }
-                };
-                break;
-            case DataType::I32:
-                write_data = [&write_data](const std::byte *data, const Shape &shape, const Strides &strides, size_t dim, std::ofstream &out) {
-                    const int32_t *ptr = reinterpret_cast<const int32_t *>(data);
-                    if (dim == shape.size() - 1) {
-                        for (size_t i = 0; i < shape[dim]; i++) {
-                            out << ptr[i * strides[dim]];
-                            if (i < shape[dim] - 1) {
-                                out << " ";
-                            }
-                        }
-                        out << "\n";
-                    } else {
-                        for (size_t i = 0; i < shape[dim]; i++) {
-                            write_data(data + i * strides[dim] * sizeof(int32_t), shape, strides, dim + 1, out);
-                        }
-                    }
-                };
-                break;
-            case DataType::I64:
-                write_data = [&write_data](const std::byte *data, const Shape &shape, const Strides &strides, size_t dim, std::ofstream &out) {
-                    const int64_t *ptr = reinterpret_cast<const int64_t *>(data);
-                    if (dim == shape.size() - 1) {
-                        for (size_t i = 0; i < shape[dim]; i++) {
-                            out << ptr[i * strides[dim]];
-                            if (i < shape[dim] - 1) {
-                                out << " ";
-                            }
-                        }
-                        out << "\n";
-                    } else {
-                        for (size_t i = 0; i < shape[dim]; i++) {
-                            write_data(data + i * strides[dim] * sizeof(int64_t), shape, strides, dim + 1, out);
-                        }
-                    }
-                };
-                break;
-            case DataType::BF16:
-                write_data = [&write_data](const std::byte *data, const Shape &shape, const Strides &strides, size_t dim, std::ofstream &out) {
-                    const uint16_t *ptr = reinterpret_cast<const uint16_t *>(data);
-                    if (dim == shape.size() - 1) {
-                        for (size_t i = 0; i < shape[dim]; i++) {
-                            out << bf16_to_f32(ptr[i * strides[dim]]);
-                            if (i < shape[dim] - 1) {
-                                out << " ";
-                            }
-                        }
-                        out << "\n";
-                    } else {
-                        for (size_t i = 0; i < shape[dim]; i++) {
-                            write_data(data + i * strides[dim] * sizeof(uint16_t), shape, strides, dim + 1, out);
-                        }
-                    }
-                };
-                break;
-            default:
-                outFile << "# Unsupported data type for text output\n";
-                outFile.close();
-                if (allocated_memory) {
-                    delete[] allocated_memory;
-                }
-                return;
-            }
-
-            // Write the actual data
-            write_data(cpu_data, this->shape(), this->strides(), 0, outFile);
-
-            outFile.close();
-            std::cout << "Data written to text file: " << filename << "\n";
-        } else {
-            // Save as binary format (default)
-            std::ofstream outFile(filename, std::ios::binary);
-            if (!outFile) {
-                std::cerr << "Error opening file for writing: " << filename << "\n";
-                if (allocated_memory) {
-                    delete[] allocated_memory;
-                }
-                return;
-            }
+        
+        // Check if tensor is contiguous - for optimization
+        if (this->is_contiguous()) {
+            // Fast path: contiguous tensor, write in one go
             size_t mem_size = this->numel() * dsize(this->dtype());
             outFile.write(reinterpret_cast<const char *>(cpu_data), mem_size);
-            outFile.close();
-            std::cout << "Data written to binary file: " << filename << "\n";
+        } else {
+            // Slow path: non-contiguous tensor, write element by element using strides
+            switch (this->dtype()) {
+            case DataType::F16:
+            case DataType::BF16:
+                write_binary_data(outFile, reinterpret_cast<const uint16_t *>(cpu_data),
+                                this->shape(), this->strides(), 0);
+                break;
+            case DataType::F32:
+                write_binary_data(outFile, reinterpret_cast<const float *>(cpu_data),
+                                this->shape(), this->strides(), 0);
+                break;
+            case DataType::F64:
+                write_binary_data(outFile, reinterpret_cast<const double *>(cpu_data),
+                                this->shape(), this->strides(), 0);
+                break;
+            case DataType::U64:
+                write_binary_data(outFile, reinterpret_cast<const uint64_t *>(cpu_data),
+                                this->shape(), this->strides(), 0);
+                break;
+            case DataType::I64:
+                write_binary_data(outFile, reinterpret_cast<const int64_t *>(cpu_data),
+                                this->shape(), this->strides(), 0);
+                break;
+            case DataType::U32:
+                write_binary_data(outFile, reinterpret_cast<const uint32_t *>(cpu_data),
+                                this->shape(), this->strides(), 0);
+                break;
+            case DataType::I32:
+                write_binary_data(outFile, reinterpret_cast<const int32_t *>(cpu_data),
+                                this->shape(), this->strides(), 0);
+                break;
+            case DataType::U16:
+                write_binary_data(outFile, reinterpret_cast<const uint16_t *>(cpu_data),
+                                this->shape(), this->strides(), 0);
+                break;
+            case DataType::I16:
+                write_binary_data(outFile, reinterpret_cast<const int16_t *>(cpu_data),
+                                this->shape(), this->strides(), 0);
+                break;
+            case DataType::U8:
+                write_binary_data(outFile, reinterpret_cast<const uint8_t *>(cpu_data),
+                                this->shape(), this->strides(), 0);
+                break;
+            case DataType::I8:
+                write_binary_data(outFile, reinterpret_cast<const int8_t *>(cpu_data),
+                                this->shape(), this->strides(), 0);
+                break;
+            case DataType::BOOL:
+                // 布尔类型特殊处理：转换为 uint8_t 以保证跨平台一致性
+                write_binary_data(outFile, reinterpret_cast<const uint8_t *>(cpu_data),
+                                this->shape(), this->strides(), 0);
+                break;
+            default:
+                std::cerr << "Unsupported data type for binary output\n";
+                return;  // allocated_memory 会自动释放
+            }
         }
-
-        if (allocated_memory) {
-            delete[] allocated_memory;
+        
+        // 显式关闭文件并检查是否成功
+        outFile.close();
+        if (!outFile) {
+            std::cerr << "Error: Failed to write data to file: " << filename << "\n";
+            return;
         }
-        return;
+        
+        std::cout << "Data written to binary file: " << filename;
+        if (!this->is_contiguous()) {
+            std::cout << " (non-contiguous tensor, wrote " << this->numel() << " elements)";
+        }
+        std::cout << "\n";
+        return;  // allocated_memory 会自动释放
     }
 
     // Print data based on dtype
@@ -361,11 +284,6 @@ void TensorImpl::debug(const std::string &filename) const {
     default:
         std::cout << "Unsupported data type for debug" << std::endl;
         break;
-    }
-
-    // Clean up allocated memory
-    if (allocated_memory) {
-        delete[] allocated_memory;
     }
 }
 
