@@ -27,6 +27,7 @@ from infinicore.dtype import (
 from infinicore.ops.add import add
 from infinicore.ops.matmul import matmul
 from infinicore.ops.rearrange import rearrange
+from infinicore.ops.rms_norm import rms_norm
 from infinicore.tensor import (
     empty,
     from_blob,
@@ -67,6 +68,7 @@ __all__ = [
     "add",
     "matmul",
     "rearrange",
+    "rms_norm",
     "empty",
     "from_blob",
     "ones",
