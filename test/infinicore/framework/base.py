@@ -8,8 +8,10 @@ from .datatypes import to_torch_dtype, to_infinicore_dtype
 from .devices import InfiniDeviceNames, torch_device_map
 from .utils import (
     create_infinicore_tensor,
+    create_strided_infinicore_tensor,
     create_test_comparator,
     profile_operation,
+    rearrange_tensor,
     synchronize_device,
 )
 
@@ -390,18 +392,25 @@ class BaseOperatorTest(ABC):
             else:
                 infini_inputs.append(inp)
 
-        # Create infinicore output tensor
+        # # Create infinicore output tensor
+        # if test_case.output.is_contiguous or test_case.output.strides is None:
+        #     infini_output = infinicore.empty(
+        #         output_shape, dtype=dtype, device=infinicore.device(device_str, 0)
+        #     )
+        # else:
+        #     infini_output = infinicore.strided_empty(
+        #         output_shape,
+        #         test_case.output.strides,
+        #         dtype=dtype,
+        #         device=infinicore.device(device_str, 0),
+        #     )
+
+        torch_dummy = torch.zeros(output_shape, dtype=output_dtype, device=device_str)
         if test_case.output.is_contiguous or test_case.output.strides is None:
-            infini_output = infinicore.empty(
-                output_shape, dtype=dtype, device=infinicore.device(device_str, 0)
-            )
+            infini_output = create_infinicore_tensor(torch_dummy, device_str)
         else:
-            infini_output = infinicore.strided_empty(
-                output_shape,
-                test_case.output.strides,
-                dtype=dtype,
-                device=infinicore.device(device_str, 0),
-            )
+            rearrange_tensor(torch_dummy, list(torch_preallocated.stride()))
+            infini_output = create_strided_infinicore_tensor(torch_dummy, device_str)
 
         def infini_op_inplace():
             self.infinicore_operator(*infini_inputs, out=infini_output, **kwargs)
