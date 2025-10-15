@@ -39,6 +39,10 @@ std::string Device::toString(const Type &type) {
         return "KUNLUN";
     case Type::HYGON:
         return "HYGON";
+    case Type::COUNT:
+        return "COUNT";
+    default:
+        return "UNKNOWN";
     }
 }
 

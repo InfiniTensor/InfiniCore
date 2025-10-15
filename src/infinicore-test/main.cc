@@ -1,4 +1,5 @@
 #include "memory_test.h"
+#include "test_tensor_destructor.h"
 #include <iostream>
 #include <memory>
 #include <spdlog/spdlog.h>
@@ -36,7 +37,7 @@ void printUsage() {
               << "  moore" << std::endl
               << "  iluvatar" << std::endl
               << "  kunlun" << std::endl
-              << "  sugon" << std::endl
+              << "  hygon" << std::endl
               << std::endl
               << "Available tests:" << std::endl
               << "  basic       - Basic memory allocation and deallocation tests" << std::endl
@@ -74,8 +75,8 @@ ParsedArgs parseArgs(int argc, char *argv[]) {
             args.device_type = INFINI_DEVICE_ILUVATAR;
         } else if (arg == "--kunlun") {
             args.device_type = INFINI_DEVICE_KUNLUN;
-        } else if (arg == "--sugon") {
-            args.device_type = INFINI_DEVICE_SUGON;
+        } else if (arg == "--hygon") {
+            args.device_type = INFINI_DEVICE_HYGON;
         } else if (arg == "--test") {
             if (i + 1 >= argc) {
                 std::cerr << "Error: --test requires a test name" << std::endl;
@@ -164,6 +165,10 @@ int main(int argc, char *argv[]) {
             spdlog::debug("Adding BasicMemoryTest");
             runner.addTest(std::make_unique<infinicore::test::BasicMemoryTest>());
             spdlog::debug("BasicMemoryTest added successfully");
+
+            spdlog::debug("Adding TensorDestructorTest");
+            runner.addTest(std::make_unique<infinicore::test::TensorDestructorTest>());
+            spdlog::debug("TensorDestructorTest added successfully");
         }
 
         if (args.run_concurrency) {

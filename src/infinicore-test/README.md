@@ -64,7 +64,7 @@ xmake build infinicore-test
 ./infinicore-test --moore
 ./infinicore-test --iluvatar
 ./infinicore-test --kunlun
-./infinicore-test --sugon
+./infinicore-test --hygon
 ```
 
 ### Customize Test Parameters

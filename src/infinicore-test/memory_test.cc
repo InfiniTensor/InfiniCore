@@ -30,24 +30,35 @@ TestResult BasicMemoryTest::run() {
             spdlog::debug("BasicMemoryTest: Testing memory access");
             // Test memory access
             std::byte *data = memory->data();
-            spdlog::debug("BasicMemoryTest: Got memory data pointer");
+            spdlog::debug("BasicMemoryTest: Got memory data pointer: {}", static_cast<void *>(data));
             if (!data) {
                 std::cerr << "Memory data pointer is null" << std::endl;
                 return false;
             }
             spdlog::debug("BasicMemoryTest: Memory data pointer is valid");
 
-            spdlog::debug("BasicMemoryTest: Testing memory write/read");
-            // Test memory write/read
-            std::memset(data, 0xAB, 1024);
-            spdlog::debug("BasicMemoryTest: Memory memset completed");
-            for (size_t i = 0; i < 1024; ++i) {
-                if (data[i] != static_cast<std::byte>(0xAB)) {
-                    std::cerr << "Memory write/read test failed at index " << i << std::endl;
-                    return false;
+            // Check if this is GPU memory that can't be accessed directly
+            Device current_device = context::getDevice();
+            spdlog::debug("BasicMemoryTest: Current device type: {}", static_cast<int>(current_device.getType()));
+            spdlog::debug("BasicMemoryTest: Memory is pinned: {}", memory->is_pinned());
+
+            // For GPU memory, we shouldn't try to access it directly with memset
+            if (current_device.getType() != Device::Type::CPU) {
+                spdlog::debug("BasicMemoryTest: Skipping direct memory access for GPU device");
+                spdlog::debug("BasicMemoryTest: GPU memory access test completed (skipped)");
+            } else {
+                spdlog::debug("BasicMemoryTest: Testing memory write/read");
+                // Test memory write/read
+                std::memset(data, 0xAB, 1024);
+                spdlog::debug("BasicMemoryTest: Memory memset completed");
+                for (size_t i = 0; i < 1024; ++i) {
+                    if (data[i] != static_cast<std::byte>(0xAB)) {
+                        std::cerr << "Memory write/read test failed at index " << i << std::endl;
+                        return false;
+                    }
                 }
+                spdlog::debug("BasicMemoryTest: Memory write/read test completed");
             }
-            spdlog::debug("BasicMemoryTest: Memory write/read test completed");
 
             spdlog::debug("BasicMemoryTest: Testing pinned memory allocation");
             // Test pinned memory allocation
@@ -60,8 +71,8 @@ TestResult BasicMemoryTest::run() {
 
             spdlog::debug("BasicMemoryTest: Checking pinned memory properties");
             // For CPU devices, pinned memory falls back to regular memory, so it may not be marked as pinned
-            Device current_device = context::getDevice();
-            if (current_device.getType() != Device::Type::CPU && !pinned_memory->is_pinned()) {
+            Device pinned_device = context::getDevice();
+            if (pinned_device.getType() != Device::Type::CPU && !pinned_memory->is_pinned()) {
                 std::cerr << "Pinned memory not marked as pinned" << std::endl;
                 return false;
             }
