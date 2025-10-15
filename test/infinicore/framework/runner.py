@@ -26,6 +26,7 @@ class GenericTestRunner:
             bench=self.args.bench,
             num_prerun=self.args.num_prerun,
             num_iterations=self.args.num_iterations,
+            dtype_combinations=self.operator_test.dtype_combinations,
         )
 
         runner = TestRunner(self.operator_test.test_cases, config)
