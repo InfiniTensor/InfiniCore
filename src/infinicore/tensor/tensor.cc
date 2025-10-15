@@ -65,6 +65,13 @@ TensorMetaData::TensorMetaData(const Shape &_shape, const Strides &_strides, con
     INFINICORE_CHECK_ERROR(infiniopCreateTensorDescriptor(&desc, shape.size(), shape.data(), strides.data(), (infiniDtype_t)dtype));
 }
 
+TensorMetaData::~TensorMetaData() {
+    if (desc) {
+        infiniopDestroyTensorDescriptor(desc);
+        desc = nullptr;
+    }
+}
+
 TensorImpl::TensorImpl(const Shape &shape, const DataType &dtype)
     : meta_(TensorMetaData(shape, calculate_contiguous_strides(shape), dtype)) {}
 

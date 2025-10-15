@@ -27,6 +27,7 @@ struct TensorMetaData {
     infiniopTensorDescriptor_t desc;
 
     TensorMetaData(const Shape &shape, const Strides &strides, const DataType &dtype);
+    ~TensorMetaData();
 };
 
 struct TensorData {
