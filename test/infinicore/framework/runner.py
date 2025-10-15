@@ -33,31 +33,10 @@ class GenericTestRunner:
         devices = get_test_devices(self.args)
 
         print(f"Starting {self.operator_test.operator_name} tests...")
-        all_passed = True
 
-        # Run out-of-place tests if defined
-        if self.operator_test.has_out_of_place_test():
-            print(f"\n--- Testing Out-of-place {self.operator_test.operator_name} ---")
-            out_of_place_passed = runner.run_tests(
-                devices, self.operator_test.run_out_of_place_test, "Out-of-place"
-            )
-            all_passed = all_passed and out_of_place_passed
-        else:
-            print(
-                f"\n--- Skipping Out-of-place {self.operator_test.operator_name} (not defined) ---"
-            )
-
-        # Run in-place tests if defined
-        if self.operator_test.has_inplace_test():
-            print(f"\n--- Testing In-place {self.operator_test.operator_name} ---")
-            in_place_passed = runner.run_tests(
-                devices, self.operator_test.run_inplace_test, "In-place"
-            )
-            all_passed = all_passed and in_place_passed
-        else:
-            print(
-                f"\n--- Skipping In-place {self.operator_test.operator_name} (not defined) ---"
-            )
+        # Run unified tests
+        print(f"\n--- Testing {self.operator_test.operator_name} ---")
+        all_passed = runner.run_tests(devices, self.operator_test.run_test, "Unified")
 
         # Print summary
         summary_passed = runner.print_summary()

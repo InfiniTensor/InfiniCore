@@ -6,22 +6,39 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import torch
 import infinicore
 from framework import create_test_cases
-from framework.base import BaseOperatorTest
+from framework.base import BaseOperatorTest, TestCase
 from framework.runner import GenericTestRunner
 
 # ==============================================================================
 # Operator-specific configuration
 # ==============================================================================
 
-# Test cases: (a_shape, b_shape, result_shape, a_stride, b_stride, c_stride)
-# For cases without strides, only provide first 3 elements
+# Test cases with operation mode as first parameter
+# Format: (operation_mode, a_shape, b_shape, result_shape, a_stride, b_stride, c_stride)
 _TEST_CASES_DATA = [
-    ((2, 3), (3, 4), (2, 4)),
-    ((128, 256), (256, 64), (128, 64)),
-    ((2, 4, 2048), (2, 2048, 2048), (2, 4, 2048)),
-    ((1, 2048), (2048, 2048), (1, 2048), (4096, 1), (4096, 1), (4096, 1)),
-    ((6, 2048), (2048, 2560), (6, 2560), (2048, 1), (1, 2048), (2560, 1)),
-    ((4, 48, 64), (4, 64, 6), (4, 48, 6)),
+    (TestCase.BOTH, (2, 3), (3, 4), (2, 4)),
+    (TestCase.BOTH, (128, 256), (256, 64), (128, 64)),
+    (TestCase.BOTH, (2, 4, 2048), (2, 2048, 2048), (2, 4, 2048)),
+    (
+        TestCase.BOTH,
+        (1, 2048),
+        (2048, 2048),
+        (1, 2048),
+        (4096, 1),
+        (4096, 1),
+        (4096, 1),
+    ),
+    (
+        TestCase.BOTH,
+        (6, 2048),
+        (2048, 2560),
+        (6, 2560),
+        (2048, 1),
+        (1, 2048),
+        (2560, 1),
+    ),
+    (TestCase.BOTH, (4, 48, 64), (4, 64, 6), (4, 48, 6)),
+    (TestCase.BOTH, (8, 16), (16, 32), (8, 32)),  # Additional in-place test
 ]
 
 # Parameter mapping configuration for matmul operator
@@ -51,12 +68,12 @@ _TOLERANCE_MAP = {
 }
 
 # ==============================================================================
-# Operator test class with specific test functions
+# Operator test class with unified operator functions
 # ==============================================================================
 
 
 class MatmulTest(BaseOperatorTest):
-    """Matmul test with operator-specific test functions"""
+    """Matmul test with unified operator functions"""
 
     def __init__(self):
         super().__init__("matmul")
@@ -70,21 +87,35 @@ class MatmulTest(BaseOperatorTest):
     def get_tolerance_map(self):
         return _TOLERANCE_MAP
 
-    def torch_operator_inplace(self, a, b, out=None, **kwargs):
-        """PyTorch in-place matmul operation"""
-        torch.matmul(a, b, out=out)
+    def torch_operator(self, a, b, out=None, **kwargs):
+        """
+        Unified PyTorch matmul operation - handles both in-place and out-of-place
 
-    def infinicore_operator_inplace(self, a, b, out=None, **kwargs):
-        """Infinicore in-place matmul operation"""
-        infinicore.matmul(a, b, out=out)
+        Args:
+            a: First input tensor
+            b: Second input tensor
+            out: Optional output tensor for in-place operation
+            **kwargs: Additional arguments
 
-    def torch_operator_out_of_place(self, a, b, **kwargs):
-        """PyTorch out-of-place matmul operation"""
-        return torch.matmul(a, b)
+        Returns:
+            Result tensor for out-of-place, or output tensor for in-place
+        """
+        return torch.matmul(a, b, out=out)
 
-    def infinicore_operator_out_of_place(self, a, b, **kwargs):
-        """Infinicore out-of-place matmul operation"""
-        return infinicore.matmul(a, b)
+    def infinicore_operator(self, a, b, out=None, **kwargs):
+        """
+        Unified Infinicore matmul operation - handles both in-place and out-of-place
+
+        Args:
+            a: First input tensor
+            b: Second input tensor
+            out: Optional output tensor for in-place operation
+            **kwargs: Additional arguments
+
+        Returns:
+            Result tensor for out-of-place, or output tensor for in-place
+        """
+        return infinicore.matmul(a, b, out=out)
 
 
 # ==============================================================================
