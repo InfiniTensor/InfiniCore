@@ -17,6 +17,8 @@ from .utils import (
 from .config import get_test_devices, get_args
 from .devices import InfiniDeviceEnum, InfiniDeviceNames, torch_device_map
 from .datatypes import to_torch_dtype, to_infinicore_dtype
+from .runner import GenericTestRunner
+from .templates import BinaryOperatorTest, UnaryOperatorTest
 
 __all__ = [
     "TensorSpec",
@@ -42,4 +44,7 @@ __all__ = [
     "torch_device_map",
     "to_torch_dtype",
     "to_infinicore_dtype",
+    "GenericTestRunner",
+    "BinaryOperatorTest",
+    "UnaryOperatorTest",
 ]

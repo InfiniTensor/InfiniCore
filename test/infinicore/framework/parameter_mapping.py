@@ -21,7 +21,7 @@ class ParameterMapping:
         self.input_rules = input_rules
         self.output_rules = output_rules
 
-    def map_test_case(self, test_case_data):
+    def map_test_case(self, test_case_data, operation_mode=TestCase.OUT_OF_PLACE):
         """Map test case data to TestCase object using defined rules"""
         # Normalize test case data to handle different input formats
         normalized_data = self._normalize_test_case_data(test_case_data)
@@ -37,7 +37,7 @@ class ParameterMapping:
         # Process output rules
         output_spec = self._apply_rule(self.output_rules, normalized_data)
 
-        return TestCase(inputs=inputs, output=output_spec)
+        return TestCase(operation_mode, inputs=inputs, output=output_spec)
 
     def _normalize_test_case_data(self, test_case_data):
         """Normalize test case data to handle different input formats"""
@@ -153,7 +153,7 @@ def create_test_cases(test_case_data, parameter_mapping):
     Create test cases from data using specified parameter mapping
 
     Args:
-        test_case_data: List of test case specifications
+        test_case_data: List of test case specifications with operation mode as first element
         parameter_mapping: ParameterMapping instance or configuration tuple
 
     Returns:
@@ -177,14 +177,57 @@ def create_test_cases(test_case_data, parameter_mapping):
             test_cases.append(data)
         else:
             try:
-                test_case = parameter_mapping.map_test_case(data)
+                # Extract operation mode from first element
+                operation_mode = TestCase.OUT_OF_PLACE  # Default
+                mapping_data = data
+
+                if isinstance(data, (list, tuple)) and len(data) > 0:
+                    if data[0] in [
+                        TestCase.IN_PLACE,
+                        TestCase.OUT_OF_PLACE,
+                        TestCase.BOTH,
+                    ]:
+                        operation_mode = data[0]
+                        mapping_data = data[1:]
+                    else:
+                        # Default to out-of-place if not specified
+                        operation_mode = TestCase.OUT_OF_PLACE
+                        mapping_data = data
+
+                test_case = parameter_mapping.map_test_case(
+                    mapping_data, operation_mode
+                )
                 test_cases.append(test_case)
             except Exception as e:
                 print(f"Warning: Failed to map test case {i} data {data}: {e}")
                 # Fallback: try to create TestCase directly
                 if isinstance(data, (list, tuple)):
-                    test_cases.append(TestCase(*data))
+                    # Handle operation mode in fallback
+                    if data[0] in [
+                        TestCase.IN_PLACE,
+                        TestCase.OUT_OF_PLACE,
+                        TestCase.BOTH,
+                    ]:
+                        operation_mode = data[0]
+                        test_data = data[1:]
+                    else:
+                        operation_mode = TestCase.OUT_OF_PLACE
+                        test_data = data
+
+                    # For fallback, assume first element is inputs, second is output
+                    if len(test_data) >= 1:
+                        inputs = (
+                            test_data[0]
+                            if isinstance(test_data[0], (list, tuple))
+                            else [test_data[0]]
+                        )
+                        output = test_data[1] if len(test_data) > 1 else None
+                        test_cases.append(TestCase(operation_mode, inputs, output))
+                    else:
+                        print(
+                            f"Warning: Skipping test case {i} due to insufficient data: {data}"
+                        )
                 else:
-                    test_cases.append(TestCase(data))
+                    test_cases.append(TestCase(TestCase.OUT_OF_PLACE, [data]))
 
     return test_cases

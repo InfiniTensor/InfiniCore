@@ -105,7 +105,6 @@ def print_discrepancy(
                 f"delta: {add_color(delta_str, 33)}"
             )
 
-        print(add_color(" INFO:", 35))
         print(f"  - Actual dtype: {actual.dtype}")
         print(f"  - Desired dtype: {expected.dtype}")
         print(f"  - Atol: {atol}")
@@ -221,7 +220,7 @@ def compare_results(
     return torch.allclose(torch_result_from_infini, torch_result, atol=atol, rtol=rtol)
 
 
-def create_test_comparator(config, dtype, tolerance_map=None):
+def create_test_comparator(config, dtype, tolerance_map=None, mode_name=""):
     """
     Create a test-specific comparison function that handles test configuration
 
@@ -229,6 +228,7 @@ def create_test_comparator(config, dtype, tolerance_map=None):
         config: test configuration
         dtype: infinicore data type
         tolerance_map: optional tolerance map (defaults to config's tolerance_map)
+        mode_name: operation mode name for debug output
 
     Returns:
         callable: function that takes (infini_result, torch_result) and returns bool
@@ -239,6 +239,8 @@ def create_test_comparator(config, dtype, tolerance_map=None):
     atol, rtol = get_tolerance(tolerance_map, dtype)
 
     def compare_test_results(infini_result, torch_result):
+        if config.debug and mode_name:
+            print(f"\n\033[94mDEBUG INFO - {mode_name}:\033[0m")
         return compare_results(
             infini_result, torch_result, atol=atol, rtol=rtol, debug_mode=config.debug
         )

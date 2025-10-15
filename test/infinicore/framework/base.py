@@ -17,7 +17,7 @@ from .utils import (
 
 
 class TensorSpec:
-    """Enhanced tensor specification supporting various input types and per-tensor dtype"""
+    """Tensor specification supporting various input types and per-tensor dtype"""
 
     def __init__(
         self,
@@ -62,15 +62,31 @@ class TensorSpec:
 
 
 class TestCase:
-    """Enhanced test case supporting flexible input/output specifications with per-tensor dtypes"""
+    """Test case, supporting in-place/out-of-place mode and flexible input/output specifications"""
 
-    def __init__(self, inputs, output=None, **kwargs):
+    # Operation modes
+    OUT_OF_PLACE = "out_of_place"
+    IN_PLACE = "in_place"
+    BOTH = "both"  # Test both in-place and out-of-place
+
+    def __init__(self, operation_mode, inputs, output=None, **kwargs):
         """
-        Simplified constructor
+        Enhanced constructor with operation mode
         Args:
+            operation_mode: IN_PLACE, OUT_OF_PLACE, or BOTH
             inputs: List[TensorSpec] or simple shape tuples
-            output: TensorSpec or shape tuple
+            output: TensorSpec or shape tuple (required for IN_PLACE mode)
         """
+        if operation_mode not in [self.IN_PLACE, self.OUT_OF_PLACE, self.BOTH]:
+            raise ValueError(
+                f"Invalid operation_mode: {operation_mode}. Must be IN_PLACE, OUT_OF_PLACE, or BOTH"
+            )
+
+        if operation_mode == self.IN_PLACE and output is None:
+            raise ValueError("IN_PLACE mode requires output specification")
+
+        self.operation_mode = operation_mode
+
         # Normalize inputs
         self.inputs = []
         for inp in inputs:
@@ -91,6 +107,7 @@ class TestCase:
         self.description = kwargs.pop("description", "")
 
     def __str__(self):
+        mode_str = self.operation_mode.upper()
         input_strs = []
         for inp in self.inputs:
             if hasattr(inp, "is_scalar") and inp.is_scalar:
@@ -105,7 +122,7 @@ class TestCase:
             else:
                 input_strs.append(str(inp))
 
-        base_str = f"TestCase(inputs=[{', '.join(input_strs)}]"
+        base_str = f"TestCase(mode={mode_str}, inputs=[{', '.join(input_strs)}]"
         if self.output:
             dtype_str = f", dtype={self.output.dtype}" if self.output.dtype else ""
             base_str += f", output=tensor{self.output.shape}{dtype_str}"
@@ -222,7 +239,7 @@ class TestRunner:
 
 
 class BaseOperatorTest(ABC):
-    """Enhanced base operator test supporting flexible input/output and per-tensor dtypes"""
+    """Enhanced base operator test supporting unified operator functions and operation modes"""
 
     def __init__(self, operator_name):
         self.operator_name = operator_name
@@ -279,26 +296,24 @@ class BaseOperatorTest(ABC):
 
         test_case = TestCase(
             inputs=[
-                TensorSpec.from_tensor(shape, dtype=infinicore.float32),  # 固定dtype
-                TensorSpec.from_tensor(shape),  # 使用组合配置中的dtype
+                TensorSpec.from_tensor(shape, dtype=infinicore.float32),  # fixed dtype
+                TensorSpec.from_tensor(shape),  # from combined dtypes
             ],
-            output=TensorSpec.from_tensor(shape)  # 使用组合配置中的dtype
+            output=TensorSpec.from_tensor(shape)  # from combined dtypes
         )
 
         """
         return None
 
-    def has_out_of_place_test(self):
-        """Check if out-of-place test functions are defined"""
-        return hasattr(self, "torch_operator_out_of_place") and hasattr(
-            self, "infinicore_operator_out_of_place"
-        )
+    @abstractmethod
+    def torch_operator(self, *inputs, out=None, **kwargs):
+        """Unified PyTorch operator function - handles both in-place and out-of-place"""
+        pass
 
-    def has_inplace_test(self):
-        """Check if in-place test functions are defined"""
-        return hasattr(self, "torch_operator_inplace") and hasattr(
-            self, "infinicore_operator_inplace"
-        )
+    @abstractmethod
+    def infinicore_operator(self, *inputs, out=None, **kwargs):
+        """Unified Infinicore operator function - handles both in-place and out-of-place"""
+        pass
 
     def create_strided_tensor(self, shape, strides, dtype, device_str):
         """Create a non-contiguous tensor with specific strides"""
@@ -378,25 +393,47 @@ class BaseOperatorTest(ABC):
             else:
                 return to_torch_dtype(dtype_config)
 
-    def run_out_of_place_test(self, device, test_case, dtype_config, config):
-        """Generic out-of-place test execution flow with per-tensor dtype support"""
-        if not self.has_out_of_place_test():
-            raise NotImplementedError("Out-of-place test functions not defined")
+    def run_test(self, device, test_case, dtype_config, config):
+        """Unified test execution flow that handles all operation modes"""
+        device_str = torch_device_map[device]
 
+        # Handle BOTH mode by running both IN_PLACE and OUT_OF_PLACE
+        if test_case.operation_mode == TestCase.BOTH:
+            # Run OUT_OF_PLACE test
+            out_of_place_case = TestCase(
+                TestCase.OUT_OF_PLACE,
+                test_case.inputs,
+                test_case.output,
+                **test_case.kwargs,
+            )
+            self._run_single_test(
+                device, out_of_place_case, dtype_config, config, "OUT_OF_PLACE"
+            )
+
+            # Run IN_PLACE test (if output is specified)
+            if test_case.output is not None:
+                in_place_case = TestCase(
+                    TestCase.IN_PLACE,
+                    test_case.inputs,
+                    test_case.output,
+                    **test_case.kwargs,
+                )
+                self._run_single_test(
+                    device, in_place_case, dtype_config, config, "IN_PLACE"
+                )
+            return
+
+        # Handle single mode tests
+        self._run_single_test(
+            device, test_case, dtype_config, config, test_case.operation_mode.upper()
+        )
+
+    def _run_single_test(self, device, test_case, dtype_config, config, mode_name):
+        """Run a single test with specified operation mode"""
         device_str = torch_device_map[device]
 
         # Prepare inputs with per-tensor dtype support
         inputs, kwargs = self.prepare_inputs(test_case, device_str, dtype_config)
-
-        # PyTorch reference result
-        def torch_op():
-            return self.torch_operator_out_of_place(*inputs, **kwargs)
-
-        torch_result = torch_op()
-
-        # Ensure PyTorch result is contiguous
-        if isinstance(torch_result, torch.Tensor) and not torch_result.is_contiguous():
-            torch_result = torch_result.contiguous()
 
         # Convert tensor inputs to infinicore (skip scalars and non-tensors)
         infini_inputs = []
@@ -417,130 +454,121 @@ class BaseOperatorTest(ABC):
             else:
                 infini_inputs.append(inp)
 
-        # Infinicore result
-        def infini_op():
-            return self.infinicore_operator_out_of_place(*infini_inputs, **kwargs)
+        if test_case.operation_mode == TestCase.OUT_OF_PLACE:
+            # Out-of-place testing
+            def torch_op():
+                return self.torch_operator(*inputs, **kwargs)
 
-        infini_result = infini_op()
+            torch_result = torch_op()
 
-        # Determine comparison dtype (use output dtype or result dtype)
-        comparison_dtype = to_infinicore_dtype(
-            self.get_output_dtype(test_case, dtype_config, torch_result)
-        )
+            # Ensure PyTorch result is contiguous
+            if (
+                isinstance(torch_result, torch.Tensor)
+                and not torch_result.is_contiguous()
+            ):
+                torch_result = torch_result.contiguous()
 
-        # Result comparison
-        compare_fn = create_test_comparator(config, comparison_dtype)
-        is_valid = compare_fn(infini_result, torch_result)
-        assert is_valid, f"{self.operator_name} out-of-place test failed"
+            def infini_op():
+                return self.infinicore_operator(*infini_inputs, **kwargs)
 
-        # Performance testing
-        if config.bench:
-            profile_operation(
-                f"PyTorch {self.operator_name} Out-of-place",
-                torch_op,
-                device_str,
-                config.num_prerun,
-                config.num_iterations,
-            )
-            profile_operation(
-                f"Infinicore {self.operator_name} Out-of-place",
-                infini_op,
-                device_str,
-                config.num_prerun,
-                config.num_iterations,
+            infini_result = infini_op()
+
+            # Determine comparison dtype
+            comparison_dtype = to_infinicore_dtype(
+                self.get_output_dtype(test_case, dtype_config, torch_result)
             )
 
-    def run_inplace_test(self, device, test_case, dtype_config, config):
-        """Generic in-place operation test execution flow with per-tensor dtype support"""
-        if not self.has_inplace_test():
-            raise NotImplementedError("In-place test functions not defined")
+            # Result comparison
+            compare_fn = create_test_comparator(
+                config, comparison_dtype, mode_name=f"{self.operator_name} {mode_name}"
+            )
+            is_valid = compare_fn(infini_result, torch_result)
+            assert is_valid, f"{self.operator_name} {mode_name} test failed"
 
-        device_str = torch_device_map[device]
+            # Performance testing
+            if config.bench:
+                profile_operation(
+                    f"PyTorch {self.operator_name} {mode_name}",
+                    torch_op,
+                    device_str,
+                    config.num_prerun,
+                    config.num_iterations,
+                )
+                profile_operation(
+                    f"Infinicore {self.operator_name} {mode_name}",
+                    infini_op,
+                    device_str,
+                    config.num_prerun,
+                    config.num_iterations,
+                )
 
-        # Prepare inputs with per-tensor dtype support
-        inputs, kwargs = self.prepare_inputs(test_case, device_str, dtype_config)
+        else:  # IN_PLACE mode
+            # In-place testing
+            if not test_case.output:
+                raise ValueError("IN_PLACE test requires output specification")
 
-        if not test_case.output:
-            raise ValueError("In-place test requires output specification in test case")
+            # Determine output dtype
+            output_dtype = self.get_output_dtype(test_case, dtype_config)
+            output_shape = test_case.output.shape
 
-        # Determine output dtype
-        output_dtype = self.get_output_dtype(test_case, dtype_config)
+            # Prepare output tensors for both frameworks
+            if test_case.output.is_contiguous or test_case.output.strides is None:
+                # Create contiguous output tensor
+                torch_output = torch.zeros(
+                    output_shape, dtype=output_dtype, device=device_str
+                )
+            else:
+                # Create strided output tensor
+                torch_output = self.create_strided_tensor(
+                    output_shape, test_case.output.strides, output_dtype, device_str
+                )
+                torch_output.zero_()
 
-        # PyTorch in-place operation
-        output_shape = test_case.output.shape
+            def torch_op_inplace():
+                self.torch_operator(*inputs, out=torch_output, **kwargs)
 
-        if test_case.output.is_contiguous or test_case.output.strides is None:
-            # Create contiguous output tensor
-            torch_preallocated = torch.zeros(
+            torch_op_inplace()
+
+            # Create infinicore output tensor
+            torch_dummy = torch.zeros(
                 output_shape, dtype=output_dtype, device=device_str
             )
-        else:
-            # Create strided output tensor
-            torch_preallocated = self.create_strided_tensor(
-                output_shape, test_case.output.strides, output_dtype, device_str
-            )
-            # Zero out the strided tensor
-            torch_preallocated.zero_()
-
-        def torch_op_inplace():
-            self.torch_operator_inplace(*inputs, out=torch_preallocated, **kwargs)
-
-        torch_op_inplace()
-
-        # Infinicore in-place operation
-        infini_inputs = []
-        for inp in inputs:
-            if isinstance(inp, torch.Tensor):
-                if not inp.is_contiguous():
-                    infini_tensor = infinicore.strided_from_blob(
-                        inp.data_ptr(),
-                        list(inp.shape),
-                        list(inp.stride()),
-                        dtype=to_infinicore_dtype(inp.dtype),
-                        device=infinicore.device(device_str, 0),
-                    )
-                else:
-                    infini_tensor = create_infinicore_tensor(inp, device_str)
-                infini_inputs.append(infini_tensor)
+            if test_case.output.is_contiguous or test_case.output.strides is None:
+                infini_output = create_infinicore_tensor(torch_dummy, device_str)
             else:
-                infini_inputs.append(inp)
+                rearrange_tensor(torch_dummy, list(torch_output.stride()))
+                infini_output = create_strided_infinicore_tensor(
+                    torch_dummy, device_str
+                )
 
-        # Create infinicore output tensor
-        torch_dummy = torch.zeros(output_shape, dtype=output_dtype, device=device_str)
-        if test_case.output.is_contiguous or test_case.output.strides is None:
-            infini_output = create_infinicore_tensor(torch_dummy, device_str)
-        else:
-            rearrange_tensor(torch_dummy, list(torch_preallocated.stride()))
-            infini_output = create_strided_infinicore_tensor(torch_dummy, device_str)
+            def infini_op_inplace():
+                self.infinicore_operator(*infini_inputs, out=infini_output, **kwargs)
 
-        def infini_op_inplace():
-            self.infinicore_operator_inplace(
-                *infini_inputs, out=infini_output, **kwargs
+            infini_op_inplace()
+
+            # Result comparison
+            comparison_dtype = to_infinicore_dtype(
+                self.get_output_dtype(test_case, dtype_config, torch_output)
             )
-
-        infini_op_inplace()
-
-        # Result comparison
-        comparison_dtype = to_infinicore_dtype(
-            self.get_output_dtype(test_case, dtype_config, torch_preallocated)
-        )
-        compare_fn = create_test_comparator(config, comparison_dtype)
-        is_valid = compare_fn(infini_output, torch_preallocated)
-        assert is_valid, f"{self.operator_name} in-place test failed"
-
-        # Performance testing
-        if config.bench:
-            profile_operation(
-                f"PyTorch {self.operator_name} In-place",
-                torch_op_inplace,
-                device_str,
-                config.num_prerun,
-                config.num_iterations,
+            compare_fn = create_test_comparator(
+                config, comparison_dtype, mode_name=f"{self.operator_name} {mode_name}"
             )
-            profile_operation(
-                f"Infinicore {self.operator_name} In-place",
-                infini_op_inplace,
-                device_str,
-                config.num_prerun,
-                config.num_iterations,
-            )
+            is_valid = compare_fn(infini_output, torch_output)
+            assert is_valid, f"{self.operator_name} {mode_name} test failed"
+
+            # Performance testing
+            if config.bench:
+                profile_operation(
+                    f"PyTorch {self.operator_name} {mode_name}",
+                    torch_op_inplace,
+                    device_str,
+                    config.num_prerun,
+                    config.num_iterations,
+                )
+                profile_operation(
+                    f"Infinicore {self.operator_name} {mode_name}",
+                    infini_op_inplace,
+                    device_str,
+                    config.num_prerun,
+                    config.num_iterations,
+                )
