@@ -32,11 +32,10 @@ class GenericTestRunner:
         runner = TestRunner(self.operator_test.test_cases, config)
         devices = get_test_devices(self.args)
 
-        print(f"Starting {self.operator_test.operator_name} tests...")
-
         # Run unified tests
-        print(f"\n--- Testing {self.operator_test.operator_name} ---")
-        all_passed = runner.run_tests(devices, self.operator_test.run_test, "Unified")
+        all_passed = runner.run_tests(
+            devices, self.operator_test.run_test, self.operator_test.operator_name
+        )
 
         # Print summary
         summary_passed = runner.print_summary()
