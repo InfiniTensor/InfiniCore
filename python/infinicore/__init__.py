@@ -25,6 +25,7 @@ from infinicore.dtype import (
     uint8,
 )
 from infinicore.ops.add import add
+from infinicore.ops.attention import attention
 from infinicore.ops.matmul import matmul
 from infinicore.ops.rearrange import rearrange
 from infinicore.ops.rms_norm import rms_norm
@@ -66,6 +67,7 @@ __all__ = [
     "uint8",
     # Operations.
     "add",
+    "attention",
     "matmul",
     "rearrange",
     "rms_norm",
