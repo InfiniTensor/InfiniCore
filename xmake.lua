@@ -62,8 +62,18 @@ option("cudnn")
     set_description("Whether to compile cudnn for Nvidia GPU")
 option_end()
 
+option("cublaslt")
+    set_default(true)
+    set_showmenu(true)
+    set_description("Whether to compile cublaslt for Nvidia GPU")
+option_end()
+
 if has_config("cudnn") then
     add_defines("ENABLE_CUDNN_API")
+end
+
+if has_config("cublaslt") then
+    add_defines("ENABLE_CUBLASLT_API")
 end
 
 -- 寒武纪

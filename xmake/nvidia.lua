@@ -10,7 +10,7 @@ target("infiniop-nvidia")
 
     set_policy("build.cuda.devlink", true)
     set_toolchains("cuda")
-    add_links("cudart", "cublas")
+    add_links("cudart", "cublas", "cublasLt")
     if has_config("cudnn") then
         add_links("cudnn")
     end

@@ -4,7 +4,14 @@ import gguf
 from typing import List
 from enum import Enum
 
-from .. import InfiniopTestWriter, InfiniopTestCase, np_dtype_to_ggml, gguf_strides, contiguous_gguf_strides
+from .. import (
+    InfiniopTestWriter,
+    InfiniopTestCase,
+    np_dtype_to_ggml,
+    gguf_strides,
+    contiguous_gguf_strides,
+)
+
 
 class Algorithm(Enum):
     GPT_J = 0
@@ -21,7 +28,6 @@ def rotary_embedding(t, sin, cos, algo):
 
         return t_out_1, t_out_2
 
-
     dh = t.shape[-1]
     assert dh % 2 == 0, "Embedding dimension must be even."
 
@@ -36,7 +42,7 @@ def rotary_embedding(t, sin, cos, algo):
         t_out[..., 0::2] = t_out_even
         t_out[..., 1::2] = t_out_odd
     else:
-        half_dim = dh // 2   
+        half_dim = dh // 2
         t_first = t[..., :half_dim]
         t_second = t[..., half_dim:]
 
@@ -51,7 +57,9 @@ def rotary_embedding(t, sin, cos, algo):
 def sin_cos_table(pos, dim, theta, dtype):
     assert dim % 2 == 0, "Embedding dimension must be even."
 
-    freqs = 1.0 / (theta ** (np.arange(0, dim, 2)[: (dim // 2)].astype(np.float32) / dim))
+    freqs = 1.0 / (
+        theta ** (np.arange(0, dim, 2)[: (dim // 2)].astype(np.float32) / dim)
+    )
 
     angles = np.outer(pos, freqs)
 
@@ -103,19 +111,33 @@ class RoPETestCase(InfiniopTestCase):
             test_writer.add_array(test_writer.gguf_key("x.shape"), self.shape_x)
         test_writer.add_array(
             test_writer.gguf_key("y.strides"),
-            gguf_strides(*self.stride_y if self.stride_y is not None else contiguous_gguf_strides(self.shape_y))
+            gguf_strides(
+                *(
+                    self.stride_y
+                    if self.stride_y is not None
+                    else contiguous_gguf_strides(self.shape_y)
+                )
+            ),
         )
         if self.stride_x is not None:
-            test_writer.add_array(test_writer.gguf_key("x.strides"), gguf_strides(*self.stride_x))
+            test_writer.add_array(
+                test_writer.gguf_key("x.strides"), gguf_strides(*self.stride_x)
+            )
 
         test_writer.add_tensor(
-            test_writer.gguf_key("pos_ids"), self.pos_ids, raw_dtype=np_dtype_to_ggml(self.pos_ids.dtype)
+            test_writer.gguf_key("pos_ids"),
+            self.pos_ids,
+            raw_dtype=np_dtype_to_ggml(self.pos_ids.dtype),
         )
         test_writer.add_tensor(
-            test_writer.gguf_key("sin_table"), self.sin_table, raw_dtype=np_dtype_to_ggml(self.sin_table.dtype)
+            test_writer.gguf_key("sin_table"),
+            self.sin_table,
+            raw_dtype=np_dtype_to_ggml(self.sin_table.dtype),
         )
         test_writer.add_tensor(
-            test_writer.gguf_key("cos_table"), self.cos_table, raw_dtype=np_dtype_to_ggml(self.cos_table.dtype)
+            test_writer.gguf_key("cos_table"),
+            self.cos_table,
+            raw_dtype=np_dtype_to_ggml(self.cos_table.dtype),
         )
         ans = rotary_embedding(
             self.x.astype(np.float64),
@@ -126,8 +148,6 @@ class RoPETestCase(InfiniopTestCase):
         test_writer.add_tensor(
             test_writer.gguf_key("ans"), ans, raw_dtype=gguf.GGMLQuantizationType.F64
         )
-
-
 
 
 if __name__ == "__main__":
@@ -146,7 +166,6 @@ if __name__ == "__main__":
         ((3, 32, 128), (8000, 200, 1), (7000, 128, 1)),
     ]
 
-
     _ALGO = [
         Algorithm.GPT_J,
         Algorithm.GPT_NEOX,
@@ -162,7 +181,9 @@ if __name__ == "__main__":
                 x = np.random.rand(*shape).astype(dtype)
                 y = np.empty(tuple(0 for _ in shape), dtype=dtype)
                 pos_ids = np.arange(0, x.shape[0], dtype=np.int32)
-                sin_table, cos_table = sin_cos_table(pos_ids, x.shape[2], theta=1e5, dtype=dtype)
+                sin_table, cos_table = sin_cos_table(
+                    pos_ids, x.shape[2], theta=1e5, dtype=dtype
+                )
                 test_case = RoPETestCase(
                     y=y,
                     x=x,

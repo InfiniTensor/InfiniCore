@@ -49,6 +49,18 @@ infiniStatus_t Handle::Internal::useCudnn(cudaStream_t stream, const Fn<cudnnHan
 }
 #endif
 
+#ifdef ENABLE_CUBLASLT_API
+infiniStatus_t Handle::Internal::useCublasLt(cudaStream_t stream, const Fn<cublasLtHandle_t> &f) const {
+    auto handle = blaslt_handles.pop();
+    if (!handle) {
+        CHECK_CUBLASLT(cublasLtCreate(&(*handle)));
+    }
+    CHECK_STATUS(f(*handle));
+    blaslt_handles.push(std::move(*handle));
+    return INFINI_STATUS_SUCCESS;
+}
+#endif
+
 int Handle::Internal::warpSize() const { return _warp_size; }
 int Handle::Internal::maxThreadsPerBlock() const { return _max_threads_per_block; }
 int Handle::Internal::blockSizeX() const { return _block_size[0]; }

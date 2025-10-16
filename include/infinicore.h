@@ -34,6 +34,7 @@ typedef enum {
     INFINI_STATUS_BAD_TENSOR_SHAPE = 11,
     INFINI_STATUS_BAD_TENSOR_STRIDES = 12,
     INFINI_STATUS_INSUFFICIENT_WORKSPACE = 13,
+    INFINI_STATUS_NOT_ALIGNED = 14,
 } infiniStatus_t;
 
 typedef enum {
@@ -70,6 +71,9 @@ typedef enum {
     INFINI_DTYPE_C64 = 17,
     INFINI_DTYPE_C128 = 18,
     INFINI_DTYPE_BF16 = 19,
+    INFINI_DTYPE_F8_E4M3 = 20,
+    INFINI_DTYPE_F8_E5M2 = 21,
+    INFINI_DTYPE_F8_UE8M0 = 22,
 } infiniDtype_t;
 
 #endif // __INFINICORE_API_H__

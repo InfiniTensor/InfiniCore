@@ -19,6 +19,8 @@ class InfiniDtype:
     C32 = 17
     C64 = 18
     BF16 = 19
+    F8E4M3 = 20
+    F8E5M2 = 21
 
 
 InfiniDtypeNames = {
@@ -42,4 +44,6 @@ InfiniDtypeNames = {
     InfiniDtype.C32: "C32",
     InfiniDtype.C64: "C64",
     InfiniDtype.BF16: "BF16",
+    InfiniDtype.F8E4M3: "F8E4M3",
+    InfiniDtype.F8E5M2: "F8E5M2",
 }

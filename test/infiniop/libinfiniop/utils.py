@@ -80,7 +80,13 @@ class TestTensor(CTensor):
                 torch_shape, dtype=to_torch_dtype(dt), device=torch_device_map[device]
             )
         elif mode == "randint":
-            self._torch_tensor = torch.randint(-2000000000,2000000000, torch_shape,dtype=to_torch_dtype(dt), device=torch_device_map[device])
+            self._torch_tensor = torch.randint(
+                -2000000000,
+                2000000000,
+                torch_shape,
+                dtype=to_torch_dtype(dt),
+                device=torch_device_map[device],
+            )
         elif mode == "manual":
             assert set_tensor is not None
             assert torch_shape == list(set_tensor.shape)
@@ -120,14 +126,19 @@ class TestTensor(CTensor):
 
     def is_broadcast(self):
         return self.strides is not None and 0 in self.strides
-    
+
     @staticmethod
-    def from_binary(binary_file, shape, strides, dt: InfiniDtype, device: InfiniDeviceEnum):
+    def from_binary(
+        binary_file, shape, strides, dt: InfiniDtype, device: InfiniDeviceEnum
+    ):
         data = np.fromfile(binary_file, dtype=to_numpy_dtype(dt))
         base = torch.from_numpy(data)
-        torch_tensor = torch.as_strided(base, size=shape, stride=strides).to(torch_device_map[device])
+        torch_tensor = torch.as_strided(base, size=shape, stride=strides).to(
+            torch_device_map[device]
+        )
         return TestTensor(
-            shape, strides, dt, device, mode="binary", set_tensor=torch_tensor)
+            shape, strides, dt, device, mode="binary", set_tensor=torch_tensor
+        )
 
     @staticmethod
     def from_torch(torch_tensor, dt: InfiniDtype, device: InfiniDeviceEnum):
@@ -136,6 +147,26 @@ class TestTensor(CTensor):
         return TestTensor(
             shape_, strides_, dt, device, mode="manual", set_tensor=torch_tensor
         )
+
+    def convert_pricesion(self, dtype: InfiniDtype):
+        torch_shape = []
+        torch_strides = [] if self.strides is not None else None
+        for i in range(len(self.shape)):
+            if self.strides is not None and self.strides[i] == 0:
+                torch_shape.append(1)
+                torch_strides.append(1)
+            elif self.strides is not None and self.strides[i] != 0:
+                torch_shape.append(self.shape[i])
+                torch_strides.append(self.strides[i])
+            else:
+                torch_shape.append(self.shape[i])
+        self._torch_tensor = self._torch_tensor.to(to_torch_dtype(dtype))
+        self.dt = dtype
+        if self.strides is not None:
+            self._data_tensor = rearrange_tensor(self._torch_tensor, torch_strides)
+        else:
+            self._data_tensor = self._torch_tensor.clone()
+        super().__init__(self.dt, self.shape, self.strides)
 
 
 def to_torch_dtype(dt: InfiniDtype, compatability_mode=False):
@@ -165,6 +196,10 @@ def to_torch_dtype(dt: InfiniDtype, compatability_mode=False):
         return torch.int32 if compatability_mode else torch.uint32
     elif dt == InfiniDtype.U64:
         return torch.int64 if compatability_mode else torch.uint64
+    elif dt == InfiniDtype.F8E4M3:
+        return torch.float8_e4m3fn
+    elif dt == InfiniDtype.F8E5M2:
+        return torch.float8_e5m2
     else:
         raise ValueError("Unsupported data type")
 
@@ -198,7 +233,6 @@ def to_numpy_dtype(dt: InfiniDtype, compatability_mode=False):
         return np.float64
     else:
         raise ValueError("Unsupported data type")
-
 
 
 class TestWorkspace:
@@ -476,7 +510,7 @@ def print_discrepancy(
 
     actual = actual.to("cpu")
     expected = expected.to("cpu")
-    
+
     actual_isnan = torch.isnan(actual)
     expected_isnan = torch.isnan(expected)
 

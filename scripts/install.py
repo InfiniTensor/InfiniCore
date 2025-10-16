@@ -7,6 +7,7 @@ from set_env import set_env
 PROJECT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 os.chdir(PROJECT_DIR)
 
+
 def run_cmd(cmd):
     subprocess.run(cmd, text=True, encoding="utf-8", check=True, shell=True)
 

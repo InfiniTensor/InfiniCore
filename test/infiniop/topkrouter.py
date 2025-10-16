@@ -19,7 +19,7 @@ from libinfiniop import (
     InfiniDtypeNames,
     InfiniDeviceNames,
     infiniopOperatorDescriptor_t,
-    torch_device_map
+    torch_device_map,
 )
 
 # ==============================================================================
@@ -34,7 +34,7 @@ _TEST_CASES_ = [
 
 # w (weight) types
 # Note: 'None' means the same as input dtype
-_X_DTYPES = [InfiniDtype.F32, InfiniDtype.BF16, InfiniDtype.F16]  # 
+_X_DTYPES = [InfiniDtype.F32, InfiniDtype.BF16, InfiniDtype.F16]  #
 # x types used for testing
 _VALUE_DTYPES = [InfiniDtype.F32]
 
@@ -55,7 +55,16 @@ NUM_ITERATIONS = 1000
 
 
 def tensorInfo(data):
-    print("data:  ", data.is_contiguous(), data.device, data.dtype, data.shape, data.stride(), data.data_ptr(), hex(data.data_ptr()))
+    print(
+        "data:  ",
+        data.is_contiguous(),
+        data.device,
+        data.dtype,
+        data.shape,
+        data.stride(),
+        data.data_ptr(),
+        hex(data.data_ptr()),
+    )
 
 
 class DeepseekV3TopkRouter(nn.Module):
@@ -78,14 +87,22 @@ class DeepseekV3TopkRouter(nn.Module):
 
     @torch.no_grad()
     def get_topk_indices(self, scores):
-        scores_for_choice = scores.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)  # Size([1, 256])
+        scores_for_choice = scores.view(
+            -1, self.n_routed_experts
+        ) + self.e_score_correction_bias.unsqueeze(
+            0
+        )  # Size([1, 256])
         group_scores = (
-            scores_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
+            scores_for_choice.view(
+                -1, self.n_group, self.n_routed_experts // self.n_group
+            )
             .topk(2, dim=-1)[0]
             .sum(dim=-1)
         )
 
-        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=True)[1]  # Size([1, 4])  
+        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=True)[
+            1
+        ]  # Size([1, 4])
         group_mask = torch.zeros_like(group_scores)  # Size([1, 8])
         group_mask.scatter_(1, group_idx, 1)  # Size([1, 8])
 
@@ -95,8 +112,12 @@ class DeepseekV3TopkRouter(nn.Module):
             .reshape(-1, self.n_routed_experts)
         )
 
-        scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), 0.0)  # Size([1, 256])
-        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=True)[1]  # Size([1, 8])
+        scores_for_choice = scores_for_choice.masked_fill(
+            ~score_mask.bool(), 0.0
+        )  # Size([1, 256])
+        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=True)[
+            1
+        ]  # Size([1, 8])
 
         return topk_indices
 
@@ -124,14 +145,14 @@ def torch_topkrouter(router_logits, correction_bias):
 
 
 def test(
-        handle,
-        device,
-        x_shape,
-        x_stride,
-        topk,
-        x_dtype=InfiniDtype.F32,
-        dtype=InfiniDtype.F16,
-        sync=None,
+    handle,
+    device,
+    x_shape,
+    x_stride,
+    topk,
+    x_dtype=InfiniDtype.F32,
+    dtype=InfiniDtype.F16,
+    sync=None,
 ):
     print(
         f"Testing topkrouter on {InfiniDeviceNames[device]} with x_shape:{x_shape}"
@@ -141,8 +162,12 @@ def test(
     data = torch.arange(0, x_shape[0] * x_shape[1]).reshape(x_shape)
 
     N, width = x_shape
-    x = TestTensor(x_shape, data.stride(), x_dtype, device, scale=5.0, bias=-5.0, mode="random")
-    correction_bias = TestTensor([x_shape[1]], [1], InfiniDtype.F32, device, mode="random")
+    x = TestTensor(
+        x_shape, data.stride(), x_dtype, device, scale=5.0, bias=-5.0, mode="random"
+    )
+    correction_bias = TestTensor(
+        [x_shape[1]], [1], InfiniDtype.F32, device, mode="random"
+    )
 
     if sync is not None:
         sync()
@@ -150,10 +175,7 @@ def test(
     descriptor = infiniopOperatorDescriptor_t()
     check_error(
         LIBINFINIOP.infiniopCreateTopkrouterDescriptor(
-            handle,
-            ctypes.byref(descriptor),
-            x.descriptor,
-            correction_bias.descriptor
+            handle, ctypes.byref(descriptor), x.descriptor, correction_bias.descriptor
         )
     )
 
@@ -169,8 +191,12 @@ def test(
     )
     workspace = TestWorkspace(workspace_size.value, x.device)
 
-    values = torch.zeros((N, topk), dtype=torch.float32, device=torch_device_map[x.device])
-    indices = torch.zeros((N, topk), dtype=torch.int32, device=torch_device_map[x.device])
+    values = torch.zeros(
+        (N, topk), dtype=torch.float32, device=torch_device_map[x.device]
+    )
+    indices = torch.zeros(
+        (N, topk), dtype=torch.int32, device=torch_device_map[x.device]
+    )
 
     def lib_topkrouter():
         check_error(
@@ -189,7 +215,9 @@ def test(
         )
 
     lib_topkrouter()
-    lable_values, lable_indices = torch_topkrouter(x.actual_tensor(), correction_bias.actual_tensor())
+    lable_values, lable_indices = torch_topkrouter(
+        x.actual_tensor(), correction_bias.actual_tensor()
+    )
 
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:

@@ -6,26 +6,22 @@
 #include <utility>
 
 /**
- * @brief Define the process for initializing a Descriptor of an elementwise operation
- * for its CPU implementation
+ * @brief Define the process for initializing a Descriptor of an elementwise
+ * operation for its CPU implementation
  *
  * @param HANDLE         The device handle.
  * @param DTYPE          The output dtype.
  * @param OUT_DESC       The output tensor descriptor.
  * @param INPUT_DESC_VEC A vector containing input tensor descriptors.
  */
-#define CREATE_ELEMENTWISE_CPU_DESCRIPTOR(HANDLE, DTYPE, OUT_DESC, INPUT_DESC_VEC)         \
+#define CREATE_ELEMENTWISE_CPU_DESCRIPTOR(HANDLE, DTYPE, OUT_DESC,                         \
+                                          INPUT_DESC_VEC)                                  \
                                                                                            \
     auto info_result = op::elementwise::ElementwiseInfo::create(OUT_DESC, INPUT_DESC_VEC); \
     CHECK_RESULT(info_result);                                                             \
                                                                                            \
-    *desc_ptr = new Descriptor(                                                            \
-        DTYPE,                                                                             \
-        info_result.take(),                                                                \
-        nullptr,                                                                           \
-        0,                                                                                 \
-        HANDLE->device,                                                                    \
-        HANDLE->device_id);
+    *desc_ptr = new Descriptor(DTYPE, info_result.take(), nullptr, 0,                      \
+                               HANDLE->device, HANDLE->device_id);
 
 namespace op::elementwise::cpu {
 
@@ -62,18 +58,17 @@ public:
      * @return infiniStatus_t  Status indicating success or failure.
      */
     template <typename Op, typename Tdata, typename... Args>
-    infiniStatus_t calculate(
-        const op::elementwise::ElementwiseInfo &info,
-        void *output,
-        const std::vector<const void *> &inputs,
-        void *stream,
-        Args &&...args);
+    infiniStatus_t calculate(const op::elementwise::ElementwiseInfo &info,
+                             void *output,
+                             const std::vector<const void *> &inputs,
+                             void *stream, Args &&...args);
 
     /**
      * @brief Dispatches an elementwise operation with heterogeneous input types.
      *
-     * Supports operations where each input may have a different type, as defined by Op.
-     * The number of input types must match the operation's expected input count.
+     * Supports operations where each input may have a different type, as defined
+     * by Op. The number of input types must match the operation's expected input
+     * count.
      *
      * @tparam Op     The elementwise operation to perform.
      * @tparam Tout   Output data type.
@@ -86,15 +81,12 @@ public:
      * @param args     Additional backend-specific arguments.
      * @return infiniStatus_t  Status indicating success or failure.
      */
-    template <typename Op, typename Tout, typename... Tin,
-              typename... Args,
+    template <typename Op, typename Tout, typename... Tin, typename... Args,
               std::enable_if_t<(sizeof...(Tin) == Op::num_inputs), int> = 0>
-    infiniStatus_t calculate(
-        const op::elementwise::ElementwiseInfo &info,
-        void *output,
-        const std::vector<const void *> &inputs,
-        void *stream,
-        Args &&...args);
+    infiniStatus_t calculate(const op::elementwise::ElementwiseInfo &info,
+                             void *output,
+                             const std::vector<const void *> &inputs,
+                             void *stream, Args &&...args);
 };
 
 // Define the Opaque struct for CPU, which is empty
@@ -106,74 +98,86 @@ utils::Result<DeviceImpl> DeviceImpl::create(Args &&...args) {
 }
 
 // Perform elementwise operation for different input types
-template <typename Op, typename Tout, typename... Tin, size_t... Is, typename... Args,
+template <typename Op, typename Tout, typename... Tin, size_t... Is,
+          typename... Args,
           std::enable_if_t<(sizeof...(Tin) == Op::num_inputs), int> = 0>
-void calculate_impl(const op::elementwise::ElementwiseInfo &info,
-                    void *output,
+void calculate_impl(const op::elementwise::ElementwiseInfo &info, void *output,
                     const std::vector<const void *> &inputs,
-                    std::index_sequence<Is...>,
-                    Args &&...args) {
+                    std::index_sequence<Is...>, Args &&...args) {
 
     Tout *out = reinterpret_cast<Tout *>(output);
-    std::tuple<const Tin *...> input_ptrs = {reinterpret_cast<const Tin *>(inputs[Is])...};
+    std::tuple<const Tin *...> input_ptrs = {
+        reinterpret_cast<const Tin *>(inputs[Is])...};
     ptrdiff_t output_size = info.getOutputSize();
 
 #pragma omp parallel for
     for (ptrdiff_t i = 0; i < output_size; ++i) {
         size_t out_idx = info.isOutputContiguous()
                            ? i
-                           : op::common_cpu::indexToOffset(i, info.getNdim(), info.getOutputShape(), info.getOutputStrides());
+                           : op::common_cpu::indexToOffset(
+                               i, info.getNdim(), info.getOutputShape(),
+                               info.getOutputStrides());
 
         auto get_input_idx = [&](size_t input_id) {
             return info.getInputContiguous()[input_id]
                      ? i
-                     : op::common_cpu::indexToOffset(i, info.getNdim(), info.getInputShape(input_id), info.getInputStrides(input_id));
+                     : op::common_cpu::indexToOffset(
+                         i, info.getNdim(), info.getInputShape(input_id),
+                         info.getInputStrides(input_id));
         };
 
-        out[out_idx] = utils::cast<Tout>(
-            Op{}.template operator()<Tout, Tin...>(std::get<Is>(input_ptrs)[get_input_idx(Is)]..., std::forward<Args>(args)...));
+        out[out_idx] = utils::cast<Tout>(Op{}.template operator()<Tout, Tin...>(
+            std::get<Is>(input_ptrs)[get_input_idx(Is)]...,
+            std::forward<Args>(args)...));
     }
 }
 
 // Invoke elementwise operation for different input types
-template <typename Op, typename Tout, typename... Tin, typename... Args, std::enable_if_t<(sizeof...(Tin) == Op::num_inputs), int>>
-infiniStatus_t DeviceImpl::calculate(const op::elementwise::ElementwiseInfo &info,
-                                     void *output,
-                                     const std::vector<const void *> &inputs,
-                                     void *stream,
-                                     Args &&...args) {
+template <typename Op, typename Tout, typename... Tin, typename... Args,
+          std::enable_if_t<(sizeof...(Tin) == Op::num_inputs), int>>
+infiniStatus_t
+DeviceImpl::calculate(const op::elementwise::ElementwiseInfo &info,
+                      void *output, const std::vector<const void *> &inputs,
+                      void *stream, Args &&...args) {
 
     static_assert(sizeof...(Tin) == Op::num_inputs, "Input type count mismatch");
-    calculate_impl<Op, Tout, Tin...>(info, output, inputs, std::make_index_sequence<sizeof...(Tin)>{}, std::forward<Args>(args)...);
+    calculate_impl<Op, Tout, Tin...>(info, output, inputs,
+                                     std::make_index_sequence<sizeof...(Tin)>{},
+                                     std::forward<Args>(args)...);
     return INFINI_STATUS_SUCCESS;
 }
 
 // Perform elementwise operation when all inputs have the same type
 template <typename Op, typename Tdata, size_t... Is, typename... Args>
-void calculate_impl(const op::elementwise::ElementwiseInfo &info,
-                    void *output,
+void calculate_impl(const op::elementwise::ElementwiseInfo &info, void *output,
                     const std::vector<const void *> &inputs,
-                    std::index_sequence<Is...>,
-                    Args &&...args) {
+                    std::index_sequence<Is...>, Args &&...args) {
 
     Tdata *out = reinterpret_cast<Tdata *>(output);
-    std::array<const Tdata *, sizeof...(Is)> ins = {reinterpret_cast<const Tdata *>(inputs[Is])...};
+    std::array<const Tdata *, sizeof...(Is)> ins = {
+        reinterpret_cast<const Tdata *>(inputs[Is])...};
     const ptrdiff_t output_size = info.getOutputSize();
 
 #pragma omp parallel for if (output_size > 1024)
     for (ptrdiff_t i = 0; i < output_size; ++i) {
         size_t out_idx = info.isOutputContiguous()
                            ? i
-                           : op::common_cpu::indexToOffset(i, info.getNdim(), info.getOutputShape(), info.getOutputStrides());
+                           : op::common_cpu::indexToOffset(
+                               i, info.getNdim(), info.getOutputShape(),
+                               info.getOutputStrides());
 
         auto get_input_idx = [&](size_t input_id) {
             return info.getInputContiguous()[input_id]
                      ? i
-                     : op::common_cpu::indexToOffset(i, info.getNdim(), info.getInputShape(input_id), info.getInputStrides(input_id));
+                     : op::common_cpu::indexToOffset(
+                         i, info.getNdim(), info.getInputShape(input_id),
+                         info.getInputStrides(input_id));
         };
 
         if constexpr (std::is_same_v<Tdata, fp16_t> || std::is_same_v<Tdata, bf16_t>) {
-            out[out_idx] = utils::cast<Tdata>(Op{}(utils::cast<float>(ins[Is][get_input_idx(Is)])..., std::forward<Args>(args)...));
+            out[out_idx] = utils::cast<Tdata>(
+                Op{}(utils::cast<float>(ins[Is][get_input_idx(Is)])...,
+                     std::forward<Args>(args)...));
         } else {
             out[out_idx] = Op{}(ins[Is][get_input_idx(Is)]..., std::forward<Args>(args)...);
         }
@@ -182,13 +186,13 @@ void calculate_impl(const op::elementwise::ElementwiseInfo &info,
 
 // Invoke elementwise operation when all inputs have the same type
 template <typename Op, typename Tdata, typename... Args>
-infiniStatus_t DeviceImpl::calculate(const op::elementwise::ElementwiseInfo &info,
-                                     void *output,
-                                     const std::vector<const void *> &inputs,
-                                     void *stream,
-                                     Args &&...args) {
+infiniStatus_t
+DeviceImpl::calculate(const op::elementwise::ElementwiseInfo &info,
+                      void *output, const std::vector<const void *> &inputs,
+                      void *stream, Args &&...args) {
     constexpr size_t N = Op::num_inputs;
-    calculate_impl<Op, Tdata>(info, output, inputs, std::make_index_sequence<N>{}, std::forward<Args>(args)...);
+    calculate_impl<Op, Tdata>(info, output, inputs, std::make_index_sequence<N>{},
+                              std::forward<Args>(args)...);
     return INFINI_STATUS_SUCCESS;
 }
 

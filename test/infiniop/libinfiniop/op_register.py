@@ -4,7 +4,7 @@ from .structs import (
     infiniopOperatorDescriptor_t,
 )
 
-from ctypes import c_int32, c_void_p, c_size_t, POINTER, c_float
+from ctypes import c_int32, c_void_p, c_size_t, POINTER, c_float, c_bool, c_double
 
 
 class OpRegister:
@@ -523,6 +523,92 @@ def conv_(lib):
     ]
     lib.infiniopDestroyConvDescriptor.restype = c_int32
     lib.infiniopDestroyConvDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
+def linear_(lib):
+    lib.infiniopCreateLinearDescriptor.restype = c_int32
+    lib.infiniopCreateLinearDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetLinearWorkspaceSize.restype = c_int32
+    lib.infiniopGetLinearWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopLinear.restype = c_int32
+    lib.infiniopLinear.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_float,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_float,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_bool,
+        c_bool,
+        c_bool,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyLinearDescriptor.restype = c_int32
+    lib.infiniopDestroyLinearDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
+def quantize_(lib):
+    lib.infiniopCreateQuantizeDescriptor.restype = c_int32
+    lib.infiniopCreateQuantizeDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetQuantizeWorkspaceSize.restype = c_int32
+    lib.infiniopGetQuantizeWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopQuantize.restype = c_int32
+    lib.infiniopQuantize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_int32,
+        c_double,
+        c_double,
+        c_double,
+        c_bool,
+        # c_void_p,
+        # c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyQuantizeDescriptor.restype = c_int32
+    lib.infiniopDestroyQuantizeDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
 

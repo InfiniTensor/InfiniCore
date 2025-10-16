@@ -23,7 +23,6 @@ from libinfiniop import (
 )
 
 
-
 def causal_softmax(x):
     type = x.dtype
     mask = torch.tril(torch.ones_like(x), diagonal=-1).flip(dims=[-2, -1])
