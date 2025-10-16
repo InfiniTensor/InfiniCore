@@ -29,11 +29,11 @@ class TensorSpec:
         is_contiguous=True,
     ):
         self.shape = shape
-        self.dtype = dtype  # Can be specific dtype or None (will use test dtype)
+        self.dtype = dtype
         self.strides = strides
-        self.value = value  # For scalar values
+        self.value = value
         self.is_scalar = is_scalar
-        self.is_contiguous = is_contiguous  # Whether tensor should be contiguous
+        self.is_contiguous = is_contiguous
 
     @classmethod
     def from_tensor(cls, shape, dtype=None, strides=None, is_contiguous=True):
@@ -51,7 +51,6 @@ class TensorSpec:
 
     @classmethod
     def from_strided_tensor(cls, shape, strides, dtype=None):
-        """Create a non-contiguous tensor specification with specific strides"""
         return cls(
             shape=shape,
             dtype=dtype,
@@ -62,33 +61,22 @@ class TensorSpec:
 
 
 class TestCase:
-    """Test case, supporting in-place/out-of-place mode and flexible input/output specifications"""
+    """Test case with enhanced parsing support"""
 
-    # Operation modes
     OUT_OF_PLACE = "out_of_place"
     IN_PLACE = "in_place"
-    BOTH = "both"  # Test both in-place and out-of-place
+    BOTH = "both"
 
     def __init__(self, operation_mode, inputs, output=None, **kwargs):
-        """
-        Enhanced constructor with operation mode
-        Args:
-            operation_mode: IN_PLACE, OUT_OF_PLACE, or BOTH
-            inputs: List[TensorSpec] or simple shape tuples
-            output: TensorSpec or shape tuple (required for IN_PLACE mode)
-        """
         if operation_mode not in [self.IN_PLACE, self.OUT_OF_PLACE, self.BOTH]:
-            raise ValueError(
-                f"Invalid operation_mode: {operation_mode}. Must be IN_PLACE, OUT_OF_PLACE, or BOTH"
-            )
+            raise ValueError(f"Invalid operation_mode: {operation_mode}")
 
         if operation_mode == self.IN_PLACE and output is None:
             raise ValueError("IN_PLACE mode requires output specification")
 
         self.operation_mode = operation_mode
-
-        # Normalize inputs
         self.inputs = []
+
         for inp in inputs:
             if isinstance(inp, (list, tuple)):
                 self.inputs.append(TensorSpec.from_tensor(inp))
@@ -97,7 +85,6 @@ class TestCase:
             else:
                 self.inputs.append(inp)
 
-        # Normalize output
         if isinstance(output, (list, tuple)):
             self.output = TensorSpec.from_tensor(output)
         else:
@@ -135,7 +122,7 @@ class TestCase:
 
 
 class TestConfig:
-    """Test configuration with support for dtype combinations"""
+    """Test configuration"""
 
     def __init__(
         self,
@@ -153,33 +140,28 @@ class TestConfig:
         self.bench = bench
         self.num_prerun = num_prerun
         self.num_iterations = num_iterations
-        self.dtype_combinations = (
-            dtype_combinations  # List of dtype configs for each tensor
-        )
+        self.dtype_combinations = dtype_combinations
 
 
 class TestRunner:
-    """Test runner with support for dtype combinations"""
+    """Test runner"""
 
     def __init__(self, test_cases, test_config):
         self.test_cases = test_cases
         self.config = test_config
-        self.failed_tests = []  # Track failures
+        self.failed_tests = []
 
     def run_tests(self, devices, test_func, test_type="Test"):
-        """Run tests and track failures with support for dtype combinations"""
         for device in devices:
             print(f"\n{'='*60}")
             print(f"Testing {test_type} on {InfiniDeviceNames[device]}")
             print(f"{'='*60}")
 
-            # Filter unsupported data types
             tensor_dtypes = self._filter_tensor_dtypes_by_device(
                 device, self.config.tensor_dtypes
             )
 
             for test_case in self.test_cases:
-                # If dtype combinations are specified, use them
                 if self.config.dtype_combinations:
                     for dtype_combo in self.config.dtype_combinations:
                         try:
@@ -194,7 +176,6 @@ class TestRunner:
                             if self.config.debug:
                                 raise
                 else:
-                    # Original behavior: single dtype for all tensors
                     for dtype in tensor_dtypes:
                         try:
                             test_func(device, test_case, dtype, self.config)
@@ -206,11 +187,9 @@ class TestRunner:
                             if self.config.debug:
                                 raise
 
-        # Return whether any tests failed
         return len(self.failed_tests) == 0
 
     def _format_dtype_combo(self, dtype_combo):
-        """Format dtype combination for display"""
         if isinstance(dtype_combo, dict):
             return f"dtypes({dtype_combo})"
         elif isinstance(dtype_combo, (list, tuple)):
@@ -219,15 +198,12 @@ class TestRunner:
             return str(dtype_combo)
 
     def _filter_tensor_dtypes_by_device(self, device, tensor_dtypes):
-        """Filter data types based on device"""
         if device in ():
-            # Filter out unsupported data types on specified devices
             return [dt for dt in tensor_dtypes if dt != infinicore.bfloat16]
         else:
             return tensor_dtypes
 
     def print_summary(self):
-        """Print test summary"""
         if self.failed_tests:
             print(f"\n\033[91m{len(self.failed_tests)} tests failed:\033[0m")
             for failure in self.failed_tests:
@@ -239,7 +215,7 @@ class TestRunner:
 
 
 class BaseOperatorTest(ABC):
-    """Enhanced base operator test supporting unified operator functions and operation modes"""
+    """Enhanced base operator test with simplified test case parsing"""
 
     def __init__(self, operator_name):
         self.operator_name = operator_name
@@ -264,122 +240,70 @@ class BaseOperatorTest(ABC):
         pass
 
     def get_dtype_combinations(self):
-        """Return dtype combinations for tests with mixed dtypes.
-        Override this method to specify different dtype combinations.
-        Returns None if all tensors should use the same dtype.
-
-        Dictionary based:
-        _DTYPE_COMBINATIONS = [
-            {
-                "input_0": infinicore.float16,
-                "input_1": infinicore.float32,
-                "input_2": infinicore.bfloat16,
-                "output": infinicore.float16,
-            },
-            {
-                "input_0": infinicore.bfloat16,
-                "input_1": infinicore.float16,
-                "input_2": infinicore.float32,
-                "output": infinicore.bfloat16,
-            }
-        ]
-
-        or
-
-        Position based:
-        _DTYPE_COMBINATIONS = [
-            (infinicore.float16, infinicore.float32, infinicore.float16),  # (in1, in2, out)
-            (infinicore.bfloat16, infinicore.float16, infinicore.bfloat16),
-        ]
-
-        or TensorSpec + combinations:
-
-        test_case = TestCase(
-            inputs=[
-                TensorSpec.from_tensor(shape, dtype=infinicore.float32),  # fixed dtype
-                TensorSpec.from_tensor(shape),  # from combined dtypes
-            ],
-            output=TensorSpec.from_tensor(shape)  # from combined dtypes
-        )
-
-        """
+        """Return dtype combinations for mixed dtype tests"""
         return None
 
     @abstractmethod
     def torch_operator(self, *inputs, out=None, **kwargs):
-        """Unified PyTorch operator function - handles both in-place and out-of-place"""
+        """Unified PyTorch operator function"""
         pass
 
     @abstractmethod
     def infinicore_operator(self, *inputs, out=None, **kwargs):
-        """Unified Infinicore operator function - handles both in-place and out-of-place"""
+        """Unified Infinicore operator function"""
         pass
 
     def create_strided_tensor(self, shape, strides, dtype, device_str):
         """Create a non-contiguous tensor with specific strides"""
-        # Create a larger contiguous tensor and create a strided view
         total_size = 1
         for i in range(len(shape)):
             total_size += (shape[i] - 1) * abs(strides[i])
 
-        # Create base contiguous tensor
         base_tensor = torch.rand(total_size, dtype=dtype, device=device_str)
-
-        # Create strided tensor view
         strided_tensor = torch.as_strided(base_tensor, shape, strides)
         return strided_tensor
 
     def prepare_inputs(self, test_case, device_str, dtype_config):
-        """Prepare input data - handles various input types including strided tensors and per-tensor dtypes"""
+        """Prepare input data"""
         inputs = []
 
         for i, input_spec in enumerate(test_case.inputs):
             if isinstance(input_spec, TensorSpec):
                 if input_spec.is_scalar:
-                    # Handle scalar inputs
                     inputs.append(input_spec.value)
                 else:
-                    # Handle tensor inputs
                     shape = input_spec.shape
 
-                    # Determine dtype for this specific tensor
                     if input_spec.dtype is not None:
-                        # Use explicitly specified dtype in TensorSpec
                         tensor_dtype = to_torch_dtype(input_spec.dtype)
                     elif (
                         isinstance(dtype_config, dict) and f"input_{i}" in dtype_config
                     ):
-                        # Use dtype from combination config
                         tensor_dtype = to_torch_dtype(dtype_config[f"input_{i}"])
                     elif isinstance(dtype_config, (list, tuple)) and i < len(
                         dtype_config
                     ):
-                        # Use dtype from tuple config
                         tensor_dtype = to_torch_dtype(dtype_config[i])
                     else:
-                        # Fallback: use single dtype or default
                         tensor_dtype = to_torch_dtype(dtype_config)
 
                     if input_spec.is_contiguous or input_spec.strides is None:
-                        # Create contiguous tensor
                         tensor = torch.rand(
                             shape, dtype=tensor_dtype, device=device_str
                         )
                     else:
-                        # Create strided tensor
                         tensor = self.create_strided_tensor(
                             shape, input_spec.strides, tensor_dtype, device_str
                         )
 
                     inputs.append(tensor)
             else:
-                # Handle raw values (scalars, lists, etc.)
                 inputs.append(input_spec)
 
         return inputs, test_case.kwargs
 
     def get_output_dtype(self, test_case, dtype_config, torch_result=None):
-        """Determine output dtype considering per-tensor configuration"""
+        """Determine output dtype"""
         if test_case.output and test_case.output.dtype is not None:
             return to_torch_dtype(test_case.output.dtype)
         elif isinstance(dtype_config, dict) and "output" in dtype_config:
@@ -387,19 +311,16 @@ class BaseOperatorTest(ABC):
         elif torch_result is not None:
             return torch_result.dtype
         else:
-            # Fallback to first input dtype or single test dtype
             if isinstance(dtype_config, (list, tuple)):
                 return to_torch_dtype(dtype_config[0])
             else:
                 return to_torch_dtype(dtype_config)
 
     def run_test(self, device, test_case, dtype_config, config):
-        """Unified test execution flow that handles all operation modes"""
+        """Unified test execution flow"""
         device_str = torch_device_map[device]
 
-        # Handle BOTH mode by running both IN_PLACE and OUT_OF_PLACE
         if test_case.operation_mode == TestCase.BOTH:
-            # Run OUT_OF_PLACE test
             out_of_place_case = TestCase(
                 TestCase.OUT_OF_PLACE,
                 test_case.inputs,
@@ -410,7 +331,6 @@ class BaseOperatorTest(ABC):
                 device, out_of_place_case, dtype_config, config, "OUT_OF_PLACE"
             )
 
-            # Run IN_PLACE test (if output is specified)
             if test_case.output is not None:
                 in_place_case = TestCase(
                     TestCase.IN_PLACE,
@@ -423,7 +343,6 @@ class BaseOperatorTest(ABC):
                 )
             return
 
-        # Handle single mode tests
         self._run_single_test(
             device, test_case, dtype_config, config, test_case.operation_mode.upper()
         )
@@ -432,14 +351,11 @@ class BaseOperatorTest(ABC):
         """Run a single test with specified operation mode"""
         device_str = torch_device_map[device]
 
-        # Prepare inputs with per-tensor dtype support
         inputs, kwargs = self.prepare_inputs(test_case, device_str, dtype_config)
 
-        # Convert tensor inputs to infinicore (skip scalars and non-tensors)
         infini_inputs = []
         for inp in inputs:
             if isinstance(inp, torch.Tensor):
-                # For strided tensors, use strided infinicore tensor
                 if not inp.is_contiguous():
                     infini_tensor = infinicore.strided_from_blob(
                         inp.data_ptr(),
@@ -455,13 +371,12 @@ class BaseOperatorTest(ABC):
                 infini_inputs.append(inp)
 
         if test_case.operation_mode == TestCase.OUT_OF_PLACE:
-            # Out-of-place testing
+
             def torch_op():
                 return self.torch_operator(*inputs, **kwargs)
 
             torch_result = torch_op()
 
-            # Ensure PyTorch result is contiguous
             if (
                 isinstance(torch_result, torch.Tensor)
                 and not torch_result.is_contiguous()
@@ -473,19 +388,16 @@ class BaseOperatorTest(ABC):
 
             infini_result = infini_op()
 
-            # Determine comparison dtype
             comparison_dtype = to_infinicore_dtype(
                 self.get_output_dtype(test_case, dtype_config, torch_result)
             )
 
-            # Result comparison
             compare_fn = create_test_comparator(
                 config, comparison_dtype, mode_name=f"{self.operator_name} {mode_name}"
             )
             is_valid = compare_fn(infini_result, torch_result)
             assert is_valid, f"{self.operator_name} {mode_name} test failed"
 
-            # Performance testing
             if config.bench:
                 profile_operation(
                     f"PyTorch {self.operator_name} {mode_name}",
@@ -502,23 +414,18 @@ class BaseOperatorTest(ABC):
                     config.num_iterations,
                 )
 
-        else:  # IN_PLACE mode
-            # In-place testing
+        else:
             if not test_case.output:
                 raise ValueError("IN_PLACE test requires output specification")
 
-            # Determine output dtype
             output_dtype = self.get_output_dtype(test_case, dtype_config)
             output_shape = test_case.output.shape
 
-            # Prepare output tensors for both frameworks
             if test_case.output.is_contiguous or test_case.output.strides is None:
-                # Create contiguous output tensor
                 torch_output = torch.zeros(
                     output_shape, dtype=output_dtype, device=device_str
                 )
             else:
-                # Create strided output tensor
                 torch_output = self.create_strided_tensor(
                     output_shape, test_case.output.strides, output_dtype, device_str
                 )
@@ -529,7 +436,6 @@ class BaseOperatorTest(ABC):
 
             torch_op_inplace()
 
-            # Create infinicore output tensor
             torch_dummy = torch.zeros(
                 output_shape, dtype=output_dtype, device=device_str
             )
@@ -546,7 +452,6 @@ class BaseOperatorTest(ABC):
 
             infini_op_inplace()
 
-            # Result comparison
             comparison_dtype = to_infinicore_dtype(
                 self.get_output_dtype(test_case, dtype_config, torch_output)
             )
@@ -556,7 +461,6 @@ class BaseOperatorTest(ABC):
             is_valid = compare_fn(infini_output, torch_output)
             assert is_valid, f"{self.operator_name} {mode_name} test failed"
 
-            # Performance testing
             if config.bench:
                 profile_operation(
                     f"PyTorch {self.operator_name} {mode_name}",
