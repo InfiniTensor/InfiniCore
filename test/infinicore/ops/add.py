@@ -78,7 +78,7 @@ class AddTest(BaseOperatorTest):
     """Add test with simplified test case parsing"""
 
     def __init__(self):
-        super().__init__("add")
+        super().__init__("Add")
 
     def get_test_cases(self):
         return _TEST_CASES

@@ -94,7 +94,7 @@ class MatmulTest(BaseOperatorTest):
     """Matmul test with simplified test case parsing"""
 
     def __init__(self):
-        super().__init__("matmul")
+        super().__init__("Matmul")
 
     def get_test_cases(self):
         return _TEST_CASES

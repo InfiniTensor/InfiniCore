@@ -92,7 +92,7 @@ class RMSNormTest(BaseOperatorTest):
     """RMSNorm test with simplified test case parsing"""
 
     def __init__(self):
-        super().__init__("rms_norm")
+        super().__init__("RMS_Norm")
 
     def get_test_cases(self):
         return _TEST_CASES
