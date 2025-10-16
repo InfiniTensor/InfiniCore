@@ -1,6 +1,7 @@
 """
 This is for framework validation
 """
+
 import sys
 import os
 
@@ -229,7 +230,7 @@ _TOLERANCE_MAP = {
 }
 
 
-class AttentionTest(BaseOperatorTest):
+class OpTest(BaseOperatorTest):
     """Attention test with simplified test case parsing"""
 
     def __init__(self):
@@ -259,7 +260,7 @@ class AttentionTest(BaseOperatorTest):
 
 def main():
     """Main entry point"""
-    runner = GenericTestRunner(AttentionTest)
+    runner = GenericTestRunner(OpTest)
     runner.run_and_exit()
 
 
