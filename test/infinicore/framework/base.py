@@ -61,7 +61,7 @@ class TensorSpec:
 
 
 class TestCase:
-    """Test case with enhanced parsing support"""
+    """Test case"""
 
     OUT_OF_PLACE = "out_of_place"
     IN_PLACE = "in_place"
@@ -215,7 +215,7 @@ class TestRunner:
 
 
 class BaseOperatorTest(ABC):
-    """Enhanced base operator test with simplified test case parsing"""
+    """Base operator test"""
 
     def __init__(self, operator_name):
         self.operator_name = operator_name
