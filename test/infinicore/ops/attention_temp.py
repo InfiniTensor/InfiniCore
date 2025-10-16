@@ -233,7 +233,7 @@ class AttentionTest(BaseOperatorTest):
     """Attention test with simplified test case parsing"""
 
     def __init__(self):
-        super().__init__("attention")
+        super().__init__("Attention")
 
     def get_test_cases(self):
         return _TEST_CASES
