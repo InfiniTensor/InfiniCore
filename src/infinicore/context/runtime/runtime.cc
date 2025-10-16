@@ -64,7 +64,7 @@ std::shared_ptr<Memory> Runtime::allocateMemory(size_t size) {
 
 std::shared_ptr<Memory> Runtime::allocatePinnedHostMemory(size_t size) {
     if (!pinned_host_memory_allocator_) {
-        // For CPU devices, pinned memory is not supported, fall back to regular host memory
+        spdlog::warn("For CPU devices, pinned memory is not supported, falling back to regular host memory");
         return allocateMemory(size);
     }
     std::byte *data_ptr = pinned_host_memory_allocator_->allocate(size);

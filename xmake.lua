@@ -335,7 +335,6 @@ target("_infinicore")
     set_languages("cxx17")
 
     set_kind("shared")
-    set_languages("cxx17")
     local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
     add_includedirs(INFINI_ROOT.."/include", { public = true })
 
