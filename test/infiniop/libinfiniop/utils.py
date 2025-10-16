@@ -67,10 +67,34 @@ class TestTensor(CTensor):
                 torch_strides.append(strides[i])
             else:
                 torch_shape.append(shape[i])
+
+        is_bool = dt == InfiniDtype.BOOL
+        if is_bool:
+            dt = InfiniDtype.F32
+
+        is_int = (
+            dt == InfiniDtype.I8
+            or dt == InfiniDtype.I16
+            or dt == InfiniDtype.I32
+            or dt == InfiniDtype.I64
+        )
+
+        torch_dtype = to_torch_dtype(dt)
         if mode == "random":
-            self._torch_tensor = torch.rand(
-                torch_shape, dtype=to_torch_dtype(dt), device=torch_device_map[device]
-            )
+            if is_int:
+                self._torch_tensor = torch.randint(
+                    0,
+                    100,
+                    torch_shape,
+                    dtype=to_torch_dtype(dt),
+                    device=torch_device_map[device],
+                )
+            else:
+                self._torch_tensor = torch.rand(
+                    torch_shape,
+                    dtype=to_torch_dtype(dt),
+                    device=torch_device_map[device],
+                )
         elif mode == "zeros":
             self._torch_tensor = torch.zeros(
                 torch_shape, dtype=to_torch_dtype(dt), device=torch_device_map[device]
@@ -96,6 +120,9 @@ class TestTensor(CTensor):
             )
         else:
             raise ValueError("Unsupported mode")
+
+        if is_bool:
+            self._torch_tensor = self._torch_tensor > 0.5
 
         if scale is not None:
             self._torch_tensor *= scale
@@ -157,6 +184,8 @@ def to_torch_dtype(dt: InfiniDtype, compatability_mode=False):
         return torch.float32
     elif dt == InfiniDtype.F64:
         return torch.float64
+    elif dt == InfiniDtype.BOOL:
+        return torch.bool
     # TODO: These following types may not be supported by older
     # versions of PyTorch. Use compatability mode to convert them.
     elif dt == InfiniDtype.U16:

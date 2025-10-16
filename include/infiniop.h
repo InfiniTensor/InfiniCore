@@ -9,6 +9,7 @@
 #include "infiniop/ops/logsoftmax.h"
 #include "infiniop/ops/conv.h"
 #include "infiniop/ops/dequantize_awq.h"
+#include "infiniop/ops/equal.h"
 #include "infiniop/ops/gemm.h"
 #include "infiniop/ops/mul.h"
 #include "infiniop/ops/random_sample.h"
