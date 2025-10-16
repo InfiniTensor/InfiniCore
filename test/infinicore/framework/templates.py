@@ -1,5 +1,55 @@
 """
 Templates for common operator patterns to minimize code duplication
+
+Available configuration methods in BaseOperatorTest:
+
+1. get_test_cases() -> List[TestCase]
+   - Define input/output shapes, strides, and operation modes
+   - Operation modes: TestCase.OUT_OF_PLACE, TestCase.IN_PLACE, TestCase.BOTH
+
+2. get_tensor_dtypes() -> List[infinicore.dtype]
+   - Define supported data types for single-dtype tests
+   - Used when dtype_combinations is None
+
+3. get_tolerance_map() -> Dict[infinicore.dtype, Dict[str, float]]
+   - Set tolerance (atol, rtol) for each data type
+   - Example: {infinicore.float16: {"atol": 1e-3, "rtol": 1e-2}}
+
+4. get_dtype_combinations() -> Optional[List[Dict]]
+   - Define mixed dtype configurations for multi-dtype tests
+   - Return None for single-dtype tests
+   - Available mixed dtype definition methods:
+
+   METHOD 1: Explicit dictionary per combination (Recommended)
+     Format: [{"input_0": dtype1, "input_1": dtype2, "output": dtype3}]
+     Example:
+       [{"input_0": infinicore.float16, "input_1": infinicore.float32, "output": infinicore.float16}]
+
+   METHOD 2: Rule-based combination generation
+     Generate all valid combinations with business logic constraints
+     Example: Output bf16 requires input bf16
+
+   METHOD 3: Multi-output support with complex structure
+     Format: [{"inputs": [dtype1, dtype2], "outputs": [dtype3, dtype4], "params": {"scale": dtype5}}]
+     Requires special handling in prepare_inputs()
+
+   METHOD 4: Per-tensor specification in TestCase
+     Individual tensors can specify dtype in TensorSpec
+     Overrides dtype_combinations for specific tensors
+
+   METHOD 5: Hybrid approach with fallback
+     Combine explicit combinations with generated ones
+     Support both simple and complex dtype requirements
+
+5. torch_operator(*inputs, out=None, **kwargs) -> torch.Tensor
+   - Implement PyTorch reference implementation
+
+6. infinicore_operator(*inputs, out=None, **kwargs) -> infinicore.Tensor
+   - Implement Infinicore operator implementation
+
+Usage examples:
+- Single dtype: Return dtype list from get_tensor_dtypes(), None from get_dtype_combinations()
+- Mixed dtype: Return dtype combinations from get_dtype_combinations(), basic dtypes from get_tensor_dtypes()
 """
 
 import torch
