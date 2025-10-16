@@ -74,7 +74,7 @@ _TOLERANCE_MAP = {
 }
 
 
-class AddTest(BaseOperatorTest):
+class OpTest(BaseOperatorTest):
     """Add test with simplified test case parsing"""
 
     def __init__(self):
@@ -98,7 +98,7 @@ class AddTest(BaseOperatorTest):
 
 def main():
     """Main entry point"""
-    runner = GenericTestRunner(AddTest)
+    runner = GenericTestRunner(OpTest)
     runner.run_and_exit()
 
 

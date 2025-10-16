@@ -90,7 +90,7 @@ _TOLERANCE_MAP = {
 }
 
 
-class MatmulTest(BaseOperatorTest):
+class OpTest(BaseOperatorTest):
     """Matmul test with simplified test case parsing"""
 
     def __init__(self):
@@ -114,7 +114,7 @@ class MatmulTest(BaseOperatorTest):
 
 def main():
     """Main entry point"""
-    runner = GenericTestRunner(MatmulTest)
+    runner = GenericTestRunner(OpTest)
     runner.run_and_exit()
 
 

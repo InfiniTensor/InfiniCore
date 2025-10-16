@@ -88,7 +88,7 @@ _TOLERANCE_MAP = {
 _EPSILON = 1e-5
 
 
-class RMSNormTest(BaseOperatorTest):
+class OpTest(BaseOperatorTest):
     """RMSNorm test with simplified test case parsing"""
 
     def __init__(self):
@@ -124,7 +124,7 @@ class RMSNormTest(BaseOperatorTest):
 
 def main():
     """Main entry point"""
-    runner = GenericTestRunner(RMSNormTest)
+    runner = GenericTestRunner(OpTest)
     runner.run_and_exit()
 
 
