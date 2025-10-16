@@ -32,7 +32,7 @@ class Tensor:
         return self._underlying.ndim
 
     def data_ptr(self):
-        return self._underlying.data_ptr
+        return self._underlying.data_ptr()
 
     def size(self, dim=None):
         if dim is None:
