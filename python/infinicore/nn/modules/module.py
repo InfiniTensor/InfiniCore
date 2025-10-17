@@ -19,6 +19,7 @@ import warnings
 
 _EXTRA_STATE_KEY_SUFFIX = '_extra_state'
 
+T = TypeVar('T', bound='InfiniCoreModule')
 
 class _IncompatibleKeys(namedtuple('IncompatibleKeys', ['missing_keys', 'unexpected_keys'])):
     def __repr__(self):
@@ -513,6 +514,77 @@ class InfiniCoreModule:
             raise RuntimeError('Error(s) in loading state_dict for {}:\n\t{}'.format(
                                self.__class__.__name__, "\n\t".join(error_msgs)))
         return _IncompatibleKeys(missing_keys, unexpected_keys)
+
+    def children(self) -> Iterator['InfiniCoreModule']:
+        r"""Returns an iterator over immediate children modules.
+
+        Yields:
+            Module: a child module
+        """
+        for name, module in self.named_children():
+            yield module
+
+    def named_children(self) -> Iterator[Tuple[str, 'InfiniCoreModule']]:
+        r"""Returns an iterator over immediate children modules, yielding both
+        the name of the module as well as the module itself.
+
+        Yields:
+            (str, Module): Tuple containing a name and child module
+
+        Example::
+
+            >>> # xdoctest: +SKIP("undefined vars")
+            >>> for name, module in model.named_children():
+            >>>     if name in ['conv4', 'conv5']:
+            >>>         print(module)
+
+        """
+        memo = set()
+        for name, module in self._modules.items():
+            if module is not None and module not in memo:
+                memo.add(module)
+                yield name, module
+
+
+    def train(self: T, mode: bool = True) -> T:
+        r"""Sets the module in training mode.
+
+        This has any effect only on certain modules. See documentations of
+        particular modules for details of their behaviors in training/evaluation
+        mode, if they are affected, e.g. :class:`Dropout`, :class:`BatchNorm`,
+        etc.
+
+        Args:
+            mode (bool): whether to set training mode (``True``) or evaluation
+                         mode (``False``). Default: ``True``.
+
+        Returns:
+            Module: self
+        """
+        if not isinstance(mode, bool):
+            raise ValueError("training mode is expected to be boolean")
+        self.training = mode
+        for module in self.children():
+            module.train(mode)
+        return self
+
+    def eval(self: T) -> T:
+        r"""Sets the module in evaluation mode.
+
+        This has any effect only on certain modules. See documentations of
+        particular modules for details of their behaviors in training/evaluation
+        mode, if they are affected, e.g. :class:`Dropout`, :class:`BatchNorm`,
+        etc.
+
+        This is equivalent with :meth:`self.train(False) <torch.nn.Module.train>`.
+
+        See :ref:`locally-disable-grad-doc` for a comparison between
+        `.eval()` and several similar mechanisms that may be confused with it.
+
+        Returns:
+            Module: self
+        """
+        return self.train(False)
 
 
     def to(self, device: torch.device) -> "InfiniCoreModule":
