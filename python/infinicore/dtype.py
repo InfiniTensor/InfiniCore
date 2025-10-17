@@ -4,7 +4,6 @@ from infinicore.lib import _infinicore
 class dtype:
     def __init__(self, data_type):
         """An internal method. Please do not use this directly."""
-
         self._underlying = data_type
 
     def __repr__(self):
@@ -29,8 +28,30 @@ class dtype:
             _infinicore.DataType.C128: "complex128",
             _infinicore.DataType.BF16: "bfloat16",
         }
-
         return f"infinicore.{repr_map[self._underlying]}"
+
+    def __eq__(self, other):
+        """
+        Compare two dtype objects for equality.
+
+        Args:
+            other: The object to compare with
+
+        Returns:
+            bool: True if both objects are dtype instances with the same underlying data type
+        """
+        if not isinstance(other, dtype):
+            return False
+        return self._underlying == other._underlying
+
+    def __hash__(self):
+        """
+        Return a hash value for the dtype object.
+
+        Returns:
+            int: Hash value based on the underlying data type
+        """
+        return hash(self._underlying)
 
 
 float32 = dtype(_infinicore.DataType.F32)

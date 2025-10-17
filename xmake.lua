@@ -345,7 +345,7 @@ target("_infinicore")
     add_files("src/infinicore/context/*.cc")
     add_files("src/infinicore/context/*/*.cc")
     add_files("src/infinicore/tensor/*.cc")
-    add_files("src/infinicore/op/*/*.cc")
+    add_files("src/infinicore/ops/*/*.cc")
     add_files("src/infinicore/pybind11/**.cc")
 
     set_installdir("python/infinicore")

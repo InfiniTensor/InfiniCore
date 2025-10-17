@@ -2,11 +2,11 @@
 
 #include <pybind11/pybind11.h>
 
-#include "infinicore/op/rearrange.hpp"
+#include "infinicore/ops/rearrange.hpp"
 
 namespace py = pybind11;
 
-namespace infinicore::op {
+namespace infinicore::ops {
 
 inline void bind_rearrange(py::module &m) {
     m.def("rearrange",
@@ -21,4 +21,4 @@ inline void bind_rearrange(py::module &m) {
           R"doc(In-place tensor rearrangement.)doc");
 }
 
-} // namespace infinicore::op
+} // namespace infinicore::ops

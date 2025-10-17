@@ -1,7 +1,7 @@
 #include "../../utils.hpp"
 #include "infinicore/common/hash.hpp"
-#include "infinicore/op/common/cache.hpp"
-#include "infinicore/op/matmul.hpp"
+#include "infinicore/ops/common/cache.hpp"
+#include "infinicore/ops/matmul.hpp"
 #include <infiniop.h>
 
 namespace infinicore::op::matmul_impl::infiniop {
@@ -27,7 +27,9 @@ void calculate(Tensor c, Tensor a, Tensor b) {
     infiniopGemmDescriptor_t desc = nullptr;
 
     if (!desc_opt) {
-        INFINICORE_CHECK_ERROR(infiniopCreateGemmDescriptor(context::getInfiniopHandle(), &desc, c->desc(), a->desc(), b->desc()));
+        INFINICORE_CHECK_ERROR(infiniopCreateGemmDescriptor(
+            context::getInfiniopHandle(), &desc,
+            c->desc(), a->desc(), b->desc()));
         cache.put(seed, desc);
     } else {
         desc = *desc_opt;
