@@ -21,6 +21,58 @@ from framework import (
 )
 
 # ==============================================================================
+# Memory Statistics Functions
+# ==============================================================================
+
+def print_memory_stats(title="Memory Statistics", show_detailed=False):
+    """Print memory statistics in a formatted way."""
+    try:
+        device_stats = infinicore.get_device_memory_stats()
+        pinned_stats = infinicore.get_pinned_host_memory_stats()
+
+        print(f"\n=== {title} ===")
+
+        # Device memory statistics
+        print("Device Memory:")
+        print(f"  Allocations: {device_stats.allocation[0].current}")
+        print(f"  Allocated bytes: {device_stats.allocated_bytes[0].current:,} bytes ({device_stats.allocated_bytes[0].current / 1024 / 1024:.2f} MB)")
+        print(f"  Active blocks: {device_stats.active[0].current}")
+        print(f"  Device alloc/dealloc: {device_stats.num_device_alloc}/{device_stats.num_device_free}")
+
+        if show_detailed:
+            print(f"  Segments: {device_stats.segment[0].current}")
+            print(f"  Reserved bytes: {device_stats.reserved_bytes[0].current:,} bytes")
+            print(f"  Active bytes: {device_stats.active_bytes[0].current:,} bytes")
+            print(f"  Requested bytes: {device_stats.requested_bytes[0].current:,} bytes")
+            print(f"  Allocation retries: {device_stats.num_alloc_retries}")
+            print(f"  OOM errors: {device_stats.num_ooms}")
+
+        # Pinned host memory statistics
+        print("Pinned Host Memory:")
+        print(f"  Allocations: {pinned_stats.allocation[0].current}")
+        print(f"  Allocated bytes: {pinned_stats.allocated_bytes[0].current:,} bytes ({pinned_stats.allocated_bytes[0].current / 1024 / 1024:.2f} MB)")
+        print(f"  Active blocks: {pinned_stats.active[0].current}")
+        print(f"  Device alloc/dealloc: {pinned_stats.num_device_alloc}/{pinned_stats.num_device_free}")
+
+    except Exception as e:
+        print(f"Warning: Could not get memory statistics: {e}")
+
+def get_memory_summary():
+    """Get a summary of current memory usage."""
+    try:
+        device_stats = infinicore.get_device_memory_stats()
+        return {
+            'allocations': device_stats.allocation[0].current,
+            'allocated_bytes': device_stats.allocated_bytes[0].current,
+            'active_blocks': device_stats.active[0].current,
+            'device_allocations': device_stats.num_device_alloc,
+            'device_deallocations': device_stats.num_device_free
+        }
+    except Exception as e:
+        print(f"Warning: Could not get memory summary: {e}")
+        return None
+
+# ==============================================================================
 # Test Setup
 # ==============================================================================
 
@@ -69,6 +121,9 @@ def test_matmul(device, test_case, dtype, config):
         f"dtype:{dtype}"
     )
 
+    # Show initial memory state
+    print_memory_stats("Initial Memory State")
+
     # Create PyTorch tensors
     device_str = torch_device_map[device]
     torch_dtype = to_torch_dtype(dtype)
@@ -86,11 +141,17 @@ def test_matmul(device, test_case, dtype, config):
     infini_a = create_infinicore_tensor(torch_a, device_str)
     infini_b = create_infinicore_tensor(torch_b, device_str)
 
+    # Show memory state after tensor creation
+    print_memory_stats("After Creating InfiniCore Tensors")
+
     # Out-of-place matmul
     def infini_matmul():
         return infinicore.matmul(infini_a, infini_b)
 
     infini_result = infini_matmul()
+
+    # Show memory state after matmul operation
+    print_memory_stats("After Matmul Operation")
 
     # Validate results using common method
     is_valid = compare_results(infini_result, torch_result, dtype, config, device_str)
@@ -132,6 +193,9 @@ def test_matmul_inplace(device, test_case, dtype, config):
         f"dtype:{dtype}"
     )
 
+    # Show initial memory state
+    print_memory_stats("Initial Memory State (In-place)")
+
     device_str = torch_device_map[device]
     torch_dtype = to_torch_dtype(dtype)
 
@@ -156,12 +220,18 @@ def test_matmul_inplace(device, test_case, dtype, config):
         result_shape, dtype=dtype, device=infinicore.device(device_str, 0)
     )
 
+    # Show memory state after tensor creation
+    print_memory_stats("After Creating InfiniCore Tensors (In-place)")
+
     # Test in-place matmul
     def infini_matmul_inplace():
         infinicore.matmul(infini_a, infini_b, out=infini_c)
 
     # Execute in-place operation
     infini_matmul_inplace()
+
+    # Show memory state after in-place matmul operation
+    print_memory_stats("After In-place Matmul Operation")
 
     # Validate results using common method
     is_valid = compare_results(infini_c, torch_preallocated, dtype, config, device_str)
@@ -211,6 +281,9 @@ def main():
 
     print("Starting matmul tests...")
 
+    # Show initial memory state
+    print_memory_stats("Initial Memory State (All Tests)")
+
     all_passed = True
 
     # Run out-of-place tests
@@ -218,10 +291,16 @@ def main():
     out_of_place_passed = runner.run_tests(devices, test_matmul)
     all_passed = all_passed and out_of_place_passed
 
+    # Show memory state after out-of-place tests
+    print_memory_stats("After Out-of-place Tests")
+
     # Run in-place tests
     print("\n--- Testing In-place Matmul ---")
     in_place_passed = runner.run_tests(devices, test_matmul_inplace)
     all_passed = all_passed and in_place_passed
+
+    # Show final memory state
+    print_memory_stats("Final Memory State (All Tests)", show_detailed=True)
 
     runner.print_summary()
 

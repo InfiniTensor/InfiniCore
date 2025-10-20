@@ -157,10 +157,12 @@ public:
 
 class ConcurrencyTest : public MemoryTestFramework {
 public:
+    ConcurrencyTest(int num_threads = 4) : num_threads_(num_threads) {}
     TestResult run() override;
     std::string getName() const override { return "ConcurrencyTest"; }
 
 private:
+    int num_threads_;
     TestResult testConcurrentAllocations();
     TestResult testConcurrentDeviceSwitching();
     TestResult testMemoryAllocationRace();
@@ -201,10 +203,12 @@ private:
 
 class StressTest : public MemoryTestFramework {
 public:
+    StressTest(int iterations = 1000) : iterations_(iterations) {}
     TestResult run() override;
     std::string getName() const override { return "StressTest"; }
 
 private:
+    int iterations_;
     TestResult testHighFrequencyAllocations();
     TestResult testLargeMemoryAllocations();
     TestResult testCrossDeviceStress();

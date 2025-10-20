@@ -29,6 +29,7 @@ Runtime::~Runtime() {
 }
 
 Runtime *Runtime::activate() {
+    spdlog::debug("Runtime::activate() called for device={}", device_.toString());
     INFINICORE_CHECK_ERROR(infinirtSetDevice((infiniDevice_t)device_.getType(), (int)device_.getIndex()));
     return this;
 }
@@ -86,6 +87,14 @@ void Runtime::memcpyD2H(void *dst, const void *src, size_t size) {
 
 void Runtime::memcpyD2D(void *dst, const void *src, size_t size) {
     INFINICORE_CHECK_ERROR(infinirtMemcpyAsync(dst, src, size, INFINIRT_MEMCPY_D2D, stream_));
+}
+
+MemoryAllocator *Runtime::getDeviceMemoryAllocator() const {
+    return device_memory_allocator_.get();
+}
+
+MemoryAllocator *Runtime::getPinnedHostMemoryAllocator() const {
+    return pinned_host_memory_allocator_.get();
 }
 
 std::string Runtime::toString() const {

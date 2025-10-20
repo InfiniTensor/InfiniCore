@@ -38,6 +38,10 @@ public:
     void memcpyD2H(void *dst, const void *src, size_t size);
     void memcpyD2D(void *dst, const void *src, size_t size);
 
+    // Getter methods for memory allocators (for statistics access)
+    MemoryAllocator *getDeviceMemoryAllocator() const;
+    MemoryAllocator *getPinnedHostMemoryAllocator() const;
+
     std::string toString() const;
 
     friend class ContextImpl;

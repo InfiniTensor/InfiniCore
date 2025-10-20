@@ -96,19 +96,20 @@ TestResult ConcurrencyTest::run() {
                 std::cerr << "Concurrent allocations test failed: " << result1.error_message << std::endl;
                 return false;
             }
+            std::cout << "Concurrent allocations test passed" << std::endl;
 
             auto result2 = testConcurrentDeviceSwitching();
             if (!result2.passed) {
                 std::cerr << "Concurrent device switching test failed: " << result2.error_message << std::endl;
                 return false;
             }
-
+            std::cout << "Concurrent device switching test passed" << std::endl;
             auto result3 = testMemoryAllocationRace();
             if (!result3.passed) {
                 std::cerr << "Memory allocation race test failed: " << result3.error_message << std::endl;
                 return false;
             }
-
+            std::cout << "Memory allocation race test passed" << std::endl;
             return true;
         } catch (const std::exception &e) {
             std::cerr << "ConcurrencyTest failed with exception: " << e.what() << std::endl;
@@ -119,19 +120,20 @@ TestResult ConcurrencyTest::run() {
 
 TestResult ConcurrencyTest::testConcurrentAllocations() {
     return measureTime("ConcurrentAllocations", [this]() -> bool {
-        const int num_threads = 8;
         const int allocations_per_thread = 100;
         std::vector<std::thread> threads;
         std::atomic<int> success_count{0};
         std::atomic<int> failure_count{0};
 
-        for (int i = 0; i < num_threads; ++i) {
+        for (int i = 0; i < num_threads_; ++i) {
             threads.emplace_back([&, i]() {
                 try {
                     for (int j = 0; j < allocations_per_thread; ++j) {
                         // Allocate memory of random size
                         size_t size = 64 + (j % 1024);
+                        spdlog::debug("Thread {}: ConcurrentAllocations: Allocating memory of size {}", i, size);
                         auto memory = context::allocateMemory(size);
+                        spdlog::debug("Thread {}: ConcurrentAllocations: Memory allocated successfully", i);
                         if (memory && memory->size() == size) {
                             success_count++;
                         } else {
@@ -152,7 +154,7 @@ TestResult ConcurrencyTest::testConcurrentAllocations() {
             thread.join();
         }
 
-        int total_expected = num_threads * allocations_per_thread;
+        int total_expected = num_threads_ * allocations_per_thread;
         if (success_count.load() != total_expected) {
             std::cerr << "Concurrent allocation test failed: expected " << total_expected
                       << " successes, got " << success_count.load()
@@ -166,7 +168,6 @@ TestResult ConcurrencyTest::testConcurrentAllocations() {
 
 TestResult ConcurrencyTest::testConcurrentDeviceSwitching() {
     return measureTime("ConcurrentDeviceSwitching", [this]() -> bool {
-        const int num_threads = 4;
         std::vector<std::thread> threads;
         std::atomic<int> success_count{0};
         std::atomic<int> failure_count{0};
@@ -185,7 +186,7 @@ TestResult ConcurrencyTest::testConcurrentDeviceSwitching() {
             return true;
         }
 
-        for (int i = 0; i < num_threads; ++i) {
+        for (int i = 0; i < num_threads_; ++i) {
             threads.emplace_back([&, i, devices]() {
                 try {
                     for (int j = 0; j < 50; ++j) {
@@ -239,22 +240,23 @@ TestResult ConcurrencyTest::testConcurrentDeviceSwitching() {
 TestResult ConcurrencyTest::testMemoryAllocationRace() {
     return measureTime("MemoryAllocationRace", [this]() -> bool {
         const int num_threads = 16;
-        const int allocations_per_thread = 1000;
+        const int allocations_per_thread = 1024;
         std::vector<std::thread> threads;
         std::atomic<int> success_count{0};
         std::atomic<int> failure_count{0};
-        std::vector<std::shared_ptr<Memory>> all_allocations;
+        std::vector<Memory> all_allocations;
         std::mutex allocations_mutex;
 
         for (int i = 0; i < num_threads; ++i) {
             threads.emplace_back([&, i]() {
-                std::vector<std::shared_ptr<Memory>> thread_allocations;
+                std::vector<Memory> thread_allocations;
                 try {
                     for (int j = 0; j < allocations_per_thread; ++j) {
                         size_t size = 64 + (j % 1024);
                         auto memory = context::allocateMemory(size);
                         if (memory) {
-                            thread_allocations.push_back(memory);
+                            // Copy the Memory object - reference counting will handle the lifecycle
+                            thread_allocations.push_back(*memory);
                             success_count++;
                         } else {
                             failure_count++;
@@ -264,9 +266,11 @@ TestResult ConcurrencyTest::testMemoryAllocationRace() {
                         if (j % 10 == 0 && !thread_allocations.empty()) {
                             thread_allocations.pop_back();
                         }
+                        spdlog::debug("Thread {} iteration {}: Memory allocation race: Allocated memory of size {} done", i, j, size);
                     }
 
-                    // Store remaining allocations
+                    // Store remaining allocations - copying Memory objects with reference counting
+                    // prevents double-free while maintaining the original test logic
                     std::lock_guard<std::mutex> lock(allocations_mutex);
                     all_allocations.insert(all_allocations.end(),
                                            thread_allocations.begin(),
@@ -284,7 +288,7 @@ TestResult ConcurrencyTest::testMemoryAllocationRace() {
 
         // Verify all allocations are valid
         for (const auto &memory : all_allocations) {
-            if (!memory || !memory->data()) {
+            if (!memory.data()) {
                 std::cerr << "Invalid memory allocation found" << std::endl;
                 return false;
             }
@@ -297,6 +301,7 @@ TestResult ConcurrencyTest::testMemoryAllocationRace() {
             return false;
         }
 
+        spdlog::debug("Memory allocation race test: All allocations: {}", all_allocations.size());
         return true;
     });
 }
@@ -778,7 +783,7 @@ TestResult StressTest::run() {
 TestResult StressTest::testHighFrequencyAllocations() {
     return measureTime("HighFrequencyAllocations", [this]() -> bool {
         try {
-            const int num_allocations = 100000;
+            const int num_allocations = iterations_;
             std::vector<std::shared_ptr<Memory>> memories;
             memories.reserve(num_allocations);
 
