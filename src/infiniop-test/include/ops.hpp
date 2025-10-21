@@ -19,6 +19,9 @@ DECLARE_INFINIOP_TEST(sub)
 DECLARE_INFINIOP_TEST(zeros)
 DECLARE_INFINIOP_TEST(ones)
 
+DECLARE_INFINIOP_TEST(sigmoid)
+DECLARE_INFINIOP_TEST(topkrouter)
+DECLARE_INFINIOP_TEST(topksoftmax)
 #define REGISTER_INFINIOP_TEST(name)                      \
     {                                                     \
         #name,                                            \
@@ -47,6 +50,9 @@ DECLARE_INFINIOP_TEST(ones)
         REGISTER_INFINIOP_TEST(sub)            \
         REGISTER_INFINIOP_TEST(zeros)          \
         REGISTER_INFINIOP_TEST(ones)           \
+        REGISTER_INFINIOP_TEST(sigmoid)        \
+        REGISTER_INFINIOP_TEST(topkrouter)     \
+        REGISTER_INFINIOP_TEST(topksoftmax)    \
     }
 
 namespace infiniop_test {

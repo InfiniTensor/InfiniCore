@@ -163,6 +163,38 @@ def clip_(lib):
 
 
 @OpRegister.operator
+def logsoftmax_(lib):
+    lib.infiniopCreateLogSoftmaxDescriptor.restype = c_int32
+    lib.infiniopCreateLogSoftmaxDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetLogSoftmaxWorkspaceSize.restype = c_int32
+    lib.infiniopGetLogSoftmaxWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopLogSoftmax.restype = c_int32
+    lib.infiniopLogSoftmax.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyLogSoftmaxDescriptor.restype = c_int32
+    lib.infiniopDestroyLogSoftmaxDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def conv_(lib):
     pass
 
@@ -496,13 +528,73 @@ def conv_(lib):
 
 
 @OpRegister.operator
+def sigmoid_(lib):
+    lib.infiniopCreateSigmoidDescriptor.restype = c_int32
+    lib.infiniopCreateSigmoidDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+    lib.infiniopGetSigmoidWorkspaceSize.restype = c_int32
+    lib.infiniopGetSigmoidWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopSigmoid.restype = c_int32
+    lib.infiniopSigmoid.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroySigmoidDescriptor.restype = c_int32
+    lib.infiniopDestroySigmoidDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
+def topksoftmax_(lib):
+    lib.infiniopCreateTopksoftmaxDescriptor.restype = c_int32
+    lib.infiniopCreateTopksoftmaxDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+    ]
+    lib.infiniopGetTopksoftmaxWorkspaceSize.restype = c_int32
+    lib.infiniopGetTopksoftmaxWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopTopksoftmax.restype = c_int32
+    lib.infiniopTopksoftmax.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_size_t,
+        c_int32, 
+        c_void_p,
+    ]
+    lib.infiniopDestroyTopksoftmaxDescriptor.restype = c_int32
+    lib.infiniopDestroyTopksoftmaxDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def topkrouter_(lib):
     lib.infiniopCreateTopkrouterDescriptor.restype = c_int32
     lib.infiniopCreateTopkrouterDescriptor.argtypes = [
         infiniopHandle_t,
         POINTER(infiniopOperatorDescriptor_t),
         infiniopTensorDescriptor_t,
-        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t
     ]
 
     lib.infiniopGetTopkrouterWorkspaceSize.restype = c_int32
@@ -510,7 +602,6 @@ def topkrouter_(lib):
         infiniopOperatorDescriptor_t,
         POINTER(c_size_t),
     ]
-
     lib.infiniopTopkrouter.restype = c_int32
     lib.infiniopTopkrouter.argtypes = [
         infiniopOperatorDescriptor_t,
@@ -524,7 +615,6 @@ def topkrouter_(lib):
         c_size_t,
         c_void_p,
     ]
-
     lib.infiniopDestroyTopkrouterDescriptor.restype = c_int32
     lib.infiniopDestroyTopkrouterDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,

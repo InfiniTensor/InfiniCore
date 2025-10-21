@@ -77,10 +77,14 @@ infiniStatus_t launchKernel(
 
     if (atype == INFINI_DTYPE_F16 && wtype == INFINI_DTYPE_F16) {
         LAUNCH_KERNEL(half, half, float);
+    } else if (atype == INFINI_DTYPE_F16 && wtype == INFINI_DTYPE_BF16){
+        LAUNCH_KERNEL(half, __mt_bfloat16, float);
     } else if (atype == INFINI_DTYPE_F16 && wtype == INFINI_DTYPE_F32) {
         LAUNCH_KERNEL(half, float, float);
     } else if (atype == INFINI_DTYPE_BF16 && wtype == INFINI_DTYPE_BF16) {
         LAUNCH_KERNEL(__mt_bfloat16, __mt_bfloat16, float);
+    } else if (atype == INFINI_DTYPE_BF16 && wtype == INFINI_DTYPE_F16) {
+        LAUNCH_KERNEL(__mt_bfloat16, half, float);
     } else if (atype == INFINI_DTYPE_BF16 && wtype == INFINI_DTYPE_F32) {
         LAUNCH_KERNEL(__mt_bfloat16, float, float);
     } else if (atype == INFINI_DTYPE_F32 && wtype == INFINI_DTYPE_F32) {

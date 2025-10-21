@@ -367,6 +367,11 @@ def get_args():
         action="store_true",
         help="Run KUNLUN XPU test",
     )
+    parser.add_argument(
+        "--hygon",
+        action="store_true",
+        help="Run HYGON DCU test",
+    )
 
     return parser.parse_args()
 
@@ -675,6 +680,10 @@ def get_test_devices(args):
         import torch_xmlir
 
         devices_to_test.append(InfiniDeviceEnum.KUNLUN)
+    if args.hygon:
+        import torch
+
+        devices_to_test.append(InfiniDeviceEnum.HYGON)
     if not devices_to_test:
         devices_to_test = [InfiniDeviceEnum.CPU]
 

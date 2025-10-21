@@ -1,4 +1,5 @@
 add_rules("mode.debug", "mode.release")
+add_requires("boost", {configs = {stacktrace = true}})
 add_requires("pybind11")
 
 -- Define color codes
@@ -9,6 +10,7 @@ local NC = '\27[0m'  -- No Color
 set_encodings("utf-8")
 
 add_includedirs("include")
+add_includedirs("third_party/spdlog/include")
 
 if is_mode("debug") then
     add_defines("DEBUG_MODE")
@@ -124,15 +126,16 @@ if has_config("moore-gpu") then
     includes("xmake/moore.lua")
 end
 
--- 海光
-option("sugon-dcu")
+-- 海光DCU
+option("hygon-dcu")
     set_default(false)
     set_showmenu(true)
-    set_description("Whether to compile implementations for Sugon DCU")
+    set_description("Whether to compile implementations for Hygon DCU")
 option_end()
 
-if has_config("sugon-dcu") then
-    add_defines("ENABLE_SUGON_CUDA_API")
+if has_config("hygon-dcu") then
+    add_defines("ENABLE_HYGON_API")
+    includes("xmake/hygon.lua")
 end
 
 -- 昆仑芯
@@ -219,6 +222,9 @@ target("infinirt")
     if has_config("kunlun-xpu") then
         add_deps("infinirt-kunlun")
     end
+    if has_config("hygon-dcu") then
+        add_deps("infinirt-hygon")
+    end
     set_languages("cxx17")
     set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
     add_files("src/infinirt/*.cc")
@@ -238,20 +244,6 @@ target("infiniop")
     if has_config("iluvatar-gpu") then
         add_deps("infiniop-iluvatar")
     end
-    if has_config("sugon-dcu") then
-        local builddir = string.format(
-            "build/%s/%s/%s",
-            get_config("plat"),
-            get_config("arch"),
-            get_config("mode")
-        )
-        add_shflags("-s", "-shared", "-fPIC")
-        add_links("cublas", "cudnn", "cudadevrt", "cudart_static", "rt", "pthread", "dl")
-        -- Using -linfiniop-nvidia will fail, manually link the target using full path
-        add_deps("nv-gpu", {inherit = false})
-        add_links(builddir.."/libinfiniop-nvidia.a")
-        set_toolchains("sugon-dcu-linker")
-    end
 
     if has_config("cambricon-mlu") then
         add_deps("infiniop-cambricon")
@@ -267,6 +259,9 @@ target("infiniop")
     end
     if has_config("kunlun-xpu") then
         add_deps("infiniop-kunlun")
+    end
+    if has_config("hygon-dcu") then
+        add_deps("infiniop-hygon")
     end
     set_languages("cxx17")
     add_files("src/infiniop/devices/handle.cc")
@@ -303,10 +298,14 @@ target("infiniccl")
     if has_config("moore-gpu") then
         add_deps("infiniccl-moore")
     end
+
     if has_config("kunlun-xpu") then
         add_deps("infiniccl-kunlun")
     end
-    
+    if has_config("hygon-dcu") then
+        add_deps("infiniccl-hygon")
+    end
+
     set_languages("cxx17")
 
     add_files("src/infiniccl/*.cc")
@@ -321,16 +320,59 @@ target("infinicore_c_api")
     after_build(function (target) print(YELLOW .. "[Congratulations!] Now you can install the libraries with \"xmake install\"" .. NC) end)
 target_end()
 
-target("infinicore")
+target("_infinicore")
+    add_packages("boost")
+    if is_mode("debug") then
+        add_defines("BOOST_STACKTRACE_USE_BACKTRACE")
+        add_links("backtrace")
+    else
+        add_defines("BOOST_STACKTRACE_USE_NOOP")
+    end
+
+    set_default(false)
     add_rules("python.library", {soabi = true})
     add_packages("pybind11")
+    set_languages("cxx17")
 
     set_kind("shared")
-    add_deps("infinicore_c_api")
+    local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
+    add_includedirs(INFINI_ROOT.."/include", { public = true })
+
+    add_linkdirs(INFINI_ROOT.."/lib")
+    add_links("infiniop", "infinirt", "infiniccl")
 
     add_files("src/infinicore/*.cc")
+    add_files("src/infinicore/context/*.cc")
+    add_files("src/infinicore/context/*/*.cc")
+    add_files("src/infinicore/tensor/*.cc")
+    add_files("src/infinicore/op/*/*.cc")
+    add_files("src/infinicore/pybind11/**.cc")
 
-    set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
+    set_installdir("python/infinicore")
+target_end()
+
+option("editable")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Install the `infinicore` Python package in editable mode")
+option_end()
+
+target("infinicore")
+    set_kind("phony")
+
+    set_default(false)
+
+    add_deps("_infinicore")
+
+    on_install(function (target)
+        local pip_install_args = {}
+
+        if has_config("editable") then
+            table.insert(pip_install_args, "--editable")
+        end
+
+        os.execv("python", table.join({"-m", "pip", "install"}, pip_install_args, {"."}))
+    end)
 target_end()
 
 -- Tests

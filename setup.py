@@ -1,30 +1,15 @@
-import glob
-import os
 import subprocess
-from pathlib import Path
 
 from setuptools import setup
-from setuptools.command.build_py import build_py
-
-INSTALLATION_DIR = os.getenv("INFINI_ROOT", str(Path.home() / ".infini"))
-
-LIB_DIR = os.path.join(INSTALLATION_DIR, "lib")
-
-PACKAGE_NAME = "infinicore"
-
-PACKAGE_DIR = os.path.join(INSTALLATION_DIR, PACKAGE_NAME)
+from setuptools.command.build import build
 
 
-class BuildPy(build_py):
+class Build(build):
     def run(self):
-        subprocess.run(["xmake", "build", "-y"])
+        subprocess.run(["xmake", "build"])
         subprocess.run(["xmake", "install"])
-        built_lib = glob.glob(os.path.join(LIB_DIR, f"{PACKAGE_NAME}.*"))[0]
-        os.makedirs(PACKAGE_DIR, exist_ok=True)
-        self.copy_file(built_lib, PACKAGE_DIR)
+        subprocess.run(["xmake", "build", "-y", "_infinicore"])
+        subprocess.run(["xmake", "install", "_infinicore"])
 
 
-setup(
-    cmdclass={"build_py": BuildPy},
-    package_dir={"": "."},
-)
+setup(package_dir={"": "python"}, cmdclass={"build": Build})

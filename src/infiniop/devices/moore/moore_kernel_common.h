@@ -39,9 +39,12 @@ exp_(const float val) {
     return expf(val);
 }
 
+// Computes exp for long double on Moore GPU,
+// casts to double to resolve ambiguous exp call,
+// due to conflicting double/float definitions in MUSA math libraries.
 __forceinline__ __device__ long double
 exp_(const long double val) {
-    return exp(val);
+    return static_cast<long double>(exp(static_cast<double>(val)));
 }
 
 __forceinline__ __device__ double

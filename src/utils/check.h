@@ -3,6 +3,8 @@
 #include <iostream>
 #include <tuple>
 
+#include "infini_status_string.h"
+
 #define CHECK_OR_RETURN(CONDITION, ERROR)                                    \
     do {                                                                     \
         if (!(CONDITION)) {                                                  \
@@ -26,7 +28,10 @@
 
 #define CHECK_INTERNAL(API, EXPECT) CHECK_API_OR(API, EXPECT, return INFINI_STATUS_INTERNAL_ERROR)
 
-#define CHECK_STATUS(API) CHECK_API_OR(API, INFINI_STATUS_SUCCESS, return api_result_)
+#define CHECK_STATUS(API)                                                                  \
+    CHECK_API_OR(API, INFINI_STATUS_SUCCESS,                                               \
+                 std::cerr << "Error: " << infini_status_string(api_result_) << std::endl; \
+                 return api_result_)
 
 #define CHECK_DTYPE(DT, ...)                                 \
     do {                                                     \

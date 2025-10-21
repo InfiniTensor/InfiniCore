@@ -19,7 +19,7 @@ InfiniCore 是一个跨平台统一编程工具集，为不同芯片平台的功
   - 摩尔线程 GPU；
   - 天数智芯 GPU；
   - 沐曦 GPU；
-  - 曙光 DCU；
+  - 海光 DCU；
 - 华为昇腾 NPU；
 - 寒武纪 MLU；
 - 昆仑芯 XPU；
@@ -27,6 +27,20 @@ InfiniCore 是一个跨平台统一编程工具集，为不同芯片平台的功
 API 定义以及使用方式详见 [`InfiniCore文档`](https://github.com/InfiniTensor/InfiniCore-Documentation)。
 
 ## 配置和使用
+
+### 子模块
+
+由于仓库中含有子模块，所以在克隆时请添加 `--recursive` 或 `--recurse-submodules`，如：
+
+```shell
+git clone --recursive https://github.com/InfiniTensor/InfiniCore.git
+```
+
+或者在普通克隆后进行更新：
+
+```shell
+git submodule update --init --recursive
+```
 
 ### 一键安装
 
@@ -50,7 +64,7 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
 | `--metax-gpu=[y\|n]`     | 是否编译沐曦 GPU 接口实现         | n
 | `--moore-gpu=[y\|n]`     | 是否编译摩尔线程 GPU 接口实现     | n
 | `--iluvatar-gpu=[y\|n]`  | 是否编译沐曦 GPU 接口实现         | n
-| `--sugon-dcu=[y\|n]`     | 是否编译曙光 DCU 接口实现         | n
+| `--hygon-dcu=[y\|n]`     | 是否编译海光 DCU 接口实现         | n
 | `--kunlun-xpu=[y\|n]`    | 是否编译昆仑 XPU 接口实现         | n
 | `--ninetoothed=[y\|n]`   | 是否编译九齿实现                 | n
 | `--ccl=[y\|n]`           | 是否编译 InfiniCCL 通信库接口实现 | n
