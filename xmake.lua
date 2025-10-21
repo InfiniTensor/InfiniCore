@@ -298,13 +298,14 @@ target("infiniccl")
     if has_config("moore-gpu") then
         add_deps("infiniccl-moore")
     end
+
     if has_config("kunlun-xpu") then
         add_deps("infiniccl-kunlun")
     end
     if has_config("hygon-dcu") then
         add_deps("infiniccl-hygon")
     end
-    
+
     set_languages("cxx17")
 
     add_files("src/infiniccl/*.cc")

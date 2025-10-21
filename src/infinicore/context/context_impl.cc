@@ -4,6 +4,8 @@
 
 namespace infinicore {
 
+thread_local Runtime *ContextImpl::current_runtime_ = nullptr;
+
 Runtime *ContextImpl::getCurrentRuntime() {
     return current_runtime_;
 }

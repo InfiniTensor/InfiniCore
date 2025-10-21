@@ -27,6 +27,7 @@ struct TensorMetaData {
     infiniopTensorDescriptor_t desc;
 
     TensorMetaData(const Shape &shape, const Strides &strides, const DataType &dtype);
+    ~TensorMetaData();
 };
 
 struct TensorData {
@@ -120,6 +121,10 @@ public:
     bool is_pinned() const;
 
     std::string info() const;
+
+    void debug(const std::string &filename) const;
+
+    void debug() const;
 
     ///
     /// Data Transfer APIs

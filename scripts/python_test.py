@@ -17,6 +17,7 @@ def run_tests(args):
         "causal_softmax.py",
         "clip.py",
         "gemm.py",
+        "logsoftmax.py",
         "mul.py",
         "random_sample.py",
         "rearrange.py",
@@ -25,6 +26,9 @@ def run_tests(args):
         "sub.py",
         "swiglu.py",
         "softplus.py",
+        "sigmoid.py",
+        "topkrouter.py",
+        "topksoftmax.py",
     ]:
         result = subprocess.run(
             f"python {test} {args} --debug", text=True, encoding="utf-8", shell=True

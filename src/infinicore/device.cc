@@ -39,10 +39,11 @@ std::string Device::toString(const Type &type) {
         return "KUNLUN";
     case Type::HYGON:
         return "HYGON";
+    case Type::COUNT:
+        return "COUNT";
+    default:
+        return "UNKNOWN";
     }
-
-    // TODO: Add error handling.
-    return "";
 }
 
 bool Device::operator==(const Device &other) const {

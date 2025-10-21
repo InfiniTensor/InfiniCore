@@ -40,9 +40,9 @@ infiniStatus_t Descriptor::create(
 namespace {
 
 template <int BLOCK_SIZE = 128>
-infiniStatus_t launch_topkrouter(float *d_values_out, int *d_indices_out, void *d_input, float *d_correction_bias, float routed_scaling_factor,
-                                 size_t N, size_t width, size_t topk, infiniDtype_t xtype, cudaStream_t stream) {
-
+infiniStatus_t launch_topkrouter(float *d_values_out, int *d_indices_out, const void *d_input, const float *d_correction_bias,
+                                 const float routed_scaling_factor, const size_t N, const size_t width, const size_t topk, infiniDtype_t xtype,
+                                 cudaStream_t stream) {
     const int block_threads = BLOCK_SIZE;
     dim3 blocks(N);
     dim3 threads(block_threads);
@@ -63,9 +63,15 @@ infiniStatus_t launch_topkrouter(float *d_values_out, int *d_indices_out, void *
 }; // namespace
 
 infiniStatus_t Descriptor::calculate(
-    void *workspace, size_t workspace_size,
-    float *values, int *indices, void *x, float *correction_bias, float routed_scaling_factor, size_t topk, void *stream) const {
-
+    void *workspace,
+    size_t workspace_size,
+    float *values,
+    int *indices,
+    const void *x,
+    const float *correction_bias,
+    const float routed_scaling_factor,
+    const size_t topk,
+    void *stream) const {
     if (workspace_size < _workspace_size) {
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
@@ -76,13 +82,12 @@ infiniStatus_t Descriptor::calculate(
     // size_t n_routed_experts = 256;
     // size_t n_group = 8;
     // size_t topk_group = 4;
-
     auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
 
     if (256 == width) {
         launch_topkrouter<256>(values, indices, x, correction_bias, routed_scaling_factor, N, width, topk, _info.xtype, cuda_stream);
     } else {
-        return INFINI_STATUS_INTERNAL_ERROR;
+        return INFINI_STATUS_BAD_PARAM;
     }
 
     return INFINI_STATUS_SUCCESS;
