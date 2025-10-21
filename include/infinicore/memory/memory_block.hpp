@@ -8,20 +8,20 @@
 
 namespace infinicore {
 
-class Memory {
+class MemoryBlock {
 public:
     using Deleter = std::function<void(std::byte *)>;
 
-    Memory(std::byte *data, size_t size, Device device, Deleter deleter, bool pin_memory = false);
-    ~Memory();
+    MemoryBlock(std::byte *data, size_t size, Device device, Deleter deleter, bool pin_memory = false);
+    ~MemoryBlock();
 
     // Copy constructor and copy assignment with reference counting
-    Memory(const Memory& other);
-    Memory& operator=(const Memory& other);
+    MemoryBlock(const MemoryBlock& other);
+    MemoryBlock& operator=(const MemoryBlock& other);
 
     // Move constructor and move assignment
-    Memory(Memory&& other) noexcept;
-    Memory& operator=(Memory&& other) noexcept;
+    MemoryBlock(MemoryBlock&& other) noexcept;
+    MemoryBlock& operator=(MemoryBlock&& other) noexcept;
 
     std::byte *data() const;
     Device device() const;

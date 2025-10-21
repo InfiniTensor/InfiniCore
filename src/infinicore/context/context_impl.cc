@@ -153,7 +153,7 @@ void syncDevice() {
     return ContextImpl::singleton().getCurrentRuntime()->syncDevice();
 }
 
-std::shared_ptr<Memory> allocateMemory(size_t size) {
+std::shared_ptr<MemoryBlock> allocateMemory(size_t size) {
     spdlog::debug("context::allocateMemory() called for size={}", size);
     auto runtime = ContextImpl::singleton().getCurrentRuntime();
     spdlog::debug("Current runtime device: {}", runtime->device().toString());
@@ -162,14 +162,14 @@ std::shared_ptr<Memory> allocateMemory(size_t size) {
     return memory;
 }
 
-std::shared_ptr<Memory> allocateHostMemory(size_t size) {
+std::shared_ptr<MemoryBlock> allocateHostMemory(size_t size) {
     spdlog::debug("context::allocateHostMemory() called for size={}", size);
     auto memory = ContextImpl::singleton().getCpuRuntime()->allocateMemory(size);
     spdlog::debug("context::allocateHostMemory() returned memory={}", static_cast<void *>(memory.get()));
     return memory;
 }
 
-std::shared_ptr<Memory> allocatePinnedHostMemory(size_t size) {
+std::shared_ptr<MemoryBlock> allocatePinnedHostMemory(size_t size) {
     spdlog::debug("context::allocatePinnedHostMemory() called for size={}", size);
     auto memory = ContextImpl::singleton().getCurrentRuntime()->allocatePinnedHostMemory(size);
     spdlog::debug("context::allocatePinnedHostMemory() returned memory={}", static_cast<void *>(memory.get()));

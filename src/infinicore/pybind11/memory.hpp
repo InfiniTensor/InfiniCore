@@ -51,11 +51,11 @@ inline void bind(py::module &m) {
         .def_readonly("max_split_size", &DeviceStats::max_split_size);
 
     // Bind the Memory class
-    py::class_<Memory, std::shared_ptr<Memory>>(m, "Memory")
-        .def("data", &Memory::data)
-        .def("device", &Memory::device)
-        .def("size", &Memory::size)
-        .def("is_pinned", &Memory::is_pinned);
+    py::class_<MemoryBlock, std::shared_ptr<MemoryBlock>>(m, "MemoryBlock")
+        .def("data", &MemoryBlock::data)
+        .def("device", &MemoryBlock::device)
+        .def("size", &MemoryBlock::size)
+        .def("is_pinned", &MemoryBlock::is_pinned);
 
     // Add functions to get memory statistics from the current runtime
     m.def(

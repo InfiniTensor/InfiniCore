@@ -54,22 +54,22 @@ void Runtime::syncDevice() {
     INFINICORE_CHECK_ERROR(infinirtDeviceSynchronize());
 }
 
-std::shared_ptr<Memory> Runtime::allocateMemory(size_t size) {
+std::shared_ptr<MemoryBlock> Runtime::allocateMemory(size_t size) {
     std::byte *data_ptr = device_memory_allocator_->allocate(size);
-    return std::make_shared<Memory>(
+    return std::make_shared<MemoryBlock>(
         data_ptr, size, device_,
         [alloc = device_memory_allocator_.get()](std::byte *p) {
             alloc->deallocate(p);
         });
 }
 
-std::shared_ptr<Memory> Runtime::allocatePinnedHostMemory(size_t size) {
+std::shared_ptr<MemoryBlock> Runtime::allocatePinnedHostMemory(size_t size) {
     if (!pinned_host_memory_allocator_) {
         spdlog::warn("For CPU devices, pinned memory is not supported, falling back to regular host memory");
         return allocateMemory(size);
     }
     std::byte *data_ptr = pinned_host_memory_allocator_->allocate(size);
-    return std::make_shared<Memory>(
+    return std::make_shared<MemoryBlock>(
         data_ptr, size, device_,
         [alloc = pinned_host_memory_allocator_.get()](std::byte *p) {
             alloc->deallocate(p);

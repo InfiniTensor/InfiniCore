@@ -32,7 +32,7 @@ struct TensorMetaData {
 
 struct TensorData {
     size_t offset;
-    std::shared_ptr<Memory> memory;
+    std::shared_ptr<MemoryBlock> memory;
 };
 
 struct TensorSliceParams {

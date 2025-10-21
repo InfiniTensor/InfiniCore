@@ -35,7 +35,7 @@ void calculate(Tensor c, Tensor a, Tensor b) {
 
     size_t workspace_size = 0;
     INFINICORE_CHECK_ERROR(infiniopGetGemmWorkspaceSize(desc, &workspace_size));
-    std::shared_ptr<Memory> workspace = context::allocateMemory(workspace_size);
+    std::shared_ptr<MemoryBlock> workspace = context::allocateMemory(workspace_size);
 
     INFINICORE_CHECK_ERROR(infiniopGemm(
         desc, workspace->data(), workspace_size,

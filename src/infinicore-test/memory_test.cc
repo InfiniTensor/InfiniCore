@@ -244,12 +244,12 @@ TestResult ConcurrencyTest::testMemoryAllocationRace() {
         std::vector<std::thread> threads;
         std::atomic<int> success_count{0};
         std::atomic<int> failure_count{0};
-        std::vector<Memory> all_allocations;
+        std::vector<MemoryBlock> all_allocations;
         std::mutex allocations_mutex;
 
         for (int i = 0; i < num_threads; ++i) {
             threads.emplace_back([&, i]() {
-                std::vector<Memory> thread_allocations;
+                std::vector<MemoryBlock> thread_allocations;
                 try {
                     for (int j = 0; j < allocations_per_thread; ++j) {
                         size_t size = 64 + (j % 1024);
@@ -373,7 +373,7 @@ TestResult ExceptionSafetyTest::testDeallocationException() {
     return measureTime("DeallocationException", [this]() -> bool {
         try {
             // Test that deallocation doesn't throw exceptions
-            std::vector<std::shared_ptr<Memory>> memories;
+            std::vector<std::shared_ptr<MemoryBlock>> memories;
 
             // Allocate some memory
             for (int i = 0; i < 10; ++i) {
@@ -468,7 +468,7 @@ TestResult MemoryLeakTest::testBasicLeakDetection() {
             MemoryLeakDetector::instance().reset();
 
             // Allocate and deallocate memory
-            std::vector<std::shared_ptr<Memory>> memories;
+            std::vector<std::shared_ptr<MemoryBlock>> memories;
             for (int i = 0; i < 100; ++i) {
                 auto memory = context::allocateMemory(1024);
                 if (memory) {
@@ -549,7 +549,7 @@ TestResult MemoryLeakTest::testExceptionLeakDetection() {
     return measureTime("ExceptionLeakDetection", [this]() -> bool {
         try {
             // Test that exceptions don't cause memory leaks
-            std::vector<std::shared_ptr<Memory>> memories;
+            std::vector<std::shared_ptr<MemoryBlock>> memories;
 
             try {
                 // Allocate some memory
@@ -624,7 +624,7 @@ TestResult PerformanceTest::testAllocationPerformance() {
 
             auto start = std::chrono::high_resolution_clock::now();
 
-            std::vector<std::shared_ptr<Memory>> memories;
+            std::vector<std::shared_ptr<MemoryBlock>> memories;
             for (int i = 0; i < num_allocations; ++i) {
                 auto memory = context::allocateMemory(allocation_size);
                 if (memory) {
@@ -784,7 +784,7 @@ TestResult StressTest::testHighFrequencyAllocations() {
     return measureTime("HighFrequencyAllocations", [this]() -> bool {
         try {
             const int num_allocations = iterations_;
-            std::vector<std::shared_ptr<Memory>> memories;
+            std::vector<std::shared_ptr<MemoryBlock>> memories;
             memories.reserve(num_allocations);
 
             auto start = std::chrono::high_resolution_clock::now();
@@ -825,7 +825,7 @@ TestResult StressTest::testLargeMemoryAllocations() {
             const size_t large_size = 100 * 1024 * 1024; // 100MB
             const int num_allocations = 10;
 
-            std::vector<std::shared_ptr<Memory>> memories;
+            std::vector<std::shared_ptr<MemoryBlock>> memories;
 
             for (int i = 0; i < num_allocations; ++i) {
                 try {
@@ -871,7 +871,7 @@ TestResult StressTest::testCrossDeviceStress() {
             }
 
             const int num_operations = 1000;
-            std::vector<std::shared_ptr<Memory>> pinned_memories;
+            std::vector<std::shared_ptr<MemoryBlock>> pinned_memories;
 
             for (int i = 0; i < num_operations; ++i) {
                 // Switch to random device
