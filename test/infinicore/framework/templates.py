@@ -18,28 +18,6 @@ Available configuration methods in BaseOperatorTest:
 4. get_dtype_combinations() -> Optional[List[Dict]]
    - Define mixed dtype configurations for multi-dtype tests
    - Return None for single-dtype tests
-   - Available mixed dtype definition methods:
-
-   METHOD 1: Explicit dictionary per combination (Recommended)
-     Format: [{"input_0": dtype1, "input_1": dtype2, "output": dtype3}]
-     Example:
-       [{"input_0": infinicore.float16, "input_1": infinicore.float32, "output": infinicore.float16}]
-
-   METHOD 2: Rule-based combination generation
-     Generate all valid combinations with business logic constraints
-     Example: Output bf16 requires input bf16
-
-   METHOD 3: Multi-output support with complex structure
-     Format: [{"inputs": [dtype1, dtype2], "outputs": [dtype3, dtype4], "params": {"scale": dtype5}}]
-     Requires special handling in prepare_inputs()
-
-   METHOD 4: Per-tensor specification in TestCase
-     Individual tensors can specify dtype in TensorSpec
-     Overrides dtype_combinations for specific tensors
-
-   METHOD 5: Hybrid approach with fallback
-     Combine explicit combinations with generated ones
-     Support both simple and complex dtype requirements
 
 5. torch_operator(*inputs, out=None, **kwargs) -> torch.Tensor
    - Implement PyTorch reference implementation
@@ -47,14 +25,24 @@ Available configuration methods in BaseOperatorTest:
 6. infinicore_operator(*inputs, out=None, **kwargs) -> infinicore.Tensor
    - Implement Infinicore operator implementation
 
-Usage examples:
-- Single dtype: Return dtype list from get_tensor_dtypes(), None from get_dtype_combinations()
-- Mixed dtype: Return dtype combinations from get_dtype_combinations(), basic dtypes from get_tensor_dtypes()
+New Tensor Initialization Modes:
+- TensorInitializer.RANDOM (default): Random values using torch.rand
+- TensorInitializer.ZEROS: All zeros using torch.zeros
+- TensorInitializer.ONES: All ones using torch.ones
+- TensorInitializer.RANDINT: Random integers using torch.randint
+- TensorInitializer.MANUAL: Use a pre-existing tensor with shape/strides validation
+- TensorInitializer.BINARY: Use a pre-existing tensor with shape validation only
+
+Usage examples in TestCase creation:
+- Basic: TensorSpec.from_tensor(shape)
+- With initialization: TensorSpec.from_tensor(shape, init_mode=TensorInitializer.ZEROS)
+- Strided with custom init: TensorSpec.from_strided_tensor(shape, strides, init_mode=TensorInitializer.ONES)
 """
 
 import torch
 import infinicore
 from .base import BaseOperatorTest
+from .tensor import TensorSpec, TensorInitializer
 
 
 class BinaryOperatorTest(BaseOperatorTest):

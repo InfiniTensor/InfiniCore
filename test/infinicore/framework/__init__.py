@@ -1,4 +1,7 @@
-from .base import TensorSpec, TestConfig, TestRunner, TestCase, BaseOperatorTest
+# [file name]: __init__.py
+# [file content begin]
+from .base import TestConfig, TestRunner, TestCase, BaseOperatorTest
+from .tensor import TensorSpec, TensorInitializer
 from .utils import (
     compare_results,
     create_test_comparator,
@@ -17,12 +20,11 @@ from .templates import BinaryOperatorTest, UnaryOperatorTest
 
 __all__ = [
     "TensorSpec",
+    "TensorInitializer",
     "TestConfig",
     "TestRunner",
     "TestCase",
     "BaseOperatorTest",
-    "ParameterMapping",
-    "create_test_cases",
     "compare_results",
     "create_test_comparator",
     "convert_infinicore_to_torch",

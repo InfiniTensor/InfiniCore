@@ -6,6 +6,7 @@ from typing import List, Dict, Any, Tuple, Union, Callable, Optional
 
 from .datatypes import to_torch_dtype, to_infinicore_dtype
 from .devices import InfiniDeviceNames, torch_device_map
+from .tensor import TensorSpec, TensorInitializer
 from .utils import (
     create_test_comparator,
     infinicore_tensor_from_torch,
@@ -13,50 +14,6 @@ from .utils import (
     rearrange_tensor,
     synchronize_device,
 )
-
-
-class TensorSpec:
-    """Tensor specification supporting various input types and per-tensor dtype"""
-
-    def __init__(
-        self,
-        shape=None,
-        dtype=None,
-        strides=None,
-        value=None,
-        is_scalar=False,
-        is_contiguous=True,
-    ):
-        self.shape = shape
-        self.dtype = dtype
-        self.strides = strides
-        self.value = value
-        self.is_scalar = is_scalar
-        self.is_contiguous = is_contiguous
-
-    @classmethod
-    def from_tensor(cls, shape, dtype=None, strides=None, is_contiguous=True):
-        return cls(
-            shape=shape,
-            dtype=dtype,
-            strides=strides,
-            is_scalar=False,
-            is_contiguous=is_contiguous,
-        )
-
-    @classmethod
-    def from_scalar(cls, value, dtype=None):
-        return cls(value=value, dtype=dtype, is_scalar=True)
-
-    @classmethod
-    def from_strided_tensor(cls, shape, strides, dtype=None):
-        return cls(
-            shape=shape,
-            dtype=dtype,
-            strides=strides,
-            is_scalar=False,
-            is_contiguous=False,
-        )
 
 
 class TestCase:
@@ -101,17 +58,27 @@ class TestCase:
                 input_strs.append(f"scalar({inp.value}{dtype_str})")
             elif hasattr(inp, "shape"):
                 dtype_str = f", dtype={inp.dtype}" if inp.dtype else ""
+                init_str = (
+                    f", init={inp.init_mode}"
+                    if inp.init_mode != TensorInitializer.RANDOM
+                    else ""
+                )
                 if hasattr(inp, "is_contiguous") and not inp.is_contiguous:
-                    input_strs.append(f"strided_tensor{inp.shape}{dtype_str}")
+                    input_strs.append(f"strided_tensor{inp.shape}{dtype_str}{init_str}")
                 else:
-                    input_strs.append(f"tensor{inp.shape}{dtype_str}")
+                    input_strs.append(f"tensor{inp.shape}{dtype_str}{init_str}")
             else:
                 input_strs.append(str(inp))
 
         base_str = f"TestCase(mode={mode_str}, inputs=[{', '.join(input_strs)}]"
         if self.output:
             dtype_str = f", dtype={self.output.dtype}" if self.output.dtype else ""
-            base_str += f", output=tensor{self.output.shape}{dtype_str}"
+            init_str = (
+                f", init={self.output.init_mode}"
+                if self.output.init_mode != TensorInitializer.RANDOM
+                else ""
+            )
+            base_str += f", output=tensor{self.output.shape}{dtype_str}{init_str}"
         if self.kwargs:
             base_str += f", kwargs={self.kwargs}"
         if self.description:
@@ -252,17 +219,14 @@ class BaseOperatorTest(ABC):
         """Unified Infinicore operator function"""
         pass
 
-    def create_strided_tensor(self, shape, strides, dtype, device_str):
+    def create_strided_tensor(
+        self, shape, strides, dtype, device, init_mode=TensorInitializer.RANDOM
+    ):
         """Create a non-contiguous tensor with specific strides"""
-        total_size = 1
-        for i in range(len(shape)):
-            total_size += (shape[i] - 1) * abs(strides[i])
+        spec = TensorSpec.from_strided_tensor(shape, strides, dtype, init_mode)
+        return spec.create_torch_tensor(device, dtype)
 
-        base_tensor = torch.rand(total_size, dtype=dtype, device=device_str)
-        strided_tensor = torch.as_strided(base_tensor, shape, strides)
-        return strided_tensor
-
-    def prepare_inputs(self, test_case, device_str, dtype_config):
+    def prepare_inputs(self, test_case, device, dtype_config):
         """Prepare input data"""
         inputs = []
 
@@ -271,30 +235,7 @@ class BaseOperatorTest(ABC):
                 if input_spec.is_scalar:
                     inputs.append(input_spec.value)
                 else:
-                    shape = input_spec.shape
-
-                    if input_spec.dtype is not None:
-                        tensor_dtype = to_torch_dtype(input_spec.dtype)
-                    elif (
-                        isinstance(dtype_config, dict) and f"input_{i}" in dtype_config
-                    ):
-                        tensor_dtype = to_torch_dtype(dtype_config[f"input_{i}"])
-                    elif isinstance(dtype_config, (list, tuple)) and i < len(
-                        dtype_config
-                    ):
-                        tensor_dtype = to_torch_dtype(dtype_config[i])
-                    else:
-                        tensor_dtype = to_torch_dtype(dtype_config)
-
-                    if input_spec.is_contiguous or input_spec.strides is None:
-                        tensor = torch.rand(
-                            shape, dtype=tensor_dtype, device=device_str
-                        )
-                    else:
-                        tensor = self.create_strided_tensor(
-                            shape, input_spec.strides, tensor_dtype, device_str
-                        )
-
+                    tensor = input_spec.create_torch_tensor(device, dtype_config, i)
                     inputs.append(tensor)
             else:
                 inputs.append(input_spec)
@@ -302,18 +243,18 @@ class BaseOperatorTest(ABC):
         return inputs, test_case.kwargs
 
     def get_output_dtype(self, test_case, dtype_config, torch_result=None):
-        """Determine output dtype"""
+        """Determine output dtype - returns infinicore dtype, not torch dtype"""
         if test_case.output and test_case.output.dtype is not None:
-            return to_torch_dtype(test_case.output.dtype)
+            return test_case.output.dtype
         elif isinstance(dtype_config, dict) and "output" in dtype_config:
-            return to_torch_dtype(dtype_config["output"])
+            return dtype_config["output"]
         elif torch_result is not None:
-            return torch_result.dtype
+            return to_infinicore_dtype(torch_result.dtype)
         else:
             if isinstance(dtype_config, (list, tuple)):
-                return to_torch_dtype(dtype_config[0])
+                return dtype_config[0]
             else:
-                return to_torch_dtype(dtype_config)
+                return dtype_config
 
     def run_test(self, device, test_case, dtype_config, config):
         """Unified test execution flow"""
@@ -350,7 +291,7 @@ class BaseOperatorTest(ABC):
         """Run a single test with specified operation mode"""
         device_str = torch_device_map[device]
 
-        inputs, kwargs = self.prepare_inputs(test_case, device_str, dtype_config)
+        inputs, kwargs = self.prepare_inputs(test_case, device, dtype_config)
 
         infini_inputs = []
         for inp in inputs:
@@ -378,8 +319,9 @@ class BaseOperatorTest(ABC):
 
             infini_result = infini_op()
 
-            comparison_dtype = to_infinicore_dtype(
-                self.get_output_dtype(test_case, dtype_config, torch_result)
+            # Get comparison dtype (infinicore dtype)
+            comparison_dtype = self.get_output_dtype(
+                test_case, dtype_config, torch_result
             )
 
             compare_fn = create_test_comparator(
@@ -408,17 +350,30 @@ class BaseOperatorTest(ABC):
             if not test_case.output:
                 raise ValueError("IN_PLACE test requires output specification")
 
+            # Get output dtype and create output tensor
             output_dtype = self.get_output_dtype(test_case, dtype_config)
             output_shape = test_case.output.shape
 
+            # Use TensorSpec to create output tensor with specified initialization mode
             if test_case.output.is_contiguous or test_case.output.strides is None:
-                torch_output = torch.zeros(
-                    output_shape, dtype=output_dtype, device=device_str
+                output_spec = TensorSpec.from_tensor(
+                    output_shape, output_dtype, init_mode=test_case.output.init_mode
                 )
             else:
-                torch_output = self.create_strided_tensor(
-                    output_shape, test_case.output.strides, output_dtype, device_str
+                output_spec = TensorSpec.from_strided_tensor(
+                    output_shape,
+                    test_case.output.strides,
+                    output_dtype,
+                    init_mode=test_case.output.init_mode,
                 )
+
+            torch_output = output_spec.create_torch_tensor(device, output_dtype)
+
+            # For non-contiguous tensors, we need to ensure zeros initialization
+            if (
+                not test_case.output.is_contiguous
+                and test_case.output.strides is not None
+            ):
                 torch_output.zero_()
 
             def torch_op_inplace():
@@ -426,8 +381,9 @@ class BaseOperatorTest(ABC):
 
             torch_op_inplace()
 
+            # Create infinicore output tensor
             torch_dummy = torch.zeros(
-                output_shape, dtype=output_dtype, device=device_str
+                output_shape, dtype=to_torch_dtype(output_dtype), device=device_str
             )
             if (
                 not test_case.output.is_contiguous
@@ -441,8 +397,8 @@ class BaseOperatorTest(ABC):
 
             infini_op_inplace()
 
-            comparison_dtype = to_infinicore_dtype(
-                self.get_output_dtype(test_case, dtype_config, torch_output)
+            comparison_dtype = self.get_output_dtype(
+                test_case, dtype_config, torch_output
             )
             compare_fn = create_test_comparator(
                 config, comparison_dtype, mode_name=f"{self.operator_name} {mode_name}"
