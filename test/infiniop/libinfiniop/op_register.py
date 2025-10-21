@@ -673,3 +673,41 @@ def softplus_(lib):
     ]
     lib.infiniopDestroySoftplusDescriptor.restype = c_int32
     lib.infiniopDestroySoftplusDescriptor.argtypes = [infiniopOperatorDescriptor_t]
+
+
+@OpRegister.operator
+def flash_attention_(lib):
+    lib.infiniopCreateFlashAttentionDescriptor.restype = c_int32
+    lib.infiniopCreateFlashAttentionDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetFlashAttentionWorkspaceSize.restype = c_int32
+    lib.infiniopGetFlashAttentionWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopFlashAttention.restype = c_int32
+    lib.infiniopFlashAttention.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyFlashAttentionDescriptor.restype = c_int32
+    lib.infiniopDestroyFlashAttentionDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]

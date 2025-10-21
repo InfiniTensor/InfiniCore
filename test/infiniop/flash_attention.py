@@ -1,42 +1,36 @@
-from ctypes import POINTER, Structure, c_int32, c_uint64, c_void_p
+from ctypes import c_uint64
 import ctypes
 import math
 import sys
 import os
 
-from regex import F
-
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 from libinfiniop import (
-    open_lib,
-    to_tensor,
-    infiniopHandle_t,
-    infiniopTensorDescriptor_t,
-    check_error,
-    rearrange_tensor,
-    create_workspace,
-    get_args,
+    LIBINFINIOP,
+    TestTensor,
     get_test_devices,
+    check_error,
     test_operator,
+    get_args,
     debug,
     get_tolerance,
     profile_operation,
+    TestWorkspace,
+    InfiniDtype,
+    InfiniDtypeNames,
+    InfiniDeviceNames,
+    infiniopOperatorDescriptor_t,
 )
 
 import torch
 
 
-class FlashAttentionDescriptor(Structure):
-    _fields_ = [("device", c_int32)]
-
-
-infiniopFlashAttentionDescriptor_t = POINTER(FlashAttentionDescriptor)
 
 
 def causal_mask(shape):
     mask = torch.tril(torch.ones(shape), diagonal=-1).flip(dims=[-2, -1])
     masked = torch.where(mask == 1, True, False)
-    return masked
+    return masked.contiguous()  # 确保返回连续张量
 
 
 def attention(query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False, scale=None) -> torch.Tensor:
@@ -73,77 +67,73 @@ def attention(query, key, value, attn_mask=None, dropout_p=0.0, is_causal=False,
 
 
 def test(
-    lib,
     handle,
-    torch_device,
+    device,
     out_shape,
     q_shape,
     k_shape,
     v_shape,
-    dtype=torch.float16,
+    dtype=InfiniDtype.F16,
     sync=None,
 ):
     print(
-        f"Testing Attention on {torch_device} with out:{out_shape} q:{q_shape} k:{k_shape} v:{v_shape} dtype:{dtype}"
+        f"Testing FlashAttention on {InfiniDeviceNames[device]} with out:{out_shape} q:{q_shape} k:{k_shape} v:{v_shape} dtype:{InfiniDtypeNames[dtype]}"
     )
     
-    q = torch.rand(q_shape, dtype=dtype).to(torch_device) * 0.1
-    k = torch.rand(k_shape, dtype=dtype).to(torch_device) * 0.1
-    v = torch.rand(v_shape, dtype=dtype).to(torch_device) * 0.1
-    mask = causal_mask((q_shape[-3], k_shape[-3])).to(torch_device)
-    ans = attention(q, k, v, mask)
-    out = torch.ones(out_shape, dtype=dtype, device=torch_device)
+    # Convert InfiniDtype to torch dtype
+    torch_dtype = torch.float16 if dtype == InfiniDtype.F16 else torch.float32
+    
+    q = TestTensor(q_shape, None, dtype, device, scale=0.1)
+    k = TestTensor(k_shape, None, dtype, device, scale=0.1)
+    v = TestTensor(v_shape, None, dtype, device, scale=0.1)
+    mask_torch = causal_mask((q_shape[-3], k_shape[-3]))
+    mask = TestTensor((q_shape[-3], k_shape[-3]), mask_torch.stride(), InfiniDtype.BOOL, device, mode="manual", set_tensor=mask_torch)
+    out = TestTensor(out_shape, None, dtype, device, mode="zeros")
 
-    out_tensor = to_tensor(out, lib)
-    q_tensor = to_tensor(q, lib)
-    k_tensor = to_tensor(k, lib)
-    v_tensor = to_tensor(v, lib)
-    # mask_ = torch.zeros((q_shape[-3], k_shape[-3]), dtype=torch.uint8).to(torch_device)
-    mask_tensor = to_tensor(mask, lib)
+    # Get PyTorch tensors for reference computation
+    q_torch = q.torch_tensor()
+    k_torch = k.torch_tensor()
+    v_torch = v.torch_tensor()
+    mask_torch = mask.torch_tensor()
+    ans = attention(q_torch, k_torch, v_torch, mask_torch)
 
     if sync is not None:
         sync()
 
-    descriptor = infiniopFlashAttentionDescriptor_t()
+    descriptor = infiniopOperatorDescriptor_t()
     check_error(
-        lib.infiniopCreateFlashAttentionDescriptor(
+        LIBINFINIOP.infiniopCreateFlashAttentionDescriptor(
             handle,
             ctypes.byref(descriptor),
-            out_tensor.descriptor,
-            q_tensor.descriptor,
-            k_tensor.descriptor,
-            v_tensor.descriptor,
-            mask_tensor.descriptor,
+            out.descriptor,
+            q.descriptor,
+            k.descriptor,
+            v.descriptor,
+            mask.descriptor,
         )
     )
 
     # Invalidate the shape and strides in the descriptor to prevent them from being directly used by the kernel
-    for tensor in [
-        out_tensor,
-        q_tensor,
-        k_tensor,
-        v_tensor,
-        mask_tensor,
-    ]:
-        tensor.destroyDesc(lib)
+    for tensor in [out, q, k, v, mask]:
+        tensor.destroy_desc()
 
     workspace_size = c_uint64(0)
     check_error(
-        lib.infiniopGetFlashAttentionWorkspaceSize(descriptor, ctypes.byref(workspace_size))
+        LIBINFINIOP.infiniopGetFlashAttentionWorkspaceSize(descriptor, ctypes.byref(workspace_size))
     )
-    workspace = create_workspace(workspace_size.value, out.device)
+    workspace = TestWorkspace(workspace_size.value, device)
 
     def lib_attention():
         check_error(
-            lib.infiniopFlashAttention(
+            LIBINFINIOP.infiniopFlashAttention(
                 descriptor,
-                workspace.data_ptr() if workspace is not None else None,
+                workspace.data(),
                 workspace_size.value,
-                out_tensor.data,
-                q_tensor.data,
-                k_tensor.data,
-                v_tensor.data,
-                mask_tensor.data,
+                out.data(),
+                q.data(),
+                k.data(),
+                v.data(),
+                mask.data(),
                 None,
             )
         )
@@ -153,25 +143,25 @@ def test(
     # Validate results
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:
-        debug(out, ans, atol=atol, rtol=rtol)
-    assert torch.allclose(out, ans, atol=atol, rtol=rtol)
+        debug(out.actual_tensor(), ans, atol=atol, rtol=rtol)
+    assert torch.allclose(out.actual_tensor(), ans, atol=atol, rtol=rtol)
 
     # Profiling workflow
     if PROFILE:
         # fmt: off
-        profile_operation("PyTorch", lambda: attention(q, k, v, mask), torch_device, NUM_PRERUN, NUM_ITERATIONS)
-        profile_operation("    lib", lambda: lib_attention(), torch_device, NUM_PRERUN, NUM_ITERATIONS)
+        profile_operation("PyTorch", lambda: attention(q_torch, k_torch, v_torch, mask_torch), device, NUM_PRERUN, NUM_ITERATIONS)
+        profile_operation("    lib", lambda: lib_attention(), device, NUM_PRERUN, NUM_ITERATIONS)
         # fmt: on
-    check_error(lib.infiniopDestroyFlashAttentionDescriptor(descriptor))
+    check_error(LIBINFINIOP.infiniopDestroyFlashAttentionDescriptor(descriptor))
 
 
 if __name__ == "__main__":
-    _TENSOR_DTYPES = [torch.float16]
+    _TENSOR_DTYPES = [InfiniDtype.F16]
 
     # Tolerance map for different data types
     _TOLERANCE_MAP = {
-        torch.float16: {"atol": 1e-4, "rtol": 1e-2},
-        torch.float32: {"atol": 1e-5, "rtol": 1e-3},
+        InfiniDtype.F16: {"atol": 1e-4, "rtol": 1e-2},
+        InfiniDtype.F32: {"atol": 1e-5, "rtol": 1e-3},
     }
 
     DEBUG = False
@@ -208,41 +198,6 @@ if __name__ == "__main__":
         # ),
     ]
     args = get_args()
-    lib = open_lib()
-
-    lib.infiniopCreateFlashAttentionDescriptor.restype = c_int32
-    lib.infiniopCreateFlashAttentionDescriptor.argtypes = [
-        infiniopHandle_t,
-        POINTER(infiniopFlashAttentionDescriptor_t),
-        infiniopTensorDescriptor_t,
-        infiniopTensorDescriptor_t,
-        infiniopTensorDescriptor_t,
-        infiniopTensorDescriptor_t,
-        infiniopTensorDescriptor_t,
-    ]
-
-    lib.infiniopGetFlashAttentionWorkspaceSize.restype = c_int32
-    lib.infiniopGetFlashAttentionWorkspaceSize.argtypes = [
-        infiniopFlashAttentionDescriptor_t,
-        POINTER(c_uint64),
-    ]
-
-    lib.infiniopFlashAttention.restype = c_int32
-    lib.infiniopFlashAttention.argtypes = [
-        infiniopFlashAttentionDescriptor_t,
-        c_void_p,
-        c_uint64,
-        c_void_p,
-        c_void_p,
-        c_void_p,
-        c_void_p,
-        c_void_p,
-    ]
-
-    lib.infiniopDestroyFlashAttentionDescriptor.restype = c_int32
-    lib.infiniopDestroyFlashAttentionDescriptor.argtypes = [
-        infiniopFlashAttentionDescriptor_t,
-    ]
 
     # Configure testing options
     DEBUG = args.debug
@@ -252,5 +207,5 @@ if __name__ == "__main__":
 
     # Execute tests
     for device in get_test_devices(args):
-        test_operator(lib, device, test, test_cases, _TENSOR_DTYPES)
+        test_operator(device, test, test_cases, _TENSOR_DTYPES)
     print("\033[92mTest passed!\033[0m")

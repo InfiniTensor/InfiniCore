@@ -157,6 +157,8 @@ def to_torch_dtype(dt: InfiniDtype, compatability_mode=False):
         return torch.float32
     elif dt == InfiniDtype.F64:
         return torch.float64
+    elif dt == InfiniDtype.BOOL:
+        return torch.bool
     # TODO: These following types may not be supported by older
     # versions of PyTorch. Use compatability mode to convert them.
     elif dt == InfiniDtype.U16:
