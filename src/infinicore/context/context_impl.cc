@@ -7,6 +7,25 @@ namespace infinicore {
 thread_local Runtime *ContextImpl::current_runtime_ = nullptr;
 
 Runtime *ContextImpl::getCurrentRuntime() {
+    if (current_runtime_ == nullptr) {
+        spdlog::debug("current_runtime_ is null, performing lazy initialization");
+        // Lazy initialization: use the first available runtime
+        // Try to find the first non-CPU device, fallback to CPU
+        for (int i = int(Device::Type::COUNT) - 1; i > 0; i--) {
+            if (!runtime_table_[i].empty() && runtime_table_[i][0] != nullptr) {
+                current_runtime_ = runtime_table_[i][0].get();
+                spdlog::debug("Lazy init: Set current_runtime_ to {} (ptr={})", current_runtime_->device().toString(), static_cast<void *>(current_runtime_));
+                return current_runtime_;
+            }
+        }
+        // Fallback to CPU runtime
+        if (!runtime_table_[0].empty() && runtime_table_[0][0] != nullptr) {
+            current_runtime_ = runtime_table_[0][0].get();
+            spdlog::debug("Lazy init: Set current_runtime_ to {} (ptr={})", current_runtime_->device().toString(), static_cast<void *>(current_runtime_));
+        }
+    } else {
+        spdlog::debug("getCurrentRuntime() returning {} (ptr={})", current_runtime_->device().toString(), static_cast<void *>(current_runtime_));
+    }
     return current_runtime_;
 }
 
