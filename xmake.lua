@@ -109,8 +109,17 @@ option("metax-gpu")
     set_description("Whether to compile implementations for MetaX GPU")
 option_end()
 
+option("use_mc")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Use MC version")
+option_end()
+
 if has_config("metax-gpu") then
     add_defines("ENABLE_METAX_API")
+    if has_config("use_mc") then
+        add_defines("ENABLE_METAX_MC_API")
+    end
     includes("xmake/metax.lua")
 end
 
