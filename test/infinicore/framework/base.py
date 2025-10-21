@@ -7,9 +7,8 @@ from typing import List, Dict, Any, Tuple, Union, Callable, Optional
 from .datatypes import to_torch_dtype, to_infinicore_dtype
 from .devices import InfiniDeviceNames, torch_device_map
 from .utils import (
-    create_infinicore_tensor,
-    create_strided_infinicore_tensor,
     create_test_comparator,
+    infinicore_tensor_from_torch,
     profile_operation,
     rearrange_tensor,
     synchronize_device,
@@ -356,16 +355,7 @@ class BaseOperatorTest(ABC):
         infini_inputs = []
         for inp in inputs:
             if isinstance(inp, torch.Tensor):
-                if not inp.is_contiguous():
-                    infini_tensor = infinicore.strided_from_blob(
-                        inp.data_ptr(),
-                        list(inp.shape),
-                        list(inp.stride()),
-                        dtype=to_infinicore_dtype(inp.dtype),
-                        device=infinicore.device(device_str, 0),
-                    )
-                else:
-                    infini_tensor = create_infinicore_tensor(inp, device_str)
+                infini_tensor = infinicore_tensor_from_torch(inp)
                 infini_inputs.append(infini_tensor)
             else:
                 infini_inputs.append(inp)
@@ -439,13 +429,12 @@ class BaseOperatorTest(ABC):
             torch_dummy = torch.zeros(
                 output_shape, dtype=output_dtype, device=device_str
             )
-            if test_case.output.is_contiguous or test_case.output.strides is None:
-                infini_output = create_infinicore_tensor(torch_dummy, device_str)
-            else:
+            if (
+                not test_case.output.is_contiguous
+                and not test_case.output.strides is None
+            ):
                 rearrange_tensor(torch_dummy, list(torch_output.stride()))
-                infini_output = create_strided_infinicore_tensor(
-                    torch_dummy, device_str
-                )
+            infini_output = infinicore_tensor_from_torch(torch_dummy)
 
             def infini_op_inplace():
                 self.infinicore_operator(*infini_inputs, out=infini_output, **kwargs)

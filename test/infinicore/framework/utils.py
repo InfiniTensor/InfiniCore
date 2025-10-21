@@ -136,29 +136,23 @@ def get_tolerance(tolerance_map, tensor_dtype, default_atol=0, default_rtol=1e-3
     return tolerance["atol"], tolerance["rtol"]
 
 
-def create_infinicore_tensor(torch_tensor, device_str):
-    """Create infinicore tensor from PyTorch tensor"""
-    infini_device = infinicore.device(device_str, 0)
-
-    return infinicore.from_blob(
-        torch_tensor.data_ptr(),
-        list(torch_tensor.shape),
-        dtype=to_infinicore_dtype(torch_tensor.dtype),
-        device=infini_device,
-    )
-
-
-def create_strided_infinicore_tensor(torch_tensor, device_str):
-    """Create strided infinicore tensor from PyTorch tensor"""
-    infini_device = infinicore.device(device_str, 0)
-
-    return infinicore.strided_from_blob(
-        torch_tensor.data_ptr(),
-        list(torch_tensor.shape),
-        list(torch_tensor.stride()),
-        dtype=to_infinicore_dtype(torch_tensor.dtype),
-        device=infini_device,
-    )
+def infinicore_tensor_from_torch(torch_tensor):
+    infini_device = infinicore.device(torch_tensor.device.type, 0)
+    if torch_tensor.is_contiguous():
+        return infinicore.from_blob(
+            torch_tensor.data_ptr(),
+            list(torch_tensor.shape),
+            dtype=to_infinicore_dtype(torch_tensor.dtype),
+            device=infini_device,
+        )
+    else:
+        return infinicore.strided_from_blob(
+            torch_tensor.data_ptr(),
+            list(torch_tensor.shape),
+            list(torch_tensor.stride()),
+            dtype=to_infinicore_dtype(torch_tensor.dtype),
+            device=infini_device,
+        )
 
 
 def convert_infinicore_to_torch(infini_result, torch_reference):
@@ -179,16 +173,7 @@ def convert_infinicore_to_torch(infini_result, torch_reference):
         dtype=to_torch_dtype(infini_result.dtype),
         device=infini_result.device.type,
     )
-    if infini_result.is_contiguous():
-        temp_tensor = create_infinicore_tensor(
-            torch_result_from_infini, infini_result.device.type
-        )
-    else:
-        rearrange_tensor(torch_result_from_infini, list(torch_reference.stride()))
-        temp_tensor = create_strided_infinicore_tensor(
-            torch_result_from_infini, infini_result.device.type
-        )
-
+    temp_tensor = infinicore_tensor_from_torch(torch_result_from_infini)
     temp_tensor.copy_(infini_result)
     return torch_result_from_infini
 
