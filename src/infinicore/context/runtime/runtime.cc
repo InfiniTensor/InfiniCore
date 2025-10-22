@@ -29,6 +29,7 @@ Runtime::~Runtime() {
 }
 
 Runtime *Runtime::activate() {
+    spdlog::debug("Runtime::activate() called for device={}", device_.toString());
     INFINICORE_CHECK_ERROR(infinirtSetDevice((infiniDevice_t)device_.getType(), (int)device_.getIndex()));
     return this;
 }
@@ -53,22 +54,22 @@ void Runtime::syncDevice() {
     INFINICORE_CHECK_ERROR(infinirtDeviceSynchronize());
 }
 
-std::shared_ptr<Memory> Runtime::allocateMemory(size_t size) {
+std::shared_ptr<MemoryBlock> Runtime::allocateMemory(size_t size) {
     std::byte *data_ptr = device_memory_allocator_->allocate(size);
-    return std::make_shared<Memory>(
+    return std::make_shared<MemoryBlock>(
         data_ptr, size, device_,
         [alloc = device_memory_allocator_.get()](std::byte *p) {
             alloc->deallocate(p);
         });
 }
 
-std::shared_ptr<Memory> Runtime::allocatePinnedHostMemory(size_t size) {
+std::shared_ptr<MemoryBlock> Runtime::allocatePinnedHostMemory(size_t size) {
     if (!pinned_host_memory_allocator_) {
         spdlog::warn("For CPU devices, pinned memory is not supported, falling back to regular host memory");
         return allocateMemory(size);
     }
     std::byte *data_ptr = pinned_host_memory_allocator_->allocate(size);
-    return std::make_shared<Memory>(
+    return std::make_shared<MemoryBlock>(
         data_ptr, size, device_,
         [alloc = pinned_host_memory_allocator_.get()](std::byte *p) {
             alloc->deallocate(p);
@@ -86,6 +87,14 @@ void Runtime::memcpyD2H(void *dst, const void *src, size_t size) {
 
 void Runtime::memcpyD2D(void *dst, const void *src, size_t size) {
     INFINICORE_CHECK_ERROR(infinirtMemcpyAsync(dst, src, size, INFINIRT_MEMCPY_D2D, stream_));
+}
+
+MemoryAllocator *Runtime::getDeviceMemoryAllocator() const {
+    return device_memory_allocator_.get();
+}
+
+MemoryAllocator *Runtime::getPinnedHostMemoryAllocator() const {
+    return pinned_host_memory_allocator_.get();
 }
 
 std::string Runtime::toString() const {

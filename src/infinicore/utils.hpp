@@ -28,3 +28,8 @@ inline struct SpdlogInitializer {
             throw std::runtime_error(#call " failed with error: " + std::string(infini_status_string(ret))); \
         }                                                                                                    \
     } while (false)
+
+#define INFINICORE_ASSERT(condition, message) \
+    if (!(condition)) {                       \
+        throw std::runtime_error(message);    \
+    }

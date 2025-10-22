@@ -36,6 +36,16 @@ from infinicore.tensor import (
     zeros,
 )
 
+from .lib._infinicore import (
+    get_device_memory_stats,
+    get_pinned_host_memory_stats,
+    get_device_memory_stats_by_device,
+    get_pinned_host_memory_stats_by_device,
+    Stat,
+    StatType,
+    DeviceStats,
+)
+
 __all__ = [
     # Classes.
     "device",
@@ -74,4 +84,12 @@ __all__ = [
     "strided_empty",
     "strided_from_blob",
     "zeros",
+    # Memory Statistics.
+    "get_device_memory_stats",
+    "get_pinned_host_memory_stats",
+    "get_device_memory_stats_by_device",
+    "get_pinned_host_memory_stats_by_device",
+    "Stat",
+    "StatType",
+    "DeviceStats",
 ]

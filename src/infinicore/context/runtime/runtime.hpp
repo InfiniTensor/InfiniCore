@@ -31,12 +31,16 @@ public:
     void syncStream();
     void syncDevice();
 
-    std::shared_ptr<Memory> allocateMemory(size_t size);
-    std::shared_ptr<Memory> allocatePinnedHostMemory(size_t size);
+    std::shared_ptr<MemoryBlock> allocateMemory(size_t size);
+    std::shared_ptr<MemoryBlock> allocatePinnedHostMemory(size_t size);
 
     void memcpyH2D(void *dst, const void *src, size_t size);
     void memcpyD2H(void *dst, const void *src, size_t size);
     void memcpyD2D(void *dst, const void *src, size_t size);
+
+    // Getter methods for memory allocators (for statistics access)
+    MemoryAllocator *getDeviceMemoryAllocator() const;
+    MemoryAllocator *getPinnedHostMemoryAllocator() const;
 
     std::string toString() const;
 

@@ -172,7 +172,7 @@ int main(int argc, char *argv[]) {
         }
 
         if (args.run_concurrency) {
-            runner.addTest(std::make_unique<infinicore::test::ConcurrencyTest>());
+            runner.addTest(std::make_unique<infinicore::test::ConcurrencyTest>(args.num_threads));
         }
 
         if (args.run_exception_safety) {
@@ -188,7 +188,7 @@ int main(int argc, char *argv[]) {
         }
 
         if (args.run_stress) {
-            runner.addTest(std::make_unique<infinicore::test::StressTest>());
+            runner.addTest(std::make_unique<infinicore::test::StressTest>(args.iterations));
         }
 
         spdlog::debug("About to run all tests");

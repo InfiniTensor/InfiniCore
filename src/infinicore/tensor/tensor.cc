@@ -248,7 +248,7 @@ std::shared_ptr<TensorImpl> TensorImpl::from_blob(
     const Device &device) {
     auto t = std::shared_ptr<TensorImpl>(new TensorImpl(shape, dtype));
     t->data_.offset = 0;
-    t->data_.memory = std::make_shared<Memory>((std::byte *)raw_ptr, t->numel() * dsize(dtype), device, nullptr);
+    t->data_.memory = std::make_shared<MemoryBlock>((std::byte *)raw_ptr, t->numel() * dsize(dtype), device, nullptr);
     return t;
 }
 
@@ -260,7 +260,7 @@ std::shared_ptr<TensorImpl> TensorImpl::strided_from_blob(
     const Device &device) {
     auto t = std::shared_ptr<TensorImpl>(new TensorImpl(shape, strides, dtype));
     t->data_.offset = 0;
-    t->data_.memory = std::make_shared<Memory>((std::byte *)raw_ptr, t->numel() * dsize(dtype), device, nullptr);
+    t->data_.memory = std::make_shared<MemoryBlock>((std::byte *)raw_ptr, t->numel() * dsize(dtype), device, nullptr);
     return t;
 }
 
