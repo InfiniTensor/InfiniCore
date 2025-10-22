@@ -25,7 +25,7 @@ _TEST_CASES_DATA = [
 ]
 
 
-def parse_add_test_case(data):
+def parse_test_cases(data):
     """
     Parse add test case data according to format:
     (operation_mode, shape, a_strides, b_strides, c_strides)
@@ -61,7 +61,7 @@ def parse_add_test_case(data):
 
 
 # Parse test cases
-_TEST_CASES = [parse_add_test_case(data) for data in _TEST_CASES_DATA]
+_TEST_CASES = [parse_test_cases(data) for data in _TEST_CASES_DATA]
 
 # Data types
 _TENSOR_DTYPES = [infinicore.float16, infinicore.bfloat16, infinicore.float32]

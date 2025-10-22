@@ -137,7 +137,7 @@ def torch_attention(q, k, v, k_cache, v_cache, pos):
     return attn_output
 
 
-def parse_attention_test_case(data):
+def parse_test_cases(data):
     """
     Parse attention test case data according to format:
     (operation_mode, n_q_head, n_kv_head, seq_len, head_dim, pos,
@@ -217,7 +217,7 @@ def parse_attention_test_case(data):
 
 
 # Parse test cases
-_TEST_CASES = [parse_attention_test_case(data) for data in _TEST_CASES_DATA]
+_TEST_CASES = [parse_test_cases(data) for data in _TEST_CASES_DATA]
 
 # Data types
 _TENSOR_DTYPES = [infinicore.float16, infinicore.bfloat16, infinicore.float32]

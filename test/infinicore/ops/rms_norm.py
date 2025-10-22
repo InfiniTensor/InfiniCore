@@ -23,7 +23,7 @@ _TEST_CASES_DATA = [
 ]
 
 
-def parse_rms_norm_test_case(data):
+def parse_test_cases(data):
     """
     Parse RMSNorm test case data according to format:
     (operation_mode, y_shape, x_shape, w_shape, y_strides, x_strides)
@@ -57,7 +57,7 @@ def parse_rms_norm_test_case(data):
 
 
 # Parse test cases
-_TEST_CASES = [parse_rms_norm_test_case(data) for data in _TEST_CASES_DATA]
+_TEST_CASES = [parse_test_cases(data) for data in _TEST_CASES_DATA]
 
 # Data types for individual tensors
 _INPUT_DTYPES = [infinicore.float16, infinicore.bfloat16]
