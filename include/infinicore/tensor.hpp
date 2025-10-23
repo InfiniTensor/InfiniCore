@@ -110,6 +110,10 @@ public:
 
     Size size(size_t dim) const;
 
+    size_t element_size() const;
+
+    size_t nbytes() const;
+
     Stride stride(size_t dim) const;
 
     DataType dtype() const;
@@ -142,7 +146,6 @@ public:
 
     /**
      * Copy Data from another tensor to this tensor.
-     * Currently, only contigous tensors of the same dtype and shape are supported.
      *
      * @param src The source tensor to copy from
      *

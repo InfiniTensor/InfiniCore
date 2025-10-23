@@ -117,6 +117,14 @@ Size TensorImpl::numel() const {
     return total;
 }
 
+size_t TensorImpl::element_size() const {
+    return dsize(dtype());
+}
+
+size_t TensorImpl::nbytes() const {
+    return numel() * element_size();
+}
+
 Size TensorImpl::size(size_t dim) const {
     return meta_.shape[dim];
 }
