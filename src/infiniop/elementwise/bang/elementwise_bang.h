@@ -127,8 +127,8 @@ private:
         const int8_t *d_meta_start = reinterpret_cast<int8_t *>(workspace) + input_arr_size;
 
         // Copy input pointer array and metadata to device
-        CNRT_CHECK(cnrtMemcpy(workspace, (void *)h_inputs_arr, input_arr_size, CNRT_MEM_TRANS_DIR_HOST2DEV));
-        CNRT_CHECK(cnrtMemcpy((void *)d_meta_start, (void *)info_meta_start, info.getMetaMemSize(), CNRT_MEM_TRANS_DIR_HOST2DEV));
+        CNRT_CHECK(cnrtMemcpy(workspace, (void *)h_inputs_arr, input_arr_size, cnrtMemcpyHostToDev));
+        CNRT_CHECK(cnrtMemcpy((void *)d_meta_start, (void *)info_meta_start, info.getMetaMemSize(), cnrtMemcpyHostToDev));
 
         // Setup pointers to device memory regions
         d_inputs_arr = reinterpret_cast<const void **>(workspace);

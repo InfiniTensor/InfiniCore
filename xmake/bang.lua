@@ -22,7 +22,7 @@ rule("mlu")
         local cc = "cncc"
 
         local includedirs = table.concat(target:get("includedirs"), " ")
-        local args = {"-c", sourcefile, "-o", objectfile, "--bang-mlu-arch=mtp_592", "-O3", "-fPIC", "-Wall", "-Werror", "-std=c++17", "-pthread"}
+        local args = {"-c", sourcefile, "-o", objectfile, "--bang-mlu-arch=mtp_613", "-O3", "-fPIC", "-Wall", "-Werror", "-std=c++17", "-pthread"}
 
         for _, includedir in ipairs(target:get("includedirs")) do
             table.insert(args, "-I" .. includedir)
