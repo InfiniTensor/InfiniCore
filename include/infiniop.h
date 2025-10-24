@@ -8,6 +8,7 @@
 #include "infiniop/ops/clip.h"
 #include "infiniop/ops/logsoftmax.h"
 #include "infiniop/ops/conv.h"
+#include "infiniop/ops/dequantize_awq.h"
 #include "infiniop/ops/flash_attention.h"
 #include "infiniop/ops/gemm.h"
 #include "infiniop/ops/mul.h"

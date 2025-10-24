@@ -45,10 +45,15 @@ infiniStatus_t Descriptor::create(
     aclnnTensorDescriptor_t w = nullptr;
     aclnnTensorDescriptor_t rstd = nullptr;
 
-    std::vector<int64_t> slice_shape = {static_cast<int64_t>((info.shape)[1])};
-    auto slice_stride = std::vector<int64_t>(1, 1);
-    y = new aclnnTensorDescriptor(toAclDataType(info.atype), slice_shape, slice_stride);
-    x = new aclnnTensorDescriptor(toAclDataType(info.atype), slice_shape, slice_stride);
+    // Slice shape should be all dimensions except the first (batch) dimension
+    // For 2D [batch, dim] -> slice is [dim]
+    // For 3D [batch, nhead, dim] -> slice is [nhead, dim]
+    std::vector<int64_t> slice_shape(info.shape.begin() + 1, info.shape.end());
+    std::vector<int64_t> slice_y_stride(info.y_strides.begin() + 1, info.y_strides.end());
+    std::vector<int64_t> slice_x_stride(info.x_strides.begin() + 1, info.x_strides.end());
+
+    y = new aclnnTensorDescriptor(toAclDataType(info.atype), slice_shape, slice_y_stride);
+    x = new aclnnTensorDescriptor(toAclDataType(info.atype), slice_shape, slice_x_stride);
     w = new aclnnTensorDescriptor(w_desc);
 
     // Get AclTensor
