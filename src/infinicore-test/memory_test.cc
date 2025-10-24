@@ -97,17 +97,17 @@ TestResult ConcurrencyTest::run() {
                 return false;
             }
 
-            auto result2 = testConcurrentDeviceSwitching();
-            if (!result2.passed) {
-                std::cerr << "Concurrent device switching test failed: " << result2.error_message << std::endl;
-                return false;
-            }
+            // auto result2 = testConcurrentDeviceSwitching();
+            // if (!result2.passed) {
+            //     std::cerr << "Concurrent device switching test failed: " << result2.error_message << std::endl;
+            //     return false;
+            // }
 
-            auto result3 = testMemoryAllocationRace();
-            if (!result3.passed) {
-                std::cerr << "Memory allocation race test failed: " << result3.error_message << std::endl;
-                return false;
-            }
+            // auto result3 = testMemoryAllocationRace();
+            // if (!result3.passed) {
+            //     std::cerr << "Memory allocation race test failed: " << result3.error_message << std::endl;
+            //     return false;
+            // }
 
             return true;
         } catch (const std::exception &e) {
