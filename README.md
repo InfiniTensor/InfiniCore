@@ -150,6 +150,33 @@ xmake build infiniccl-test
 infiniccl-test --nvidia
 ```
 
+### `infinicore` Python 包
+
+#### 构建
+
+1. 进行[手动安装](#手动安装)。
+2. 构建与安装内部依赖库 `_infinicore`：
+
+```shell
+xmake build _infinicore
+```
+
+#### 安装
+
+1. 安装 `_infinicore`：
+
+```shell
+xmake install _infinicore
+```
+
+2. 安装 `infinicore`：
+
+```shell
+pip install .
+```
+
+注：开发时建议加入 `-e` 选项（即 `pip install -e .`），这样对 `python/infinicore` 做的更改将会实时得到反映，同时对 C++ 层所做的修改也只需要运行 `xmake build _infinicore && xmake install _infinicore` 便可以生效。
+
 ### 使用九齿
 
 [九齿](https://github.com/InfiniTensor/ninetoothed)是一门基于 Triton 但提供更高层抽象的领域特定语言（DSL）。使用九齿可以降低算子的开发门槛，并且提高开发效率。
