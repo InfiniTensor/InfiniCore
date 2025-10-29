@@ -16,10 +16,23 @@ static cudaError argMax_(
     void *workspace_ptr,
     size_t &workspace_len,
     cudaStream_t stream) {
-    return cub::DeviceReduce::ArgMax(
-        workspace_ptr, workspace_len,
-        logits, kv_pair, n,
+    // Use the new CUB API that takes separate iterators for value and index
+    // Create temporary arrays for the output
+    T *value_out = reinterpret_cast<T*>(workspace_ptr);
+    int *index_out = reinterpret_cast<int*>(value_out + 1);
+
+    cudaError_t result = cub::DeviceReduce::ArgMax(
+        reinterpret_cast<void*>(index_out + 1), workspace_len,
+        logits, value_out, index_out, n,
         stream);
+
+    // Copy the result back to the kv_pair
+    if (result == cudaSuccess) {
+        cudaMemcpyAsync(&kv_pair->value, value_out, sizeof(T), cudaMemcpyDeviceToDevice, stream);
+        cudaMemcpyAsync(&kv_pair->key, index_out, sizeof(int), cudaMemcpyDeviceToDevice, stream);
+    }
+
+    return result;
 }
 
 template <class Tval, class Tidx>
@@ -66,8 +79,8 @@ utils::Result<size_t> calculateWorkspace(size_t n_) {
         nullptr, nullptr, n,
         nullptr, argmax,
         nullptr));
-    // 前 256 字节用于 kv pair
-    argmax += 256;
+    // 前 256 字节用于 kv pair，加上临时数组空间
+    argmax += 256 + sizeof(Tval) + sizeof(int);
 
     // indices
     size_t size_random = align256(sizeof(Tidx) * n);

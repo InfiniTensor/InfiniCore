@@ -176,7 +176,7 @@ int main(int argc, char *argv[]) {
         }
 
         if (args.run_exception_safety) {
-            // runner.addTest(std::make_unique<infinicore::test::ExceptionSafetyTest>());
+            runner.addTest(std::make_unique<infinicore::test::ExceptionSafetyTest>());
         }
 
         if (args.run_memory_leak) {

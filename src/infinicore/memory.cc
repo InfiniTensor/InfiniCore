@@ -3,10 +3,10 @@
 #include "spdlog/spdlog.h"
 namespace infinicore {
 
-Memory::Memory(std::byte *data,
+MemoryBlock::MemoryBlock(std::byte *data,
                size_t size,
                Device device,
-               Memory::Deleter deleter,
+               MemoryBlock::Deleter deleter,
                bool pin_memory)
     : data_{data}, size_{size}, device_{device}, deleter_{deleter}, is_pinned_(pin_memory) {
     // Register this memory allocation in the pool
@@ -15,7 +15,7 @@ Memory::Memory(std::byte *data,
                   static_cast<void *>(data), device.toString());
 }
 
-Memory::~Memory() {
+MemoryBlock::~MemoryBlock() {
     if (data_ && deleter_) {
         spdlog::debug("Memory::~Memory() called for memory={} at Device: {}",
                       static_cast<void *>(data_), device_.toString());
@@ -24,7 +24,7 @@ Memory::~Memory() {
     }
 }
 
-Memory::Memory(const Memory &other)
+MemoryBlock::MemoryBlock(const MemoryBlock &other)
     : data_{other.data_}, size_{other.size_}, device_{other.device_},
       deleter_{other.deleter_}, is_pinned_{other.is_pinned_} {
     if (data_) {
@@ -34,7 +34,7 @@ Memory::Memory(const Memory &other)
     }
 }
 
-Memory &Memory::operator=(const Memory &other) {
+MemoryBlock &MemoryBlock::operator=(const MemoryBlock &other) {
     if (this != &other) {
         // Release current memory if it exists
         if (data_ && deleter_) {
@@ -59,7 +59,7 @@ Memory &Memory::operator=(const Memory &other) {
     return *this;
 }
 
-Memory::Memory(Memory &&other) noexcept
+MemoryBlock::MemoryBlock(MemoryBlock &&other) noexcept
     : data_{other.data_}, size_{other.size_}, device_{other.device_},
       deleter_{std::move(other.deleter_)}, is_pinned_{other.is_pinned_} {
     // Clear the moved-from object to prevent double-free
@@ -68,7 +68,7 @@ Memory::Memory(Memory &&other) noexcept
     spdlog::debug("Memory::Memory(Memory&&) move constructor called");
 }
 
-Memory &Memory::operator=(Memory &&other) noexcept {
+MemoryBlock &MemoryBlock::operator=(MemoryBlock &&other) noexcept {
     if (this != &other) {
         // Release current memory if it exists
         if (data_ && deleter_) {
@@ -91,19 +91,19 @@ Memory &Memory::operator=(Memory &&other) noexcept {
     return *this;
 }
 
-std::byte *Memory::data() const {
+std::byte *MemoryBlock::data() const {
     return data_;
 }
 
-Device Memory::device() const {
+Device MemoryBlock::device() const {
     return device_;
 }
 
-size_t Memory::size() const {
+size_t MemoryBlock::size() const {
     return size_;
 }
 
-bool Memory::is_pinned() const {
+bool MemoryBlock::is_pinned() const {
     return is_pinned_;
 }
 } // namespace infinicore
