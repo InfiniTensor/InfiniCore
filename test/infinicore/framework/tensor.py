@@ -1,7 +1,9 @@
 import torch
+import infinicore
 from pathlib import Path
 from .datatypes import to_torch_dtype
 from .devices import torch_device_map
+from .utils import is_integer_dtype
 
 
 class TensorInitializer:
@@ -38,6 +40,10 @@ class TensorInitializer:
         torch_device_str = torch_device_map[device]
         torch_dtype = to_torch_dtype(dtype)
 
+        # Handle integer types differently for random initialization
+        if mode == TensorInitializer.RANDOM and is_integer_dtype(dtype):
+            mode = TensorInitializer.RANDINT  # Use randint for integer types
+
         # Handle strided tensors - calculate required storage size
         if strides is not None:
             # Calculate the required storage size for strided tensor
@@ -61,9 +67,22 @@ class TensorInitializer:
                     storage_size, dtype=torch_dtype, device=torch_device_str
                 )
             elif mode == TensorInitializer.RANDINT:
+                # For integer types, use appropriate range
+                if is_integer_dtype(dtype):
+                    if dtype == infinicore.uint8:
+                        low, high = 0, 256
+                    elif dtype == infinicore.int8:
+                        low, high = -128, 128
+                    elif dtype == infinicore.int16:
+                        low, high = -32768, 32768
+                    else:  # int32, int64, uint32
+                        low, high = -1000, 1000
+                else:
+                    low, high = -1000, 1000
+
                 base_tensor = torch.randint(
-                    -2000000000,
-                    2000000000,
+                    low,
+                    high,
                     (storage_size,),
                     dtype=torch_dtype,
                     device=torch_device_str,
@@ -92,9 +111,22 @@ class TensorInitializer:
             elif mode == TensorInitializer.ONES:
                 tensor = torch.ones(shape, dtype=torch_dtype, device=torch_device_str)
             elif mode == TensorInitializer.RANDINT:
+                # For integer types, use appropriate range
+                if is_integer_dtype(dtype):
+                    if dtype == infinicore.uint8:
+                        low, high = 0, 256
+                    elif dtype == infinicore.int8:
+                        low, high = -128, 128
+                    elif dtype == infinicore.int16:
+                        low, high = -32768, 32768
+                    else:  # int32, int64, uint32
+                        low, high = -1000, 1000
+                else:
+                    low, high = -1000, 1000
+
                 tensor = torch.randint(
-                    -2000000000,
-                    2000000000,
+                    low,
+                    high,
                     shape,
                     dtype=torch_dtype,
                     device=torch_device_str,
