@@ -25,15 +25,8 @@ RMSNorm::RMSNorm(size_t normalized_shape, double eps, const DataType &dtype, con
 }
 
 Tensor RMSNorm::forward(const Tensor &x) const {
-    // Validate input shape - last dimension should match normalized_shape
-    auto input_shape = x->shape();
-    if (input_shape.empty() || input_shape.back() != normalized_shape_) {
-        throw std::invalid_argument(
-            "Input last dimension " + std::to_string(input_shape.back()) + " doesn't match normalized_shape " + std::to_string(normalized_shape_));
-    }
-
     // Delegate to InfiniCore op (backed by InfiniRT/InfiniOP)
-    // y = RMSNorm(x, weight, eps)
+    // Validation is handled by the op layer
     return op::rms_norm(x, weight_, static_cast<float>(eps_));
 }
 

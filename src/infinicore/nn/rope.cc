@@ -101,20 +101,8 @@ void RoPE::initialize_cache() {
 }
 
 Tensor RoPE::forward(const Tensor &x, const Tensor &pos) const {
-    // Validate input
-    auto x_shape = x->shape();
-
-    if (x_shape.empty()) {
-        throw std::invalid_argument("Input tensor must have at least one dimension");
-    }
-
-    if (x_shape.back() != head_dim_) {
-        throw std::invalid_argument(
-            "Last dimension of input tensor must match head_dim. Expected " + std::to_string(head_dim_) + ", got " + std::to_string(x_shape.back()));
-    }
-
     // Delegate to InfiniCore op (backed by InfiniRT/InfiniOP)
-    // InfiniOP reads from x and writes to output, avoiding double copy
+    // Validation is handled by the op layer
     return op::rope(x, pos, sin_cache_, cos_cache_, algo_);
 }
 
