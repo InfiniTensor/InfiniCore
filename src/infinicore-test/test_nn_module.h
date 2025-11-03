@@ -6,6 +6,8 @@
 #include "infinicore/nn/module.hpp"
 #include "infinicore/nn/parameter.hpp"
 #include "infinicore/nn/rmsnorm.hpp"
+#include "infinicore/nn/rope.hpp"
+#include "infinicore/nn/swiglu.hpp"
 #include "test_runner.h"
 #include <algorithm>
 #include <cmath>
@@ -82,6 +84,8 @@ private:
     TestResult testModuleLinear();          // Comprehensive Linear module test
     TestResult testModuleEmbedding();       // Embedding module test
     TestResult testModuleRMSNorm();         // RMSNorm module test
+    TestResult testModuleRoPE();            // RoPE module test
+    TestResult testModuleSwiGLU();          // SwiGLU module test
     TestResult testDtypeAssertion();        // Test dtype assertions when loading parameters
     TestResult testTinyLlamaConstruction(); // Comprehensive: construction + weight loading + validation
 };

@@ -9,7 +9,7 @@
 inline struct SpdlogInitializer {
     SpdlogInitializer() {
         if (!std::getenv("INFINICORE_LOG_LEVEL")) {
-            spdlog::set_level(spdlog::level::off);
+            spdlog::set_level(spdlog::level::info);
         } else {
             spdlog::cfg::load_env_levels("INFINICORE_LOG_LEVEL");
         }
@@ -21,9 +21,9 @@ inline struct SpdlogInitializer {
 
 #define INFINICORE_CHECK_ERROR(call)                                                                         \
     do {                                                                                                     \
-        spdlog::info("Entering `" #call "` at `" __FILE__ ":" STRINGIZE(__LINE__) "`.");                     \
+        spdlog::debug("Entering `" #call "` at `" __FILE__ ":" STRINGIZE(__LINE__) "`.");                    \
         infiniStatus_t ret = (call);                                                                         \
-        spdlog::info("Exiting `" #call "` at `" __FILE__ ":" STRINGIZE(__LINE__) "`.");                      \
+        spdlog::debug("Exiting `" #call "` at `" __FILE__ ":" STRINGIZE(__LINE__) "`.");                     \
         if (ret != INFINI_STATUS_SUCCESS) {                                                                  \
             throw std::runtime_error(#call " failed with error: " + std::string(infini_status_string(ret))); \
         }                                                                                                    \

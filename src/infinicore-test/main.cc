@@ -141,12 +141,8 @@ ParsedArgs parseArgs(int argc, char *argv[]) {
 
 int main(int argc, char *argv[]) {
     try {
-        // Initialize spdlog for debugging
-        spdlog::set_level(spdlog::level::debug);
-        spdlog::info("Starting InfiniCore Memory Management Test Suite");
-
         ParsedArgs args = parseArgs(argc, argv);
-        spdlog::debug("Arguments parsed successfully");
+        spdlog::info("Arguments parsed successfully");
 
         std::cout << "==============================================\n"
                   << "InfiniCore Memory Management Test Suite\n"
@@ -156,31 +152,25 @@ int main(int argc, char *argv[]) {
                   << "Iterations: " << args.iterations << "\n"
                   << "==============================================" << std::endl;
 
-        spdlog::debug("About to initialize InfiniCore context");
+        spdlog::info("About to initialize InfiniCore context");
         // Initialize InfiniCore context
         infinicore::context::setDevice(infinicore::Device(static_cast<infinicore::Device::Type>(args.device_type), 0));
-        spdlog::debug("InfiniCore context initialized successfully");
+        spdlog::info("InfiniCore context initialized successfully");
 
-        spdlog::debug("Creating test runner");
+        spdlog::info("Creating test runner");
         // Create test runner
         infinicore::test::InfiniCoreTestRunner runner;
-        spdlog::debug("Test runner created successfully");
+        spdlog::info("Test runner created successfully");
 
         // Add tests based on arguments
         if (args.run_basic) {
-            spdlog::debug("Adding BasicMemoryTest");
             runner.addTest(std::make_unique<infinicore::test::BasicMemoryTest>());
-            spdlog::debug("BasicMemoryTest added successfully");
 
-            spdlog::debug("Adding TensorDestructorTest");
             runner.addTest(std::make_unique<infinicore::test::TensorDestructorTest>());
-            spdlog::debug("TensorDestructorTest added successfully");
         }
 
         if (args.run_module) {
-            spdlog::debug("Adding NNModuleTest");
             runner.addTest(std::make_unique<infinicore::test::NNModuleTest>());
-            spdlog::debug("NNModuleTest added successfully");
         }
 
         if (args.run_concurrency) {
@@ -203,10 +193,10 @@ int main(int argc, char *argv[]) {
             runner.addTest(std::make_unique<infinicore::test::StressTest>());
         }
 
-        spdlog::debug("About to run all tests");
+        spdlog::info("About to run all tests");
         // Run all tests
         auto results = runner.runAllTests();
-        spdlog::debug("All tests completed");
+        spdlog::info("All tests completed");
 
         // Count results and collect failed tests
         size_t passed = 0, failed = 0;
