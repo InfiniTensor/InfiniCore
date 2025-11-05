@@ -71,9 +71,9 @@ __device__ __forceinline__ Tdata max(const Tdata *data_ptr, size_t count) {
         max_, [](const Tdata &a, const Tdata &b) { return (a > b) ? a : b; }, BLOCK_SIZE);
 #else
 #if CUDART_VERSION >= 12090
-        return BlockReduce(temp_storage).Reduce(max_, ::cuda::maximum(), BLOCK_SIZE);
+    return BlockReduce(temp_storage).Reduce(max_, ::cuda::maximum(), BLOCK_SIZE);
 #else
-        return BlockReduce(temp_storage).Reduce(max_, cub::Max(), BLOCK_SIZE);
+    return BlockReduce(temp_storage).Reduce(max_, cub::Max(), BLOCK_SIZE);
 #endif
 #endif
 }
