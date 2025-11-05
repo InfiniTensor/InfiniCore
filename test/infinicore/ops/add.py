@@ -22,6 +22,14 @@ _TEST_CASES_DATA = [
     (TestCase.BOTH, (13, 4, 4), (4, 0, 1), (0, 4, 1), None),
     (TestCase.BOTH, (16, 5632), None, None, None),
     (TestCase.BOTH, (16, 5632), (13312, 1), (13312, 1), (13312, 1)),
+    # Regular out-of-place
+    (TestCase.BOTH, (13, 4), None, None, None),
+    # In-place on input a (add(a, b, out=a))
+    (TestCase.IN_PLACE_0, (13, 4), None, None, None),
+    # In-place on input b (add(a, b, out=b))
+    (TestCase.IN_PLACE_1, (13, 4), None, None, None),
+    # Test both in-place options
+    (TestCase.IN_PLACE_MULTI, (13, 4), None, None, None, "both"),
 ]
 
 

@@ -1,5 +1,6 @@
 import torch
 import infinicore
+import copy
 
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Tuple, Union, Callable, Optional
@@ -23,15 +24,35 @@ class TestCase:
     IN_PLACE = "in_place"
     BOTH = "both"
 
-    def __init__(self, operation_mode, inputs, output=None, **kwargs):
-        if operation_mode not in [self.IN_PLACE, self.OUT_OF_PLACE, self.BOTH]:
+    # New in-place modes for specific operators
+    IN_PLACE_0 = "in_place_0"  # e.g., elu(x, inplace=True) where x is input_0
+    IN_PLACE_1 = "in_place_1"  # e.g., add(a, b, out=b) where b is input_1
+    IN_PLACE_MULTI = "in_place_multi"  # Multiple in-place options
+
+    def __init__(
+        self, operation_mode, inputs, output=None, inplace_target=None, **kwargs
+    ):
+        if operation_mode not in [
+            self.IN_PLACE,
+            self.OUT_OF_PLACE,
+            self.BOTH,
+            self.IN_PLACE_0,
+            self.IN_PLACE_1,
+            self.IN_PLACE_MULTI,
+        ]:
             raise ValueError(f"Invalid operation_mode: {operation_mode}")
 
-        if operation_mode == self.IN_PLACE and output is None:
-            raise ValueError("IN_PLACE mode requires output specification")
+        # For input-specific in-place modes, set default inplace_target if not provided
+        if operation_mode == self.IN_PLACE_0 and inplace_target is None:
+            inplace_target = 0  # Default to input 0
+        elif operation_mode == self.IN_PLACE_1 and inplace_target is None:
+            inplace_target = 1  # Default to input 1
+        elif operation_mode == self.IN_PLACE_MULTI and inplace_target is None:
+            inplace_target = "both"  # Default to testing both
 
         self.operation_mode = operation_mode
         self.inputs = []
+        self.inplace_target = inplace_target  # Which input to use as in-place target
 
         for inp in inputs:
             if isinstance(inp, (list, tuple)):
@@ -100,6 +121,9 @@ class TestCase:
             base_str += f", kwargs={self.kwargs}"
         if self.description:
             base_str += f", desc='{self.description}'"
+        # Add inplace_target to string representation if present
+        if self.inplace_target is not None:
+            base_str += f", inplace_target={self.inplace_target}"
         base_str += ")"
         return base_str
 
@@ -263,6 +287,77 @@ class BaseOperatorTest(ABC):
 
         return inputs, test_case.kwargs
 
+    def prepare_inputs_for_inplace(
+        self, test_case, device, dtype_config, make_copy=True
+    ):
+        """
+        Prepare inputs for in-place operations with optional copying to preserve original data
+
+        Args:
+            test_case: The test case
+            device: Target device
+            dtype_config: Data type configuration (infinicore dtype)
+            make_copy: Whether to create copies of inputs (needed for comparison)
+
+        Returns:
+            tuple: (inputs, kwargs, original_inputs_for_comparison)
+        """
+        inputs, kwargs = self.prepare_inputs(test_case, device, dtype_config)
+        original_inputs = None
+
+        if make_copy:
+            # Create deep copies of input tensors for comparison
+            original_inputs = []
+            for inp in inputs:
+                if isinstance(inp, torch.Tensor):
+                    original_inputs.append(inp.clone().detach())
+                else:
+                    original_inputs.append(copy.deepcopy(inp))
+        else:
+            original_inputs = inputs
+
+        return inputs, kwargs, original_inputs
+
+    def run_test(self, device, test_case, dtype_config, config):
+        """Enhanced test execution flow with additional in-place modes"""
+
+        # Handle new in-place modes
+        if test_case.operation_mode in [
+            TestCase.IN_PLACE_0,
+            TestCase.IN_PLACE_1,
+            TestCase.IN_PLACE_MULTI,
+        ]:
+            self._run_input_inplace_test(device, test_case, dtype_config, config)
+            return
+
+        # Original logic for OUT_OF_PLACE, IN_PLACE, BOTH
+        if test_case.operation_mode == TestCase.BOTH:
+            out_of_place_case = TestCase(
+                TestCase.OUT_OF_PLACE,
+                test_case.inputs,
+                test_case.output,
+                **test_case.kwargs,
+            )
+            self._run_single_test(
+                device, out_of_place_case, dtype_config, config, "OUT_OF_PLACE"
+            )
+
+            if test_case.output is not None:
+                in_place_case = TestCase(
+                    TestCase.IN_PLACE,
+                    test_case.inputs,
+                    test_case.output,
+                    **test_case.kwargs,
+                )
+                self._run_single_test(
+                    device, in_place_case, dtype_config, config, "IN_PLACE"
+                )
+            return
+
+        self._run_single_test(
+            device, test_case, dtype_config, config, test_case.operation_mode.upper()
+        )
+
     def get_output_dtype(self, test_case, dtype_config, torch_result=None):
         """Determine output dtype - returns infinicore dtype, not torch dtype"""
         if test_case.output and test_case.output.dtype is not None:
@@ -278,9 +373,19 @@ class BaseOperatorTest(ABC):
                 return dtype_config
 
     def run_test(self, device, test_case, dtype_config, config):
-        """Unified test execution flow"""
+        """Enhanced test execution flow with additional in-place modes"""
         device_str = torch_device_map[device]
 
+        # Handle new in-place modes
+        if test_case.operation_mode in [
+            TestCase.IN_PLACE_0,
+            TestCase.IN_PLACE_1,
+            TestCase.IN_PLACE_MULTI,
+        ]:
+            self._run_input_inplace_test(device, test_case, dtype_config, config)
+            return
+
+        # Original logic for OUT_OF_PLACE, IN_PLACE, BOTH
         if test_case.operation_mode == TestCase.BOTH:
             out_of_place_case = TestCase(
                 TestCase.OUT_OF_PLACE,
@@ -509,3 +614,260 @@ class BaseOperatorTest(ABC):
                     config.num_prerun,
                     config.num_iterations,
                 )
+
+    def _run_input_inplace_test(self, device, test_case, dtype_config, config):
+        """
+        Run test where an input tensor is modified in-place
+        e.g., elu(x, inplace=True) or add(a, b, out=a)
+        """
+        device_str = torch_device_map[device]
+
+        # Prepare inputs with copies for comparison
+        inputs, kwargs, original_inputs = self.prepare_inputs_for_inplace(
+            test_case, device, dtype_config, make_copy=True
+        )
+
+        # Determine which input is the in-place target
+        if test_case.operation_mode == TestCase.IN_PLACE_0:
+            target_index = (
+                test_case.inplace_target if test_case.inplace_target is not None else 0
+            )
+        elif test_case.operation_mode == TestCase.IN_PLACE_1:
+            target_index = (
+                test_case.inplace_target if test_case.inplace_target is not None else 1
+            )
+        elif test_case.operation_mode == TestCase.IN_PLACE_MULTI:
+            # For multi mode, test all possible in-place targets
+            self._run_multi_inplace_test(device, test_case, dtype_config, config)
+            return
+        else:
+            target_index = test_case.inplace_target
+
+        if target_index >= len(inputs):
+            raise ValueError(
+                f"Invalid inplace_target {target_index} for {len(inputs)} inputs"
+            )
+
+        target_input = inputs[target_index]
+        original_target = original_inputs[target_index]
+
+        # Create infinicore inputs - ensure we use the same tensor objects
+        infini_inputs = []
+        infini_target = None
+
+        for i, inp in enumerate(inputs):
+            if isinstance(inp, torch.Tensor):
+                infini_tensor = infinicore_tensor_from_torch(inp)
+                infini_inputs.append(infini_tensor)
+                if i == target_index:
+                    infini_target = infini_tensor
+            else:
+                infini_inputs.append(inp)
+
+        # Check if operators are implemented
+        torch_implemented = True
+        infini_implemented = True
+
+        # Run torch operator with in-place on target input
+        try:
+            # For operators like elu(x, inplace=True)
+            if "inplace" in kwargs and kwargs["inplace"]:
+                torch_result = self.torch_operator(*inputs, **kwargs)
+                # The target input should be modified in-place
+                torch_modified = target_input
+            else:
+                # For operators like add(a, b, out=a)
+                out_kwargs = kwargs.copy()
+                out_kwargs["out"] = target_input
+                torch_result = self.torch_operator(*inputs, **out_kwargs)
+                torch_modified = target_input
+        except NotImplementedError:
+            torch_implemented = False
+            torch_modified = None
+        except Exception as e:
+            if not torch_implemented:
+                raise RuntimeError(f"Torch operator failed: {e}")
+
+        # Run infinicore operator with in-place on target input
+        try:
+            if "inplace" in kwargs and kwargs["inplace"]:
+                infini_result = self.infinicore_operator(*infini_inputs, **kwargs)
+                infini_modified = infini_target
+            else:
+                out_kwargs = kwargs.copy()
+                out_kwargs["out"] = infini_target
+                infini_result = self.infinicore_operator(*infini_inputs, **out_kwargs)
+                infini_modified = infini_target
+        except NotImplementedError:
+            infini_implemented = False
+            infini_modified = None
+        except Exception as e:
+            if not infini_implemented:
+                raise RuntimeError(f"Infinicore operator failed: {e}")
+
+        # If neither operator is implemented, skip the test
+        if not torch_implemented and not infini_implemented:
+            print(f"⚠ Both operators not implemented - test skipped")
+            return
+
+        # If only one operator is implemented, run it without comparison
+        if not torch_implemented or not infini_implemented:
+            missing_op = (
+                "torch_operator" if not torch_implemented else "infinicore_operator"
+            )
+            print(
+                f"⚠ {missing_op} not implemented - running single operator without comparison"
+            )
+
+            # Run the available operator for benchmarking if requested
+            if config.bench:
+                if torch_implemented:
+
+                    def torch_inplace_op():
+                        # Restore original input for each benchmark iteration
+                        if isinstance(target_input, torch.Tensor) and isinstance(
+                            original_target, torch.Tensor
+                        ):
+                            target_input.copy_(original_target)
+
+                        if "inplace" in kwargs and kwargs["inplace"]:
+                            return self.torch_operator(*inputs, **kwargs)
+                        else:
+                            out_kwargs = kwargs.copy()
+                            out_kwargs["out"] = target_input
+                            return self.torch_operator(*inputs, **out_kwargs)
+
+                    print(f"  {test_case.operation_mode.upper()}:")
+                    profile_operation(
+                        "PyTorch   ",
+                        torch_inplace_op,
+                        device_str,
+                        config.num_prerun,
+                        config.num_iterations,
+                    )
+
+                if infini_implemented:
+
+                    def infini_inplace_op():
+                        # For infinicore, we need to recreate the inputs for each iteration
+                        bench_inputs, _, _ = self.prepare_inputs_for_inplace(
+                            test_case, device, dtype_config, make_copy=False
+                        )
+                        infini_inputs_bench = []
+                        infini_target_bench = None
+
+                        for i, inp in enumerate(bench_inputs):
+                            if isinstance(inp, torch.Tensor):
+                                infini_tensor = infinicore_tensor_from_torch(inp)
+                                infini_inputs_bench.append(infini_tensor)
+                                if i == target_index:
+                                    infini_target_bench = infini_tensor
+                            else:
+                                infini_inputs_bench.append(inp)
+
+                        if "inplace" in kwargs and kwargs["inplace"]:
+                            return self.infinicore_operator(
+                                *infini_inputs_bench, **kwargs
+                            )
+                        else:
+                            out_kwargs = kwargs.copy()
+                            out_kwargs["out"] = infini_target_bench
+                            return self.infinicore_operator(
+                                *infini_inputs_bench, **out_kwargs
+                            )
+
+                    print(f"  {test_case.operation_mode.upper()}:")
+                    profile_operation(
+                        "InfiniCore",
+                        infini_inplace_op,
+                        device_str,
+                        config.num_prerun,
+                        config.num_iterations,
+                    )
+            return
+
+        # Both operators are implemented - proceed with normal comparison
+        # Compare the modified target inputs
+        comparison_dtype = self.get_output_dtype(
+            test_case, dtype_config, torch_modified
+        )
+        compare_fn = create_test_comparator(
+            config, comparison_dtype, mode_name=f"{test_case.operation_mode.upper()}"
+        )
+
+        is_valid = compare_fn(infini_modified, torch_modified)
+        assert is_valid, f"{test_case.operation_mode} result comparison failed"
+
+        # Benchmark if requested
+        if config.bench:
+
+            def torch_inplace_op():
+                # Restore original input for each benchmark iteration
+                if isinstance(target_input, torch.Tensor) and isinstance(
+                    original_target, torch.Tensor
+                ):
+                    target_input.copy_(original_target)
+
+                if "inplace" in kwargs and kwargs["inplace"]:
+                    return self.torch_operator(*inputs, **kwargs)
+                else:
+                    out_kwargs = kwargs.copy()
+                    out_kwargs["out"] = target_input
+                    return self.torch_operator(*inputs, **out_kwargs)
+
+            def infini_inplace_op():
+                # For infinicore, we need to recreate the inputs for each iteration
+                bench_inputs, _, _ = self.prepare_inputs_for_inplace(
+                    test_case, device, dtype_config, make_copy=False
+                )
+                infini_inputs_bench = []
+                infini_target_bench = None
+
+                for i, inp in enumerate(bench_inputs):
+                    if isinstance(inp, torch.Tensor):
+                        infini_tensor = infinicore_tensor_from_torch(inp)
+                        infini_inputs_bench.append(infini_tensor)
+                        if i == target_index:
+                            infini_target_bench = infini_tensor
+                    else:
+                        infini_inputs_bench.append(inp)
+
+                if "inplace" in kwargs and kwargs["inplace"]:
+                    return self.infinicore_operator(*infini_inputs_bench, **kwargs)
+                else:
+                    out_kwargs = kwargs.copy()
+                    out_kwargs["out"] = infini_target_bench
+                    return self.infinicore_operator(*infini_inputs_bench, **out_kwargs)
+
+            print(f"  {test_case.operation_mode.upper()}:")
+            profile_operation(
+                "PyTorch   ",
+                torch_inplace_op,
+                device_str,
+                config.num_prerun,
+                config.num_iterations,
+            )
+            profile_operation(
+                "InfiniCore",
+                infini_inplace_op,
+                device_str,
+                config.num_prerun,
+                config.num_iterations,
+            )
+
+    def _run_multi_inplace_test(self, device, test_case, dtype_config, config):
+        """
+        Run test with multiple in-place options (e.g., test both add(a, b, out=a) and add(a, b, out=b))
+        """
+        # Test in-place on each input
+        for target_index in range(len(test_case.inputs)):
+            # Create a copy of the test case with specific target
+            case = TestCase(
+                TestCase.IN_PLACE_0,  # Use IN_PLACE_0 as base
+                test_case.inputs,
+                test_case.output,
+                inplace_target=target_index,
+                **test_case.kwargs,
+            )
+            print(f"Testing in-place on input {target_index}")
+            self._run_input_inplace_test(device, case, dtype_config, config)
