@@ -55,7 +55,11 @@ __global__ void softmax_topk_row_kernel(float *values_topk, // 输出数据, 形
 
     {
         __shared__ typename BlockReduce::TempStorage temp_storage_max;
+#if CUDART_VERSION >= 12090
+        T value_max = BlockReduce(temp_storage_max).Reduce(thread_max, ::cuda::maximum());
+#else
         T value_max = BlockReduce(temp_storage_max).Reduce(thread_max, cub::Max());
+#endif
         if (tid == 0) {
             shared_max = value_max;
         }

@@ -89,9 +89,13 @@ utils::Result<size_t> calculateWorkspace(size_t n_) {
         nullptr, size_inclusive_sum,
         nullptr, n,
         nullptr));
+#if CUDART_VERSION >= 12090
+    size_random += ::cuda::maximum()(size_radix_sort, size_inclusive_sum);
+    return utils::Result<size_t>(::cuda::maximum()(argmax, size_random));
+#else
     size_random += cub::Max()(size_radix_sort, size_inclusive_sum);
-
     return utils::Result<size_t>(cub::Max()(argmax, size_random));
+#endif
 }
 
 // ↑↑↑ 计算 workspace
@@ -161,8 +165,13 @@ static __global__ void randomSampleKernel(
     const Tidx *__restrict__ indices_out,
     size_t n,
     float random, float topp, size_t topk) {
+#if CUDART_VERSION >= 12090
+    topk = ::cuda::minimum()(topk, n);
+    auto p = (Tval)(random * ::cuda::minimum()(topp * (float)sorted[n - 1], (float)sorted[topk - 1]));
+#else
     topk = cub::Min()(topk, n);
     auto p = (Tval)(random * cub::Min()(topp * (float)sorted[n - 1], (float)sorted[topk - 1]));
+#endif
     for (size_t i = 0;; ++i) {
         if ((sorted[i]) >= p) {
             *result = indices_out[i];
@@ -228,8 +237,11 @@ struct Algo {
 
         workspace_ = reinterpret_cast<void *>(workspace);
         workspace_size = workspace_end - workspace;
-
+#if CUDART_VERSION >= 12090
+        auto block = ::cuda::minimum()((size_t)block_size, n);
+#else
         auto block = cub::Min()((size_t)block_size, n);
+#endif
         auto grid = (n + block - 1) / block;
         // sort
         fillIndices<<<static_cast<unsigned int>(grid), static_cast<unsigned int>(block), 0, stream>>>(indices, static_cast<int>(n));

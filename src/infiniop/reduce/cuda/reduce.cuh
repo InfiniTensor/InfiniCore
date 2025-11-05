@@ -55,7 +55,11 @@ __device__ __forceinline__ Tdata max(const Tdata *data_ptr, size_t count) {
 #ifdef ENABLE_HYGON_API
         max_ = (data_ptr[i] > max_) ? data_ptr[i] : max_;
 #else
+#if CUDART_VERSION >= 12090
+        max_ = ::cuda::maximum()(max_, data_ptr[i]);
+#else
         max_ = cub::Max()(max_, data_ptr[i]);
+#endif
 #endif
     }
 
@@ -66,7 +70,11 @@ __device__ __forceinline__ Tdata max(const Tdata *data_ptr, size_t count) {
     return BlockReduce(temp_storage).Reduce(
         max_, [](const Tdata &a, const Tdata &b) { return (a > b) ? a : b; }, BLOCK_SIZE);
 #else
-    return BlockReduce(temp_storage).Reduce(max_, cub::Max(), BLOCK_SIZE);
+#if CUDART_VERSION >= 12090
+        return BlockReduce(temp_storage).Reduce(max_, ::cuda::maximum(), BLOCK_SIZE);
+#else
+        return BlockReduce(temp_storage).Reduce(max_, cub::Max(), BLOCK_SIZE);
+#endif
 #endif
 }
 

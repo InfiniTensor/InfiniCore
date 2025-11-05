@@ -54,7 +54,11 @@ __device__ void logSoftmaxKernel(
             }
         }
     }
-    max_val = BlockReduce(temp_storage).Reduce(max_val, cub::Max());
+    #if CUDART_VERSION >= 12090
+        max_val = BlockReduce(temp_storage).Reduce(max_val, ::cuda::maximum());
+    #else
+        max_val = BlockReduce(temp_storage).Reduce(max_val, cub::Max());
+    #endif
     if (tid == 0) {
         shared_max_val = max_val;
     }
