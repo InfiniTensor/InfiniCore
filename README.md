@@ -97,7 +97,7 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
 | `--ninetoothed=[y\|n]`   | 是否编译九齿实现                 | n
 | `--ccl=[y\|n]`           | 是否编译 InfiniCCL 通信库接口实现 | n
 
-#####  手动安装底层库
+##### 手动安装底层库
 
 0. 生成九齿算子（可选）
 
@@ -178,7 +178,7 @@ pip install . -e
 #### 运行 InfiniCore Python算子接口测试
 
 ```bash
-python test/infinicore/run.py --nvidia --verbose --bench
+python test/infinicore/run.py --verbose --bench [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun]
 ```
 
 使用 -h 查看更多参数。
@@ -187,9 +187,9 @@ python test/infinicore/run.py --nvidia --verbose --bench
 
 ```shell
 # 测试单算子
-python test/infiniop/[operator].py [--cpu | --nvidia | --cambricon | --ascend]
+python test/infiniop/[operator].py [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun | --Hygon]
 # 测试全部算子
-python scripts/python_test.py [--cpu | --nvidia | --cambricon | --ascend]
+python scripts/python_test.py [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun | --Hygon]
 ```
 
 #### 通信库（InfiniCCL）测试
