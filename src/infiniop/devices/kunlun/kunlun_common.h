@@ -2,6 +2,7 @@
 #define __KUNLUN_COMMON_H__
 
 #include "../../../utils.h"
+#include <xpu/refactor/context/xpu_act_type.h>
 #include <xpu/runtime.h>
 #include <xpu/runtime_ex.h>
 #include <xpu/xdnn.h>
