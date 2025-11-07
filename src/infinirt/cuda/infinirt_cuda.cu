@@ -53,6 +53,23 @@ infiniStatus_t eventCreate(infinirtEvent_t *event_ptr) {
     return INFINI_STATUS_SUCCESS;
 }
 
+infiniStatus_t eventCreateWithFlags(infinirtEvent_t *event_ptr, uint32_t flags) {
+    cudaEvent_t event;
+    unsigned int cuda_flags = cudaEventDefault;
+
+    // Convert infinirt flags to CUDA flags
+    if (flags & INFINIRT_EVENT_DISABLE_TIMING) {
+        cuda_flags |= cudaEventDisableTiming;
+    }
+    if (flags & INFINIRT_EVENT_BLOCKING_SYNC) {
+        cuda_flags |= cudaEventBlockingSync;
+    }
+
+    CHECK_CUDART(cudaEventCreateWithFlags(&event, cuda_flags));
+    *event_ptr = event;
+    return INFINI_STATUS_SUCCESS;
+}
+
 infiniStatus_t eventRecord(infinirtEvent_t event, infinirtStream_t stream) {
     CHECK_CUDART(cudaEventRecord((cudaEvent_t)event, (cudaStream_t)stream));
     return INFINI_STATUS_SUCCESS;
@@ -77,6 +94,11 @@ infiniStatus_t eventSynchronize(infinirtEvent_t event) {
 
 infiniStatus_t eventDestroy(infinirtEvent_t event) {
     CHECK_CUDART(cudaEventDestroy((cudaEvent_t)event));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t eventElapsedTime(float *ms_ptr, infinirtEvent_t start, infinirtEvent_t end) {
+    CHECK_CUDART(cudaEventElapsedTime(ms_ptr, (cudaEvent_t)start, (cudaEvent_t)end));
     return INFINI_STATUS_SUCCESS;
 }
 
