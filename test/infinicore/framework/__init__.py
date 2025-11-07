@@ -9,14 +9,10 @@ from .utils import (
     profile_operation,
     rearrange_tensor,
     convert_infinicore_to_torch,
-    get_operator_help_info,
-    print_operator_testing_tips,
 )
 from .config import (
     get_args,
     get_hardware_args_group,
-    get_hardware_help_text,
-    get_supported_hardware_platforms,
     get_test_devices,
 )
 from .devices import InfiniDeviceEnum, InfiniDeviceNames, torch_device_map
@@ -41,13 +37,9 @@ __all__ = [
     "debug",
     "get_args",
     "get_hardware_args_group",
-    "get_hardware_help_text",
-    "get_operator_help_info",
-    "get_supported_hardware_platforms",
     "get_test_devices",
     "get_tolerance",
     "infinicore_tensor_from_torch",
-    "print_operator_testing_tips",
     "profile_operation",
     "rearrange_tensor",
     # Utility functions

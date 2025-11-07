@@ -142,21 +142,19 @@ def run_all_op_tests(ops_dir=None, specific_ops=None, extra_args=None):
             if extra_args:
                 cmd.extend(extra_args)
 
-            # Run with captured output
             result = subprocess.run(
                 cmd,
                 cwd=ops_dir,
-                capture_output=True,
-                text=True,
-                timeout=300,  # 5 minute timeout per test
+                stdout=None,
+                stderr=None,
             )
 
             success = result.returncode == 0
             results[test_name] = (
                 success,
                 result.returncode,
-                result.stdout,
-                result.stderr,
+                "",
+                "",
             )
 
             # Print the output from the test script
@@ -173,12 +171,8 @@ def run_all_op_tests(ops_dir=None, specific_ops=None, extra_args=None):
 
             status_icon = "✅" if success else "❌"
             print(
-                f"\n{status_icon} {test_name}: {'PASSED' if success else 'FAILED'} (return code: {result.returncode})"
+                f"{status_icon} {test_name}: {'PASSED' if success else 'FAILED'} (return code: {result.returncode})"
             )
-
-        except subprocess.TimeoutExpired:
-            print(f"⏰ {test_name}: TIMEOUT (exceeded 5 minutes)")
-            results[test_name] = (False, -2, "", "Test execution timed out")
 
         except Exception as e:
             print(f"💥 {test_name}: ERROR - {str(e)}")
@@ -279,19 +273,14 @@ def generate_help_epilog(ops_dir):
     epilog_parts.append("  # Run all operator tests on CPU")
     epilog_parts.append("  python run.py --cpu")
     epilog_parts.append("")
-    epilog_parts.append("  # Run specific operators with benchmarking")
-    epilog_parts.append("  python run.py --ops add matmul --nvidia --bench")
+    epilog_parts.append("  # Run specific operators")
+    epilog_parts.append("  python run.py --ops add matmul --nvidia")
     epilog_parts.append("")
     epilog_parts.append("  # Run with debug mode on multiple devices")
     epilog_parts.append("  python run.py --cpu --nvidia --debug")
     epilog_parts.append("")
     epilog_parts.append("  # List available tests without running")
     epilog_parts.append("  python run.py --list")
-    epilog_parts.append("")
-    epilog_parts.append("  # Run with custom performance settings")
-    epilog_parts.append(
-        "  python run.py --nvidia --bench --num_prerun 50 --num_iterations 5000"
-    )
     epilog_parts.append("")
 
     # Available operators section
@@ -314,6 +303,9 @@ def generate_help_epilog(ops_dir):
     )
     epilog_parts.append(
         "  - Operators are automatically discovered from the ops directory"
+    )
+    epilog_parts.append(
+        "  - --bench option is disabled in batch mode (run individual tests for benchmarking)"
     )
 
     return "\n".join(epilog_parts)
@@ -355,6 +347,15 @@ def main():
     if args.list:
         list_available_tests(args.ops_dir)
         return
+
+    # Check for --bench option in extra arguments
+    for arg in unknown_args:
+        if arg in ["--bench"]:
+            print("❌ ERROR: --bench option is not allowed in batch testing mode.")
+            print("")
+            print("Solution: Run individual test scripts for benchmarking:")
+            print("          python path/to/individual_test.py --bench --<platform>")
+            sys.exit(1)
 
     # Auto-detect ops directory if not provided
     if args.ops_dir is None:

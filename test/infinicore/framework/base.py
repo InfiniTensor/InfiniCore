@@ -27,6 +27,8 @@ class TestCase:
         comparison_target=None,
         description="",
         tolerance=None,
+        output_count=1,
+        output_specs=None,
     ):
         """
         Initialize a test case with complete configuration
@@ -34,10 +36,12 @@ class TestCase:
         Args:
             inputs: List of TensorSpec objects or scalars
             kwargs: Additional keyword arguments for the operator
-            output_spec: TensorSpec for output tensor (for in-place operations)
+            output_spec: TensorSpec for output tensor (for single output operations)
+            output_specs: List of TensorSpec for multiple output tensors
             comparison_target: Target for comparison ('out', index, or None for return value)
             description: Test case description
             tolerance: Tolerance settings for this test case {'atol': float, 'rtol': float}
+            output_count: Number of outputs (default: 1)
         """
         self.inputs = []
 
@@ -52,9 +56,26 @@ class TestCase:
 
         self.kwargs = kwargs or {}
         self.output_spec = output_spec
+        self.output_specs = output_specs
         self.comparison_target = comparison_target
         self.description = description
         self.tolerance = tolerance or {"atol": 1e-5, "rtol": 1e-3}
+        self.output_count = output_count
+
+        # Validate output configuration
+        if self.output_count == 1:
+            if self.output_specs is not None:
+                raise ValueError("output_specs cannot be used when output_count=1")
+        else:
+            if self.output_spec is not None:
+                raise ValueError("output_spec cannot be used when output_count>1")
+            if (
+                self.output_specs is not None
+                and len(self.output_specs) != self.output_count
+            ):
+                raise ValueError(
+                    f"output_specs count ({len(self.output_specs)}) must match output_count ({self.output_count})"
+                )
 
     def get_tensor_input_count(self):
         """Count the number of tensor inputs (excluding scalars)"""
@@ -92,34 +113,56 @@ class TestCase:
             base_str += f"{self.description}"
         base_str += f" - inputs=[{', '.join(input_strs)}]"
 
-        if self.kwargs or self.output_spec:
+        if self.kwargs or self.output_spec or self.output_specs:
             kwargs_strs = []
             for key, value in self.kwargs.items():
                 if key == "out" and isinstance(value, int):
                     kwargs_strs.append(f"{key}={value}")
                 else:
                     kwargs_strs.append(f"{key}={value}")
-            output_spec = self.output_spec
-            if output_spec and isinstance(output_spec, TensorSpec):
-                dtype_str = f", {output_spec.dtype}" if output_spec.dtype else ""
+
+            # Handle output specifications
+            if self.output_count == 1 and self.output_spec:
+                dtype_str = (
+                    f", {self.output_spec.dtype}" if self.output_spec.dtype else ""
+                )
                 init_str = (
-                    f", init={output_spec.init_mode}"
-                    if output_spec.init_mode != TensorInitializer.RANDOM
+                    f", init={self.output_spec.init_mode}"
+                    if self.output_spec.init_mode != TensorInitializer.RANDOM
                     else ""
                 )
-                if hasattr(output_spec, "strides") and output_spec.strides:
-                    strides_str = f", strides={output_spec.strides}"
+                if hasattr(self.output_spec, "strides") and self.output_spec.strides:
+                    strides_str = f", strides={self.output_spec.strides}"
                     kwargs_strs.append(
-                        f"out=tensor{output_spec.shape}{strides_str}{dtype_str}{init_str}"
+                        f"out=tensor{self.output_spec.shape}{strides_str}{dtype_str}{init_str}"
                     )
                 else:
                     kwargs_strs.append(
-                        f"out=tensor{output_spec.shape}{dtype_str}{init_str}"
+                        f"out=tensor{self.output_spec.shape}{dtype_str}{init_str}"
                     )
+            elif self.output_count > 1 and self.output_specs:
+                output_strs = []
+                for i, spec in enumerate(self.output_specs):
+                    dtype_str = f", {spec.dtype}" if spec.dtype else ""
+                    init_str = (
+                        f", init={spec.init_mode}"
+                        if spec.init_mode != TensorInitializer.RANDOM
+                        else ""
+                    )
+                    if hasattr(spec, "strides") and spec.strides:
+                        strides_str = f", strides={spec.strides}"
+                        output_strs.append(
+                            f"out_{i}=tensor{spec.shape}{strides_str}{dtype_str}{init_str}"
+                        )
+                    else:
+                        output_strs.append(
+                            f"out_{i}=tensor{spec.shape}{dtype_str}{init_str}"
+                        )
+                kwargs_strs.extend(output_strs)
 
             base_str += f", kwargs={{{', '.join(kwargs_strs)}}}"
 
-        base_str += ")"
+        base_str += f", outputs={self.output_count})"
         return base_str
 
 
@@ -209,10 +252,20 @@ class BaseOperatorTest(ABC):
             else:
                 inputs.append(input_spec)
 
-        # Prepare output tensor if specified in output_spec
-        if test_case.output_spec is not None:
-            output_tensor = test_case.output_spec.create_torch_tensor(device)
-            kwargs["out"] = output_tensor
+        # Prepare output tensors based on output_count
+        if test_case.output_count == 1:
+            # Single output case
+            if test_case.output_spec is not None:
+                output_tensor = test_case.output_spec.create_torch_tensor(device)
+                kwargs["out"] = output_tensor
+        else:
+            # Multiple outputs case
+            if test_case.output_specs is not None:
+                # Create output tuple for in-place multiple outputs
+                output_tensors = tuple(
+                    spec.create_torch_tensor(device) for spec in test_case.output_specs
+                )
+                kwargs["out"] = output_tensors
 
         # Handle integer indices for in-place operations
         if "out" in kwargs and isinstance(kwargs["out"], int):
@@ -264,13 +317,24 @@ class BaseOperatorTest(ABC):
 
         # Handle infinicore output
         infini_kwargs = kwargs.copy()
-        if "out" in infini_kwargs and isinstance(infini_kwargs["out"], torch.Tensor):
-            if isinstance(comparison_target, int):
-                infini_kwargs["out"] = infini_inputs[comparison_target]
-            else:
-                cloned_out = infini_kwargs["out"].clone().detach()
-                torch_input_clones.append(cloned_out)
-                infini_kwargs["out"] = infinicore_tensor_from_torch(cloned_out)
+        if "out" in infini_kwargs:
+            out_value = infini_kwargs["out"]
+            if isinstance(out_value, torch.Tensor):
+                # Single tensor output
+                if isinstance(comparison_target, int):
+                    infini_kwargs["out"] = infini_inputs[comparison_target]
+                else:
+                    cloned_out = out_value.clone().detach()
+                    torch_input_clones.append(cloned_out)
+                    infini_kwargs["out"] = infinicore_tensor_from_torch(cloned_out)
+            elif isinstance(out_value, (tuple, list)):
+                # Multiple tensor outputs
+                infini_outputs = []
+                for tensor in out_value:
+                    cloned_tensor = tensor.clone().detach()
+                    torch_input_clones.append(cloned_tensor)
+                    infini_outputs.append(infinicore_tensor_from_torch(cloned_tensor))
+                infini_kwargs["out"] = tuple(infini_outputs)
 
         # Check operator implementations
         torch_implemented = True
@@ -307,93 +371,174 @@ class BaseOperatorTest(ABC):
             )
 
             if config.bench:
-                if torch_implemented:
-
-                    def torch_op():
-                        return self.torch_operator(*inputs, **kwargs)
-
-                    profile_operation(
-                        "PyTorch   ",
-                        torch_op,
-                        device_str,
-                        config.num_prerun,
-                        config.num_iterations,
-                    )
-                if infini_implemented:
-
-                    def infini_op():
-                        return self.infinicore_operator(*infini_inputs, **infini_kwargs)
-
-                    profile_operation(
-                        "InfiniCore",
-                        infini_op,
-                        device_str,
-                        config.num_prerun,
-                        config.num_iterations,
-                    )
+                self._run_benchmarking(
+                    config,
+                    device_str,
+                    torch_implemented,
+                    infini_implemented,
+                    inputs,
+                    kwargs,
+                    infini_inputs,
+                    infini_kwargs,
+                    test_case.output_count,
+                    comparison_target,
+                )
             return
 
-        if comparison_target is None:
-            # Compare return values (out-of-place)
-            torch_comparison = torch_result
-            infini_comparison = infini_result
-        elif comparison_target == "out":
-            # Compare output tensor from kwargs (explicit output)
-            torch_comparison = kwargs.get("out")
-            infini_comparison = infini_kwargs.get("out")
-        elif isinstance(comparison_target, int):
-            # Compare specific input tensor (in-place operation on input)
-            # For in-place operations, we compare the modified input tensor
-            if 0 <= comparison_target < len(inputs):
-                torch_comparison = inputs[comparison_target]
-                infini_comparison = infini_inputs[comparison_target]
+        # ==========================================================================
+        # MULTIPLE OUTPUTS COMPARISON LOGIC
+        # ==========================================================================
+        if test_case.output_count > 1:
+            # Handle multiple outputs comparison
+
+            # Determine what to compare based on comparison_target
+            if comparison_target is None:
+                # Compare return values (out-of-place multiple outputs)
+                torch_comparison = torch_result
+                infini_comparison = infini_result
+            elif comparison_target == "out":
+                # Compare output tuple from kwargs (explicit multiple outputs)
+                torch_comparison = kwargs.get("out")
+                infini_comparison = infini_kwargs.get("out")
             else:
                 raise ValueError(
-                    f"Invalid comparison target index: {comparison_target}"
+                    f"Invalid comparison target for multiple outputs: {comparison_target}"
                 )
+
+            # Validate that we have multiple outputs to compare
+            if not isinstance(torch_comparison, (tuple, list)) or not isinstance(
+                infini_comparison, (tuple, list)
+            ):
+                raise ValueError(
+                    f"Multiple outputs expected but got single result: "
+                    f"torch={type(torch_comparison)}, infinicore={type(infini_comparison)}"
+                )
+
+            if len(torch_comparison) != len(infini_comparison):
+                raise ValueError(
+                    f"Output count mismatch: torch={len(torch_comparison)}, infinicore={len(infini_comparison)}"
+                )
+
+            if len(torch_comparison) != test_case.output_count:
+                raise ValueError(
+                    f"Output count mismatch: expected {test_case.output_count}, got {len(torch_comparison)}"
+                )
+
+            # Compare each output pair individually
+            all_valid = True
+            for i, (torch_out, infini_out) in enumerate(
+                zip(torch_comparison, infini_comparison)
+            ):
+                atol = test_case.tolerance.get("atol", 1e-5)
+                rtol = test_case.tolerance.get("rtol", 1e-3)
+
+                compare_fn = create_test_comparator(
+                    config, atol, rtol, f"{test_case.description} - output_{i}"
+                )
+
+                is_valid = compare_fn(infini_out, torch_out)
+                if not is_valid:
+                    print(f"❌ Output {i} comparison failed")
+                    all_valid = False
+                else:
+                    print(f"✅ Output {i} comparison passed")
+
+            assert all_valid, f"Multiple outputs comparison failed for {test_case}"
+
+        # ==========================================================================
+        # SINGLE OUTPUT COMPARISON LOGIC
+        # ==========================================================================
         else:
-            raise ValueError(f"Invalid comparison target: {comparison_target}")
-
-        # Validate comparison targets
-        if torch_comparison is None or infini_comparison is None:
-            raise ValueError("Comparison targets cannot be None")
-
-        # Perform comparison
-        atol = test_case.tolerance.get("atol", 1e-5)
-        rtol = test_case.tolerance.get("rtol", 1e-3)
-
-        compare_fn = create_test_comparator(config, atol, rtol, test_case.description)
-
-        is_valid = compare_fn(infini_comparison, torch_comparison)
-        assert is_valid, f"Result comparison failed for {test_case}"
-
-        # Benchmarking
-        if config.bench:
+            # Determine comparison targets for single output
             if comparison_target is None:
-                # Out-of-place benchmarking
+                # Compare return values (out-of-place)
+                torch_comparison = torch_result
+                infini_comparison = infini_result
+            elif comparison_target == "out":
+                # Compare output tensor from kwargs (explicit output)
+                torch_comparison = kwargs.get("out")
+                infini_comparison = infini_kwargs.get("out")
+            elif isinstance(comparison_target, int):
+                # Compare specific input tensor (in-place operation on input)
+                if 0 <= comparison_target < len(inputs):
+                    torch_comparison = inputs[comparison_target]
+                    infini_comparison = infini_inputs[comparison_target]
+                else:
+                    raise ValueError(
+                        f"Invalid comparison target index: {comparison_target}"
+                    )
+            else:
+                raise ValueError(f"Invalid comparison target: {comparison_target}")
+
+            # Validate comparison targets
+            if torch_comparison is None or infini_comparison is None:
+                raise ValueError("Comparison targets cannot be None")
+
+            # Perform comparison
+            atol = test_case.tolerance.get("atol", 1e-5)
+            rtol = test_case.tolerance.get("rtol", 1e-3)
+
+            compare_fn = create_test_comparator(
+                config, atol, rtol, test_case.description
+            )
+
+            is_valid = compare_fn(infini_comparison, torch_comparison)
+            assert is_valid, f"Result comparison failed for {test_case}"
+
+        # ==========================================================================
+        # UNIFIED BENCHMARKING LOGIC
+        # ==========================================================================
+        if config.bench:
+            self._run_benchmarking(
+                config,
+                device_str,
+                True,
+                True,
+                inputs,
+                kwargs,
+                infini_inputs,
+                infini_kwargs,
+                test_case.output_count,
+                comparison_target,
+            )
+
+    def _run_benchmarking(
+        self,
+        config,
+        device_str,
+        torch_implemented,
+        infini_implemented,
+        inputs,
+        kwargs,
+        infini_inputs,
+        infini_kwargs,
+        output_count,
+        comparison_target,
+    ):
+        """
+        Unified benchmarking logic
+        """
+        if torch_implemented:
+            if output_count > 1:
+                # For multiple outputs, just call the operator
                 def torch_op():
                     return self.torch_operator(*inputs, **kwargs)
 
-                def infini_op():
-                    return self.infinicore_operator(*infini_inputs, **infini_kwargs)
-
             else:
-                # In-place benchmarking
-                def torch_op():
-                    self.torch_operator(*inputs, **kwargs)
-                    return (
-                        kwargs.get("out")
-                        if "out" in kwargs
-                        else inputs[comparison_target]
-                    )
+                if comparison_target is None:
+                    # Out-of-place benchmarking
+                    def torch_op():
+                        return self.torch_operator(*inputs, **kwargs)
 
-                def infini_op():
-                    self.infinicore_operator(*infini_inputs, **infini_kwargs)
-                    return (
-                        infini_kwargs.get("out")
-                        if "out" in infini_kwargs
-                        else infini_inputs[comparison_target]
-                    )
+                else:
+                    # In-place benchmarking
+                    def torch_op():
+                        self.torch_operator(*inputs, **kwargs)
+                        return (
+                            kwargs.get("out")
+                            if "out" in kwargs
+                            else inputs[comparison_target]
+                        )
 
             profile_operation(
                 "PyTorch   ",
@@ -402,6 +547,23 @@ class BaseOperatorTest(ABC):
                 config.num_prerun,
                 config.num_iterations,
             )
+
+        if infini_implemented:
+            if comparison_target is None:
+                # Out-of-place benchmarking
+                def infini_op():
+                    return self.infinicore_operator(*infini_inputs, **infini_kwargs)
+
+            else:
+                # In-place benchmarking
+                def infini_op():
+                    self.infinicore_operator(*infini_inputs, **infini_kwargs)
+                    return (
+                        infini_kwargs.get("out")
+                        if "out" in infini_kwargs
+                        else infini_inputs[comparison_target]
+                    )
+
             profile_operation(
                 "InfiniCore",
                 infini_op,

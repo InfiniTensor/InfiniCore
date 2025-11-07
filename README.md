@@ -181,7 +181,10 @@ pip install . -e
 #### 运行 InfiniCore Python算子接口测试
 
 ```bash
-python test/infinicore/run.py --verbose --bench [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun]
+# 测试单算子
+python test/infinicore/ops/[operator].py [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun | --Hygon]
+# 测试全部算子
+python test/infinicore/run.py [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun]
 ```
 
 使用 -h 查看更多参数。

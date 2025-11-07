@@ -27,24 +27,6 @@ def get_supported_hardware_platforms():
     ]
 
 
-def get_hardware_help_text():
-    """
-    Get formatted help text for hardware platforms.
-
-    Returns:
-        str: Formatted help text for argument parsers
-    """
-    platforms = get_supported_hardware_platforms()
-    help_lines = ["Supported Hardware Platforms:"]
-
-    for flag, description in platforms:
-        # Remove leading dashes for cleaner display
-        name = flag.lstrip("-")
-        help_lines.append(f"  - {name.upper():<10} {description}")
-
-    return "\n".join(help_lines)
-
-
 def get_hardware_args_group(parser):
     """
     Add hardware platform arguments to an argument parser.
@@ -82,7 +64,6 @@ Examples:
   # Run performance profiling with custom iterations
   python test_operator.py --nvidia --bench --num_prerun 50 --num_iterations 5000
 
-{get_hardware_help_text()}
         """,
     )
 
