@@ -2,13 +2,13 @@
 #include "infinicore.h"
 
 #ifdef ENABLE_METAX_MC_API
-    #include <cub/device/device_radix_sort.cuh>
-    #include <cub/device/device_reduce.cuh>
-    #include <cub/device/device_scan.cuh>
+#include <cub/device/device_radix_sort.cuh>
+#include <cub/device/device_reduce.cuh>
+#include <cub/device/device_scan.cuh>
 #else
-    #include <cub/device/device_radix_sort.cuh>
-    #include <cub/device/device_reduce.cuh>
-    #include <cub/device/device_scan.cuh>
+#include <cub/device/device_radix_sort.cuh>
+#include <cub/device/device_reduce.cuh>
+#include <cub/device/device_scan.cuh>
 #endif
 
 namespace op::random_sample::metax {
