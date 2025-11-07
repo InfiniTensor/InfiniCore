@@ -1,3 +1,5 @@
+import contextlib
+
 from infinicore.device import device
 from infinicore.dtype import (
     bfloat16,
@@ -24,7 +26,6 @@ from infinicore.dtype import (
     short,
     uint8,
 )
-from infinicore.ntops import use_ntops
 from infinicore.ops.add import add
 from infinicore.ops.attention import attention
 from infinicore.ops.matmul import matmul
@@ -68,8 +69,6 @@ __all__ = [
     "long",
     "short",
     "uint8",
-    # `ntops` integration.
-    "use_ntops",
     # Operations.
     "add",
     "attention",
@@ -82,3 +81,15 @@ __all__ = [
     "strided_from_blob",
     "zeros",
 ]
+
+use_ntops = False
+
+with contextlib.suppress(ImportError, ModuleNotFoundError):
+    import sys
+
+    import ntops
+
+    for op_name in ntops.torch.__all__:
+        getattr(ntops.torch, op_name).__globals__["torch"] = sys.modules[__name__]
+
+    use_ntops = True
