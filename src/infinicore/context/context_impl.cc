@@ -145,6 +145,35 @@ void memcpyH2H(void *dst, const void *src, size_t size) {
     return ContextImpl::singleton().getCpuRuntime()->memcpyD2D(dst, src, size);
 }
 
+// Timing API implementations
+infinirtEvent_t createEvent() {
+    return ContextImpl::singleton().getCurrentRuntime()->createEvent();
+}
+
+infinirtEvent_t createEventWithFlags(uint32_t flags) {
+    return ContextImpl::singleton().getCurrentRuntime()->createEventWithFlags(flags);
+}
+
+void recordEvent(infinirtEvent_t event, infinirtStream_t stream) {
+    ContextImpl::singleton().getCurrentRuntime()->recordEvent(event, stream);
+}
+
+bool queryEvent(infinirtEvent_t event) {
+    return ContextImpl::singleton().getCurrentRuntime()->queryEvent(event);
+}
+
+void synchronizeEvent(infinirtEvent_t event) {
+    ContextImpl::singleton().getCurrentRuntime()->synchronizeEvent(event);
+}
+
+void destroyEvent(infinirtEvent_t event) {
+    ContextImpl::singleton().getCurrentRuntime()->destroyEvent(event);
+}
+
+float elapsedTime(infinirtEvent_t start, infinirtEvent_t end) {
+    return ContextImpl::singleton().getCurrentRuntime()->elapsedTime(start, end);
+}
+
 } // namespace context
 
 } // namespace infinicore

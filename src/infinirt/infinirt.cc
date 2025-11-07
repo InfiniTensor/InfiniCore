@@ -126,6 +126,10 @@ __C infiniStatus_t infinirtEventCreate(infinirtEvent_t *event_ptr) {
     INFINIRT_CALL_DEVICE_API(eventCreate, (event_ptr));
 }
 
+__C infiniStatus_t infinirtEventCreateWithFlags(infinirtEvent_t *event_ptr, uint32_t flags) {
+    INFINIRT_CALL_DEVICE_API(eventCreateWithFlags, (event_ptr, flags));
+}
+
 __C infiniStatus_t infinirtEventRecord(infinirtEvent_t event, infinirtStream_t stream) {
     INFINIRT_CALL_DEVICE_API(eventRecord, (event, stream));
 }
@@ -140,6 +144,10 @@ __C infiniStatus_t infinirtEventSynchronize(infinirtEvent_t event) {
 
 __C infiniStatus_t infinirtEventDestroy(infinirtEvent_t event) {
     INFINIRT_CALL_DEVICE_API(eventDestroy, (event));
+}
+
+__C infiniStatus_t infinirtEventElapsedTime(float *ms_ptr, infinirtEvent_t start, infinirtEvent_t end) {
+    INFINIRT_CALL_DEVICE_API(eventElapsedTime, (ms_ptr, start, end));
 }
 
 __C infiniStatus_t infinirtMalloc(void **p_ptr, size_t size) {

@@ -1,6 +1,7 @@
 #ifndef __INFINIRT_IMPL_H__
 #define __INFINIRT_IMPL_H__
 #include "infinirt.h"
+#include <stdint.h>
 
 #define INFINIRT_DEVICE_API(IMPL, COUNT)                                                                                          \
     infiniStatus_t getDeviceCount(int *count) COUNT;                                                                              \
@@ -13,10 +14,12 @@
     infiniStatus_t streamWaitEvent(infinirtStream_t stream, infinirtEvent_t event) IMPL;                                          \
                                                                                                                                   \
     infiniStatus_t eventCreate(infinirtEvent_t *event_ptr) IMPL;                                                                  \
+    infiniStatus_t eventCreateWithFlags(infinirtEvent_t *event_ptr, uint32_t flags) IMPL;                                         \
     infiniStatus_t eventRecord(infinirtEvent_t event, infinirtStream_t stream) IMPL;                                              \
     infiniStatus_t eventQuery(infinirtEvent_t event, infinirtEventStatus_t *status_ptr) IMPL;                                     \
     infiniStatus_t eventSynchronize(infinirtEvent_t event) IMPL;                                                                  \
     infiniStatus_t eventDestroy(infinirtEvent_t event) IMPL;                                                                      \
+    infiniStatus_t eventElapsedTime(float *ms_ptr, infinirtEvent_t start, infinirtEvent_t end) IMPL;                              \
                                                                                                                                   \
     infiniStatus_t mallocDevice(void **p_ptr, size_t size) IMPL;                                                                  \
     infiniStatus_t mallocHost(void **p_ptr, size_t size) IMPL;                                                                    \

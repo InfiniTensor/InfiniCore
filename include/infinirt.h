@@ -2,6 +2,7 @@
 #define __INFINIRT_API_H__
 
 #include "infinicore.h"
+#include <stdint.h>
 
 typedef void *infinirtStream_t;
 typedef void *infinirtEvent_t;
@@ -27,11 +28,20 @@ typedef enum {
     INFINIRT_EVENT_NOT_READY = 1,
 } infinirtEventStatus_t;
 
+// Event flags for precise timing
+typedef enum {
+    INFINIRT_EVENT_DEFAULT = 0x0,        // Default event creation flags
+    INFINIRT_EVENT_DISABLE_TIMING = 0x1, // Event will not record timing data
+    INFINIRT_EVENT_BLOCKING_SYNC = 0x2,  // Event uses blocking synchronization
+} infinirtEventFlags_t;
+
 __C __export infiniStatus_t infinirtEventCreate(infinirtEvent_t *event_ptr);
+__C __export infiniStatus_t infinirtEventCreateWithFlags(infinirtEvent_t *event_ptr, uint32_t flags);
 __C __export infiniStatus_t infinirtEventRecord(infinirtEvent_t event, infinirtStream_t stream);
 __C __export infiniStatus_t infinirtEventQuery(infinirtEvent_t event, infinirtEventStatus_t *status_ptr);
 __C __export infiniStatus_t infinirtEventSynchronize(infinirtEvent_t event);
 __C __export infiniStatus_t infinirtEventDestroy(infinirtEvent_t event);
+__C __export infiniStatus_t infinirtEventElapsedTime(float *ms_ptr, infinirtEvent_t start, infinirtEvent_t end);
 
 // Memory
 typedef enum {

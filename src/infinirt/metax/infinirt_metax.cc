@@ -50,6 +50,10 @@ infiniStatus_t eventCreate(infinirtEvent_t *event_ptr) {
     return INFINI_STATUS_SUCCESS;
 }
 
+infiniStatus_t eventCreateWithFlags(infinirtEvent_t *event_ptr, uint32_t flags) {
+    return INFINI_STATUS_NOT_IMPLEMENTED;
+}
+
 infiniStatus_t eventRecord(infinirtEvent_t event, infinirtStream_t stream) {
     CHECK_MACART(hcEventRecord((hcEvent_t)event, (hcStream_t)stream));
     return INFINI_STATUS_SUCCESS;
@@ -68,6 +72,10 @@ infiniStatus_t eventSynchronize(infinirtEvent_t event) {
 infiniStatus_t eventDestroy(infinirtEvent_t event) {
     CHECK_MACART(hcEventDestroy((hcEvent_t)event));
     return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t eventElapsedTime(float *ms_ptr, infinirtEvent_t start, infinirtEvent_t end) {
+    return INFINI_STATUS_NOT_IMPLEMENTED;
 }
 
 infiniStatus_t mallocDevice(void **p_ptr, size_t size) {
