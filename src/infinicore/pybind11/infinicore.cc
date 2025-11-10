@@ -6,6 +6,7 @@
 #include "dtype.hpp"
 #include "ops.hpp"
 #include "tensor.hpp"
+#include "safetensors_loader.hpp"
 
 namespace infinicore {
 
@@ -15,6 +16,7 @@ PYBIND11_MODULE(_infinicore, m) {
     dtype::bind(m);
     ops::bind(m);
     tensor::bind(m);
+    safetensors::bind(m);
 }
 
 } // namespace infinicore

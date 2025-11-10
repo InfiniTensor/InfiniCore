@@ -1,7 +1,8 @@
 #include "memory_test.h"
-#include "test_nn_module.h"
+#include "nn/test_nn_module.h"
+#include "pybind11/test_safetensors_loading.h"
 #include "test_runner.h"
-#include "test_tensor_destructor.h"
+#include "tensor/test_tensor_destructor.h"
 #include <iostream>
 #include <memory>
 #include <spdlog/spdlog.h>
@@ -171,6 +172,7 @@ int main(int argc, char *argv[]) {
 
         if (args.run_module) {
             runner.addTest(std::make_unique<infinicore::test::NNModuleTest>());
+            runner.addTest(std::make_unique<infinicore::test::SafetensorsLoaderTest>());
         }
 
         if (args.run_concurrency) {

@@ -7,7 +7,7 @@
 #include "infinicore/nn/parameter.hpp"
 #include "infinicore/nn/rmsnorm.hpp"
 #include "infinicore/nn/rope.hpp"
-#include "test_runner.h"
+#include "../test_runner.h"
 #include <algorithm>
 #include <cmath>
 #include <fstream>
