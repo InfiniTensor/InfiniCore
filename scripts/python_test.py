@@ -19,6 +19,8 @@ def run_tests(args):
         "gemm.py",
         "logsoftmax.py",
         "mul.py",
+        "paged_attention.py",
+        "paged_caching.py",
         "random_sample.py",
         "rearrange.py",
         "rms_norm.py",
