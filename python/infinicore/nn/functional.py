@@ -45,6 +45,9 @@ def silu(input: infinicore.Tensor, inplace: bool = False, out=None) -> infinicor
     r"""Apply the Sigmoid Linear Unit (SiLU) function, element-wise.
     """
 
+    if infinicore.use_ntops and out is None:
+        return infinicore.ntops.torch.silu(input, inplace=inplace)
+
     if inplace:
         _infinicore.silu_(input._underlying, input._underlying)
         return input
