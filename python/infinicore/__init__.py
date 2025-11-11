@@ -1,6 +1,6 @@
 import contextlib
 
-from infinicore import nn as nn
+import infinicore.nn as nn
 from infinicore.device import device
 from infinicore.dtype import (
     bfloat16,
@@ -43,6 +43,8 @@ from infinicore.tensor import (
 )
 
 __all__ = [
+    # Modules.
+    "nn",
     # Classes.
     "device",
     "dtype",
