@@ -128,6 +128,14 @@ float Runtime::elapsedTime(infinirtEvent_t start, infinirtEvent_t end) {
     return ms;
 }
 
+void Runtime::streamWaitEvent(infinirtStream_t stream, infinirtEvent_t event) {
+    // Use current stream if no specific stream is provided
+    if (stream == nullptr) {
+        stream = stream_;
+    }
+    INFINICORE_CHECK_ERROR(infinirtStreamWaitEvent(stream, event));
+}
+
 std::string Runtime::toString() const {
     return fmt::format("Runtime({})", device_.toString());
 }

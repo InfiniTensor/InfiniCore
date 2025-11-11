@@ -46,6 +46,7 @@ public:
     void synchronizeEvent(infinirtEvent_t event);
     void destroyEvent(infinirtEvent_t event);
     float elapsedTime(infinirtEvent_t start, infinirtEvent_t end);
+    void streamWaitEvent(infinirtStream_t stream, infinirtEvent_t event);
 
     std::string toString() const;
 
