@@ -21,6 +21,7 @@ def rms_norm(
     normalized_shape: list[int],
     weight: Tensor,
     eps: float = 1e-5,
+    *,
     out=None,
 ) -> Tensor:
     r"""Apply Root Mean Square Layer Normalization."""
@@ -37,7 +38,7 @@ def rms_norm(
     return out
 
 
-def silu(input: Tensor, inplace: bool = False, out=None) -> Tensor:
+def silu(input: Tensor, inplace: bool = False, *, out=None) -> Tensor:
     r"""Apply the Sigmoid Linear Unit (SiLU) function, element-wise."""
 
     if infinicore.use_ntops and input.device.type in ("cuda", "musa") and out is None:
@@ -55,7 +56,7 @@ def silu(input: Tensor, inplace: bool = False, out=None) -> Tensor:
     return out
 
 
-def swiglu(input: Tensor, other: Tensor, out=None):
+def swiglu(input: Tensor, other: Tensor, *, out=None):
     r"""Apply the Swish-Gated Linear Unit (SwiGLU) function, element-wise."""
 
     if out is None:
