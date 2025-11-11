@@ -58,7 +58,7 @@ ContextImpl &ContextImpl::singleton() {
 }
 
 ContextImpl::ContextImpl() {
-    std::vector<int> device_counter(size_t(Device::Type::COUNT));
+    std::vector<int> device_counter(static_cast<size_t>(Device::Type::COUNT));
     INFINICORE_CHECK_ERROR(infinirtGetAllDeviceCount(device_counter.data()));
 
     // Reserve runtime slot for all devices.
@@ -172,6 +172,10 @@ void destroyEvent(infinirtEvent_t event) {
 
 float elapsedTime(infinirtEvent_t start, infinirtEvent_t end) {
     return ContextImpl::singleton().getCurrentRuntime()->elapsedTime(start, end);
+}
+
+void streamWaitEvent(infinirtStream_t stream, infinirtEvent_t event) {
+    ContextImpl::singleton().getCurrentRuntime()->streamWaitEvent(stream, event);
 }
 
 } // namespace context

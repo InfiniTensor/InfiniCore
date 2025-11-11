@@ -1,7 +1,18 @@
 import contextlib
 
 import infinicore.nn as nn
+
+# Import context functions
+from infinicore.context import (
+    get_device,
+    get_device_count,
+    get_stream,
+    set_device,
+    sync_device,
+    sync_stream,
+)
 from infinicore.device import device
+from infinicore.device_event import DeviceEvent
 from infinicore.dtype import (
     bfloat16,
     bool,
@@ -50,8 +61,16 @@ __all__ = [
     "nn",
     # Classes.
     "device",
+    "DeviceEvent",
     "dtype",
     "Tensor",
+    # Context functions.
+    "get_device",
+    "get_device_count",
+    "get_stream",
+    "set_device",
+    "sync_device",
+    "sync_stream",
     # Data Types.
     "bfloat16",
     "bool",
