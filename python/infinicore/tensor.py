@@ -77,7 +77,7 @@ class Tensor:
 
     def debug(self, filename=None):
         """Print tensor data or save to file for debugging
-        
+
         Args:
             filename: Optional filename to save raw binary data. If None, prints to stdout.
         """

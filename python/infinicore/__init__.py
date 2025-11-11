@@ -1,5 +1,6 @@
 import contextlib
 
+from infinicore import nn as nn
 from infinicore.device import device
 from infinicore.dtype import (
     bfloat16,
@@ -41,12 +42,11 @@ from infinicore.tensor import (
     zeros,
 )
 
-from infinicore import nn as nn
-
 __all__ = [
     # Classes.
     "device",
     "dtype",
+    "Tensor",
     # Data Types.
     "bfloat16",
     "bool",
