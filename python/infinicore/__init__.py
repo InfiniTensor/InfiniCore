@@ -33,6 +33,7 @@ from infinicore.ops.rearrange import rearrange
 from infinicore.tensor import (
     Tensor,
     empty,
+    empty_like,
     from_blob,
     ones,
     strided_empty,
@@ -75,6 +76,7 @@ __all__ = [
     "matmul",
     "rearrange",
     "empty",
+    "empty_like",
     "from_blob",
     "ones",
     "strided_empty",

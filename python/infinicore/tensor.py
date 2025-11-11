@@ -93,6 +93,16 @@ def empty(size, *, dtype=None, device=None, pin_memory=False):
     )
 
 
+def empty_like(input, *, dtype=None, device=None):
+    if dtype is None:
+        dtype = input.dtype
+
+    if device is None:
+        device = input.device
+
+    return empty(input.size(), dtype=dtype, device=device)
+
+
 def strided_empty(size, strides, *, dtype=None, device=None, pin_memory=False):
     return Tensor(
         _infinicore.strided_empty(
