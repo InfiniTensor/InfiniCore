@@ -34,7 +34,7 @@ class TestCase:
         Initialize a test case with complete configuration
 
         Args:
-            inputs: List of TensorSpec objects or scalars
+            inputs: List of TensorSpec objects, scalars, or tuples containing multiple TensorSpecs
             kwargs: Additional keyword arguments for the operator
             output_spec: TensorSpec for output tensor (for single output operations)
             output_specs: List of TensorSpec for multiple output tensors
@@ -45,10 +45,26 @@ class TestCase:
         """
         self.inputs = []
 
-        # Process inputs
+        # Process inputs - support both single TensorSpecs and tuples of TensorSpecs
         for inp in inputs:
             if isinstance(inp, (list, tuple)):
-                self.inputs.append(TensorSpec.from_tensor(inp))
+                # Handle tuple/list of multiple TensorSpecs (e.g., for torch.cat)
+                processed_tuple = []
+                for item in inp:
+                    if isinstance(item, (list, tuple)):
+                        # Nested tuple - recursively process
+                        nested_processed = []
+                        for nested_item in item:
+                            if isinstance(nested_item, TensorSpec):
+                                nested_processed.append(nested_item)
+                            else:
+                                nested_processed.append(nested_item)
+                        processed_tuple.append(tuple(nested_processed))
+                    elif isinstance(item, TensorSpec):
+                        processed_tuple.append(item)
+                    else:
+                        processed_tuple.append(item)
+                self.inputs.append(tuple(processed_tuple))
             elif isinstance(inp, TensorSpec):
                 self.inputs.append(inp)
             else:
@@ -83,12 +99,43 @@ class TestCase:
         for inp in self.inputs:
             if isinstance(inp, TensorSpec) and not inp.is_scalar:
                 count += 1
+            elif isinstance(inp, (list, tuple)):
+                # Count all TensorSpecs within the tuple
+                for item in inp:
+                    if isinstance(item, TensorSpec) and not item.is_scalar:
+                        count += 1
         return count
 
     def __str__(self):
         input_strs = []
         for inp in self.inputs:
-            if hasattr(inp, "is_scalar") and inp.is_scalar:
+            if isinstance(inp, (list, tuple)):
+                # Handle tuple inputs (e.g., for torch.cat)
+                tuple_strs = []
+                for item in inp:
+                    if hasattr(item, "is_scalar") and item.is_scalar:
+                        dtype_str = f", dtype={item.dtype}" if item.dtype else ""
+                        tuple_strs.append(f"scalar({item.value}{dtype_str})")
+                    elif hasattr(item, "shape"):
+                        dtype_str = f", {item.dtype}" if item.dtype else ""
+                        init_str = (
+                            f", init={item.init_mode}"
+                            if item.init_mode != TensorInitializer.RANDOM
+                            else ""
+                        )
+                        if hasattr(item, "strides") and item.strides:
+                            strides_str = f", strides={item.strides}"
+                            tuple_strs.append(
+                                f"tensor{item.shape}{strides_str}{dtype_str}{init_str}"
+                            )
+                        else:
+                            tuple_strs.append(
+                                f"tensor{item.shape}{dtype_str}{init_str}"
+                            )
+                    else:
+                        tuple_strs.append(str(item))
+                input_strs.append(f"tuple({'; '.join(tuple_strs)})")
+            elif hasattr(inp, "is_scalar") and inp.is_scalar:
                 dtype_str = f", dtype={inp.dtype}" if inp.dtype else ""
                 input_strs.append(f"scalar({inp.value}{dtype_str})")
             elif hasattr(inp, "shape"):
@@ -111,7 +158,7 @@ class TestCase:
         base_str = f"TestCase("
         if self.description:
             base_str += f"{self.description}"
-        base_str += f" - inputs=[{', '.join(input_strs)}]"
+        base_str += f" - inputs=[{'; '.join(input_strs)}]"
 
         if self.kwargs or self.output_spec or self.output_specs:
             kwargs_strs = []
@@ -160,9 +207,9 @@ class TestCase:
                         )
                 kwargs_strs.extend(output_strs)
 
-            base_str += f", kwargs={{{', '.join(kwargs_strs)}}}"
+            base_str += f", kwargs={{{'; '.join(kwargs_strs)}}}"
 
-        base_str += f", outputs={self.output_count})"
+        base_str += ")"
         return base_str
 
 
@@ -331,21 +378,43 @@ class BaseOperatorTest(ABC):
         """InfiniCore operator function"""
         raise NotImplementedError("infinicore_operator not implemented")
 
+    def _create_tensor_from_spec(self, spec, device):
+        """Helper method to create tensor from TensorSpec"""
+        if isinstance(spec, TensorSpec):
+            if spec.is_scalar:
+                return spec.value
+            else:
+                return spec.create_torch_tensor(device)
+        return spec
+
     def prepare_inputs_and_kwargs(self, test_case, device):
-        """Prepare inputs and kwargs, replacing TensorSpec objects with actual tensors"""
+        """Prepare inputs and kwargs, replacing TensorSpec objects with actual tensors
+        Supports tuple inputs for operators like torch.cat
+        """
         inputs = []
         kwargs = test_case.kwargs.copy()
 
-        # Prepare input tensors
-        for i, input_spec in enumerate(test_case.inputs):
-            if isinstance(input_spec, TensorSpec):
-                if input_spec.is_scalar:
-                    inputs.append(input_spec.value)
-                else:
-                    tensor = input_spec.create_torch_tensor(device)
-                    inputs.append(tensor)
+        # Prepare input tensors - support both single TensorSpecs and tuples of TensorSpecs
+        for input_spec in test_case.inputs:
+            if isinstance(input_spec, (list, tuple)):
+                # Handle tuple of multiple TensorSpecs (e.g., for torch.cat)
+                tuple_tensors = []
+                for item in input_spec:
+                    if isinstance(item, (list, tuple)):
+                        # Handle nested tuples
+                        nested_tensors = []
+                        for nested_item in item:
+                            nested_tensors.append(
+                                self._create_tensor_from_spec(nested_item, device)
+                            )
+                        tuple_tensors.append(tuple(nested_tensors))
+                    else:
+                        tuple_tensors.append(
+                            self._create_tensor_from_spec(item, device)
+                        )
+                inputs.append(tuple(tuple_tensors))
             else:
-                inputs.append(input_spec)
+                inputs.append(self._create_tensor_from_spec(input_spec, device))
 
         # Prepare output tensors based on output_count
         if test_case.output_count == 1:
