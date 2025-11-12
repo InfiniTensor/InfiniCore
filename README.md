@@ -182,9 +182,9 @@ pip install . -e
 
 ```bash
 # 测试单算子
-python test/infinicore/ops/[operator].py [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun | --Hygon]
+python test/infinicore/ops/[operator].py [--bench | --debug] [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun | --Hygon]
 # 测试全部算子
-python test/infinicore/run.py [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun]
+python test/infinicore/run.py [--bench | --debug] [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun]
 ```
 
 使用 -h 查看更多参数。

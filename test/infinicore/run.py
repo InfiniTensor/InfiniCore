@@ -335,27 +335,19 @@ def main():
         help="List all available test files without running them",
     )
 
-    # Hardware platform options using shared function
     from framework import get_hardware_args_group
 
-    hardware_group = get_hardware_args_group(parser)
+    if "-h" in sys.argv or "--help" in sys.argv:
+        get_hardware_args_group(parser)
 
     # Parse known args first, leave the rest for the test scripts
     args, unknown_args = parser.parse_known_args()
+    get_hardware_args_group(parser)
 
     # Handle list command
     if args.list:
         list_available_tests(args.ops_dir)
         return
-
-    # Check for --bench option in extra arguments
-    for arg in unknown_args:
-        if arg in ["--bench"]:
-            print("❌ ERROR: --bench option is not allowed in batch testing mode.")
-            print("")
-            print("Solution: Run individual test scripts for benchmarking:")
-            print("          python path/to/individual_test.py --bench --<platform>")
-            sys.exit(1)
 
     # Auto-detect ops directory if not provided
     if args.ops_dir is None:
