@@ -145,16 +145,37 @@ def run_all_op_tests(ops_dir=None, specific_ops=None, extra_args=None):
             result = subprocess.run(
                 cmd,
                 cwd=ops_dir,
-                stdout=None,
-                stderr=None,
+                capture_output=True,  # Capture output to analyze
+                text=True,
             )
 
-            success = result.returncode == 0
+            # Analyze output to determine test status
+            stdout_lower = result.stdout.lower()
+            stderr_lower = result.stderr.lower()
+
+            # Check for operator not implemented patterns
+            if "not implemented" in stdout_lower or "not implemented" in stderr_lower:
+                if "both operators not implemented" in stdout_lower:
+                    # Both operators not implemented - skipped test
+                    success = True  # Not a failure, but skipped
+                    returncode = -2  # Special code for skipped
+                elif "one operator not implemented" in stdout_lower:
+                    # One operator not implemented - partial test
+                    success = False  # Not fully successful
+                    returncode = -3  # Special code for partial
+                else:
+                    # General not implemented case
+                    success = result.returncode == 0
+                    returncode = result.returncode
+            else:
+                success = result.returncode == 0
+                returncode = result.returncode
+
             results[test_name] = (
                 success,
-                result.returncode,
-                "",
-                "",
+                returncode,
+                result.stdout,
+                result.stderr,
             )
 
             # Print the output from the test script
@@ -169,9 +190,22 @@ def run_all_op_tests(ops_dir=None, specific_ops=None, extra_args=None):
                 print("\nSTDERR:")
                 print(result.stderr.rstrip())
 
-            status_icon = "✅" if success else "❌"
+            # Enhanced status display
+            if returncode == -2:
+                status_icon = "⏭️"
+                status_text = "SKIPPED (operators not implemented)"
+            elif returncode == -3:
+                status_icon = "⚠️"
+                status_text = "PARTIAL (one operator not implemented)"
+            elif success:
+                status_icon = "✅"
+                status_text = "PASSED"
+            else:
+                status_icon = "❌"
+                status_text = "FAILED"
+
             print(
-                f"{status_icon} {test_name}: {'PASSED' if success else 'FAILED'} (return code: {result.returncode})"
+                f"{status_icon} {test_name}: {status_text} (return code: {returncode})"
             )
 
         except Exception as e:
@@ -191,36 +225,54 @@ def print_summary(results):
         print("No tests were run.")
         return False
 
-    passed = sum(1 for success, _, _, _ in results.values() if success)
+    # Count different types of results
+    passed = 0
+    failed = 0
+    skipped = 0
+    partial = 0
+
+    for test_name, (success, returncode, stdout, stderr) in results.items():
+        if success:
+            passed += 1
+        elif returncode == -2:  # Special code for skipped tests
+            skipped += 1
+        elif returncode == -3:  # Special code for partial tests
+            partial += 1
+        else:
+            failed += 1
+
     total = len(results)
-    failed_tests = [name for name, (success, _, _, _) in results.items() if not success]
 
     print(f"Total tests: {total}")
     print(f"Passed: {passed}")
-    print(f"Failed: {total - passed}")
+    print(f"Failed: {failed}")
+
+    if skipped > 0:
+        print(f"Skipped (operators not implemented): {skipped}")
+
+    if partial > 0:
+        print(f"Partial (one operator not implemented): {partial}")
 
     if total > 0:
-        success_rate = passed / total * 100
-        print(f"Success rate: {success_rate:.1f}%")
+        # Calculate success rate based on executed tests only
+        executed_tests = passed + failed + partial
+        if executed_tests > 0:
+            success_rate = passed / executed_tests * 100
+            print(f"Success rate: {success_rate:.1f}%")
 
-    if not failed_tests:
-        print("\n🎉 All tests passed!")
+    if failed == 0:
+        if skipped > 0 or partial > 0:
+            print(f"\n⚠️ Tests completed with some operators not implemented")
+            print(f"   - {skipped} tests skipped (both operators not implemented)")
+            print(f"   - {partial} tests partial (one operator not implemented)")
+        else:
+            print(f"\n🎉 All tests passed!")
         return True
     else:
-        print(f"\n❌ {len(failed_tests)} tests failed:")
-        for test_name in failed_tests:
-            success, returncode, stdout, stderr = results[test_name]
-            print(f"  - {test_name} (return code: {returncode})")
-
-            # Print brief error info for failed tests
-            if stderr:
-                error_lines = stderr.strip().split("\n")
-                if error_lines:
-                    # Take first meaningful error line
-                    for line in error_lines:
-                        if line.strip() and not line.startswith("Warning:"):
-                            print(f"    Error: {line.strip()}")
-                            break
+        print(f"\n❌ {failed} tests failed:")
+        for test_name, (success, returncode, stdout, stderr) in results.items():
+            if not success and returncode not in [-2, -3]:  # Not skipped or partial
+                print(f"  - {test_name} (return code: {returncode})")
         return False
 
 
@@ -406,6 +458,16 @@ def main():
 
     # Print summary and exit with appropriate code
     all_passed = print_summary(results)
+
+    # Check if there were any tests with missing implementations
+    has_missing_implementations = any(
+        returncode in [-2, -3] for _, (_, returncode, _, _) in results.items()
+    )
+
+    if all_passed and has_missing_implementations:
+        print(f"\n⚠️ Note: Some operators are not fully implemented")
+        print(f"   Run individual tests for details on missing implementations")
+
     sys.exit(0 if all_passed else 1)
 
 

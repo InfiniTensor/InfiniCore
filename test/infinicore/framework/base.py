@@ -176,6 +176,9 @@ class TestConfig:
         self.num_iterations = num_iterations
 
 
+# In base.py - update the TestRunner class
+
+
 class TestRunner:
     """Test runner"""
 
@@ -183,8 +186,24 @@ class TestRunner:
         self.test_cases = test_cases
         self.config = test_config
         self.failed_tests = []
+        self.skipped_tests = []  # Track skipped tests (both operators not implemented)
+        self.partial_tests = []  # Track partial tests (one operator not implemented)
+        self.passed_tests = (
+            []
+        )  # Track passed tests (both operators implemented and passed)
 
     def run_tests(self, devices, test_func, test_type="Test"):
+        """
+        Run tests on specified devices
+
+        Args:
+            devices: List of devices to test on
+            test_func: Test function to execute
+            test_type: Type of test for display purposes
+
+        Returns:
+            bool: True if no tests failed, False otherwise
+        """
         for device in devices:
             print(f"\n{'='*60}")
             print(f"Testing {test_type} on {InfiniDeviceNames[device]}")
@@ -194,26 +213,102 @@ class TestRunner:
                 try:
                     print(f"{test_case}")
 
-                    test_func(device, test_case, self.config)
-                    print(f"\033[92m✓\033[0m Passed")
+                    # Execute test and get result status
+                    success, status = test_func(device, test_case, self.config)
+
+                    # Handle different test statuses
+                    if status == "passed":
+                        self.passed_tests.append(
+                            f"{test_case} - {InfiniDeviceNames[device]}"
+                        )
+                        print(f"\033[92m✓\033[0m Passed")
+                    elif status == "skipped":
+                        # Test was skipped due to both operators not being implemented
+                        skip_msg = f"{test_case} - {InfiniDeviceNames[device]} - Both operators not implemented"
+                        self.skipped_tests.append(skip_msg)
+                        print(
+                            f"\033[93m⚠\033[0m Skipped - both operators not implemented"
+                        )
+                    elif status == "partial":
+                        # Test was partially executed (one operator not implemented)
+                        partial_msg = f"{test_case} - {InfiniDeviceNames[device]} - One operator not implemented"
+                        self.partial_tests.append(partial_msg)
+                        print(
+                            f"\033[93m⚠\033[0m Partial - one operator not implemented"
+                        )
+                    # Failed tests are handled in the exception handler below
+
                 except Exception as e:
-                    error_msg = f"Error: {e}"
+                    error_msg = (
+                        f"{test_case} - {InfiniDeviceNames[device]} - Error: {e}"
+                    )
                     print(f"\033[91m✗\033[0m {error_msg}")
                     self.failed_tests.append(error_msg)
                     if self.config.debug:
                         raise
 
+        # Return True if no tests failed (skipped/partial tests don't count as failures)
         return len(self.failed_tests) == 0
 
     def print_summary(self):
+        """
+        Print test execution summary
+
+        Returns:
+            bool: True if no tests failed, False otherwise
+        """
+        total_tests = len(self.test_cases)
+        passed_count = len(self.passed_tests)
+        skipped_count = len(self.skipped_tests)
+        partial_count = len(self.partial_tests)
+        failed_count = len(self.failed_tests)
+
+        print(f"\n{'='*60}")
+        print("TEST SUMMARY")
+        print(f"{'='*60}")
+        print(f"Total tests: {total_tests}")
+        print(f"\033[92mPassed: {passed_count}\033[0m")
+
+        # Display partial tests (one operator not implemented)
+        if self.partial_tests:
+            print(
+                f"\033[93mPartial (one operator not implemented): {partial_count}\033[0m"
+            )
+            for test in self.partial_tests:
+                print(f"  - {test}")
+
+        # Display skipped tests (both operators not implemented)
+        if self.skipped_tests:
+            print(
+                f"\033[93mSkipped (both operators not implemented): {skipped_count}\033[0m"
+            )
+            for test in self.skipped_tests:
+                print(f"  - {test}")
+
+        # Display failed tests
         if self.failed_tests:
-            print(f"\n\033[91m{len(self.failed_tests)} tests failed:\033[0m")
+            print(f"\033[91mFailed: {failed_count}\033[0m")
             for failure in self.failed_tests:
                 print(f"  - {failure}")
+
+            # Return False only if there are actual test failures
             return False
         else:
-            print("\n\033[92mAll tests passed!\033[0m")
-            return True
+            # Calculate success rate based on actual executed tests
+            executed_tests = passed_count + partial_count + failed_count
+            if executed_tests > 0:
+                success_rate = passed_count / executed_tests * 100
+                print(f"Success rate: {success_rate:.1f}%")
+
+            # If there are skipped or partial tests, show appropriate message
+            if self.skipped_tests or self.partial_tests:
+                print(
+                    f"\n\033[93mTests completed with some implementations missing\033[0m"
+                )
+                return True  # Skipped/partial tests don't count as failures
+            else:
+                print(f"\n\033[92mAll tests passed!\033[0m")
+                return True
 
 
 class BaseOperatorTest(ABC):
@@ -282,7 +377,19 @@ class BaseOperatorTest(ABC):
         return inputs, kwargs
 
     def run_test(self, device, test_case, config):
-        """Unified test execution flow"""
+        """
+        Unified test execution flow
+
+        Args:
+            device: Device to test on
+            test_case: Test case configuration
+            config: Test configuration
+
+        Returns:
+            tuple: (success, status) where:
+                success: bool indicating if test passed
+                status: str describing test status ("passed", "skipped", "partial")
+        """
         device_str = torch_device_map[device]
 
         # Prepare inputs and kwargs with actual tensors
@@ -358,8 +465,8 @@ class BaseOperatorTest(ABC):
 
         # Skip if neither operator is implemented
         if not torch_implemented and not infini_implemented:
-            print(f"⚠ Both operators not implemented - test skipped")
-            return
+            print(f"\033[93m⚠\033[0m Both operators not implemented - test skipped")
+            return False, "skipped"
 
         # Single operator execution without comparison
         if not torch_implemented or not infini_implemented:
@@ -367,7 +474,7 @@ class BaseOperatorTest(ABC):
                 "torch_operator" if not torch_implemented else "infinicore_operator"
             )
             print(
-                f"⚠ {missing_op} not implemented - running single operator without comparison"
+                f"\033[93m⚠\033[0m {missing_op} not implemented - running single operator without comparison"
             )
 
             if config.bench:
@@ -383,7 +490,7 @@ class BaseOperatorTest(ABC):
                     test_case.output_count,
                     comparison_target,
                 )
-            return
+            return False, "partial"
 
         # ==========================================================================
         # MULTIPLE OUTPUTS COMPARISON LOGIC
@@ -443,7 +550,10 @@ class BaseOperatorTest(ABC):
                 else:
                     print(f"✅ Output {i} comparison passed")
 
-            assert all_valid, f"Multiple outputs comparison failed for {test_case}"
+            if not all_valid:
+                raise AssertionError(
+                    f"Multiple outputs comparison failed for {test_case}"
+                )
 
         # ==========================================================================
         # SINGLE OUTPUT COMPARISON LOGIC
@@ -483,7 +593,8 @@ class BaseOperatorTest(ABC):
             )
 
             is_valid = compare_fn(infini_comparison, torch_comparison)
-            assert is_valid, f"Result comparison failed for {test_case}"
+            if not is_valid:
+                raise AssertionError(f"Result comparison failed for {test_case}")
 
         # ==========================================================================
         # UNIFIED BENCHMARKING LOGIC
@@ -501,6 +612,9 @@ class BaseOperatorTest(ABC):
                 test_case.output_count,
                 comparison_target,
             )
+
+        # Test passed successfully
+        return True, "passed"
 
     def _run_benchmarking(
         self,

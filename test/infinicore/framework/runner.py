@@ -18,7 +18,11 @@ class GenericTestRunner:
         self.args = get_args()
 
     def run(self):
-        """Execute the complete test suite"""
+        """Execute the complete test suite
+
+        Returns:
+            bool: True if all tests passed or were skipped/partial, False if any tests failed
+        """
         config = TestConfig(
             debug=self.args.debug,
             bench=self.args.bench,
@@ -29,18 +33,27 @@ class GenericTestRunner:
         runner = TestRunner(self.operator_test.test_cases, config)
         devices = get_test_devices(self.args)
 
-        # Run unified tests
-        all_passed = runner.run_tests(
+        # Run unified tests - returns True if no tests failed
+        # (skipped/partial tests don't count as failures)
+        has_no_failures = runner.run_tests(
             devices, self.operator_test.run_test, self.operator_test.operator_name
         )
 
-        # Print summary
+        # Print summary and get final result
+        # summary_passed returns True if no tests failed (skipped/partial are OK)
         summary_passed = runner.print_summary()
-        all_passed = all_passed and summary_passed
 
-        return all_passed
+        # Both conditions must be True for overall success
+        # - has_no_failures: no test failures during execution
+        # - summary_passed: summary confirms no failures
+        return has_no_failures and summary_passed
 
     def run_and_exit(self):
-        """Run tests and exit with appropriate status code"""
+        """Run tests and exit with appropriate status code
+
+        Exit codes:
+            0: All tests passed or were skipped/partial (no failures)
+            1: One or more tests failed
+        """
         success = self.run()
         sys.exit(0 if success else 1)
