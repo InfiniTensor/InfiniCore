@@ -1,0 +1,91 @@
+import sys
+import os
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+import torch
+import infinicore
+from framework.base import BaseOperatorTest, TensorSpec, TestCase
+from framework.runner import GenericTestRunner
+from framework.utils import is_broadcast
+
+# Test cases format: (shape, dim, a_strides_or_None, b_strides_or_None)
+# infinicore.cross(a, b, dim=-1)
+
+_TEST_CASES_DATA = [
+    ((8, 3), -1, None, None),
+    ((2, 3, 3), 2, None, (9, 3, 1)),
+    ((4, 3, 5), 1, None, None),
+    ((3, 3), -1, (9, 3), None),
+    ((16, 3), -1, None, None),
+    ((2, 3, 4, 3), 3, None, None),
+]
+
+_TOLERANCE_MAP = {
+    infinicore.float16: {"atol": 0, "rtol": 1e-2},
+    infinicore.float32: {"atol": 0, "rtol": 1e-4},
+    infinicore.bfloat16: {"atol": 0, "rtol": 5e-2},
+}
+
+_TENSOR_DTYPES = [infinicore.float16, infinicore.bfloat16, infinicore.float32]
+
+
+def parse_test_cases():
+    test_cases = []
+    for data in _TEST_CASES_DATA:
+        shape, dim = data[0], data[1]
+        a_strides = data[2] if len(data) > 2 else None
+        b_strides = data[3] if len(data) > 3 else None
+
+        a_supports_inplace = not is_broadcast(a_strides)
+        b_supports_inplace = not is_broadcast(b_strides)
+
+        for dtype in _TENSOR_DTYPES:
+            tol = _TOLERANCE_MAP.get(dtype, {"atol": 0, "rtol": 1e-4})
+            a_spec = TensorSpec.from_tensor(shape, a_strides, dtype)
+            b_spec = TensorSpec.from_tensor(shape, b_strides, dtype)
+
+            kwargs = {"dim": dim}
+
+            # Out-of-place
+            test_cases.append(
+                TestCase(
+                    inputs=[a_spec, b_spec],
+                    kwargs=kwargs,
+                    output_spec=None,
+                    comparison_target=None,
+                    tolerance=tol,
+                    description=f"cross - OUT_OF_PLACE",
+                )
+            )
+
+            # explicit out not supported by infinicore.cross
+
+    return test_cases
+
+
+class OpTest(BaseOperatorTest):
+    """Cross operator test with simplified implementation"""
+
+    def __init__(self):
+        super().__init__("Cross")
+
+    def get_test_cases(self):
+        return parse_test_cases()
+
+    def torch_operator(self, *args, **kwargs):
+        return torch.cross(*args, **kwargs)
+
+    # def infinicore_operator(self, *args, **kwargs):
+    #     """InfiniCore implementation (operator not yet available)."""
+    #     return infinicore.cross(*args, **kwargs)
+
+
+def main():
+    """Main entry point"""
+    runner = GenericTestRunner(OpTest)
+    runner.run_and_exit()
+
+
+if __name__ == "__main__":
+    main()

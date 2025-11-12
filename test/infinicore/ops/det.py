@@ -1,0 +1,75 @@
+import sys
+import os
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+import torch
+import infinicore
+from framework.base import BaseOperatorTest, TensorSpec, TestCase
+from framework.runner import GenericTestRunner
+
+# Test cases format: (matrix_shape, strides_or_None)
+# det(input) — only out-of-place (no inplace/out parameter for det)
+
+_TEST_CASES_DATA = [
+    ((1, 1), None),
+    ((2, 2), None),
+    ((3, 3), (3, 1)),
+    ((4, 4), None),
+    ((8, 8), (512, 1)),
+    ((16, 16), None),
+]
+
+_TOLERANCE_MAP = {
+    infinicore.float32: {"atol": 1e-5, "rtol": 1e-4},
+}
+
+_TENSOR_DTYPES = [infinicore.float32]
+
+
+def parse_test_cases():
+    test_cases = []
+    for shape, strides in _TEST_CASES_DATA:
+        for dtype in _TENSOR_DTYPES:
+            tol = _TOLERANCE_MAP.get(dtype, {"atol": 1e-5, "rtol": 1e-4})
+            spec = TensorSpec.from_tensor(shape, strides, dtype)
+
+            test_cases.append(
+                TestCase(
+                    inputs=[spec],
+                    kwargs={},
+                    output_spec=None,
+                    comparison_target=None,
+                    tolerance=tol,
+                    description="det - OUT_OF_PLACE",
+                )
+            )
+
+    return test_cases
+
+
+class OpTest(BaseOperatorTest):
+    """det operator test with simplified implementation"""
+
+    def __init__(self):
+        super().__init__("det")
+
+    def get_test_cases(self):
+        return parse_test_cases()
+
+    def torch_operator(self, *args, **kwargs):
+        return torch.det(*args, **kwargs)
+
+    # def infinicore_operator(self, *args, **kwargs):
+    #     """InfiniCore implementation (operator not yet available)."""
+    #     return infinicore.det(*args, **kwargs)
+
+
+def main():
+    """Main entry point"""
+    runner = GenericTestRunner(OpTest)
+    runner.run_and_exit()
+
+
+if __name__ == "__main__":
+    main()

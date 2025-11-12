@@ -86,7 +86,7 @@ def parse_test_cases():
                 test_cases.append(
                     TestCase(
                         inputs=[a_spec, b_spec],
-                        kwargs=None,
+                        kwargs={},
                         output_spec=c_spec,  # Specify the output tensor spec
                         comparison_target="out",
                         tolerance=tolerance,

@@ -202,7 +202,7 @@ def parse_test_cases():
                     output_spec=None,
                     comparison_target=None,
                     tolerance=tolerance,
-                    description=f"Attention - OUT_OF_PLACE",
+                    description="Attention - OUT_OF_PLACE",
                 )
             )
 
@@ -215,7 +215,7 @@ def parse_test_cases():
                         output_spec=output_spec,  # Specify the output tensor spec
                         comparison_target="out",
                         tolerance=tolerance,
-                        description=f"Attention - INPLACE(out)",
+                        description="Attention - INPLACE(out)",
                     )
                 )
 

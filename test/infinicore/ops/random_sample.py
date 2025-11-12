@@ -80,7 +80,7 @@ def parse_test_cases():
                     ),
                     comparison_target="out",
                     tolerance=tolerance,
-                    description=f"RandomSample - OUT",
+                    description=f"RandomSample - INPLACE(out)",
                 )
             )
 
@@ -109,7 +109,11 @@ def torch_random_sample(data, random_val, topp, topk, voc, temperature):
             idx = torch.searchsorted(cum_probs, threshold)
         except Exception:
             indices = (cum_probs >= threshold).nonzero(as_tuple=True)[0]
-            idx = indices[0] if indices.numel() > 0 else torch.tensor(len(cum_probs) - 1, device=cum_probs.device)
+            idx = (
+                indices[0]
+                if indices.numel() > 0
+                else torch.tensor(len(cum_probs) - 1, device=cum_probs.device)
+            )
         return sorted_indices[idx]
 
     return torch.argmax(data)
@@ -191,18 +195,18 @@ class OpTest(BaseOperatorTest):
     def run_test(self, device, test_case, config):
         """
         Override run_test to handle random_sample's special comparison logic.
-        
+
         For random_sample, if the indices differ but the logits values at those
         indices are equal, the result is still considered valid. This handles
         cases where multiple valid indices exist due to floating-point precision.
-        
+
         This is necessary because random_sample can return different valid indices
         when multiple positions have the same logits value, especially with
         low-precision types like bfloat16 due to floating-point rounding.
         """
         # Clear stored logits before test to ensure fresh generation
         self._current_logits = None
-        
+
         try:
             # Try the standard comparison first
             # This will call prepare_inputs_and_kwargs which will set self._current_logits
@@ -210,22 +214,22 @@ class OpTest(BaseOperatorTest):
         except AssertionError:
             # If standard comparison fails, check if this is a valid case where
             # indices differ but logits values are equal
-            
+
             # Only handle if we have stored logits (from prepare_inputs_and_kwargs)
             if self._current_logits is None:
                 raise
-            
+
             logits_tensor = self._current_logits
-            
+
             # Re-run operations with the same logits to get results for comparison
             # prepare_inputs_and_kwargs will reuse self._current_logits if it exists
             from framework.utils import (
                 infinicore_tensor_from_torch,
                 convert_infinicore_to_torch,
             )
-            
+
             inputs, kwargs = self.prepare_inputs_and_kwargs(test_case, device)
-            
+
             # Prepare infinicore inputs
             infini_inputs = []
             for inp in inputs:
@@ -235,16 +239,18 @@ class OpTest(BaseOperatorTest):
                     infini_inputs.append(infini_tensor)
                 else:
                     infini_inputs.append(inp)
-            
+
             infini_kwargs = kwargs.copy()
-            if "out" in infini_kwargs and isinstance(infini_kwargs["out"], torch.Tensor):
+            if "out" in infini_kwargs and isinstance(
+                infini_kwargs["out"], torch.Tensor
+            ):
                 cloned_out = infini_kwargs["out"].clone().detach()
                 infini_kwargs["out"] = infinicore_tensor_from_torch(cloned_out)
-            
+
             # Run both operators
             torch_result = self.torch_operator(*inputs, **kwargs)
             infini_result = self.infinicore_operator(*infini_inputs, **infini_kwargs)
-            
+
             # Extract indices from results
             comparison_target = test_case.comparison_target
             if comparison_target == "out":
@@ -261,11 +267,11 @@ class OpTest(BaseOperatorTest):
                     infini_result, torch_result
                 )
                 ic_idx = torch_result_from_infini.item()
-            
+
             # Check if indices are equal (standard case)
             if ic_idx == ref_idx:
                 return
-            
+
             # Special case: indices differ but logits values are equal
             # This is valid for random_sample when multiple indices have the same logits value
             try:
@@ -277,7 +283,7 @@ class OpTest(BaseOperatorTest):
             except (IndexError, RuntimeError):
                 # If we can't access the logits, fall through to raise the original error
                 pass
-            
+
             # If we get here, the results are truly different
             raise
 
