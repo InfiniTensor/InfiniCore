@@ -7,3 +7,5 @@ def mul(input, other, *, out=None):
         return Tensor(_infinicore.mul(input._underlying, other._underlying))
 
     _infinicore.mul_(out._underlying, input._underlying, other._underlying)
+
+    return out

@@ -389,7 +389,7 @@ class BaseOperatorTest(ABC):
 
     def prepare_inputs_and_kwargs(self, test_case, device):
         """Prepare inputs and kwargs, replacing TensorSpec objects with actual tensors
-        Supports tuple inputs for operators like torch.cat
+        Supports tuple inputs for operators like torch.cat and TensorSpec in kwargs
         """
         inputs = []
         kwargs = test_case.kwargs.copy()
@@ -443,6 +443,11 @@ class BaseOperatorTest(ABC):
                     f"Invalid input index for in-place operation: {input_idx}"
                 )
 
+        for key, value in list(kwargs.items()):
+            if isinstance(value, TensorSpec):
+                # Replace TensorSpec with actual tensor
+                kwargs[key] = self._create_tensor_from_spec(value, device)
+
         return inputs, kwargs
 
     def run_test(self, device, test_case, config):
@@ -487,6 +492,17 @@ class BaseOperatorTest(ABC):
                 infini_inputs.append(infini_tensor)
             else:
                 infini_inputs.append(inp)
+
+        infini_kwargs = {}
+        for key, value in kwargs.items():
+            if isinstance(value, torch.Tensor):
+                # Clone tensor and convert to infinicore
+                cloned_value = value.clone().detach()
+                torch_input_clones.append(cloned_value)
+                infini_kwargs[key] = infinicore_tensor_from_torch(cloned_value)
+            else:
+                # Pass through non-tensor values (scalars, strings, etc.)
+                infini_kwargs[key] = value
 
         # Determine comparison target
         comparison_target = test_case.comparison_target

@@ -64,7 +64,7 @@ def build_test_cases():
                     output_spec=None,
                     comparison_target=None,
                     tolerance=tolerance,
-                    description=f"Mul - OUT_OF_PLACE (dtype={dtype})",
+                    description=f"Mul - OUT_OF_PLACE",
                 )
             )
 
@@ -77,7 +77,7 @@ def build_test_cases():
                         output_spec=c_spec,
                         comparison_target="out",
                         tolerance=tolerance,
-                        description=f"Mul - INPLACE(out) (dtype={dtype})",
+                        description=f"Mul - INPLACE(out)",
                     )
                 )
 
@@ -90,7 +90,7 @@ def build_test_cases():
                         output_spec=None,
                         comparison_target=0,
                         tolerance=tolerance,
-                        description=f"Mul - INPLACE(a) (dtype={dtype})",
+                        description=f"Mul - INPLACE(a)",
                     )
                 )
 
@@ -103,7 +103,7 @@ def build_test_cases():
                         output_spec=None,
                         comparison_target=1,
                         tolerance=tolerance,
-                        description=f"Mul - INPLACE(b) (dtype={dtype})",
+                        description=f"Mul - INPLACE(b)",
                     )
                 )
 

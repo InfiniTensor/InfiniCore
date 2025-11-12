@@ -310,22 +310,15 @@ class TensorSpec:
 
     @classmethod
     def from_strided_tensor(
-        cls, shape, strides, dtype=None, init_mode=TensorInitializer.RANDOM, **kwargs
+        cls,
+        shape,
+        strides,
+        dtype=None,
+        init_mode=TensorInitializer.RANDOM,
+        **kwargs,
     ):
         """Alias for from_tensor with explicit strides (for backward compatibility)"""
         return cls.from_tensor(shape, strides, dtype, init_mode, **kwargs)
-
-    def with_dtype(self, dtype):
-        """Create a new TensorSpec with the specified dtype"""
-        return TensorSpec(
-            shape=self.shape,
-            dtype=dtype,
-            strides=self.strides,
-            value=self.value,
-            is_scalar=self.is_scalar,
-            init_mode=self.init_mode,
-            **self.kwargs,
-        )
 
     def create_torch_tensor(self, device):
         """Create a torch tensor based on this specification"""
@@ -335,7 +328,7 @@ class TensorSpec:
         # Create tensor using unified interface
         return TensorInitializer.create_tensor(
             shape=self.shape,
-            dtype=self.dtype,  # Use the dtype from the spec
+            dtype=self.dtype,
             device=device,
             mode=self.init_mode,
             strides=self.strides,
