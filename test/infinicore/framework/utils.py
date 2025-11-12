@@ -42,7 +42,11 @@ def debug(actual, desired, atol=0, rtol=1e-2, equal_nan=False, verbose=True):
     """
     Debug function to compare two tensors and print differences
     """
-    if actual.dtype == torch.bfloat16 or desired.dtype == torch.bfloat16:
+    # Handle complex types by converting to real representation for comparison
+    if actual.is_complex() or desired.is_complex():
+        actual = torch.view_as_real(actual)
+        desired = torch.view_as_real(desired)
+    elif actual.dtype == torch.bfloat16 or desired.dtype == torch.bfloat16:
         actual = actual.to(torch.float32)
         desired = desired.to(torch.float32)
 
@@ -162,8 +166,6 @@ def convert_infinicore_to_torch(infini_result):
 
     Args:
         infini_result: infinicore tensor result
-        dtype: infinicore data type
-        device_str: torch device string
 
     Returns:
         torch.Tensor: PyTorch tensor with infinicore data
@@ -258,6 +260,24 @@ def compare_results(
         result_equal = torch.equal(torch_result_from_infini, torch_result)
         if debug_mode and not result_equal:
             print("Integer tensor comparison failed - requiring exact equality")
+        return result_equal
+    elif is_complex_dtype(torch_result_from_infini.dtype) or is_complex_dtype(
+        torch_result.dtype
+    ):
+        # Complex number comparison - compare real and imaginary parts separately
+        real_close = torch.allclose(
+            torch_result_from_infini.real, torch_result.real, atol=atol, rtol=rtol
+        )
+        imag_close = torch.allclose(
+            torch_result_from_infini.imag, torch_result.imag, atol=atol, rtol=rtol
+        )
+        result_equal = real_close and imag_close
+        if debug_mode and not result_equal:
+            print("Complex tensor comparison failed")
+            if not real_close:
+                print("  Real parts don't match")
+            if not imag_close:
+                print("  Imaginary parts don't match")
         return result_equal
     else:
         # Tolerance-based comparison for floating-point types
@@ -381,4 +401,19 @@ def is_integer_dtype(dtype):
         torch.int64,
         torch.uint8,
         torch.bool,
+    ]
+
+
+def is_complex_dtype(dtype):
+    """Check if dtype is complex type"""
+    return dtype in [torch.complex64, torch.complex128]
+
+
+def is_floating_dtype(dtype):
+    """Check if dtype is floating-point type"""
+    return dtype in [
+        torch.float16,
+        torch.float32,
+        torch.float64,
+        torch.bfloat16,
     ]

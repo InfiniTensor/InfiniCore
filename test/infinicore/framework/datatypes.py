@@ -8,6 +8,8 @@ def to_torch_dtype(infini_dtype):
         return torch.float16
     elif infini_dtype == infinicore.float32:
         return torch.float32
+    elif infini_dtype == infinicore.float64:
+        return torch.float64
     elif infini_dtype == infinicore.bfloat16:
         return torch.bfloat16
     elif infini_dtype == infinicore.int8:
@@ -22,6 +24,10 @@ def to_torch_dtype(infini_dtype):
         return torch.uint8
     elif infini_dtype == infinicore.bool:
         return torch.bool
+    elif infini_dtype == infinicore.complex64:
+        return torch.complex64
+    elif infini_dtype == infinicore.complex128:
+        return torch.complex128
     else:
         raise ValueError(f"Unsupported infinicore dtype: {infini_dtype}")
 
@@ -30,6 +36,8 @@ def to_infinicore_dtype(torch_dtype):
     """Convert PyTorch data type to infinicore data type"""
     if torch_dtype == torch.float32:
         return infinicore.float32
+    elif torch_dtype == torch.float64:
+        return infinicore.float64
     elif torch_dtype == torch.float16:
         return infinicore.float16
     elif torch_dtype == torch.bfloat16:
@@ -46,5 +54,9 @@ def to_infinicore_dtype(torch_dtype):
         return infinicore.uint8
     elif torch_dtype == torch.bool:
         return infinicore.bool
+    elif torch_dtype == torch.complex64:
+        return infinicore.complex64
+    elif torch_dtype == torch.complex128:
+        return infinicore.complex128
     else:
         raise ValueError(f"Unsupported torch dtype: {torch_dtype}")

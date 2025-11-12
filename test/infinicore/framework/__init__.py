@@ -9,6 +9,9 @@ from .utils import (
     profile_operation,
     rearrange_tensor,
     convert_infinicore_to_torch,
+    is_integer_dtype,
+    is_complex_dtype,
+    is_floating_dtype,
 )
 from .config import (
     get_args,
@@ -46,4 +49,8 @@ __all__ = [
     "to_infinicore_dtype",
     "to_torch_dtype",
     "torch_device_map",
+    # Type checking utilities
+    "is_integer_dtype",
+    "is_complex_dtype",
+    "is_floating_dtype",
 ]
