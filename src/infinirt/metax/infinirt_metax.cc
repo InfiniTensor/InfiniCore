@@ -1,7 +1,12 @@
 #include "infinirt_metax.h"
 #include "../../utils.h"
+#ifdef ENABLE_METAX_MC_API
+#include <mcr/mc_runtime.h>
+#include <mcr/mc_runtime_api.h>
+#else
 #include <hcr/hc_runtime.h>
 #include <hcr/hc_runtime_api.h>
+#endif
 
 #define CHECK_MACART(RT_API) CHECK_INTERNAL(RT_API, hcSuccess)
 

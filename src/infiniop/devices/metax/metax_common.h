@@ -1,8 +1,15 @@
 #include "../../../utils.h"
 #include "../pool.h"
 #include "metax_handle.h"
+#include "metax_ht2mc.h"
+
+#ifdef ENABLE_METAX_MC_API
+#include <mcblas/mcblas.h>
+#include <mcdnn/mcdnn.h>
+#else
 #include <hcblas/hcblas.h>
 #include <hcdnn/hcdnn.h>
+#endif
 #include <memory>
 
 #define CHECK_MCBLAS(API) CHECK_INTERNAL(API, HCBLAS_STATUS_SUCCESS)
