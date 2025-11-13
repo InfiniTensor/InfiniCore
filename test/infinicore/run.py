@@ -6,31 +6,22 @@ from pathlib import Path
 from typing import Dict, Tuple, List
 
 
-def find_ops_directory(start_dir=None):
+def find_ops_directory(location=None):
     """
-    Find the ops directory by searching from start_dir upwards.
+    Find the ops directory by searching from location upwards.
 
     Args:
-        start_dir: Starting directory for search (default: current file's parent)
+        location: Starting directory for search (default: current file's parent)
 
     Returns:
         Path: Path to ops directory or None if not found
     """
-    if start_dir is None:
-        start_dir = Path(__file__).parent
+    if location is None:
+        location = Path(__file__).parent / "ops"
 
-    # Look for ops directory in common locations
-    possible_locations = [
-        start_dir / "ops",
-        start_dir / ".." / "ops",
-        start_dir / ".." / "test" / "ops",
-        start_dir / "test" / "ops",
-    ]
-
-    for location in possible_locations:
-        ops_dir = location.resolve()
-        if ops_dir.exists() and any(ops_dir.glob("*.py")):
-            return ops_dir
+    ops_dir = location.resolve()
+    if ops_dir.exists() and any(ops_dir.glob("*.py")):
+        return ops_dir
 
     return None
 
@@ -116,7 +107,7 @@ def run_all_op_tests(ops_dir=None, specific_ops=None, extra_args=None):
         filtered_files = []
         for test_file in operator_test_files:
             test_name = test_file.stem.lower()
-            if any(op.lower() in test_name for op in specific_ops):
+            if any(op.lower() == test_name for op in specific_ops):
                 filtered_files.append(test_file)
         operator_test_files = filtered_files
 
@@ -135,8 +126,8 @@ def run_all_op_tests(ops_dir=None, specific_ops=None, extra_args=None):
         test_name = test_file.stem
 
         try:
-            # Run the test script
-            cmd = [sys.executable, str(test_file)]
+            # Run the test script - use the absolute path and run from current directory
+            cmd = [sys.executable, str(test_file.absolute())]
 
             # Add extra arguments if provided
             if extra_args:
@@ -144,7 +135,6 @@ def run_all_op_tests(ops_dir=None, specific_ops=None, extra_args=None):
 
             result = subprocess.run(
                 cmd,
-                cwd=ops_dir,
                 capture_output=True,  # Capture output to analyze
                 text=True,
             )
@@ -154,22 +144,23 @@ def run_all_op_tests(ops_dir=None, specific_ops=None, extra_args=None):
             stderr_lower = result.stderr.lower()
 
             # Check for operator not implemented patterns
-            if "not implemented" in stdout_lower or "not implemented" in stderr_lower:
-                if "both operators not implemented" in stdout_lower:
-                    # Both operators not implemented - skipped test
-                    success = True  # Not a failure, but skipped
-                    returncode = -2  # Special code for skipped
-                elif "one operator not implemented" in stdout_lower:
-                    # One operator not implemented - partial test
-                    success = False  # Not fully successful
-                    returncode = -3  # Special code for partial
-                else:
-                    # General not implemented case
-                    success = result.returncode == 0
-                    returncode = result.returncode
+            if (
+                "all tests passed!" in stdout_lower
+                and "success rate: 100.0%" in stdout_lower
+            ):
+                success = True
+                returncode = 0
+            elif "both operators not implemented" in stdout_lower:
+                # Both operators not implemented - skipped test
+                success = False  # Not a failure, but skipped
+                returncode = -2  # Special code for skipped
+            elif "one operator not implemented" in stdout_lower:
+                # One operator not implemented - partial test
+                success = False  # Not fully successful
+                returncode = -3  # Special code for partial
             else:
-                success = result.returncode == 0
-                returncode = result.returncode
+                success = False
+                returncode = -1
 
             results[test_name] = (
                 success,
@@ -193,10 +184,10 @@ def run_all_op_tests(ops_dir=None, specific_ops=None, extra_args=None):
             # Enhanced status display
             if returncode == -2:
                 status_icon = "⏭️"
-                status_text = "SKIPPED (operators not implemented)"
+                status_text = "SKIPPED"
             elif returncode == -3:
                 status_icon = "⚠️"
-                status_text = "PARTIAL (one operator not implemented)"
+                status_text = "PARTIAL"
             elif success:
                 status_icon = "✅"
                 status_text = "PASSED"
@@ -205,7 +196,7 @@ def run_all_op_tests(ops_dir=None, specific_ops=None, extra_args=None):
                 status_text = "FAILED"
 
             print(
-                f"{status_icon} {test_name}: {status_text} (return code: {returncode})"
+                f"{status_icon}  {test_name}: {status_text} (return code: {returncode})"
             )
 
         except Exception as e:
@@ -218,7 +209,7 @@ def run_all_op_tests(ops_dir=None, specific_ops=None, extra_args=None):
 def print_summary(results):
     """Print a comprehensive summary of test results."""
     print(f"\n{'='*80}")
-    print("TEST SUMMARY")
+    print("CUMULATIVE TEST SUMMARY")
     print(f"{'='*80}")
 
     if not results:
@@ -230,16 +221,24 @@ def print_summary(results):
     failed = 0
     skipped = 0
     partial = 0
+    passed_operators = []  # Store passed operator names
+    failed_operators = []  # Store failed operator names
+    skipped_operators = []  # Store skipped operator names
+    partial_operators = []  # Store partial operator names
 
     for test_name, (success, returncode, stdout, stderr) in results.items():
         if success:
             passed += 1
+            passed_operators.append(test_name)
         elif returncode == -2:  # Special code for skipped tests
             skipped += 1
+            skipped_operators.append(test_name)
         elif returncode == -3:  # Special code for partial tests
             partial += 1
+            partial_operators.append(test_name)
         else:
             failed += 1
+            failed_operators.append(test_name)
 
     total = len(results)
 
@@ -248,31 +247,59 @@ def print_summary(results):
     print(f"Failed: {failed}")
 
     if skipped > 0:
-        print(f"Skipped (operators not implemented): {skipped}")
+        print(f"Skipped: {skipped}")
 
     if partial > 0:
-        print(f"Partial (one operator not implemented): {partial}")
+        print(f"Partial: {partial}")
+
+    # Display passed operators
+    if passed_operators:
+        print(f"\n✅ PASSED OPERATORS ({len(passed_operators)}):")
+        # Display operators in groups of 10 per line
+        for i in range(0, len(passed_operators), 10):
+            line_ops = passed_operators[i : i + 10]
+            print("  " + ", ".join(line_ops))
+    else:
+        print(f"\n✅ PASSED OPERATORS: None")
+
+    # Display failed operators (if any)
+    if failed_operators:
+        print(f"\n❌ FAILED OPERATORS ({len(failed_operators)}):")
+        for i in range(0, len(failed_operators), 10):
+            line_ops = failed_operators[i : i + 10]
+            print("  " + ", ".join(line_ops))
+
+    # Display skipped operators (if any)
+    if skipped_operators:
+        print(f"\n⏭️ SKIPPED OPERATORS ({len(skipped_operators)}):")
+        for i in range(0, len(skipped_operators), 10):
+            line_ops = skipped_operators[i : i + 10]
+            print("  " + ", ".join(line_ops))
+
+    # Display partial operators (if any)
+    if partial_operators:
+        print(f"\n⚠️  PARTIAL OPERATORS ({len(partial_operators)}):")
+        for i in range(0, len(partial_operators), 10):
+            line_ops = partial_operators[i : i + 10]
+            print("  " + ", ".join(line_ops))
 
     if total > 0:
         # Calculate success rate based on executed tests only
         executed_tests = passed + failed + partial
         if executed_tests > 0:
             success_rate = passed / executed_tests * 100
-            print(f"Success rate: {success_rate:.1f}%")
+            print(f"\nSuccess rate: {success_rate:.1f}%")
 
     if failed == 0:
         if skipped > 0 or partial > 0:
-            print(f"\n⚠️ Tests completed with some operators not implemented")
+            print(f"\n⚠️  Tests completed with some operators not implemented")
             print(f"   - {skipped} tests skipped (both operators not implemented)")
             print(f"   - {partial} tests partial (one operator not implemented)")
         else:
             print(f"\n🎉 All tests passed!")
         return True
     else:
-        print(f"\n❌ {failed} tests failed:")
-        for test_name, (success, returncode, stdout, stderr) in results.items():
-            if not success and returncode not in [-2, -3]:  # Not skipped or partial
-                print(f"  - {test_name} (return code: {returncode})")
+        print(f"\n❌ {failed} tests failed")
         return False
 
 
@@ -465,7 +492,7 @@ def main():
     )
 
     if all_passed and has_missing_implementations:
-        print(f"\n⚠️ Note: Some operators are not fully implemented")
+        print(f"\n⚠️  Note: Some operators are not fully implemented")
         print(f"   Run individual tests for details on missing implementations")
 
     sys.exit(0 if all_passed else 1)
