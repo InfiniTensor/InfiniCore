@@ -26,6 +26,9 @@ from infinicore.dtype import (
     long,
     short,
     uint8,
+    uint16,
+    uint32,
+    uint64,
 )
 from infinicore.ops.add import add
 from infinicore.ops.attention import attention
@@ -41,6 +44,7 @@ from infinicore.tensor import (
     ones,
     strided_empty,
     strided_from_blob,
+    tensor,
     zeros,
 )
 
@@ -74,6 +78,9 @@ __all__ = [
     "long",
     "short",
     "uint8",
+    "uint16",
+    "uint32",
+    "uint64",
     # Operations.
     "add",
     "attention",
@@ -87,6 +94,7 @@ __all__ = [
     "ones",
     "strided_empty",
     "strided_from_blob",
+    "tensor",
     "zeros",
 ]
 
