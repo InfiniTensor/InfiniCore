@@ -51,6 +51,23 @@ Args:
     v_cache: Value cache tensor
     pos: Current position in the sequence
 )doc");
+
+    m.def("scaled_dot_product_attention",
+          &op::scaled_dot_product_attention,
+          py::arg("query"),
+          py::arg("key"),
+          py::arg("value"),
+          py::arg("scale") = py::none(),
+          R"doc(Computes scaled dot product attention on query, key and value tensors)doc");
+
+    m.def("scaled_dot_product_attention_",
+          &op::scaled_dot_product_attention_,
+          py::arg("out"),
+          py::arg("query"),
+          py::arg("key"),
+          py::arg("value"),
+          py::arg("scale") = py::none(),
+          R"doc(In-place, Computes scaled dot product attention on query, key and value tensors)doc");
 }
 
 } // namespace infinicore::ops
