@@ -103,7 +103,7 @@ def parse_test_cases():
     return test_cases
 
 
-class MultiMarginLossOpTest(BaseOperatorTest):
+class OpTest(BaseOperatorTest):
     """MultiMarginLoss operator test with device handling"""
 
     def __init__(self):
@@ -116,9 +116,9 @@ class MultiMarginLossOpTest(BaseOperatorTest):
         """PyTorch multi_margin_loss implementation with device handling"""
         return F.multi_margin_loss(*args, **kwargs)
 
-    def infinicore_operator(self, *args, **kwargs):
-        """InfiniCore multi_margin_loss implementation"""
-        return None
+    # def infinicore_operator(self, *args, **kwargs):
+    #     """InfiniCore multi_margin_loss implementation"""
+    #     return None
 
 
 def main():

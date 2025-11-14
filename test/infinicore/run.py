@@ -1,9 +1,10 @@
 import os
 import sys
-import subprocess
 import argparse
 from pathlib import Path
-from typing import Dict, Tuple, List
+import importlib.util
+
+from framework import get_hardware_args_group
 
 
 def find_ops_directory(location=None):
@@ -58,9 +59,59 @@ def get_available_operators(ops_dir):
     return sorted(operators)
 
 
-def run_all_op_tests(ops_dir=None, specific_ops=None, extra_args=None):
+def import_operator_test(test_file_path):
     """
-    Run all operator test scripts in the ops directory.
+    Import an operator test module and return the test class instance.
+
+    Args:
+        test_file_path: Path to the test file
+
+    Returns:
+        tuple: (success, test_instance_or_error)
+    """
+    try:
+        # Create a unique module name
+        module_name = f"op_test_{test_file_path.stem}"
+
+        # Load the module from file
+        spec = importlib.util.spec_from_file_location(module_name, test_file_path)
+        if spec is None or spec.loader is None:
+            return False, f"Could not load module from {test_file_path}"
+
+        module = importlib.util.module_from_spec(spec)
+
+        # Add the module to sys.modules
+        sys.modules[module_name] = module
+
+        # Execute the module
+        spec.loader.exec_module(module)
+
+        # Find the test class (usually named OpTest)
+        test_class = None
+        for attr_name in dir(module):
+            attr = getattr(module, attr_name)
+            if (
+                isinstance(attr, type)
+                and hasattr(attr, "__bases__")
+                and any("BaseOperatorTest" in str(base) for base in attr.__bases__)
+            ):
+                test_class = attr
+                break
+
+        if test_class is None:
+            return False, f"No test class found in {test_file_path}"
+
+        # Create an instance
+        test_instance = test_class()
+        return True, test_instance
+
+    except Exception as e:
+        return False, f"Error importing {test_file_path}: {str(e)}"
+
+
+def run_all_op_tests(ops_dir=None, specific_ops=None, bench=False, verbose=False):
+    """
+    Run all operator test scripts in the ops directory using direct import.
 
     Args:
         ops_dir (str, optional): Path to the ops directory. If None, uses auto-detection.
@@ -68,7 +119,7 @@ def run_all_op_tests(ops_dir=None, specific_ops=None, extra_args=None):
         extra_args (list, optional): Extra command line arguments to pass to test scripts.
 
     Returns:
-        dict: Results dictionary with test names as keys and (success, return_code, stdout, stderr) as values.
+        dict: Results dictionary with test names as keys and (success, test_runner, stdout, stderr) as values.
     """
     if ops_dir is None:
         ops_dir = find_ops_directory()
@@ -122,92 +173,184 @@ def run_all_op_tests(ops_dir=None, specific_ops=None, extra_args=None):
 
     results = {}
 
+    cumulative_timing = {
+        "total_torch_time": 0.0,
+        "total_infinicore_time": 0.0,
+        "operators_tested": 0,
+    }
+
     for test_file in operator_test_files:
         test_name = test_file.stem
 
         try:
-            # Run the test script - use the absolute path and run from current directory
-            cmd = [sys.executable, str(test_file.absolute())]
+            # Import and run the test directly
+            success, test_instance_or_error = import_operator_test(test_file)
 
-            # Add extra arguments if provided
-            if extra_args:
-                cmd.extend(extra_args)
+            if not success:
+                print(f"💥 {test_name}: ERROR - {test_instance_or_error}")
+                results[test_name] = {
+                    "success": False,
+                    "return_code": -1,
+                    "torch_time": 0.0,
+                    "infini_time": 0.0,
+                    "error_message": test_instance_or_error,
+                    "test_runner": None,
+                    "stdout": "",
+                    "stderr": test_instance_or_error,
+                }
+                continue
 
-            result = subprocess.run(
-                cmd,
-                capture_output=True,  # Capture output to analyze
-                text=True,
-            )
+            # Get the test runner class from the module
+            test_module = sys.modules[f"op_test_{test_file.stem}"]
+            if not hasattr(test_module, "GenericTestRunner"):
+                print(f"💥 {test_name}: ERROR - No GenericTestRunner found")
+                results[test_name] = {
+                    "success": False,
+                    "return_code": -1,
+                    "torch_time": 0.0,
+                    "infini_time": 0.0,
+                    "error_message": "No GenericTestRunner found",
+                    "test_runner": None,
+                    "stdout": "",
+                    "stderr": "No GenericTestRunner found",
+                }
+                continue
 
-            # Analyze output to determine test status
-            stdout_lower = result.stdout.lower()
-            stderr_lower = result.stderr.lower()
+            # Create and run the test runner
+            test_runner_class = test_module.GenericTestRunner
+            runner_instance = test_runner_class(test_instance_or_error.__class__)
 
-            # Check for operator not implemented patterns
-            if (
-                "all tests passed!" in stdout_lower
-                and "success rate: 100.0%" in stdout_lower
-            ):
-                success = True
-                returncode = 0
-            elif "both operators not implemented" in stdout_lower:
-                # Both operators not implemented - skipped test
-                success = False  # Not a failure, but skipped
-                returncode = -2  # Special code for skipped
-            elif "one operator not implemented" in stdout_lower:
-                # One operator not implemented - partial test
-                success = False  # Not fully successful
-                returncode = -3  # Special code for partial
-            else:
-                success = False
-                returncode = -1
+            # Temporarily redirect stdout to capture output
+            from io import StringIO
 
-            results[test_name] = (
-                success,
-                returncode,
-                result.stdout,
-                result.stderr,
-            )
+            stdout_capture = StringIO()
+            stderr_capture = StringIO()
 
-            # Print the output from the test script
-            print(f"\n{'='*60}")
-            print(f"TEST: {test_name}")
-            print(f"{'='*60}")
+            old_stdout = sys.stdout
+            old_stderr = sys.stderr
+            sys.stdout = stdout_capture
+            sys.stderr = stderr_capture
 
-            if result.stdout:
-                print(result.stdout.rstrip())
+            try:
+                # Run the test
+                test_success, test_runner = runner_instance.run()
 
-            if result.stderr:
-                print("\nSTDERR:")
-                print(result.stderr.rstrip())
+                # Get captured output
+                stdout_output = stdout_capture.getvalue()
+                stderr_output = stderr_capture.getvalue()
 
-            # Enhanced status display
-            if returncode == -2:
-                status_icon = "⏭️"
-                status_text = "SKIPPED"
-            elif returncode == -3:
-                status_icon = "⚠️"
-                status_text = "PARTIAL"
-            elif success:
-                status_icon = "✅"
-                status_text = "PASSED"
-            else:
-                status_icon = "❌"
-                status_text = "FAILED"
+                # Restore stdout/stderr
+                sys.stdout = old_stdout
+                sys.stderr = old_stderr
 
-            print(
-                f"{status_icon}  {test_name}: {status_text} (return code: {returncode})"
-            )
+                # Print the captured output
+                if stdout_output:
+                    print(stdout_output.rstrip())
+                if stderr_output:
+                    print("\nSTDERR:")
+                    print(stderr_output.rstrip())
+
+                # Analyze test results
+                test_results = test_runner.get_test_results() if test_runner else []
+
+                # Determine overall test status
+                if test_success:
+                    return_code = 0
+                    status_icon = "✅"
+                    status_text = "PASSED"
+                else:
+                    # Check if there are any failed tests
+                    has_failures = any(
+                        result.return_code == -1 for result in test_results
+                    )
+                    has_partial = any(
+                        result.return_code == -3 for result in test_results
+                    )
+                    has_skipped = any(
+                        result.return_code == -2 for result in test_results
+                    )
+
+                    if has_failures:
+                        return_code = -1
+                        status_icon = "❌"
+                        status_text = "FAILED"
+                    elif has_partial:
+                        return_code = -3
+                        status_icon = "⚠️"
+                        status_text = "PARTIAL"
+                    elif has_skipped:
+                        return_code = -2
+                        status_icon = "⏭️"
+                        status_text = "SKIPPED"
+                    else:
+                        return_code = -1
+                        status_icon = "❌"
+                        status_text = "FAILED"
+
+                # Calculate timing
+                torch_time = sum(result.torch_time for result in test_results)
+                infini_time = sum(result.infini_time for result in test_results)
+
+                results[test_name] = {
+                    "success": test_success,
+                    "return_code": return_code,
+                    "torch_time": torch_time,
+                    "infini_time": infini_time,
+                    "error_message": "",
+                    "test_runner": test_runner,
+                    "stdout": stdout_output,
+                    "stderr": stderr_output,
+                }
+
+                print(
+                    f"{status_icon}  {test_name}: {status_text} (return code: {return_code})"
+                )
+
+                # Extract benchmark timing if in bench mode
+                if bench and test_success and return_code == 0:
+                    cumulative_timing["total_torch_time"] += torch_time
+                    cumulative_timing["total_infinicore_time"] += infini_time
+                    cumulative_timing["operators_tested"] += 1
+
+            except Exception as e:
+                # Restore stdout/stderr in case of exception
+                sys.stdout = old_stdout
+                sys.stderr = old_stderr
+                raise e
+
+            # In verbose mode, stop execution on first failure
+            if verbose and not test_success and return_code != 0:
+                break
 
         except Exception as e:
             print(f"💥 {test_name}: ERROR - {str(e)}")
-            results[test_name] = (False, -1, "", str(e))
+            results[test_name] = {
+                "success": False,
+                "return_code": -1,
+                "torch_time": 0.0,
+                "infini_time": 0.0,
+                "error_message": str(e),
+                "test_runner": None,
+                "stdout": "",
+                "stderr": str(e),
+            }
 
-    return results
+            # In verbose mode, stop execution on any exception
+            if verbose:
+                print(f"\n{'!'*60}")
+                print(
+                    f"VERBOSE MODE: Stopping execution due to exception in {test_name}"
+                )
+                print(f"{'!'*60}")
+                break
+
+    return results, cumulative_timing
 
 
-def print_summary(results):
-    """Print a comprehensive summary of test results."""
+def print_summary(
+    results, verbose=False, total_expected_tests=0, cumulative_timing=None
+):
+    """Print a comprehensive summary of test results including benchmark data."""
     print(f"\n{'='*80}")
     print("CUMULATIVE TEST SUMMARY")
     print(f"{'='*80}")
@@ -226,14 +369,15 @@ def print_summary(results):
     skipped_operators = []  # Store skipped operator names
     partial_operators = []  # Store partial operator names
 
-    for test_name, (success, returncode, stdout, stderr) in results.items():
-        if success:
+    for test_name, result_data in results.items():
+        return_code = result_data["return_code"]
+        if return_code == 0:
             passed += 1
             passed_operators.append(test_name)
-        elif returncode == -2:  # Special code for skipped tests
+        elif return_code == -2:  # Special code for skipped tests
             skipped += 1
             skipped_operators.append(test_name)
-        elif returncode == -3:  # Special code for partial tests
+        elif return_code == -3:  # Special code for partial tests
             partial += 1
             partial_operators.append(test_name)
         else:
@@ -242,7 +386,11 @@ def print_summary(results):
 
     total = len(results)
 
-    print(f"Total tests: {total}")
+    print(f"Total tests run: {total}")
+    if total_expected_tests > 0 and total < total_expected_tests:
+        print(f"Total tests expected: {total_expected_tests}")
+        print(f"Tests not executed: {total_expected_tests - total}")
+
     print(f"Passed: {passed}")
     print(f"Failed: {failed}")
 
@@ -251,6 +399,19 @@ def print_summary(results):
 
     if partial > 0:
         print(f"Partial: {partial}")
+
+    # Print benchmark summary if cumulative_timing data is available
+    if cumulative_timing and cumulative_timing["operators_tested"] > 0:
+        print(f"{'-'*40}")
+        print("BENCHMARK SUMMARY:")
+        print(f"  Operators Tested: {cumulative_timing['operators_tested']}")
+        print(
+            f"  PyTorch    Total Time: {cumulative_timing['total_torch_time'] * 1000:12.3f} ms"
+        )
+        print(
+            f"  InfiniCore Total Time: {cumulative_timing['total_infinicore_time'] * 1000:12.3f} ms"
+        )
+        print(f"{'-'*40}")
 
     # Display passed operators
     if passed_operators:
@@ -284,11 +445,15 @@ def print_summary(results):
             print("  " + ", ".join(line_ops))
 
     if total > 0:
-        # Calculate success rate based on executed tests only
+        # Calculate success rate based on actual executed tests
         executed_tests = passed + failed + partial
         if executed_tests > 0:
             success_rate = passed / executed_tests * 100
             print(f"\nSuccess rate: {success_rate:.1f}%")
+
+    if verbose and total < total_expected_tests:
+        print(f"\n💡 Verbose mode: Execution stopped after first failure")
+        print(f"   {total_expected_tests - total} tests were not executed")
 
     if failed == 0:
         if skipped > 0 or partial > 0:
@@ -358,6 +523,14 @@ def generate_help_epilog(ops_dir):
     epilog_parts.append("  # Run with debug mode on multiple devices")
     epilog_parts.append("  python run.py --cpu --nvidia --debug")
     epilog_parts.append("")
+    epilog_parts.append(
+        "  # Run with verbose mode to stop on first error with full traceback"
+    )
+    epilog_parts.append("  python run.py --cpu --nvidia --verbose")
+    epilog_parts.append("")
+    epilog_parts.append("  # Run with benchmarking to get cumulative timing")
+    epilog_parts.append("  python run.py --cpu --bench")
+    epilog_parts.append("")
     epilog_parts.append("  # List available tests without running")
     epilog_parts.append("  python run.py --list")
     epilog_parts.append("")
@@ -384,7 +557,13 @@ def generate_help_epilog(ops_dir):
         "  - Operators are automatically discovered from the ops directory"
     )
     epilog_parts.append(
-        "  - --bench option is disabled in batch mode (run individual tests for benchmarking)"
+        "  - --bench mode now shows cumulative timing across all operators"
+    )
+    epilog_parts.append(
+        "  - --verbose mode stops execution on first error and shows full traceback"
+    )
+    epilog_parts.append(
+        "  - In verbose mode, subsequent tests are skipped after first failure"
     )
 
     return "\n".join(epilog_parts)
@@ -413,15 +592,21 @@ def main():
         action="store_true",
         help="List all available test files without running them",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable verbose mode to stop on first error with full traceback",
+    )
+    parser.add_argument(
+        "--bench",
+        action="store_true",
+        help="Enable bench mode to show performance data",
+    )
 
-    from framework import get_hardware_args_group
-
-    if "-h" in sys.argv or "--help" in sys.argv:
-        get_hardware_args_group(parser)
+    get_hardware_args_group(parser)
 
     # Parse known args first, leave the rest for the test scripts
     args, unknown_args = parser.parse_known_args()
-    get_hardware_args_group(parser)
 
     # Handle list command
     if args.list:
@@ -453,6 +638,9 @@ def main():
     print(f"Operating directory: {ops_dir}")
     print(f"Available operators: {len(available_operators)}")
 
+    if args.verbose:
+        print(f"Verbose mode: ENABLED (will stop on first error with full traceback)")
+
     if args.ops:
         # Validate requested operators
         valid_ops = []
@@ -469,31 +657,49 @@ def main():
 
         if valid_ops:
             print(f"Testing operators: {', '.join(valid_ops)}")
+            total_expected_tests = len(valid_ops)
         else:
             print("No valid operators specified. Running all available tests.")
+            total_expected_tests = len(available_operators)
     else:
         print("Testing all available operators")
+        total_expected_tests = len(available_operators)
 
     print()
 
     # Run all tests
-    results = run_all_op_tests(
+    results, cumulative_timing = run_all_op_tests(
         ops_dir=ops_dir,
         specific_ops=args.ops,
-        extra_args=unknown_args,
+        bench=args.bench,
+        verbose=args.verbose,
     )
 
     # Print summary and exit with appropriate code
-    all_passed = print_summary(results)
+    all_passed = print_summary(
+        results, args.verbose, total_expected_tests, cumulative_timing
+    )
 
     # Check if there were any tests with missing implementations
     has_missing_implementations = any(
-        returncode in [-2, -3] for _, (_, returncode, _, _) in results.items()
+        result_data["return_code"] in [-2, -3] for result_data in results.values()
     )
 
     if all_passed and has_missing_implementations:
         print(f"\n⚠️  Note: Some operators are not fully implemented")
         print(f"   Run individual tests for details on missing implementations")
+
+    if args.verbose and not all_passed:
+        print(
+            f"\n💡 Verbose mode tip: Use individual test commands for detailed debugging:"
+        )
+        failed_ops = [
+            name
+            for name, result_data in results.items()
+            if result_data["return_code"] == -1
+        ]
+        for op in failed_ops[:3]:  # Show first 3 failed operators
+            print(f"   python {ops_dir / (op + '.py')} --verbose")
 
     sys.exit(0 if all_passed else 1)
 
