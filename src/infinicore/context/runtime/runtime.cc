@@ -88,6 +88,54 @@ void Runtime::memcpyD2D(void *dst, const void *src, size_t size) {
     INFINICORE_CHECK_ERROR(infinirtMemcpyAsync(dst, src, size, INFINIRT_MEMCPY_D2D, stream_));
 }
 
+// Timing method implementations
+infinirtEvent_t Runtime::createEvent() {
+    infinirtEvent_t event;
+    INFINICORE_CHECK_ERROR(infinirtEventCreate(&event));
+    return event;
+}
+
+infinirtEvent_t Runtime::createEventWithFlags(uint32_t flags) {
+    infinirtEvent_t event;
+    INFINICORE_CHECK_ERROR(infinirtEventCreateWithFlags(&event, flags));
+    return event;
+}
+
+void Runtime::recordEvent(infinirtEvent_t event, infinirtStream_t stream) {
+    if (stream == nullptr) {
+        stream = stream_;
+    }
+    INFINICORE_CHECK_ERROR(infinirtEventRecord(event, stream));
+}
+
+bool Runtime::queryEvent(infinirtEvent_t event) {
+    infinirtEventStatus_t status;
+    INFINICORE_CHECK_ERROR(infinirtEventQuery(event, &status));
+    return status == INFINIRT_EVENT_COMPLETE;
+}
+
+void Runtime::synchronizeEvent(infinirtEvent_t event) {
+    INFINICORE_CHECK_ERROR(infinirtEventSynchronize(event));
+}
+
+void Runtime::destroyEvent(infinirtEvent_t event) {
+    INFINICORE_CHECK_ERROR(infinirtEventDestroy(event));
+}
+
+float Runtime::elapsedTime(infinirtEvent_t start, infinirtEvent_t end) {
+    float ms;
+    INFINICORE_CHECK_ERROR(infinirtEventElapsedTime(&ms, start, end));
+    return ms;
+}
+
+void Runtime::streamWaitEvent(infinirtStream_t stream, infinirtEvent_t event) {
+    // Use current stream if no specific stream is provided
+    if (stream == nullptr) {
+        stream = stream_;
+    }
+    INFINICORE_CHECK_ERROR(infinirtStreamWaitEvent(stream, event));
+}
+
 std::string Runtime::toString() const {
     return fmt::format("Runtime({})", device_.toString());
 }

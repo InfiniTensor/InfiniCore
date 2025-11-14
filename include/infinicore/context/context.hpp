@@ -30,6 +30,16 @@ void memcpyD2H(void *dst, const void *src, size_t size);
 void memcpyD2D(void *dst, const void *src, size_t size);
 void memcpyH2H(void *dst, const void *src, size_t size);
 
+// Timing APIs for performance measurement
+infinirtEvent_t createEvent();
+infinirtEvent_t createEventWithFlags(uint32_t flags);
+void recordEvent(infinirtEvent_t event, infinirtStream_t stream = nullptr);
+bool queryEvent(infinirtEvent_t event);
+void synchronizeEvent(infinirtEvent_t event);
+void destroyEvent(infinirtEvent_t event);
+float elapsedTime(infinirtEvent_t start, infinirtEvent_t end);
+void streamWaitEvent(infinirtStream_t stream, infinirtEvent_t event);
+
 } // namespace context
 
 } // namespace infinicore

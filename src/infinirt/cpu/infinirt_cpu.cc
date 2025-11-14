@@ -1,4 +1,5 @@
 #include "infinirt_cpu.h"
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
 
@@ -34,23 +35,50 @@ infiniStatus_t streamWaitEvent(infinirtStream_t stream, infinirtEvent_t event) {
 }
 
 infiniStatus_t eventCreate(infinirtEvent_t *event_ptr) {
-    return INFINI_STATUS_NOT_IMPLEMENTED;
+    // For CPU implementation, we use a simple timestamp as event
+    auto now = std::chrono::steady_clock::now();
+    auto *timestamp = new std::chrono::steady_clock::time_point(now);
+    *event_ptr = timestamp;
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t eventCreateWithFlags(infinirtEvent_t *event_ptr, uint32_t flags) {
+    // CPU implementation ignores flags for simplicity
+    return eventCreate(event_ptr);
 }
 
 infiniStatus_t eventRecord(infinirtEvent_t event, infinirtStream_t stream) {
-    return INFINI_STATUS_NOT_IMPLEMENTED;
+    // Update the event timestamp
+    auto *timestamp = static_cast<std::chrono::steady_clock::time_point *>(event);
+    *timestamp = std::chrono::steady_clock::now();
+    return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t eventQuery(infinirtEvent_t event, infinirtEventStatus_t *status_ptr) {
-    return INFINI_STATUS_NOT_IMPLEMENTED;
+    // CPU events are always complete immediately
+    *status_ptr = INFINIRT_EVENT_COMPLETE;
+    return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t eventSynchronize(infinirtEvent_t event) {
-    return INFINI_STATUS_NOT_IMPLEMENTED;
+    // CPU events are synchronized immediately
+    return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t eventDestroy(infinirtEvent_t event) {
-    return INFINI_STATUS_NOT_IMPLEMENTED;
+    auto *timestamp = static_cast<std::chrono::steady_clock::time_point *>(event);
+    delete timestamp;
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t eventElapsedTime(float *ms_ptr, infinirtEvent_t start, infinirtEvent_t end) {
+    auto *start_time = static_cast<std::chrono::steady_clock::time_point *>(start);
+    auto *end_time = static_cast<std::chrono::steady_clock::time_point *>(end);
+
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(*end_time - *start_time);
+    *ms_ptr = static_cast<float>(duration.count()) / 1000.0f; // Convert microseconds to milliseconds
+
+    return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t mallocDevice(void **p_ptr, size_t size) {
