@@ -284,6 +284,7 @@ class TensorSpec:
         self.is_scalar = is_scalar
         self.init_mode = init_mode
         self.kwargs = kwargs
+        self.name = kwargs.get("name") if kwargs.get("name") else None
 
     @classmethod
     def from_tensor(
@@ -339,10 +340,17 @@ class TensorSpec:
         """Check if this spec represents a tensor input (not scalar)"""
         return not self.is_scalar
 
+    def fill_name(self, name):
+        if self.name is None:
+            self.name = name
+
     def __str__(self):
+        name_str = f"{self.name}: " if self.name else ""
         if self.is_scalar:
-            return f"scalar({self.value})"
+            return f"{name_str}scalar({self.value})"
         else:
             strides_str = f", strides={self.strides}" if self.strides else ""
-            dtype_str = f", dtype={self.dtype}" if self.dtype else ""
-            return f"tensor{self.shape}{strides_str}{dtype_str}"
+            dtype_str = (
+                f", {str(self.dtype).replace("infinicore.", "")}" if self.dtype else ""
+            )
+            return f"{name_str}tensor{self.shape}{strides_str}{dtype_str}"

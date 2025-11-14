@@ -1,8 +1,9 @@
 import torch
 import infinicore
-
+import traceback
+from dataclasses import dataclass
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 from .datatypes import to_torch_dtype, to_infinicore_dtype
 from .devices import InfiniDeviceNames, torch_device_map
@@ -11,9 +12,20 @@ from .utils import (
     create_test_comparator,
     infinicore_tensor_from_torch,
     profile_operation,
-    synchronize_device,
-    convert_infinicore_to_torch,
 )
+
+
+@dataclass
+class TestResult:
+    """Test result data structure"""
+
+    success: bool
+    return_code: int  # 0: success, -1: failure, -2: skipped, -3: partial
+    torch_time: float = 0.0
+    infini_time: float = 0.0
+    error_message: str = ""
+    test_case: Any = None
+    device: Any = None
 
 
 class TestCase:
@@ -24,11 +36,11 @@ class TestCase:
         inputs,
         kwargs=None,
         output_spec=None,
+        output_specs=None,
         comparison_target=None,
         description="",
         tolerance=None,
         output_count=1,
-        output_specs=None,
     ):
         """
         Initialize a test case with complete configuration
@@ -46,26 +58,29 @@ class TestCase:
         self.inputs = []
 
         # Process inputs - support both single TensorSpecs and tuples of TensorSpecs
-        for inp in inputs:
+        for i, inp in enumerate(inputs):
             if isinstance(inp, (list, tuple)):
                 # Handle tuple/list of multiple TensorSpecs (e.g., for torch.cat)
                 processed_tuple = []
-                for item in inp:
+                for j, item in enumerate(inp):
                     if isinstance(item, (list, tuple)):
                         # Nested tuple - recursively process
                         nested_processed = []
-                        for nested_item in item:
+                        for k, nested_item in enumerate(item):
                             if isinstance(nested_item, TensorSpec):
+                                nested_item.fill_name(f"in_{i}_{j}_{k}")
                                 nested_processed.append(nested_item)
                             else:
                                 nested_processed.append(nested_item)
                         processed_tuple.append(tuple(nested_processed))
                     elif isinstance(item, TensorSpec):
+                        item.fill_name(f"in_{i}_{j}")
                         processed_tuple.append(item)
                     else:
                         processed_tuple.append(item)
                 self.inputs.append(tuple(processed_tuple))
             elif isinstance(inp, TensorSpec):
+                inp.fill_name(f"in_{i}")
                 self.inputs.append(inp)
             else:
                 self.inputs.append(inp)
@@ -77,6 +92,12 @@ class TestCase:
         self.description = description
         self.tolerance = tolerance or {"atol": 1e-5, "rtol": 1e-3}
         self.output_count = output_count
+
+        if self.output_count == 1 and self.output_spec is not None:
+            self.output_spec.fill_name("out")
+        elif self.output_count > 1 and self.output_specs is not None:
+            for idx, spec in enumerate(self.output_specs):
+                spec.fill_name(f"output_{idx}")
 
         # Validate output configuration
         if self.output_count == 1:
@@ -113,45 +134,15 @@ class TestCase:
                 # Handle tuple inputs (e.g., for torch.cat)
                 tuple_strs = []
                 for item in inp:
-                    if hasattr(item, "is_scalar") and item.is_scalar:
-                        dtype_str = f", dtype={item.dtype}" if item.dtype else ""
-                        tuple_strs.append(f"scalar({item.value}{dtype_str})")
-                    elif hasattr(item, "shape"):
-                        dtype_str = f", {item.dtype}" if item.dtype else ""
-                        init_str = (
-                            f", init={item.init_mode}"
-                            if item.init_mode != TensorInitializer.RANDOM
-                            else ""
-                        )
-                        if hasattr(item, "strides") and item.strides:
-                            strides_str = f", strides={item.strides}"
-                            tuple_strs.append(
-                                f"tensor{item.shape}{strides_str}{dtype_str}{init_str}"
-                            )
-                        else:
-                            tuple_strs.append(
-                                f"tensor{item.shape}{dtype_str}{init_str}"
-                            )
+                    if isinstance(item, (list, tuple)):
+                        # Handle nested tuples
+                        nested_strs = []
+                        for nested_item in item:
+                            nested_strs.append(str(nested_item))
+                        tuple_strs.append(f"tuple({', '.join(nested_strs)})")
                     else:
                         tuple_strs.append(str(item))
                 input_strs.append(f"tuple({'; '.join(tuple_strs)})")
-            elif hasattr(inp, "is_scalar") and inp.is_scalar:
-                dtype_str = f", dtype={inp.dtype}" if inp.dtype else ""
-                input_strs.append(f"scalar({inp.value}{dtype_str})")
-            elif hasattr(inp, "shape"):
-                dtype_str = f", {inp.dtype}" if inp.dtype else ""
-                init_str = (
-                    f", init={inp.init_mode}"
-                    if inp.init_mode != TensorInitializer.RANDOM
-                    else ""
-                )
-                if hasattr(inp, "strides") and inp.strides:
-                    strides_str = f", strides={inp.strides}"
-                    input_strs.append(
-                        f"tensor{inp.shape}{strides_str}{dtype_str}{init_str}"
-                    )
-                else:
-                    input_strs.append(f"tensor{inp.shape}{dtype_str}{init_str}")
             else:
                 input_strs.append(str(inp))
 
@@ -164,48 +155,16 @@ class TestCase:
             kwargs_strs = []
             for key, value in self.kwargs.items():
                 if key == "out" and isinstance(value, int):
-                    kwargs_strs.append(f"{key}={value}")
+                    kwargs_strs.append(f"{key}={self.inputs[value].name}")
                 else:
                     kwargs_strs.append(f"{key}={value}")
 
-            # Handle output specifications
+            # Handle output specifications using TensorSpec's __str__
             if self.output_count == 1 and self.output_spec:
-                dtype_str = (
-                    f", {self.output_spec.dtype}" if self.output_spec.dtype else ""
-                )
-                init_str = (
-                    f", init={self.output_spec.init_mode}"
-                    if self.output_spec.init_mode != TensorInitializer.RANDOM
-                    else ""
-                )
-                if hasattr(self.output_spec, "strides") and self.output_spec.strides:
-                    strides_str = f", strides={self.output_spec.strides}"
-                    kwargs_strs.append(
-                        f"out=tensor{self.output_spec.shape}{strides_str}{dtype_str}{init_str}"
-                    )
-                else:
-                    kwargs_strs.append(
-                        f"out=tensor{self.output_spec.shape}{dtype_str}{init_str}"
-                    )
+                kwargs_strs.append(f"out={self.output_spec}")
             elif self.output_count > 1 and self.output_specs:
-                output_strs = []
                 for i, spec in enumerate(self.output_specs):
-                    dtype_str = f", {spec.dtype}" if spec.dtype else ""
-                    init_str = (
-                        f", init={spec.init_mode}"
-                        if spec.init_mode != TensorInitializer.RANDOM
-                        else ""
-                    )
-                    if hasattr(spec, "strides") and spec.strides:
-                        strides_str = f", strides={spec.strides}"
-                        output_strs.append(
-                            f"out_{i}=tensor{spec.shape}{strides_str}{dtype_str}{init_str}"
-                        )
-                    else:
-                        output_strs.append(
-                            f"out_{i}=tensor{spec.shape}{dtype_str}{init_str}"
-                        )
-                kwargs_strs.extend(output_strs)
+                    kwargs_strs.append(f"out_{i}={spec}")
 
             base_str += f", kwargs={{{'; '.join(kwargs_strs)}}}"
 
@@ -216,14 +175,19 @@ class TestCase:
 class TestConfig:
     """Test configuration"""
 
-    def __init__(self, debug=False, bench=False, num_prerun=10, num_iterations=1000):
+    def __init__(
+        self,
+        debug=False,
+        bench=False,
+        num_prerun=10,
+        num_iterations=1000,
+        verbose=False,
+    ):
         self.debug = debug
         self.bench = bench
         self.num_prerun = num_prerun
         self.num_iterations = num_iterations
-
-
-# In base.py - update the TestRunner class
+        self.verbose = verbose
 
 
 class TestRunner:
@@ -238,6 +202,14 @@ class TestRunner:
         self.passed_tests = (
             []
         )  # Track passed tests (both operators implemented and passed)
+        # Add benchmark timing statistics
+        self.benchmark_times = {
+            "torch_total": 0.0,
+            "infinicore_total": 0.0,
+            "per_test_case": {},  # Store timing per test case
+        }
+        # Store test results
+        self.test_results = []
 
     def run_tests(self, devices, test_func, test_type="Test"):
         """
@@ -260,42 +232,62 @@ class TestRunner:
                 try:
                     print(f"{test_case}")
 
-                    # Execute test and get result status
-                    success, status = test_func(device, test_case, self.config)
+                    # Execute test and get TestResult object
+                    test_result = test_func(device, test_case, self.config)
+                    self.test_results.append(test_result)
 
-                    # Handle different test statuses
-                    if status == "passed":
+                    # Handle different test statuses based on return_code
+                    if test_result.return_code == 0:  # Success
                         self.passed_tests.append(
                             f"{test_case} - {InfiniDeviceNames[device]}"
                         )
                         print(f"\033[92m✓\033[0m Passed")
-                    elif status == "skipped":
-                        # Test was skipped due to both operators not being implemented
+                    elif test_result.return_code == -1:
+                        fail_msg = f"{test_case} - {InfiniDeviceNames[device]} - Test terminated in verbose mode."
+                        self.failed_tests.append(fail_msg)
+                    elif test_result.return_code == -2:  # Skipped
                         skip_msg = f"{test_case} - {InfiniDeviceNames[device]} - Both operators not implemented"
                         self.skipped_tests.append(skip_msg)
                         print(
-                            f"\033[93m⚠\033[0m Skipped - both operators not implemented"
+                            f"\033[93m⚠\033[0m Both operators not implemented - test skipped"
                         )
-                    elif status == "partial":
-                        # Test was partially executed (one operator not implemented)
+                    elif test_result.return_code == -3:  # Partial
                         partial_msg = f"{test_case} - {InfiniDeviceNames[device]} - One operator not implemented"
                         self.partial_tests.append(partial_msg)
                         print(
-                            f"\033[93m⚠\033[0m Partial - one operator not implemented"
+                            f"\033[93m⚠\033[0m One operator not implemented - running single operator without comparison"
                         )
-                    # Failed tests are handled in the exception handler below
+
+                    if self.config.verbose and test_result.return_code != 0:
+                        return False
 
                 except Exception as e:
-                    error_msg = (
-                        f"{test_case} - {InfiniDeviceNames[device]} - Error: {e}"
-                    )
+                    error_msg = f"Error: {e}"
                     print(f"\033[91m✗\033[0m {error_msg}")
                     self.failed_tests.append(error_msg)
+
+                    # Create a failed TestResult
+                    failed_result = TestResult(
+                        success=False,
+                        return_code=-1,
+                        error_message=str(e),
+                        test_case=test_case,
+                        device=device,
+                    )
+                    self.test_results.append(failed_result)
+                    # In verbose mode, print full traceback and stop execution
+                    if self.config.verbose:
+                        traceback.print_exc()
+                        return False  # Stop test execution immediately
+
                     if self.config.debug:
                         raise
 
-        # Return True if no tests failed (skipped/partial tests don't count as failures)
-        return len(self.failed_tests) == 0
+        return (
+            len(self.failed_tests) == 0
+            and len(self.skipped_tests) == 0
+            and len(self.partial_tests) == 0
+        )
 
     def print_summary(self):
         """
@@ -312,34 +304,16 @@ class TestRunner:
 
         print(f"\n{'='*60}")
         print("TEST SUMMARY")
-        print(f"{'='*60}")
         print(f"Total tests: {total_tests}")
         print(f"\033[92mPassed: {passed_count}\033[0m")
 
-        # Display partial tests (one operator not implemented)
-        if self.partial_tests:
-            print(
-                f"\033[93mPartial (one operator not implemented): {partial_count}\033[0m"
-            )
-            for test in self.partial_tests:
-                print(f"  - {test}")
-
-        # Display skipped tests (both operators not implemented)
-        if self.skipped_tests:
-            print(
-                f"\033[93mSkipped (both operators not implemented): {skipped_count}\033[0m"
-            )
-            for test in self.skipped_tests:
-                print(f"  - {test}")
-
+        result = True
         # Display failed tests
         if self.failed_tests:
             print(f"\033[91mFailed: {failed_count}\033[0m")
-            for failure in self.failed_tests:
-                print(f"  - {failure}")
 
             # Return False only if there are actual test failures
-            return False
+            result = False
         else:
             # Calculate success rate based on actual executed tests
             executed_tests = passed_count + partial_count + failed_count
@@ -352,10 +326,41 @@ class TestRunner:
                 print(
                     f"\n\033[93mTests completed with some implementations missing\033[0m"
                 )
-                return True  # Skipped/partial tests don't count as failures
             else:
                 print(f"\n\033[92mAll tests passed!\033[0m")
-                return True
+
+        # Print benchmark summary if benchmarking was enabled
+        if self.config.bench and (
+            self.benchmark_times["torch_total"] > 0
+            or self.benchmark_times["infinicore_total"] > 0
+        ):
+            self._print_benchmark_summary()
+
+        print(f"{'='*60}")
+        return result
+
+    def _print_benchmark_summary(self):
+        """Print benchmark timing summary"""
+        print(f"{'-'*60}")
+        print("BENCHMARK SUMMARY")
+
+        torch_total = self.benchmark_times["torch_total"]
+        infinicore_total = self.benchmark_times["infinicore_total"]
+
+        if torch_total > 0:
+            print(f"PyTorch Total Time: {torch_total * 1000:.3f} ms")
+        if infinicore_total > 0:
+            print(f"InfiniCore Total Time: {infinicore_total * 1000:.3f} ms")
+
+        if torch_total > 0 and infinicore_total > 0:
+            speedup = (
+                torch_total / infinicore_total if infinicore_total > 0 else float("inf")
+            )
+            print(f"Speedup (PyTorch/InfiniCore): {speedup:.2f}x")
+
+    def get_test_results(self):
+        """Get all test results"""
+        return self.test_results
 
 
 class BaseOperatorTest(ABC):
@@ -387,7 +392,7 @@ class BaseOperatorTest(ABC):
                 return spec.create_torch_tensor(device)
         return spec
 
-    def prepare_inputs_and_kwargs(self, test_case, device):
+    def prepare_pytorch_inputs_and_kwargs(self, test_case, device):
         """Prepare inputs and kwargs, replacing TensorSpec objects with actual tensors
         Supports tuple inputs for operators like torch.cat and TensorSpec in kwargs
         """
@@ -450,6 +455,71 @@ class BaseOperatorTest(ABC):
 
         return inputs, kwargs
 
+    def prepare_infinicore_list(self, input_sequence, clone=False):
+        cloned_tensors = []
+        infini_list = []
+        for item in input_sequence:
+            if isinstance(item, torch.Tensor):
+                if clone:
+                    cloned_item = item.clone().detach()
+                    infini_item = infinicore_tensor_from_torch(cloned_item)
+                    cloned_tensors.append(cloned_item)
+                else:
+                    infini_item = infinicore_tensor_from_torch(item)
+            else:
+                infini_item = item
+            infini_list.append(infini_item)
+        return infini_list, cloned_tensors
+
+    def prepare_infinicore_inputs_and_kwargs(self, inputs, kwargs, comparison_target):
+        cloned_tensors = []
+        infini_inputs = []
+
+        # Prepare infinicore inputs - only clone if needed for comparison
+        for i, inp in enumerate(inputs):
+            if isinstance(inp, torch.Tensor):
+                # Clone only if this input will be used for comparison
+                if comparison_target == i:
+                    cloned_inp = inp.clone().detach()
+                    infini_tensor = infinicore_tensor_from_torch(cloned_inp)
+                    cloned_tensors.append(cloned_inp)
+                else:
+                    # For non-comparison inputs, we can use the original (but still need to convert)
+                    infini_tensor = infinicore_tensor_from_torch(inp)
+                infini_inputs.append(infini_tensor)
+            elif isinstance(inp, (tuple, list)):
+                infini_list, cloned_list = self.prepare_infinicore_list(
+                    inp, comparison_target == i
+                )
+                infini_inputs.append(infini_list)
+                cloned_tensors.append(cloned_list)
+            else:
+                infini_inputs.append(inp)
+
+        # Prepare infinicore kwargs
+        infini_kwargs = {}
+        for key, value in kwargs.items():
+            if isinstance(value, torch.Tensor):
+                # Check if this tensor is used for output comparison
+                if key == "out" and comparison_target == "out":
+                    cloned_value = value.clone().detach()
+                    infini_kwargs[key] = infinicore_tensor_from_torch(cloned_value)
+                    cloned_tensors.append(cloned_value)
+                elif key == "out" and isinstance(comparison_target, int):
+                    infini_kwargs[key] = infini_inputs[comparison_target]
+                else:
+                    infini_kwargs[key] = infinicore_tensor_from_torch(value)
+            elif isinstance(value, (tuple, list)):
+                infini_list, cloned_list = self.prepare_infinicore_list(
+                    value, key == "out"
+                )
+                cloned_tensors.append(cloned_list)
+                infini_kwargs[key] = infini_list
+            else:
+                infini_kwargs[key] = value
+
+        return infini_inputs, infini_kwargs, cloned_tensors
+
     def run_test(self, device, test_case, config):
         """
         Unified test execution flow
@@ -460,73 +530,28 @@ class BaseOperatorTest(ABC):
             config: Test configuration
 
         Returns:
-            tuple: (success, status) where:
-                success: bool indicating if test passed
-                status: str describing test status ("passed", "skipped", "partial")
+            TestResult: Test result object containing status and timing information
         """
         device_str = torch_device_map[device]
 
+        # Initialize test result
+        test_result = TestResult(
+            success=False,
+            return_code=-1,  # Default to failure
+            test_case=test_case,
+            device=device,
+        )
+
         # Prepare inputs and kwargs with actual tensors
-        inputs, kwargs = self.prepare_inputs_and_kwargs(test_case, device)
-
-        # For in-place operations on input tensors, we need to preserve the original state
-        original_inputs = []
-        if "out" in kwargs and isinstance(kwargs["out"], torch.Tensor):
-            # This is an in-place operation on an input tensor
-            # Store original values for comparison
-            for inp in inputs:
-                if isinstance(inp, torch.Tensor):
-                    original_inputs.append(inp.clone().detach())
-                else:
-                    original_inputs.append(inp)
-
-        # Create infinicore inputs (cloned to avoid in-place modifications affecting reference)
-        infini_inputs = []
-        torch_input_clones = []
-
-        for inp in inputs:
-            if isinstance(inp, torch.Tensor):
-                cloned_inp = inp.clone().detach()
-                torch_input_clones.append(cloned_inp)
-                infini_tensor = infinicore_tensor_from_torch(cloned_inp)
-                infini_inputs.append(infini_tensor)
-            else:
-                infini_inputs.append(inp)
-
-        infini_kwargs = {}
-        for key, value in kwargs.items():
-            if isinstance(value, torch.Tensor):
-                # Clone tensor and convert to infinicore
-                cloned_value = value.clone().detach()
-                torch_input_clones.append(cloned_value)
-                infini_kwargs[key] = infinicore_tensor_from_torch(cloned_value)
-            else:
-                # Pass through non-tensor values (scalars, strings, etc.)
-                infini_kwargs[key] = value
+        inputs, kwargs = self.prepare_pytorch_inputs_and_kwargs(test_case, device)
 
         # Determine comparison target
         comparison_target = test_case.comparison_target
 
-        # Handle infinicore output
-        infini_kwargs = kwargs.copy()
-        if "out" in infini_kwargs:
-            out_value = infini_kwargs["out"]
-            if isinstance(out_value, torch.Tensor):
-                # Single tensor output
-                if isinstance(comparison_target, int):
-                    infini_kwargs["out"] = infini_inputs[comparison_target]
-                else:
-                    cloned_out = out_value.clone().detach()
-                    torch_input_clones.append(cloned_out)
-                    infini_kwargs["out"] = infinicore_tensor_from_torch(cloned_out)
-            elif isinstance(out_value, (tuple, list)):
-                # Multiple tensor outputs
-                infini_outputs = []
-                for tensor in out_value:
-                    cloned_tensor = tensor.clone().detach()
-                    torch_input_clones.append(cloned_tensor)
-                    infini_outputs.append(infinicore_tensor_from_torch(cloned_tensor))
-                infini_kwargs["out"] = tuple(infini_outputs)
+        # Create infinicore inputs (cloned to avoid in-place modifications affecting reference)
+        infini_inputs, infini_kwargs, cloned_tensors = (
+            self.prepare_infinicore_inputs_and_kwargs(inputs, kwargs, comparison_target)
+        )
 
         # Check operator implementations
         torch_implemented = True
@@ -537,6 +562,12 @@ class BaseOperatorTest(ABC):
             if torch_result is None:
                 torch_implemented = False
         except NotImplementedError:
+            if config.verbose:
+                traceback.print_exc()
+                # Return test result immediately in verbose mode
+                test_result.return_code = -1
+                test_result.error_message = "torch_operator not implemented"
+                return test_result
             torch_implemented = False
             torch_result = None
 
@@ -545,25 +576,26 @@ class BaseOperatorTest(ABC):
             if infini_result is None:
                 infini_implemented = False
         except NotImplementedError:
+            if config.verbose:
+                traceback.print_exc()
+                # Return test result immediately in verbose mode
+                test_result.return_code = -1
+                test_result.error_message = "infinicore_operator not implemented"
+                return test_result
             infini_implemented = False
             infini_result = None
 
         # Skip if neither operator is implemented
         if not torch_implemented and not infini_implemented:
-            print(f"\033[93m⚠\033[0m Both operators not implemented - test skipped")
-            return False, "skipped"
+            test_result.return_code = -2  # Skipped
+            return test_result
 
         # Single operator execution without comparison
         if not torch_implemented or not infini_implemented:
-            missing_op = (
-                "torch_operator" if not torch_implemented else "infinicore_operator"
-            )
-            print(
-                f"\033[93m⚠\033[0m {missing_op} not implemented - running single operator without comparison"
-            )
-
+            test_result.return_code = -3  # Partial
+            # Run benchmarking for partial tests if enabled
             if config.bench:
-                self._run_benchmarking(
+                torch_time, infini_time = self._run_benchmarking(
                     config,
                     device_str,
                     torch_implemented,
@@ -575,8 +607,9 @@ class BaseOperatorTest(ABC):
                     test_case.output_count,
                     comparison_target,
                 )
-            return False, "partial"
-
+                test_result.torch_time = torch_time
+                test_result.infini_time = infini_time
+            return test_result
         # ==========================================================================
         # MULTIPLE OUTPUTS COMPARISON LOGIC
         # ==========================================================================
@@ -679,13 +712,13 @@ class BaseOperatorTest(ABC):
 
             is_valid = compare_fn(infini_comparison, torch_comparison)
             if not is_valid:
-                raise AssertionError(f"Result comparison failed for {test_case}")
+                raise AssertionError(f"Result comparison failed.")
 
         # ==========================================================================
         # UNIFIED BENCHMARKING LOGIC
         # ==========================================================================
         if config.bench:
-            self._run_benchmarking(
+            torch_time, infini_time = self._run_benchmarking(
                 config,
                 device_str,
                 True,
@@ -697,9 +730,13 @@ class BaseOperatorTest(ABC):
                 test_case.output_count,
                 comparison_target,
             )
+            test_result.torch_time = torch_time
+            test_result.infini_time = infini_time
 
         # Test passed successfully
-        return True, "passed"
+        test_result.success = True
+        test_result.return_code = 0
+        return test_result
 
     def _run_benchmarking(
         self,
@@ -715,8 +752,15 @@ class BaseOperatorTest(ABC):
         comparison_target,
     ):
         """
-        Unified benchmarking logic
+        Unified benchmarking logic with timing accumulation
+
+        Returns:
+            tuple: (torch_time, infini_time) timing results
         """
+        # Initialize timing variables
+        torch_time = 0.0
+        infini_time = 0.0
+
         if torch_implemented:
             if output_count > 1:
                 # For multiple outputs, just call the operator
@@ -739,12 +783,13 @@ class BaseOperatorTest(ABC):
                             else inputs[comparison_target]
                         )
 
-            profile_operation(
+            torch_time = profile_operation(
                 "PyTorch   ",
                 torch_op,
                 device_str,
                 config.num_prerun,
                 config.num_iterations,
+                total=True,
             )
 
         if infini_implemented:
@@ -763,10 +808,19 @@ class BaseOperatorTest(ABC):
                         else infini_inputs[comparison_target]
                     )
 
-            profile_operation(
+            infini_time = profile_operation(
                 "InfiniCore",
                 infini_op,
                 device_str,
                 config.num_prerun,
                 config.num_iterations,
+                total=True,
             )
+
+        # Store timing information in the test runner
+        if hasattr(config, "_test_runner") and config._test_runner:
+            # Accumulate total times
+            config._test_runner.benchmark_times["torch_total"] += torch_time
+            config._test_runner.benchmark_times["infinicore_total"] += infini_time
+
+        return torch_time, infini_time

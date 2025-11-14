@@ -1,7 +1,6 @@
 import argparse
 from .devices import InfiniDeviceEnum
 
-# hardware_info.py
 """
 Shared hardware platform information for the InfiniCore testing framework
 """
@@ -61,6 +60,9 @@ Examples:
   # Run with debug mode on multiple devices
   python test_operator.py --cpu --nvidia --debug
 
+  # Run with verbose mode to stop on first error with full traceback
+  python test_operator.py --cpu --nvidia --verbose
+
   # Run performance profiling with custom iterations
   python test_operator.py --nvidia --bench --num_prerun 50 --num_iterations 5000
 
@@ -90,11 +92,17 @@ Examples:
         action="store_true",
         help="Enable debug mode for detailed tensor comparison",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable verbose mode to stop on first error with full traceback",
+    )
 
     # Device options using shared hardware info
     hardware_group = get_hardware_args_group(parser)
+    args, unknown = parser.parse_known_args()
 
-    return parser.parse_args()
+    return args
 
 
 def get_test_devices(args):

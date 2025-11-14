@@ -65,9 +65,9 @@ def parse_test_cases():
             tolerance = _TOLERANCE_MAP.get(dtype, {"atol": 0, "rtol": 1e-3})
 
             # Create typed tensor specs
-            a_spec = TensorSpec.from_tensor(shape, a_strides, dtype)
-            b_spec = TensorSpec.from_tensor(shape, b_strides, dtype)
-            c_spec = TensorSpec.from_tensor(shape, c_strides, dtype)
+            a_spec = TensorSpec.from_tensor(shape, a_strides, dtype, name="a")
+            b_spec = TensorSpec.from_tensor(shape, b_strides, dtype, name="b")
+            c_spec = TensorSpec.from_tensor(shape, c_strides, dtype, name="c")
 
             # Test Case 1: Out-of-place (return value)
             test_cases.append(
