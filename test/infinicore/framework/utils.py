@@ -22,10 +22,12 @@ def timed_op(func, num_iterations, device):
     for _ in range(num_iterations):
         func()
     synchronize_device(device)
-    return (time.time() - start) / num_iterations
+    return time.time() - start
 
 
-def profile_operation(desc, func, torch_device, num_prerun, num_iterations):
+def profile_operation(
+    desc, func, torch_device, num_prerun, num_iterations, total=False
+):
     """
     Performance profiling workflow
     """
@@ -35,7 +37,11 @@ def profile_operation(desc, func, torch_device, num_prerun, num_iterations):
 
     # Timed execution
     elapsed = timed_op(lambda: func(), num_iterations, torch_device)
-    print(f"    {desc} time: {elapsed * 1000 :6f} ms")
+    print(f"    {desc} time: {elapsed / num_iterations * 1000 :6f} ms")
+    if total:
+        return elapsed
+    else:
+        return elapsed / num_iterations
 
 
 def debug(actual, desired, atol=0, rtol=1e-2, equal_nan=False, verbose=True):
