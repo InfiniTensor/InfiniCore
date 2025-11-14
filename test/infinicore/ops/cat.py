@@ -89,7 +89,7 @@ def parse_test_cases():
                     output_spec=None,
                     comparison_target=None,
                     tolerance=tolerance,
-                    description=f"Cat - OUT_OF_PLACE",
+                    description="Cat - OUT_OF_PLACE",
                 )
             )
 
@@ -102,7 +102,7 @@ def parse_test_cases():
                         output_spec=output_spec,
                         comparison_target="out",
                         tolerance=tolerance,
-                        description=f"Cat - INPLACE(out)",
+                        description="Cat - INPLACE(out)",
                     )
                 )
 

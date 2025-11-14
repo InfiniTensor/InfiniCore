@@ -31,7 +31,7 @@ _TEST_CASES_DATA = [
     ((16, 5632), (13312, 1), (13312, 1), None),
 ]
 
-# Tolerance configuration - exact match required for bitwise operations
+# Tolerance configuration
 _TOLERANCE_MAP = {
     infinicore.int8: {"atol": 0, "rtol": 0},
     infinicore.int16: {"atol": 0, "rtol": 0},
@@ -41,14 +41,14 @@ _TOLERANCE_MAP = {
     infinicore.bool: {"atol": 0, "rtol": 0},
 }
 
-# Data types to test - integer types for bitwise operations
+# Data types to test
 _TENSOR_DTYPES = [
     infinicore.int8,
     infinicore.int16,
     infinicore.int32,
     infinicore.int64,
     infinicore.uint8,
-    infinicore.bool,  # XOR also supports boolean tensors
+    infinicore.bool,
 ]
 
 
