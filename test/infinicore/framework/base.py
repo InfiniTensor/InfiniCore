@@ -18,6 +18,7 @@ from .utils import (
 @dataclass
 class TestResult:
     """Test result data structure"""
+
     success: bool
     return_code: int  # 0: success, -1: failure, -2: skipped, -3: partial
     torch_time: float = 0.0
@@ -57,26 +58,29 @@ class TestCase:
         self.inputs = []
 
         # Process inputs - support both single TensorSpecs and tuples of TensorSpecs
-        for inp in inputs:
+        for i, inp in enumerate(inputs):
             if isinstance(inp, (list, tuple)):
                 # Handle tuple/list of multiple TensorSpecs (e.g., for torch.cat)
                 processed_tuple = []
-                for item in inp:
+                for j, item in enumerate(inp):
                     if isinstance(item, (list, tuple)):
                         # Nested tuple - recursively process
                         nested_processed = []
-                        for nested_item in item:
+                        for k, nested_item in enumerate(item):
                             if isinstance(nested_item, TensorSpec):
+                                nested_item.fill_name(f"in_{i}_{j}_{k}")
                                 nested_processed.append(nested_item)
                             else:
                                 nested_processed.append(nested_item)
                         processed_tuple.append(tuple(nested_processed))
                     elif isinstance(item, TensorSpec):
+                        item.fill_name(f"in_{i}_{j}")
                         processed_tuple.append(item)
                     else:
                         processed_tuple.append(item)
                 self.inputs.append(tuple(processed_tuple))
             elif isinstance(inp, TensorSpec):
+                inp.fill_name(f"in_{i}")
                 self.inputs.append(inp)
             else:
                 self.inputs.append(inp)
@@ -88,6 +92,12 @@ class TestCase:
         self.description = description
         self.tolerance = tolerance or {"atol": 1e-5, "rtol": 1e-3}
         self.output_count = output_count
+
+        if self.output_count == 1 and self.output_spec is not None:
+            self.output_spec.fill_name("out")
+        elif self.output_count > 1 and self.output_specs is not None:
+            for idx, spec in enumerate(self.output_specs):
+                spec.fill_name(f"output_{idx}")
 
         # Validate output configuration
         if self.output_count == 1:
@@ -124,45 +134,15 @@ class TestCase:
                 # Handle tuple inputs (e.g., for torch.cat)
                 tuple_strs = []
                 for item in inp:
-                    if hasattr(item, "is_scalar") and item.is_scalar:
-                        dtype_str = f", dtype={item.dtype}" if item.dtype else ""
-                        tuple_strs.append(f"scalar({item.value}{dtype_str})")
-                    elif hasattr(item, "shape"):
-                        dtype_str = f", {item.dtype}" if item.dtype else ""
-                        init_str = (
-                            f", init={item.init_mode}"
-                            if item.init_mode != TensorInitializer.RANDOM
-                            else ""
-                        )
-                        if hasattr(item, "strides") and item.strides:
-                            strides_str = f", strides={item.strides}"
-                            tuple_strs.append(
-                                f"tensor{item.shape}{strides_str}{dtype_str}{init_str}"
-                            )
-                        else:
-                            tuple_strs.append(
-                                f"tensor{item.shape}{dtype_str}{init_str}"
-                            )
+                    if isinstance(item, (list, tuple)):
+                        # Handle nested tuples
+                        nested_strs = []
+                        for nested_item in item:
+                            nested_strs.append(str(nested_item))
+                        tuple_strs.append(f"tuple({', '.join(nested_strs)})")
                     else:
                         tuple_strs.append(str(item))
                 input_strs.append(f"tuple({'; '.join(tuple_strs)})")
-            elif hasattr(inp, "is_scalar") and inp.is_scalar:
-                dtype_str = f", dtype={inp.dtype}" if inp.dtype else ""
-                input_strs.append(f"scalar({inp.value}{dtype_str})")
-            elif hasattr(inp, "shape"):
-                dtype_str = f", {inp.dtype}" if inp.dtype else ""
-                init_str = (
-                    f", init={inp.init_mode}"
-                    if inp.init_mode != TensorInitializer.RANDOM
-                    else ""
-                )
-                if hasattr(inp, "strides") and inp.strides:
-                    strides_str = f", strides={inp.strides}"
-                    input_strs.append(
-                        f"tensor{inp.shape}{strides_str}{dtype_str}{init_str}"
-                    )
-                else:
-                    input_strs.append(f"tensor{inp.shape}{dtype_str}{init_str}")
             else:
                 input_strs.append(str(inp))
 
@@ -175,48 +155,16 @@ class TestCase:
             kwargs_strs = []
             for key, value in self.kwargs.items():
                 if key == "out" and isinstance(value, int):
-                    kwargs_strs.append(f"{key}={value}")
+                    kwargs_strs.append(f"{key}={self.inputs[value].name}")
                 else:
                     kwargs_strs.append(f"{key}={value}")
 
-            # Handle output specifications
+            # Handle output specifications using TensorSpec's __str__
             if self.output_count == 1 and self.output_spec:
-                dtype_str = (
-                    f", {self.output_spec.dtype}" if self.output_spec.dtype else ""
-                )
-                init_str = (
-                    f", init={self.output_spec.init_mode}"
-                    if self.output_spec.init_mode != TensorInitializer.RANDOM
-                    else ""
-                )
-                if hasattr(self.output_spec, "strides") and self.output_spec.strides:
-                    strides_str = f", strides={self.output_spec.strides}"
-                    kwargs_strs.append(
-                        f"out=tensor{self.output_spec.shape}{strides_str}{dtype_str}{init_str}"
-                    )
-                else:
-                    kwargs_strs.append(
-                        f"out=tensor{self.output_spec.shape}{dtype_str}{init_str}"
-                    )
+                kwargs_strs.append(f"out={self.output_spec}")
             elif self.output_count > 1 and self.output_specs:
-                output_strs = []
                 for i, spec in enumerate(self.output_specs):
-                    dtype_str = f", {spec.dtype}" if spec.dtype else ""
-                    init_str = (
-                        f", init={spec.init_mode}"
-                        if spec.init_mode != TensorInitializer.RANDOM
-                        else ""
-                    )
-                    if hasattr(spec, "strides") and spec.strides:
-                        strides_str = f", strides={spec.strides}"
-                        output_strs.append(
-                            f"out_{i}=tensor{spec.shape}{strides_str}{dtype_str}{init_str}"
-                        )
-                    else:
-                        output_strs.append(
-                            f"out_{i}=tensor{spec.shape}{dtype_str}{init_str}"
-                        )
-                kwargs_strs.extend(output_strs)
+                    kwargs_strs.append(f"out_{i}={spec}")
 
             base_str += f", kwargs={{{'; '.join(kwargs_strs)}}}"
 
@@ -300,11 +248,15 @@ class TestRunner:
                     elif test_result.return_code == -2:  # Skipped
                         skip_msg = f"{test_case} - {InfiniDeviceNames[device]} - Both operators not implemented"
                         self.skipped_tests.append(skip_msg)
-                        print(f"\033[93m⚠\033[0m Both operators not implemented - test skipped")
+                        print(
+                            f"\033[93m⚠\033[0m Both operators not implemented - test skipped"
+                        )
                     elif test_result.return_code == -3:  # Partial
                         partial_msg = f"{test_case} - {InfiniDeviceNames[device]} - One operator not implemented"
                         self.partial_tests.append(partial_msg)
-                        print(f"\033[93m⚠\033[0m One operator not implemented - running single operator without comparison")
+                        print(
+                            f"\033[93m⚠\033[0m One operator not implemented - running single operator without comparison"
+                        )
 
                     if self.config.verbose and test_result.return_code != 0:
                         return False
@@ -315,14 +267,14 @@ class TestRunner:
                     )
                     print(f"\033[91m✗\033[0m {error_msg}")
                     self.failed_tests.append(error_msg)
-                    
+
                     # Create a failed TestResult
                     failed_result = TestResult(
                         success=False,
                         return_code=-1,
                         error_message=str(e),
                         test_case=test_case,
-                        device=device
+                        device=device,
                     )
                     self.test_results.append(failed_result)
                     # In verbose mode, print full traceback and stop execution
@@ -333,7 +285,11 @@ class TestRunner:
                     if self.config.debug:
                         raise
 
-        return len(self.failed_tests) == 0 and len(self.skipped_tests) == 0 and len(self.partial_tests) == 0
+        return (
+            len(self.failed_tests) == 0
+            and len(self.skipped_tests) == 0
+            and len(self.partial_tests) == 0
+        )
 
     def print_summary(self):
         """
@@ -514,13 +470,13 @@ class BaseOperatorTest(ABC):
             TestResult: Test result object containing status and timing information
         """
         device_str = torch_device_map[device]
-        
+
         # Initialize test result
         test_result = TestResult(
             success=False,
             return_code=-1,  # Default to failure
             test_case=test_case,
-            device=device
+            device=device,
         )
 
         # Prepare inputs and kwargs with actual tensors
