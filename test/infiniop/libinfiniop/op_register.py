@@ -270,6 +270,57 @@ def mul_(lib):
 
 
 @OpRegister.operator
+def quantize_gptq_(lib):
+    lib.infiniopCreateQuantizeGPTQDescriptor.restype = c_int32
+    lib.infiniopCreateQuantizeGPTQDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetQuantizeGPTQWorkspaceSize.restype = c_int32
+    lib.infiniopGetQuantizeGPTQWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopQuantizeLinearGPTQ.restype = c_int32
+    lib.infiniopQuantizeLinearGPTQ.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopQuantizeGPTQ.restype = c_int32
+    lib.infiniopQuantizeGPTQ.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyQuantizeGPTQDescriptor.restype = c_int32
+    lib.infiniopDestroyQuantizeGPTQDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def random_sample_(lib):
     lib.infiniopCreateRandomSampleDescriptor.restype = c_int32
     lib.infiniopCreateRandomSampleDescriptor.argtypes = [
