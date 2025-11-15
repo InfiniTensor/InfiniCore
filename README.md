@@ -171,7 +171,7 @@ pip install .
 或
 
 ```shell
-pip install . -e
+pip install -e .
 ```
 
 注：开发时建议加入 `-e` 选项（即 `pip install -e .`），这样对 `python/infinicore` 做的更改将会实时得到反映，同时对 C++ 层所做的修改也只需要运行 `xmake build _infinicore && xmake install _infinicore` 便可以生效。
