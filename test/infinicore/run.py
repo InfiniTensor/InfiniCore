@@ -109,14 +109,18 @@ def import_operator_test(test_file_path):
         return False, f"Error importing {test_file_path}: {str(e)}"
 
 
-def run_all_op_tests(ops_dir=None, specific_ops=None, bench=False, verbose=False):
+def run_all_op_tests(
+    ops_dir=None, specific_ops=None, bench=False, bench_mode="both", verbose=False
+):
     """
     Run all operator test scripts in the ops directory using direct import.
 
     Args:
         ops_dir (str, optional): Path to the ops directory. If None, uses auto-detection.
         specific_ops (list, optional): List of specific operator names to test.
-        extra_args (list, optional): Extra command line arguments to pass to test scripts.
+        bench (bool): Whether benchmarking is enabled
+        bench_mode (str): Benchmark mode - "host", "device", or "both"
+        verbose (bool): Whether verbose mode is enabled
 
     Returns:
         dict: Results dictionary with test names as keys and (success, test_runner, stdout, stderr) as values.
@@ -174,8 +178,10 @@ def run_all_op_tests(ops_dir=None, specific_ops=None, bench=False, verbose=False
     results = {}
 
     cumulative_timing = {
-        "total_torch_time": 0.0,
-        "total_infinicore_time": 0.0,
+        "total_torch_host_time": 0.0,
+        "total_torch_device_time": 0.0,
+        "total_infinicore_host_time": 0.0,
+        "total_infinicore_device_time": 0.0,
         "operators_tested": 0,
     }
 
@@ -191,8 +197,10 @@ def run_all_op_tests(ops_dir=None, specific_ops=None, bench=False, verbose=False
                 results[test_name] = {
                     "success": False,
                     "return_code": -1,
-                    "torch_time": 0.0,
-                    "infini_time": 0.0,
+                    "torch_host_time": 0.0,
+                    "torch_device_time": 0.0,
+                    "infini_host_time": 0.0,
+                    "infini_device_time": 0.0,
                     "error_message": test_instance_or_error,
                     "test_runner": None,
                     "stdout": "",
@@ -207,8 +215,10 @@ def run_all_op_tests(ops_dir=None, specific_ops=None, bench=False, verbose=False
                 results[test_name] = {
                     "success": False,
                     "return_code": -1,
-                    "torch_time": 0.0,
-                    "infini_time": 0.0,
+                    "torch_host_time": 0.0,
+                    "torch_device_time": 0.0,
+                    "infini_host_time": 0.0,
+                    "infini_device_time": 0.0,
                     "error_message": "No GenericTestRunner found",
                     "test_runner": None,
                     "stdout": "",
@@ -287,15 +297,25 @@ def run_all_op_tests(ops_dir=None, specific_ops=None, bench=False, verbose=False
                         status_icon = "❌"
                         status_text = "FAILED"
 
-                # Calculate timing
-                torch_time = sum(result.torch_time for result in test_results)
-                infini_time = sum(result.infini_time for result in test_results)
+                # Calculate timing for all four metrics
+                torch_host_time = sum(result.torch_host_time for result in test_results)
+                torch_device_time = sum(
+                    result.torch_device_time for result in test_results
+                )
+                infini_host_time = sum(
+                    result.infini_host_time for result in test_results
+                )
+                infini_device_time = sum(
+                    result.infini_device_time for result in test_results
+                )
 
                 results[test_name] = {
                     "success": test_success,
                     "return_code": return_code,
-                    "torch_time": torch_time,
-                    "infini_time": infini_time,
+                    "torch_host_time": torch_host_time,
+                    "torch_device_time": torch_device_time,
+                    "infini_host_time": infini_host_time,
+                    "infini_device_time": infini_device_time,
                     "error_message": "",
                     "test_runner": test_runner,
                     "stdout": stdout_output,
@@ -308,8 +328,12 @@ def run_all_op_tests(ops_dir=None, specific_ops=None, bench=False, verbose=False
 
                 # Extract benchmark timing if in bench mode
                 if bench and test_success and return_code == 0:
-                    cumulative_timing["total_torch_time"] += torch_time
-                    cumulative_timing["total_infinicore_time"] += infini_time
+                    cumulative_timing["total_torch_host_time"] += torch_host_time
+                    cumulative_timing["total_torch_device_time"] += torch_device_time
+                    cumulative_timing["total_infinicore_host_time"] += infini_host_time
+                    cumulative_timing[
+                        "total_infinicore_device_time"
+                    ] += infini_device_time
                     cumulative_timing["operators_tested"] += 1
 
             except Exception as e:
@@ -327,8 +351,10 @@ def run_all_op_tests(ops_dir=None, specific_ops=None, bench=False, verbose=False
             results[test_name] = {
                 "success": False,
                 "return_code": -1,
-                "torch_time": 0.0,
-                "infini_time": 0.0,
+                "torch_host_time": 0.0,
+                "torch_device_time": 0.0,
+                "infini_host_time": 0.0,
+                "infini_device_time": 0.0,
                 "error_message": str(e),
                 "test_runner": None,
                 "stdout": "",
@@ -348,7 +374,11 @@ def run_all_op_tests(ops_dir=None, specific_ops=None, bench=False, verbose=False
 
 
 def print_summary(
-    results, verbose=False, total_expected_tests=0, cumulative_timing=None
+    results,
+    verbose=False,
+    total_expected_tests=0,
+    cumulative_timing=None,
+    bench_mode="both",
 ):
     """Print a comprehensive summary of test results including benchmark data."""
     print(f"\n{'='*80}")
@@ -405,12 +435,24 @@ def print_summary(
         print(f"{'-'*40}")
         print("BENCHMARK SUMMARY:")
         print(f"  Operators Tested: {cumulative_timing['operators_tested']}")
-        print(
-            f"  PyTorch    Total Time: {cumulative_timing['total_torch_time'] * 1000:12.3f} ms"
-        )
-        print(
-            f"  InfiniCore Total Time: {cumulative_timing['total_infinicore_time'] * 1000:12.3f} ms"
-        )
+
+        # Display timing based on bench_mode
+        if bench_mode in ["host", "both"]:
+            print(
+                f"  PyTorch    Host Total Time:   {cumulative_timing['total_torch_host_time'] * 1000:12.3f} ms"
+            )
+            print(
+                f"  InfiniCore Host Total Time:   {cumulative_timing['total_infinicore_host_time'] * 1000:12.3f} ms"
+            )
+
+        if bench_mode in ["device", "both"]:
+            print(
+                f"  PyTorch    Device Total Time: {cumulative_timing['total_torch_device_time'] * 1000:12.3f} ms"
+            )
+            print(
+                f"  InfiniCore Device Total Time: {cumulative_timing['total_infinicore_device_time'] * 1000:12.3f} ms"
+            )
+
         print(f"{'-'*40}")
 
     # Display passed operators
@@ -528,8 +570,14 @@ def generate_help_epilog(ops_dir):
     )
     epilog_parts.append("  python run.py --cpu --nvidia --verbose")
     epilog_parts.append("")
-    epilog_parts.append("  # Run with benchmarking to get cumulative timing")
+    epilog_parts.append("  # Run with benchmarking (both host and device timing)")
     epilog_parts.append("  python run.py --cpu --bench")
+    epilog_parts.append("")
+    epilog_parts.append("  # Run with host timing only")
+    epilog_parts.append("  python run.py --nvidia --bench host")
+    epilog_parts.append("")
+    epilog_parts.append("  # Run with device timing only")
+    epilog_parts.append("  python run.py --nvidia --bench device")
     epilog_parts.append("")
     epilog_parts.append("  # List available tests without running")
     epilog_parts.append("  python run.py --list")
@@ -560,10 +608,10 @@ def generate_help_epilog(ops_dir):
         "  - --bench mode now shows cumulative timing across all operators"
     )
     epilog_parts.append(
-        "  - --verbose mode stops execution on first error and shows full traceback"
+        "  - --bench host/device/both controls host/device timing measurement"
     )
     epilog_parts.append(
-        "  - In verbose mode, subsequent tests are skipped after first failure"
+        "  - --verbose mode stops execution on first error and shows full traceback"
     )
 
     return "\n".join(epilog_parts)
@@ -599,8 +647,11 @@ def main():
     )
     parser.add_argument(
         "--bench",
-        action="store_true",
-        help="Enable bench mode to show performance data",
+        nargs="?",
+        const="both",
+        choices=["host", "device", "both"],
+        help="Enable performance benchmarking mode. "
+        "Options: host (CPU time only), device (GPU time only), both (default)",
     )
 
     get_hardware_args_group(parser)
@@ -641,6 +692,10 @@ def main():
     if args.verbose:
         print(f"Verbose mode: ENABLED (will stop on first error with full traceback)")
 
+    if args.bench:
+        bench_mode = args.bench if args.bench != "both" else "both"
+        print(f"Benchmark mode: {bench_mode.upper()} timing")
+
     if args.ops:
         # Validate requested operators
         valid_ops = []
@@ -671,13 +726,18 @@ def main():
     results, cumulative_timing = run_all_op_tests(
         ops_dir=ops_dir,
         specific_ops=args.ops,
-        bench=args.bench,
+        bench=bool(args.bench),
+        bench_mode=args.bench if args.bench else "both",
         verbose=args.verbose,
     )
 
     # Print summary and exit with appropriate code
     all_passed = print_summary(
-        results, args.verbose, total_expected_tests, cumulative_timing
+        results,
+        args.verbose,
+        total_expected_tests,
+        cumulative_timing,
+        bench_mode=args.bench if args.bench else "both",
     )
 
     # Check if there were any tests with missing implementations

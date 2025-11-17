@@ -7,8 +7,8 @@ def test_device_event_timing():
     print("\nTesting DeviceEvent timing...")
 
     # Create events
-    start_event = infinicore.DeviceEvent()
-    end_event = infinicore.DeviceEvent()
+    start_event = infinicore.DeviceEvent(enable_timing=True)
+    end_event = infinicore.DeviceEvent(enable_timing=True)
 
     # Create test tensors
     shape = [1000, 1000]
@@ -44,7 +44,7 @@ def test_device_event_query():
     """Test DeviceEvent query functionality"""
     print("\nTesting DeviceEvent query...")
 
-    event = infinicore.DeviceEvent()
+    event = infinicore.DeviceEvent(enable_timing=True)
 
     # Event should not be completed before recording
     assert not event.is_recorded, "Event should not be recorded initially"
@@ -66,17 +66,25 @@ def test_multiple_devices():
     """Test operations across multiple devices"""
     print("\nTesting multiple devices...")
 
-    cuda_count = 8
+    cuda_count = infinicore.get_device_count("cuda")
 
     if cuda_count > 1:
         # Test operations on different devices
         shape = [100, 100]
 
         # Create events for timing
-        event0_start = infinicore.DeviceEvent(device=infinicore.device("cuda", 0))
-        event0_end = infinicore.DeviceEvent(device=infinicore.device("cuda", 0))
-        event1_start = infinicore.DeviceEvent(device=infinicore.device("cuda", 1))
-        event1_end = infinicore.DeviceEvent(device=infinicore.device("cuda", 1))
+        event0_start = infinicore.DeviceEvent(
+            device=infinicore.device("cuda", 0), enable_timing=True
+        )
+        event0_end = infinicore.DeviceEvent(
+            device=infinicore.device("cuda", 0), enable_timing=True
+        )
+        event1_start = infinicore.DeviceEvent(
+            device=infinicore.device("cuda", 1), enable_timing=True
+        )
+        event1_end = infinicore.DeviceEvent(
+            device=infinicore.device("cuda", 1), enable_timing=True
+        )
 
         # Create tensors on different devices
         event0_start.record()
@@ -149,26 +157,6 @@ def test_multiple_devices():
         print("⚠ Skipping multiple devices test (only 1 CUDA device available)")
 
 
-def test_event_flags():
-    """Test DeviceEvent with different flags"""
-    print("\nTesting DeviceEvent flags...")
-
-    try:
-        # Test with default flags (0)
-        event_default = infinicore.DeviceEvent(flags=0)
-        event_default.record()
-        event_default.synchronize()
-
-        # Test with different flag values (adjust based on available flags)
-        event_with_flags = infinicore.DeviceEvent(flags=1)  # Example flag
-        event_with_flags.record()
-        event_with_flags.synchronize()
-
-        print("✓ DeviceEvent flags test passed")
-    except Exception as e:
-        print(f"⚠ DeviceEvent flags test skipped: {e}")
-
-
 def test_event_stream():
     """Test DeviceEvent with different streams"""
     print("\nTesting DeviceEvent with streams...")
@@ -182,7 +170,7 @@ def test_event_stream():
             print("⚠ infinicore.get_stream() not available, using default stream")
 
         # Create event and record
-        event = infinicore.DeviceEvent()
+        event = infinicore.DeviceEvent(enable_timing=True)
         if default_stream is not None:
             event.record(stream=default_stream)
         else:
@@ -202,7 +190,7 @@ def test_concurrent_events():
     # Create multiple events
     events = []
     for i in range(5):
-        events.append(infinicore.DeviceEvent())
+        events.append(infinicore.DeviceEvent(enable_timing=True))
 
     # Record events with small delays
     for i, event in enumerate(events):
@@ -226,8 +214,8 @@ def test_torch_style_usage():
     print("\nTesting torch.cuda.Event style usage...")
 
     # This should work exactly like torch.cuda.Event
-    start = infinicore.DeviceEvent()
-    end = infinicore.DeviceEvent()
+    start = infinicore.DeviceEvent(enable_timing=True)
+    end = infinicore.DeviceEvent(enable_timing=True)
 
     # Record events
     start.record()
@@ -252,8 +240,8 @@ def test_event_synchronization():
     """Test event synchronization behavior"""
     print("\nTesting event synchronization...")
 
-    event1 = infinicore.DeviceEvent()
-    event2 = infinicore.DeviceEvent()
+    event1 = infinicore.DeviceEvent(enable_timing=True)
+    event2 = infinicore.DeviceEvent(enable_timing=True)
 
     # Record events in sequence
     event1.record()
@@ -278,8 +266,8 @@ def test_event_wait_functionality():
     print("\nTesting DeviceEvent wait functionality...")
 
     # Create events
-    event1 = infinicore.DeviceEvent()
-    event2 = infinicore.DeviceEvent()
+    event1 = infinicore.DeviceEvent(enable_timing=True)
+    event2 = infinicore.DeviceEvent(enable_timing=True)
 
     # Record first event
     event1.record()
@@ -313,8 +301,8 @@ def test_stream_wait_event():
         current_stream = infinicore.get_stream()
 
         # Create events
-        dependency_event = infinicore.DeviceEvent()
-        dependent_event = infinicore.DeviceEvent()
+        dependency_event = infinicore.DeviceEvent(enable_timing=True)
+        dependent_event = infinicore.DeviceEvent(enable_timing=True)
 
         # Record dependency event
         dependency_event.record()
@@ -349,8 +337,8 @@ def test_multiple_stream_synchronization():
 
     try:
         # This test simulates a producer-consumer pattern using events
-        producer_event = infinicore.DeviceEvent()
-        consumer_event = infinicore.DeviceEvent()
+        producer_event = infinicore.DeviceEvent(enable_timing=True)
+        consumer_event = infinicore.DeviceEvent(enable_timing=True)
 
         # Producer work
         producer_event.record()
@@ -389,8 +377,8 @@ def test_event_wait_with_specific_stream():
         main_stream = infinicore.get_stream()
 
         # Create events
-        compute_event = infinicore.DeviceEvent()
-        transfer_event = infinicore.DeviceEvent()
+        compute_event = infinicore.DeviceEvent(enable_timing=True)
+        transfer_event = infinicore.DeviceEvent(enable_timing=True)
 
         # Record compute event after some computation
         compute_event.record()
@@ -425,10 +413,10 @@ def test_complex_dependency_chain():
 
     try:
         # Create multiple events for a dependency chain
-        event_a = infinicore.DeviceEvent()
-        event_b = infinicore.DeviceEvent()
-        event_c = infinicore.DeviceEvent()
-        event_d = infinicore.DeviceEvent()
+        event_a = infinicore.DeviceEvent(enable_timing=True)
+        event_b = infinicore.DeviceEvent(enable_timing=True)
+        event_c = infinicore.DeviceEvent(enable_timing=True)
+        event_d = infinicore.DeviceEvent(enable_timing=True)
 
         # Stage A
         event_a.record()
@@ -477,7 +465,7 @@ def test_wait_before_record():
     print("\nTesting wait before record behavior...")
 
     try:
-        event = infinicore.DeviceEvent()
+        event = infinicore.DeviceEvent(enable_timing=True)
 
         # This should not crash, but the behavior depends on the underlying implementation
         # In most systems, waiting for an unrecorded event is undefined behavior

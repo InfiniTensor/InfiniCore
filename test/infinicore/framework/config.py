@@ -54,8 +54,14 @@ Examples:
   # Run all tests on CPU only
   python test_operator.py --cpu
 
-  # Run with benchmarking on NVIDIA GPU
+  # Run with benchmarking on NVIDIA GPU (both host and device timing)
   python test_operator.py --nvidia --bench
+
+  # Run with benchmarking - host timing only
+  python test_operator.py --nvidia --bench host
+
+  # Run with benchmarking - device timing only  
+  python test_operator.py --nvidia --bench device
 
   # Run with debug mode on multiple devices
   python test_operator.py --cpu --nvidia --debug
@@ -72,8 +78,11 @@ Examples:
     # Core testing options
     parser.add_argument(
         "--bench",
-        action="store_true",
-        help="Enable performance benchmarking mode",
+        nargs="?",
+        const="both",
+        choices=["host", "device", "both"],
+        help="Enable performance benchmarking mode. "
+        "Options: host (CPU time only), device (GPU time only), both (default)",
     )
     parser.add_argument(
         "--num_prerun",

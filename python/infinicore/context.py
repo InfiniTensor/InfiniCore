@@ -1,3 +1,4 @@
+import infinicore.device
 from infinicore.lib import _infinicore
 
 
@@ -19,7 +20,7 @@ def get_device_count(device_type):
     Returns:
         int: The number of available devices of the specified type
     """
-    return _infinicore.get_device_count(device_type)
+    return _infinicore.get_device_count(infinicore.device(device_type)._underlying.type)
 
 
 def set_device(device):

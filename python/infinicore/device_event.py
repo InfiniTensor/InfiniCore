@@ -13,15 +13,26 @@ class DeviceEvent:
     - Make streams wait for events
 
     Args:
+        enable_timing: Whether the event should record timing data. Default: False.
+        blocking: Whether to use blocking synchronization. Default: False.
+        interprocess: Whether the event can be used for inter-process communication. Default: False.
+        external: Whether the event is an external event. Default: False.
         device: Target device for this event. If None, uses current device.
-        flags: Event creation flags (e.g., for timing, blocking sync). Default is 0.
-        enable_timing: Whether the event should be created with timing enabled.
     """
 
-    def __init__(self, device=None, enable_timing=True, flags=0):
+    def __init__(self, enable_timing=False, device=None):
+        # Build flags based on parameters
+        flags = 0
         if not enable_timing:
-            # You might want to handle this differently based on your flag system
-            flags = flags  # Adjust flags if timing is disabled
+            flags |= 0x2  # DISABLE_TIMING
+        # if blocking:
+        #     flags |= 0x1  # BLOCKING_SYNC
+
+        # Store parameters for reference
+        self._enable_timing = enable_timing
+        # self._blocking = blocking
+        # self._interprocess = interprocess
+        # self._external = external
 
         if device is None:
             # Use current device
@@ -69,8 +80,11 @@ class DeviceEvent:
             float: Elapsed time in milliseconds between this event and the other event
 
         Raises:
-            RuntimeError: If events are on different devices or not recorded
+            RuntimeError: If events are on different devices or not recorded,
+                         or if timing is disabled on either event
         """
+        if not self._enable_timing or not other._enable_timing:
+            raise RuntimeError("Cannot measure elapsed time when timing is disabled")
         return self._underlying.elapsed_time(other._underlying)
 
     def wait(self, stream=None):
@@ -91,5 +105,32 @@ class DeviceEvent:
         """Check if the event has been recorded."""
         return self._underlying.is_recorded
 
+    @property
+    def enable_timing(self):
+        """Whether this event records timing data."""
+        return self._enable_timing
+
+    @property
+    def blocking(self):
+        """Whether this event uses blocking synchronization."""
+        return self._blocking
+
+    @property
+    def interprocess(self):
+        """Whether this event can be used for inter-process communication."""
+        return self._interprocess
+
     def __repr__(self):
-        return f"DeviceEvent(device={self.device}, recorded={self.is_recorded})"
+        flags_str = []
+        if not self._enable_timing:
+            flags_str.append("timing_disabled")
+        if self._blocking:
+            flags_str.append("blocking")
+        if self._interprocess:
+            flags_str.append("interprocess")
+        if self._external:
+            flags_str.append("external")
+        if not flags_str:
+            flags_str.append("default")
+
+        return f"DeviceEvent(device={self.device}, flags={', '.join(flags_str)}, recorded={self.is_recorded})"

@@ -1,4 +1,13 @@
 from .base import TestConfig, TestRunner, TestCase, BaseOperatorTest
+from .benchmark import BenchmarkUtils, BenchmarkResult
+from .config import (
+    get_args,
+    get_hardware_args_group,
+    get_test_devices,
+)
+from .datatypes import to_torch_dtype, to_infinicore_dtype
+from .devices import InfiniDeviceEnum, InfiniDeviceNames, torch_device_map
+from .runner import GenericTestRunner
 from .tensor import TensorSpec, TensorInitializer
 from .utils import (
     compare_results,
@@ -6,21 +15,12 @@ from .utils import (
     debug,
     get_tolerance,
     infinicore_tensor_from_torch,
-    profile_operation,
     rearrange_tensor,
     convert_infinicore_to_torch,
     is_integer_dtype,
     is_complex_dtype,
     is_floating_dtype,
 )
-from .config import (
-    get_args,
-    get_hardware_args_group,
-    get_test_devices,
-)
-from .devices import InfiniDeviceEnum, InfiniDeviceNames, torch_device_map
-from .datatypes import to_torch_dtype, to_infinicore_dtype
-from .runner import GenericTestRunner
 
 __all__ = [
     # Core types and classes
@@ -43,7 +43,6 @@ __all__ = [
     "get_test_devices",
     "get_tolerance",
     "infinicore_tensor_from_torch",
-    "profile_operation",
     "rearrange_tensor",
     # Utility functions
     "to_infinicore_dtype",
@@ -53,4 +52,7 @@ __all__ = [
     "is_integer_dtype",
     "is_complex_dtype",
     "is_floating_dtype",
+    # Benchmarking utilities
+    "BenchmarkUtils",
+    "BenchmarkResult",
 ]

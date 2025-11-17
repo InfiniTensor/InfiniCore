@@ -71,9 +71,6 @@ infiniStatus_t eventCreateWithFlags(infinirtEvent_t *event_ptr, uint32_t flags) 
 }
 
 infiniStatus_t eventRecord(infinirtEvent_t event, infinirtStream_t stream) {
-    if (event == nullptr) {
-        std::cout << "Event is nullptr!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!" << std::endl;
-    }
     CHECK_CUDART(cudaEventRecord((cudaEvent_t)event, (cudaStream_t)stream));
     return INFINI_STATUS_SUCCESS;
 }

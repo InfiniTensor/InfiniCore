@@ -11,8 +11,8 @@ from .tensor import TensorSpec, TensorInitializer
 from .utils import (
     create_test_comparator,
     infinicore_tensor_from_torch,
-    profile_operation,
 )
+from .benchmark import BenchmarkUtils
 
 
 @dataclass
@@ -21,8 +21,10 @@ class TestResult:
 
     success: bool
     return_code: int  # 0: success, -1: failure, -2: skipped, -3: partial
-    torch_time: float = 0.0
-    infini_time: float = 0.0
+    torch_host_time: float = 0.0
+    torch_device_time: float = 0.0
+    infini_host_time: float = 0.0
+    infini_device_time: float = 0.0
     error_message: str = ""
     test_case: Any = None
     device: Any = None
@@ -202,8 +204,10 @@ class TestRunner:
         )  # Track passed tests (both operators implemented and passed)
         # Add benchmark timing statistics
         self.benchmark_times = {
-            "torch_total": 0.0,
-            "infinicore_total": 0.0,
+            "torch_host_total": 0.0,
+            "torch_device_total": 0.0,
+            "infinicore_host_total": 0.0,
+            "infinicore_device_total": 0.0,
             "per_test_case": {},  # Store timing per test case
         }
         # Store test results
@@ -329,8 +333,10 @@ class TestRunner:
 
         # Print benchmark summary if benchmarking was enabled
         if self.config.bench and (
-            self.benchmark_times["torch_total"] > 0
-            or self.benchmark_times["infinicore_total"] > 0
+            self.benchmark_times["torch_host_total"] > 0
+            or self.benchmark_times["torch_device_total"] > 0
+            or self.benchmark_times["infinicore_host_total"] > 0
+            or self.benchmark_times["infinicore_device_total"] > 0
         ):
             self._print_benchmark_summary()
 
@@ -342,19 +348,28 @@ class TestRunner:
         print(f"{'-'*60}")
         print("BENCHMARK SUMMARY")
 
-        torch_total = self.benchmark_times["torch_total"]
-        infinicore_total = self.benchmark_times["infinicore_total"]
+        torch_host_total = self.benchmark_times["torch_host_total"]
+        torch_device_total = self.benchmark_times["torch_device_total"]
+        infinicore_host_total = self.benchmark_times["infinicore_host_total"]
+        infinicore_device_total = self.benchmark_times["infinicore_device_total"]
 
-        if torch_total > 0:
-            print(f"PyTorch Total Time: {torch_total * 1000:.3f} ms")
-        if infinicore_total > 0:
-            print(f"InfiniCore Total Time: {infinicore_total * 1000:.3f} ms")
+        if torch_host_total > 0:
+            print(f"PyTorch Host Total Time: {torch_host_total:.3f} ms")
+        if torch_device_total > 0:
+            print(f"PyTorch Device Total Time: {torch_device_total:.3f} ms")
+        if infinicore_host_total > 0:
+            print(f"InfiniCore Host Total Time: {infinicore_host_total:.3f} ms")
+        if infinicore_device_total > 0:
+            print(f"InfiniCore Device Total Time: {infinicore_device_total:.3f} ms")
 
-        if torch_total > 0 and infinicore_total > 0:
-            speedup = (
-                torch_total / infinicore_total if infinicore_total > 0 else float("inf")
-            )
-            print(f"Speedup (PyTorch/InfiniCore): {speedup:.2f}x")
+        # Calculate speedups
+        if torch_host_total > 0 and infinicore_host_total > 0:
+            host_speedup = torch_host_total / infinicore_host_total
+            print(f"Host Speedup (PyTorch/InfiniCore): {host_speedup:.2f}x")
+
+        if torch_device_total > 0 and infinicore_device_total > 0:
+            device_speedup = torch_device_total / infinicore_device_total
+            print(f"Device Speedup (PyTorch/InfiniCore): {device_speedup:.2f}x")
 
     def get_test_results(self):
         """Get all test results"""
@@ -593,20 +608,27 @@ class BaseOperatorTest(ABC):
             test_result.return_code = -3  # Partial
             # Run benchmarking for partial tests if enabled
             if config.bench:
-                torch_time, infini_time = self._run_benchmarking(
-                    config,
-                    device_str,
-                    torch_implemented,
-                    infini_implemented,
-                    inputs,
-                    kwargs,
-                    infini_inputs,
-                    infini_kwargs,
-                    test_case.output_count,
-                    comparison_target,
+                torch_host, torch_device, infini_host, infini_device = (
+                    BenchmarkUtils.run_benchmarking(
+                        config,
+                        device_str,
+                        torch_implemented,
+                        infini_implemented,
+                        self.torch_operator,
+                        self.infinicore_operator,
+                        inputs,
+                        kwargs,
+                        infini_inputs,
+                        infini_kwargs,
+                        test_case.output_count,
+                        comparison_target,
+                        bench_mode=config.bench,
+                    )
                 )
-                test_result.torch_time = torch_time
-                test_result.infini_time = infini_time
+                test_result.torch_host_time = torch_host
+                test_result.torch_device_time = torch_device
+                test_result.infini_host_time = infini_host
+                test_result.infini_device_time = infini_device
             return test_result
         # ==========================================================================
         # MULTIPLE OUTPUTS COMPARISON LOGIC
@@ -716,109 +738,43 @@ class BaseOperatorTest(ABC):
         # UNIFIED BENCHMARKING LOGIC
         # ==========================================================================
         if config.bench:
-            torch_time, infini_time = self._run_benchmarking(
-                config,
-                device_str,
-                True,
-                True,
-                inputs,
-                kwargs,
-                infini_inputs,
-                infini_kwargs,
-                test_case.output_count,
-                comparison_target,
+            torch_host, torch_device, infini_host, infini_device = (
+                BenchmarkUtils.run_benchmarking(
+                    config,
+                    device_str,
+                    True,
+                    True,
+                    self.torch_operator,
+                    self.infinicore_operator,
+                    inputs,
+                    kwargs,
+                    infini_inputs,
+                    infini_kwargs,
+                    test_case.output_count,
+                    comparison_target,
+                    bench_mode=config.bench,
+                )
             )
-            test_result.torch_time = torch_time
-            test_result.infini_time = infini_time
+            test_result.torch_host_time = torch_host
+            test_result.torch_device_time = torch_device
+            test_result.infini_host_time = infini_host
+            test_result.infini_device_time = infini_device
+
+            # Store timing information in the test runner
+            if hasattr(config, "_test_runner") and config._test_runner:
+                # Accumulate total times
+                config._test_runner.benchmark_times["torch_host_total"] += torch_host
+                config._test_runner.benchmark_times[
+                    "torch_device_total"
+                ] += torch_device
+                config._test_runner.benchmark_times[
+                    "infinicore_host_total"
+                ] += infini_host
+                config._test_runner.benchmark_times[
+                    "infinicore_device_total"
+                ] += infini_device
 
         # Test passed successfully
         test_result.success = True
         test_result.return_code = 0
         return test_result
-
-    def _run_benchmarking(
-        self,
-        config,
-        device_str,
-        torch_implemented,
-        infini_implemented,
-        inputs,
-        kwargs,
-        infini_inputs,
-        infini_kwargs,
-        output_count,
-        comparison_target,
-    ):
-        """
-        Unified benchmarking logic with timing accumulation
-
-        Returns:
-            tuple: (torch_time, infini_time) timing results
-        """
-        # Initialize timing variables
-        torch_time = 0.0
-        infini_time = 0.0
-
-        if torch_implemented:
-            if output_count > 1:
-                # For multiple outputs, just call the operator
-                def torch_op():
-                    return self.torch_operator(*inputs, **kwargs)
-
-            else:
-                if comparison_target is None:
-                    # Out-of-place benchmarking
-                    def torch_op():
-                        return self.torch_operator(*inputs, **kwargs)
-
-                else:
-                    # In-place benchmarking
-                    def torch_op():
-                        self.torch_operator(*inputs, **kwargs)
-                        return (
-                            kwargs.get("out")
-                            if "out" in kwargs
-                            else inputs[comparison_target]
-                        )
-
-            torch_time = profile_operation(
-                "PyTorch   ",
-                torch_op,
-                device_str,
-                config.num_prerun,
-                config.num_iterations,
-                total=True,
-            )
-
-        if infini_implemented:
-            if comparison_target is None:
-                # Out-of-place benchmarking
-                def infini_op():
-                    return self.infinicore_operator(*infini_inputs, **infini_kwargs)
-
-            else:
-                # In-place benchmarking
-                def infini_op():
-                    self.infinicore_operator(*infini_inputs, **infini_kwargs)
-                    return (
-                        infini_kwargs.get("out")
-                        if "out" in infini_kwargs
-                        else infini_inputs[comparison_target]
-                    )
-
-            infini_time = profile_operation(
-                "InfiniCore",
-                infini_op,
-                device_str,
-                config.num_prerun,
-                config.num_iterations,
-                total=True,
-            )
-
-        # Store timing information in the test runner
-        if hasattr(config, "_test_runner") and config._test_runner:
-            # Accumulate total times
-            config._test_runner.benchmark_times["torch_total"] += torch_time
-            config._test_runner.benchmark_times["infinicore_total"] += infini_time
-
-        return torch_time, infini_time

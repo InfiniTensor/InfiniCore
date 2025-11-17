@@ -15,35 +15,6 @@ def synchronize_device(torch_device):
         torch.mlu.synchronize()
 
 
-def timed_op(func, num_iterations, device):
-    """Timed operation"""
-    synchronize_device(device)
-    start = time.time()
-    for _ in range(num_iterations):
-        func()
-    synchronize_device(device)
-    return time.time() - start
-
-
-def profile_operation(
-    desc, func, torch_device, num_prerun, num_iterations, total=False
-):
-    """
-    Performance profiling workflow
-    """
-    # Warm-up runs
-    for _ in range(num_prerun):
-        func()
-
-    # Timed execution
-    elapsed = timed_op(lambda: func(), num_iterations, torch_device)
-    print(f"    {desc} time: {elapsed / num_iterations * 1000 :6f} ms")
-    if total:
-        return elapsed
-    else:
-        return elapsed / num_iterations
-
-
 def debug(actual, desired, atol=0, rtol=1e-2, equal_nan=False, verbose=True):
     """
     Debug function to compare two tensors and print differences
