@@ -27,4 +27,6 @@
 #include "infiniop/ops/sigmoid.h"
 #include "infiniop/tensor_descriptor.h"
 
+#include "infiniop/index_copy_inplace.h"
+
 #endif // __INFINIOP_API_H__
