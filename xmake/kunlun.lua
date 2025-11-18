@@ -17,8 +17,13 @@ add_linkdirs(path.join(XRE_DIR, "so"))
 add_linkdirs(path.join(XDNN_DIR, "so"))
 add_linkdirs(path.join(XBLAS_DIR, "so"))
 
+-- Add rpath
+add_rpathdirs(path.join(XRE_DIR, "so"))
+add_rpathdirs(path.join(XDNN_DIR, "so"))
+add_rpathdirs(path.join(XBLAS_DIR, "so"))
+
 -- Add links
-add_links("xpurt", "xpuapi", "xpu_blas")
+add_links("xpurt", "xpuapi", "xpu_blas", "cudart")
 
 rule("xpu")
     set_extensions(".xpu")

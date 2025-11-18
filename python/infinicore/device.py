@@ -79,7 +79,7 @@ class device:
             if infinicore_type == infinicore_device.type:
                 break
 
-            base_index += _infinicore.get_device_count(infinicore_device)
+            base_index += _infinicore.get_device_count(infinicore_type)
 
         return device(type, base_index + infinicore_device.index)
 
