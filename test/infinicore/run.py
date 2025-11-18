@@ -439,18 +439,18 @@ def print_summary(
         # Display timing based on bench_mode
         if bench_mode in ["host", "both"]:
             print(
-                f"  PyTorch    Host Total Time:   {cumulative_timing['total_torch_host_time'] * 1000:12.3f} ms"
+                f"  PyTorch    Host Total Time:   {cumulative_timing['total_torch_host_time']:12.3f} ms"
             )
             print(
-                f"  InfiniCore Host Total Time:   {cumulative_timing['total_infinicore_host_time'] * 1000:12.3f} ms"
+                f"  InfiniCore Host Total Time:   {cumulative_timing['total_infinicore_host_time']:12.3f} ms"
             )
 
         if bench_mode in ["device", "both"]:
             print(
-                f"  PyTorch    Device Total Time: {cumulative_timing['total_torch_device_time'] * 1000:12.3f} ms"
+                f"  PyTorch    Device Total Time: {cumulative_timing['total_torch_device_time']:12.3f} ms"
             )
             print(
-                f"  InfiniCore Device Total Time: {cumulative_timing['total_infinicore_device_time'] * 1000:12.3f} ms"
+                f"  InfiniCore Device Total Time: {cumulative_timing['total_infinicore_device_time']:12.3f} ms"
             )
 
         print(f"{'-'*40}")
