@@ -111,6 +111,17 @@ class BenchmarkUtils:
         if device in ["cpu"]:
             return 0.0
 
+        def _clear_cache():
+            pass
+
+        if infinicore.use_ntops:
+            import triton
+
+            cache = triton.runtime.driver.active.get_empty_cache_for_benchmark()
+
+            def _clear_cache():
+                triton.runtime.driver.active.clear_cache(cache)
+
         # Create pairs of DeviceEvents for each iteration
         start_events = [
             infinicore.DeviceEvent(enable_timing=True) for _ in range(num_iterations)
@@ -121,6 +132,7 @@ class BenchmarkUtils:
 
         # Execute the function multiple times with individual timing
         for i in range(num_iterations):
+            _clear_cache()
             start_events[i].record()
             func()
             end_events[i].record()
