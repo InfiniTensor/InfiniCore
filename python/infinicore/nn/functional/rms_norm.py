@@ -1,3 +1,5 @@
+from typing import List
+
 from infinicore.lib import _infinicore
 from infinicore.tensor import Tensor
 
@@ -6,7 +8,7 @@ __all__ = ["rms_norm"]
 
 def rms_norm(
     input: Tensor,
-    normalized_shape: list[int],
+    normalized_shape: List[int],
     weight: Tensor,
     eps: float = 1e-5,
     *,
