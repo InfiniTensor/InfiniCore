@@ -264,6 +264,12 @@ if __name__ == "__main__":
     NUM_PRERUN = args.num_prerun
     NUM_ITERATIONS = args.num_iterations
     for device in get_test_devices(args):
-        test_operator(device, test, _TEST_CASES, _TENSOR_DTYPES)
+        # 海光DCU不支持bfloat16，只测试F16和F32
+        tensor_dtypes = _TENSOR_DTYPES
+        if InfiniDeviceNames[device] == "Hygon":
+            tensor_dtypes = [InfiniDtype.F16, InfiniDtype.F32]  # 跳过BF16
+            print(f"Testing on Hygon DCU, skipping BF16 (unsupported)")
+
+        test_operator(device, test, _TEST_CASES, tensor_dtypes)
 
     print("\033[92mTest passed!\033[0m")

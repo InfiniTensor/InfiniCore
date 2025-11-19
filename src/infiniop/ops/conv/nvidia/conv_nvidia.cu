@@ -213,10 +213,16 @@ private:
 
     infiniStatus_t setupAlgorithmWithBias() {
         int maxAlgoCount = 0;
+
+        // 为海光DCU提供特殊处理 - 避免使用不支持的API
         CHECK_STATUS(internal->useCudnn(
             nullptr,
             [&](cudnnHandle_t handle) {
-                CHECK_CUDNN(cudnnGetConvolutionForwardAlgorithmMaxCount(handle, &maxAlgoCount));
+                auto result = cudnnGetConvolutionForwardAlgorithmMaxCount(handle, &maxAlgoCount);
+                if (result != CUDNN_STATUS_SUCCESS) {
+                    // 如果海光DCU不支持此API，使用默认值
+                    maxAlgoCount = 8;
+                }
                 return INFINI_STATUS_SUCCESS;
             }));
 
@@ -227,11 +233,19 @@ private:
         std::vector<cudnnConvolutionFwdAlgoPerf_t> perf_results(maxAlgoCount);
         int algoCounts = 0;
 
+        // 为海光DCU提供特殊处理 - 避免使用可能不支持的API
         CHECK_STATUS(internal->useCudnn(
             nullptr, [&](cudnnHandle_t handle) {
-                CHECK_CUDNN(cudnnFindConvolutionForwardAlgorithm(
+                auto result = cudnnFindConvolutionForwardAlgorithm(
                     handle, x_desc, w_desc, conv_desc, y_desc,
-                    maxAlgoCount, &algoCounts, perf_results.data()));
+                    maxAlgoCount, &algoCounts, perf_results.data());
+                if (result != CUDNN_STATUS_SUCCESS) {
+                    // 如果海光DCU不支持此API，使用默认算法
+                    algoCounts = 1;
+                    perf_results[0].algo = CUDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_PRECOMP_GEMM;
+                    perf_results[0].status = CUDNN_STATUS_SUCCESS;
+                    perf_results[0].time = 0.0f;
+                }
                 return INFINI_STATUS_SUCCESS;
             }));
 
