@@ -43,7 +43,7 @@ target("infiniop-iluvatar")
 
     set_warnings("all", "error")
     add_cuflags("-Wno-error=unused-private-field")
-    add_cuflags("-fPIC", "-x", "ivcore", "-std=c++17", {force = true})
+    add_cuflags("-fPIC", "-x", "ivcore", "-std=c++17", "--cuda-gpu-arch=ivcore20", {force = true})
     add_culdflags("-fPIC")
     add_cxflags("-fPIC")
 
