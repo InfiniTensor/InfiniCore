@@ -97,7 +97,7 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
 | `--ascend-npu=[y\|n]`    | 是否编译昇腾 NPU 接口实现         | n
 | `--cambricon-mlu=[y\|n]` | 是否编译寒武纪 MLU 接口实现       | n
 | `--metax-gpu=[y\|n]`     | 是否编译沐曦 GPU 接口实现         | n
-| `--use_mc=[y\|n]`        | 是否沐曦 GPU 接口实现使用maca SDK | n
+| `--use-mc=[y\|n]`        | 是否沐曦 GPU 接口实现使用maca SDK | n
 | `--moore-gpu=[y\|n]`     | 是否编译摩尔线程 GPU 接口实现     | n
 | `--iluvatar-gpu=[y\|n]`  | 是否编译沐曦 GPU 接口实现         | n
 | `--hygon-dcu=[y\|n]`     | 是否编译海光 DCU 接口实现         | n
