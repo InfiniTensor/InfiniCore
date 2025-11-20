@@ -11,6 +11,7 @@
 #include <hcdnn/hcdnn.h>
 #endif
 #include <memory>
+#include <functional>
 
 #define CHECK_MCBLAS(API) CHECK_INTERNAL(API, HCBLAS_STATUS_SUCCESS)
 #define CHECK_MCDNN(API) CHECK_INTERNAL(API, HCDNN_STATUS_SUCCESS)
