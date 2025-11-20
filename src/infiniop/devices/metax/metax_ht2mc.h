@@ -5,6 +5,7 @@
 #define hcdnnDataType_t mcdnnDataType_t
 #define hpcc_bfloat16 maca_bfloat16
 #define hpcc_bfloat162 maca_bfloat162
+#define __hpcc_fp8_e4m3 __maca_fp8_e4m3
 #define __hpcc_bfloat16 __maca_bfloat16
 #define __hpcc_bfloat16 __maca_bfloat16
 #define hcError_t mcError_t

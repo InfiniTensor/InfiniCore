@@ -1,6 +1,10 @@
 #define INFINIOP_METAX_KERNEL __global__ void
 
+#ifdef ENABLE_METAX_MC_API
+#include <maca_fp8.h>
+#else
 #include <hpcc_fp8.h>
+#endif
 
 // Posible maximum number of threads per block for METAX architectures
 // Used for picking correct kernel launch configuration
