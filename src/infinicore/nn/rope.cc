@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
-#include <spdlog/spdlog.h>
 #include <stdexcept>
 
 namespace infinicore::nn {
@@ -12,15 +11,16 @@ namespace infinicore::nn {
 RoPE::RoPE(size_t head_dim,
            size_t max_seq_len,
            double theta,
+           FreqGen freq_gen,
            Algo algo,
            const DataType &dtype,
            const Device &device)
     : head_dim_(head_dim),
       max_seq_len_(max_seq_len),
       theta_(theta),
+      freq_gen_(freq_gen),
       algo_(algo),
       dtype_(dtype) {
-
     if (head_dim % 2 != 0) {
         throw std::invalid_argument("head_dim must be even for RoPE, got " + std::to_string(head_dim));
     }
@@ -29,9 +29,6 @@ RoPE::RoPE(size_t head_dim,
 
     // Initialize cache tables
     initialize_cache();
-
-    spdlog::debug("Created RoPE module: head_dim={}, max_seq_len={}, theta={}, algo={}, dtype={}",
-                  head_dim, max_seq_len, theta, static_cast<int>(algo), static_cast<int>(dtype_));
 }
 
 void RoPE::initialize_cache() {
@@ -42,9 +39,10 @@ void RoPE::initialize_cache() {
     INFINICORE_NN_BUFFER_INIT(cos_cache, ({max_seq_len_, cache_dim}, dtype_, device_));
 
     // Pre-compute sin and cos values
-    // The frequency calculation differs based on algorithm:
-    // - GPT_J: pairs are (2j, 2j+1) for cache entry j, frequency for dimension 2j is theta^(-2j/head_dim)
-    // - GPT_NEOX: pairs are (j, j+head_dim/2) for cache entry j, frequency for dimension j is theta^(-j/head_dim)
+    // The frequency calculation is controlled by freq_gen_:
+    // - GPT_J: frequency for cache entry j is theta^(-2j/head_dim)
+    // - GPT_NEOX: frequency for cache entry j is theta^(-j/head_dim)
+    // The rotation algorithm (algo_) controls how dimensions are paired in the kernel
 
     // Compute on CPU first, then copy to device
     auto cpu_device = Device(Device::Type::CPU, 0);
@@ -55,19 +53,17 @@ void RoPE::initialize_cache() {
 
     for (size_t pos = 0; pos < max_seq_len_; pos++) {
         for (size_t j = 0; j < cache_dim; j++) {
-            // Compute inverse frequency based on algorithm
+            // Compute inverse frequency based on frequency generation method
             double inv_freq;
 
-            if (algo_ == Algo::GPT_J) {
-                // GPT_J: pairs are (2j, 2j+1) for cache entry j
-                // Frequency for pair j: theta^(-2j/head_dim)
+            if (freq_gen_ == FreqGen::GPT_J) {
+                // GPT_J style: frequency for cache entry j is theta^(-2j/head_dim)
                 inv_freq = 1.0 / std::pow(theta_, 2.0 * static_cast<double>(j) / static_cast<double>(head_dim_));
-            } else if (algo_ == Algo::GPT_NEOX) {
-                // GPT_NEOX: pairs are (j, j+head_dim/2) for cache entry j
-                // Frequency for pair j (corresponding to dimension j): theta^(-j/head_dim)
+            } else if (freq_gen_ == FreqGen::GPT_NEOX) {
+                // GPT_NEOX style: frequency for cache entry j is theta^(-j/head_dim)
                 inv_freq = 1.0 / std::pow(theta_, static_cast<double>(j) / static_cast<double>(head_dim_));
             } else {
-                throw std::runtime_error("Unsupported RoPE algorithm: " + std::to_string(static_cast<int>(algo_)));
+                throw std::runtime_error("Unsupported frequency generation method: " + std::to_string(static_cast<int>(freq_gen_)));
             }
 
             // Compute angle: position * inverse_frequency
@@ -107,8 +103,9 @@ Tensor RoPE::forward(const Tensor &x, const Tensor &pos) const {
 }
 
 std::string RoPE::extra_repr() const {
+    std::string freq_gen_str = (freq_gen_ == FreqGen::GPT_J) ? "GPT_J" : "GPT_NEOX";
     std::string algo_str = (algo_ == Algo::GPT_J) ? "GPT_J" : "GPT_NEOX";
-    return "RoPE(head_dim=" + std::to_string(head_dim_) + ", max_seq_len=" + std::to_string(max_seq_len_) + ", theta=" + std::to_string(theta_) + ", algo=" + algo_str + ", dtype=" + std::to_string(static_cast<int>(dtype_)) + ")";
+    return "RoPE(head_dim=" + std::to_string(head_dim_) + ", max_seq_len=" + std::to_string(max_seq_len_) + ", theta=" + std::to_string(theta_) + ", freq_gen=" + freq_gen_str + ", algo=" + algo_str + ", dtype=" + std::to_string(static_cast<int>(dtype_)) + ")";
 }
 
 } // namespace infinicore::nn

@@ -4,6 +4,8 @@
 #include <pybind11/stl.h>
 
 #include "infinicore.hpp"
+#include <spdlog/spdlog.h>
+#include <iostream>
 
 namespace py = pybind11;
 

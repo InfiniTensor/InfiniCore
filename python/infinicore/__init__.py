@@ -1,5 +1,6 @@
 import contextlib
 
+import infinicore.context as context
 import infinicore.nn as nn
 from infinicore.device import device
 from infinicore.dtype import (
@@ -46,6 +47,7 @@ from infinicore.tensor import (
 
 __all__ = [
     # Modules.
+    "context",
     "nn",
     # Classes.
     "device",
@@ -98,6 +100,7 @@ with contextlib.suppress(ImportError, ModuleNotFoundError):
     import ntops
 
     for op_name in ntops.torch.__all__:
-        getattr(ntops.torch, op_name).__globals__["torch"] = sys.modules[__name__]
+        getattr(ntops.torch, op_name).__globals__[
+            "torch"] = sys.modules[__name__]
 
     use_ntops = True

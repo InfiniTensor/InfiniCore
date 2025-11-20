@@ -173,7 +173,9 @@ std::shared_ptr<TensorImpl> TensorImpl::empty(const Shape &shape,
     auto t = std::shared_ptr<TensorImpl>(new TensorImpl(shape, dtype));
     t->data_.offset = 0;
 
-    context::setDevice(device);
+    if (device.getType() != Device::Type::CPU) {
+        context::setDevice(device);
+    }
 
     if (device == Device::Type::CPU) {
         if (pin_memory) {
@@ -203,7 +205,9 @@ std::shared_ptr<TensorImpl> TensorImpl::strided_empty(
     auto impl = std::shared_ptr<TensorImpl>(new TensorImpl(shape, strides, dtype));
     impl->data_.offset = 0;
 
-    context::setDevice(device);
+    if (device.getType() != Device::Type::CPU) {
+        context::setDevice(device);
+    }
 
     size_t max_offset = 0;
 

@@ -3,8 +3,8 @@
 
 #include "infinicore/context/context.hpp"
 #include "infinicore/tensor.hpp"
-#include "memory_test.h"
-#include "test_runner.h"
+#include "../memory_test.h"
+#include "../test_runner.h"
 #include <iostream>
 #include <memory>
 #include <vector>

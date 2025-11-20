@@ -9,6 +9,7 @@ namespace py = pybind11;
 namespace infinicore::context {
 
 inline void bind(py::module &m) {
+    m.def("set_device", &setDevice);
     m.def("get_device", &getDevice);
     m.def("get_device_count", &getDeviceCount);
 }

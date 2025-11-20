@@ -2,6 +2,7 @@
 #include "infinicore/dtype.hpp"
 #include "infinicore/tensor.hpp"
 
+#include <spdlog/spdlog.h>
 #include <cstring>
 #include <fstream>
 #include <iostream>
