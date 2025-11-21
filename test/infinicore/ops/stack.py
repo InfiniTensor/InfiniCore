@@ -13,11 +13,6 @@ from framework.runner import GenericTestRunner
 # ==============================================================================
 
 # Test cases format: (base_shape, num_tensors, dim)
-#
-#   base_shape  : shape of each input tensor
-#   num_tensors : number of tensors to stack
-#   dim         : dimension at which to insert the new axis
-
 _TEST_CASES_DATA = [
     # ========== Basic cases ==========
     ((8,),              2,  0),
@@ -84,7 +79,7 @@ def parse_test_cases():
 
             cases.append(
                 TestCase(
-                    inputs=input_specs,
+                    inputs=[tuple(input_specs)],  
                     kwargs=kwargs,
                     output_spec=None,
                     comparison_target=None,
