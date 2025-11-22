@@ -8,6 +8,29 @@ namespace py = pybind11;
 
 namespace infinicore::ops {
 
+Tensor py_self_attention(Tensor query,
+                         Tensor key,
+                         Tensor value,
+                         pybind11::object scale) {
+    std::optional<float> scale_float = std::nullopt;
+    if (!scale.is_none()) {
+        scale_float = scale.cast<float>();
+    }
+    return op::self_attention(query, key, value, scale_float);
+}
+
+void py_self_attention_(Tensor out,
+                        Tensor query,
+                        Tensor key,
+                        Tensor value,
+                        pybind11::object scale) {
+    std::optional<float> scale_float = std::nullopt;
+    if (!scale.is_none()) {
+        scale_float = scale.cast<float>();
+    }
+    op::self_attention_(out, query, key, value, scale_float);
+}
+
 inline void bind_attention(py::module &m) {
     m.def("attention",
           &op::attention,
@@ -21,7 +44,7 @@ inline void bind_attention(py::module &m) {
 
 Args:
     q: Query tensor
-    k: Key tensor  
+    k: Key tensor
     v: Value tensor
     k_cache: Key cache tensor
     v_cache: Value cache tensor
@@ -51,6 +74,23 @@ Args:
     v_cache: Value cache tensor
     pos: Current position in the sequence
 )doc");
+
+    m.def("self_attention",
+          &ops::py_self_attention,
+          py::arg("query"),
+          py::arg("key"),
+          py::arg("value"),
+          py::arg("scale") = py::none(),
+          R"doc(Computes scaled dot product attention on query, key and value tensors)doc");
+
+    m.def("self_attention_",
+          &ops::py_self_attention_,
+          py::arg("out"),
+          py::arg("query"),
+          py::arg("key"),
+          py::arg("value"),
+          py::arg("scale") = py::none(),
+          R"doc(In-place, Computes scaled dot product attention on query, key and value tensors)doc");
 }
 
 } // namespace infinicore::ops
