@@ -129,16 +129,16 @@ std::shared_ptr<Memory> allocatePinnedHostMemory(size_t size) {
     return ContextImpl::singleton().getCurrentRuntime()->allocatePinnedHostMemory(size);
 }
 
-void memcpyH2D(void *dst, const void *src, size_t size) {
-    return ContextImpl::singleton().getCurrentRuntime()->memcpyH2D(dst, src, size);
+void memcpyH2D(void *dst, const void *src, size_t size, bool async) {
+    return ContextImpl::singleton().getCurrentRuntime()->memcpyH2D(dst, src, size, async);
 }
 
 void memcpyD2H(void *dst, const void *src, size_t size) {
     return ContextImpl::singleton().getCurrentRuntime()->memcpyD2H(dst, src, size);
 }
 
-void memcpyD2D(void *dst, const void *src, size_t size) {
-    return ContextImpl::singleton().getCurrentRuntime()->memcpyD2D(dst, src, size);
+void memcpyD2D(void *dst, const void *src, size_t size, bool async) {
+    return ContextImpl::singleton().getCurrentRuntime()->memcpyD2D(dst, src, size, async);
 }
 
 void memcpyH2H(void *dst, const void *src, size_t size) {

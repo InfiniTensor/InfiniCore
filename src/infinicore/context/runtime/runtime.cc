@@ -76,16 +76,24 @@ std::shared_ptr<Memory> Runtime::allocatePinnedHostMemory(size_t size) {
         true);
 }
 
-void Runtime::memcpyH2D(void *dst, const void *src, size_t size) {
-    INFINICORE_CHECK_ERROR(infinirtMemcpyAsync(dst, src, size, INFINIRT_MEMCPY_H2D, stream_));
+void Runtime::memcpyH2D(void *dst, const void *src, size_t size, bool async) {
+    if (async) {
+        INFINICORE_CHECK_ERROR(infinirtMemcpyAsync(dst, src, size, INFINIRT_MEMCPY_H2D, stream_));
+    } else {
+        INFINICORE_CHECK_ERROR(infinirtMemcpy(dst, src, size, INFINIRT_MEMCPY_H2D));
+    }
 }
 
 void Runtime::memcpyD2H(void *dst, const void *src, size_t size) {
     INFINICORE_CHECK_ERROR(infinirtMemcpy(dst, src, size, INFINIRT_MEMCPY_D2H));
 }
 
-void Runtime::memcpyD2D(void *dst, const void *src, size_t size) {
-    INFINICORE_CHECK_ERROR(infinirtMemcpyAsync(dst, src, size, INFINIRT_MEMCPY_D2D, stream_));
+void Runtime::memcpyD2D(void *dst, const void *src, size_t size, bool async) {
+    if (async) {
+        INFINICORE_CHECK_ERROR(infinirtMemcpyAsync(dst, src, size, INFINIRT_MEMCPY_D2D, stream_));
+    } else {
+        INFINICORE_CHECK_ERROR(infinirtMemcpy(dst, src, size, INFINIRT_MEMCPY_D2D));
+    }
 }
 
 // Timing method implementations

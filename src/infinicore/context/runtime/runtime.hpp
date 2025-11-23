@@ -34,9 +34,9 @@ public:
     std::shared_ptr<Memory> allocateMemory(size_t size);
     std::shared_ptr<Memory> allocatePinnedHostMemory(size_t size);
 
-    void memcpyH2D(void *dst, const void *src, size_t size);
+    void memcpyH2D(void *dst, const void *src, size_t size, bool async = true);
     void memcpyD2H(void *dst, const void *src, size_t size);
-    void memcpyD2D(void *dst, const void *src, size_t size);
+    void memcpyD2D(void *dst, const void *src, size_t size, bool async = true);
 
     // Timing methods
     infinirtEvent_t createEvent();
