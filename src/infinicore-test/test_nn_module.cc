@@ -1032,8 +1032,8 @@ TestResult NNModuleTest::testModuleRoPE() {
 
             // Test 3: Different algorithms
             SPDLOG_INFO("Test 3: Testing different algorithms");
-            infinicore::nn::RoPE rope_gptj(64, 1024, 10000.0, infinicore::nn::RoPE::FreqGen::GPT_J, infinicore::nn::RoPE::Algo::GPT_J);
-            infinicore::nn::RoPE rope_gptneox(64, 1024, 10000.0, infinicore::nn::RoPE::FreqGen::GPT_NEOX, infinicore::nn::RoPE::Algo::GPT_NEOX);
+            infinicore::nn::RoPE rope_gptj(64, 1024, 10000.0, infinicore::nn::RoPE::Algo::GPT_J, infinicore::nn::RoPE::Algo::GPT_J);
+            infinicore::nn::RoPE rope_gptneox(64, 1024, 10000.0, infinicore::nn::RoPE::Algo::GPT_NEOX, infinicore::nn::RoPE::Algo::GPT_NEOX);
 
             if (rope_gptj.algo() != infinicore::nn::RoPE::Algo::GPT_J) {
                 SPDLOG_ERROR("GPT_J algorithm not set correctly");

@@ -9,6 +9,8 @@ local NC = '\27[0m'  -- No Color
 
 set_encodings("utf-8")
 
+set_toolchains("gcc")
+
 add_includedirs("include")
 add_includedirs("third_party/spdlog/include")
 
@@ -348,8 +350,26 @@ target("infiniccl")
 target_end()
 
 target("infinicore_c_api")
-    set_kind("phony")
-    add_deps("infiniop", "infinirt", "infiniccl")
+    set_kind("shared")
+    set_languages("cxx17")
+
+    local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
+
+    add_includedirs("include")
+    add_includedirs(INFINI_ROOT.."/include", { public = true })
+
+    add_linkdirs(INFINI_ROOT.."/lib")
+    add_links("infiniop", "infinirt", "infiniccl")
+
+    -- Add InfiniCore C++ source files (needed for RoPE and other nn modules)
+    add_files("src/infinicore/*.cc")
+    add_files("src/infinicore/context/*.cc")
+    add_files("src/infinicore/context/*/*.cc")
+    add_files("src/infinicore/tensor/*.cc")
+    add_files("src/infinicore/nn/*.cc")
+    add_files("src/infinicore/ops/*/*.cc")
+
+    set_installdir(INFINI_ROOT)
     after_build(function (target) print(YELLOW .. "[Congratulations!] Now you can install the libraries with \"xmake install\"" .. NC) end)
 target_end()
 

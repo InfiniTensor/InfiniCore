@@ -10,19 +10,11 @@ namespace infinicore::nn {
 class RoPE : public Module {
 public:
     /**
-     * @brief Frequency generation method for RoPE cache
-     */
-    enum class FreqGen {
-        GPT_J = 0,    // GPT-J style: frequency for cache entry j is theta^(-2j/head_dim)
-        GPT_NEOX = 1, // GPT-NeoX style: frequency for cache entry j is theta^(-j/head_dim)
-    };
-
-    /**
-     * @brief RoPE rotation algorithm type (kernel-level)
+     * @brief RoPE rotation algorithm type (kernel-level and frequency generation)
      */
     enum class Algo {
-        GPT_J = 0,    // GPT-J style: pairs dimensions as (2j, 2j+1)
-        GPT_NEOX = 1, // GPT-NeoX style: pairs dimensions as (j, j+head_dim/2)
+        GPT_J = 0,    // GPT-J style: pairs dimensions as (2j, 2j+1), frequency for cache entry j is theta^(-2j/head_dim)
+        GPT_NEOX = 1, // GPT-NeoX style: pairs dimensions as (j, j+head_dim/2), frequency for cache entry j is theta^(-j/head_dim)
     };
 
     /**
@@ -31,7 +23,7 @@ public:
      * @param head_dim Dimension of each attention head (must be even)
      * @param max_seq_len Maximum sequence length for pre-computed cache
      * @param theta Base frequency for rotary embeddings (default: 10000.0)
-     * @param freq_gen Frequency generation method (default: FreqGen::GPT_J)
+     * @param freq_gen Frequency generation method (default: Algo::GPT_J)
      * @param algo Rotation algorithm type for kernel (default: Algo::GPT_J)
      * @param dtype Data type for sin/cos cache (default: DataType::F32)
      * @param device Device to create the cache on
@@ -39,7 +31,7 @@ public:
     RoPE(size_t head_dim,
          size_t max_seq_len,
          double theta = 10000.0,
-         FreqGen freq_gen = FreqGen::GPT_J,
+         Algo freq_gen = Algo::GPT_J,
          Algo algo = Algo::GPT_J,
          const DataType &dtype = DataType::F32,
          const Device &device = Device());
@@ -65,7 +57,7 @@ public:
     size_t head_dim() const { return head_dim_; }
     size_t max_seq_len() const { return max_seq_len_; }
     double theta() const { return theta_; }
-    FreqGen freq_gen() const { return freq_gen_; }
+    Algo freq_gen() const { return freq_gen_; }
     Algo algo() const { return algo_; }
     DataType dtype() const { return dtype_; }
 
@@ -83,7 +75,7 @@ private:
     size_t head_dim_;      // Dimension of each attention head
     size_t max_seq_len_;   // Maximum sequence length
     double theta_;         // Base frequency for rotary embeddings
-    FreqGen freq_gen_;     // Frequency generation method
+    Algo freq_gen_;     // Frequency generation method
     Algo algo_;            // Rotation algorithm type (kernel-level)
     DataType dtype_;       // Data type for cache tables
 };

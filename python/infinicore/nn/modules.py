@@ -28,7 +28,7 @@ class RoPE:
         head_dim: int,
         max_seq_len: int,
         theta: float = 10000.0,
-        freq_gen: _infinicore.RoPEFreqGen = _infinicore.RoPEFreqGen.GPT_J,
+        freq_gen: _infinicore.RoPEAlgo = _infinicore.RoPEAlgo.GPT_J,
         algo: _infinicore.RoPEAlgo = _infinicore.RoPEAlgo.GPT_J,
         dtype: _infinicore.DataType = _infinicore.DataType.F32,
         device=None,

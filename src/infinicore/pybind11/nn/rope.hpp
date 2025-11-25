@@ -11,20 +11,16 @@ namespace py = pybind11;
 namespace infinicore::pybind11_nn {
 
 inline void bind_rope(py::module &m) {
-    py::enum_<infinicore::nn::RoPE::FreqGen>(m, "RoPEFreqGen")
-        .value("GPT_J", infinicore::nn::RoPE::FreqGen::GPT_J)
-        .value("GPT_NEOX", infinicore::nn::RoPE::FreqGen::GPT_NEOX);
-
     py::enum_<infinicore::nn::RoPE::Algo>(m, "RoPEAlgo")
         .value("GPT_J", infinicore::nn::RoPE::Algo::GPT_J)
         .value("GPT_NEOX", infinicore::nn::RoPE::Algo::GPT_NEOX);
 
     py::class_<infinicore::nn::RoPE>(m, "RoPE")
-        .def(py::init<size_t, size_t, double, infinicore::nn::RoPE::FreqGen, infinicore::nn::RoPE::Algo, const DataType &, const Device &>(),
+        .def(py::init<size_t, size_t, double, infinicore::nn::RoPE::Algo, infinicore::nn::RoPE::Algo, const DataType &, const Device &>(),
              py::arg("head_dim"),
              py::arg("max_seq_len"),
              py::arg("theta") = 10000.0,
-             py::arg("freq_gen") = infinicore::nn::RoPE::FreqGen::GPT_J,
+             py::arg("freq_gen") = infinicore::nn::RoPE::Algo::GPT_J,
              py::arg("algo") = infinicore::nn::RoPE::Algo::GPT_J,
              py::arg("dtype") = DataType::F32,
              py::arg("device") = Device())

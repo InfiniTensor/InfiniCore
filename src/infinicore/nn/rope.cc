@@ -11,7 +11,7 @@ namespace infinicore::nn {
 RoPE::RoPE(size_t head_dim,
            size_t max_seq_len,
            double theta,
-           FreqGen freq_gen,
+           Algo freq_gen,
            Algo algo,
            const DataType &dtype,
            const Device &device)
@@ -56,10 +56,10 @@ void RoPE::initialize_cache() {
             // Compute inverse frequency based on frequency generation method
             double inv_freq;
 
-            if (freq_gen_ == FreqGen::GPT_J) {
+            if (freq_gen_ == Algo::GPT_J) {
                 // GPT_J style: frequency for cache entry j is theta^(-2j/head_dim)
                 inv_freq = 1.0 / std::pow(theta_, 2.0 * static_cast<double>(j) / static_cast<double>(head_dim_));
-            } else if (freq_gen_ == FreqGen::GPT_NEOX) {
+            } else if (freq_gen_ == Algo::GPT_NEOX) {
                 // GPT_NEOX style: frequency for cache entry j is theta^(-j/head_dim)
                 inv_freq = 1.0 / std::pow(theta_, static_cast<double>(j) / static_cast<double>(head_dim_));
             } else {
@@ -103,7 +103,7 @@ Tensor RoPE::forward(const Tensor &x, const Tensor &pos) const {
 }
 
 std::string RoPE::extra_repr() const {
-    std::string freq_gen_str = (freq_gen_ == FreqGen::GPT_J) ? "GPT_J" : "GPT_NEOX";
+    std::string freq_gen_str = (freq_gen_ == Algo::GPT_J) ? "GPT_J" : "GPT_NEOX";
     std::string algo_str = (algo_ == Algo::GPT_J) ? "GPT_J" : "GPT_NEOX";
     return "RoPE(head_dim=" + std::to_string(head_dim_) + ", max_seq_len=" + std::to_string(max_seq_len_) + ", theta=" + std::to_string(theta_) + ", freq_gen=" + freq_gen_str + ", algo=" + algo_str + ", dtype=" + std::to_string(static_cast<int>(dtype_)) + ")";
 }
