@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 
 from .test_case import TestCase, TestResult
 from .datatypes import to_torch_dtype, to_infinicore_dtype
-from .devices import InfiniDeviceNames, torch_device_map
+from .devices import InfiniDeviceEnum, InfiniDeviceNames, torch_device_map
 from .tensor import TensorSpec, TensorInitializer
 from .utils import (
     create_test_comparator,
@@ -401,6 +401,30 @@ class BaseOperatorTest(ABC):
             test_case=test_case,
             device=device,
         )
+
+        # Set infinicore device before preparing tensors
+        # This ensures Runtime is created with the correct device type before any operations.
+        # We need to explicitly set the device type because multiple CUDA-compatible devices
+        # (NVIDIA, ILUVATAR, QY, HYGON) all use "cuda" as torch device type, so we can't
+        # infer the correct type from the string alone.
+        from infinicore.lib import _infinicore
+        device_type_map = {
+            InfiniDeviceEnum.CPU: _infinicore.Device.Type.CPU,
+            InfiniDeviceEnum.NVIDIA: _infinicore.Device.Type.NVIDIA,
+            InfiniDeviceEnum.CAMBRICON: _infinicore.Device.Type.CAMBRICON,
+            InfiniDeviceEnum.ASCEND: _infinicore.Device.Type.ASCEND,
+            InfiniDeviceEnum.METAX: _infinicore.Device.Type.METAX,
+            InfiniDeviceEnum.MOORE: _infinicore.Device.Type.MOORE,
+            InfiniDeviceEnum.ILUVATAR: _infinicore.Device.Type.ILUVATAR,
+            InfiniDeviceEnum.KUNLUN: _infinicore.Device.Type.KUNLUN,
+            InfiniDeviceEnum.HYGON: _infinicore.Device.Type.HYGON,
+            InfiniDeviceEnum.QY: _infinicore.Device.Type.QY,
+        }
+        # Create underlying C++ Device object with explicit device type
+        underlying_device = _infinicore.Device(device_type_map[device], 0)
+        # Set the device directly using underlying C++ Device object
+        # This avoids the conversion through _from_infinicore_device which may re-select the wrong device
+        _infinicore.set_device(underlying_device)
 
         # Prepare inputs and kwargs with actual tensors
         inputs, kwargs = self.prepare_pytorch_inputs_and_kwargs(test_case, device)

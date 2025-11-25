@@ -19,9 +19,9 @@ inline void bind(py::module &m) {
         .value("METAX", Device::Type::METAX)
         .value("MOORE", Device::Type::MOORE)
         .value("ILUVATAR", Device::Type::ILUVATAR)
-        .value("QY", Device::Type::QY)
         .value("KUNLUN", Device::Type::KUNLUN)
         .value("HYGON", Device::Type::HYGON)
+        .value("QY", Device::Type::QY)
         .value("COUNT", Device::Type::COUNT);
 
     device

@@ -118,8 +118,26 @@ def get_tolerance(tolerance_map, tensor_dtype, default_atol=0, default_rtol=1e-3
     return tolerance["atol"], tolerance["rtol"]
 
 
-def infinicore_tensor_from_torch(torch_tensor):
-    infini_device = infinicore.device(torch_tensor.device.type, 0)
+def infinicore_tensor_from_torch(torch_tensor, infini_device=None):
+    """
+    Convert PyTorch tensor to infinicore tensor.
+    
+    Args:
+        torch_tensor: PyTorch tensor
+        infini_device: Optional infinicore Device object. If not provided, uses torch_tensor's device.
+    """
+    if infini_device is None:
+        # Use device from torch_tensor instead of infinicore's current device
+        # This ensures the infinicore tensor is created on the same device as the torch tensor
+        # infinicore.device() constructor can handle torch device type strings directly
+        # (e.g., "cpu", "cuda", "npu", "mlu", "musa", etc.) and will map them correctly
+        torch_device = torch_tensor.device
+        infini_device = infinicore.device(torch_device.type, torch_device.index or 0)
+    elif not hasattr(infini_device, '_underlying'):
+        # C++ Device object, convert to Python device object
+        from infinicore.device import device
+        infini_device = device._from_infinicore_device(infini_device)
+    
     if torch_tensor.is_contiguous():
         return infinicore.from_blob(
             torch_tensor.data_ptr(),

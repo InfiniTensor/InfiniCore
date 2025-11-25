@@ -23,13 +23,17 @@ __C infiniStatus_t infinirtGetAllDeviceCount(int *count_array) {
         return INFINI_STATUS_NULL_POINTER;
     }
     for (size_t i = 0; i < INFINI_DEVICE_TYPE_COUNT; i++) {
-        if (i == INFINI_DEVICE_ILUVATAR || i == INFINI_DEVICE_QY || i == INFINI_DEVICE_KUNLUN || i == INFINI_DEVICE_HYGON) {
-            count_array[i] = 0;
-            continue;
-        }
         auto status = infinirtGetDeviceCount(static_cast<infiniDevice_t>(i), &count_array[i]);
         if (status != INFINI_STATUS_SUCCESS) {
-            return status;
+            // INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED indicates a code bug (missing case in switch)
+            // This should not be silently ignored
+            if (status == INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED) {
+                return status;
+            }
+            // For other errors (device not available, internal errors), set count to 0 and continue
+            // This allows the function to succeed even if some device types are not available
+            // Note: CPU device should always succeed, so this function should not fail completely
+            count_array[i] = 0;
         }
     }
     return INFINI_STATUS_SUCCESS;

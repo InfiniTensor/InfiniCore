@@ -24,7 +24,8 @@ Runtime *ContextImpl::getCurrentRuntime() {
             spdlog::debug("Lazy init: Set current_runtime_ to {} (ptr={})", current_runtime_->device().toString(), static_cast<void *>(current_runtime_));
         }
     } else {
-        spdlog::debug("getCurrentRuntime() returning {} (ptr={})", current_runtime_->device().toString(), static_cast<void *>(current_runtime_));
+        spdlog::debug("current_runtime_ is not null, returning existing runtime");
+        spdlog::debug("current_runtime_ is {} (ptr={})", current_runtime_->device().toString(), static_cast<void *>(current_runtime_));
     }
     return current_runtime_;
 }
@@ -39,12 +40,19 @@ void ContextImpl::setDevice(Device device) {
         return;
     }
 
-    if (runtime_table_[int(device.getType())][device.getIndex()] == nullptr) {
+    // Ensure runtime_table_ has enough space for this device type and index
+    auto &device_runtimes = runtime_table_[int(device.getType())];
+    size_t required_size = device.getIndex() + 1;
+    if (device_runtimes.size() < required_size) {
+        device_runtimes.resize(required_size);
+    }
+
+    if (device_runtimes[device.getIndex()] == nullptr) {
         // Lazy initialization of runtime if never set before.
-        runtime_table_[int(device.getType())][device.getIndex()] = std::unique_ptr<Runtime>(new Runtime(device));
-        current_runtime_ = runtime_table_[int(device.getType())][device.getIndex()].get();
+        device_runtimes[device.getIndex()] = std::unique_ptr<Runtime>(new Runtime(device));
+        current_runtime_ = device_runtimes[device.getIndex()].get();
     } else {
-        current_runtime_ = runtime_table_[int(device.getType())][device.getIndex()].get()->activate();
+        current_runtime_ = device_runtimes[device.getIndex()].get()->activate();
     }
 }
 
@@ -64,20 +72,16 @@ ContextImpl::ContextImpl() {
     // Reserve runtime slot for all devices.
     runtime_table_[0].resize(device_counter[0]);
     runtime_table_[0][0] = std::unique_ptr<Runtime>(new Runtime(Device(Device::Type::CPU, 0)));
+    current_runtime_ = runtime_table_[0][0].get();
 
-    // Context will try to use the first non-cpu available device as the default runtime.
-    for (int i = int(Device::Type::COUNT) - 1; i > 0; i--) {
+    // Reserve slots for other device types, but don't create Runtime objects yet.
+    // Runtime objects will be created lazily when setDevice is called.
+    // This avoids automatically selecting the wrong device type when multiple CUDA-compatible
+    // devices (NVIDIA, ILUVATAR, QY, HYGON) are available.
+    for (int i = 1; i < int(Device::Type::COUNT); i++) {
         if (device_counter[i] > 0) {
             runtime_table_[i].resize(device_counter[i]);
-            if (current_runtime_ == nullptr) {
-                runtime_table_[i][0] = std::unique_ptr<Runtime>(new Runtime(Device(Device::Type(i), 0)));
-                current_runtime_ = runtime_table_[i][0].get();
-            }
         }
-    }
-
-    if (current_runtime_ == nullptr) {
-        current_runtime_ = runtime_table_[0][0].get();
     }
 }
 
