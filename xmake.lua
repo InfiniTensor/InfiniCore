@@ -350,6 +350,7 @@ target("infiniccl")
 target_end()
 
 target("infinicore_c_api")
+    set_default(false)
     set_kind("shared")
     set_languages("cxx17")
 
