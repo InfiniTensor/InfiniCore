@@ -4,6 +4,7 @@
 
 #include "../context_impl.hpp"
 
+#include <mutex>
 #include <queue>
 
 namespace infinicore {
@@ -20,8 +21,10 @@ public:
 private:
     Device owner_;
 
-    /// TODO: this is not thread-safe
+    // Thread-safe queue for deferred deallocation
     std::queue<std::byte *> gc_queue_;
+    // Mutex to protect concurrent allocate/deallocate/gc operations
+    mutable std::mutex allocator_mutex_;
 };
 
 } // namespace infinicore

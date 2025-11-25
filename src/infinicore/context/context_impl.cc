@@ -1,30 +1,47 @@
 #include "context_impl.hpp"
 
 #include "../utils.hpp"
+#include <iostream>
+#include <mutex>
+#include <spdlog/spdlog.h>
 
 namespace infinicore {
+
+// Static guard to detect when static destruction starts
+struct StaticDestructionGuard {
+    ~StaticDestructionGuard() {
+        SPDLOG_DEBUG("[STATIC] StaticDestructionGuard: Static destruction starting");
+    }
+};
+static StaticDestructionGuard static_guard;
 
 thread_local Runtime *ContextImpl::current_runtime_ = nullptr;
 
 Runtime *ContextImpl::getCurrentRuntime() {
     if (current_runtime_ == nullptr) {
-        spdlog::debug("current_runtime_ is null, performing lazy initialization");
+        SPDLOG_DEBUG("current_runtime_ is null, performing lazy initialization");
         // Lazy initialization: use the first available runtime
-        // Try to find the first non-CPU device, fallback to CPU
-        for (int i = int(Device::Type::COUNT) - 1; i > 0; i--) {
-            if (!runtime_table_[i].empty() && runtime_table_[i][0] != nullptr) {
-                current_runtime_ = runtime_table_[i][0].get();
-                spdlog::debug("Lazy init: Set current_runtime_ to {} (ptr={})", current_runtime_->device().toString(), static_cast<void *>(current_runtime_));
-                return current_runtime_;
+        // Protect runtime_table_ access with mutex for thread safety
+        std::lock_guard<std::mutex> lock(runtime_table_mutex_);
+
+        // Double-check after acquiring lock (another thread may have set it)
+        if (current_runtime_ == nullptr) {
+            // Try to find the first non-CPU device, fallback to CPU
+            for (int i = int(Device::Type::COUNT) - 1; i > 0; i--) {
+                if (!runtime_table_[i].empty() && runtime_table_[i][0] != nullptr) {
+                    current_runtime_ = runtime_table_[i][0].get();
+                    SPDLOG_DEBUG("Lazy init: Set current_runtime_ to {} (ptr={})", current_runtime_->device().toString(), static_cast<void *>(current_runtime_));
+                    return current_runtime_;
+                }
+            }
+            // Fallback to CPU runtime
+            if (!runtime_table_[0].empty() && runtime_table_[0][0] != nullptr) {
+                current_runtime_ = runtime_table_[0][0].get();
+                SPDLOG_DEBUG("Lazy init: Set current_runtime_ to {} (ptr={})", current_runtime_->device().toString(), static_cast<void *>(current_runtime_));
             }
         }
-        // Fallback to CPU runtime
-        if (!runtime_table_[0].empty() && runtime_table_[0][0] != nullptr) {
-            current_runtime_ = runtime_table_[0][0].get();
-            spdlog::debug("Lazy init: Set current_runtime_ to {} (ptr={})", current_runtime_->device().toString(), static_cast<void *>(current_runtime_));
-        }
     } else {
-        spdlog::debug("getCurrentRuntime() returning {} (ptr={})", current_runtime_->device().toString(), static_cast<void *>(current_runtime_));
+        // SPDLOG_DEBUG("getCurrentRuntime() returning {} (ptr={})", current_runtime_->device().toString(), static_cast<void *>(current_runtime_));
     }
     return current_runtime_;
 }
@@ -33,18 +50,65 @@ Runtime *ContextImpl::getCpuRuntime() {
     return runtime_table_[int(Device::Type::CPU)][0].get();
 }
 
+Runtime *ContextImpl::getRuntime(Device device) {
+    std::lock_guard<std::mutex> lock(runtime_table_mutex_);
+    int device_type = int(device.getType());
+    size_t device_index = device.getIndex();
+
+    // Ensure runtime exists
+    if (runtime_table_[device_type].size() <= device_index || runtime_table_[device_type][device_index] == nullptr) {
+        // Runtime doesn't exist yet, create it
+        runtime_table_[device_type].resize(device_index + 1);
+        runtime_table_[device_type][device_index] = std::unique_ptr<Runtime>(new Runtime(device));
+    }
+
+    return runtime_table_[device_type][device_index].get();
+}
+
 void ContextImpl::setDevice(Device device) {
-    if (device == getCurrentRuntime()->device()) {
+    Device current_device = getCurrentRuntime()->device();
+    SPDLOG_DEBUG("[CONTEXT] setDevice: ENTERED - target={}, current={}",
+                 device.toString(), current_device.toString());
+
+    if (device == current_device) {
         // Do nothing if the device is already set.
+        SPDLOG_DEBUG("[CONTEXT] setDevice: Device already set, returning early");
         return;
     }
 
-    if (runtime_table_[int(device.getType())][device.getIndex()] == nullptr) {
-        // Lazy initialization of runtime if never set before.
-        runtime_table_[int(device.getType())][device.getIndex()] = std::unique_ptr<Runtime>(new Runtime(device));
-        current_runtime_ = runtime_table_[int(device.getType())][device.getIndex()].get();
+    // Fast path: check without lock (double-checked locking pattern)
+    int device_type = int(device.getType());
+    int device_index = device.getIndex();
+
+    SPDLOG_DEBUG("[CONTEXT] setDevice: Switching from {} to {}",
+                 current_device.toString(), device.toString());
+
+    if (runtime_table_[device_type][device_index] == nullptr) {
+        // Slow path: acquire lock and create Runtime if needed
+        std::lock_guard<std::mutex> lock(runtime_table_mutex_);
+        // Double-check after acquiring lock (another thread may have created it)
+        if (runtime_table_[device_type][device_index] == nullptr) {
+            // Lazy initialization of runtime if never set before.
+            runtime_table_[device_type][device_index] = std::unique_ptr<Runtime>(new Runtime(device));
+        }
+        // Access Runtime within the same lock to prevent use-after-free
+        Runtime *runtime_ptr = runtime_table_[device_type][device_index].get();
+        if (runtime_ptr != nullptr) {
+            SPDLOG_DEBUG("[CONTEXT] setDevice: Activating runtime for {}", device.toString());
+            current_runtime_ = runtime_ptr->activate();
+            SPDLOG_DEBUG("[CONTEXT] setDevice: Runtime activated, current_runtime_ now points to {}",
+                         current_runtime_->device().toString());
+        }
     } else {
-        current_runtime_ = runtime_table_[int(device.getType())][device.getIndex()].get()->activate();
+        // Runtime already exists, protect access to prevent use-after-free
+        std::lock_guard<std::mutex> lock(runtime_table_mutex_);
+        Runtime *runtime_ptr = runtime_table_[device_type][device_index].get();
+        if (runtime_ptr != nullptr) {
+            SPDLOG_DEBUG("[CONTEXT] setDevice: Activating existing runtime for {}", device.toString());
+            current_runtime_ = runtime_ptr->activate();
+            SPDLOG_DEBUG("[CONTEXT] setDevice: Runtime activated, current_runtime_ now points to {}",
+                         current_runtime_->device().toString());
+        }
     }
 }
 
@@ -52,9 +116,27 @@ size_t ContextImpl::getDeviceCount(Device::Type type) {
     return runtime_table_[int(type)].size();
 }
 
+// Guard struct implementation - can access protected ContextImpl constructor/destructor
+// because it's a nested struct
+ContextImpl::SingletonGuard::SingletonGuard() {
+    // ContextImpl constructor is protected, but we're a nested struct so we can create it
+    instance = new ContextImpl();
+}
+
+ContextImpl::SingletonGuard::~SingletonGuard() {
+    SPDLOG_DEBUG("[CONTEXT] SingletonGuard destructor called - singleton destruction starting");
+    // Explicitly delete, which will call ContextImpl destructor
+    // Since we're a nested struct, we can access the protected destructor
+    if (instance != nullptr) {
+        delete instance;
+        instance = nullptr;
+    }
+    SPDLOG_DEBUG("[CONTEXT] SingletonGuard: ContextImpl destroyed");
+}
+
 ContextImpl &ContextImpl::singleton() {
-    static ContextImpl instance;
-    return instance;
+    static SingletonGuard guard;
+    return *guard.instance;
 }
 
 ContextImpl::ContextImpl() {
@@ -78,6 +160,52 @@ ContextImpl::ContextImpl() {
 
     if (current_runtime_ == nullptr) {
         current_runtime_ = runtime_table_[0][0].get();
+    }
+}
+
+ContextImpl::~ContextImpl() {
+    // Wrap entire destructor in try-catch to catch any exceptions
+    try {
+        SPDLOG_DEBUG("[CONTEXT] ~ContextImpl: START");
+
+        // Clear current_runtime_ pointer first to avoid accessing destroyed objects
+        SPDLOG_DEBUG("[CONTEXT] ~ContextImpl: Clearing current_runtime_ pointer");
+        current_runtime_ = nullptr;
+
+        // Destroy runtimes in reverse order (non-CPU first, then CPU)
+        SPDLOG_DEBUG("[CONTEXT] ~ContextImpl: Starting to destroy runtime_table_");
+
+        // Count total runtimes
+        size_t total_runtimes = 0;
+        for (size_t i = 0; i < runtime_table_.size(); ++i) {
+            total_runtimes += runtime_table_[i].size();
+        }
+        SPDLOG_DEBUG("[CONTEXT] ~ContextImpl: Total runtimes to destroy: {}", total_runtimes);
+
+        // Destroy runtimes in reverse order
+        for (int i = int(Device::Type::COUNT) - 1; i >= 0; --i) {
+            SPDLOG_DEBUG("[CONTEXT] ~ContextImpl: Destroying runtimes for device type {}", i);
+
+            for (size_t j = runtime_table_[i].size(); j > 0; --j) {
+                size_t idx = j - 1;
+                if (runtime_table_[i][idx] != nullptr) {
+                    SPDLOG_DEBUG("[CONTEXT] ~ContextImpl: About to destroy runtime at type={}, index={}", i, idx);
+                    // The unique_ptr will automatically call Runtime destructor
+                    runtime_table_[i][idx].reset();
+                    SPDLOG_DEBUG("[CONTEXT] ~ContextImpl: Successfully destroyed runtime at type={}, index={}", i, idx);
+                }
+            }
+
+            SPDLOG_DEBUG("[CONTEXT] ~ContextImpl: Clearing runtime vector for device type {}", i);
+            runtime_table_[i].clear();
+            SPDLOG_DEBUG("[CONTEXT] ~ContextImpl: Cleared runtime vector for device type {}", i);
+        }
+
+        SPDLOG_DEBUG("[CONTEXT] ~ContextImpl: Complete");
+    } catch (const std::exception &e) {
+        SPDLOG_ERROR("[CONTEXT] ~ContextImpl: EXCEPTION caught: {}", e.what());
+    } catch (...) {
+        SPDLOG_ERROR("[CONTEXT] ~ContextImpl: UNKNOWN EXCEPTION caught");
     }
 }
 

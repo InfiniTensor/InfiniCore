@@ -22,8 +22,8 @@ Linear::Linear(size_t in_features, size_t out_features, bool bias, const DataTyp
         bias_ = Parameter(); // Default constructed empty parameter
     }
 
-    spdlog::debug("Created Linear module: in_features={}, out_features={}, bias={}, dtype={}",
-                  in_features, out_features, bias, static_cast<int>(dtype_));
+    SPDLOG_DEBUG("Created Linear module: in_features={}, out_features={}, bias={}, dtype={}",
+                 in_features, out_features, bias, static_cast<int>(dtype_));
 }
 
 Tensor Linear::compute_linear(Tensor &input) const {

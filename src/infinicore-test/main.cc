@@ -1,7 +1,9 @@
 #include "memory_test.h"
+#include "tensor/test_d2h_issue.h"
+#include "tensor/test_tensor_destructor.h"
+#include "tensor/test_tensor_usage.h"
 #include "test_nn_module.h"
 #include "test_runner.h"
-#include "test_tensor_destructor.h"
 #include <iostream>
 #include <memory>
 #include <spdlog/spdlog.h>
@@ -10,6 +12,7 @@
 struct ParsedArgs {
     infiniDevice_t device_type = INFINI_DEVICE_CPU;
     bool run_basic = true;
+    bool run_tensor = true;
     bool run_concurrency = true;
     bool run_exception_safety = true;
     bool run_memory_leak = true;
@@ -26,7 +29,7 @@ void printUsage() {
               << std::endl
               << "Options:" << std::endl
               << "  --<device>        Specify the device type (default: cpu)" << std::endl
-              << "  --test <name>     Run specific test (basic|concurrency|exception|leak|performance|stress|module|all)" << std::endl
+              << "  --test <name>     Run specific test (basic|tensor|concurrency|exception|leak|performance|stress|module|all)" << std::endl
               << "  --threads <num>   Number of threads for concurrency tests (default: 4)" << std::endl
               << "  --iterations <num> Number of iterations for stress tests (default: 1000)" << std::endl
               << "  --help            Show this help message" << std::endl
@@ -45,6 +48,7 @@ void printUsage() {
               << std::endl
               << "Available tests:" << std::endl
               << "  basic       - Basic memory allocation and deallocation tests" << std::endl
+              << "  tensor      - Tensor-related tests (destructor, usage)" << std::endl
               << "  concurrency - Thread safety and concurrent access tests" << std::endl
               << "  exception   - Exception safety tests" << std::endl
               << "  leak        - Memory leak detection tests" << std::endl
@@ -91,10 +95,12 @@ ParsedArgs parseArgs(int argc, char *argv[]) {
             }
 
             std::string test_name = argv[++i];
-            args.run_basic = args.run_concurrency = args.run_exception_safety = args.run_memory_leak = args.run_performance = args.run_stress = args.run_module = false;
+            args.run_basic = args.run_tensor = args.run_concurrency = args.run_exception_safety = args.run_memory_leak = args.run_performance = args.run_stress = args.run_module = false;
 
             if (test_name == "basic") {
                 args.run_basic = true;
+            } else if (test_name == "tensor") {
+                args.run_tensor = true;
             } else if (test_name == "concurrency") {
                 args.run_concurrency = true;
             } else if (test_name == "exception") {
@@ -108,7 +114,7 @@ ParsedArgs parseArgs(int argc, char *argv[]) {
             } else if (test_name == "module") {
                 args.run_module = true;
             } else if (test_name == "all") {
-                args.run_basic = args.run_concurrency = args.run_exception_safety = args.run_memory_leak = args.run_performance = args.run_stress = args.run_module = true;
+                args.run_basic = args.run_tensor = args.run_concurrency = args.run_exception_safety = args.run_memory_leak = args.run_performance = args.run_stress = args.run_module = true;
             } else {
                 std::cerr << "Error: Unknown test name: " << test_name << std::endl;
                 exit(EXIT_FAILURE);
@@ -145,7 +151,7 @@ ParsedArgs parseArgs(int argc, char *argv[]) {
 int main(int argc, char *argv[]) {
     try {
         ParsedArgs args = parseArgs(argc, argv);
-        spdlog::info("Arguments parsed successfully");
+        SPDLOG_INFO("Arguments parsed successfully");
 
         std::cout << "==============================================\n"
                   << "InfiniCore Memory Management Test Suite\n"
@@ -155,21 +161,32 @@ int main(int argc, char *argv[]) {
                   << "Iterations: " << args.iterations << "\n"
                   << "==============================================" << std::endl;
 
-        spdlog::info("About to initialize InfiniCore context");
+        SPDLOG_INFO("About to initialize InfiniCore context");
         // Initialize InfiniCore context
         infinicore::context::setDevice(infinicore::Device(static_cast<infinicore::Device::Type>(args.device_type), 0));
-        spdlog::info("InfiniCore context initialized successfully");
+        SPDLOG_INFO("InfiniCore context initialized successfully");
 
-        spdlog::info("Creating test runner");
+        SPDLOG_INFO("Creating test runner");
         // Create test runner
         infinicore::test::InfiniCoreTestRunner runner;
-        spdlog::info("Test runner created successfully");
+        SPDLOG_INFO("Test runner created successfully");
 
         // Add tests based on arguments
         if (args.run_basic) {
             runner.addTest(std::make_unique<infinicore::test::BasicMemoryTest>());
 
+            // Add device switch test to basic tests (critical regression test)
+            runner.addTest(std::make_unique<infinicore::test::DeviceSwitchTest>());
+        }
+
+        if (args.run_tensor) {
             runner.addTest(std::make_unique<infinicore::test::TensorDestructorTest>());
+
+            // Add tensor usage test (tests operations used in InfiniLM weight loading)
+            runner.addTest(std::make_unique<infinicore::test::TensorUsageTest>());
+
+            // Add D2H issue test (reproduces the segfault issue)
+            runner.addTest(std::make_unique<infinicore::test::D2HIssueTest>());
         }
 
         if (args.run_module) {
@@ -196,10 +213,10 @@ int main(int argc, char *argv[]) {
             runner.addTest(std::make_unique<infinicore::test::StressTest>());
         }
 
-        spdlog::info("About to run all tests");
+        SPDLOG_INFO("About to run all tests");
         // Run all tests
         auto results = runner.runAllTests();
-        spdlog::info("All tests completed");
+        SPDLOG_INFO("All tests completed");
 
         // Count results and collect failed tests
         size_t passed = 0, failed = 0;

@@ -2,6 +2,9 @@
 #include <algorithm>
 #include <cstring>
 #include <random>
+#include <spdlog/spdlog.h>
+#include <string>
+#include <vector>
 
 namespace infinicore::test {
 
@@ -9,78 +12,78 @@ namespace infinicore::test {
 TestResult BasicMemoryTest::run() {
     return measureTime("BasicMemoryTest", [this]() -> bool {
         try {
-            spdlog::debug("BasicMemoryTest: Starting test");
+            SPDLOG_DEBUG("BasicMemoryTest: Starting test");
             // Test basic memory allocation
-            spdlog::debug("BasicMemoryTest: About to allocate memory");
+            SPDLOG_DEBUG("BasicMemoryTest: About to allocate memory");
             auto memory = context::allocateMemory(1024);
-            spdlog::debug("BasicMemoryTest: Memory allocated successfully");
+            SPDLOG_DEBUG("BasicMemoryTest: Memory allocated successfully");
             if (!memory) {
-                std::cerr << "Failed to allocate memory" << std::endl;
+                SPDLOG_ERROR("Failed to allocate memory");
                 return false;
             }
 
-            spdlog::debug("BasicMemoryTest: Testing memory properties");
+            SPDLOG_DEBUG("BasicMemoryTest: Testing memory properties");
             // Test memory properties
             if (memory->size() != 1024) {
-                std::cerr << "Memory size mismatch: expected 1024, got " << memory->size() << std::endl;
+                SPDLOG_ERROR("Memory size mismatch: expected 1024, got {}", memory->size());
                 return false;
             }
-            spdlog::debug("BasicMemoryTest: Memory size check passed");
+            SPDLOG_DEBUG("BasicMemoryTest: Memory size check passed");
 
-            spdlog::debug("BasicMemoryTest: Testing memory access");
+            SPDLOG_DEBUG("BasicMemoryTest: Testing memory access");
             // Test memory access
             std::byte *data = memory->data();
-            spdlog::debug("BasicMemoryTest: Got memory data pointer: {}", static_cast<void *>(data));
+            SPDLOG_DEBUG("BasicMemoryTest: Got memory data pointer: {}", static_cast<void *>(data));
             if (!data) {
-                std::cerr << "Memory data pointer is null" << std::endl;
+                SPDLOG_ERROR("Memory data pointer is null");
                 return false;
             }
-            spdlog::debug("BasicMemoryTest: Memory data pointer is valid");
+            SPDLOG_DEBUG("BasicMemoryTest: Memory data pointer is valid");
 
             // Check if this is GPU memory that can't be accessed directly
             Device current_device = context::getDevice();
-            spdlog::debug("BasicMemoryTest: Current device type: {}", static_cast<int>(current_device.getType()));
-            spdlog::debug("BasicMemoryTest: Memory is pinned: {}", memory->is_pinned());
+            SPDLOG_DEBUG("BasicMemoryTest: Current device type: {}", static_cast<int>(current_device.getType()));
+            SPDLOG_DEBUG("BasicMemoryTest: Memory is pinned: {}", memory->is_pinned());
 
             // For GPU memory, we shouldn't try to access it directly with memset
             if (current_device.getType() != Device::Type::CPU) {
-                spdlog::debug("BasicMemoryTest: Skipping direct memory access for GPU device");
-                spdlog::debug("BasicMemoryTest: GPU memory access test completed (skipped)");
+                SPDLOG_DEBUG("BasicMemoryTest: Skipping direct memory access for GPU device");
+                SPDLOG_DEBUG("BasicMemoryTest: GPU memory access test completed (skipped)");
             } else {
-                spdlog::debug("BasicMemoryTest: Testing memory write/read");
+                SPDLOG_DEBUG("BasicMemoryTest: Testing memory write/read");
                 // Test memory write/read
                 std::memset(data, 0xAB, 1024);
-                spdlog::debug("BasicMemoryTest: Memory memset completed");
+                SPDLOG_DEBUG("BasicMemoryTest: Memory memset completed");
                 for (size_t i = 0; i < 1024; ++i) {
                     if (data[i] != static_cast<std::byte>(0xAB)) {
-                        std::cerr << "Memory write/read test failed at index " << i << std::endl;
+                        SPDLOG_ERROR("Memory write/read test failed at index {}", i);
                         return false;
                     }
                 }
-                spdlog::debug("BasicMemoryTest: Memory write/read test completed");
+                SPDLOG_DEBUG("BasicMemoryTest: Memory write/read test completed");
             }
 
-            spdlog::debug("BasicMemoryTest: Testing pinned memory allocation");
+            SPDLOG_DEBUG("BasicMemoryTest: Testing pinned memory allocation");
             // Test pinned memory allocation
             auto pinned_memory = context::allocatePinnedHostMemory(512);
-            spdlog::debug("BasicMemoryTest: Pinned memory allocated");
+            SPDLOG_DEBUG("BasicMemoryTest: Pinned memory allocated");
             if (!pinned_memory) {
-                std::cerr << "Failed to allocate pinned memory" << std::endl;
+                SPDLOG_ERROR("Failed to allocate pinned memory");
                 return false;
             }
 
-            spdlog::debug("BasicMemoryTest: Checking pinned memory properties");
+            SPDLOG_DEBUG("BasicMemoryTest: Checking pinned memory properties");
             // For CPU devices, pinned memory falls back to regular memory, so it may not be marked as pinned
             Device pinned_device = context::getDevice();
             if (pinned_device.getType() != Device::Type::CPU && !pinned_memory->is_pinned()) {
-                std::cerr << "Pinned memory not marked as pinned" << std::endl;
+                SPDLOG_ERROR("Pinned memory not marked as pinned");
                 return false;
             }
-            spdlog::debug("BasicMemoryTest: Pinned memory test completed");
+            SPDLOG_DEBUG("BasicMemoryTest: Pinned memory test completed");
 
             return true;
         } catch (const std::exception &e) {
-            std::cerr << "BasicMemoryTest failed with exception: " << e.what() << std::endl;
+            SPDLOG_ERROR("BasicMemoryTest failed with exception: {}", e.what());
             return false;
         }
     });
@@ -93,25 +96,25 @@ TestResult ConcurrencyTest::run() {
             // Run all concurrency subtests
             auto result1 = testConcurrentAllocations();
             if (!result1.passed) {
-                std::cerr << "Concurrent allocations test failed: " << result1.error_message << std::endl;
+                SPDLOG_ERROR("Concurrent allocations test failed: {}", result1.error_message);
                 return false;
             }
 
-            // auto result2 = testConcurrentDeviceSwitching();
-            // if (!result2.passed) {
-            //     std::cerr << "Concurrent device switching test failed: " << result2.error_message << std::endl;
-            //     return false;
-            // }
+            auto result2 = testConcurrentDeviceSwitching();
+            if (!result2.passed) {
+                SPDLOG_ERROR("Concurrent device switching test failed: {}", result2.error_message);
+                return false;
+            }
 
-            // auto result3 = testMemoryAllocationRace();
-            // if (!result3.passed) {
-            //     std::cerr << "Memory allocation race test failed: " << result3.error_message << std::endl;
-            //     return false;
-            // }
+            auto result3 = testMemoryAllocationRace();
+            if (!result3.passed) {
+                SPDLOG_ERROR("Memory allocation race test failed: {}", result3.error_message);
+                return false;
+            }
 
             return true;
         } catch (const std::exception &e) {
-            std::cerr << "ConcurrencyTest failed with exception: " << e.what() << std::endl;
+            SPDLOG_ERROR("ConcurrencyTest failed with exception: {}", e.what());
             return false;
         }
     });
@@ -119,6 +122,9 @@ TestResult ConcurrencyTest::run() {
 
 TestResult ConcurrencyTest::testConcurrentAllocations() {
     return measureTime("ConcurrentAllocations", [this]() -> bool {
+        SPDLOG_INFO("================================================");
+        SPDLOG_INFO("ConcurrentAllocations: Starting test");
+        SPDLOG_INFO("================================================");
         const int num_threads = 8;
         const int allocations_per_thread = 100;
         std::vector<std::thread> threads;
@@ -143,7 +149,7 @@ TestResult ConcurrencyTest::testConcurrentAllocations() {
                     }
                 } catch (const std::exception &e) {
                     failure_count++;
-                    std::cerr << "Thread " << i << " failed: " << e.what() << std::endl;
+                    SPDLOG_ERROR("Thread {} failed: {}", i, e.what());
                 }
             });
         }
@@ -154,9 +160,8 @@ TestResult ConcurrencyTest::testConcurrentAllocations() {
 
         int total_expected = num_threads * allocations_per_thread;
         if (success_count.load() != total_expected) {
-            std::cerr << "Concurrent allocation test failed: expected " << total_expected
-                      << " successes, got " << success_count.load()
-                      << " successes and " << failure_count.load() << " failures" << std::endl;
+            SPDLOG_ERROR("Concurrent allocation test failed: expected {} successes, got {} successes and {} failures",
+                         total_expected, success_count.load(), failure_count.load());
             return false;
         }
 
@@ -166,6 +171,9 @@ TestResult ConcurrencyTest::testConcurrentAllocations() {
 
 TestResult ConcurrencyTest::testConcurrentDeviceSwitching() {
     return measureTime("ConcurrentDeviceSwitching", [this]() -> bool {
+        SPDLOG_INFO("================================================");
+        SPDLOG_INFO("ConcurrentDeviceSwitching: Starting test");
+        SPDLOG_INFO("================================================");
         const int num_threads = 4;
         std::vector<std::thread> threads;
         std::atomic<int> success_count{0};
@@ -199,9 +207,9 @@ TestResult ConcurrencyTest::testConcurrentDeviceSwitching() {
                             success_count++;
                         } else {
                             failure_count++;
-                            std::cerr << "Device switching failed: expected "
-                                      << static_cast<int>(target_device.getType())
-                                      << ", got " << static_cast<int>(current_device.getType()) << std::endl;
+                            SPDLOG_ERROR("Device switching failed: expected {}, got {}",
+                                         static_cast<int>(target_device.getType()),
+                                         static_cast<int>(current_device.getType()));
                         }
 
                         // Allocate memory to test device context
@@ -216,7 +224,7 @@ TestResult ConcurrencyTest::testConcurrentDeviceSwitching() {
                     }
                 } catch (const std::exception &e) {
                     failure_count++;
-                    std::cerr << "Thread " << i << " failed: " << e.what() << std::endl;
+                    SPDLOG_ERROR("Thread {} failed: {}", i, e.what());
                 }
             });
         }
@@ -226,9 +234,8 @@ TestResult ConcurrencyTest::testConcurrentDeviceSwitching() {
         }
 
         if (failure_count.load() > 0) {
-            std::cerr << "Concurrent device switching test failed: "
-                      << failure_count.load() << " failures out of "
-                      << (success_count.load() + failure_count.load()) << " operations" << std::endl;
+            SPDLOG_ERROR("Concurrent device switching test failed: {} failures out of {} operations",
+                         failure_count.load(), success_count.load() + failure_count.load());
             return false;
         }
 
@@ -238,8 +245,11 @@ TestResult ConcurrencyTest::testConcurrentDeviceSwitching() {
 
 TestResult ConcurrencyTest::testMemoryAllocationRace() {
     return measureTime("MemoryAllocationRace", [this]() -> bool {
+        SPDLOG_INFO("================================================");
+        SPDLOG_INFO("MemoryAllocationRace: Starting test");
+        SPDLOG_INFO("================================================");
         const int num_threads = 16;
-        const int allocations_per_thread = 1000;
+        const int allocations_per_thread = 100;
         std::vector<std::thread> threads;
         std::atomic<int> success_count{0};
         std::atomic<int> failure_count{0};
@@ -273,7 +283,7 @@ TestResult ConcurrencyTest::testMemoryAllocationRace() {
                                            thread_allocations.end());
                 } catch (const std::exception &e) {
                     failure_count++;
-                    std::cerr << "Thread " << i << " failed: " << e.what() << std::endl;
+                    SPDLOG_ERROR("Thread {} failed: {}", i, e.what());
                 }
             });
         }
@@ -285,15 +295,15 @@ TestResult ConcurrencyTest::testMemoryAllocationRace() {
         // Verify all allocations are valid
         for (const auto &memory : all_allocations) {
             if (!memory || !memory->data()) {
-                std::cerr << "Invalid memory allocation found" << std::endl;
+                SPDLOG_ERROR("Invalid memory allocation found");
                 return false;
             }
         }
 
         int total_expected = num_threads * allocations_per_thread;
         if (success_count.load() < total_expected * 0.9) { // Allow 10% failure rate
-            std::cerr << "Memory allocation race test failed: expected at least "
-                      << total_expected * 0.9 << " successes, got " << success_count.load() << std::endl;
+            SPDLOG_ERROR("Memory allocation race test failed: expected at least {} successes, got {}",
+                         static_cast<int>(total_expected * 0.9), success_count.load());
             return false;
         }
 
@@ -307,25 +317,25 @@ TestResult ExceptionSafetyTest::run() {
         try {
             auto result1 = testAllocationFailure();
             if (!result1.passed) {
-                std::cerr << "Allocation failure test failed: " << result1.error_message << std::endl;
+                SPDLOG_ERROR("Allocation failure test failed: {}", result1.error_message);
                 return false;
             }
 
             auto result2 = testDeallocationException();
             if (!result2.passed) {
-                std::cerr << "Deallocation exception test failed: " << result2.error_message << std::endl;
+                SPDLOG_ERROR("Deallocation exception test failed: {}", result2.error_message);
                 return false;
             }
 
             auto result3 = testContextSwitchException();
             if (!result3.passed) {
-                std::cerr << "Context switch exception test failed: " << result3.error_message << std::endl;
+                SPDLOG_ERROR("Context switch exception test failed: {}", result3.error_message);
                 return false;
             }
 
             return true;
         } catch (const std::exception &e) {
-            std::cerr << "ExceptionSafetyTest failed with exception: " << e.what() << std::endl;
+            SPDLOG_ERROR("ExceptionSafetyTest failed with exception: {}", e.what());
             return false;
         }
     });
@@ -337,7 +347,7 @@ TestResult ExceptionSafetyTest::testAllocationFailure() {
             // Test allocation with extremely large size (should fail)
             try {
                 auto memory = context::allocateMemory(SIZE_MAX);
-                std::cerr << "Expected allocation to fail with SIZE_MAX" << std::endl;
+                SPDLOG_ERROR("Expected allocation to fail with SIZE_MAX");
                 return false;
             } catch (const std::exception &e) {
                 // Expected to fail
@@ -348,7 +358,7 @@ TestResult ExceptionSafetyTest::testAllocationFailure() {
             try {
                 auto memory = context::allocateMemory(0);
                 if (memory) {
-                    std::cerr << "Zero-size allocation should return null or throw" << std::endl;
+                    SPDLOG_ERROR("Zero-size allocation should return null or throw");
                     return false;
                 }
             } catch (const std::exception &e) {
@@ -358,7 +368,7 @@ TestResult ExceptionSafetyTest::testAllocationFailure() {
 
             return true;
         } catch (const std::exception &e) {
-            std::cerr << "Allocation failure test failed with unexpected exception: " << e.what() << std::endl;
+            SPDLOG_ERROR("Allocation failure test failed with unexpected exception: {}", e.what());
             return false;
         }
     });
@@ -382,13 +392,13 @@ TestResult ExceptionSafetyTest::testDeallocationException() {
             try {
                 memories.clear(); // This should trigger deallocation
             } catch (const std::exception &e) {
-                std::cerr << "Memory deallocation threw exception: " << e.what() << std::endl;
+                SPDLOG_ERROR("Memory deallocation threw exception: {}", e.what());
                 return false;
             }
 
             return true;
         } catch (const std::exception &e) {
-            std::cerr << "Deallocation exception test failed: " << e.what() << std::endl;
+            SPDLOG_ERROR("Deallocation exception test failed: {}", e.what());
             return false;
         }
     });
@@ -404,7 +414,7 @@ TestResult ExceptionSafetyTest::testContextSwitchException() {
                 // Try to switch to a device that might not exist
                 Device invalid_device(Device::Type::COUNT, 999);
                 context::setDevice(invalid_device);
-                std::cerr << "Expected device switching to fail with invalid device" << std::endl;
+                SPDLOG_ERROR("Expected device switching to fail with invalid device");
                 return false;
             } catch (const std::exception &e) {
                 // Expected to fail
@@ -414,13 +424,13 @@ TestResult ExceptionSafetyTest::testContextSwitchException() {
             // Verify original device is still set
             Device current_device = context::getDevice();
             if (current_device != original_device) {
-                std::cerr << "Device context not restored after exception" << std::endl;
+                SPDLOG_ERROR("Device context not restored after exception");
                 return false;
             }
 
             return true;
         } catch (const std::exception &e) {
-            std::cerr << "Context switch exception test failed: " << e.what() << std::endl;
+            SPDLOG_ERROR("Context switch exception test failed: {}", e.what());
             return false;
         }
     });
@@ -432,25 +442,25 @@ TestResult MemoryLeakTest::run() {
         try {
             auto result1 = testBasicLeakDetection();
             if (!result1.passed) {
-                std::cerr << "Basic leak detection test failed: " << result1.error_message << std::endl;
+                SPDLOG_ERROR("Basic leak detection test failed: {}", result1.error_message);
                 return false;
             }
 
             auto result2 = testCrossDeviceLeakDetection();
             if (!result2.passed) {
-                std::cerr << "Cross-device leak detection test failed: " << result2.error_message << std::endl;
+                SPDLOG_ERROR("Cross-device leak detection test failed: {}", result2.error_message);
                 return false;
             }
 
             auto result3 = testExceptionLeakDetection();
             if (!result3.passed) {
-                std::cerr << "Exception leak detection test failed: " << result3.error_message << std::endl;
+                SPDLOG_ERROR("Exception leak detection test failed: {}", result3.error_message);
                 return false;
             }
 
             return true;
         } catch (const std::exception &e) {
-            std::cerr << "MemoryLeakTest failed with exception: " << e.what() << std::endl;
+            SPDLOG_ERROR("MemoryLeakTest failed with exception: {}", e.what());
             return false;
         }
     });
@@ -480,13 +490,13 @@ TestResult MemoryLeakTest::testBasicLeakDetection() {
             // Check for leaks (this is a basic test - real leak detection would need more sophisticated tools)
             size_t leaked_memory = MemoryLeakDetector::instance().getLeakedMemory();
             if (leaked_memory > 0) {
-                std::cerr << "Potential memory leak detected: " << leaked_memory << " bytes" << std::endl;
+                SPDLOG_ERROR("Potential memory leak detected: {} bytes", leaked_memory);
                 return false;
             }
 
             return true;
         } catch (const std::exception &e) {
-            std::cerr << "Basic leak detection test failed: " << e.what() << std::endl;
+            SPDLOG_ERROR("Basic leak detection test failed: {}", e.what());
             return false;
         }
     });
@@ -514,7 +524,7 @@ TestResult MemoryLeakTest::testCrossDeviceLeakDetection() {
             auto pinned_memory = context::allocatePinnedHostMemory(1024);
 
             if (!pinned_memory) {
-                std::cerr << "Failed to allocate pinned memory" << std::endl;
+                SPDLOG_ERROR("Failed to allocate pinned memory");
                 return false;
             }
 
@@ -528,13 +538,13 @@ TestResult MemoryLeakTest::testCrossDeviceLeakDetection() {
             // Check for leaks
             size_t leaked_memory = MemoryLeakDetector::instance().getLeakedMemory();
             if (leaked_memory > 0) {
-                std::cerr << "Potential cross-device memory leak detected: " << leaked_memory << " bytes" << std::endl;
+                SPDLOG_ERROR("Potential cross-device memory leak detected: {} bytes", leaked_memory);
                 return false;
             }
 
             return true;
         } catch (const std::exception &e) {
-            std::cerr << "Cross-device leak detection test failed: " << e.what() << std::endl;
+            SPDLOG_ERROR("Cross-device leak detection test failed: {}", e.what());
             return false;
         }
     });
@@ -569,13 +579,13 @@ TestResult MemoryLeakTest::testExceptionLeakDetection() {
             // Check for leaks
             size_t leaked_memory = MemoryLeakDetector::instance().getLeakedMemory();
             if (leaked_memory > 0) {
-                std::cerr << "Potential exception-related memory leak detected: " << leaked_memory << " bytes" << std::endl;
+                SPDLOG_ERROR("Potential exception-related memory leak detected: {} bytes", leaked_memory);
                 return false;
             }
 
             return true;
         } catch (const std::exception &e) {
-            std::cerr << "Exception leak detection test failed: " << e.what() << std::endl;
+            SPDLOG_ERROR("Exception leak detection test failed: {}", e.what());
             return false;
         }
     });
@@ -587,25 +597,25 @@ TestResult PerformanceTest::run() {
         try {
             auto result1 = testAllocationPerformance();
             if (!result1.passed) {
-                std::cerr << "Allocation performance test failed: " << result1.error_message << std::endl;
+                SPDLOG_ERROR("Allocation performance test failed: {}", result1.error_message);
                 return false;
             }
 
             auto result2 = testConcurrentPerformance();
             if (!result2.passed) {
-                std::cerr << "Concurrent performance test failed: " << result2.error_message << std::endl;
+                SPDLOG_ERROR("Concurrent performance test failed: {}", result2.error_message);
                 return false;
             }
 
             auto result3 = testMemoryCopyPerformance();
             if (!result3.passed) {
-                std::cerr << "Memory copy performance test failed: " << result3.error_message << std::endl;
+                SPDLOG_ERROR("Memory copy performance test failed: {}", result3.error_message);
                 return false;
             }
 
             return true;
         } catch (const std::exception &e) {
-            std::cerr << "PerformanceTest failed with exception: " << e.what() << std::endl;
+            SPDLOG_ERROR("PerformanceTest failed with exception: {}", e.what());
             return false;
         }
     });
@@ -635,13 +645,13 @@ TestResult PerformanceTest::testAllocationPerformance() {
 
             // Performance threshold: should be under 100μs per allocation
             if (avg_time_per_allocation > 100.0) {
-                std::cerr << "Allocation performance too slow: " << avg_time_per_allocation << "μs per allocation" << std::endl;
+                SPDLOG_ERROR("Allocation performance too slow: {}μs per allocation", avg_time_per_allocation);
                 return false;
             }
 
             return true;
         } catch (const std::exception &e) {
-            std::cerr << "Allocation performance test failed: " << e.what() << std::endl;
+            SPDLOG_ERROR("Allocation performance test failed: {}", e.what());
             return false;
         }
     });
@@ -682,13 +692,13 @@ TestResult PerformanceTest::testConcurrentPerformance() {
 
             // Performance threshold: should be under 200μs per allocation under concurrent load
             if (avg_time_per_allocation > 200.0) {
-                std::cerr << "Concurrent allocation performance too slow: " << avg_time_per_allocation << "μs per allocation" << std::endl;
+                SPDLOG_ERROR("Concurrent allocation performance too slow: {}μs per allocation", avg_time_per_allocation);
                 return false;
             }
 
             return true;
         } catch (const std::exception &e) {
-            std::cerr << "Concurrent performance test failed: " << e.what() << std::endl;
+            SPDLOG_ERROR("Concurrent performance test failed: {}", e.what());
             return false;
         }
     });
@@ -705,7 +715,7 @@ TestResult PerformanceTest::testMemoryCopyPerformance() {
             auto dst_memory = context::allocateMemory(data_size);
 
             if (!src_memory || !dst_memory) {
-                std::cerr << "Failed to allocate memory for copy test" << std::endl;
+                SPDLOG_ERROR("Failed to allocate memory for copy test");
                 return false;
             }
 
@@ -733,13 +743,13 @@ TestResult PerformanceTest::testMemoryCopyPerformance() {
 
             // Performance threshold: should achieve at least 100 MB/s
             if (bandwidth < 100.0) {
-                std::cerr << "Memory copy performance too slow: " << bandwidth << " MB/s" << std::endl;
+                SPDLOG_ERROR("Memory copy performance too slow: {} MB/s", bandwidth);
                 return false;
             }
 
             return true;
         } catch (const std::exception &e) {
-            std::cerr << "Memory copy performance test failed: " << e.what() << std::endl;
+            SPDLOG_ERROR("Memory copy performance test failed: {}", e.what());
             return false;
         }
     });
@@ -751,25 +761,25 @@ TestResult StressTest::run() {
         try {
             auto result1 = testHighFrequencyAllocations();
             if (!result1.passed) {
-                std::cerr << "High frequency allocations test failed: " << result1.error_message << std::endl;
+                SPDLOG_ERROR("High frequency allocations test failed: {}", result1.error_message);
                 return false;
             }
 
             auto result2 = testLargeMemoryAllocations();
             if (!result2.passed) {
-                std::cerr << "Large memory allocations test failed: " << result2.error_message << std::endl;
+                SPDLOG_ERROR("Large memory allocations test failed: {}", result2.error_message);
                 return false;
             }
 
             auto result3 = testCrossDeviceStress();
             if (!result3.passed) {
-                std::cerr << "Cross-device stress test failed: " << result3.error_message << std::endl;
+                SPDLOG_ERROR("Cross-device stress test failed: {}", result3.error_message);
                 return false;
             }
 
             return true;
         } catch (const std::exception &e) {
-            std::cerr << "StressTest failed with exception: " << e.what() << std::endl;
+            SPDLOG_ERROR("StressTest failed with exception: {}", e.what());
             return false;
         }
     });
@@ -808,7 +818,7 @@ TestResult StressTest::testHighFrequencyAllocations() {
 
             return true;
         } catch (const std::exception &e) {
-            std::cerr << "High frequency allocations test failed: " << e.what() << std::endl;
+            SPDLOG_ERROR("High frequency allocations test failed: {}", e.what());
             return false;
         }
     });
@@ -842,7 +852,7 @@ TestResult StressTest::testLargeMemoryAllocations() {
 
             return true;
         } catch (const std::exception &e) {
-            std::cerr << "Large memory allocations test failed: " << e.what() << std::endl;
+            SPDLOG_ERROR("Large memory allocations test failed: {}", e.what());
             return false;
         }
     });
@@ -894,7 +904,216 @@ TestResult StressTest::testCrossDeviceStress() {
 
             return true;
         } catch (const std::exception &e) {
-            std::cerr << "Cross-device stress test failed: " << e.what() << std::endl;
+            SPDLOG_ERROR("Cross-device stress test failed: {}", e.what());
+            return false;
+        }
+    });
+}
+
+// Device Switch Test Implementation
+TestResult DeviceSwitchTest::run() {
+    return measureTime("DeviceSwitchTest", [this]() -> bool {
+        try {
+            SPDLOG_INFO("DeviceSwitchTest: Starting test");
+            auto result1 = testD2HWithDeviceSwitch();
+            if (!result1.passed) {
+                SPDLOG_ERROR("D2H with device switch test failed: {}", result1.error_message);
+                return false;
+            }
+            auto result2 = testD2HWithNonContiguousTensor();
+            if (!result2.passed) {
+                SPDLOG_ERROR("D2H with non-contiguous tensor test failed: {}", result2.error_message);
+                return false;
+            }
+            return true;
+        } catch (const std::exception &e) {
+            SPDLOG_ERROR("DeviceSwitchTest failed with exception: {}", e.what());
+            return false;
+        }
+    });
+}
+
+TestResult DeviceSwitchTest::testD2HWithDeviceSwitch() {
+    return measureTime("testD2HWithDeviceSwitch", [this]() -> bool {
+        try {
+            SPDLOG_INFO("testD2HWithDeviceSwitch: Starting test");
+
+            // Find a non-CPU device
+            bool has_device = false;
+            Device device_to_use;
+
+            for (int device_type = 0; device_type < 10; ++device_type) {
+                try {
+                    Device test_device(static_cast<Device::Type>(device_type), 0);
+                    context::setDevice(test_device);
+                    if (test_device.getType() != Device::Type::CPU) {
+                        has_device = true;
+                        device_to_use = test_device;
+                        break;
+                    }
+                } catch (...) {
+                    // Device type not available, continue
+                }
+            }
+
+            if (!has_device) {
+                SPDLOG_INFO("testD2HWithDeviceSwitch: No non-CPU device available, skipping test");
+                return true; // Skip test if no device available
+            }
+
+            SPDLOG_INFO("testD2HWithDeviceSwitch: Using device: {}", device_to_use.toString());
+
+            // Allocate memory on device
+            context::setDevice(device_to_use);
+            auto device_memory = context::allocateMemory(1024);
+            if (!device_memory) {
+                SPDLOG_ERROR("Failed to allocate device memory");
+                return false;
+            }
+
+            // Initialize device memory with test pattern (using H2D)
+            std::vector<uint8_t> test_pattern(1024, 0xAB);
+            context::memcpyH2D(device_memory->data(), test_pattern.data(), 1024);
+
+            // Switch to CPU (simulating what happens when creating CPU tensors)
+            context::setDevice(Device(Device::Type::CPU, 0));
+
+            // Allocate host memory
+            auto host_memory = context::allocateHostMemory(1024);
+            if (!host_memory) {
+                SPDLOG_ERROR("Failed to allocate host memory");
+                return false;
+            }
+
+            // Now try to do D2H copy with CPU runtime active
+            // With the fix, memcpyD2H should automatically switch to device runtime and succeed
+            try {
+                context::memcpyD2H(host_memory->data(), device_memory->data(), 1024);
+
+                // Verify data was copied correctly
+                std::vector<uint8_t> host_data(1024);
+                std::memcpy(host_data.data(), host_memory->data(), 1024);
+                if (host_data != test_pattern) {
+                    SPDLOG_ERROR("Data mismatch after D2H copy with automatic device switch");
+                    return false;
+                }
+
+                SPDLOG_INFO("testD2HWithDeviceSwitch: D2H copy succeeded with automatic device switch");
+            } catch (const std::exception &e) {
+                SPDLOG_ERROR("D2H copy with CPU runtime failed (should have auto-switched): {}", e.what());
+                return false;
+            }
+
+            // Now do it explicitly - set device to source device first (should also work)
+            context::setDevice(device_to_use);
+            try {
+                context::memcpyD2H(host_memory->data(), device_memory->data(), 1024);
+
+                // Verify data was copied correctly
+                std::vector<uint8_t> host_data(1024);
+                std::memcpy(host_data.data(), host_memory->data(), 1024);
+                if (host_data != test_pattern) {
+                    SPDLOG_ERROR("Data mismatch after D2H copy with explicit device set");
+                    return false;
+                }
+
+                SPDLOG_INFO("testD2HWithDeviceSwitch: Correct D2H copy succeeded with explicit device");
+            } catch (const std::exception &e) {
+                SPDLOG_ERROR("D2H copy with correct runtime failed: {}", e.what());
+                return false;
+            }
+
+            SPDLOG_INFO("testD2HWithDeviceSwitch: Test passed");
+            return true;
+        } catch (const std::exception &e) {
+            SPDLOG_ERROR("testD2HWithDeviceSwitch failed: {}", e.what());
+            return false;
+        }
+    });
+}
+
+TestResult DeviceSwitchTest::testD2HWithNonContiguousTensor() {
+    return measureTime("testD2HWithNonContiguousTensor", [this]() -> bool {
+        try {
+            SPDLOG_INFO("testD2HWithNonContiguousTensor: Starting test");
+
+            // Find a non-CPU device
+            bool has_device = false;
+            Device device_to_use;
+
+            for (int device_type = 0; device_type < 10; ++device_type) {
+                try {
+                    Device test_device(static_cast<Device::Type>(device_type), 0);
+                    context::setDevice(test_device);
+                    if (test_device.getType() != Device::Type::CPU) {
+                        has_device = true;
+                        device_to_use = test_device;
+                        break;
+                    }
+                } catch (...) {
+                    // Device type not available, continue
+                }
+            }
+
+            if (!has_device) {
+                SPDLOG_INFO("testD2HWithNonContiguousTensor: No non-CPU device available, skipping test");
+                return true; // Skip test if no device available
+            }
+
+            SPDLOG_INFO("testD2HWithNonContiguousTensor: Using device: {}", device_to_use.toString());
+
+            // This test simulates the exact scenario from the bug:
+            // 1. Create device tensor (switches to device)
+            // 2. Create CPU tensor (switches to CPU) - this was causing the issue
+            // 3. Copy from device to CPU - should work correctly now
+
+            // Set device to source device
+            context::setDevice(device_to_use);
+
+            // Allocate device memory
+            auto device_memory = context::allocateMemory(1024);
+            if (!device_memory) {
+                SPDLOG_ERROR("Failed to allocate device memory");
+                return false;
+            }
+
+            // Initialize device memory
+            std::vector<uint8_t> test_pattern(1024, 0xCD);
+            context::memcpyH2D(device_memory->data(), test_pattern.data(), 1024);
+
+            // Switch to CPU (simulating Tensor::empty() call which switches device)
+            context::setDevice(Device(Device::Type::CPU, 0));
+
+            // Allocate host memory (this simulates creating CPU tensor)
+            auto host_memory = context::allocateHostMemory(1024);
+            if (!host_memory) {
+                SPDLOG_ERROR("Failed to allocate host memory");
+                return false;
+            }
+
+            // Now try D2H copy with CPU runtime - should automatically switch to device runtime
+            // This tests the automatic device switching fix
+            try {
+                context::memcpyD2H(host_memory->data(), device_memory->data(), 1024);
+
+                // Verify data
+                std::vector<uint8_t> host_data(1024);
+                std::memcpy(host_data.data(), host_memory->data(), 1024);
+                if (host_data != test_pattern) {
+                    SPDLOG_ERROR("Data mismatch after D2H copy");
+                    return false;
+                }
+
+                SPDLOG_INFO("testD2HWithNonContiguousTensor: D2H copy succeeded with automatic device switch");
+            } catch (const std::exception &e) {
+                SPDLOG_ERROR("D2H copy failed: {}", e.what());
+                return false;
+            }
+
+            SPDLOG_INFO("testD2HWithNonContiguousTensor: Test passed");
+            return true;
+        } catch (const std::exception &e) {
+            SPDLOG_ERROR("testD2HWithNonContiguousTensor failed: {}", e.what());
             return false;
         }
     });

@@ -5,6 +5,7 @@
 
 #include <infiniop.h>
 #include <infinirt.h>
+#include <mutex>
 
 namespace infinicore {
 class ContextImpl;
@@ -15,6 +16,8 @@ private:
     infiniopHandle_t infiniop_handle_;
     std::unique_ptr<MemoryAllocator> device_memory_allocator_;
     std::unique_ptr<MemoryAllocator> pinned_host_memory_allocator_;
+    // Mutex to protect stream access for thread safety
+    mutable std::mutex stream_mutex_;
 
 protected:
     Runtime(Device device);
