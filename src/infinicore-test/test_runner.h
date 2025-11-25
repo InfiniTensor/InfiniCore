@@ -39,7 +39,7 @@ inline bool tensorsAllClose(const infinicore::Tensor &actual,
                             double rtol = 1e-5,
                             double atol = 1e-5) {
     if (actual->shape() != expected->shape()) {
-        spdlog::error("Shape mismatch: actual vs expected");
+        SPDLOG_ERROR("Shape mismatch: actual vs expected");
         return false;
     }
 
@@ -50,13 +50,13 @@ inline bool tensorsAllClose(const infinicore::Tensor &actual,
     b_cpu = b_cpu->contiguous();
 
     if (a_cpu->dtype() != b_cpu->dtype()) {
-        spdlog::error("DType mismatch");
+        SPDLOG_ERROR("DType mismatch");
         return false;
     }
 
     // Only support F32 in this test
     if (a_cpu->dtype() != infinicore::DataType::F32) {
-        spdlog::error("Unsupported dtype for comparison; only F32 supported in test");
+        SPDLOG_ERROR("Unsupported dtype for comparison; only F32 supported in test");
         return false;
     }
 
@@ -98,8 +98,8 @@ inline bool tensorsAllClose(const infinicore::Tensor &actual,
                     ss << coords[d] << (d + 1 < coords.size() ? "," : "]");
                 }
                 double tol = atol + rtol * std::fabs(bv);
-                spdlog::error("Mismatch at index {} coords {}: actual={} expected={} diff={} tol={}",
-                              i, ss.str(), av, bv, diff, tol);
+                SPDLOG_ERROR("Mismatch at index {} coords {}: actual={} expected={} diff={} tol={}",
+                             i, ss.str(), av, bv, diff, tol);
                 num_fail_reported++;
             }
         }
@@ -118,7 +118,7 @@ inline bool tensorsAllClose(const infinicore::Tensor &actual,
         for (size_t d = 0; d < coords.size(); ++d) {
             ss << coords[d] << (d + 1 < coords.size() ? "," : "]");
         }
-        spdlog::error("Max diff {} at linear index {} coords {}", max_diff, max_diff_index, ss.str());
+        SPDLOG_ERROR("Max diff {} at linear index {} coords {}", max_diff, max_diff_index, ss.str());
         return false;
     }
 

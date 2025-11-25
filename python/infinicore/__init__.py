@@ -1,5 +1,6 @@
 import contextlib
 
+import infinicore.context as context
 import infinicore.nn as nn
 
 # Import context functions
@@ -60,6 +61,7 @@ from infinicore.tensor import (
 
 __all__ = [
     # Modules.
+    "context",
     "nn",
     # Classes.
     "device",

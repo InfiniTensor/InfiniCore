@@ -155,6 +155,16 @@ private:
     TestResult testCrossDeviceStress();
 };
 
+class DeviceSwitchTest : public TestFramework {
+public:
+    TestResult run() override;
+    std::string getName() const override { return "DeviceSwitchTest"; }
+
+private:
+    TestResult testD2HWithDeviceSwitch();
+    TestResult testD2HWithNonContiguousTensor();
+};
+
 } // namespace infinicore::test
 
 #endif // __INFINICORE_MEMORY_TEST_H__
