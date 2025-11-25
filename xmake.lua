@@ -350,8 +350,8 @@ target("infiniccl")
 target_end()
 
 target("infinicore_c_api")
-    set_default(false)
     set_kind("shared")
+    add_deps("infiniop", "infinirt", "infiniccl")
     set_languages("cxx17")
 
     local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
@@ -371,6 +371,12 @@ target("infinicore_c_api")
     add_files("src/infinicore/ops/*/*.cc")
 
     set_installdir(INFINI_ROOT)
+    add_installfiles("include/infinicore/(**.h)",    {prefixdir = "include/infinicore"})
+    add_installfiles("include/infinicore/(**.hpp)",    {prefixdir = "include/infinicore"})
+    add_installfiles("include/infinicore/(**/*.h)",  {prefixdir = "include/infinicore"})
+    add_installfiles("include/infinicore/(**/*.hpp)",{prefixdir = "include/infinicore"})
+    add_installfiles("include/infinicore.h",          {prefixdir = "include"})
+    add_installfiles("include/infinicore.hpp",        {prefixdir = "include"})
     after_build(function (target) print(YELLOW .. "[Congratulations!] Now you can install the libraries with \"xmake install\"" .. NC) end)
 target_end()
 

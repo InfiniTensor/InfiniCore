@@ -50,21 +50,6 @@ Runtime *ContextImpl::getCpuRuntime() {
     return runtime_table_[int(Device::Type::CPU)][0].get();
 }
 
-Runtime *ContextImpl::getRuntime(Device device) {
-    std::lock_guard<std::mutex> lock(runtime_table_mutex_);
-    int device_type = int(device.getType());
-    size_t device_index = device.getIndex();
-
-    // Ensure runtime exists
-    if (runtime_table_[device_type].size() <= device_index || runtime_table_[device_type][device_index] == nullptr) {
-        // Runtime doesn't exist yet, create it
-        runtime_table_[device_type].resize(device_index + 1);
-        runtime_table_[device_type][device_index] = std::unique_ptr<Runtime>(new Runtime(device));
-    }
-
-    return runtime_table_[device_type][device_index].get();
-}
-
 void ContextImpl::setDevice(Device device) {
     Device current_device = getCurrentRuntime()->device();
     SPDLOG_DEBUG("[CONTEXT] setDevice: ENTERED - target={}, current={}",

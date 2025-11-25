@@ -26,9 +26,6 @@ public:
 
     Runtime *getCpuRuntime();
 
-    // Get runtime for a specific device (creates it if it doesn't exist)
-    Runtime *getRuntime(Device device);
-
     void setDevice(Device);
 
     size_t getDeviceCount(Device::Type type);
