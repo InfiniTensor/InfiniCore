@@ -986,22 +986,19 @@ TestResult DeviceSwitchTest::testD2HWithDeviceSwitch() {
             }
 
             // Now try to do D2H copy with CPU runtime active
-            // With the fix, memcpyD2H should automatically switch to device runtime and succeed
+            // This should throw an exception since CPU runtime cannot perform D2H operations
             try {
                 context::memcpyD2H(host_memory->data(), device_memory->data(), 1024);
-
-                // Verify data was copied correctly
-                std::vector<uint8_t> host_data(1024);
-                std::memcpy(host_data.data(), host_memory->data(), 1024);
-                if (host_data != test_pattern) {
-                    SPDLOG_ERROR("Data mismatch after D2H copy with automatic device switch");
+                SPDLOG_ERROR("D2H copy with CPU runtime should have thrown an exception");
+                return false;
+            } catch (const std::exception &e) {
+                SPDLOG_INFO("testD2HWithDeviceSwitch: D2H copy correctly threw exception with CPU runtime: {}", e.what());
+                // Verify it's the expected exception message
+                std::string error_msg = e.what();
+                if (error_msg.find("CPU runtime") == std::string::npos) {
+                    SPDLOG_ERROR("Unexpected exception message: {}", error_msg);
                     return false;
                 }
-
-                SPDLOG_INFO("testD2HWithDeviceSwitch: D2H copy succeeded with automatic device switch");
-            } catch (const std::exception &e) {
-                SPDLOG_ERROR("D2H copy with CPU runtime failed (should have auto-switched): {}", e.what());
-                return false;
             }
 
             // Now do it explicitly - set device to source device first (should also work)
@@ -1091,8 +1088,24 @@ TestResult DeviceSwitchTest::testD2HWithNonContiguousTensor() {
                 return false;
             }
 
-            // Now try D2H copy with CPU runtime - should automatically switch to device runtime
-            // This tests the automatic device switching fix
+            // Now try D2H copy with CPU runtime - should throw an exception
+            // This tests that CPU runtime correctly rejects D2H operations
+            try {
+                context::memcpyD2H(host_memory->data(), device_memory->data(), 1024);
+                SPDLOG_ERROR("D2H copy with CPU runtime should have thrown an exception");
+                return false;
+            } catch (const std::exception &e) {
+                SPDLOG_INFO("testD2HWithNonContiguousTensor: D2H copy correctly threw exception with CPU runtime: {}", e.what());
+                // Verify it's the expected exception message
+                std::string error_msg = e.what();
+                if (error_msg.find("CPU runtime") == std::string::npos) {
+                    SPDLOG_ERROR("Unexpected exception message: {}", error_msg);
+                    return false;
+                }
+            }
+
+            // Now explicitly set device to source device and try again - should succeed
+            context::setDevice(device_to_use);
             try {
                 context::memcpyD2H(host_memory->data(), device_memory->data(), 1024);
 
@@ -1100,13 +1113,13 @@ TestResult DeviceSwitchTest::testD2HWithNonContiguousTensor() {
                 std::vector<uint8_t> host_data(1024);
                 std::memcpy(host_data.data(), host_memory->data(), 1024);
                 if (host_data != test_pattern) {
-                    SPDLOG_ERROR("Data mismatch after D2H copy");
+                    SPDLOG_ERROR("Data mismatch after D2H copy with explicit device set");
                     return false;
                 }
 
-                SPDLOG_INFO("testD2HWithNonContiguousTensor: D2H copy succeeded with automatic device switch");
+                SPDLOG_INFO("testD2HWithNonContiguousTensor: D2H copy succeeded with explicit device set");
             } catch (const std::exception &e) {
-                SPDLOG_ERROR("D2H copy failed: {}", e.what());
+                SPDLOG_ERROR("D2H copy failed with explicit device set: {}", e.what());
                 return false;
             }
 
