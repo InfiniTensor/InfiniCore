@@ -13,6 +13,7 @@ from .datatypes import to_torch_dtype, to_infinicore_dtype
 from .devices import InfiniDeviceNames, torch_device_map
 from .tensor import TensorSpec, TensorInitializer
 from .utils import (
+    clone_torch_tensor,
     create_test_comparator,
     infinicore_tensor_from_torch,
 )
@@ -321,7 +322,7 @@ class BaseOperatorTest(ABC):
         for item in input_sequence:
             if isinstance(item, torch.Tensor):
                 if clone:
-                    cloned_item = item.clone().detach()
+                    cloned_item = clone_torch_tensor(item)
                     infini_item = infinicore_tensor_from_torch(cloned_item)
                     cloned_tensors.append(cloned_item)
                 else:
@@ -340,7 +341,7 @@ class BaseOperatorTest(ABC):
             if isinstance(inp, torch.Tensor):
                 # Clone only if this input will be used for comparison
                 if comparison_target == i:
-                    cloned_inp = inp.clone().detach()
+                    cloned_inp = clone_torch_tensor(inp)
                     infini_tensor = infinicore_tensor_from_torch(cloned_inp)
                     cloned_tensors.append(cloned_inp)
                 else:
@@ -362,7 +363,7 @@ class BaseOperatorTest(ABC):
             if isinstance(value, torch.Tensor):
                 # Check if this tensor is used for output comparison
                 if key == "out" and comparison_target == "out":
-                    cloned_value = value.clone().detach()
+                    cloned_value = clone_torch_tensor(value)
                     infini_kwargs[key] = infinicore_tensor_from_torch(cloned_value)
                     cloned_tensors.append(cloned_value)
                 elif key == "out" and isinstance(comparison_target, int):
