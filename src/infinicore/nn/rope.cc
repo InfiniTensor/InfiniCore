@@ -4,7 +4,6 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
-#include <spdlog/spdlog.h>
 #include <stdexcept>
 
 namespace infinicore::nn {
@@ -20,7 +19,6 @@ RoPE::RoPE(size_t head_dim,
       theta_(theta),
       algo_(algo),
       dtype_(dtype) {
-
     if (head_dim % 2 != 0) {
         throw std::invalid_argument("head_dim must be even for RoPE, got " + std::to_string(head_dim));
     }
@@ -29,9 +27,6 @@ RoPE::RoPE(size_t head_dim,
 
     // Initialize cache tables
     initialize_cache();
-
-    spdlog::debug("Created RoPE module: head_dim={}, max_seq_len={}, theta={}, algo={}, dtype={}",
-                  head_dim, max_seq_len, theta, static_cast<int>(algo), static_cast<int>(dtype_));
 }
 
 void RoPE::initialize_cache() {
@@ -42,9 +37,8 @@ void RoPE::initialize_cache() {
     INFINICORE_NN_BUFFER_INIT(cos_cache, ({max_seq_len_, cache_dim}, dtype_, device_));
 
     // Pre-compute sin and cos values
-    // The frequency calculation differs based on algorithm:
-    // - GPT_J: pairs are (2j, 2j+1) for cache entry j, frequency for dimension 2j is theta^(-2j/head_dim)
-    // - GPT_NEOX: pairs are (j, j+head_dim/2) for cache entry j, frequency for dimension j is theta^(-j/head_dim)
+    // Frequency generation always uses GPT-J style (theta^(-2j/head_dim)).
+    // The rotation algorithm (algo_) controls how dimensions are paired in the kernel.
 
     // Compute on CPU first, then copy to device
     auto cpu_device = Device(Device::Type::CPU, 0);
@@ -55,20 +49,8 @@ void RoPE::initialize_cache() {
 
     for (size_t pos = 0; pos < max_seq_len_; pos++) {
         for (size_t j = 0; j < cache_dim; j++) {
-            // Compute inverse frequency based on algorithm
-            double inv_freq;
-
-            if (algo_ == Algo::GPT_J) {
-                // GPT_J: pairs are (2j, 2j+1) for cache entry j
-                // Frequency for pair j: theta^(-2j/head_dim)
-                inv_freq = 1.0 / std::pow(theta_, 2.0 * static_cast<double>(j) / static_cast<double>(head_dim_));
-            } else if (algo_ == Algo::GPT_NEOX) {
-                // GPT_NEOX: pairs are (j, j+head_dim/2) for cache entry j
-                // Frequency for pair j (corresponding to dimension j): theta^(-j/head_dim)
-                inv_freq = 1.0 / std::pow(theta_, static_cast<double>(j) / static_cast<double>(head_dim_));
-            } else {
-                throw std::runtime_error("Unsupported RoPE algorithm: " + std::to_string(static_cast<int>(algo_)));
-            }
+            // GPT-J style inverse frequency: theta^(-2j/head_dim)
+            double inv_freq = 1.0 / std::pow(theta_, 2.0 * static_cast<double>(j) / static_cast<double>(head_dim_));
 
             // Compute angle: position * inverse_frequency
             double angle = static_cast<double>(pos) * inv_freq;
