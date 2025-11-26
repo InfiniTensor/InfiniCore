@@ -234,7 +234,10 @@ def compare_results(
             return result_equal
 
     # Convert infinicore result to PyTorch tensor for comparison
-    torch_result_from_infini = convert_infinicore_to_torch(infini_result)
+    if isinstance(infini_result, torch.Tensor):
+        torch_result_from_infini = infini_result
+    else:
+        torch_result_from_infini = convert_infinicore_to_torch(infini_result)
 
     # Debug mode: detailed comparison
     if debug_mode:

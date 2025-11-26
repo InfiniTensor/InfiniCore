@@ -567,12 +567,12 @@ class BaseOperatorTest(ABC):
             elif comparison_target == "out":
                 # Compare output tensor from kwargs (explicit output)
                 torch_comparison = kwargs.get("out")
-                infini_comparison = infini_kwargs.get("out")
+                infini_comparison = cloned_tensors[0]
             elif isinstance(comparison_target, int):
                 # Compare specific input tensor (in-place operation on input)
                 if 0 <= comparison_target < len(inputs):
                     torch_comparison = inputs[comparison_target]
-                    infini_comparison = infini_inputs[comparison_target]
+                    infini_comparison = cloned_tensors[0]
                 else:
                     raise ValueError(
                         f"Invalid comparison target index: {comparison_target}"
