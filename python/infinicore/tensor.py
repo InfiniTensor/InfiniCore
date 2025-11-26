@@ -161,9 +161,37 @@ def strided_from_blob(data_ptr, size, strides, *, dtype=None, device=None):
     )
 
 
-def from_torch(torch_tensor) -> Tensor:
+def from_torch(torch_tensor, device=None) -> Tensor:
+    """Convert a PyTorch tensor to an infinicore Tensor.
+    
+    Args:
+        torch_tensor: PyTorch tensor to convert
+        device: Optional infinicore device. If None, infers from torch_tensor.device.
+                When torch_tensor.device.type is "cuda", uses current context device
+                to determine the correct infinicore device type.
+    
+    Returns:
+        Tensor: An infinicore tensor created from the torch tensor
+    """
     infini_type = to_infinicore_dtype(torch_tensor.dtype)
-    infini_device = infinicore.device(torch_tensor.device.type, 0)
+    
+    if device is None:
+        # If torch device is "cuda", use current context device to determine
+        # the correct infinicore device type (NVIDIA, ILUVATAR, QY, HYGON, etc.)
+        if torch_tensor.device.type == "cuda":
+            try:
+                # Use current context device to get the correct device type
+                current_device = infinicore.context.get_device()
+                # Use the same device type as current context, but use torch's device index
+                infini_device = infinicore.device(current_device.type, torch_tensor.device.index or 0)
+            except Exception:
+                # Fallback to torch device type mapping if context is not set
+                infini_device = infinicore.device(torch_tensor.device.type, torch_tensor.device.index or 0)
+        else:
+            infini_device = infinicore.device(torch_tensor.device.type, torch_tensor.device.index or 0)
+    else:
+        infini_device = device
+    
     return Tensor(
         _infinicore.from_blob(
             torch_tensor.data_ptr(),

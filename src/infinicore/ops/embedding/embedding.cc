@@ -65,6 +65,9 @@ void embedding_(Tensor out, Tensor input, Tensor weight) {
         }
 
     } else {
+        // Ensure device context is set to weight device before memcpyD2D
+        context::setDevice(weight->device());
+        
         if (infinicore::DataType::I64 == input->dtype()) {
             const int64_t *input_arr = reinterpret_cast<const int64_t *>(input->data());
             for (Size i = 0; i < counts; ++i) {
