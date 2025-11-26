@@ -32,13 +32,9 @@ void TensorImpl::copy_from(Tensor src) {
             if (this->device().getType() == Device::Type::CPU) {
                 context::memcpyH2H(this->data(), src->data(), copy_size);
             } else {
-                // Set context to the device for D2D operations
-                context::setDevice(this->device());
                 context::memcpyD2D(this->data(), src->data(), copy_size);
             }
         } else {
-            // Set context to the device before rearrange
-            context::setDevice(this->device());
             op::rearrange_(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()), src);
         }
     } else {
@@ -46,18 +42,9 @@ void TensorImpl::copy_from(Tensor src) {
             src = src->contiguous();
         }
         if (this->device().getType() == Device::Type::CPU) {
-            // Set context to source device before copying
-            context::setDevice(src->device());
-
             // Use nbytes() to get the actual tensor size, not the full memory size
             size_t copy_size = std::min(this->nbytes(), src->nbytes());
             if (this->is_contiguous()) {
-                // Verify device is still set to source device before memcpy
-                Device current_device = context::getDevice();
-                if (current_device != src->device()) {
-                    context::setDevice(src->device());
-                    current_device = context::getDevice();
-                }
                 context::memcpyD2H(this->data(), src->data(), copy_size);
             } else {
                 auto local_src = Tensor::empty(this->shape(), this->dtype(), this->device());
@@ -67,9 +54,6 @@ void TensorImpl::copy_from(Tensor src) {
         } else if (src->device().getType() == Device::Type::CPU) {
             // Use nbytes() to get the actual tensor size
             size_t copy_size = std::min(this->nbytes(), src->nbytes());
-
-            // Set context to destination device before copying
-            context::setDevice(this->device());
 
             if (this->is_contiguous()) {
                 context::memcpyH2D(this->data(), src->data(), copy_size);
