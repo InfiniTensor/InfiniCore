@@ -24,6 +24,7 @@
 #include "infiniop/ops/silu.h"
 #include "infiniop/ops/softmax.h"
 #include "infiniop/ops/softplus.h"
+#include "infiniop/ops/sqrt.h"
 #include "infiniop/ops/sub.h"
 #include "infiniop/ops/swiglu.h"
 #include "infiniop/ops/tanh.h"

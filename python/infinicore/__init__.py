@@ -44,6 +44,7 @@ from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.rearrange import rearrange
+from .ops.sqrt import sqrt
 from infinicore.tensor import (
     Tensor,
     empty,
