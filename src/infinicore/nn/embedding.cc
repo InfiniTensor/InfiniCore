@@ -82,6 +82,9 @@ Tensor Embedding::forward(const Tensor &indices) const {
         }
     } else {
         // Device path: use stream-ordered D2D copies
+        // Ensure device context is set to weight device before memcpyD2D
+        context::setDevice(weight_->device());
+        
         for (size_t i = 0; i < num_lookups; ++i) {
             int64_t idx = indices_data[i];
             if (idx < 0 || idx >= static_cast<int64_t>(num_embeddings_)) {

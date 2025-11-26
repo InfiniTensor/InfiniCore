@@ -95,3 +95,44 @@ def infinicore_to_numpy_dtype(infini_dtype):
         return np.uint8
     else:
         raise ValueError(f"Unsupported infinicore dtype: {infini_dtype}")
+
+
+def to_torch_device(infini_device):
+    """Convert infinicore device type to PyTorch device type string
+    
+    Args:
+        infini_device: infinicore.device object or device type string
+        
+    Returns:
+        str: PyTorch device type string (e.g., "cpu", "cuda", "npu", "mlu", "musa")
+    """
+    from infinicore.device import device as infini_device_class
+    from infinicore.lib import _infinicore
+    
+    # 如果输入是字符串，创建一个临时 device 对象
+    if isinstance(infini_device, str):
+        infini_device = infini_device_class(infini_device, 0)
+    
+    # 映射 infinicore device type 到 PyTorch device type
+    _TORCH_DEVICE_MAP = {
+        _infinicore.Device.Type.CPU: "cpu",
+        _infinicore.Device.Type.NVIDIA: "cuda",
+        _infinicore.Device.Type.CAMBRICON: "mlu",
+        _infinicore.Device.Type.ASCEND: "npu",
+        _infinicore.Device.Type.METAX: "cuda",
+        _infinicore.Device.Type.MOORE: "musa",
+        _infinicore.Device.Type.ILUVATAR: "cuda",
+        _infinicore.Device.Type.KUNLUN: "cuda",
+        _infinicore.Device.Type.HYGON: "cuda",
+        _infinicore.Device.Type.QY: "cuda",
+    }
+    
+    # 获取 underlying device type
+    infinicore_device_type = infini_device._underlying.type
+    
+    # 转换为 PyTorch device type
+    torch_device_type = _TORCH_DEVICE_MAP.get(infinicore_device_type)
+    if torch_device_type is None:
+        raise ValueError(f"Unsupported infinicore device type: {infinicore_device_type}")
+    
+    return torch_device_type
