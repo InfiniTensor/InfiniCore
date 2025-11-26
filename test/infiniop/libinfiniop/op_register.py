@@ -938,3 +938,41 @@ def tanh_(lib):
     lib.infiniopDestroyTanhDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
+
+
+@OpRegister.operator
+def bilinear_(lib):
+    lib.infiniopCreateBilinearDescriptor.restype = c_int32
+    lib.infiniopCreateBilinearDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetBilinearWorkspaceSize.restype = c_int32
+    lib.infiniopGetBilinearWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopBilinear.restype = c_int32
+    lib.infiniopBilinear.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyBilinearDescriptor.restype = c_int32
+    lib.infiniopDestroyBilinearDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
