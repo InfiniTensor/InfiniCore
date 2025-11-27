@@ -141,12 +141,8 @@ def test(
 				None,
 			)
 		)
-	print(f"workspace size: {workspace_size.value} bytes")
-	print(f"tensor shapes: x1{tuple(x1.shape)} x2{tuple(x2.shape)} weight{tuple(weight.shape)} bias{tuple(bias_tensor.shape) if bias_tensor else None} out{tuple(out_tensor.shape)}")
+
 	lib_bilinear()
-	print(f"new workspace size: {workspace_size.value} bytes")
-	print(f"new tensor shapes: x1{tuple(x1.shape)} x2{tuple(x2.shape)} weight{tuple(weight.shape)} bias{tuple(bias_tensor.shape) if bias_tensor else None} out{tuple(out_tensor.shape)}")
-	print(f"--")
  
 	atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
 	if DEBUG:

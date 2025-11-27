@@ -99,6 +99,7 @@ __all__ = [
     # Operations.
     "add",
     "attention",
+    "bilinear",
     "matmul",
     "mul",
     "narrow",

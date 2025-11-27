@@ -204,13 +204,8 @@ __C __export infiniStatus_t infiniopBilinear(
     void *weight_buffer = workspace_ptr + desc->weight_offset;
     void *imediate_buffer = workspace_ptr + desc->imediate_offset;
     void *op_workspace = workspace_ptr + desc->op_workspace_offset;
-    printf("workspace_ptr: %p, weight_buffer: %p, imediate_buffer: %p, op_workspace: %p\n",
-           workspace_ptr, weight_buffer, imediate_buffer, op_workspace);
 
-    printf("desc->weight_rearrange_desc: %p, weight_buffer: %p, weight: %p, stream: %p\n",
-           desc->weight_rearrange_desc, weight_buffer, weight, stream);
     CHECK_STATUS(infiniopRearrange(desc->weight_rearrange_desc, weight_buffer, weight, stream));
-    printf("Bilinear: weight rearranged\n");
 
     CHECK_STATUS(infiniopGemm(desc->imediate_desc,
                               op_workspace, desc->op_workspace_size,
@@ -220,7 +215,6 @@ __C __export infiniStatus_t infiniopBilinear(
                               1.0f,
                               0.0f,
                               stream));
-    printf("Bilinear: first GEMM done\n");
 
     CHECK_STATUS(infiniopGemm(desc->result_desc,
                               op_workspace, desc->op_workspace_size,
@@ -230,7 +224,6 @@ __C __export infiniStatus_t infiniopBilinear(
                               1.0f,
                               0.0f,
                               stream));
-    printf("Bilinear: second GEMM done\n");
 
     if (desc->bias_add_desc) {
         CHECK_STATUS(infiniopAdd(desc->bias_add_desc,
@@ -240,7 +233,6 @@ __C __export infiniStatus_t infiniopBilinear(
                                  bias,
                                  stream));
     }
-    printf("Bilinear: bias added\n");
 
     return INFINI_STATUS_SUCCESS;
 }

@@ -4,6 +4,7 @@
 
 #include "ops/add.hpp"
 #include "ops/attention.hpp"
+#include "ops/bilinear.hpp"
 #include "ops/causal_softmax.hpp"
 #include "ops/embedding.hpp"
 #include "ops/linear.hpp"
