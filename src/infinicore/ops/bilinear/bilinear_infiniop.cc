@@ -15,8 +15,11 @@ thread_local common::OpCache<size_t, infiniopBilinearDescriptor_t> caches(
         }
     });
 
-void calculate(Tensor out, Tensor x1, Tensor x2, Tensor weight, Tensor bias) {
-    size_t seed = hash_combine(out, x1, x2, weight, bias);
+void calculate(Tensor out, Tensor x1, Tensor x2, Tensor weight, std::optional<Tensor> bias) {
+    size_t seed = hash_combine(out, x1, x2, weight);
+    if (bias) {
+        seed = hash_combine(out, x1, x2, weight,*bias);
+    }
 
     auto device_type = context::getDevice().getType();
     auto device_index = context::getDevice().getIndex();
@@ -30,7 +33,7 @@ void calculate(Tensor out, Tensor x1, Tensor x2, Tensor weight, Tensor bias) {
         INFINICORE_CHECK_ERROR(infiniopCreateBilinearDescriptor(
             context::getInfiniopHandle(out->device()), &desc,
             out->desc(), x1->desc(), x2->desc(), weight->desc(), 
-            bias.operator->() ? bias->desc() : nullptr));
+            bias ? (*bias)->desc() : nullptr));
         cache.put(seed, desc);
     } else {
         desc = *desc_opt;
@@ -43,7 +46,7 @@ void calculate(Tensor out, Tensor x1, Tensor x2, Tensor weight, Tensor bias) {
     INFINICORE_CHECK_ERROR(infiniopBilinear(
         desc, workspace->data(), workspace_size,
         out->data(), x1->data(), x2->data(),
-        weight->data(), bias.operator->() ? bias->data() : nullptr,
+        weight->data(), bias ? (*bias)->data() : nullptr,
         context::getStream()));
 }
 

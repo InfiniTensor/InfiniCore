@@ -7,11 +7,11 @@ common::OpDispatcher<Bilinear::schema> &Bilinear::dispatcher() {
     return dispatcher_;
 };
 
-void Bilinear::execute(Tensor out, Tensor x1, Tensor x2, Tensor weight, Tensor bias) {
+void Bilinear::execute(Tensor out, Tensor x1, Tensor x2, Tensor weight, std::optional<Tensor> bias) {
     dispatcher().lookup(context::getDevice().getType())(out, x1, x2, weight, bias);
 }
 
-Tensor bilinear(Tensor x1, Tensor x2, Tensor weight, Tensor bias) {
+Tensor bilinear(Tensor x1, Tensor x2, Tensor weight, std::optional<Tensor> bias) {
     size_t batch_size = x1->shape()[0];
     size_t out_features = weight->shape()[0];
     Shape shape = {batch_size, out_features};
@@ -20,7 +20,7 @@ Tensor bilinear(Tensor x1, Tensor x2, Tensor weight, Tensor bias) {
     return out;
 }
 
-void bilinear_(Tensor out, Tensor x1, Tensor x2, Tensor weight, Tensor bias) {
+void bilinear_(Tensor out, Tensor x1, Tensor x2, Tensor weight, std::optional<Tensor> bias) {
     Bilinear::execute(out, x1, x2, weight, bias);
 }
 

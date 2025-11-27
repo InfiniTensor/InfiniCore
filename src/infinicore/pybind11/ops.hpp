@@ -24,6 +24,7 @@ namespace infinicore::ops {
 inline void bind(py::module &m) {
     bind_add(m);
     bind_attention(m);
+    bind_bilinear(m);
     bind_causal_softmax(m);
     bind_random_sample(m);
     bind_linear(m);

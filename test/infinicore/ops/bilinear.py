@@ -44,12 +44,18 @@ def parse_test_cases():
             in1 = TensorSpec.from_tensor(in1_shape, in1_strides, dtype)
             in2 = TensorSpec.from_tensor(in2_shape, in2_strides, dtype)
             weight = TensorSpec.from_tensor(weight_shape, weight_strides, dtype)
+            
+            inputs = [in1, in2, weight]
+            if bias_present:
+                bias_shape = (weight_shape[0],)
+                bias = TensorSpec.from_tensor(bias_shape, None, dtype)
+                inputs.append(bias)
 
             kwargs = {}
 
             test_cases.append(
                 TestCase(
-                    inputs=[in1, in2, weight],
+                    inputs=inputs,
                     kwargs=kwargs,
                     output_spec=None,
                     comparison_target=None,
@@ -73,9 +79,9 @@ class OpTest(BaseOperatorTest):
     def torch_operator(self, *args, **kwargs):
         return torch.nn.functional.bilinear(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
-    #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.nn.functional.bilinear(*args, **kwargs)
+    def infinicore_operator(self, *args, **kwargs):
+        from infinicore.ops.bilinear import bilinear
+        return bilinear(*args, **kwargs)
 
 
 def main():
