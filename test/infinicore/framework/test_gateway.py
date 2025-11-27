@@ -160,11 +160,11 @@ class TestExecutionGateway:
             def infinicore_operator(self, *args, **kwargs):
                 return infini_func(*args, **kwargs)
 
-        runner = GenericTestRunner(DynamicOpTest, args)
-        try: runner.run_and_exit()
-        except SystemExit: pass
+        generic_runner = GenericTestRunner(DynamicOpTest, args)
+        
+        success, internal_runner = generic_runner.run()
 
-        return getattr(runner, "test_results", "Done")
+        return getattr(internal_runner, "test_results", "Done")
 
     def _load_function(self, func_path: str) -> Any:
         """
