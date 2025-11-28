@@ -13,6 +13,7 @@ from .runner import GenericTestRunner
 from .tensor import TensorSpec, TensorInitializer
 from .utils import (
     compare_results,
+    create_strided_tensor_by_slicing,
     create_test_comparator,
     debug,
     get_tolerance,
@@ -42,6 +43,7 @@ __all__ = [
     "add_common_test_args",
     "compare_results",
     "convert_infinicore_to_torch",
+    "create_strided_tensor_by_slicing",
     "create_test_comparator",
     "debug",
     "get_args",

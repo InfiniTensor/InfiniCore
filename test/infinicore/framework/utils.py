@@ -435,3 +435,57 @@ def is_floating_dtype(dtype):
         torch.float64,
         torch.bfloat16,
     ]
+
+
+def create_strided_tensor_by_slicing(
+    shape, strides, dtype, device, mode="random", **kwargs
+):
+    """
+    Create a non-contiguous tensor by creating a larger base tensor and slicing.
+
+    Args:
+        shape: Desired tensor shape
+        strides: Desired tensor strides
+        dtype: PyTorch data type
+        device: PyTorch device
+        mode: Initialization mode ("random", "zeros", "ones", etc.)
+        **kwargs: Additional arguments for initialization
+
+    Returns:
+        torch.Tensor: Non-contiguous tensor with specified shape and strides
+    """
+    # Calculate required base tensor size
+    base_shape = []
+    for i, (dim_size, stride) in enumerate(zip(shape, strides)):
+        if stride == 0:
+            # Broadcast dimension - only need 1 element
+            base_shape.append(1)
+        else:
+            # Calculate required size for this dimension
+            required_size = (dim_size - 1) * abs(stride) + 1
+            base_shape.append(required_size)
+
+    # Create base contiguous tensor
+    if mode == "random":
+        base_tensor = torch.rand(base_shape, dtype=dtype, device=device)
+    elif mode == "zeros":
+        base_tensor = torch.zeros(base_shape, dtype=dtype, device=device)
+    elif mode == "ones":
+        base_tensor = torch.ones(base_shape, dtype=dtype, device=device)
+    elif mode == "randint":
+        low = kwargs.get("low", 0)
+        high = kwargs.get("high", 100)
+        base_tensor = torch.randint(low, high, base_shape, dtype=dtype, device=device)
+    else:
+        raise ValueError(f"Unsupported initialization mode: {mode}")
+
+    # Apply slicing to create strided tensor
+    strided_tensor = torch.as_strided(base_tensor, shape, strides)
+
+    # Verify the resulting tensor has the correct shape and strides
+    if list(strided_tensor.shape) != list(shape):
+        raise ValueError(
+            f"Shape mismatch after slicing: expected {shape}, got {strided_tensor.shape}"
+        )
+
+    return strided_tensor
