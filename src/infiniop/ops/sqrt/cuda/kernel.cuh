@@ -25,9 +25,9 @@ public:
         } else if constexpr (std::is_same_v<T, float>) {
             return sqrtf(x);
         } else if constexpr (std::is_same_v<T, double>) {
-            return sqrt(x);
+            return sqrtf(x);
         } else {
-            return sqrt(x);
+            return sqrtf(x);
         }
     }
 } SqrtOp;

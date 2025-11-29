@@ -6,6 +6,10 @@
 #include "cpu/sqrt_cpu.h"
 #endif
 
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
+#include "nvidia/sqrt_nvidia.cuh"
+#endif
+
 __C infiniStatus_t infiniopCreateSqrtDescriptor(
     infiniopHandle_t handle,
     infiniopSqrtDescriptor_t *desc_ptr,
