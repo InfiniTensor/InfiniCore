@@ -40,6 +40,7 @@ from infinicore.dtype import (
 )
 from infinicore.ops.add import add
 from infinicore.ops.attention import attention
+from infinicore.ops.cat import cat
 from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
@@ -99,6 +100,7 @@ __all__ = [
     # Operations.
     "add",
     "attention",
+    "cat",
     "matmul",
     "mul",
     "narrow",

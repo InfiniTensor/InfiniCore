@@ -126,9 +126,9 @@ class OpTest(BaseOperatorTest):
         """PyTorch cat implementation"""
         return torch.cat(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
-    #     """InfiniCore cat implementation"""
-    #     return infinicore.cat(*args, **kwargs)
+    def infinicore_operator(self, *args, **kwargs):
+        """InfiniCore cat implementation"""
+        return infinicore.cat(*args, **kwargs)
 
 
 def main():
