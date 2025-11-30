@@ -1,10 +1,13 @@
 #include "../../utils.h"
 #include "infinirt_cuda.cuh"
+#include <cuda.h>
 #include <cuda_runtime.h>
+#include <string.h>
 
 #define CHECK_CUDART(RT_API) CHECK_INTERNAL(RT_API, cudaSuccess)
 
 namespace infinirt::cuda {
+
 infiniStatus_t getDeviceCount(int *count) {
     CHECK_CUDART(cudaGetDeviceCount(count));
     return INFINI_STATUS_SUCCESS;
@@ -156,4 +159,73 @@ infiniStatus_t freeAsync(void *ptr, infinirtStream_t stream) {
     CHECK_CUDART(cudaFreeAsync(ptr, (cudaStream_t)stream));
     return INFINI_STATUS_SUCCESS;
 }
+
+CUmemAllocationProp *getMemProp() {
+    int device_id;
+    infinirtGetDevice(nullptr, &device_id);
+    CUmemAllocationProp *cuda_prop = new CUmemAllocationProp();
+    memset(cuda_prop, 0, sizeof(CUmemAllocationProp));
+    cuda_prop->type = CU_MEM_ALLOCATION_TYPE_PINNED;
+    cuda_prop->requestedHandleTypes = CU_MEM_HANDLE_TYPE_NONE;
+    cuda_prop->location.type = CU_MEM_LOCATION_TYPE_DEVICE;
+    cuda_prop->location.id = device_id;
+    return cuda_prop;
+}
+
+infiniStatus_t getMemGranularityMinimum(size_t *granularity) {
+    CUmemAllocationProp *cuda_prop = getMemProp();
+    CHECK_CUDART(cuMemGetAllocationGranularity(granularity, cuda_prop, CU_MEM_ALLOC_GRANULARITY_MINIMUM));
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t createPhysicalMem(infinirtPhysicalMemoryHandle_t *pm_handle, size_t len) {
+    CUmemGenericAllocationHandle handle;
+    CUmemAllocationProp *cuda_prop = getMemProp();
+    CHECK_CUDART(cuMemCreate(&handle, len, cuda_prop, 0));
+
+    *pm_handle = (infinirtPhysicalMemoryHandle_t)handle;
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t releasePhysicalMem(infinirtPhysicalMemoryHandle_t pm_handle) {
+    CHECK_CUDART(cuMemRelease((CUmemGenericAllocationHandle)pm_handle));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t createVirtualMem(void **vm, size_t len) {
+    CUdeviceptr device_ptr;
+    CHECK_CUDART(cuMemAddressReserve(&device_ptr, len, 0, (CUdeviceptr)0, 0));
+
+    *vm = (void *)device_ptr;
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t releaseVirtualMem(void *vm, size_t len) {
+    CHECK_CUDART(cuMemAddressFree((CUdeviceptr)vm, len));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t mapVirtualMem(void *vm, size_t len, size_t offset,
+                             infinirtPhysicalMemoryHandle_t pm_handle) {
+
+    CUdeviceptr ptr = (CUdeviceptr)vm + offset;
+    CHECK_CUDART(cuMemMap(ptr, len, 0, (CUmemGenericAllocationHandle)pm_handle, 0));
+
+    CUmemAllocationProp *cuda_prop = getMemProp();
+    CUmemAccessDesc desc = {};
+    desc.location = cuda_prop->location;
+    desc.flags = CU_MEM_ACCESS_FLAGS_PROT_READWRITE;
+    CHECK_CUDART(cuMemSetAccess(ptr, len, &desc, 1));
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t unmapVirtualMem(void *vm, size_t len) {
+    CUdeviceptr ptr = (CUdeviceptr)vm;
+    CHECK_CUDART(cuMemUnmap(ptr, len));
+
+    return INFINI_STATUS_SUCCESS;
+}
+
 } // namespace infinirt::cuda

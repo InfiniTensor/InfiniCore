@@ -100,6 +100,12 @@ int main(int argc, char *argv[]) {
                 return 1;
             }
         }
+
+        if (device == INFINI_DEVICE_NVIDIA) {
+            if (!testVirtualMem(device, deviceId)) {
+                return 1;
+            }
+        }
     }
 
     return 0;

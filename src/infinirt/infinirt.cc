@@ -184,3 +184,32 @@ __C infiniStatus_t infinirtMallocAsync(void **p_ptr, size_t size, infinirtStream
 __C infiniStatus_t infinirtFreeAsync(void *ptr, infinirtStream_t stream) {
     INFINIRT_CALL_DEVICE_API(freeAsync, (ptr, stream));
 }
+
+__C infiniStatus_t infinirtGetMemGranularityMinimum(size_t *granularity) {
+    INFINIRT_CALL_DEVICE_API(getMemGranularityMinimum, (granularity));
+}
+
+__C infiniStatus_t infinirtCreatePhysicalMem(infinirtPhysicalMemoryHandle_t *pm_handle, size_t len) {
+    INFINIRT_CALL_DEVICE_API(createPhysicalMem, (pm_handle, len));
+}
+
+__C infiniStatus_t infinirtReleasePhysicalMem(infinirtPhysicalMemoryHandle_t pm_handle) {
+    INFINIRT_CALL_DEVICE_API(releasePhysicalMem, (pm_handle));
+}
+
+__C infiniStatus_t infinirtCreateVirtualMem(void **vm, size_t len) {
+    INFINIRT_CALL_DEVICE_API(createVirtualMem, (vm, len));
+}
+
+__C infiniStatus_t infinirtMapVirtualMem(void *vm, size_t len, size_t offset,
+                                         infinirtPhysicalMemoryHandle_t pm_handle) {
+    INFINIRT_CALL_DEVICE_API(mapVirtualMem, (vm, len, offset, pm_handle));
+}
+
+__C infiniStatus_t infinirtUnmapVirtualMem(void *vm, size_t len) {
+    INFINIRT_CALL_DEVICE_API(unmapVirtualMem, (vm, len));
+}
+
+__C infiniStatus_t infinirtReleaseVirtualMem(void *vm, size_t len) {
+    INFINIRT_CALL_DEVICE_API(releaseVirtualMem, (vm, len));
+}

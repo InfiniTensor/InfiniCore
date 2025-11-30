@@ -116,4 +116,31 @@ infiniStatus_t freeAsync(void *ptr, infinirtStream_t stream) {
     return freeDevice(ptr);
 }
 
+infiniStatus_t getMemGranularityMinimum(size_t *granularity) {
+    return INFINI_STATUS_NOT_IMPLEMENTED;
+}
+
+infiniStatus_t createPhysicalMem(infinirtPhysicalMemoryHandle_t *pm_handle, size_t len) {
+    return INFINI_STATUS_NOT_IMPLEMENTED;
+}
+
+infiniStatus_t releasePhysicalMem(infinirtPhysicalMemoryHandle_t pm_handle) {
+    return INFINI_STATUS_NOT_IMPLEMENTED;
+}
+
+infiniStatus_t createVirtualMem(void **vm, size_t len) {
+    return INFINI_STATUS_NOT_IMPLEMENTED;
+}
+
+infiniStatus_t releaseVirtualMem(void *vm, size_t len) {
+    return INFINI_STATUS_NOT_IMPLEMENTED;
+}
+
+infiniStatus_t mapVirtualMem(void *vm, size_t len, size_t offset, infinirtPhysicalMemoryHandle_t pm_handle) {
+    return INFINI_STATUS_NOT_IMPLEMENTED;
+}
+
+infiniStatus_t unmapVirtualMem(void *vm, size_t len) {
+    return INFINI_STATUS_NOT_IMPLEMENTED;
+}
 } // namespace infinirt::cpu
