@@ -9,11 +9,6 @@ namespace py = pybind11;
 namespace infinicore::ops {
 
 inline void bind_rope(py::module &m) {
-
-    py::enum_<infinicore::nn::RoPE::Algo>(m, "Algo")
-        .value("GPT_J", infinicore::nn::RoPE::Algo::GPT_J)
-        .value("GPT_NEOX", infinicore::nn::RoPE::Algo::GPT_NEOX);
-
     m.def("rope",
           &op::rope,
           py::arg("x"),
