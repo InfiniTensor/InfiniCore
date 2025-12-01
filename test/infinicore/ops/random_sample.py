@@ -206,96 +206,91 @@ class OpTest(BaseOperatorTest):
         # Clear stored logits before test to ensure fresh generation
         self._current_logits = None
 
-        try:
-            # Try the standard comparison first
-            # This will call prepare_pytorch_inputs_and_kwargs which will set self._current_logits
-            return super().run_test(device, test_case, config)
-        except AssertionError as original_error:
-            # If standard comparison fails, check if this is a valid case where
-            # indices differ but logits values are equal
-
-            # Only handle if we have stored logits (from prepare_pytorch_inputs_and_kwargs)
-            if self._current_logits is None:
-                raise
-
-            logits_tensor = self._current_logits
-
-            # Re-run operations with the same logits to get results for comparison
-            # prepare_pytorch_inputs_and_kwargs will reuse self._current_logits if it exists
-            from framework.base import TestResult
-            from framework.utils import (
-                convert_infinicore_to_torch,
-                infinicore_tensor_from_torch,
-            )
-
-            inputs, kwargs = self.prepare_pytorch_inputs_and_kwargs(test_case, device)
-
-            # Prepare infinicore inputs
-            infini_inputs = []
-            for inp in inputs:
-                if isinstance(inp, torch.Tensor):
-                    cloned_inp = inp.clone().detach()
-                    infini_tensor = infinicore_tensor_from_torch(cloned_inp)
-                    infini_inputs.append(infini_tensor)
-                else:
-                    infini_inputs.append(inp)
-
-            infini_kwargs = kwargs.copy()
-            if "out" in infini_kwargs and isinstance(
-                infini_kwargs["out"], torch.Tensor
-            ):
-                cloned_out = infini_kwargs["out"].clone().detach()
-                infini_kwargs["out"] = infinicore_tensor_from_torch(cloned_out)
-
-            # Run both operators
-            torch_result = self.torch_operator(*inputs, **kwargs)
-            infini_result = self.infinicore_operator(*infini_inputs, **infini_kwargs)
-
-            # Extract indices from results
-            comparison_target = test_case.comparison_target
-            if comparison_target == "out":
-                # Compare output tensor from kwargs
-                ref_idx = kwargs["out"].item()
-                torch_result_from_infini = convert_infinicore_to_torch(
-                    infini_kwargs["out"]
-                )
-                ic_idx = torch_result_from_infini.item()
-            else:
-                # Compare return values
-                ref_idx = torch_result.item()
-                torch_result_from_infini = convert_infinicore_to_torch(infini_result)
-                ic_idx = torch_result_from_infini.item()
-
-            # Check if indices are equal (standard case)
-            if ic_idx == ref_idx:
-                # Return a successful TestResult object
-                return TestResult(
-                    success=True,
-                    return_code=0,
-                    test_case=test_case,
-                    device=device,
-                )
-
-            # Special case: indices differ but logits values are equal
-            # This is valid for random_sample when multiple indices have the same logits value
-            try:
-                logits_ref = logits_tensor[ref_idx].item()
-                logits_ic = logits_tensor[ic_idx].item()
-                if logits_ic == logits_ref:
-                    # Valid: different indices but same logits value
-                    # Return a successful TestResult object
-                    return TestResult(
-                        success=True,
-                        return_code=0,
-                        test_case=test_case,
-                        device=device,
+        # Call parent's run_test, but intercept the result to check for failures
+        result = super().run_test(device, test_case, config)
+        
+        # Check if test failed and try special comparison logic
+        if not result.success and "Result comparison failed" in result.error_message:
+            # Try special comparison logic for random_sample
+            # When indices differ but logits values are equal, the result is still valid
+            if self._current_logits is not None:
+                try:
+                    # Re-run operations with the same logits to get results for comparison
+                    from framework.base import TestResult
+                    from framework.utils import (
+                        convert_infinicore_to_torch,
+                        infinicore_tensor_from_torch,
                     )
-            except (IndexError, RuntimeError):
-                # If we can't access the logits, fall through to raise the original error
-                pass
 
-            # If we get here, the results are truly different
-            raise original_error
+                    inputs, kwargs = self.prepare_pytorch_inputs_and_kwargs(test_case, device)
+
+                    # Prepare infinicore inputs
+                    infini_inputs = []
+                    for inp in inputs:
+                        if isinstance(inp, torch.Tensor):
+                            cloned_inp = inp.clone().detach()
+                            infini_tensor = infinicore_tensor_from_torch(cloned_inp)
+                            infini_inputs.append(infini_tensor)
+                        else:
+                            infini_inputs.append(inp)
+
+                    infini_kwargs = kwargs.copy()
+                    if "out" in infini_kwargs and isinstance(
+                        infini_kwargs["out"], torch.Tensor
+                    ):
+                        cloned_out = infini_kwargs["out"].clone().detach()
+                        infini_kwargs["out"] = infinicore_tensor_from_torch(cloned_out)
+
+                    # Run both operators
+                    torch_result = self.torch_operator(*inputs, **kwargs)
+                    infini_result = self.infinicore_operator(*infini_inputs, **infini_kwargs)
+
+                    # Extract indices from results
+                    comparison_target = test_case.comparison_target
+                    if comparison_target == "out":
+                        ref_idx = kwargs["out"].item()
+                        torch_result_from_infini = convert_infinicore_to_torch(
+                            infini_kwargs["out"]
+                        )
+                        ic_idx = torch_result_from_infini.item()
+                    else:
+                        ref_idx = torch_result.item()
+                        torch_result_from_infini = convert_infinicore_to_torch(infini_result)
+                        ic_idx = torch_result_from_infini.item()
+
+                    # Check if indices are equal (standard case)
+                    if ic_idx == ref_idx:
+                        return TestResult(
+                            success=True,
+                            return_code=0,
+                            test_case=test_case,
+                            device=device,
+                        )
+
+                    # Special case: indices differ but logits values are equal
+                    # Match infiniop test logic: check if logits values are equal
+                    logits_tensor = self._current_logits
+                    logits_ref_val = logits_tensor[ref_idx]
+                    logits_ic_val = logits_tensor[ic_idx]
+                    
+                    # For bfloat16/float16, convert to float32 for comparison (same as infiniop debug function)
+                    if logits_tensor.dtype in (torch.bfloat16, torch.float16):
+                        logits_ref_val = logits_ref_val.float()
+                        logits_ic_val = logits_ic_val.float()
+                    
+                    if torch.equal(logits_ref_val, logits_ic_val):
+                        # Valid: different indices but same logits value
+                        return TestResult(
+                            success=True,
+                            return_code=0,
+                            test_case=test_case,
+                            device=device,
+                        )
+                except Exception:
+                    # If special comparison fails, fall through to return original result
+                    pass
+        
+        return result
 
 
 def main():
