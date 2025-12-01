@@ -21,13 +21,12 @@ void TensorImpl::copy_from(Tensor src) {
     if (src->shape() != this->shape()) {
         throw std::runtime_error("Cannot copy from tensor with different shape");
     }
-
-    // Use nbytes() to get the actual tensor size, not the full memory size
-    size_t copy_size = std::min(this->nbytes(), src->nbytes());
     if (this->device() == src->device()) {
 
         // If both tensors are contiguous, use direct memcpy (much faster and avoids rearrange issues)
         if (this->is_contiguous() && src->is_contiguous()) {
+            // Use nbytes() to get the actual tensor size
+            size_t copy_size = std::min(this->nbytes(), src->nbytes());
 
             // For CPU-to-CPU copies, use regular memcpy. For device-to-device, use D2D memcpy
             if (this->device().getType() == Device::Type::CPU) {
@@ -42,6 +41,9 @@ void TensorImpl::copy_from(Tensor src) {
         if (!src->is_contiguous()) {
             src = src->contiguous();
         }
+
+        // Use nbytes() to get the actual tensor size, not the full memory size
+        size_t copy_size = std::min(this->nbytes(), src->nbytes());
         if (this->device().getType() == Device::Type::CPU) {
             if (this->is_contiguous()) {
                 context::memcpyD2H(this->data(), src->data(), copy_size);
@@ -51,8 +53,6 @@ void TensorImpl::copy_from(Tensor src) {
                 op::rearrange_(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()), local_src);
             }
         } else if (src->device().getType() == Device::Type::CPU) {
-            // Use nbytes() to get the actual tensor size
-            size_t copy_size = std::min(this->nbytes(), src->nbytes());
 
             if (this->is_contiguous()) {
                 context::memcpyH2D(this->data(), src->data(), copy_size);
