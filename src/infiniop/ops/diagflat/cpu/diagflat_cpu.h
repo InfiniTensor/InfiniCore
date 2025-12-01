@@ -8,24 +8,33 @@ namespace op::diagflat::cpu {
 class Descriptor final : public InfiniopDescriptor {
     infiniDtype_t _dtype;
     std::vector<size_t> _input_shape;
+    std::vector<ptrdiff_t> _input_strides;
     std::vector<size_t> _output_shape;
     int64_t _offset;
     size_t _workspace_size;
+    bool _input_contiguous;
+    size_t _ndim;
 
     Descriptor(
         infiniDtype_t dtype,
         std::vector<size_t> input_shape,
+        std::vector<ptrdiff_t> input_strides,
         std::vector<size_t> output_shape,
         int64_t offset,
         size_t workspace_size,
+        bool input_contiguous,
+        size_t ndim,
         infiniDevice_t device_type,
         int device_id)
         : InfiniopDescriptor{device_type, device_id},
           _dtype(dtype),
           _input_shape(std::move(input_shape)),
+          _input_strides(std::move(input_strides)),
           _output_shape(std::move(output_shape)),
           _offset(offset),
-          _workspace_size(workspace_size) {}
+          _workspace_size(workspace_size),
+          _input_contiguous(input_contiguous),
+          _ndim(ndim) {}
 
 public:
     ~Descriptor();
