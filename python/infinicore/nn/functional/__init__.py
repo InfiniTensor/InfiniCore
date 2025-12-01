@@ -1,4 +1,5 @@
 from .causal_softmax import causal_softmax
+from .elu import elu
 from .embedding import embedding
 from .linear import linear
 from .random_sample import random_sample
@@ -9,6 +10,7 @@ from .swiglu import swiglu
 
 __all__ = [
     "causal_softmax",
+    "elu",
     "random_sample",
     "rms_norm",
     "silu",

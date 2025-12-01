@@ -136,10 +136,10 @@ class OpTest(BaseOperatorTest):
         """PyTorch ELU implementation"""
         return torch.nn.functional.elu(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
-    #     """InfiniCore ELU implementation"""
-    #     return infinicore.nn.functional.elu(*args, **kwargs)
-    #     # return None
+    def infinicore_operator(self, *args, **kwargs):
+        """InfiniCore ELU implementation"""
+        return infinicore.nn.functional.elu(*args, **kwargs)
+        # return None
 
 
 def main():

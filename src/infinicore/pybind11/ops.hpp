@@ -5,6 +5,7 @@
 #include "ops/add.hpp"
 #include "ops/attention.hpp"
 #include "ops/causal_softmax.hpp"
+#include "ops/elu.hpp"
 #include "ops/embedding.hpp"
 #include "ops/linear.hpp"
 #include "ops/matmul.hpp"
@@ -36,6 +37,7 @@ inline void bind(py::module &m) {
     bind_rope(m);
     bind_embedding(m);
     bind_sqrt(m);
+    bind_elu(m);
 }
 
 } // namespace infinicore::ops
