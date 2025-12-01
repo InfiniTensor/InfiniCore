@@ -33,6 +33,11 @@ jobs:
       with:
         xmake-version: latest
 
+    - name: Add lib load path on Linux
+      if: matrix.os == 'ubuntu-latest'
+      run:
+        export LD_LIBRARY_PATH=/home/runner/.infini/lib:$LD_LIBRARY_PATH
+
     - name: Build & Install
       run: python scripts/install.py --omp=y -y
 
@@ -40,6 +45,15 @@ jobs:
       run: |
         pip install numpy
         pip install torch
+
+    - name: Build and Install Python packages
+      run:
+        pip3 install -e .
+
+    - name: Build and Install _infinicore on Linux
+      if: matrix.os == 'ubuntu-latest'
+      run:
+        xmake build _infinicore && xmake install _infinicore
 
     - name: Python Test
       run: python scripts/python_test.py --cpu
@@ -53,3 +67,14 @@ jobs:
       if: matrix.os == 'windows-latest'
       run: |
         .\build\windows\x64\release\infinirt-test.exe --cpu
+
+    - name: DEBUG
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        ls ~/.infini/lib
+        ls /home/runner/.infini/lib
+
+    - name: run _infinicore op test on Linux
+      if: matrix.os == 'ubuntu-latest'
+      run:
+        python3 test/infinicore/run.py
