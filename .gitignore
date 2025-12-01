@@ -32,3 +32,5 @@ cache/
 *.gz
 *.zip
 *.tar
+
+*.txt

@@ -1,5 +1,9 @@
 #include <infinicore.hpp>
 
+#include <cstring>
+#include <cstdint>
+#include <stdexcept>
+
 namespace infinicore {
 
 std::string toString(const DataType &dtype) {
@@ -80,4 +84,47 @@ size_t dsize(const DataType &dtype) {
     return 0;
 }
 
+void convertFloat(double value, DataType dtype, void* buffer) {
+    switch (dtype){
+        case DataType::F32: {
+            float f32_val = static_cast<float>(value);
+            std::memcpy(buffer, &f32_val, sizeof(float));
+            break;
+        }
+        case DataType::F64: {
+            double f64_val = value;
+            std::memcpy(buffer, &f64_val, sizeof(double));
+            break;
+        }
+        case DataType::F16: {
+            float f32_val = static_cast<float>(value);
+            uint32_t f;
+            std::memcpy(&f, &f32_val, sizeof(float));
+            
+            uint16_t h;
+            uint32_t sign = (f >> 16) & 0x8000;
+            int32_t exp = ((f >> 23) & 0xff) - 127 + 15;
+            uint32_t mant = f & 0x7fffff;
+            if (exp <= 0) {
+                h = sign;
+            } else if (exp >= 31) {
+                h = sign | 0x7c00;
+            } else {
+                h = sign | (exp << 10) | (mant >> 13);
+            }
+            std::memcpy(buffer, &h, sizeof(uint16_t));
+            break;
+        }
+        case DataType::BF16: {
+            float f32_val = static_cast<float>(value);
+            uint32_t f;
+            std::memcpy(&f, &f32_val, sizeof(float));
+            uint16_t bf16 = static_cast<uint16_t>(f >> 16);
+            std::memcpy(buffer, &bf16, sizeof(uint16_t));
+            break;
+        }
+        default:
+            throw std::runtime_error("Unsupported dtype for float conversion");
+    }
+}
 } // namespace infinicore
