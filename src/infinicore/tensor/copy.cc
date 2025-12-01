@@ -22,21 +22,7 @@ void TensorImpl::copy_from(Tensor src) {
         throw std::runtime_error("Cannot copy from tensor with different shape");
     }
     if (this->device() == src->device()) {
-
-        // If both tensors are contiguous, use direct memcpy (much faster and avoids rearrange issues)
-        if (this->is_contiguous() && src->is_contiguous()) {
-            // Use nbytes() to get the actual tensor size
-            size_t copy_size = std::min(this->nbytes(), src->nbytes());
-
-            // For CPU-to-CPU copies, use regular memcpy. For device-to-device, use D2D memcpy
-            if (this->device().getType() == Device::Type::CPU) {
-                context::memcpyH2H(this->data(), src->data(), copy_size);
-            } else {
-                context::memcpyD2D(this->data(), src->data(), copy_size);
-            }
-        } else {
-            op::rearrange_(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()), src);
-        }
+        op::rearrange_(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()), src);
     } else {
         if (!src->is_contiguous()) {
             src = src->contiguous();
