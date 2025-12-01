@@ -29,5 +29,5 @@ enum class DataType {
 
 std::string toString(const DataType &dtype);
 size_t dsize(const DataType &dtype);
-void convertFloat(double value, DataType dtype, void* buffer);
+
 } // namespace infinicore
