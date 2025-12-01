@@ -45,6 +45,7 @@ from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.rearrange import rearrange
 from .ops.sqrt import sqrt
+from .ops.diagflat import diagflat
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -114,6 +115,8 @@ __all__ = [
     "strided_empty",
     "strided_from_blob",
     "zeros",
+    "sqrt",
+    "diagflat",
 ]
 
 use_ntops = False
