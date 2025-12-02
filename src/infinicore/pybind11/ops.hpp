@@ -2,6 +2,7 @@
 
 #include <pybind11/pybind11.h>
 
+#include "ops/adaptive_avg_pool3d.hpp"
 #include "ops/add.hpp"
 #include "ops/attention.hpp"
 #include "ops/causal_softmax.hpp"
@@ -34,6 +35,7 @@ inline void bind(py::module &m) {
     bind_swiglu(m);
     bind_rope(m);
     bind_embedding(m);
+    bind_adaptive_avg_pool3d(m);
 }
 
 } // namespace infinicore::ops

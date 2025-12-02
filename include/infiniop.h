@@ -2,6 +2,7 @@
 #define __INFINIOP_API_H__
 
 #include "infiniop/handle.h"
+#include "infiniop/ops/adaptive_avg_pool3d.h"
 #include "infiniop/ops/add.h"
 #include "infiniop/ops/attention.h"
 #include "infiniop/ops/causal_softmax.h"
