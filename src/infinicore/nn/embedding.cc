@@ -1,9 +1,9 @@
 #include "infinicore/nn/embedding.hpp"
 #include "infinicore/context/context.hpp"
 #include "infinicore/ops.hpp"
+#include <limits>
 #include <spdlog/spdlog.h>
 #include <stdexcept>
-#include <limits>
 
 namespace infinicore::nn {
 
