@@ -149,7 +149,7 @@ __device__ void warpLPNormKernel(T const *input, T *output,
         }
         __syncthreads();
         float global_max = max(p_max[threadIdx.y], eps);
-        float global_max_inv = __fdividef(1.0F, max(p_max[threadIdx.y], eps));
+        float global_max_inv = __fdividef(1.0F, global_max);
         float p_data = 0.0f;
 
         for (int ind = threadIdx.x; ind < dimsize; ind += BLOCK_SIZE_x) {
@@ -201,7 +201,7 @@ __device__ void warpLPNormStridesKernel(T const *input, T *output, const ptrdiff
         }
         __syncthreads();
         float global_max = max(p_max[threadIdx.y], eps);
-        float global_max_inv = __fdividef(1.0F, max(p_max[threadIdx.y], eps));
+        float global_max_inv = __fdividef(1.0F, global_max);
         float p_data = 0.0f;
 
         for (int ind = threadIdx.x; ind < dimsize; ind += BLOCK_SIZE_x) {
