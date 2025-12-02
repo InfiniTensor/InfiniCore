@@ -27,10 +27,19 @@ Linear::Linear(size_t in_features, size_t out_features, bool bias, const DataTyp
 }
 
 Tensor Linear::compute_linear(Tensor &input) const {
+    // Ensure input dtype matches weight dtype for matmul operation
+    // Matmul requires all operands (input, weight, output) to have matching dtypes
+    if (input->dtype() != dtype_) {
+        SPDLOG_WARN("Linear layer input dtype ({}) doesn't match weight dtype ({}). "
+                    "This may cause incorrect results. Expected dtype: {}",
+                    static_cast<int>(input->dtype()), static_cast<int>(dtype_), static_cast<int>(dtype_));
+    }
+
     // Create output tensor with shape [batch_size, out_features]
+    // Use weight dtype for output to ensure dtype consistency with matmul operation
     auto output_shape = input->shape();
     output_shape[output_shape.size() - 1] = out_features_;
-    auto output = Tensor::empty(output_shape, input->dtype(), input->device());
+    auto output = Tensor::empty(output_shape, dtype_, input->device());
 
     // Transpose weight: [out_features, in_features] -> [in_features, out_features]
     auto weight_t = weight_->permute({1, 0});

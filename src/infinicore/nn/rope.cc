@@ -1,10 +1,13 @@
 #include "infinicore/nn/rope.hpp"
+#include "../../utils.h"
 #include "../utils.hpp"
 #include "infinicore/ops.hpp"
 #include <algorithm>
 #include <cmath>
 #include <functional>
 #include <stdexcept>
+#include <utility>
+#include <vector>
 
 namespace infinicore::nn {
 
@@ -61,25 +64,51 @@ void RoPE::initialize_cache() {
         }
     }
 
-    // Create CPU tensors and copy data
-    auto sin_cpu = Tensor::from_blob(sin_data.data(), {max_seq_len_, cache_dim}, DataType::F32, cpu_device);
-    auto cos_cpu = Tensor::from_blob(cos_data.data(), {max_seq_len_, cache_dim}, DataType::F32, cpu_device);
+    // Convert to target dtype on CPU (matching Python's numpy astype conversion pattern)
+    // Python: np_array.astype(ml_dtypes.bfloat16, copy=True) converts F32 -> BF16
+    if (dtype_ == DataType::F32) {
+        // Direct use of F32 data
+        auto sin_f32_cpu = Tensor::from_blob(sin_data.data(), {max_seq_len_, cache_dim}, DataType::F32, cpu_device);
+        auto cos_f32_cpu = Tensor::from_blob(cos_data.data(), {max_seq_len_, cache_dim}, DataType::F32, cpu_device);
+        sin_cache_->copy_from(sin_f32_cpu);
+        cos_cache_->copy_from(cos_f32_cpu);
+    } else if (dtype_ == DataType::BF16) {
+        // Convert F32 to BF16 using the same conversion as Python's ml_dtypes.bfloat16
+        // This uses round-to-nearest-even (matching _f32_to_bf16 implementation)
+        std::vector<bf16_t> sin_bf16_data(max_seq_len_ * cache_dim);
+        std::vector<bf16_t> cos_bf16_data(max_seq_len_ * cache_dim);
 
-    // Copy to device
-    // Note: Cache is created with dtype_, but we compute in F32 for precision.
-    // If dtype_ != F32, copy_from will fail. For now, we only support F32 cache.
-    // TODO: Add dtype conversion support when cast operation is available
-    if (dtype_ != DataType::F32) {
+        for (size_t i = 0; i < sin_data.size(); i++) {
+            sin_bf16_data[i] = utils::cast<bf16_t, float>(sin_data[i]);
+            cos_bf16_data[i] = utils::cast<bf16_t, float>(cos_data[i]);
+        }
+
+        auto sin_bf16_cpu = Tensor::from_blob(sin_bf16_data.data(), {max_seq_len_, cache_dim}, DataType::BF16, cpu_device);
+        auto cos_bf16_cpu = Tensor::from_blob(cos_bf16_data.data(), {max_seq_len_, cache_dim}, DataType::BF16, cpu_device);
+
+        // copy_from handles cross-device copying to target device
+        sin_cache_->copy_from(sin_bf16_cpu);
+        cos_cache_->copy_from(cos_bf16_cpu);
+    } else if (dtype_ == DataType::F16) {
+        // Convert F32 to F16
+        std::vector<fp16_t> sin_f16_data(max_seq_len_ * cache_dim);
+        std::vector<fp16_t> cos_f16_data(max_seq_len_ * cache_dim);
+
+        for (size_t i = 0; i < sin_data.size(); i++) {
+            sin_f16_data[i] = utils::cast<fp16_t, float>(sin_data[i]);
+            cos_f16_data[i] = utils::cast<fp16_t, float>(cos_data[i]);
+        }
+
+        auto sin_f16_cpu = Tensor::from_blob(sin_f16_data.data(), {max_seq_len_, cache_dim}, DataType::F16, cpu_device);
+        auto cos_f16_cpu = Tensor::from_blob(cos_f16_data.data(), {max_seq_len_, cache_dim}, DataType::F16, cpu_device);
+
+        sin_cache_->copy_from(sin_f16_cpu);
+        cos_cache_->copy_from(cos_f16_cpu);
+    } else {
         throw std::runtime_error(
-            "RoPE cache dtype conversion not yet supported. Please use DataType::F32 for cache. "
-            "Requested dtype: "
+            "RoPE cache dtype conversion not yet supported for dtype: "
             + std::to_string(static_cast<int>(dtype_)));
     }
-
-    // copy_from handles cross-device copying automatically
-    // Direct copy from CPU to target device avoids double copying
-    sin_cache_->copy_from(sin_cpu);
-    cos_cache_->copy_from(cos_cpu);
 }
 
 Tensor RoPE::forward(const Tensor &x, const Tensor &pos) const {
