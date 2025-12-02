@@ -326,6 +326,7 @@ target("infiniccl")
     end
     if has_config("qy-gpu") then
         add_deps("infiniccl-qy")
+        add_files("build/.objs/infiniccl-qy/rules/qy.cuda/src/infiniccl/cuda/*.cu.o", {public = true})
     end
 
     if has_config("moore-gpu") then
@@ -348,8 +349,41 @@ target("infiniccl")
 target_end()
 
 target("infinicore_c_api")
+
+target("infinicore_c_api")
     set_kind("phony")
     add_deps("infiniop", "infinirt", "infiniccl")
+    after_build(function (target) print(YELLOW .. "[Congratulations!] Now you can install the libraries with \"xmake install\"" .. NC) end)
+target_end()
+
+target("infinicore_cpp_api")
+    set_kind("shared")
+    add_deps("infiniop", "infinirt", "infiniccl")
+    set_languages("cxx17")
+
+    local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
+
+    add_includedirs("include")
+    add_includedirs(INFINI_ROOT.."/include", { public = true })
+
+    add_linkdirs(INFINI_ROOT.."/lib")
+    add_links("infiniop", "infinirt", "infiniccl")
+
+    -- Add InfiniCore C++ source files (needed for RoPE and other nn modules)
+    add_files("src/infinicore/*.cc")
+    add_files("src/infinicore/context/*.cc")
+    add_files("src/infinicore/context/*/*.cc")
+    add_files("src/infinicore/tensor/*.cc")
+    add_files("src/infinicore/nn/*.cc")
+    add_files("src/infinicore/ops/*/*.cc")
+
+    set_installdir(INFINI_ROOT)
+    add_installfiles("include/infinicore/(**.h)",    {prefixdir = "include/infinicore"})
+    add_installfiles("include/infinicore/(**.hpp)",    {prefixdir = "include/infinicore"})
+    add_installfiles("include/infinicore/(**/*.h)",  {prefixdir = "include/infinicore"})
+    add_installfiles("include/infinicore/(**/*.hpp)",{prefixdir = "include/infinicore"})
+    add_installfiles("include/infinicore.h",          {prefixdir = "include"})
+    add_installfiles("include/infinicore.hpp",        {prefixdir = "include"})
     after_build(function (target) print(YELLOW .. "[Congratulations!] Now you can install the libraries with \"xmake install\"" .. NC) end)
 target_end()
 
@@ -378,6 +412,7 @@ target("_infinicore")
     add_files("src/infinicore/context/*.cc")
     add_files("src/infinicore/context/*/*.cc")
     add_files("src/infinicore/tensor/*.cc")
+    add_files("src/infinicore/nn/*.cc")
     add_files("src/infinicore/ops/*/*.cc")
     add_files("src/infinicore/pybind11/**.cc")
 

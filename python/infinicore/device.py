@@ -2,15 +2,19 @@ from infinicore.lib import _infinicore
 
 
 class device:
-    def __init__(self, type=None, index=None):
-        if type is None:
-            type = "cpu"
+    # Public attributes describing the device
+    type: str
+    index: int
+    _underlying: _infinicore.Device
 
+    def __init__(self, type=None, index=None):
         if isinstance(type, device):
             self.type = type.type
             self.index = type.index
-
             return
+
+        if type is None:
+            type = "cpu"
 
         if ":" in type:
             if index is not None:
@@ -22,12 +26,14 @@ class device:
             index = int(index)
 
         self.type = type
+        self.index = index if index else 0
 
-        self.index = index
-
-        _type, _index = device._to_infinicore_device(type, index if index else 0)
-
-        self._underlying = _infinicore.Device(_type, _index)
+    def __getattr__(self, name):
+        # Lazily construct and cache an attribute.
+        # such as, self._underlying .
+        _type, _index = device._to_infinicore_device(self.type, self.index)
+        setattr(self, name, _infinicore.Device(_type, _index))
+        return getattr(self, name)
 
     def __repr__(self):
         return f"device(type='{self.type}'{f', index={self.index}' if self.index is not None else ''})"

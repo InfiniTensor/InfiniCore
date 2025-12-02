@@ -36,9 +36,9 @@ Embedding::Embedding(size_t num_embeddings,
         // This would require a slice operation
     }
 
-    spdlog::debug("Created Embedding module: num_embeddings={}, embedding_dim={}, dtype={}, padding_idx={}",
-                  num_embeddings, embedding_dim, static_cast<int>(dtype_),
-                  padding_idx_.has_value() ? std::to_string(padding_idx_.value()) : "None");
+    SPDLOG_DEBUG("Created Embedding module: num_embeddings={}, embedding_dim={}, dtype={}, padding_idx={}",
+                 num_embeddings, embedding_dim, static_cast<int>(dtype_),
+                 padding_idx_.has_value() ? std::to_string(padding_idx_.value()) : "None");
 }
 
 Tensor Embedding::forward(const Tensor &indices) const {

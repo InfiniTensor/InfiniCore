@@ -14,30 +14,35 @@ from .utils import (
 
 
 class Tensor:
+    # Public attributes describing the device
+    _underlying: _infinicore.Tensor
+    _torch_ref: "torch.Tensor"  # noqa: F821
+    shape: list[int]
+    dtype: infinicore.dtype
+    device: infinicore.device
+
     def __init__(self, underlying, *, _torch_ref=None):
         """An internal method. Please do not use this directly."""
 
         self._underlying = underlying
-
-        self._dtype = infinicore.dtype(self._underlying.dtype)
-
-        self._device = infinicore.device._from_infinicore_device(
-            self._underlying.device
-        )
-
         self._torch_ref = _torch_ref
 
-    @property
-    def shape(self):
-        return self._underlying.shape
-
-    @property
-    def dtype(self):
-        return self._dtype
-
-    @property
-    def device(self):
-        return self._device
+    def __getattr__(self, name):
+        # Lazily construct and cache an attribute.
+        # such as, self.shape, self.dtype, self.device .
+        if name == "shape":
+            setattr(self, name, getattr(self._underlying, name))
+        elif name == "dtype":
+            setattr(self, name, infinicore.dtype(getattr(self._underlying, name)))
+        elif name == "device":
+            setattr(
+                self,
+                name,
+                infinicore.device._from_infinicore_device(
+                    getattr(self._underlying, name)
+                ),
+            )
+        return getattr(self, name)
 
     @property
     def ndim(self):
@@ -100,6 +105,10 @@ class Tensor:
 
     def __add__(self, other):
         return infinicore.add(self, other)
+
+    def __iadd__(self, other):
+        infinicore.add(self, other, out=self)
+        return self
 
     def __matmul__(self, other):
         return infinicore.matmul(self, other)
