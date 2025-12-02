@@ -63,6 +63,7 @@ Tensor Embedding::forward(const Tensor &indices) const {
     }
 
     const size_t row_bytes = embedding_dim_ * (weight_->dtype() == DataType::F32 ? sizeof(float) : weight_->dtype() == DataType::BF16 ? sizeof(uint16_t)
+                                                                                               : weight_->dtype() == DataType::F16    ? sizeof(uint16_t)
                                                                                                                                       : sizeof(float));
 
     // Source and destination base pointers
@@ -78,11 +79,11 @@ Tensor Embedding::forward(const Tensor &indices) const {
         } else if (dtype == DataType::I64) {
             const auto *data = reinterpret_cast<const int64_t *>(indices_cpu->data());
             return data[i];
-        } else if (dtype == DataType::I16) {
-            const auto *data = reinterpret_cast<const int16_t *>(indices_cpu->data());
+        } else if (dtype == DataType::U32) {
+            const auto *data = reinterpret_cast<const uint32_t *>(indices_cpu->data());
             return static_cast<int64_t>(data[i]);
-        } else if (dtype == DataType::I8) {
-            const auto *data = reinterpret_cast<const int8_t *>(indices_cpu->data());
+        } else if (dtype == DataType::U64) {
+            const auto *data = reinterpret_cast<const uint64_t *>(indices_cpu->data());
             return static_cast<int64_t>(data[i]);
         } else {
             throw std::runtime_error("Embedding indices must be integer type, got dtype=" + std::to_string(static_cast<int>(dtype)));
