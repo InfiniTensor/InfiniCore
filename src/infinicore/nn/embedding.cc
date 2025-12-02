@@ -3,6 +3,7 @@
 #include "infinicore/ops.hpp"
 #include <spdlog/spdlog.h>
 #include <stdexcept>
+#include <limits>
 
 namespace infinicore::nn {
 
@@ -62,15 +63,13 @@ Tensor Embedding::forward(const Tensor &indices) const {
         num_lookups *= dim;
     }
 
-    const size_t row_bytes = embedding_dim_ * (weight_->dtype() == DataType::F32 ? sizeof(float) : weight_->dtype() == DataType::BF16 ? sizeof(uint16_t)
-                                                                                               : weight_->dtype() == DataType::F16    ? sizeof(uint16_t)
-                                                                                                                                      : sizeof(float));
+    const size_t row_bytes = embedding_dim_ * dsize(weight_->dtype());
 
     // Source and destination base pointers
     auto *weight_base = weight_->data();
     auto *out_base = out->data();
 
-    // Helper lambda to read index based on dtype
+    // Helper lambda to read index based on dtype with bounds checking
     auto read_index = [&](size_t i) -> int64_t {
         auto dtype = indices_cpu->dtype();
         if (dtype == DataType::I32) {
@@ -84,7 +83,12 @@ Tensor Embedding::forward(const Tensor &indices) const {
             return static_cast<int64_t>(data[i]);
         } else if (dtype == DataType::U64) {
             const auto *data = reinterpret_cast<const uint64_t *>(indices_cpu->data());
-            return static_cast<int64_t>(data[i]);
+            uint64_t val = data[i];
+            // Check if value can fit in int64_t
+            if (val > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+                throw std::out_of_range("Index value out of range for int64_t: " + std::to_string(val));
+            }
+            return static_cast<int64_t>(val);
         } else {
             throw std::runtime_error("Embedding indices must be integer type, got dtype=" + std::to_string(static_cast<int>(dtype)));
         }

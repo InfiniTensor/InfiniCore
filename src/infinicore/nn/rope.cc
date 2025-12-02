@@ -53,14 +53,15 @@ void RoPE::initialize_cache() {
     for (size_t pos = 0; pos < max_seq_len_; pos++) {
         for (size_t j = 0; j < cache_dim; j++) {
             // GPT-J style inverse frequency: theta^(-2j/head_dim)
-            double inv_freq = 1.0 / std::pow(theta_, 2.0 * static_cast<double>(j) / static_cast<double>(head_dim_));
+            // Compute directly in float to avoid double->float casting
+            float inv_freq = 1.0f / std::pow(static_cast<float>(theta_), 2.0f * static_cast<float>(j) / static_cast<float>(head_dim_));
 
             // Compute angle: position * inverse_frequency
-            double angle = static_cast<double>(pos) * inv_freq;
+            float angle = static_cast<float>(pos) * inv_freq;
 
-            // Compute sin and cos
-            sin_data[pos * cache_dim + j] = static_cast<float>(std::sin(angle));
-            cos_data[pos * cache_dim + j] = static_cast<float>(std::cos(angle));
+            // Compute sin and cos directly on float
+            sin_data[pos * cache_dim + j] = std::sin(angle);
+            cos_data[pos * cache_dim + j] = std::cos(angle);
         }
     }
 
