@@ -46,6 +46,7 @@ from infinicore.ops.narrow import narrow
 from infinicore.ops.rearrange import rearrange
 from infinicore.ops.baddbmm import baddbmm
 from infinicore.ops.bilinear import bilinear
+from infinicore.ops.fmod import fmod
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -103,6 +104,7 @@ __all__ = [
     "attention",
     "baddbmm",
     "bilinear",
+    "fmod",
     "matmul",
     "mul",
     "narrow",

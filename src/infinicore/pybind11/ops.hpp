@@ -8,6 +8,7 @@
 #include "ops/bilinear.hpp"
 #include "ops/causal_softmax.hpp"
 #include "ops/embedding.hpp"
+#include "ops/fmod.hpp"
 #include "ops/linear.hpp"
 #include "ops/matmul.hpp"
 #include "ops/mul.hpp"
@@ -28,6 +29,7 @@ inline void bind(py::module &m) {
     bind_baddbmm(m);
     bind_bilinear(m);
     bind_causal_softmax(m);
+    bind_fmod(m);
     bind_random_sample(m);
     bind_linear(m);
     bind_matmul(m);

@@ -5,6 +5,7 @@
 #include "ops/baddbmm.hpp"
 #include "ops/bilinear.hpp"
 #include "ops/causal_softmax.hpp"
+#include "ops/fmod.hpp"
 #include "ops/matmul.hpp"
 #include "ops/ones.hpp"
 #include "ops/rearrange.hpp"
