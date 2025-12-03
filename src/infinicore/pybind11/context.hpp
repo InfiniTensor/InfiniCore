@@ -16,7 +16,8 @@ inline void bind(py::module &m) {
           py::arg("device_type"));
     m.def("set_device", &setDevice,
           "Set the current active device",
-          py::arg("device"));
+          py::arg("device"),
+          py::arg("force_cpu"));
 
     // Stream and handle management
     m.def("get_stream", &getStream, "Get the current stream");

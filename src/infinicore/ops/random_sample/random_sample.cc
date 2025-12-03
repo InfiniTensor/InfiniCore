@@ -1,5 +1,7 @@
 #include "infinicore/ops/random_sample.hpp"
 
+#include "../../utils.hpp"
+
 namespace infinicore::op {
 
 common::OpDispatcher<RandomSample::schema> &RandomSample::dispatcher() {
@@ -10,7 +12,9 @@ common::OpDispatcher<RandomSample::schema> &RandomSample::dispatcher() {
 void RandomSample::execute(
     Tensor indices, Tensor logits,
     float random_val, float topp, int topk, float temperature) {
-    dispatcher().lookup(context::getDevice().getType())(
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(indices, logits);
+    infinicore::context::setDevice(logits->device());
+    dispatcher().lookup(logits->device().getType())(
         indices, logits, random_val, topp, topk, temperature);
 }
 

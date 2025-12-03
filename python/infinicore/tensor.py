@@ -14,7 +14,7 @@ from .utils import (
 
 
 class Tensor:
-    # Public attributes describing the device
+    # Public attributes describing the Tensor
     _underlying: _infinicore.Tensor
     _torch_ref: "torch.Tensor"  # noqa: F821
     shape: list[int]

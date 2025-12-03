@@ -1,4 +1,5 @@
 import torch
+from infinicore.lib import _infinicore
 
 import infinicore
 
@@ -168,9 +169,106 @@ def test5_bf16():
     print("误差:", torch_tensor - torch_ans_result)
 
 
+def func6_initialize_device_relationship():
+    from infinicore.device import _initialize_device_relationship
+
+    all_device_types = [
+        _infinicore.Device.Type.CPU,  # 0  "cpu"
+        _infinicore.Device.Type.NVIDIA,  # 1  "cuda"
+        _infinicore.Device.Type.CAMBRICON,  # 2  "mlu"
+        _infinicore.Device.Type.ASCEND,  # 3  "npu"
+        _infinicore.Device.Type.METAX,  # 4  "cuda"
+        _infinicore.Device.Type.MOORE,  # 5  "musa"
+        _infinicore.Device.Type.ILUVATAR,  # 6  "cuda"
+        _infinicore.Device.Type.QY,  # 9  "cuda"
+        _infinicore.Device.Type.KUNLUN,  # 7  "cuda"
+        _infinicore.Device.Type.HYGON,  # 8  "cuda"
+    ]
+    if True:
+        print("\n ---------- 测试 CPU")
+        all_device_count = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        infinicore_2_python_dict, python_2_infinicore_dict = (
+            _initialize_device_relationship(all_device_types, all_device_count)
+        )
+        print("infinicore_2_python_dict", infinicore_2_python_dict)
+        print("python_2_infinicore_dict: ", python_2_infinicore_dict)
+
+        print("\n ---------- 测试 CPU+NVIDIA")
+        all_device_count = [1, 2, 0, 0, 0, 0, 0, 0, 0, 0]
+        infinicore_2_python_dict, python_2_infinicore_dict = (
+            _initialize_device_relationship(all_device_types, all_device_count)
+        )
+        print("infinicore_2_python_dict", infinicore_2_python_dict)
+        print("python_2_infinicore_dict: ", python_2_infinicore_dict)
+
+        print("\n ---------- 测试 CPU+NVIDIA+HYGON")
+        all_device_count = [1, 2, 0, 0, 0, 0, 0, 0, 0, 2]
+        infinicore_2_python_dict, python_2_infinicore_dict = (
+            _initialize_device_relationship(all_device_types, all_device_count)
+        )
+        print("infinicore_2_python_dict", infinicore_2_python_dict)
+        print("python_2_infinicore_dict: ", python_2_infinicore_dict)
+
+        print("\n ---------- 测试 CPU+NVIDIA+HYGON+CAMBRICON+ASCEND")
+        all_device_count = [1, 2, 2, 2, 0, 0, 0, 0, 0, 2]
+        infinicore_2_python_dict, python_2_infinicore_dict = (
+            _initialize_device_relationship(all_device_types, all_device_count)
+        )
+        print("infinicore_2_python_dict", infinicore_2_python_dict)
+        print("python_2_infinicore_dict: ", python_2_infinicore_dict)
+
+    if True:
+        print("\n ---------- 算子测试 cpu")
+        x = torch.ones((2, 3), dtype=torch.float32, device="cpu")
+        x_infini = infinicore.from_torch(x)
+
+        y = torch.ones((2, 3), dtype=torch.float32, device="cpu")
+        y_infini = infinicore.from_torch(y)
+
+        z_infini = x_infini + y_infini
+        print(z_infini.device)
+        z_infini.debug()
+
+    if True:
+        print("\n ---------- 算子测试 cuda")
+        x = torch.ones((2, 3), dtype=torch.float32, device="cuda:0")
+        x_infini = infinicore.from_torch(x)
+
+        y = torch.ones((2, 3), dtype=torch.float32, device="cuda:0")
+        y_infini = infinicore.from_torch(y)
+
+        z_infini = x_infini + y_infini
+        # print(z_infini.device)
+        # z_infini.debug()
+
+    if False:
+        print("\n ---------- 算子测试 cuda", infinicore.device("cuda", 0)._underlying)
+        x = infinicore.empty(
+            (2, 3), dtype=infinicore.float32, device=infinicore.device("cuda")
+        )
+        y = infinicore.empty(
+            (2, 3), dtype=infinicore.float32, device=infinicore.device("cuda")
+        )
+        z = x + y
+        print(z.device)
+
+    if False:
+        print("\n ---------- 算子测试 MOORE")
+        x = torch.ones((2, 3), dtype=torch.float32, device="musa:1")
+        x_infini = infinicore.from_torch(x)
+
+        y = torch.ones((2, 3), dtype=torch.float32, device="musa:1")
+        y_infini = infinicore.from_torch(y)
+
+        z_infini = x_infini + y_infini
+        print(z_infini.device)
+        z_infini.debug()
+
+
 if __name__ == "__main__":
     test()
     test2()
     test3()
     test4_to()
     test5_bf16()
+    func6_initialize_device_relationship()

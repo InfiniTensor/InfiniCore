@@ -1,6 +1,7 @@
 #include "infinicore/nn/embedding.hpp"
 #include "infinicore/context/context.hpp"
 #include "infinicore/ops.hpp"
+#include <limits>
 #include <spdlog/spdlog.h>
 #include <stdexcept>
 
@@ -55,7 +56,6 @@ Tensor Embedding::forward(const Tensor &indices) const {
     // Flatten indices for sequential row copies
     auto cpu_device = Device(Device::Type::CPU, 0);
     auto indices_cpu = indices->to(cpu_device)->contiguous();
-    const auto *indices_data = reinterpret_cast<const int64_t *>(indices_cpu->data());
 
     // Calculate total number of lookups
     size_t num_lookups = 1;
@@ -63,17 +63,41 @@ Tensor Embedding::forward(const Tensor &indices) const {
         num_lookups *= dim;
     }
 
-    const size_t row_bytes = embedding_dim_ * (weight_->dtype() == DataType::F32 ? sizeof(float) : weight_->dtype() == DataType::BF16 ? sizeof(uint16_t)
-                                                                                                                                      : sizeof(float));
+    const size_t row_bytes = embedding_dim_ * dsize(weight_->dtype());
 
     // Source and destination base pointers
     auto *weight_base = weight_->data();
     auto *out_base = out->data();
 
+    // Helper lambda to read index based on dtype with bounds checking
+    auto read_index = [&](size_t i) -> int64_t {
+        auto dtype = indices_cpu->dtype();
+        if (dtype == DataType::I32) {
+            const auto *data = reinterpret_cast<const int32_t *>(indices_cpu->data());
+            return static_cast<int64_t>(data[i]);
+        } else if (dtype == DataType::I64) {
+            const auto *data = reinterpret_cast<const int64_t *>(indices_cpu->data());
+            return data[i];
+        } else if (dtype == DataType::U32) {
+            const auto *data = reinterpret_cast<const uint32_t *>(indices_cpu->data());
+            return static_cast<int64_t>(data[i]);
+        } else if (dtype == DataType::U64) {
+            const auto *data = reinterpret_cast<const uint64_t *>(indices_cpu->data());
+            uint64_t val = data[i];
+            // Check if value can fit in int64_t
+            if (val > static_cast<uint64_t>(std::numeric_limits<int64_t>::max())) {
+                throw std::out_of_range("Index value out of range for int64_t: " + std::to_string(val));
+            }
+            return static_cast<int64_t>(val);
+        } else {
+            throw std::runtime_error("Embedding indices must be integer type, got dtype=" + std::to_string(static_cast<int>(dtype)));
+        }
+    };
+
     if (weight_->device().getType() == Device::Type::CPU) {
         // CPU path: memcpy row by row
         for (size_t i = 0; i < num_lookups; ++i) {
-            int64_t idx = indices_data[i];
+            int64_t idx = read_index(i);
             if (idx < 0 || idx >= static_cast<int64_t>(num_embeddings_)) {
                 throw std::out_of_range(
                     "Index out of range: " + std::to_string(idx) + " (num_embeddings=" + std::to_string(num_embeddings_) + ")");
@@ -83,7 +107,7 @@ Tensor Embedding::forward(const Tensor &indices) const {
     } else {
         // Device path: use stream-ordered D2D copies
         for (size_t i = 0; i < num_lookups; ++i) {
-            int64_t idx = indices_data[i];
+            int64_t idx = read_index(i);
             if (idx < 0 || idx >= static_cast<int64_t>(num_embeddings_)) {
                 throw std::out_of_range(
                     "Index out of range: " + std::to_string(idx) + " (num_embeddings=" + std::to_string(num_embeddings_) + ")");

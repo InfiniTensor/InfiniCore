@@ -32,3 +32,15 @@ inline struct SpdlogInitializer {
             throw std::runtime_error(#call " failed with error: " + std::string(infini_status_string(ret))); \
         }                                                                                                    \
     } while (false)
+
+#define INFINICORE_ASSERT_TENSORS_SAME_DEVICE(FIRST___, ...)                        \
+    do {                                                                            \
+        const auto &first_device___ = (FIRST___)->device();                         \
+        for (const auto &tensor___ : {__VA_ARGS__}) {                               \
+            if (first_device___ != (tensor___)->device()) {                         \
+                throw std::runtime_error("Tensor devices mismatch "                 \
+                                         + first_device___.toString() + " vs "      \
+                                         + (tensor___)->device().toString() + "."); \
+            }                                                                       \
+        }                                                                           \
+    } while (0)
