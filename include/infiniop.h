@@ -13,6 +13,7 @@
 #include "infiniop/ops/layer_norm.h"
 #include "infiniop/ops/logsoftmax.h"
 #include "infiniop/ops/lp_norm.h"
+#include "infiniop/ops/masked_select.h"
 #include "infiniop/ops/mul.h"
 #include "infiniop/ops/ones.h"
 #include "infiniop/ops/random_sample.h"

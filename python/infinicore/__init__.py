@@ -41,6 +41,7 @@ from infinicore.dtype import (
 from infinicore.ops.add import add
 from infinicore.ops.attention import attention
 from infinicore.ops.cat import cat
+from infinicore.ops.masked_select import masked_select
 from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
@@ -101,6 +102,7 @@ __all__ = [
     "add",
     "attention",
     "cat",
+    "masked_select",
     "matmul",
     "mul",
     "narrow",
