@@ -12,14 +12,14 @@ if current_dir not in sys.path:
 
 from framework.testcase_manager import TestCaseManager
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser(description="External Test Case Runner for InfiniCore")
     
     # Optional file path (if None, uses default add case)
     parser.add_argument("file_path", type=str, nargs="?", help="Path to JSON config file")
     
     # Overrides
-    parser.add_argument("--device", type=str, default=None, help="Override target device (e.g. cuda, cpu)")
+    parser.add_argument("--device", type=str, default=None, help="Override target device (e.g. nvidia, cpu)")
     parser.add_argument("--bench", type=str, choices=["host", "device", "both"], default=None, help="Override benchmark mode")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode")
     parser.add_argument("--num_prerun", type=int, default=None, help="Override warmup iterations")
@@ -64,7 +64,6 @@ if __name__ == "__main__":
         # Simple exit code logic based on results
         success = True
         if isinstance(results, list):
-            
             for entry in results:
                 
                 exec_results = entry.get("execution_results", [])
@@ -82,3 +81,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"\n❌ Execution Error: {e}")
         sys.exit(1)
+
+if __name__ == "__main__":
+    main()

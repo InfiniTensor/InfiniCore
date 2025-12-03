@@ -27,7 +27,6 @@ class TestCaseManager:
     """
 
     def __init__(self):
-        # Load supported hardware flags for CLI args (Strings)
         self.supported_hw_flags = [
             item[0].lstrip("-") for item in get_supported_hardware_platforms()
         ]
@@ -39,60 +38,30 @@ class TestCaseManager:
         save_path: str = None,
     ) -> Any:
         print(f"🚀 Test Case Manager: Start processing...")
-        override_dict = self._normalize_override_config(config)
+        overrides = self._normalize_override_config(config)
 
-        test_configs = []
-
-        # 1. Load Configurations
+        # 1. Unified Configuration Loading
         if json_file_path and os.path.exists(json_file_path):
             print(f"📄 Source: Loading {json_file_path}")
-            test_configs = self._load(json_file_path, override_config=override_dict)
+            test_configs = self._load(json_file_path, overrides)
         else:
-            # Fallback to default hardcoded case
-            (
-                op_name,
-                test_cases,
-                final_args,
-                op_funcs,
-                op_paths,
-            ) = self._load_default_case(override_dict)
-
-            test_configs.append(
-                {
-                    "op_name": op_name,
-                    "test_cases": test_cases,
-                    "args": final_args,
-                    "op_funcs": op_funcs,
-                    "op_paths": op_paths,
-                    "target_device": "cpu",
-                }
-            )
+            test_configs = self._load_default_case(overrides)
 
         total_results = []
 
         # 2. Execute & Collect Results
         for idx, cfg in enumerate(test_configs):
             op_name = cfg["op_name"]
-            test_cases = cfg["test_cases"]
-            n_cases = len(test_cases)
-
+            n_cases = len(cfg["test_cases"])
             print(f"\n🔹 Config {idx + 1}/{len(test_configs)}: {op_name} ({n_cases} cases)")
 
             # Execute
-            # results_list is a list of TestResult objects
-            results_list = self._execute_tests(
-                op_name, test_cases, cfg["args"], cfg["op_funcs"]
+            results = self._execute_tests(
+                op_name, cfg["test_cases"], cfg["args"], cfg["op_funcs"]
             )
 
             # Report
-            entry = self._prepare_report_entry(
-                op_name,
-                test_cases,
-                cfg["args"],
-                cfg["op_paths"],
-                cfg["target_device"],
-                results_list,
-            )
+            entry = self._prepare_report_entry(cfg, results)
             total_results.append(entry)
 
         # 3. Save
@@ -101,7 +70,48 @@ class TestCaseManager:
 
         return total_results
 
-    def _load(self, json_file_path: str, override_config: Dict[str, Any]) -> List[Dict]:
+    def _create_exec_config(self, raw_data: Dict, overrides: Dict) -> Optional[Dict]:
+        """
+        ✅ Core Simplification: Unified logic to build a config object from raw dict.
+        """
+        op_name = raw_data.get("operator")
+        if not op_name:
+            return None
+
+        # 1. Resolve Paths
+        t_op = raw_data.get("torch_op") or self._discover_op_path(
+            op_name, ["torch", "torch.nn.functional", "torch.special", "torch.fft"]
+        )
+        i_op = raw_data.get("infinicore_op") or self._discover_op_path(
+            op_name, ["infinicore", "infinicore.nn.functional"]
+        )
+
+        # 2. Args & Device
+        args = self._get_default_args()
+        self._merge_args(args, raw_data.get("args", {}))
+        self._merge_args(args, overrides)
+
+        dev_str = (
+            overrides.get("device")
+            if overrides and "device" in overrides
+            else raw_data.get("device", "cpu")
+        )
+        self._set_device_flags(args, dev_str)
+
+        # 3. Build & Return
+        return {
+            "op_name": op_name,
+            "test_cases": self._build_test_cases(raw_data, op_name),
+            "args": args,
+            "op_funcs": {
+                "torch": self._load_function(t_op),
+                "infinicore": self._load_function(i_op),
+            },
+            "op_paths": {"torch": t_op, "infinicore": i_op},
+            "target_device": dev_str,
+        }
+
+    def _load(self, json_file_path: str, overrides: Dict) -> List[Dict]:
         try:
             with open(json_file_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
@@ -109,124 +119,81 @@ class TestCaseManager:
             raise ValueError(f"Invalid JSON: {json_file_path}")
 
         data_list = data if isinstance(data, list) else [data]
-        configs = []
+        # Use generator to filter None configs
+        return [
+            cfg
+            for d in data_list
+            if (cfg := self._create_exec_config(d, overrides)) is not None
+        ]
 
-        for case_data in data_list:
-            op_name = case_data.get("operator")
-            if not op_name:
-                continue
-
-            torch_op = case_data.get("torch_op") or self._discover_op_path(
-                op_name, 
-                ["torch", "torch.nn.functional"]
-            )
-            infini_op = case_data.get("infinicore_op") or self._discover_op_path(
-                op_name, 
-                ["infinicore", "infinicore.nn.functional"]
-            )
-
-            # Load Functions
-            op_funcs = {
-                "torch": self._load_function(torch_op),
-                "infinicore": self._load_function(infini_op),
-            }
-            op_paths = {
-                "torch": torch_op,
-                "infinicore": infini_op,
-            }
-
-            # Setup Args & Device
-            case_args = self._get_default_args()
-            self._merge_args(case_args, case_data.get("args", {}))
-
-            if override_config:
-                self._merge_args(case_args, override_config)
-
-            # Determine Target Device
-            if override_config and "device" in override_config:
-                target_device = override_config["device"]
-            else:
-                target_device = case_data.get("device", "cpu")
-
-            self._set_device_flags(case_args, target_device)
-
-            # Build Cases (Strict Mode)
-            test_cases = self._build_test_cases(case_data, op_name)
-
-            configs.append(
+    def _load_default_case(self, overrides: Dict) -> List[Dict]:
+        # Construct raw dict and pass to unified creator
+        raw_data = {
+            "operator": "add",
+            "description": "Default Add",
+            "testcases": [
                 {
-                    "op_name": op_name,
-                    "test_cases": test_cases,
-                    "args": case_args,
-                    "op_funcs": op_funcs,
-                    "op_paths": op_paths,
-                    "target_device": target_device,
+                    "inputs": [{"shape": [13, 4, 4]}, {"shape": [13, 4, 4]}],
+                    "output_spec": {"shape": [13, 4, 4]},
                 }
-            )
-        return configs
+            ],
+        }
+        return [self._create_exec_config(raw_data, overrides)]
 
     def _build_test_cases(self, data: Dict, op_name: str) -> List[TestCase]:
-        """
-        Parses 'cases' list from JSON. 
-        """
-        cases_data = data.get("cases")
+        cases_data = data.get("testcases")
         if not cases_data or not isinstance(cases_data, list):
-            raise ValueError(f"❌ Config for '{op_name}' missing required 'cases' list.")
+            raise ValueError(f"❌ Config for '{op_name}' missing 'testcases' list.")
 
         base_desc = data.get("description", f"Auto-test {op_name}")
-        base_tol = data.get("tolerance", {"atol": 1e-3, "rtol": 1e-3})
-        base_cmp = data.get("comparison_target", None)
 
         test_cases_list = []
-
         for idx, sub in enumerate(cases_data):
-            full_desc = f"{base_desc} - {sub.get('description', f'Case_{idx}')}"
-
-            # Parse inputs
-            raw_inputs = sub.get("inputs", [])
+            # Compact list/dict comprehensions
             inputs = [
-                self._parse_spec(inp, f"in_{i}") for i, inp in enumerate(raw_inputs)
+                self._parse_spec(inp, f"in_{i}")
+                for i, inp in enumerate(sub.get("inputs", []))
             ]
+            
+            kwargs = {
+                k: (
+                    self._parse_spec(v, k)
+                    if isinstance(v, dict) and "shape" in v
+                    else v
+                )
+                for k, v in sub.get("kwargs", {}).items()
+            }
 
-            # Parse kwargs
-            kwargs = {}
-            for k, v in sub.get("kwargs", {}).items():
-                if isinstance(v, dict) and "shape" in v and "dtype" in v:
-                    kwargs[k] = self._parse_spec(v, k)
-                else:
-                    kwargs[k] = v
+            out_spec = (
+                self._parse_spec(sub["output_spec"], "out")
+                if "output_spec" in sub
+                else None
+            )
+            
+            out_specs = (
+                [self._parse_spec(s, f"out_{i}") for i, s in enumerate(sub["output_specs"])]
+                if "output_specs" in sub
+                else None
+            )
 
-            # Parse outputs
-            out_spec = None
-            if "output_spec" in sub:
-                out_spec = self._parse_spec(sub["output_spec"], "out")
-
-            out_specs = None
-            if "output_specs" in sub:
-                out_specs = [
-                    self._parse_spec(s, f"out_{i}")
-                    for i, s in enumerate(sub["output_specs"])
-                ]
-
-            # Determine output count
-            out_count = len(out_specs) if out_specs else sub.get("output_count", 1)
+            tol = sub.get("tolerance", {"atol": 1e-3, "rtol": 1e-3})
+            cmp = sub.get("comparison_target", None)
 
             tc = TestCase(
                 inputs=inputs,
                 kwargs=kwargs,
                 output_spec=out_spec,
                 output_specs=out_specs,
-                comparison_target=base_cmp,
-                tolerance=sub.get("tolerance", base_tol),
-                description=full_desc,
-                output_count=out_count,
+                comparison_target=cmp,
+                tolerance=tol,
+                description=f"{base_desc} - {sub.get('description', f'Case_{idx}')}",
+                output_count=len(out_specs) if out_specs else sub.get("output_count", 1),
             )
             test_cases_list.append(tc)
 
         return test_cases_list
 
     def _execute_tests(self, op_name, test_cases, args, op_funcs):
-        # Define dynamic test class
         class DynamicOpTest(BaseOperatorTest):
             def __init__(self):
                 super().__init__(op_name)
@@ -242,80 +209,55 @@ class TestCaseManager:
 
         runner = GenericTestRunner(DynamicOpTest, args)
         _, internal_runner = runner.run()
-
-        # Returns a list of TestResult objects
         return getattr(internal_runner, "test_results", [])
 
-    def _prepare_report_entry(
-        self, op_name, test_cases, args, op_paths, device, results_list
-    ):
-        """
-        Separates 'cases' (static input) and 'execution_results' (dynamic output).
-        """
+    def _prepare_report_entry(self, cfg, results_list):
         # Map results by index
-        results_map = {}
-        if isinstance(results_list, list):
-            results_map = {i: res for i, res in enumerate(results_list)}
-        elif isinstance(results_list, dict):
-            results_map = results_list
-        else:
-            results_map = {0: results_list}
+        res_map = (
+            {i: r for i, r in enumerate(results_list)}
+            if isinstance(results_list, list)
+            else {0: results_list}
+        )
 
-        processed_cases = []
-        formatted_results = []
-
-        for idx, tc in enumerate(test_cases):
-            # 1. Reconstruct case dict (Static info ONLY)
-            case_data = {
+        cases, results = [], []
+        for idx, tc in enumerate(cfg["test_cases"]):
+            # 1. Static Info
+            cases.append({
                 "description": tc.description,
                 "inputs": [self._spec_to_dict(i) for i in tc.inputs],
                 "kwargs": {
-                    k: (
-                        self._spec_to_dict(v) if isinstance(v, TensorSpec) else v
-                    )
+                    k: (self._spec_to_dict(v) if isinstance(v, TensorSpec) else v)
                     for k, v in tc.kwargs.items()
                 },
                 "comparison_target": tc.comparison_target,
                 "tolerance": tc.tolerance,
-            }
+                **({"output_spec": self._spec_to_dict(tc.output_spec)} if tc.output_spec else {}),
+                **({"output_specs": [self._spec_to_dict(s) for s in tc.output_specs]} if tc.output_specs else {}),
+                **({"output_count": tc.output_count} if tc.output_count > 1 and not tc.output_specs else {})
+            })
 
-            if tc.output_spec:
-                case_data["output_spec"] = self._spec_to_dict(tc.output_spec)
+            # 2. Dynamic Result
+            res = res_map.get(idx)
+            results.append(
+                self._fmt_result(res) if res else {"status": {"success": False, "error": "No result"}}
+            )
 
-            if hasattr(tc, "output_specs") and tc.output_specs:
-                case_data["output_specs"] = [
-                    self._spec_to_dict(s) for s in tc.output_specs
-                ]
-            
-            processed_cases.append(case_data)
-
-            # 2. Extract Result
-            res = results_map.get(idx)
-            if res:
-                formatted_results.append(self._fmt_result(res))
-            else:
-                formatted_results.append({"status": {"success": False, "error": "No result"}})
-
-        # Global Arguments
-        global_args = {
-            k: getattr(args, k)
+        # Global Args
+        g_args = {
+            k: getattr(cfg["args"], k)
             for k in ["bench", "num_prerun", "num_iterations", "verbose", "debug"]
-            if hasattr(args, k)
+            if hasattr(cfg["args"], k)
         }
 
-        # Use tolerance from the first case as global tolerance display
-        global_tolerance = test_cases[0].tolerance if test_cases else  {"atol": 1e-3, "rtol": 1e-3}
-
         return {
-            "operator": op_name,
-            "device": device,
-            "description": f"Test Report for {op_name}",
-            "torch_op": op_paths["torch"],
-            "infinicore_op": op_paths["infinicore"],
-            "tolerance": global_tolerance,
-            "args": global_args,
-            "cases": processed_cases,
-            "execution_results": formatted_results,
+            "operator": cfg["op_name"],
+            "device": cfg["target_device"],
+            "description": f"Test Report for {cfg['op_name']}",
+            "torch_op": cfg["op_paths"]["torch"],
+            "infinicore_op": cfg["op_paths"]["infinicore"],
+            "args": g_args,
+            "testcases": cases,
+            "execution_results": results,
         }
 
     def _save_all_results(self, save_path, total_results):
@@ -323,66 +265,42 @@ class TestCaseManager:
         try:
             with open(save_path, "w", encoding="utf-8") as f:
                 f.write("[\n")
-
                 for i, entry in enumerate(total_results):
                     f.write("    {\n")
                     keys = list(entry.keys())
-
                     for j, key in enumerate(keys):
-                        # ✅ Apply list compression to both 'cases' and 'execution_results'
-                        if key in ["cases", "execution_results"] and isinstance(entry[key], list):
+                        # Special handling for lists (cases/results)
+                        if key in ["testcases", "execution_results"] and isinstance(entry[key], list):
                             f.write(f'        "{key}": [\n')
-                            sub_list = entry[key]
-                            for c_idx, c_item in enumerate(sub_list):
-                                # Compress each item into one line
-                                c_str = json.dumps(c_item, ensure_ascii=False)
-                                comma = "," if c_idx < len(sub_list) - 1 else ""
+                            for k_idx, item in enumerate(entry[key]):
+                                c_str = json.dumps(item, ensure_ascii=False)
+                                comma = "," if k_idx < len(entry[key]) - 1 else ""
                                 f.write(f"            {c_str}{comma}\n")
-                            
-                            list_comma = "," if j < len(keys) - 1 else ""
-                            f.write(f"        ]{list_comma}\n")
+                            f.write(f"        ]{',' if j < len(keys) - 1 else ''}\n")
                         else:
-                            # Standard compact formatting for other fields
                             k_str = json.dumps(key, ensure_ascii=False)
                             v_str = json.dumps(entry[key], ensure_ascii=False)
-                            
-                            comma = "," if j < len(keys) - 1 else ""
-                            f.write(f"        {k_str}: {v_str}{comma}\n")
-
-                    if i < len(total_results) - 1:
-                        f.write("    },\n")
-                    else:
-                        f.write("    }\n")
-
+                            f.write(f"        {k_str}: {v_str}{',' if j < len(keys) - 1 else ''}\n")
+                    f.write(f"    }}{',' if i < len(total_results) - 1 else ''}\n")
                 f.write("]\n")
-            print(f"   ✅ Saved (Structure Matched).")
+            print(f"   ✅ Saved.")
         except Exception as e:
             print(f"   ❌ Save failed: {e}")
 
     # --- Helpers ---
 
     def _discover_op_path(self, op_name: str, candidates: List[str]) -> str:
-        """
-        Attempts to find a valid function path by trying imports.
-        """
         for prefix in candidates:
-            full_path = f"{prefix}.{op_name}"
+            path = f"{prefix}.{op_name}"
             try:
-                self._load_function(full_path)
-                return full_path
+                self._load_function(path)
+                return path
             except (ImportError, AttributeError, ValueError):
                 continue
-        raise ValueError(
-            f"❌ Could not auto-discover function for operator '{op_name}' "
-            f"in candidates: {candidates}. Please specify 'torch_op'/'infinicore_op' explicitly."
-        )
-        
+        raise ValueError(f"❌ Cannot find op '{op_name}' in {candidates}")
+
     def _parse_spec(self, d, name):
-        """
-        Parses dict into TensorSpec.
-        """
         strides = tuple(d["strides"]) if d.get("strides") else None
-        
         return TensorSpec.from_tensor(
             tuple(d["shape"]),
             strides,
@@ -395,28 +313,18 @@ class TestCaseManager:
             "name": s.name,
             "shape": list(s.shape) if s.shape else None,
             "dtype": str(s.dtype).split(".")[-1],
-            # Add strides to output if present
             "strides": list(s.strides) if s.strides else None,
         }
 
     def _fmt_result(self, res):
-        """
-        Format result with optimized Map lookup.
-        """
         if not (is_dataclass(res) or hasattr(res, "success")):
             return str(res)
-
+        
         get_time = lambda k: round(getattr(res, k, 0.0), 4)
-
-        # Build Map Locally
-        device_id_map = {
-            v: k 
-            for k, v in vars(InfiniDeviceEnum).items() 
-            if not k.startswith("_")
-        }
-
-        raw_id = getattr(res, "device", None)
-        dev_str = device_id_map.get(raw_id, str(raw_id))
+        
+        # Build Map
+        dev_map = {v: k for k, v in vars(InfiniDeviceEnum).items() if not k.startswith("_")}
+        dev_str = dev_map.get(getattr(res, "device", None), str(getattr(res, "device", None)))
 
         return {
             "status": {
@@ -424,92 +332,34 @@ class TestCaseManager:
                 "error": getattr(res, "error_message", ""),
             },
             "perf_ms": {
-                "torch": {
-                    "host": get_time("torch_host_time"),
-                    "device": get_time("torch_device_time"),
-                },
-                "infinicore": {
-                    "host": get_time("infini_host_time"),
-                    "device": get_time("infini_device_time"),
-                },
+                "torch": {"host": get_time("torch_host_time"), "device": get_time("torch_device_time")},
+                "infinicore": {"host": get_time("infini_host_time"), "device": get_time("infini_device_time")},
             },
-            "device": dev_str,
+            "dev": dev_str,
         }
 
     def _load_function(self, path):
-        if not path or "." not in path:
-            raise ValueError(f"Invalid path: {path}")
-        module_name, func_name = path.rsplit(".", 1)
-        module = importlib.import_module(module_name)
-        return getattr(module, func_name)
+        if not path or "." not in path: raise ValueError(f"Invalid path: {path}")
+        m, f = path.rsplit(".", 1)
+        return getattr(importlib.import_module(m), f)
 
     def _get_default_args(self):
-        old_argv = sys.argv
-        sys.argv = [sys.argv[0]]
-        args = get_args()
-        sys.argv = old_argv
+        old_argv = sys.argv; sys.argv = [sys.argv[0]]; args = get_args(); sys.argv = old_argv
         return args
 
     def _merge_args(self, args, overrides):
-        if not overrides:
-            return
-
-        data = (
-            vars(overrides) if isinstance(overrides, argparse.Namespace) else overrides
-        )
+        if not overrides: return
+        data = vars(overrides) if isinstance(overrides, argparse.Namespace) else overrides
         for k, v in data.items():
-            if v is not None:
-                setattr(args, k, v)
+            if v is not None: setattr(args, k, v)
 
-    def _set_device_flags(self, args, device_str):
-        # Reset existing flags
-        for flag in self.supported_hw_flags:
-            if hasattr(args, flag):
-                setattr(args, flag, False)
-
-        d = str(device_str).lower()
-
-        if hasattr(args, d):
-            setattr(args, d, True)
-        else:
-            args.cpu = True
-            print(f"⚠️ Device '{d}' -> CPU (Fallback)")
+    def _set_device_flags(self, args, dev_str):
+        for flag in self.supported_hw_flags: setattr(args, flag, False)
+        d = str(dev_str).lower()
+        if hasattr(args, d): setattr(args, d, True)
+        else: args.cpu = True; print(f"⚠️ Device '{d}' -> CPU")
 
     def _normalize_override_config(self, config):
         if isinstance(config, str) and os.path.exists(config):
-            with open(config) as f:
-                return json.load(f)
-
-        if isinstance(config, argparse.Namespace):
-            return vars(config)
-
-        return config or {}
-
-    def _load_default_case(self, overrides):
-        args = self._get_default_args()
-        self._merge_args(args, overrides)
-        self._set_device_flags(args, "cpu")
-
-        data = {
-            "description": "Default Add",
-            "cases": [
-                {
-                    "inputs": [{"shape": [13, 4, 4]}, {"shape": [13, 4, 4]}],
-                    "output_spec": {"shape": [13, 4, 4]},
-                }
-            ],
-        }
-
-        op_name = "add"
-        test_cases = self._build_test_cases(data, op_name)
-
-        op_funcs = {
-            "torch": self._load_function("torch.add"),
-            "infinicore": self._load_function("infinicore.add"),
-        }
-        op_paths = {
-            "torch": "torch.add",
-            "infinicore": "infinicore.add",
-        }
-
-        return op_name, test_cases, args, op_funcs, op_paths
+            with open(config) as f: return json.load(f)
+        return vars(config) if isinstance(config, argparse.Namespace) else (config or {})
