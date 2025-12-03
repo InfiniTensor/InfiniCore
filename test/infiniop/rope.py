@@ -82,6 +82,7 @@ NUM_ITERATIONS = 1000
 
 def rotary_embedding(ans, t, sin, cos, device, algo):
     def _torch_rope(sin, cos, t1, t2):
+        # PyTorch的标准RoPE实现
         cos = cos.unsqueeze(1)  # [seq_len, 1, dh // 2]
         sin = sin.unsqueeze(1)  # [seq_len, 1, dh // 2]
         if device == InfiniDeviceEnum.CPU:
@@ -101,6 +102,7 @@ def rotary_embedding(ans, t, sin, cos, device, algo):
     dt = t.dtype
     assert dh % 2 == 0, "Embedding dimension must be even."
 
+    # 根据不同算法(GPT-J/GPT-NeoX)处理输入
     if algo == Algorithm.GPT_J:
         t_even = t[..., 0::2]  # [seq_len, n_head, dh // 2]
         t_odd = t[..., 1::2]  # [seq_len, n_head, dh // 2]
@@ -109,7 +111,7 @@ def rotary_embedding(ans, t, sin, cos, device, algo):
 
         ans[..., 0::2] = t_out_even.to(dt)
         ans[..., 1::2] = t_out_odd.to(dt)
-    else:
+    else:  # GPT_NEOX
         half_dim = dh // 2
         t_first = t[..., :half_dim]
         t_second = t[..., half_dim:]
@@ -141,6 +143,7 @@ def test(
     dtype=torch.float32,
     sync=None,
 ):
+    # 创建测试tensor
     x = TestTensor(shape, x_strides, dtype, device)
     if inplace == Inplace.INPLACE_X:
         if x_strides != y_strides:
@@ -153,11 +156,14 @@ def test(
         f"Testing Rotary Positional Embedding on {InfiniDeviceNames[device]} with shape:{shape} x_strides:{x_strides} y_strides:{y_strides} and dtype:{InfiniDtypeNames[dtype]} inplace:{inplace} algo:{algo}"
     )
     theta = 1e5
+
+    # 生成sin/cos表
     pos = TestTensor.from_torch(torch.arange(0, x.shape[0]), InfiniDtype.I32, device)
     sin_table, cos_table = sin_cos_table(
         pos.torch_tensor(), x.shape[2], x.device, theta, dtype
     )
 
+    # 运行 baseline (PyTorch)
     rotary_embedding(
         y.torch_tensor(),
         x.torch_tensor(),
@@ -167,6 +173,7 @@ def test(
         algo,
     )
 
+    # 创建InfiniCore算子descriptor
     descriptor = infiniopOperatorDescriptor_t()
 
     if sync is not None:
@@ -189,6 +196,7 @@ def test(
     for tensor in [y, x, pos, sin_table, cos_table]:
         tensor.destroy_desc()
 
+    # 获取workspace大小并分配
     workspace_size = c_uint64(0)
     check_error(
         LIBINFINIOP.infiniopGetRoPEWorkspaceSize(
@@ -197,6 +205,7 @@ def test(
     )
     workspace = TestWorkspace(workspace_size.value, x.device)
 
+    # 定义InfiniCore算子执行函数
     def lib_rope():
         check_error(
             LIBINFINIOP.infiniopRoPE(
@@ -212,6 +221,7 @@ def test(
             )
         )
 
+    # 执行InfiniCore算子
     lib_rope()
 
     if sync is not None:
@@ -222,6 +232,7 @@ def test(
         debug(y.actual_tensor(), y.torch_tensor(), atol=atol, rtol=rtol)
     assert torch.allclose(y.actual_tensor(), y.torch_tensor(), atol=atol, rtol=rtol)
 
+    # 性能测试 (可选)
     if PROFILE:
         profile_operation(
             "PyTorch",
