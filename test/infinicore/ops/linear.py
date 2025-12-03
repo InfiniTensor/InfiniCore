@@ -4,9 +4,13 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
-from framework.base import BaseOperatorTest, TensorSpec, TestCase
-from framework.runner import GenericTestRunner
-from framework.utils import is_broadcast
+from framework import (
+    BaseOperatorTest,
+    TensorSpec,
+    TestCase,
+    GenericTestRunner,
+    is_broadcast,
+)
 
 import infinicore
 

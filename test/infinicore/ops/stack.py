@@ -5,8 +5,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
 import infinicore
-from framework.base import BaseOperatorTest, TensorSpec, TestCase
-from framework.runner import GenericTestRunner
+from framework import BaseOperatorTest, TensorSpec, TestCase, GenericTestRunner
 
 # ==============================================================================
 # Operator-specific configuration for stack
@@ -15,34 +14,32 @@ from framework.runner import GenericTestRunner
 # Test cases format: (base_shape, num_tensors, dim)
 _TEST_CASES_DATA = [
     # ========== Basic cases ==========
-    ((8,),              2,  0),
-    ((8,),              4,  1),   # stack 1D tensors along a new last dim
-    ((2, 3),            3,  0),
-    ((2, 3),            3,  1),
-    ((2, 3),            3,  2),
-    ((4, 5, 6),         2, -1),
-    ((4, 5, 6),         4,  0),
-    ((3, 4, 5, 6),      2,  2),
-
+    ((8,), 2, 0),
+    ((8,), 4, 1),  # stack 1D tensors along a new last dim
+    ((2, 3), 3, 0),
+    ((2, 3), 3, 1),
+    ((2, 3), 3, 2),
+    ((4, 5, 6), 2, -1),
+    ((4, 5, 6), 4, 0),
+    ((3, 4, 5, 6), 2, 2),
     # ========== Large-scale performance test cases ==========
-    ((1024,),           8,   0),
-    ((2048,),           16,  0),
-    ((256, 256),        4,   0),
-    ((256, 256),        8,   1),
-    ((64, 128, 128),    4,   0),
-    ((64, 128, 128),    8,   1),
-    ((32, 64, 64, 64),  4,   0),
-    ((32, 64, 64, 64),  4,   2),
-    ((16, 32, 64, 128), 8,   1),
-    ((16, 32, 64, 128), 8,  -1),
-    ((8, 16, 32, 64),   16,  0),
-    ((8, 16, 32, 64),   16,  3),
-
+    ((1024,), 8, 0),
+    ((2048,), 16, 0),
+    ((256, 256), 4, 0),
+    ((256, 256), 8, 1),
+    ((64, 128, 128), 4, 0),
+    ((64, 128, 128), 8, 1),
+    ((32, 64, 64, 64), 4, 0),
+    ((32, 64, 64, 64), 4, 2),
+    ((16, 32, 64, 128), 8, 1),
+    ((16, 32, 64, 128), 8, -1),
+    ((8, 16, 32, 64), 16, 0),
+    ((8, 16, 32, 64), 16, 3),
     # ========== Edge cases ==========
-    ((1,),          2,  0),    # single element
-    ((0, 3),        3,  0),    # zero-length dimension
-    ((2, 0, 4),     4,  1),    # zero in middle dimension
-    ((1, 1, 1),     1,  0),    # single tensor
+    ((1,), 2, 0),  # single element
+    ((0, 3), 3, 0),  # zero-length dimension
+    ((2, 0, 4), 4, 1),  # zero in middle dimension
+    ((1, 1, 1), 1, 0),  # single tensor
 ]
 
 _TOLERANCE_MAP = {
@@ -79,7 +76,7 @@ def parse_test_cases():
 
             cases.append(
                 TestCase(
-                    inputs=[tuple(input_specs)],  
+                    inputs=[tuple(input_specs)],
                     kwargs=kwargs,
                     output_spec=None,
                     comparison_target=None,

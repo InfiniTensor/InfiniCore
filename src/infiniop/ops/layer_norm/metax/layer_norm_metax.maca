@@ -1,6 +1,6 @@
 #include "../../../devices/metax/metax_common.h"
 #include "layer_norm_metax.h"
-#ifdef ENABLE_METAX_API
+#ifdef ENABLE_METAX_MC_API
 #include <mccub/block/block_reduce.cuh>
 #else
 #include <hccub/block/block_reduce.cuh>

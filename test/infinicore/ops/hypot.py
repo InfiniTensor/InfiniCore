@@ -5,9 +5,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
 import infinicore
-from framework.base import BaseOperatorTest, TensorSpec, TestCase
-from framework.runner import GenericTestRunner
-from framework.utils import is_broadcast
+from framework import (
+    BaseOperatorTest,
+    TensorSpec,
+    TestCase,
+    GenericTestRunner,
+    is_broadcast,
+)
 
 # Test cases format: (a_shape, a_strides_or_None, b_shape_or_None)
 # infinicore.hypot(a, b)

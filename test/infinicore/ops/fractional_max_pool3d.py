@@ -5,8 +5,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
 import infinicore
-from framework.base import BaseOperatorTest, TensorSpec, TestCase
-from framework.runner import GenericTestRunner
+from framework import BaseOperatorTest, TensorSpec, TestCase, GenericTestRunner
 
 # Test cases format: (in_shape, in_strides_or_None, kernel_size, output_size_or_None, return_indices)
 # Note: PyTorch fractional_max_pool3d behaves similarly to fractional_max_pool2d; we avoid _random_samples.

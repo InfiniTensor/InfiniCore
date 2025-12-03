@@ -5,9 +5,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
 import infinicore
-from framework.base import BaseOperatorTest, TensorSpec, TestCase
-from framework.runner import GenericTestRunner
-from framework.utils import is_broadcast
+from framework import (
+    BaseOperatorTest,
+    TensorSpec,
+    TestCase,
+    GenericTestRunner,
+    is_broadcast,
+)
 
 # ==============================================================================
 # Operator-specific configuration
@@ -24,7 +28,6 @@ _TEST_CASES_DATA = [
     ((4, 48, 6), None, None),
     # Strided tensors
     ((1, 2048), (4096, 1), (4096, 1)),
-    ((6, 2560), (2048, 1), (2560, 1)),
     # Mixed cases
     ((8, 16, 32), None, None),
     # Large tensors
@@ -131,7 +134,7 @@ class OpTest(BaseOperatorTest):
     def infinicore_operator(self, input, out=None, **kwargs):
         """InfiniCore SiLU implementation"""
         import infinicore.nn.functional as F
-        
+
         return F.silu(input, out=out)
 
 

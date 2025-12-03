@@ -5,9 +5,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
 import infinicore
-from framework.base import BaseOperatorTest, TensorSpec, TestCase
-from framework.runner import GenericTestRunner
-from framework.utils import is_broadcast
+from framework import (
+    BaseOperatorTest,
+    TensorSpec,
+    TestCase,
+    GenericTestRunner,
+    is_broadcast,
+)
 
 # ==============================================================================
 # Operator-specific configuration for aminmax
@@ -45,8 +49,8 @@ _TEST_CASES_DATA = [
     ((13, 4), 0, False, None, (3,), (3,)),
     ((13, 4), 1, False, (20, 1), (10,), (10,)),
     # 3D in-place cases
-    ((4, 5, 6), 1, True, None, (4, 1, 6), (4, 1, 6)),
-    ((4, 5, 6), -1, False, (30, 6, 1), (4, 5), (4, 5)),
+    ((4, 5, 6), 1, True, None, (6, 6, 1), (6, 6, 1)),
+    ((4, 5, 6), -1, False, (30, 6, 1), (5, 1), (5, 1)),
 ]
 
 # Tolerance configuration

@@ -11,7 +11,7 @@
 namespace infinicore {
 
 namespace context {
-void setDevice(Device device);
+void setDevice(Device device, bool force_cpu = false);
 Device getDevice();
 size_t getDeviceCount(Device::Type type);
 
@@ -25,9 +25,9 @@ std::shared_ptr<Memory> allocateMemory(size_t size);
 std::shared_ptr<Memory> allocateHostMemory(size_t size);
 std::shared_ptr<Memory> allocatePinnedHostMemory(size_t size);
 
-void memcpyH2D(void *dst, const void *src, size_t size);
+void memcpyH2D(void *dst, const void *src, size_t size, bool async = true);
 void memcpyD2H(void *dst, const void *src, size_t size);
-void memcpyD2D(void *dst, const void *src, size_t size);
+void memcpyD2D(void *dst, const void *src, size_t size, bool async = true);
 void memcpyH2H(void *dst, const void *src, size_t size);
 
 // Timing APIs for performance measurement

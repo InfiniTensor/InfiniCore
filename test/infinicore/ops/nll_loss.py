@@ -5,8 +5,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
 import infinicore
-from framework.base import BaseOperatorTest, TensorSpec, TestCase
-from framework.runner import GenericTestRunner
+from framework import BaseOperatorTest, TensorSpec, TestCase, GenericTestRunner
 from framework.tensor import TensorInitializer
 
 # Test cases format: (input_shape_N_C, target_shape_N, input_strides_or_None, weight_present_bool, ignore_index_or_None)

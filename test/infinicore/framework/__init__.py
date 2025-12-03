@@ -18,9 +18,10 @@ from .utils import (
     infinicore_tensor_from_torch,
     rearrange_tensor,
     convert_infinicore_to_torch,
-    is_integer_dtype,
+    is_broadcast,
     is_complex_dtype,
     is_floating_dtype,
+    is_integer_dtype,
 )
 
 __all__ = [
@@ -51,9 +52,10 @@ __all__ = [
     "to_torch_dtype",
     "torch_device_map",
     # Type checking utilities
-    "is_integer_dtype",
+    "is_broadcast",
     "is_complex_dtype",
     "is_floating_dtype",
+    "is_integer_dtype",
     # Benchmarking utilities
     "BenchmarkUtils",
     "BenchmarkResult",

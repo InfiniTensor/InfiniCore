@@ -5,8 +5,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
 import infinicore
-from framework.base import BaseOperatorTest, TensorSpec, TestCase
-from framework.runner import GenericTestRunner
+from framework import BaseOperatorTest, TensorSpec, TestCase, GenericTestRunner
 from framework.tensor import TensorInitializer
 
 # Test cases format:
@@ -28,40 +27,72 @@ _TEST_CASES_DATA = [
     # ========== Basic cases ==========
     # small sizes with different stride/padding and optional output_size
     ((1, 1, 16, 16), (2, 2), (2, 2), (0, 0), False, None),
-    ((2, 3, 16, 16), (2, 2), None,   None,   False, None),      # default stride / padding
-    ((2, 3, 8, 8),   (3, 3), (2, 2), (1, 1), False, None),
-    ((1, 4, 7, 9),   (2, 2), (2, 2), (0, 0), False, None),
-    ((4, 8, 14, 14), (3, 3), (2, 2), (1, 1), True,  (27, 27)),  # H,W: (14-1)*2 - 2 + 3 = 27
-    ((4, 8, 14, 14), (2, 2), None,   (1, 1), True,  (26, 26)),  # H,W: (14-1)*2 - 2 + 2 = 26
-    ((2, 16, 10, 12), (2, 2), (2, 2), (0, 0), True, (20, 24)),  # H: (10-1)*2+2, W: (12-1)*2+2
-    ((2, 16, 10, 12), (3, 3), (2, 2), (1, 1), True, (19, 23)),  # H: (10-1)*2-2+3, W: (12-1)*2-2+3
-
+    ((2, 3, 16, 16), (2, 2), None, None, False, None),  # default stride / padding
+    ((2, 3, 8, 8), (3, 3), (2, 2), (1, 1), False, None),
+    ((1, 4, 7, 9), (2, 2), (2, 2), (0, 0), False, None),
+    (
+        (4, 8, 14, 14),
+        (3, 3),
+        (2, 2),
+        (1, 1),
+        True,
+        (27, 27),
+    ),  # H,W: (14-1)*2 - 2 + 3 = 27
+    (
+        (4, 8, 14, 14),
+        (2, 2),
+        None,
+        (1, 1),
+        True,
+        (26, 26),
+    ),  # H,W: (14-1)*2 - 2 + 2 = 26
+    (
+        (2, 16, 10, 12),
+        (2, 2),
+        (2, 2),
+        (0, 0),
+        True,
+        (20, 24),
+    ),  # H: (10-1)*2+2, W: (12-1)*2+2
+    (
+        (2, 16, 10, 12),
+        (3, 3),
+        (2, 2),
+        (1, 1),
+        True,
+        (19, 23),
+    ),  # H: (10-1)*2-2+3, W: (12-1)*2-2+3
     # ========== Large-scale performance test cases ==========
     # typical CNN activation map sizes and larger inputs
-    ((32, 64, 56, 56),   (2, 2), (2, 2), (0, 0), False, None),
-    ((32, 64, 56, 56),   (3, 3), (2, 2), (1, 1), False, None),
-    ((64, 128, 28, 28),  (2, 2), (2, 2), (0, 0), False, None),
-    ((64, 128, 28, 28),  (3, 3), (2, 2), (1, 1), False, None),
+    ((32, 64, 56, 56), (2, 2), (2, 2), (0, 0), False, None),
+    ((32, 64, 56, 56), (3, 3), (2, 2), (1, 1), False, None),
+    ((64, 128, 28, 28), (2, 2), (2, 2), (0, 0), False, None),
+    ((64, 128, 28, 28), (3, 3), (2, 2), (1, 1), False, None),
     ((128, 256, 14, 14), (2, 2), (2, 2), (0, 0), False, None),
     ((128, 256, 14, 14), (3, 3), (2, 2), (1, 1), False, None),
-    ((256, 512, 7, 7),   (2, 2), (2, 2), (0, 0), False, None),
-    ((256, 512, 7, 7),   (3, 3), (2, 2), (1, 1), False, None),
-
+    ((256, 512, 7, 7), (2, 2), (2, 2), (0, 0), False, None),
+    ((256, 512, 7, 7), (3, 3), (2, 2), (1, 1), False, None),
     # large inputs with explicit output_size
-    ((16, 32, 64, 64), (2, 2), (2, 2), (0, 0), True,  (128, 128)),
+    ((16, 32, 64, 64), (2, 2), (2, 2), (0, 0), True, (128, 128)),
     # H,W: (64-1)*2 - 0 + 2 = 128
-    ((16, 32, 64, 64), (3, 3), (2, 2), (1, 1), True,  (127, 127)),
+    ((16, 32, 64, 64), (3, 3), (2, 2), (1, 1), True, (127, 127)),
     # H,W: (64-1)*2 - 2 + 3 = 127
-    ((8, 64, 32, 48),  (2, 2), (2, 2), (0, 0), True,  (64, 96)),
+    ((8, 64, 32, 48), (2, 2), (2, 2), (0, 0), True, (64, 96)),
     # H: (32-1)*2+2=64, W: (48-1)*2+2=96
-    ((8, 64, 32, 48),  (3, 3), (2, 2), (1, 1), True,  (63, 95)),
+    ((8, 64, 32, 48), (3, 3), (2, 2), (1, 1), True, (63, 95)),
     # H: (32-1)*2-2+3=63, W: (48-1)*2-2+3=95
-
     # ========== Edge cases ==========
     ((1, 1, 1, 1), (1, 1), (1, 1), (0, 0), False, None),
-    ((1, 4, 2, 2), (2, 2), (2, 2), (0, 0), True,  (4, 4)),   # H,W: (2-1)*2+2=4
+    ((1, 4, 2, 2), (2, 2), (2, 2), (0, 0), True, (4, 4)),  # H,W: (2-1)*2+2=4
     ((1, 2, 1, 8), (2, 2), (2, 2), (0, 1), False, None),
-    ((1, 2, 3, 5), (2, 2), (2, 2), (1, 0), True,  (4, 10)),  # H: (3-1)*2-2+2, W: (5-1)*2+2
+    (
+        (1, 2, 3, 5),
+        (2, 2),
+        (2, 2),
+        (1, 0),
+        True,
+        (4, 10),
+    ),  # H: (3-1)*2-2+2, W: (5-1)*2+2
 ]
 
 _TOLERANCE_MAP = {
@@ -93,8 +124,14 @@ def parse_test_cases():
     """
     test_cases = []
 
-    for (input_shape, kernel_size, stride, padding,
-         use_output_size, output_hw) in _TEST_CASES_DATA:
+    for (
+        input_shape,
+        kernel_size,
+        stride,
+        padding,
+        use_output_size,
+        output_hw,
+    ) in _TEST_CASES_DATA:
 
         indices_high = _kernel_elems_2d(kernel_size)
 

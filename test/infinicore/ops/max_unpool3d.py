@@ -5,8 +5,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
 import infinicore
-from framework.base import BaseOperatorTest, TensorSpec, TestCase
-from framework.runner import GenericTestRunner
+from framework import BaseOperatorTest, TensorSpec, TestCase, GenericTestRunner
 from framework.tensor import TensorInitializer
 
 # ==============================================================================
@@ -32,33 +31,31 @@ _TEST_CASES_DATA = [
     # ========== Basic cases ==========
     # small sizes with different stride/padding and optional output_size
     ((1, 1, 4, 4, 4), (2, 2, 2), (2, 2, 2), (0, 0, 0), False, None),
-    ((2, 3, 2, 4, 4), (2, 2, 2), None,       None,      False, None),   # default stride / padding
+    ((2, 3, 2, 4, 4), (2, 2, 2), None, None, False, None),  # default stride / padding
     ((2, 3, 4, 4, 4), (3, 3, 3), (2, 2, 2), (1, 1, 1), False, None),
-    ((2, 3, 4, 4, 4), (3, 3, 3), (2, 2, 2), (1, 1, 1), True,  (7, 7, 7)),
+    ((2, 3, 4, 4, 4), (3, 3, 3), (2, 2, 2), (1, 1, 1), True, (7, 7, 7)),
     ((1, 4, 3, 5, 7), (2, 2, 2), (2, 2, 2), (0, 0, 0), False, None),
-    ((1, 4, 3, 5, 7), (2, 2, 2), None,       (1, 1, 1), True, (4, 8, 12)),
-
+    ((1, 4, 3, 5, 7), (2, 2, 2), None, (1, 1, 1), True, (4, 8, 12)),
     # ========== Large-scale performance test cases ==========
     # larger volumes and batches for performance and stability
-    ((4, 8, 8, 16, 16),   (2, 2, 2), (2, 2, 2), (0, 0, 0), False, None),
-    ((4, 8, 8, 16, 16),   (3, 3, 3), (2, 2, 2), (1, 1, 1), False, None),
-    ((8, 16, 4, 32, 32),  (2, 2, 2), (2, 2, 2), (0, 0, 0), False, None),
-    ((8, 16, 4, 32, 32),  (2, 2, 2), (2, 2, 2), (0, 0, 0), True,  (8, 64, 64)),
-    ((8, 16, 4, 32, 32),  (3, 3, 3), (2, 2, 2), (1, 1, 1), True,  (7, 63, 63)),
+    ((4, 8, 8, 16, 16), (2, 2, 2), (2, 2, 2), (0, 0, 0), False, None),
+    ((4, 8, 8, 16, 16), (3, 3, 3), (2, 2, 2), (1, 1, 1), False, None),
+    ((8, 16, 4, 32, 32), (2, 2, 2), (2, 2, 2), (0, 0, 0), False, None),
+    ((8, 16, 4, 32, 32), (2, 2, 2), (2, 2, 2), (0, 0, 0), True, (8, 64, 64)),
+    ((8, 16, 4, 32, 32), (3, 3, 3), (2, 2, 2), (1, 1, 1), True, (7, 63, 63)),
     ((2, 32, 16, 16, 16), (2, 2, 2), (2, 2, 2), (0, 0, 0), False, None),
-    ((2, 32, 16, 16, 16), (2, 2, 2), None,       None,      False, None),
-    ((2, 32, 8, 32, 32),  (2, 2, 2), (2, 2, 2), (0, 0, 0), False, None),
-    ((2, 32, 8, 32, 32),  (3, 3, 3), (2, 2, 2), (1, 1, 1), False, None),
-    ((1, 64, 8, 64, 64),  (2, 2, 2), (2, 2, 2), (0, 0, 0), False, None),
-    ((1, 64, 8, 64, 64),  (2, 2, 2), (2, 2, 2), (0, 0, 0), True,  (16, 128, 128)),
+    ((2, 32, 16, 16, 16), (2, 2, 2), None, None, False, None),
+    ((2, 32, 8, 32, 32), (2, 2, 2), (2, 2, 2), (0, 0, 0), False, None),
+    ((2, 32, 8, 32, 32), (3, 3, 3), (2, 2, 2), (1, 1, 1), False, None),
+    ((1, 64, 8, 64, 64), (2, 2, 2), (2, 2, 2), (0, 0, 0), False, None),
+    ((1, 64, 8, 64, 64), (2, 2, 2), (2, 2, 2), (0, 0, 0), True, (16, 128, 128)),
     ((1, 64, 4, 64, 128), (2, 2, 2), (2, 2, 2), (0, 0, 0), False, None),
-
     # ========== Edge cases ==========
     # very small shapes and asymmetric sizes
     ((1, 1, 1, 1, 1), (1, 1, 1), (1, 1, 1), (0, 0, 0), False, None),
-    ((1, 1, 1, 2, 2), (2, 2, 2), (2, 2, 2), (0, 0, 0), True,  (2, 4, 4)),
+    ((1, 1, 1, 2, 2), (2, 2, 2), (2, 2, 2), (0, 0, 0), True, (2, 4, 4)),
     ((1, 1, 2, 2, 8), (2, 2, 2), (2, 2, 2), (0, 0, 0), False, None),
-    ((1, 1, 2, 2, 8), (2, 2, 2), (2, 2, 2), (1, 1, 1), True,  (2, 2, 14)),
+    ((1, 1, 2, 2, 8), (2, 2, 2), (2, 2, 2), (1, 1, 1), True, (2, 2, 14)),
 ]
 
 _TOLERANCE_MAP = {
@@ -90,8 +87,14 @@ def parse_test_cases():
     """
     test_cases = []
 
-    for (input_shape, kernel_size, stride, padding,
-         use_output_size, output_dhw) in _TEST_CASES_DATA:
+    for (
+        input_shape,
+        kernel_size,
+        stride,
+        padding,
+        use_output_size,
+        output_dhw,
+    ) in _TEST_CASES_DATA:
 
         indices_high = _kernel_elems_3d(kernel_size)
 

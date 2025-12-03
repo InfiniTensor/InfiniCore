@@ -1,4 +1,5 @@
 #include "infinicore/ops/rearrange.hpp"
+#include "../../utils.hpp"
 
 namespace infinicore::op {
 
@@ -8,7 +9,9 @@ common::OpDispatcher<Rearrange::schema> &Rearrange::dispatcher() {
 };
 
 void Rearrange::execute(Tensor y, Tensor x) {
-    dispatcher().lookup(context::getDevice().getType())(y, x);
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(y, x);
+    infinicore::context::setDevice(y->device());
+    dispatcher().lookup(y->device().getType())(y, x);
 }
 
 Tensor rearrange(Tensor x) {

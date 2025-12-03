@@ -5,8 +5,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
 import infinicore
-from framework.base import BaseOperatorTest, TensorSpec, TestCase
-from framework.runner import GenericTestRunner
+from framework import BaseOperatorTest, TensorSpec, TestCase, GenericTestRunner
 
 # Test cases format: (input_shape, var_present_bool, full_or_None, eps_or_None, input_strides_or_None)
 # infinicore.nn.functional.gaussian_nll_loss(input, target, var, full=False, eps=1e-6, reduction='mean')

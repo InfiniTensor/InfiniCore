@@ -5,9 +5,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
 import infinicore
-from framework.base import BaseOperatorTest, TensorSpec, TestCase
-from framework.runner import GenericTestRunner
-from framework.utils import is_broadcast
+from framework import (
+    BaseOperatorTest,
+    TensorSpec,
+    TestCase,
+    GenericTestRunner,
+    is_broadcast,
+)
 
 # ==============================================================================
 # Operator-specific configuration
@@ -150,7 +154,7 @@ class OpTest(BaseOperatorTest):
     def infinicore_operator(self, x, weight, epsilon=_EPSILON, out=None, **kwargs):
         """InfiniCore RMSNorm implementation"""
         import infinicore.nn.functional as F
-        
+
         return F.rms_norm(x, weight.shape, weight, epsilon, out=out)
 
 

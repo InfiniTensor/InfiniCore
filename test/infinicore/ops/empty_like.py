@@ -5,9 +5,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
 import infinicore
-from framework.base import BaseOperatorTest, TensorSpec, TestCase
+from framework import BaseOperatorTest, TensorSpec, TestCase, GenericTestRunner
 from framework.datatypes import to_torch_dtype
-from framework.runner import GenericTestRunner
 
 # Test cases format: (base_shape, base_strides_or_None, dtype_or_None)
 # Note: empty_like returns uninitialized memory; we validate shape/dtype via output_spec

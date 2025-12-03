@@ -5,8 +5,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
 import infinicore
-from framework.base import BaseOperatorTest, TensorSpec, TestCase
-from framework.runner import GenericTestRunner
+from framework import BaseOperatorTest, TensorSpec, TestCase, GenericTestRunner
 
 # Test cases format: (anchor_shape, positive_shape, negative_shape, strides_or_None, margin_or_None, p_or_None, eps_or_None, swap_or_None)
 # infinicore.nn.functional.triplet_margin_loss(anchor, positive, negative, margin=1.0, p=2, eps=1e-6, swap=False, reduction='mean')

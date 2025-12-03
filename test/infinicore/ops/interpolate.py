@@ -5,9 +5,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
 import infinicore
-from framework.base import BaseOperatorTest, TensorSpec, TestCase
-from framework.runner import GenericTestRunner
-from framework.utils import is_broadcast
+from framework import (
+    BaseOperatorTest,
+    TensorSpec,
+    TestCase,
+    GenericTestRunner,
+    is_broadcast,
+)
 
 # Test cases format: (shape, size_or_scale_factor, mode, align_corners_or_None, input_strides_or_None)
 # infinicore.nn.functional.interpolate(input, size=None, scale_factor=None, mode='nearest', align_corners=None)

@@ -5,8 +5,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
 import infinicore
-from framework.base import BaseOperatorTest, TensorSpec, TestCase
-from framework.runner import GenericTestRunner
+from framework import BaseOperatorTest, TensorSpec, TestCase, GenericTestRunner
 
 # Test cases format: (condition_shape, cond_strides_or_None, x_shape_or_None, y_shape_or_None)
 # infinicore.where can be used as where(condition, x, y) or where(condition) returning indices.

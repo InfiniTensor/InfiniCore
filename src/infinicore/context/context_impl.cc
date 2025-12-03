@@ -33,9 +33,13 @@ Runtime *ContextImpl::getCpuRuntime() {
     return runtime_table_[int(Device::Type::CPU)][0].get();
 }
 
-void ContextImpl::setDevice(Device device) {
+void ContextImpl::setDevice(Device device, bool force_cpu) {
     if (device == getCurrentRuntime()->device()) {
         // Do nothing if the device is already set.
+        return;
+    }
+    if (device == Device(Device::Type::CPU, 0) && !force_cpu) {
+        // if not forced, no need to switch to CPU device runtime
         return;
     }
 
@@ -83,8 +87,8 @@ ContextImpl::ContextImpl() {
 
 namespace context {
 
-void setDevice(Device device) {
-    ContextImpl::singleton().setDevice(device);
+void setDevice(Device device, bool force_cpu) {
+    ContextImpl::singleton().setDevice(device, force_cpu);
 }
 
 Device getDevice() {
@@ -129,16 +133,16 @@ std::shared_ptr<Memory> allocatePinnedHostMemory(size_t size) {
     return ContextImpl::singleton().getCurrentRuntime()->allocatePinnedHostMemory(size);
 }
 
-void memcpyH2D(void *dst, const void *src, size_t size) {
-    return ContextImpl::singleton().getCurrentRuntime()->memcpyH2D(dst, src, size);
+void memcpyH2D(void *dst, const void *src, size_t size, bool async) {
+    return ContextImpl::singleton().getCurrentRuntime()->memcpyH2D(dst, src, size, async);
 }
 
 void memcpyD2H(void *dst, const void *src, size_t size) {
     return ContextImpl::singleton().getCurrentRuntime()->memcpyD2H(dst, src, size);
 }
 
-void memcpyD2D(void *dst, const void *src, size_t size) {
-    return ContextImpl::singleton().getCurrentRuntime()->memcpyD2D(dst, src, size);
+void memcpyD2D(void *dst, const void *src, size_t size, bool async) {
+    return ContextImpl::singleton().getCurrentRuntime()->memcpyD2D(dst, src, size, async);
 }
 
 void memcpyH2H(void *dst, const void *src, size_t size) {

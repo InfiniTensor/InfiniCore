@@ -5,8 +5,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
 import infinicore
-from framework.base import BaseOperatorTest, TensorSpec, TestCase
-from framework.runner import GenericTestRunner
+from framework import BaseOperatorTest, TensorSpec, TestCase, GenericTestRunner
 from framework.tensor import TensorInitializer
 
 # Test cases format:
@@ -27,36 +26,34 @@ from framework.tensor import TensorInitializer
 _TEST_CASES_DATA = [
     # ========== Basic cases ==========
     # small sizes and various stride/padding combinations
-    ((1, 1, 4),   2, 2,    0,    False, None),
-    ((2, 3, 8),   2, 2,    0,    False, None),
-    ((2, 3, 8),   3, 2,    1,    False, None),
-    ((1, 4, 6),   2, None, 0,    False, None),    # default stride
-    ((4, 8, 16),  2, 2,    0,    True,  32),      # L_in = (16-1)*2 - 0 + 2 = 32
-    ((4, 8, 16),  3, 2,    1,    True,  31),      # L_in = (16-1)*2 - 2 + 3 = 31
-    ((2, 1, 10),  3, 1,    1,    True,  10),      # L_in = (10-1)*1 - 2 + 3 = 10
-    ((2, 1, 5),   2, None, 1,    True,  8),       # L_in = (5-1)*2 - 2 + 2 = 8
-
+    ((1, 1, 4), 2, 2, 0, False, None),
+    ((2, 3, 8), 2, 2, 0, False, None),
+    ((2, 3, 8), 3, 2, 1, False, None),
+    ((1, 4, 6), 2, None, 0, False, None),  # default stride
+    ((4, 8, 16), 2, 2, 0, True, 32),  # L_in = (16-1)*2 - 0 + 2 = 32
+    ((4, 8, 16), 3, 2, 1, True, 31),  # L_in = (16-1)*2 - 2 + 3 = 31
+    ((2, 1, 10), 3, 1, 1, True, 10),  # L_in = (10-1)*1 - 2 + 3 = 10
+    ((2, 1, 5), 2, None, 1, True, 8),  # L_in = (5-1)*2 - 2 + 2 = 8
     # ========== Large-scale performance test cases ==========
     # medium to large sizes for performance and stability
-    ((8,  64, 128),   2, 2,    0, False, None),
-    ((8,  64, 256),   3, 2,    1, False, None),
-    ((4,  128, 512),  2, 2,    0, False, None),
-    ((4,  128, 512),  3, 2,    1, False, None),
-    ((16, 32, 256),   4, 4,    0, False, None),
-    ((16, 32, 256),   3, 1,    1, False, None),
-    ((32, 16, 1024),  2, 2,    0, True,  2048),   # L_in = (1024-1)*2 + 2 = 2048
-    ((32, 16, 512),   3, 2,    1, True,  1023),   # L_in = (512-1)*2 - 2 + 3 = 1023
-    ((2,  256, 2048), 2, 2,    0, True,  4096),   # L_in = (2048-1)*2 + 2 = 4096
-    ((2,  256, 2048), 3, 2,    1, True,  4095),   # L_in = (2048-1)*2 - 2 + 3 = 4095
-    ((1,  64, 16384), 2, 2,    0, False, None),
-    ((1,  64, 8192),  3, 2,    1, False, None),
-
+    ((8, 64, 128), 2, 2, 0, False, None),
+    ((8, 64, 256), 3, 2, 1, False, None),
+    ((4, 128, 512), 2, 2, 0, False, None),
+    ((4, 128, 512), 3, 2, 1, False, None),
+    ((16, 32, 256), 4, 4, 0, False, None),
+    ((16, 32, 256), 3, 1, 1, False, None),
+    ((32, 16, 1024), 2, 2, 0, True, 2048),  # L_in = (1024-1)*2 + 2 = 2048
+    ((32, 16, 512), 3, 2, 1, True, 1023),  # L_in = (512-1)*2 - 2 + 3 = 1023
+    ((2, 256, 2048), 2, 2, 0, True, 4096),  # L_in = (2048-1)*2 + 2 = 4096
+    ((2, 256, 2048), 3, 2, 1, True, 4095),  # L_in = (2048-1)*2 - 2 + 3 = 4095
+    ((1, 64, 16384), 2, 2, 0, False, None),
+    ((1, 64, 8192), 3, 2, 1, False, None),
     # ========== Edge cases ==========
     # extreme small / boundary sizes
-    ((1, 1, 1),   1, 1,    0,   False, None),
-    ((1, 4, 2),   2, 2,    0,   True,  4),        # L_in = (2-1)*2 + 2 = 4
-    ((2, 1, 64),  3, 2,    1,   False, None),
-    ((1, 1, 3),   2, 2,    1,   True,  4),        # L_in = (3-1)*2 - 2 + 2 = 4
+    ((1, 1, 1), 1, 1, 0, False, None),
+    ((1, 4, 2), 2, 2, 0, True, 4),  # L_in = (2-1)*2 + 2 = 4
+    ((2, 1, 64), 3, 2, 1, False, None),
+    ((1, 1, 3), 2, 2, 1, True, 4),  # L_in = (3-1)*2 - 2 + 2 = 4
 ]
 
 _TOLERANCE_MAP = {
@@ -79,8 +76,14 @@ def parse_test_cases():
     """
     test_cases = []
 
-    for (input_shape, kernel_size, stride, padding,
-         use_output_size, output_length) in _TEST_CASES_DATA:
+    for (
+        input_shape,
+        kernel_size,
+        stride,
+        padding,
+        use_output_size,
+        output_length,
+    ) in _TEST_CASES_DATA:
 
         for dtype in _TENSOR_DTYPES:
             tol = _TOLERANCE_MAP.get(dtype, {"atol": 1e-5, "rtol": 1e-4})
