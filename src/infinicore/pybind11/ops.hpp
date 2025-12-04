@@ -18,6 +18,7 @@
 #include "ops/silu.hpp"
 #include "ops/sqrt.hpp"
 #include "ops/swiglu.hpp"
+#include "ops/aminmax.hpp"
 
 namespace py = pybind11;
 
@@ -40,6 +41,7 @@ inline void bind(py::module &m) {
     bind_sqrt(m);
     bind_elu(m);
     bind_diagflat(m);
+    bind_aminmax(m);
 }
 
 } // namespace infinicore::ops

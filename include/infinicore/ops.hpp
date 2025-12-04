@@ -1,6 +1,7 @@
 #pragma once
 
 #include "ops/add.hpp"
+#include "ops/aminmax.hpp"
 #include "ops/attention.hpp"
 #include "ops/causal_softmax.hpp"
 #include "ops/matmul.hpp"

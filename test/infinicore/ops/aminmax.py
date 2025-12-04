@@ -231,6 +231,8 @@ class OpTest(BaseOperatorTest):
     def torch_operator(self, x, dim=None, keepdim=False, out=None, **kwargs):
         return torch.aminmax(x, dim=dim, keepdim=keepdim, out=out)
 
+    def infinicore_operator(self, x, dim=None, keepdim=False, out=None, **kwargs):
+        return infinicore.aminmax(x, dim=dim, keepdim=keepdim, out=out)
 
 def main():
     """Main entry point"""
