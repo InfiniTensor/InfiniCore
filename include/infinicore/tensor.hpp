@@ -84,6 +84,8 @@ public:
     const TensorImpl *operator->() const;
 
 protected:
+public:
+    Tensor() = default;
     explicit Tensor(std::shared_ptr<TensorImpl> impl) : impl_(std::move(impl)) {}
     std::shared_ptr<TensorImpl> impl_;
     friend class TensorImpl;
