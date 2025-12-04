@@ -7,8 +7,14 @@ import time
 # 🛠️ Path Adaptation
 # ==============================================================================
 current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.append(current_dir)
+
+project_root = os.path.abspath(os.path.join(current_dir, "../../.."))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
 
 from framework.testcase_manager import TestCaseManager
 
@@ -26,24 +32,20 @@ def main():
     parser.add_argument("--num_iterations", type=int, default=None, help="Override measured iterations")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
     
-    # Save option
     parser.add_argument(
         "--save", 
         nargs="?", 
-        const="AUTO", 
+        const="test_report.json", 
         default=None, 
-        help="Path to save effective config JSON with results. If flag is used without value, generates 'test_case_<timestamp>.json'"
+        help="Save test results to JSON. Default file: test_report.json"
     )
     
     args = parser.parse_args()
 
-    # Handle automatic save path generation
     final_save_path = args.save
-    if final_save_path == "AUTO":
-        timestamp = time.strftime("%Y%m%d_%H%M%S")
-        final_save_path = f"result_{timestamp}.json"
 
     # Construct override dictionary
+    # Filter out None/False values and specific keys not meant for override config
     override_dict = {
         k: v for k, v in vars(args).items()
         if k not in ["file_path", "save"] and v is not None and v is not False
@@ -66,9 +68,9 @@ def main():
         if isinstance(results, list):
             for entry in results:
                 
-                exec_results = entry.get("execution_results", [])
-                for res in exec_results:
-                    
+                cases = entry.get("testcases", [])
+                for case in cases:
+                    res = case.get("result", {})
                     status = res.get("status", {})
                     if not status.get("success", False):
                         success = False
@@ -79,7 +81,11 @@ def main():
                     break
             
     except Exception as e:
+        import traceback; traceback.print_exc()
         print(f"\n❌ Execution Error: {e}")
+        sys.exit(1)
+
+    if not success:
         sys.exit(1)
 
 if __name__ == "__main__":

@@ -19,13 +19,12 @@ from framework.base import BaseOperatorTest, TestCase, TensorSpec
 from framework.config import get_args, get_supported_hardware_platforms
 from framework.runner import GenericTestRunner
 from framework.devices import InfiniDeviceEnum
-
+from .reporter import TestReporter
 
 class TestCaseManager:
     """
     Test Case Manager (Strict Schema Version)
     """
-
     def __init__(self):
         self.supported_hw_flags = [
             item[0].lstrip("-") for item in get_supported_hardware_platforms()
@@ -41,10 +40,15 @@ class TestCaseManager:
         overrides = self._normalize_override_config(config)
 
         # 1. Unified Configuration Loading
-        if json_file_path and os.path.exists(json_file_path):
-            print(f"📄 Source: Loading {json_file_path}")
-            test_configs = self._load(json_file_path, overrides)
+        if json_file_path:
+            if os.path.exists(json_file_path):
+                print(f"📄 Source: Loading {json_file_path}")
+                test_configs = self._load(json_file_path, overrides)
+            else:
+                print(f"⚠️ Warning: File not found: '{json_file_path}'. Falling back to default case.")
+                test_configs = self._load_default_case(overrides)
         else:
+            print(f"ℹ️ No file provided. Using default built-in case.")
             test_configs = self._load_default_case(overrides)
 
         total_results = []
@@ -61,12 +65,20 @@ class TestCaseManager:
             )
 
             # Report
-            entry = self._prepare_report_entry(cfg, results)
+            entry = TestReporter.prepare_report_entry(
+                op_name=op_name,
+                test_cases=cfg["test_cases"],
+                args=cfg["args"],
+                op_paths=cfg["op_paths"],
+                device=cfg["target_device"],
+                results_list=results,
+            )
+            
             total_results.append(entry)
 
         # 3. Save
         if save_path:
-            self._save_all_results(save_path, total_results)
+            TestReporter.save_all_results(save_path, total_results)
 
         return total_results
 
@@ -86,19 +98,30 @@ class TestCaseManager:
             op_name, ["infinicore", "infinicore.nn.functional"]
         )
 
-        # 2. Args & Device
+        # 2. Args 
         args = self._get_default_args()
         self._merge_args(args, raw_data.get("args", {}))
         self._merge_args(args, overrides)
 
-        dev_str = (
-            overrides.get("device")
-            if overrides and "device" in overrides
-            else raw_data.get("device", "cpu")
-        )
+        # 3. Resolve Device (String resolution with Priority)
+        # Priority 1: Explicit 'device' string in overrides
+        dev_str = overrides.get("device") if overrides else None
+        
+        # Priority 2: Boolean hardware flags in overrides (CLI args like --nvidia)
+        if not dev_str and overrides:
+            active_flags = [
+                flag for flag in self.supported_hw_flags 
+                if overrides.get(flag)
+            ]
+            if active_flags:
+                dev_str = ",".join(active_flags)
+        
+        # Priority 3: JSON config or default
+        if not dev_str:
+            dev_str = raw_data.get("device", "cpu")
         self._set_device_flags(args, dev_str)
 
-        # 3. Build & Return
+        # 4. Build & Return
         return {
             "op_name": op_name,
             "test_cases": self._build_test_cases(raw_data, op_name),
@@ -210,81 +233,6 @@ class TestCaseManager:
         _, internal_runner = runner.run()
         return getattr(internal_runner, "test_results", [])
 
-    def _prepare_report_entry(self, cfg, results_list):
-        # Map results by index
-        res_map = (
-            {i: r for i, r in enumerate(results_list)}
-            if isinstance(results_list, list)
-            else {0: results_list}
-        )
-
-        cases, results = [], []
-        for idx, tc in enumerate(cfg["test_cases"]):
-            # 1. Static Info
-            cases.append({
-                "description": tc.description,
-                "inputs": [self._spec_to_dict(i) for i in tc.inputs],
-                "kwargs": {
-                    k: (self._spec_to_dict(v) if isinstance(v, TensorSpec) else v)
-                    for k, v in tc.kwargs.items()
-                },
-                "comparison_target": tc.comparison_target,
-                "tolerance": tc.tolerance,
-                **({"output_spec": self._spec_to_dict(tc.output_spec)} if tc.output_spec else {}),
-                **({"output_specs": [self._spec_to_dict(s) for s in tc.output_specs]} if tc.output_specs else {}),
-                **({"output_count": tc.output_count} if tc.output_count > 1 and not tc.output_specs else {})
-            })
-
-            # 2. Dynamic Result
-            res = res_map.get(idx)
-            results.append(
-                self._fmt_result(res) if res else {"status": {"success": False, "error": "No result"}}
-            )
-
-        # Global Args
-        g_args = {
-            k: getattr(cfg["args"], k)
-            for k in ["bench", "num_prerun", "num_iterations", "verbose", "debug"]
-            if hasattr(cfg["args"], k)
-        }
-
-        return {
-            "operator": cfg["op_name"],
-            "device": cfg["target_device"],
-            "torch_op": cfg["op_paths"]["torch"],
-            "infinicore_op": cfg["op_paths"]["infinicore"],
-            "args": g_args,
-            "testcases": cases,
-            "execution_results": results,
-        }
-
-    def _save_all_results(self, save_path, total_results):
-        print(f"💾 Saving to: {save_path}")
-        try:
-            with open(save_path, "w", encoding="utf-8") as f:
-                f.write("[\n")
-                for i, entry in enumerate(total_results):
-                    f.write("    {\n")
-                    keys = list(entry.keys())
-                    for j, key in enumerate(keys):
-                        # Special handling for lists (cases/results)
-                        if key in ["testcases", "execution_results"] and isinstance(entry[key], list):
-                            f.write(f'        "{key}": [\n')
-                            for k_idx, item in enumerate(entry[key]):
-                                c_str = json.dumps(item, ensure_ascii=False)
-                                comma = "," if k_idx < len(entry[key]) - 1 else ""
-                                f.write(f"            {c_str}{comma}\n")
-                            f.write(f"        ]{',' if j < len(keys) - 1 else ''}\n")
-                        else:
-                            k_str = json.dumps(key, ensure_ascii=False)
-                            v_str = json.dumps(entry[key], ensure_ascii=False)
-                            f.write(f"        {k_str}: {v_str}{',' if j < len(keys) - 1 else ''}\n")
-                    f.write(f"    }}{',' if i < len(total_results) - 1 else ''}\n")
-                f.write("]\n")
-            print(f"   ✅ Saved.")
-        except Exception as e:
-            print(f"   ❌ Save failed: {e}")
-
     # --- Helpers ---
 
     def _discover_op_path(self, op_name: str, candidates: List[str]) -> str:
@@ -306,36 +254,6 @@ class TestCaseManager:
             name=d.get("name", name),
         )
 
-    def _spec_to_dict(self, s):
-        return {
-            "name": s.name,
-            "shape": list(s.shape) if s.shape else None,
-            "dtype": str(s.dtype).split(".")[-1],
-            "strides": list(s.strides) if s.strides else None,
-        }
-
-    def _fmt_result(self, res):
-        if not (is_dataclass(res) or hasattr(res, "success")):
-            return str(res)
-        
-        get_time = lambda k: round(getattr(res, k, 0.0), 4)
-        
-        # Build Map
-        dev_map = {v: k for k, v in vars(InfiniDeviceEnum).items() if not k.startswith("_")}
-        dev_str = dev_map.get(getattr(res, "device", None), str(getattr(res, "device", None)))
-
-        return {
-            "status": {
-                "success": getattr(res, "success", False),
-                "error": getattr(res, "error_message", ""),
-            },
-            "perf_ms": {
-                "torch": {"host": get_time("torch_host_time"), "device": get_time("torch_device_time")},
-                "infinicore": {"host": get_time("infini_host_time"), "device": get_time("infini_device_time")},
-            },
-            "device": dev_str,
-        }
-
     def _load_function(self, path):
         if not path or "." not in path: raise ValueError(f"Invalid path: {path}")
         m, f = path.rsplit(".", 1)
@@ -352,10 +270,28 @@ class TestCaseManager:
             if v is not None: setattr(args, k, v)
 
     def _set_device_flags(self, args, dev_str):
-        for flag in self.supported_hw_flags: setattr(args, flag, False)
-        d = str(dev_str).lower()
-        if hasattr(args, d): setattr(args, d, True)
-        else: args.cpu = True; print(f"⚠️ Device '{d}' -> CPU")
+        # 1. Reset all hardware flags first
+        for flag in self.supported_hw_flags:
+            setattr(args, flag, False)
+        
+        # 2. Parse string (split by comma)
+        d_str = str(dev_str).lower()
+        devices = [d.strip() for d in d_str.split(",") if d.strip()]
+        
+        activated = False
+        for d in devices:
+            if hasattr(args, d):
+                setattr(args, d, True)
+                activated = True
+            else:
+                if d != "cpu":
+                    print(f"⚠️ Warning: Unknown device flag '{d}' ignored.")
+        
+        # 3. Fallback
+        if not activated:
+            args.cpu = True
+            if dev_str != "cpu":
+                print(f"⚠️ Device '{dev_str}' invalid/unsupported -> CPU (Fallback)")
 
     def _normalize_override_config(self, config):
         if isinstance(config, str) and os.path.exists(config):
