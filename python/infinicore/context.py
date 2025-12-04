@@ -23,13 +23,13 @@ def get_device_count(device_type):
     return _infinicore.get_device_count(infinicore.device(device_type)._underlying.type)
 
 
-def set_device(device):
+def set_device(device, force_cpu=False):
     """Set the current active device.
 
     Args:
         device: The device to set as active
     """
-    _infinicore.set_device(device._underlying)
+    _infinicore.set_device(device._underlying, force_cpu)
 
 
 def sync_stream():

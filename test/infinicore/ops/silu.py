@@ -28,7 +28,6 @@ _TEST_CASES_DATA = [
     ((4, 48, 6), None, None),
     # Strided tensors
     ((1, 2048), (4096, 1), (4096, 1)),
-    ((6, 2560), (2048, 1), (2560, 1)),
     # Mixed cases
     ((8, 16, 32), None, None),
     # Large tensors

@@ -3,6 +3,20 @@
 
 namespace infinicore::test {
 
+// Helper function to format shape for logging
+inline std::string formatShape(const std::vector<size_t> &shape) {
+    std::ostringstream oss;
+    oss << "[";
+    for (size_t i = 0; i < shape.size(); ++i) {
+        if (i > 0) {
+            oss << ", ";
+        }
+        oss << shape[i];
+    }
+    oss << "]";
+    return oss.str();
+}
+
 // Test 1: Basic module operations (creation, parameters, state_dict, load_state_dict)
 TestResult NNModuleTest::testBasicModuleCreation() {
     return measureTime("BasicModuleOperations", [this]() {
@@ -110,6 +124,174 @@ TestResult NNModuleTest::testBasicModuleCreation() {
             return true;
         } catch (const std::exception &e) {
             spdlog::error("Exception in testBasicModuleOperations: {}", e.what());
+            return false;
+        }
+    });
+}
+
+TestResult NNModuleTest::testTensorParallelParameters() {
+    return measureTime("TensorParallelParameters", [this]() {
+        try {
+            spdlog::info("==========================================");
+            spdlog::info("Testing Tensor Parallel Parameters");
+            spdlog::info("==========================================");
+
+            auto device = infinicore::context::getDevice();
+
+            spdlog::info("Test Tensor Parallel Parameter");
+            // Case 1: Partition along dimension 0 (row-wise partitioning)
+            infinicore::nn::Parameter param_dim0({8, 4}, infinicore::DataType::F32, device, 0, 0, 2);
+            if (param_dim0->shape() != std::vector<size_t>({4, 4})) {
+                spdlog::error("TP dim0: Expected shape [4, 4], got [{}]", formatShape(param_dim0->shape()));
+                return false;
+            }
+            spdlog::info("✓ TP dim0 parameter created with correct partitioned shape");
+            // Case 2: Partition along dimension 1 (column-wise partitioning)
+            infinicore::nn::Parameter param_dim1({8, 4}, infinicore::DataType::F32, device, 1, 0, 2);
+            if (param_dim1->shape() != std::vector<size_t>({8, 2})) {
+                spdlog::error("TP dim1: Expected shape [8, 2], got [{}]", formatShape(param_dim1->shape()));
+                return false;
+            }
+            spdlog::info("✓ TP dim1 parameter created with correct partitioned shape");
+            spdlog::info("✓ Parameter creation with tensor parallelism passed");
+
+            spdlog::info("Test Tensor Parallel Linear Module");
+            auto w_data = std::vector<float>(32 * 64);
+            auto b_data = std::vector<float>(32);
+            for (size_t i = 0; i < 32; ++i) {
+                for (size_t j = 0; j < 64; ++j) {
+                    w_data[i * 64 + j] = static_cast<float>(j);
+                }
+                b_data[i] = static_cast<float>(i);
+            }
+            {
+                spdlog::info("Test tp_size=4 tp_dim=0");
+                Size tp_size = 4;
+                Size tp_dim = 0;
+                std::vector<std::unique_ptr<MockLinearModule>> tp_modules;
+
+                for (Size tp_rank = 0; tp_rank < tp_size; ++tp_rank) {
+                    auto module = std::make_unique<MockLinearModule>(64, 32, device, tp_dim, tp_rank, tp_size);
+                    tp_modules.push_back(std::move(module));
+                }
+
+                // Verify each partition has correct shape
+                for (size_t i = 0; i < tp_modules.size(); ++i) {
+                    const auto &weight = tp_modules[i]->get_weight();
+                    const auto &bias = tp_modules[i]->get_bias();
+
+                    // Weight should be partitioned along output dimension (dim 0)
+                    if (weight->shape() != std::vector<size_t>({8, 64})) { // 32/4 = 8
+                        spdlog::error("TP rank {}: Weight shape mismatch. Expected [8, 64], got [{}]",
+                                      i, formatShape(weight->shape()));
+                        return false;
+                    }
+
+                    // Bias should be partitioned along output dimension
+                    if (bias->shape() != std::vector<size_t>({8})) { // 32/4 = 8
+                        spdlog::error("TP rank {}: Bias shape mismatch. Expected [8], got [{}]",
+                                      i, formatShape(bias->shape()));
+                        return false;
+                    }
+
+                    spdlog::debug("TP rank {}: weight shape [{}], bias shape [{}]",
+                                  i, formatShape(weight->shape()), formatShape(bias->shape()));
+
+                    tp_modules[i]->load_parameter_from_blob("weight", w_data.data());
+                    tp_modules[i]->load_parameter_from_blob("bias", b_data.data());
+
+                    auto weight_loaded = infinicore::Tensor::from_blob(
+                                             w_data.data(),
+                                             {32, 64},
+                                             infinicore::DataType::F32,
+                                             infinicore::Device::cpu())
+                                             ->narrow({{0, i * 8, 8}})
+                                             ->to(device); // Narrow to get the partition
+                    auto bias_loaded = infinicore::Tensor::from_blob(
+                                           b_data.data(),
+                                           {32},
+                                           infinicore::DataType::F32,
+                                           infinicore::Device::cpu())
+                                           ->narrow({{0, i * 8, 8}})
+                                           ->to(device); // Narrow to get the partition
+
+                    if (!tensorsAllClose(tp_modules[i]->get_weight(), weight_loaded, 1e-6, 1e-6)) {
+                        spdlog::error("TP rank {}: Weight values do not match after load_parameter_from_blob", i);
+                        return false;
+                    }
+
+                    if (!tensorsAllClose(tp_modules[i]->get_bias(), bias_loaded, 1e-6, 1e-6)) {
+                        spdlog::error("TP rank {}: Bias values do not match after load_parameter_from_blob", i);
+                        return false;
+                    }
+                }
+            }
+
+            {
+                spdlog::info("Test tp_size=4 tp_dim=1");
+                Size tp_size = 4;
+                Size tp_dim = 1;
+                std::vector<std::unique_ptr<MockLinearModule>> tp_modules;
+
+                for (Size tp_rank = 0; tp_rank < tp_size; ++tp_rank) {
+                    auto module = std::make_unique<MockLinearModule>(64, 32, device, tp_dim, tp_rank, tp_size);
+                    tp_modules.push_back(std::move(module));
+                }
+
+                // Verify each partition has correct shape
+                for (size_t i = 0; i < tp_modules.size(); ++i) {
+                    const auto &weight = tp_modules[i]->get_weight();
+                    const auto &bias = tp_modules[i]->get_bias();
+
+                    // Weight should be partitioned along output dimension (dim 0)
+                    if (weight->shape() != std::vector<size_t>({32, 16})) { // 64/4 = 16
+                        spdlog::error("TP rank {}: Weight shape mismatch. Expected [32, 16], got [{}]",
+                                      i, formatShape(weight->shape()));
+                        return false;
+                    }
+
+                    // Bias should be partitioned along output dimension
+                    if (bias->shape() != std::vector<size_t>({32})) { // Bias not partitioned when tp_dim=1
+                        spdlog::error("TP rank {}: Bias shape mismatch. Expected [32], got [{}]",
+                                      i, formatShape(bias->shape()));
+                        return false;
+                    }
+
+                    spdlog::debug("TP rank {}: weight shape [{}], bias shape [{}]",
+                                  i, formatShape(weight->shape()), formatShape(bias->shape()));
+                    ;
+                    tp_modules[i]->load_parameter_from_blob("weight", w_data.data());
+                    tp_modules[i]->load_parameter_from_blob("bias", b_data.data());
+
+                    auto weight_loaded = infinicore::Tensor::from_blob(
+                                             w_data.data(),
+                                             {32, 64},
+                                             infinicore::DataType::F32,
+                                             infinicore::Device::cpu())
+                                             ->narrow({{1, i * 16, 16}})
+                                             ->to(device); // Narrow to get the partition
+                    auto bias_loaded = infinicore::Tensor::from_blob(
+                                           b_data.data(),
+                                           {32},
+                                           infinicore::DataType::F32,
+                                           infinicore::Device::cpu())
+                                           ->to(device); // Narrow to get the partition
+                    if (!tensorsAllClose(tp_modules[i]->get_weight(), weight_loaded, 1e-6, 1e-6)) {
+                        spdlog::error("TP rank {}: Weight values do not match after load_parameter_from_blob", i);
+                        return false;
+                    }
+                    if (!tensorsAllClose(tp_modules[i]->get_bias(), bias_loaded, 1e-6, 1e-6)) {
+                        spdlog::error("TP rank {}: Bias values do not match after load_parameter_from_blob", i);
+                        return false;
+                    }
+                }
+            }
+
+            spdlog::info("=== All Tensor Parallel Parameter Tests Passed ===");
+            return true;
+
+        } catch (const std::exception &e) {
+            spdlog::error("Exception in testTensorParallelParameters: {}", e.what());
             return false;
         }
     });
@@ -383,6 +565,8 @@ TestResult NNModuleTest::testParameterLoading() {
                 spdlog::error("Error: Parameters not found after loading");
                 return false;
             }
+
+            MockLinearModule module_row_parallel(3, 2, infinicore::Device(), 0, 1, 2);
 
             spdlog::info("Parameter loading test passed");
             return true;
@@ -1708,16 +1892,17 @@ TestResult NNModuleTest::run() {
               << "InfiniCore nn::Module Test Suite\n"
               << "==============================================" << std::endl;
 
-    results.push_back(testBasicModuleCreation());   // Merged: creation + parameters + state_dict + load
-    results.push_back(testLoadStateDict());         // Advanced: hierarchical modules
-    results.push_back(testModuleHierarchy());       // Demonstrates hierarchical construction
-    results.push_back(testParameterLoading());      // Blob loading
-    results.push_back(testModuleLinear());          // Linear module comprehensive test
-    results.push_back(testModuleEmbedding());       // Embedding module test
-    results.push_back(testModuleRMSNorm());         // RMSNorm module test
-    results.push_back(testModuleRoPE());            // RoPE module test
-    results.push_back(testDtypeAssertion());        // Dtype assertion test
-    results.push_back(testTinyLlamaConstruction()); // Comprehensive: TinyLlama model test
+    results.push_back(testBasicModuleCreation());      // Merged: creation + parameters + state_dict + load
+    results.push_back(testTensorParallelParameters()); // Tensor-parallel parameters
+    results.push_back(testLoadStateDict());            // Advanced: hierarchical modules
+    results.push_back(testModuleHierarchy());          // Demonstrates hierarchical construction
+    results.push_back(testParameterLoading());         // Blob loading
+    results.push_back(testModuleLinear());             // Linear module comprehensive test
+    results.push_back(testModuleEmbedding());          // Embedding module test
+    results.push_back(testModuleRMSNorm());            // RMSNorm module test
+    results.push_back(testModuleRoPE());               // RoPE module test
+    results.push_back(testDtypeAssertion());           // Dtype assertion test
+    results.push_back(testTinyLlamaConstruction());    // Comprehensive: TinyLlama model test
 
     // Check if all tests passed
     bool all_passed = true;

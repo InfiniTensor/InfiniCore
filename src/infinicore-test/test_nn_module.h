@@ -26,17 +26,25 @@ public:
     INFINICORE_NN_PARAMETER(weight);
     INFINICORE_NN_PARAMETER(bias);
 
-    MockLinearModule(int input_size, int output_size, const infinicore::Device &device)
-        : input_size_(input_size), output_size_(output_size), device_(device) {
+    MockLinearModule(int input_size, int output_size, const infinicore::Device &device,
+                     Size tp_dim = 0, Size tp_rank = 0, Size tp_size = 1)
+        : input_size_(input_size), output_size_(output_size), device_(device),
+          tp_dim_(tp_dim), tp_rank_(tp_rank), tp_size_(tp_size) {
         // Initialize parameters using macros
         INFINICORE_NN_PARAMETER_INIT(weight,
                                      ({static_cast<size_t>(output_size), static_cast<size_t>(input_size)},
                                       infinicore::DataType::F32,
-                                      device));
+                                      device,
+                                      tp_dim_,
+                                      tp_rank_,
+                                      tp_size_));
         INFINICORE_NN_PARAMETER_INIT(bias,
                                      ({static_cast<size_t>(output_size)},
                                       infinicore::DataType::F32,
-                                      device));
+                                      device,
+                                      0,
+                                      tp_dim == 0 ? tp_rank_ : 0,
+                                      tp_dim == 0 ? tp_size_ : 1));
     }
 
     // Simple forward pass (conceptual - would need actual matrix operations)
@@ -68,6 +76,10 @@ private:
     int input_size_;
     int output_size_;
     infinicore::Device device_;
+
+    Size tp_dim_;
+    Size tp_rank_;
+    Size tp_size_;
 };
 
 class NNModuleTest : public TestFramework {
@@ -76,16 +88,17 @@ public:
     std::string getName() const override { return "NNModuleTest"; }
 
 private:
-    TestResult testBasicModuleCreation();   // Merged: creation, parameters, state_dict, load_state_dict
-    TestResult testLoadStateDict();         // Advanced: hierarchical modules
-    TestResult testModuleHierarchy();       // Demonstrates proper hierarchical construction pattern
-    TestResult testParameterLoading();      // Test blob parameter loading
-    TestResult testModuleLinear();          // Comprehensive Linear module test
-    TestResult testModuleEmbedding();       // Embedding module test
-    TestResult testModuleRMSNorm();         // RMSNorm module test
-    TestResult testModuleRoPE();            // RoPE module test
-    TestResult testDtypeAssertion();        // Test dtype assertions when loading parameters
-    TestResult testTinyLlamaConstruction(); // Comprehensive: construction + weight loading + validation
+    TestResult testBasicModuleCreation();      // Merged: creation, parameters, state_dict, load_state_dict
+    TestResult testTensorParallelParameters(); // Module with tensor parallel parameters
+    TestResult testLoadStateDict();            // Advanced: hierarchical modules
+    TestResult testModuleHierarchy();          // Demonstrates proper hierarchical construction pattern
+    TestResult testParameterLoading();         // Test blob parameter loading
+    TestResult testModuleLinear();             // Comprehensive Linear module test
+    TestResult testModuleEmbedding();          // Embedding module test
+    TestResult testModuleRMSNorm();            // RMSNorm module test
+    TestResult testModuleRoPE();               // RoPE module test
+    TestResult testDtypeAssertion();           // Test dtype assertions when loading parameters
+    TestResult testTinyLlamaConstruction();    // Comprehensive: construction + weight loading + validation
 };
 
 } // namespace infinicore::test

@@ -1,4 +1,5 @@
 #include "infinicore/ops/attention.hpp"
+#include "../../utils.hpp"
 
 namespace infinicore::op {
 
@@ -8,7 +9,9 @@ common::OpDispatcher<Attention::schema> &Attention::dispatcher() {
 };
 
 void Attention::execute(Tensor out, Tensor q, Tensor k, Tensor v, Tensor k_cache, Tensor v_cache, size_t pos) {
-    dispatcher().lookup(context::getDevice().getType())(out, q, k, v, k_cache, v_cache, pos);
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(out, q, k, v, k_cache, v_cache);
+    infinicore::context::setDevice(out->device());
+    dispatcher().lookup(out->device().getType())(out, q, k, v, k_cache, v_cache, pos);
 }
 
 Tensor attention(Tensor q, Tensor k, Tensor v, Tensor k_cache, Tensor v_cache, size_t pos) {

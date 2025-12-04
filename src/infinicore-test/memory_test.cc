@@ -709,9 +709,6 @@ TestResult PerformanceTest::testMemoryCopyPerformance() {
                 return false;
             }
 
-            // Initialize source data
-            std::memset(src_memory->data(), 0xAB, data_size);
-
             auto start = std::chrono::high_resolution_clock::now();
 
             // Perform memory copies

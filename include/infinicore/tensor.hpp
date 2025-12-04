@@ -75,6 +75,7 @@ public:
                                     const DataType &dtype,
                                     const Device &device);
 
+    Tensor() = default;
     Tensor(const Tensor &) = default;
     Tensor(Tensor &&) = default;
     Tensor &operator=(const Tensor &) = default;
@@ -84,7 +85,7 @@ public:
     const TensorImpl *operator->() const;
 
 protected:
-    explicit Tensor(std::shared_ptr<TensorImpl> impl) : impl_(std::move(impl)) {}
+    Tensor(std::shared_ptr<TensorImpl> impl) : impl_(std::move(impl)) {}
     std::shared_ptr<TensorImpl> impl_;
     friend class TensorImpl;
 };

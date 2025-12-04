@@ -1,5 +1,7 @@
 #include "infinicore/ops/gemm.hpp"
 
+#include "../../utils.hpp"
+
 namespace infinicore::op {
 
 common::OpDispatcher<Gemm::schema> &Gemm::dispatcher() {
@@ -8,7 +10,9 @@ common::OpDispatcher<Gemm::schema> &Gemm::dispatcher() {
 };
 
 void Gemm::execute(Tensor c, Tensor a, Tensor b, float alpha, float beta) {
-    dispatcher().lookup(context::getDevice().getType())(c, a, b, alpha, beta);
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(c, a, b);
+    infinicore::context::setDevice(c->device());
+    dispatcher().lookup(c->device().getType())(c, a, b, alpha, beta);
 }
 
 Tensor gemm(Tensor a, Tensor b, float alpha, float beta) {

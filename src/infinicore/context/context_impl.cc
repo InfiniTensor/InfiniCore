@@ -33,9 +33,13 @@ Runtime *ContextImpl::getCpuRuntime() {
     return runtime_table_[int(Device::Type::CPU)][0].get();
 }
 
-void ContextImpl::setDevice(Device device) {
+void ContextImpl::setDevice(Device device, bool force_cpu) {
     if (device == getCurrentRuntime()->device()) {
         // Do nothing if the device is already set.
+        return;
+    }
+    if (device == Device(Device::Type::CPU, 0) && !force_cpu) {
+        // if not forced, no need to switch to CPU device runtime
         return;
     }
 
@@ -83,8 +87,8 @@ ContextImpl::ContextImpl() {
 
 namespace context {
 
-void setDevice(Device device) {
-    ContextImpl::singleton().setDevice(device);
+void setDevice(Device device, bool force_cpu) {
+    ContextImpl::singleton().setDevice(device, force_cpu);
 }
 
 Device getDevice() {
