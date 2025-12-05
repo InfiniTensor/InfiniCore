@@ -3,19 +3,22 @@ Generic test runner that handles the common execution flow for all operators
 """
 
 import sys
+import os
+import inspect
+import re
 from . import TestConfig, TestRunner, get_args, get_test_devices
-
+from .reporter import TestReporter
 
 class GenericTestRunner:
     """Generic test runner that handles the common execution flow"""
 
-    def __init__(self, operator_test_class):
+    def __init__(self, operator_test_class, args=None):
         """
         Args:
             operator_test_class: A class that implements BaseOperatorTest interface
         """
         self.operator_test = operator_test_class()
-        self.args = get_args()
+        self.args = args or get_args()
 
     def run(self):
         """Execute the complete test suite
@@ -63,4 +66,74 @@ class GenericTestRunner:
             1: One or more tests failed
         """
         success, runner = self.run()
+
+        if getattr(self.args, 'save', None):
+            self._save_report(runner)
+
         sys.exit(0 if success else 1)
+
+    def _save_report(self, runner):
+        """
+        Helper method to collect metadata and trigger report saving.
+        """
+        try:
+            # 1. Infer active device string dynamically
+            from .devices import InfiniDeviceEnum
+            
+            # Get actual device IDs used (e.g. [0, 1])
+            device_ids = get_test_devices(self.args)
+            
+            # Map IDs to Names (e.g. {0: "CPU", 1: "NVIDIA"})
+            id_to_name = {v: k for k, v in vars(InfiniDeviceEnum).items() if not k.startswith('_')}
+            
+            # Convert list of IDs to list of Names
+            device_names = [id_to_name.get(d_id, str(d_id)) for d_id in device_ids]
+            device_str = ", ".join(device_names) if device_names else "CPU"
+
+            # 2. Prepare metadata (Paths)
+            # Try to infer from source code first
+            t_path = self._infer_op_path(self.operator_test.torch_operator, "torch")
+            i_path = self._infer_op_path(self.operator_test.infinicore_operator, "infinicore")
+            
+            op_paths = {
+                "torch": t_path,
+                "infinicore": i_path
+            }
+
+            # 3. Generate Report Entry
+            entry = TestReporter.prepare_report_entry(
+                op_name=self.operator_test.operator_name,
+                test_cases=self.operator_test.test_cases,
+                args=self.args,
+                op_paths=op_paths,
+                device=device_str,
+                results_list=runner.test_results
+            )
+
+            # 4. Save to File
+            TestReporter.save_all_results(self.args.save, [entry])
+            
+        except Exception as e:
+            import traceback; traceback.print_exc()
+            print(f"⚠️ Failed to save report: {e}")
+
+    def _infer_op_path(self, method, lib_prefix):
+        """
+        Introspects the method source code to find calls like 'torch.add' or 'infinicore.mul'.
+        Returns the full path string (e.g., 'torch.add') or None if not found.
+        """
+        try:
+            source = inspect.getsource(method)
+
+            # Regex to find 'lib.func' or 'lib.submodule.func'
+            # Matches: 'torch.add', 'torch.nn.functional.relu'
+            pattern = re.compile(rf"\b{lib_prefix}\.([a-zA-Z0-9_]+(?:\.[a-zA-Z0-9_]+)*)", re.IGNORECASE)
+            match = pattern.search(source)
+            if match:
+                # Return the matched string exactly as found in source code
+                # or normalize it (e.g. lowercase lib_prefix + match)
+                return f"{lib_prefix}.{match.group(1)}"
+        except Exception:
+            # Handle cases where source is not available (e.g. compiled modules)
+            pass
+        return None

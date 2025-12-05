@@ -36,6 +36,7 @@ __all__ = [
     "TestConfig",
     "TestResult",
     "TestRunner",
+    "TestReporter",
     # Core functions
     "compare_results",
     "convert_infinicore_to_torch",

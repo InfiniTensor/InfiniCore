@@ -108,6 +108,14 @@ Examples:
         help="Enable verbose mode to stop on first error with full traceback",
     )
 
+    parser.add_argument(
+        "--save",
+        nargs="?",
+        const="test_report.json",
+        default=None,
+        help="Save test results to a JSON file. Defaults to 'test_report.json' if no filename provided.",
+    )
+
     # Device options using shared hardware info
     hardware_group = get_hardware_args_group(parser)
     args, unknown = parser.parse_known_args()
