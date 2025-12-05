@@ -128,7 +128,7 @@ infiniStatus_t Descriptor::calculate(
 #define CALCULATE_MASKED_SELECT(BLOCK_SIZE, T)                  \
     launchKernel<BLOCK_SIZE, T>(                                \
         _info,                                                  \
-        (const T *)input, mask, data_ptr, dlen_ptr,  \
+        (const T *)input, mask, data_ptr, dlen_ptr,             \
         stream, workspace, workspace_size                       \
     )
 #define CALCULATE_MASKED_SELECT_WITH_BLOCK_SIZE(BLOCK_SIZE)     \

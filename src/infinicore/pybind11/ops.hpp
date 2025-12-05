@@ -7,6 +7,7 @@
 #include "ops/cat.hpp"
 #include "ops/causal_softmax.hpp"
 #include "ops/embedding.hpp"
+#include "ops/inner.hpp"
 #include "ops/linear.hpp"
 #include "ops/masked_select.hpp"
 #include "ops/matmul.hpp"
@@ -27,6 +28,7 @@ inline void bind(py::module &m) {
     bind_attention(m);
     bind_cat(m);
     bind_causal_softmax(m);
+    bind_inner(m);
     bind_random_sample(m);
     bind_linear(m);
     bind_masked_select(m);

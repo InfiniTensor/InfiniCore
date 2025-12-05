@@ -7,7 +7,7 @@ namespace infinicore::op {
 namespace {
 
     void low_dim_copy(Tensor& tensor, int dim, Tensor& out, std::byte* tensor_ptr, std::byte* out_ptr, int depth) {
-        if (depth != out->ndim() - 1) {
+        if (depth != out->ndim()) {
             std::byte* now_tensor_ptr = tensor_ptr;
             std::byte* now_out_ptr = out_ptr;
             for (int i = 0; i < tensor->shape()[depth]; i ++) {
@@ -16,7 +16,7 @@ namespace {
                 now_out_ptr += out->stride(depth) * dsize(out->dtype());
             }
         } else {
-            Size data_size = tensor->shape()[depth] * dsize(out->dtype());
+            Size data_size = dsize(out->dtype());
             if (out->device().getType() == Device::Type::CPU)
                 std::memcpy(out_ptr, tensor_ptr, data_size);
             else

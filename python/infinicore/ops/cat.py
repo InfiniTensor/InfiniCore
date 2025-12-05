@@ -3,7 +3,6 @@ from infinicore.tensor import Tensor
 
 
 def cat(tensors, dim:int=0, out=None):
-    print(type(tensors))
     if out is None:
         return Tensor(_infinicore.cat([tensor._underlying for tensor in tensors], dim))
 

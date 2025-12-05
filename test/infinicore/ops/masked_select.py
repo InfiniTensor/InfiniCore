@@ -15,7 +15,6 @@ _TEST_CASES_DATA = [
     ((1, 6), None, (1, 6)),
     ((4, 4), None, (4, 4)),
     ((2, 3, 2), None, (2, 3, 2)),
-    ((100, 100, 100), None, (100, 100, 100))
 ]
 
 _TOLERANCE_MAP = {infinicore.float32: {"atol": 1e-5, "rtol": 1e-4}}

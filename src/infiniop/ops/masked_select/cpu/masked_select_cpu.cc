@@ -18,22 +18,24 @@ infiniStatus_t Descriptor::create(
 }
 
 namespace {
-    template <typename T>
-    infiniStatus_t maskedSelect(const MaskedSelectInfo *info, T *input, const bool *mask, void **data_ptr, size_t *dlen_ptr) {
-        std::vector<T> res;
-        for (size_t index = 0; index < info->total_elements; index ++) {
-            size_t input_offset = op::common_cpu::indexToOffset(index, info->ndim, info->shape.data(), info->input_strides.data());
-            size_t mask_offset = op::common_cpu::indexToOffset(index, info->ndim, info->shape.data(), info->mask_strides.data());
-            if (mask[mask_offset]) {
-                res.push_back(input[input_offset]);
-            }
+
+template<typename T>
+infiniStatus_t maskedSelect(const MaskedSelectInfo *info, const T *input, const bool *mask, void **data_ptr, size_t *dlen_ptr) {
+    std::vector<T> res;
+    for (size_t index = 0; index < info->total_elements; index ++) {
+        size_t input_offset = op::common_cpu::indexToOffset(index, info->ndim, info->shape.data(), info->input_strides.data());
+        size_t mask_offset = op::common_cpu::indexToOffset(index, info->ndim, info->shape.data(), info->mask_strides.data());
+        if (mask[mask_offset]) {
+            res.push_back(input[input_offset]);
         }
-        *dlen_ptr = res.size();
-        *data_ptr = new T[*dlen_ptr];
-        std::memcpy(*data_ptr, res.data(), sizeof(T) * (*dlen_ptr));
-    
-        return INFINI_STATUS_SUCCESS;
     }
+    *dlen_ptr = res.size();
+    *data_ptr = new T[*dlen_ptr];
+    std::memcpy(*data_ptr, res.data(), sizeof(T) * (*dlen_ptr));
+
+    return INFINI_STATUS_SUCCESS;
+}
+
 }
 
 infiniStatus_t Descriptor::calculate(
@@ -45,7 +47,7 @@ infiniStatus_t Descriptor::calculate(
     void *stream) const {
 
     if (_info.dtype == INFINI_DTYPE_F32) {
-        CHECK_STATUS(maskedSelect(&_info, (float*)input, (bool*)mask, data_ptr, dlen_ptr));
+        CHECK_STATUS(maskedSelect(&_info, (const float *)input, mask, data_ptr, dlen_ptr));
     } else {
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
