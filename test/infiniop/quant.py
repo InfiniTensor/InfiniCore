@@ -49,7 +49,7 @@ NUM_ITERATIONS = 1000
 
 
 def quant(w: torch.Tensor, symmetric: torch.bool):
-    if(symmetric):
+    if symmetric:
         w_absmax = torch.max(torch.abs(w), dim=1, keepdim=True)[0]
 
         # 避免除 0
@@ -108,19 +108,19 @@ def test(
         x_zero = None
     else:
         x_zero = TestTensor((M, 1), None, dtype, device)
-    
+
     if sync is not None:
         sync()
 
     descriptor = infiniopOperatorDescriptor_t()
     check_error(
         LIBINFINIOP.infiniopCreateQuantDescriptor(
-            handle, 
-            ctypes.byref(descriptor), 
-            x_packed.descriptor, 
-            x_scale.descriptor, 
+            handle,
+            ctypes.byref(descriptor),
+            x_packed.descriptor,
+            x_scale.descriptor,
             None if symmetric else x_zero.descriptor,
-            x.descriptor
+            x.descriptor,
         )
     )
 
@@ -157,8 +157,8 @@ def test(
 
     if sync is not None:
         sync()
-    
-    atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype) #quant算子cuda和python难以对齐
+
+    atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)  # quant算子cuda和python难以对齐
     if DEBUG:
         if symmetric:
             debug_all(
@@ -170,21 +170,28 @@ def test(
             )
         else:
             debug_all(
-                (x_packed.actual_tensor(), x_scale.actual_tensor(), x_zero.actual_tensor()),
+                (
+                    x_packed.actual_tensor(),
+                    x_scale.actual_tensor(),
+                    x_zero.actual_tensor(),
+                ),
                 (ans_packed, ans_scale, ans_zero),
                 "and",
                 atol=atol,
                 rtol=rtol,
             )
-    
+
     print(max(abs(x_packed.actual_tensor() - ans_packed).flatten()))
     if symmetric:
-        assert (torch.allclose(x_packed.actual_tensor(), ans_packed, atol=atol, rtol=rtol) 
-                and torch.allclose(x_scale.actual_tensor(), ans_scale, atol=atol, rtol=rtol) 
-                and torch.allclose(x_zero.actual_tensor(), ans_zero, atol=atol, rtol=rtol))
+        assert (
+            torch.allclose(x_packed.actual_tensor(), ans_packed, atol=atol, rtol=rtol)
+            and torch.allclose(x_scale.actual_tensor(), ans_scale, atol=atol, rtol=rtol)
+            and torch.allclose(x_zero.actual_tensor(), ans_zero, atol=atol, rtol=rtol)
+        )
     else:
-        assert (torch.allclose(x_packed.actual_tensor(), ans_packed, atol=atol, rtol=rtol) 
-                and torch.allclose(x_scale.actual_tensor(), ans_scale, atol=atol, rtol=rtol))
+        assert torch.allclose(
+            x_packed.actual_tensor(), ans_packed, atol=atol, rtol=rtol
+        ) and torch.allclose(x_scale.actual_tensor(), ans_scale, atol=atol, rtol=rtol)
 
     # Profiling workflow
     if PROFILE:

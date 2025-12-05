@@ -992,6 +992,7 @@ def linear_(lib):
         infiniopOperatorDescriptor_t,
     ]
 
+
 @OpRegister.operator
 def quant_(lib):
     lib.infiniopCreateQuantDescriptor.restype = c_int32

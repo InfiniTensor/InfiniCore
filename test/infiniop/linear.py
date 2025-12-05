@@ -32,6 +32,7 @@ _TEST_CASES_ = [
     ((256, 2048), (2048, 1024), False, (256, 1024), 1.5, 2.5),
 ]
 
+
 class Inplace(Enum):
     OUT_OF_PLACE = auto()
     INPLACE = auto()
@@ -66,8 +67,13 @@ NUM_ITERATIONS = 1000
 
 
 def linearFunction(c, bias, x, w, alpha, beta):
-    ans = alpha * torch.matmul(x.to(torch.float32), w.to(torch.float32)).to(x.dtype) + beta * c + bias
+    ans = (
+        alpha * torch.matmul(x.to(torch.float32), w.to(torch.float32)).to(x.dtype)
+        + beta * c
+        + bias
+    )
     return ans
+
 
 def quantWeights(w: torch.Tensor, symmetric, axis):
     """
@@ -141,7 +147,7 @@ def test(
     )
     M, K = x_shape
     N = w_shape[1]
-    bias = TestTensor((N, ), None, dtype, device)
+    bias = TestTensor((N,), None, dtype, device)
     x = TestTensor(x_shape, None, dtype, device)
     w = TestTensor(w_shape, None, dtype, device)
     y = TestTensor(y_shape, None, dtype, device)
@@ -149,9 +155,18 @@ def test(
         d = y
     else:
         d = TestTensor(y_shape, None, dtype, device)
-    ans = linearFunction(y.torch_tensor(), bias.torch_tensor(), x.torch_tensor(), w.torch_tensor(), alpha, beta)
+    ans = linearFunction(
+        y.torch_tensor(),
+        bias.torch_tensor(),
+        x.torch_tensor(),
+        w.torch_tensor(),
+        alpha,
+        beta,
+    )
     x_p, x_s, x_z = quantWeights(x.torch_tensor(), symmetric, 1)
-    x_packed = TestTensor(x_shape, None, InfiniDtype.I8, device, mode="manual", set_tensor=x_p)
+    x_packed = TestTensor(
+        x_shape, None, InfiniDtype.I8, device, mode="manual", set_tensor=x_p
+    )
     x_scale = TestTensor((M, 1), None, dtype, device, mode="manual", set_tensor=x_s)
     if symmetric:
         x_zero = None
@@ -159,32 +174,38 @@ def test(
         x_zero = TestTensor((M, 1), None, dtype, device, mode="manual", set_tensor=x_z)
 
     w_packed, w_scale, w_zero = quantWeights(w.torch_tensor(), symmetric, 0)
-    weights = TestTensor(w_shape, None, InfiniDtype.I8, device, mode="manual", set_tensor=w_packed)
-    weights_scale = TestTensor((1, N), None, dtype, device, mode="manual", set_tensor=w_scale)
+    weights = TestTensor(
+        w_shape, None, InfiniDtype.I8, device, mode="manual", set_tensor=w_packed
+    )
+    weights_scale = TestTensor(
+        (1, N), None, dtype, device, mode="manual", set_tensor=w_scale
+    )
     if symmetric:
         weights_zero = None
     else:
-        weights_zero = TestTensor((1, N), None, dtype, device, mode="manual", set_tensor=w_zero)
-    
+        weights_zero = TestTensor(
+            (1, N), None, dtype, device, mode="manual", set_tensor=w_zero
+        )
+
     if sync is not None:
         sync()
 
     descriptor = infiniopOperatorDescriptor_t()
     check_error(
         LIBINFINIOP.infiniopCreateLinearDescriptor(
-            handle, 
-            ctypes.byref(descriptor), 
-            d.descriptor, 
-            y.descriptor, 
-            bias.descriptor, 
-            x_packed.descriptor, 
-            x_scale.descriptor, 
+            handle,
+            ctypes.byref(descriptor),
+            d.descriptor,
+            y.descriptor,
+            bias.descriptor,
+            x_packed.descriptor,
+            x_scale.descriptor,
             None if symmetric else x_zero.descriptor,
-            weights.descriptor, 
-            weights_scale.descriptor, 
+            weights.descriptor,
+            weights_scale.descriptor,
             None if symmetric else weights_zero.descriptor,
-            alpha, 
-            beta
+            alpha,
+            beta,
         )
     )
 
@@ -233,12 +254,11 @@ def test(
 
     if sync is not None:
         sync()
-    
 
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:
         debug(d.actual_tensor(), ans, atol=atol, rtol=rtol)
-    
+
     assert torch.allclose(d.actual_tensor(), ans, atol=atol, rtol=rtol)
 
     # Profiling workflow

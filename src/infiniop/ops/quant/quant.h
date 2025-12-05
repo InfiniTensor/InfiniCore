@@ -34,7 +34,7 @@
         infiniStatus_t calculate(                                                            \
             void *workspace, size_t workspace_size,                                          \
             void *x_packed, void *x_scale, void *x_zero, const void *x, void *stream) const; \
-        };                                                                                       \
+    };                                                                                       \
     }
 
 #endif // __QUANT_H__
