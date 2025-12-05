@@ -6,9 +6,9 @@
 typedef struct InfiniopDescriptor *infiniopLogSoftmaxDescriptor_t;
 
 __C __export infiniStatus_t infiniopCreateLogSoftmaxDescriptor(infiniopHandle_t handle,
-                                                                  infiniopLogSoftmaxDescriptor_t *desc_ptr,
-                                                                  infiniopTensorDescriptor_t y_desc,
-                                                                  infiniopTensorDescriptor_t x_desc);
+                                                               infiniopLogSoftmaxDescriptor_t *desc_ptr,
+                                                               infiniopTensorDescriptor_t y_desc,
+                                                               infiniopTensorDescriptor_t x_desc);
 
 __C __export infiniStatus_t infiniopGetLogSoftmaxWorkspaceSize(infiniopLogSoftmaxDescriptor_t desc, size_t *size);
 

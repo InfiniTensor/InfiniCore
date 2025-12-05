@@ -270,6 +270,93 @@ def mul_(lib):
 
 
 @OpRegister.operator
+def paged_attention_(lib):
+    lib.infiniopCreatePagedAttentionDescriptor.restype = c_int32
+    lib.infiniopCreatePagedAttentionDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_void_p,
+        c_float,
+    ]
+
+    lib.infiniopGetPagedAttentionWorkspaceSize.restype = c_int32
+    lib.infiniopGetPagedAttentionWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopPagedAttention.restype = c_int32
+    lib.infiniopPagedAttention.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyPagedAttentionDescriptor.restype = c_int32
+    lib.infiniopDestroyPagedAttentionDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+# File: python/infinicore/op_register.py (or similar)
+
+
+@OpRegister.operator
+def paged_caching_(lib):
+    lib.infiniopCreatePagedCachingDescriptor.restype = c_int32
+    lib.infiniopCreatePagedCachingDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,  # k_desc
+        infiniopTensorDescriptor_t,  # v_desc
+        infiniopTensorDescriptor_t,  # k_cache_desc
+        infiniopTensorDescriptor_t,  # v_cache_desc
+        infiniopTensorDescriptor_t,  # slot_mapping_desc
+    ]
+
+    # infiniopGetPagedCachingWorkspaceSize
+    lib.infiniopGetPagedCachingWorkspaceSize.restype = c_int32
+    lib.infiniopGetPagedCachingWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    # infiniopPagedCaching
+    lib.infiniopPagedCaching.restype = c_int32
+    lib.infiniopPagedCaching.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,  # workspace
+        c_size_t,  # workspace_size
+        c_void_p,  # k
+        c_void_p,  # v
+        c_void_p,  # k_cache
+        c_void_p,  # v_cache
+        c_void_p,  # slot_mapping
+        c_void_p,  # stream
+    ]
+
+    # infiniopDestroyPagedCachingDescriptor
+    lib.infiniopDestroyPagedCachingDescriptor.restype = c_int32
+    lib.infiniopDestroyPagedCachingDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def random_sample_(lib):
     lib.infiniopCreateRandomSampleDescriptor.restype = c_int32
     lib.infiniopCreateRandomSampleDescriptor.argtypes = [
