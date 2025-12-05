@@ -112,9 +112,13 @@ void RoPE::initialize_cache() {
     }
 }
 
-Tensor RoPE::forward(const Tensor &x, const Tensor &pos) const {
-    // Delegate to InfiniCore op (backed by InfiniRT/InfiniOP)
-    // Validation is handled by the op layer
+Tensor RoPE::forward(const Tensor &x, const Tensor &pos, bool in_place) const {
+    if (in_place) {
+        Tensor y = Tensor(x);
+        op::rope_(y, x, pos, sin_cache_, cos_cache_, algo_);
+        return y;
+    }
+
     return op::rope(x, pos, sin_cache_, cos_cache_, algo_);
 }
 
