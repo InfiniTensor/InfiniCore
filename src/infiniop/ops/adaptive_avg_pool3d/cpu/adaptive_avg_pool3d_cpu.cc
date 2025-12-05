@@ -1,6 +1,6 @@
 #include "adaptive_avg_pool3d_cpu.h"
 #include "../../../devices/cpu/common_cpu.h"
-
+#include<array>
 namespace op::adaptive_avg_pool3d::cpu {
 Descriptor::~Descriptor() = default;
 
@@ -32,11 +32,11 @@ infiniStatus_t calculateAdaptiveAvgPool3D(
     Tdata *y,
     const Tdata *x) {
     std::array<size_t, 5> y_strides;
-    y_strides[4] = 1;
-    y_strides[3] = info.y_w * y_strides[4];
-    y_strides[2] = info.y_h * y_strides[3];
-    y_strides[1] = info.y_d * y_strides[2];
-    y_strides[0] = info.C * y_strides[1];
+    y_strides[size_t(4)] = 1;
+    y_strides[size_t(3)] = info.y_w * y_strides[size_t(4)];
+    y_strides[size_t(2)] = info.y_h * y_strides[size_t(3)];
+    y_strides[size_t(1)] = info.y_d * y_strides[size_t(2)];
+    y_strides[size_t(0)] = info.C * y_strides[size_t(1)];
     {
 #pragma omp for collapse(5)
         for (ptrdiff_t n = 0; n < ptrdiff_t(info.N); n++) {
