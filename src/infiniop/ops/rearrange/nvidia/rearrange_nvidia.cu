@@ -30,7 +30,7 @@ infiniStatus_t Descriptor::create(
 
     CHECK_OR_RETURN(x_desc->dtype() == dtype, INFINI_STATUS_BAD_TENSOR_DTYPE);
     CHECK_OR_RETURN(x_desc->ndim() == ndim, INFINI_STATUS_BAD_TENSOR_SHAPE);
-    // 保存临时vector对象
+
     auto x_shape = x_desc->shape();
     auto y_shape = y_desc->shape();
     auto y_strides = y_desc->strides();
@@ -54,315 +54,144 @@ infiniStatus_t Descriptor::create(
     return INFINI_STATUS_SUCCESS;
 }
 
-// 维度信息结构
-struct Dim {
-    size_t len;
-    ARRAY_TYPE_STRIDE src_stride;
-    ARRAY_TYPE_STRIDE dst_stride;
-};
-
-// 分割维度结构
-struct SplitDim {
-    size_t choose_idx;
-    size_t num_per_block;
-    size_t num_per_grid;
-    int array_struct_idx_block;
-    int array_struct_idx_grid;
-    size_t dim_len;
-};
-
-/**
- * 根据给定的元数据准备张量重排参数，该函数主要完成以下工作：
- * 1. 根据原始元数据调整单元大小，获取更适合GPU处理的单元大小
- * 2. 将维度分配为CUDA块（block）维度和网格（grid）维度：
- *    该步骤是核心，目标是为每个block分配尽可能多的相对连续的数据进行处理，
- *    对无法完整放入块的维度进行分割，并记录分割维度信息，用于防止kernel访问越界，最大化内存访问局部性和计算效率
- */
-utils::Result<RearrangeParams> prepareRearrangeParams(const utils::RearrangeMeta &original_meta, int max_threads) {
+// 简化的参数准备函数
+utils::Result<RearrangeParams> prepareRearrangeParams(const utils::RearrangeMeta &meta) {
     RearrangeParams params;
 
-    // Get unit size optimized for GPU processing
-    auto meta_result = original_meta.distributeUnit({32, 16, 8, 4, 2, 1});
-    CHECK_RESULT(meta_result);
-    const utils::RearrangeMeta &meta = meta_result.take();
+    // 直接从RearrangeMeta获取参数
+    params.count = meta.count();
+    params.unit = meta.unit();
+    params.ndim = meta.ndim();
+    params.unit_size = meta.unit(); // 原始unit大小
 
-    // Get dimension information
-    const size_t ndim = meta.ndim();
-    const size_t unit = meta.unit();
-
-    // Special case: no dimensions, simple copy
-    if (ndim == 0) {
-        params.block_dim = 0;
-        params.block_len_total = 1;
-        params.block_len = {static_cast<ARRAY_TYPE_SIZE>(1)};
-        params.src_block_stride = {static_cast<ARRAY_TYPE_STRIDE>(0)};
-        params.dst_block_stride = {static_cast<ARRAY_TYPE_STRIDE>(0)};
-        params.grid_len = {static_cast<ARRAY_TYPE_SIZE>(1)};
-        params.src_grid_stride = {static_cast<ARRAY_TYPE_STRIDE>(0)};
-        params.dst_grid_stride = {static_cast<ARRAY_TYPE_STRIDE>(0)};
-        params.unit_size = unit;
-        return utils::Result<RearrangeParams>(params);
-    }
-
-    // Extract necessary information from metadata
+    // 拷贝步长信息
     const ptrdiff_t *idx_strides = meta.idx_strides();
     const ptrdiff_t *dst_strides = meta.dst_strides();
     const ptrdiff_t *src_strides = meta.src_strides();
 
-    // Prepare dimension information
-    std::vector<Dim> dims;
-    std::vector<size_t> shape;
-    dims.reserve(ndim);
-    shape.reserve(ndim);
-
-    auto prev_idx_stride = meta.count();
-    for (size_t i = 0; i < ndim; ++i) {
-        size_t len = prev_idx_stride / idx_strides[i];
-        shape.push_back(len);
-        dims.push_back({len, src_strides[i], dst_strides[i]});
-        prev_idx_stride = idx_strides[i];
-    }
-
-    // Create dimension mapping based on stride patterns
-    // We need to find which dimensions are "contiguous" in memory access pattern
-    std::vector<bool> block_dim_choose(ndim, false);
-    std::vector<SplitDim> split_dims;
-
-    // Calculate total elements and bytes accessed per element
-    size_t total_elements = 1;
-    for (size_t i = 0; i < ndim; ++i) {
-        total_elements *= shape[i];
-    }
-
-    // Simple heuristic: put as many dimensions as possible in block
-    // while keeping total block elements <= max_threads
-    size_t block_elements = 1;
-
-    // Sort dimensions by increasing stride magnitude (most contiguous first)
-    std::vector<size_t> dim_order(ndim);
-    for (size_t i = 0; i < ndim; ++i) {
-        dim_order[i] = i;
-    }
-
-    // Sort by stride magnitude (ascending) - this puts contiguous dimensions first
-    std::sort(dim_order.begin(), dim_order.end(),
-              [&dims](size_t a, size_t b) {
-                  return std::abs(dims[a].src_stride) < std::abs(dims[b].src_stride);
-              });
-
-    // Try to pack dimensions into block
-    for (size_t i = 0; i < ndim; ++i) {
-        size_t dim_idx = dim_order[i];
-        size_t dim_len = shape[dim_idx];
-
-        if (block_elements * dim_len <= (size_t)max_threads) {
-            block_dim_choose[dim_idx] = true;
-            block_elements *= dim_len;
-        } else if (block_elements > 1 && dim_len > 1) {
-            // Need to split this dimension
-            size_t num_per_block = std::min(dim_len, (size_t)max_threads / block_elements);
-            if (num_per_block > 0) {
-                size_t num_per_grid = (dim_len + num_per_block - 1) / num_per_block;
-
-                SplitDim split_dim = {
-                    dim_idx,       // choose_idx
-                    num_per_block, // num_per_block
-                    num_per_grid,  // num_per_grid
-                    0,             // array_struct_idx_block (to be updated)
-                    0,             // array_struct_idx_grid (to be updated)
-                    dim_len        // original dimension length
-                };
-                split_dims.push_back(split_dim);
-                block_elements *= num_per_block;
-            }
-            break;
-        }
-    }
-
-    // If we couldn't put anything in block, force at least one dimension
-    if (block_elements == 1 && ndim > 0) {
-        size_t dim_idx = dim_order[0];
-        size_t dim_len = shape[dim_idx];
-
-        if (dim_len <= (size_t)max_threads) {
-            block_dim_choose[dim_idx] = true;
-            block_elements = dim_len;
-        } else {
-            // Split the first dimension
-            size_t num_per_block = std::min(dim_len, (size_t)max_threads);
-            size_t num_per_grid = (dim_len + num_per_block - 1) / num_per_block;
-
-            SplitDim split_dim = {
-                dim_idx,
-                num_per_block,
-                num_per_grid,
-                0,
-                0,
-                dim_len};
-            split_dims.push_back(split_dim);
-            block_elements = num_per_block;
-        }
-    }
-
-    // Prepare block dimension parameters
-    size_t block_dim = 0;
-    size_t block_len_total = block_elements;
-
-    std::vector<ARRAY_TYPE_SIZE> block_len;
-    std::vector<ARRAY_TYPE_STRIDE> src_block_stride;
-    std::vector<ARRAY_TYPE_STRIDE> dst_block_stride;
-
-    std::vector<ARRAY_TYPE_SIZE> grid_len;
-    std::vector<ARRAY_TYPE_STRIDE> src_grid_stride;
-    std::vector<ARRAY_TYPE_STRIDE> dst_grid_stride;
-
-    // Process block dimensions
-    for (size_t i = 0; i < ndim; ++i) {
-        if (block_dim_choose[i]) {
-            block_len.push_back(shape[i]);
-            src_block_stride.push_back(dims[i].src_stride);
-            dst_block_stride.push_back(dims[i].dst_stride);
-            block_dim += 1;
-        }
-
-        // Process split dimensions - block part
-        for (size_t j = 0; j < split_dims.size(); ++j) {
-            if (i == split_dims[j].choose_idx) {
-                block_len.push_back(split_dims[j].num_per_block);
-                src_block_stride.push_back(dims[i].src_stride);
-                dst_block_stride.push_back(dims[i].dst_stride);
-                split_dims[j].array_struct_idx_block = static_cast<int>(block_dim);
-                block_dim += 1;
-            }
-        }
-    }
-
-    // Process grid dimensions
-    for (size_t i = 0; i < ndim; ++i) {
-        if (!block_dim_choose[i]) {
-            bool is_split = false;
-
-            // Check if this is a split dimension
-            for (size_t j = 0; j < split_dims.size(); ++j) {
-                if (i == split_dims[j].choose_idx) {
-                    is_split = true;
-                    grid_len.push_back(split_dims[j].num_per_grid);
-                    src_grid_stride.push_back(dims[i].src_stride * split_dims[j].num_per_block);
-                    dst_grid_stride.push_back(dims[i].dst_stride * split_dims[j].num_per_block);
-                    split_dims[j].array_struct_idx_grid = static_cast<int>(grid_len.size() - 1);
-                    break;
-                }
-            }
-
-            // If not split, use whole dimension as grid dimension
-            if (!is_split) {
-                grid_len.push_back(shape[i]);
-                src_grid_stride.push_back(dims[i].src_stride);
-                dst_grid_stride.push_back(dims[i].dst_stride);
-            }
-        }
-    }
-
-    // If grid_len is empty, add a default value
-    if (grid_len.empty()) {
-        grid_len.push_back(1);
-        src_grid_stride.push_back(0);
-        dst_grid_stride.push_back(0);
-    }
-
-    // Handle constraints - similar to Rust version
-    std::vector<Constraint<ARRAY_TYPE_SIZE>> constraints;
-
-    // Limit to processing at most 2 constraints
-    for (size_t i = 0; i < split_dims.size(); ++i) {
-        if (split_dims[i].dim_len % split_dims[i].num_per_block == 0) {
-            continue;
-        }
-        Constraint<ARRAY_TYPE_SIZE> constraint;
-        constraint.grid_idx = split_dims[i].array_struct_idx_grid;
-        constraint.block_idx = split_dims[i].array_struct_idx_block;
-        constraint.grid_div_block = split_dims[i].num_per_block;
-        constraint.total_len = split_dims[i].dim_len;
-        constraints.push_back(constraint);
-
-        // Limit to 2 constraints
-        if (constraints.size() >= 2) {
-            break;
-        }
-    }
-
-    // Set parameters
-    params.block_dim = block_dim;
-    params.block_len_total = block_len_total;
-    params.block_len = block_len;
-    params.src_block_stride = src_block_stride;
-    params.dst_block_stride = dst_block_stride;
-    params.grid_len = grid_len;
-    params.src_grid_stride = src_grid_stride;
-    params.dst_grid_stride = dst_grid_stride;
-    params.constraints = constraints;
-    params.unit_size = unit;
+    params.idx_strides.assign(idx_strides, idx_strides + params.ndim);
+    params.dst_strides.assign(dst_strides, dst_strides + params.ndim);
+    params.src_strides.assign(src_strides, src_strides + params.ndim);
 
     return utils::Result<RearrangeParams>(params);
 }
 
-// 带约束的内核启动模板函数
-template <unsigned int BLOCK_SIZE>
+// 简化的kernel启动函数
 infiniStatus_t launchKernel(
     void *y,
     const void *x,
-    size_t grid_size,
     const RearrangeParams &params,
-    size_t unit_size,
     cudaStream_t stream) {
 
-    // 获取内核函数
-    RearrangeParams params_copy = params; // 创建一个非const副本
-    auto kernel_func_result = getRearrangeKernel(params_copy);
-
+    // 获取kernel函数
+    auto kernel_func_result = getRearrangeKernel(params);
     CHECK_RESULT(kernel_func_result);
     auto kernel_func = kernel_func_result.take();
 
-    // 创建非const的临时变量
-    size_t block_dim = params.block_dim;
-    size_t block_len_total = params.block_len_total;
-
-    // 检查向量尺寸是否合理
-    if (params.block_len.size() < block_dim || params.src_block_stride.size() < block_dim || params.dst_block_stride.size() < block_dim) {
+    if (!kernel_func) {
         return INFINI_STATUS_BAD_PARAM;
     }
 
-    if (params.grid_len.empty() || params.src_grid_stride.empty() || params.dst_grid_stride.empty()) {
-        return INFINI_STATUS_BAD_PARAM;
+    // 计算grid和block大小
+    const size_t block_size = 256; // 固定block大小，可根据设备调整
+    const size_t grid_size = (params.count + block_size - 1) / block_size;
+
+    if (grid_size == 0) {
+        return INFINI_STATUS_SUCCESS; // 没有数据需要处理
     }
 
-    const Constraint<ARRAY_TYPE_SIZE> *constraints_data;
-    auto empty_constraints = Constraint<ARRAY_TYPE_SIZE>();
-    if (params.constraints.empty()) {
-        constraints_data = &empty_constraints;
-    } else {
-        constraints_data = params.constraints.data();
+    // 准备kernel参数 - 需要显式转换为void*
+    size_t count = params.count;
+    size_t unit = params.unit;
+    size_t ndim = params.ndim;
+
+    // 为步长数组创建设备内存拷贝
+    ptrdiff_t *d_idx_strides = nullptr;
+    ptrdiff_t *d_dst_strides = nullptr;
+    ptrdiff_t *d_src_strides = nullptr;
+
+    cudaError_t err;
+
+    // 分配设备内存并拷贝步长数组
+    if (ndim > 0) {
+        err = cudaMalloc(&d_idx_strides, ndim * sizeof(ptrdiff_t));
+        if (err != cudaSuccess) {
+            return INFINI_STATUS_INTERNAL_ERROR;
+        }
+
+        err = cudaMalloc(&d_dst_strides, ndim * sizeof(ptrdiff_t));
+        if (err != cudaSuccess) {
+            cudaFree(d_idx_strides);
+            return INFINI_STATUS_INTERNAL_ERROR;
+        }
+
+        err = cudaMalloc(&d_src_strides, ndim * sizeof(ptrdiff_t));
+        if (err != cudaSuccess) {
+            cudaFree(d_idx_strides);
+            cudaFree(d_dst_strides);
+            return INFINI_STATUS_INTERNAL_ERROR;
+        }
+
+        // 拷贝数据到设备
+        err = cudaMemcpyAsync(d_idx_strides, params.idx_strides.data(),
+                              ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, stream);
+        if (err != cudaSuccess) {
+            cudaFree(d_idx_strides);
+            cudaFree(d_dst_strides);
+            cudaFree(d_src_strides);
+            return INFINI_STATUS_INTERNAL_ERROR;
+        }
+
+        err = cudaMemcpyAsync(d_dst_strides, params.dst_strides.data(),
+                              ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, stream);
+        if (err != cudaSuccess) {
+            cudaFree(d_idx_strides);
+            cudaFree(d_dst_strides);
+            cudaFree(d_src_strides);
+            return INFINI_STATUS_INTERNAL_ERROR;
+        }
+
+        err = cudaMemcpyAsync(d_src_strides, params.src_strides.data(),
+                              ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, stream);
+        if (err != cudaSuccess) {
+            cudaFree(d_idx_strides);
+            cudaFree(d_dst_strides);
+            cudaFree(d_src_strides);
+            return INFINI_STATUS_INTERNAL_ERROR;
+        }
     }
 
-    void *args[]
-        = {
-            &y, &x,
-            &block_dim,
-            &block_len_total,
-            const_cast<void *>(static_cast<const void *>(params.block_len.data())),
-            const_cast<void *>(static_cast<const void *>(params.src_block_stride.data())),
-            const_cast<void *>(static_cast<const void *>(params.dst_block_stride.data())),
-            const_cast<void *>(static_cast<const void *>(params.grid_len.data())),
-            const_cast<void *>(static_cast<const void *>(params.src_grid_stride.data())),
-            const_cast<void *>(static_cast<const void *>(params.dst_grid_stride.data())),
-            const_cast<void *>(static_cast<const void *>(constraints_data))};
+    // 准备kernel参数
+    void *args[] = {
+        &y,
+        &x,
+        &count,
+        &unit,
+        &ndim,
+        &d_idx_strides,
+        &d_dst_strides,
+        &d_src_strides};
 
-    CHECK_OR_RETURN(cudaLaunchKernel(
-                        kernel_func,
-                        static_cast<unsigned int>(grid_size), static_cast<unsigned int>(BLOCK_SIZE),
-                        args, 0, stream)
-                        == cudaSuccess,
-                    INFINI_STATUS_INTERNAL_ERROR);
+    // 启动kernel
+    err = cudaLaunchKernel(
+        kernel_func,
+        grid_size, block_size,
+        args, 0, stream);
+
+    // 异步释放设备内存（在stream完成后）
+    if (d_idx_strides) {
+        cudaFreeAsync(d_idx_strides, stream);
+    }
+    if (d_dst_strides) {
+        cudaFreeAsync(d_dst_strides, stream);
+    }
+    if (d_src_strides) {
+        cudaFreeAsync(d_src_strides, stream);
+    }
+
+    if (err != cudaSuccess) {
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
 
     return INFINI_STATUS_SUCCESS;
 }
@@ -374,51 +203,22 @@ infiniStatus_t Descriptor::calculate(
 
     auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
 
-    // 如果没有维度，直接进行内存拷贝
-    if (_meta.ndim() == 0) {
+    // 特殊情况：无维度，直接拷贝
+    if (_meta.ndim() == 0 || _meta.count() == 1) {
         auto err = cudaMemcpyAsync(y, x, _meta.unit(), cudaMemcpyDeviceToDevice, cuda_stream);
         if (err != cudaSuccess) {
             return INFINI_STATUS_INTERNAL_ERROR;
         }
-
-        CHECK_OR_RETURN(cudaMemcpyAsync(y, x, _meta.unit(), cudaMemcpyDeviceToDevice, cuda_stream) == cudaSuccess,
-                        INFINI_STATUS_INTERNAL_ERROR);
         return INFINI_STATUS_SUCCESS;
     }
 
-    // 获取设备属性
-    int max_threads = _opaque->internal->maxThreadsPerBlock();
-
     // 准备参数
-    auto params_result = prepareRearrangeParams(_meta, std::min(CUDA_BLOCK_SIZE_1024, max_threads));
+    auto params_result = prepareRearrangeParams(_meta);
     CHECK_RESULT(params_result);
     auto params = params_result.take();
 
-    // 计算grid大小
-    size_t grid_size = 1;
-    for (size_t i = 0; i < params.grid_len.size(); ++i) {
-        grid_size *= params.grid_len[i];
-    }
-
-    // 检查grid大小是否为0
-    if (grid_size == 0) {
-        return INFINI_STATUS_BAD_PARAM;
-    }
-
-    // 根据设备属性选择合适的内核
-    infiniStatus_t status = INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
-
-    size_t block_size = params.block_len_total;
-
-    if (block_size <= CUDA_BLOCK_SIZE_512) {
-        status = launchKernel<CUDA_BLOCK_SIZE_512>(y, x, grid_size, params, _meta.unit(), cuda_stream);
-    } else if (block_size <= CUDA_BLOCK_SIZE_1024) {
-        status = launchKernel<CUDA_BLOCK_SIZE_1024>(y, x, grid_size, params, _meta.unit(), cuda_stream);
-    } else {
-        return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
-    }
-
-    return status;
+    // 启动kernel
+    return launchKernel(y, x, params, cuda_stream);
 }
 
 } // namespace op::rearrange::nvidia
