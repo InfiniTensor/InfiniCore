@@ -1,4 +1,5 @@
 #include "infinicore/ops/add.hpp"
+#include "../../utils.hpp"
 
 namespace infinicore::op {
 
@@ -8,7 +9,9 @@ common::OpDispatcher<Add::schema> &Add::dispatcher() {
 };
 
 void Add::execute(Tensor c, Tensor a, Tensor b) {
-    dispatcher().lookup(context::getDevice().getType())(c, a, b);
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(c, a, b);
+    infinicore::context::setDevice(c->device());
+    dispatcher().lookup(c->device().getType())(c, a, b);
 }
 
 Tensor add(Tensor a, Tensor b) {

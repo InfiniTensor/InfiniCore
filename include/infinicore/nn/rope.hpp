@@ -1,8 +1,8 @@
 #pragma once
 
-#include "module.hpp"
 #include "../context/context.hpp"
 #include "../tensor.hpp"
+#include "module.hpp"
 #include <memory>
 
 namespace infinicore::nn {
@@ -39,6 +39,7 @@ public:
      *
      * @param x Input tensor of shape (..., head_dim) where ... is any number of dimensions
      * @param pos Position IDs tensor of shape (*,) typically [seq_len] or [batch, seq_len]
+     * @param in_place If true, modify input tensor in place (default: false)
      * @return Rotated tensor with same shape as input
      *
      * Applies rotary position embeddings to the input tensor.
@@ -49,7 +50,7 @@ public:
      *   - [batch, seq_len, num_heads, head_dim]
      *   - [seq_len, head_dim]
      */
-    Tensor forward(const Tensor &x, const Tensor &pos) const;
+    Tensor forward(const Tensor &x, const Tensor &pos, bool in_place = false) const;
 
     // Module information
     size_t head_dim() const { return head_dim_; }
@@ -69,11 +70,11 @@ protected:
 private:
     void initialize_cache();
 
-    size_t head_dim_;      // Dimension of each attention head
-    size_t max_seq_len_;   // Maximum sequence length
-    double theta_;         // Base frequency for rotary embeddings
-    Algo algo_;            // RoPE algorithm type
-    DataType dtype_;       // Data type for cache tables
+    size_t head_dim_;    // Dimension of each attention head
+    size_t max_seq_len_; // Maximum sequence length
+    double theta_;       // Base frequency for rotary embeddings
+    Algo algo_;          // RoPE algorithm type
+    DataType dtype_;     // Data type for cache tables
 };
 
 } // namespace infinicore::nn

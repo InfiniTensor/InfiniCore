@@ -78,6 +78,7 @@ protected:
     std::unordered_map<std::string, Parameter> parameters_;
 
 private:
+    void load_state_dict_recursively(const std::unordered_map<std::string, Tensor> &_state_dict, const std::string &prefix = "");
     void collect_all_parameters(std::unordered_map<std::string, Parameter> &all_params, const std::string &prefix = "") const;
 };
 

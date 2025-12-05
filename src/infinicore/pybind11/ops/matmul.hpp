@@ -13,6 +13,7 @@ inline void bind_matmul(py::module &m) {
           &op::matmul,
           py::arg("a"),
           py::arg("b"),
+          py::arg("alpha") = 1.0f,
           R"doc(Matrix multiplication of two tensors.)doc");
 
     m.def("matmul_",
@@ -20,6 +21,7 @@ inline void bind_matmul(py::module &m) {
           py::arg("c"),
           py::arg("a"),
           py::arg("b"),
+          py::arg("alpha") = 1.0f,
           R"doc(In-place matrix multiplication.)doc");
 }
 

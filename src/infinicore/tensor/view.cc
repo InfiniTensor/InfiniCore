@@ -5,6 +5,21 @@
 #include <spdlog/spdlog.h>
 
 namespace infinicore {
+Tensor TensorImpl::unsqueeze(size_t dim) const {
+    // Create new shape with dimension of size one inserted at dim
+    Shape new_shape = meta_.shape;
+    new_shape.insert(new_shape.begin() + dim, 1);
+
+    // Create new strides with stride of zero for the new dimension
+    Strides new_strides = meta_.strides;
+    new_strides.insert(new_strides.begin() + dim, 0);
+
+    auto tensor_impl = std::make_shared<TensorImpl>(new_shape, new_strides, meta_.dtype);
+    tensor_impl->data_ = data_;
+
+    return Tensor(tensor_impl);
+}
+
 Tensor TensorImpl::narrow(const std::vector<TensorSliceParams> &slices) const {
     // Create new shape and calculate offset
     Shape new_shape = meta_.shape;
@@ -95,12 +110,16 @@ Tensor TensorImpl::view(const Shape &new_shape) const {
     for (size_t i = 0; i < new_shape.size(); ++i) {
         // Find which merged dimension contains this new dimension
         while (new_shape[i] > remaining_size) {
-            assert(++merged_idx < merged_shape.size());
+            if (++merged_idx >= merged_shape.size()) {
+                throw std::runtime_error("Incompatible shape for view operation.");
+            }
             current_stride = merged_strides[merged_idx];
             remaining_size = merged_shape[merged_idx];
         }
 
-        assert(remaining_size % new_shape[i] == 0);
+        if (remaining_size % new_shape[i] != 0) {
+            throw std::runtime_error("Incompatible shape for view operation.");
+        };
 
         new_strides[i] = current_stride * (remaining_size / new_shape[i]);
         remaining_size /= new_shape[i];

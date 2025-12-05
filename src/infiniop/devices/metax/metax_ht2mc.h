@@ -70,4 +70,19 @@
 #define HCBLAS_GEMM_DEFAULT_TENSOR_OP MCBLAS_GEMM_DEFAULT_TENSOR_OP
 #define hcblasGemmStridedBatchedEx mcblasGemmStridedBatchedEx
 #define hcLaunchKernel mcLaunchKernel
+#define hcclDataType_t mcclDataType_t
+#define hcclRedOp_t mcclRedOp_t
+#define hcclComm_t mcclComm_t
+#define hcclFloat mcclFloat
+#define hcclHalf mcclHalf
+#define hcclBfloat16 mcclBfloat16
+#define hcclSum mcclSum
+#define hcclProd mcclProd
+#define hcclMax mcclMax
+#define hcclMin mcclMin
+#define hcclAvg mcclAvg
+#define hcclCommInitAll mcclCommInitAll
+#define hcclSuccess mcclSuccess
+#define hcclCommDestroy mcclCommDestroy
+#define hcclAllReduce mcclAllReduce
 #endif

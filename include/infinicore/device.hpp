@@ -39,6 +39,10 @@ public:
 
     bool operator!=(const Device &other) const;
 
+    inline static Device cpu() {
+        return Device(Type::CPU, 0);
+    }
+
 private:
     Type type_;
 

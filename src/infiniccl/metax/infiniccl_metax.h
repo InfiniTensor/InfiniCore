@@ -1,6 +1,7 @@
 #ifndef INFINICCL_METAX_H_
 #define INFINICCL_METAX_H_
 
+#include "../../infiniop/devices/metax/metax_ht2mc.h"
 #include "../infiniccl_impl.h"
 
 #if defined(ENABLE_METAX_API) && defined(ENABLE_CCL)
