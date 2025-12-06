@@ -90,18 +90,18 @@ TestResult NNModuleTest::testBasicModuleCreation() {
             auto new_weight = infinicore::Tensor::ones({4, 8}, infinicore::DataType::F32, infinicore::Device());
             auto new_bias = infinicore::Tensor::zeros({4}, infinicore::DataType::F32, infinicore::Device());
 
-            // Load using load_parameter
-            module.load_parameter("weight", new_weight);
-            module.load_parameter("bias", new_bias);
+            // Load using load_parameter_
+            module.load_parameter_("weight", new_weight);
+            module.load_parameter_("bias", new_bias);
 
             // Verify the parameters were updated
             auto updated_state_dict = module.state_dict();
             if (!tensorsAllClose(updated_state_dict.at("weight"), new_weight, 1e-6, 1e-6)) {
-                spdlog::error("Weight parameter values do not match after load_parameter");
+                spdlog::error("Weight parameter values do not match after load_parameter_");
                 return false;
             }
             if (!tensorsAllClose(updated_state_dict.at("bias"), new_bias, 1e-6, 1e-6)) {
-                spdlog::error("Bias parameter values do not match after load_parameter");
+                spdlog::error("Bias parameter values do not match after load_parameter_");
                 return false;
             }
 
@@ -1493,14 +1493,14 @@ TestResult NNModuleTest::testDtypeAssertion() {
             linear1.load_state_dict(matching_state);
             spdlog::debug("✓ Matching dtype load succeeded");
 
-            // Test 2: Failed load with mismatched dtype (load_parameter)
-            spdlog::info("Test 2: Failed load_parameter with mismatched dtype");
+            // Test 2: Failed load with mismatched dtype (load_parameter_)
+            spdlog::info("Test 2: Failed load_parameter_ with mismatched dtype");
             infinicore::nn::Linear linear2(8, 4, true);
             auto mismatched_weight = infinicore::Tensor::ones({4, 8}, infinicore::DataType::BF16, infinicore::Device());
 
             bool exception_thrown = false;
             try {
-                linear2.load_parameter("weight", mismatched_weight);
+                linear2.load_parameter_("weight", mismatched_weight);
             } catch (const std::runtime_error &e) {
                 exception_thrown = true;
                 std::string error_msg = e.what();
@@ -1512,7 +1512,7 @@ TestResult NNModuleTest::testDtypeAssertion() {
             }
 
             if (!exception_thrown) {
-                spdlog::error("Expected exception for dtype mismatch in load_parameter");
+                spdlog::error("Expected exception for dtype mismatch in load_parameter_");
                 return false;
             }
 

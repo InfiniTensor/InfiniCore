@@ -1,11 +1,12 @@
 #pragma once
 
-#include "parameter.hpp"
 #include "../tensor.hpp"
+#include "parameter.hpp"
 
-#include <unordered_map>
 #include <type_traits>
+#include <unordered_map>
 #include <vector>
+#include <spdlog/spdlog.h>
 
 namespace infinicore::nn {
 class Module {
@@ -17,6 +18,8 @@ public:
     void load_state_dict(const std::unordered_map<std::string, Tensor> &_state_dict);
 
     void load_parameter(const std::string &name, const Tensor &param);
+
+    void load_parameter_(const std::string &name, const Tensor &param);
 
     void load_parameter_from_blob(const std::string &name, const void *data);
 
@@ -135,7 +138,7 @@ private:
 // Usage: INFINICORE_NN_PARAMETER_INIT(name, (shape, dtype, device))
 // Example: INFINICORE_NN_PARAMETER_INIT(weight, ({out_features, in_features}, DataType::F32, device))
 #define INFINICORE_NN_PARAMETER_INIT(name, args) \
-    name##_ = infinicore::nn::Parameter args; \
+    name##_ = infinicore::nn::Parameter args;    \
     this->register_parameter(#name, name##_)
 
 // Declare a buffer member variable
