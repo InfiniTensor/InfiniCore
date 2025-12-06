@@ -26,9 +26,11 @@ Tensor bilinear(Tensor x1, Tensor x2, Tensor weight, std::optional<Tensor> bias)
 
     Tensor intermediate_3d = intermediate->view({batch_size, out_features, in2_features});
 
-    Tensor x2_col = x2_cont->view({batch_size, in2_features, 1});
+    Tensor intermediate_3d_trans = intermediate_3d->permute({0, 2, 1})->contiguous();
 
-    Tensor out_3d = matmul(intermediate_3d, x2_col, 1.0f);
+    Tensor x2_row = x2_cont->view({batch_size, 1, in2_features});
+
+    Tensor out_3d = matmul(x2_row, intermediate_3d_trans, 1.0f);
     Tensor out = out_3d->view({batch_size, out_features});
 
     if (bias) {
