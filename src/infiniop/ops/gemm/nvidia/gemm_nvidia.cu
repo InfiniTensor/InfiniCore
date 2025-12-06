@@ -116,6 +116,9 @@ infiniStatus_t Descriptor::calculate(
                     CUBLAS_GEMM_DEFAULT_TENSOR_OP));
             return INFINI_STATUS_SUCCESS;
         }));
+
+    cudaDeviceSynchronize();
+
     return INFINI_STATUS_SUCCESS;
 }
 
