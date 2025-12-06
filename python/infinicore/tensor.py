@@ -42,6 +42,9 @@ class Tensor:
                     getattr(self._underlying, name)
                 ),
             )
+        else:
+            raise KeyError(f"Tensor does not support '{name}' attribute.")
+
         return getattr(self, name)
 
     @property
@@ -116,8 +119,8 @@ class Tensor:
     def __mul__(self, other):
         return infinicore.mul(self, other)
 
-    def narrow(self, dim, start, length):
-        return infinicore.narrow(self, dim, start, length)
+    def narrow(self, dim: int, start: int, length: int):
+        return Tensor(self._underlying.narrow(dim, start, length))
 
 
 def empty(size, *, dtype=None, device=None, pin_memory=False):
