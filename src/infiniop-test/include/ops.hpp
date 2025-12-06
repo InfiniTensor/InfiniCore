@@ -16,6 +16,7 @@ DECLARE_INFINIOP_TEST(add)
 DECLARE_INFINIOP_TEST(causal_softmax)
 DECLARE_INFINIOP_TEST(rearrange)
 DECLARE_INFINIOP_TEST(sub)
+DECLARE_INFINIOP_TEST(paged_attention)
 
 #define REGISTER_INFINIOP_TEST(name)                      \
     {                                                     \
@@ -30,19 +31,20 @@ DECLARE_INFINIOP_TEST(sub)
 /*
  * Register all the tests here
  */
-#define TEST_BUILDER_MAPPINGS                  \
-    {                                          \
-        REGISTER_INFINIOP_TEST(gemm)           \
-        REGISTER_INFINIOP_TEST(random_sample)  \
-        REGISTER_INFINIOP_TEST(add)            \
-        REGISTER_INFINIOP_TEST(mul)            \
-        REGISTER_INFINIOP_TEST(clip)           \
-        REGISTER_INFINIOP_TEST(swiglu)         \
-        REGISTER_INFINIOP_TEST(rope)           \
-        REGISTER_INFINIOP_TEST(rms_norm)       \
-        REGISTER_INFINIOP_TEST(causal_softmax) \
-        REGISTER_INFINIOP_TEST(rearrange)      \
-        REGISTER_INFINIOP_TEST(sub)            \
+#define TEST_BUILDER_MAPPINGS                   \
+    {                                           \
+        REGISTER_INFINIOP_TEST(gemm)            \
+        REGISTER_INFINIOP_TEST(random_sample)   \
+        REGISTER_INFINIOP_TEST(add)             \
+        REGISTER_INFINIOP_TEST(mul)             \
+        REGISTER_INFINIOP_TEST(clip)            \
+        REGISTER_INFINIOP_TEST(swiglu)          \
+        REGISTER_INFINIOP_TEST(rope)            \
+        REGISTER_INFINIOP_TEST(rms_norm)        \
+        REGISTER_INFINIOP_TEST(causal_softmax)  \
+        REGISTER_INFINIOP_TEST(rearrange)       \
+        REGISTER_INFINIOP_TEST(sub)             \
+        REGISTER_INFINIOP_TEST(paged_attention) \
     }
 
 namespace infiniop_test {
