@@ -6,6 +6,7 @@
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
+#include <spdlog/spdlog.h>
 
 namespace infinicore::nn {
 class Module {
