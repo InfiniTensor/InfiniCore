@@ -15,8 +15,8 @@ thread_local common::OpCache<size_t, infiniopInnerDescriptor_t> caches(
         }
     });
 
-void calculate(Tensor input, Tensor other, Tensor out) {
-    size_t seed = hash_combine(input, other, out);
+void calculate(Tensor out, Tensor input, Tensor other) {
+    size_t seed = hash_combine(out, input, other);
 
     auto device_type = context::getDevice().getType();
     auto device_index = context::getDevice().getIndex();
@@ -29,7 +29,7 @@ void calculate(Tensor input, Tensor other, Tensor out) {
     if (!desc_opt) {
         INFINICORE_CHECK_ERROR(infiniopCreateInnerDescriptor(
             context::getInfiniopHandle(input->device()), &desc,
-            input->desc(), other->desc(), out->desc()));
+            out->desc(), input->desc(), other->desc()));
         cache.put(seed, desc);
     } else {
         desc = *desc_opt;
@@ -42,7 +42,7 @@ void calculate(Tensor input, Tensor other, Tensor out) {
 
     INFINICORE_CHECK_ERROR(infiniopInner(
         desc, workspace->data(), workspace_size,
-        input->data(), other->data(), out->data(), context::getStream()));
+        out->data(), input->data(), other->data(), context::getStream()));
 }
 
 static bool registered = []() {

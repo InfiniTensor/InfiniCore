@@ -27,18 +27,18 @@
 __C infiniStatus_t infiniopCreateInnerDescriptor(
     infiniopHandle_t handle,
     infiniopInnerDescriptor_t *desc_ptr,
+    infiniopTensorDescriptor_t out_desc,
     infiniopTensorDescriptor_t input_desc,
-    infiniopTensorDescriptor_t other_desc,
-    infiniopTensorDescriptor_t out_desc) {
+    infiniopTensorDescriptor_t other_desc) {
 
 #define CREATE(CASE, NAMESPACE)                                                     \
     case CASE:                                                                      \
         return op::inner::NAMESPACE::Descriptor::create(                            \
             handle,                                                                 \
             reinterpret_cast<op::inner::NAMESPACE::Descriptor **>(desc_ptr),        \
+            out_desc,                                                               \
             input_desc,                                                             \
-            other_desc,                                                             \
-            out_desc);
+            other_desc);
 
     switch (handle->device) {
 #ifdef ENABLE_CPU_API
@@ -120,15 +120,15 @@ __C infiniStatus_t infiniopGetInnerWorkspaceSize(infiniopInnerDescriptor_t desc,
 __C infiniStatus_t infiniopInner(
     infiniopInnerDescriptor_t desc,
     void *workspace, size_t workspace_size,
+    void *out,
     const void *input,
     const void *other,
-    void *out,
     void *stream) {
 
 #define CALCULATE(CASE, NAMESPACE)                                                             \
     case CASE:                                                                                 \
         return reinterpret_cast<op::inner::NAMESPACE::Descriptor *>(desc)->calculate( \
-            workspace, workspace_size, input, other, out, stream);
+            workspace, workspace_size, out, input, other, stream);
 
     switch (desc->device_type) {
 #ifdef ENABLE_CPU_API

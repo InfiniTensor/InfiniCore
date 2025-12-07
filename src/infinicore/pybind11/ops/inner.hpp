@@ -17,9 +17,9 @@ inline void bind_inner(py::module &m) {
           
     m.def("inner_",
           &op::inner_,
+          py::arg("out"),
           py::arg("input"),
           py::arg("other"),
-          py::arg("out"),
           R"doc(opertor: torch.inner, in-place mode)doc");
 }
 

@@ -18,6 +18,8 @@
 #include "ops/rope.hpp"
 #include "ops/silu.hpp"
 #include "ops/swiglu.hpp"
+#include "ops/tan.hpp"
+#include "ops/tanhshrink.hpp"
 
 namespace py = pybind11;
 
@@ -38,6 +40,8 @@ inline void bind(py::module &m) {
     bind_rms_norm(m);
     bind_silu(m);
     bind_swiglu(m);
+    bind_tan(m);
+    bind_tanhshrink(m);
     bind_rope(m);
     bind_embedding(m);
 }

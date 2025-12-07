@@ -9,7 +9,7 @@ common::OpDispatcher<Inner::schema> &Inner::dispatcher() {
     return dispatcher_;
 };
 
-void Inner::execute(Tensor input, Tensor other, Tensor out) {
+void Inner::execute(Tensor out, Tensor input, Tensor other) {
     auto device_type = context::getDevice().getType();
     auto func = dispatcher().lookup(device_type);
 
@@ -17,7 +17,7 @@ void Inner::execute(Tensor input, Tensor other, Tensor out) {
         throw std::runtime_error("No Inner implementation found for device type: " + std::to_string(static_cast<int>(device_type)));
     }
 
-    func(input, other, out);
+    func(out, input, other);
 }
 
 Tensor inner(Tensor input, Tensor other) {
@@ -33,13 +33,13 @@ Tensor inner(Tensor input, Tensor other) {
         out_shape.push_back(other->shape()[i]);
     auto out = Tensor::zeros(out_shape, input->dtype(), input->device());
 
-    inner_(input, other, out);
+    inner_(out, input, other);
     return out;
 }
 
-void inner_(Tensor input, Tensor other, Tensor out) {
+void inner_(Tensor out, Tensor input, Tensor other) {
     
-    Inner::execute(input, other, out);
+    Inner::execute(out, input, other);
 
 }
 

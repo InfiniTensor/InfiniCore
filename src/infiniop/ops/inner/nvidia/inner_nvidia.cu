@@ -21,11 +21,11 @@ Descriptor::~Descriptor() {
 infiniStatus_t Descriptor::create(
     infiniopHandle_t handle,
     Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t out_desc,
     infiniopTensorDescriptor_t input_desc,
-    infiniopTensorDescriptor_t other_desc,
-    infiniopTensorDescriptor_t out_desc) {
+    infiniopTensorDescriptor_t other_desc) {
 
-    auto result = InnerInfo::create(input_desc, other_desc, out_desc);
+    auto result = InnerInfo::create(out_desc, input_desc, other_desc);
     CHECK_RESULT(result);
     auto info = result.take();
     size_t workspace_size = 0;
@@ -89,9 +89,9 @@ infiniStatus_t launchKernel(
 
 infiniStatus_t Descriptor::calculate(
     void *workspace, size_t workspace_size,
+    void *out,
     const void *input,
     const void *other,
-    void *out,
     void *stream_) const {
 
     cudaStream_t stream = (cudaStream_t)stream_;

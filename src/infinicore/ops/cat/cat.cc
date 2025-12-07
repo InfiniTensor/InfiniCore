@@ -62,11 +62,11 @@ Tensor cat(std::vector<Tensor> tensors, int dim) {
     }
 
     auto out = Tensor::empty(shape, tensors[0]->dtype(), tensors[0]->device());
-    cat_(tensors, dim, out);
+    cat_(out, tensors, dim);
     return out;
 }
 
-void cat_(std::vector<Tensor> tensors, int dim, Tensor out) {
+void cat_(Tensor out, std::vector<Tensor> tensors, int dim) {
     assert(tensors.size() >= 2);
     int ndim = out->ndim();
     assert(-ndim <= dim && dim < ndim);

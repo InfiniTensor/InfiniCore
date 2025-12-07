@@ -27,9 +27,9 @@ public:
     std::vector<ptrdiff_t> out_strides;
 
     static utils::Result<InnerInfo> create(
+        infiniopTensorDescriptor_t out_desc,
         infiniopTensorDescriptor_t input_desc,
-        infiniopTensorDescriptor_t other_desc,
-        infiniopTensorDescriptor_t out_desc) {
+        infiniopTensorDescriptor_t other_desc) {
 
         auto dtype = out_desc->dtype();
         if (dtype != input_desc->dtype() || dtype != other_desc->dtype())

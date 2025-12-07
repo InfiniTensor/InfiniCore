@@ -8,11 +8,11 @@ Descriptor::~Descriptor() {}
 infiniStatus_t Descriptor::create(
     infiniopHandle_t handle,
     Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t out_desc,
     infiniopTensorDescriptor_t input_desc,
-    infiniopTensorDescriptor_t other_desc,
-    infiniopTensorDescriptor_t out_desc) {
+    infiniopTensorDescriptor_t other_desc) {
     
-    auto result = InnerInfo::create(input_desc, other_desc, out_desc);
+    auto result = InnerInfo::create(out_desc, input_desc, other_desc);
     CHECK_RESULT(result);
     *desc_ptr = new Descriptor(nullptr, result.take(), 0, handle->device, handle->device_id);
     return INFINI_STATUS_SUCCESS;
@@ -67,9 +67,9 @@ infiniStatus_t inner(const InnerInfo *info, const T *input, const T *other, T *o
 
 infiniStatus_t Descriptor::calculate(
     void* workspace, size_t workspace_size,
+    void *out,
     const void *input,
     const void *other,
-    void *out,
     void *stream) const {
 
     if (_info.dtype == INFINI_DTYPE_BF16) {
