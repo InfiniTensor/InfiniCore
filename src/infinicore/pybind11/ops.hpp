@@ -4,6 +4,7 @@
 
 #include "ops/add.hpp"
 #include "ops/attention.hpp"
+#include "ops/asinh.hpp"
 #include "ops/baddbmm.hpp"
 #include "ops/bilinear.hpp"
 #include "ops/causal_softmax.hpp"
@@ -26,6 +27,7 @@ namespace infinicore::ops {
 inline void bind(py::module &m) {
     bind_add(m);
     bind_attention(m);
+    bind_asinh(m);
     bind_baddbmm(m);
     bind_bilinear(m);
     bind_causal_softmax(m);

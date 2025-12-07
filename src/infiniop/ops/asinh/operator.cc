@@ -1,35 +1,32 @@
 #include "../../operator.h"
 #include "../../handle.h"
-#include "infiniop/ops/fmod.h"
+#include "infiniop/ops/asinh.h"
 
 #ifdef ENABLE_CPU_API
-#include "cpu/fmod_cpu.h"
+#include "cpu/asinh_cpu.h"
 #endif
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) 
-#include "nvidia/fmod_nvidia.cuh"
+#include "nvidia/asinh_nvidia.cuh"
 #endif
 #ifdef ENABLE_METAX_API
-#include "metax/fmod_metax.h"
+#include "metax/asinh_metax.h"
 #endif
 #ifdef ENABLE_MOORE_API
-#include "moore/fmod_moore.h"
+#include "moore/asinh_moore.h"
 #endif
 
-__C infiniStatus_t infiniopCreateFmodDescriptor(
+__C infiniStatus_t infiniopCreateAsinhDescriptor(
     infiniopHandle_t handle,
-    infiniopFmodDescriptor_t *desc_ptr,
-    infiniopTensorDescriptor_t c_desc,
-    infiniopTensorDescriptor_t a_desc,
-    infiniopTensorDescriptor_t b_desc) {
-#define CREATE(CASE, NAMESPACE)                                            \
-    case CASE:                                                             \
-        return op::fmod::NAMESPACE::Descriptor::create(                     \
-            handle,                                                        \
-            reinterpret_cast<op::fmod::NAMESPACE::Descriptor **>(desc_ptr), \
-            c_desc,                                                        \
-            {a_desc,                                                       \
-             b_desc}) 
-
+    infiniopAsinhDescriptor_t *desc_ptr,
+    infiniopTensorDescriptor_t y_desc,
+    infiniopTensorDescriptor_t x_desc) {
+#define CREATE(CASE, NAMESPACE)                                               \
+    case CASE:                                                                \
+        return op::asinh::NAMESPACE::Descriptor::create(                      \
+            handle,                                                           \
+            reinterpret_cast<op::asinh::NAMESPACE::Descriptor **>(desc_ptr),  \
+            y_desc,                                                           \
+            {x_desc})
     switch (handle->device) {
 
 #ifdef ENABLE_CPU_API
@@ -50,25 +47,24 @@ __C infiniStatus_t infiniopCreateFmodDescriptor(
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
-
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetFmodWorkspaceSize(infiniopFmodDescriptor_t desc, size_t *size) {
+__C infiniStatus_t infiniopGetAsinhWorkspaceSize(infiniopAsinhDescriptor_t desc, size_t *size) {
 
-#define GET(CASE, NAMESPACE)                                                                      \
-    case CASE:                                                                                    \
-        *size = reinterpret_cast<const op::fmod::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
-        return INFINI_STATUS_SUCCESS;
+#define GET(CASE, NAMESPACE)                                                                         \
+    case CASE:                                                                                       \
+        *size = reinterpret_cast<const op::asinh::NAMESPACE::Descriptor *>(desc)->workspaceSize();   \
+        return INFINI_STATUS_SUCCESS
 
     switch (desc->device_type) {
 #ifdef ENABLE_CPU_API
         GET(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_NVIDIA_API
+#ifdef ENABLE_NVIDIA_API    
         GET(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
-#ifdef ENABLE_ILUVATAR_API
+#ifdef ENABLE_ILUVATAR_API  
         GET(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_METAX_API
@@ -84,19 +80,16 @@ __C infiniStatus_t infiniopGetFmodWorkspaceSize(infiniopFmodDescriptor_t desc, s
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
-__C infiniStatus_t infiniopFmod(
-    infiniopFmodDescriptor_t desc,
-    void *workspace,
-    size_t workspace_size,
-    void *c,
-    const void *a,
-    const void *b,
-    void *stream) {
+__C infiniStatus_t infiniopAsinh(infiniopAsinhDescriptor_t desc,
+                                 void *workspace,
+                                 size_t workspace_size,
+                                 void *y,
+                                 const void *x,
+                                 void *stream) {
 #define CALCULATE(CASE, NAMESPACE)                                            \
     case CASE:                                                                \
-        return reinterpret_cast<const op::fmod::NAMESPACE::Descriptor *>(desc) \
-            ->calculate(workspace, workspace_size, c, {a, b}, stream)   
-
+        return reinterpret_cast<const op::asinh::NAMESPACE::Descriptor *>(desc) \
+            ->calculate(workspace, workspace_size, y, {x}, stream);
     switch (desc->device_type) {
 #ifdef ENABLE_CPU_API
         CALCULATE(INFINI_DEVICE_CPU, cpu);
@@ -119,36 +112,30 @@ __C infiniStatus_t infiniopFmod(
 #undef CALCULATE
 }
 
-__C infiniStatus_t infiniopDestroyFmodDescriptor(infiniopFmodDescriptor_t desc) {
-
-#define GET(CASE, NAMESPACE)                                            \
-    case CASE:                                                           \
-        delete reinterpret_cast<op::fmod::NAMESPACE::Descriptor *>(desc); \
+__C infiniStatus_t infiniopDestroyAsinhDescriptor(infiniopAsinhDescriptor_t desc) {
+#define GET(CASE, NAMESPACE)                                                                      \
+    case CASE:                                                                                    \
+        reinterpret_cast<op::asinh::NAMESPACE::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS;
-
+    
     switch (desc->device_type) {
 #ifdef ENABLE_CPU_API
         GET(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_NVIDIA_API
+#ifdef ENABLE_NVIDIA_API    
         GET(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
-#ifdef ENABLE_ILUVATAR_API
+#ifdef ENABLE_ILUVATAR_API  
         GET(INFINI_DEVICE_ILUVATAR, nvidia);
-#endif
-#ifdef ENABLE_QY_API
-        GET(INFINI_DEVICE_QY, nvidia);
 #endif
 #ifdef ENABLE_METAX_API
         GET(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_MOORE_API
         GET(INFINI_DEVICE_MOORE, moore);
-#endif  
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
 #undef DELETE
 }
-
-    

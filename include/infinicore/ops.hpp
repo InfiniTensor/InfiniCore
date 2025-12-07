@@ -2,6 +2,7 @@
 
 #include "ops/add.hpp"
 #include "ops/attention.hpp"
+#include "ops/asinh.hpp"
 #include "ops/baddbmm.hpp"
 #include "ops/bilinear.hpp"
 #include "ops/causal_softmax.hpp"
