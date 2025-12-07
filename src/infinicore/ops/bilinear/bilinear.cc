@@ -3,9 +3,30 @@
 #include "infinicore/ops/add.hpp"
 #include "infinicore/ops/rearrange.hpp"
 
+#ifdef ENABLE_NVIDIA_API
+namespace op::gemm::nvidia {
+    void set_tf32_enabled(bool);
+}
+#endif
+
 namespace infinicore::op {
 
 namespace {
+// RAII 守卫：作用域内禁用 TF32
+struct ScopedTF32Disable {
+    ScopedTF32Disable() {
+#ifdef ENABLE_NVIDIA_API
+        // 实际项目中建议添加检查，仅在 NVIDIA 设备上调用
+        // 使用 ::op 强制从全局命名空间查找，避免被当前的 infinicore::op 遮蔽
+        ::op::gemm::nvidia::set_tf32_enabled(false);
+#endif
+    }
+    ~ScopedTF32Disable() {
+#ifdef ENABLE_NVIDIA_API
+        ::op::gemm::nvidia::set_tf32_enabled(true);
+#endif
+    }
+};
 
 inline bool is_gemm_compatible_3d(const Tensor &t) {
     if (t->ndim() != 3) return false;
@@ -42,6 +63,7 @@ inline Tensor ensure_gemm_compatible(const Tensor &t) {
 } // anonymous namespace
 
 Tensor bilinear(Tensor x1, Tensor x2, Tensor weight, std::optional<Tensor> bias) {
+    ScopedTF32Disable tf32_guard;
 
     const size_t batch_size = x1->shape()[0];
     const size_t in1_features = x1->shape()[1];
