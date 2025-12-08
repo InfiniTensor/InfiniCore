@@ -1,11 +1,10 @@
-#include "../../../devices/nvidia/nvidia_common.cuh"
-#include "../../../elementwise/nvidia/elementwise_nvidia.cuh"
+#include "asinh_moore.h"
+
+#include "../../../elementwise/moore/elementwise_moore.h"
 
 #include "../cuda/kernel.cuh"
-#include "asinh_nvidia.cuh"
 
-namespace op::asinh::nvidia {
-
+namespace op::asinh::moore {
 Descriptor::~Descriptor() = default;
 
 infiniStatus_t Descriptor::create(
@@ -14,7 +13,7 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t out_desc,
     std::vector<infiniopTensorDescriptor_t> input_desc_vec) {
 
-    auto handle = reinterpret_cast<device::nvidia::Handle *>(handle_);
+    auto handle = reinterpret_cast<device::moore::Handle *>(handle_);
     auto dtype = out_desc->dtype();
 
     const auto &x_desc = input_desc_vec.at(0);
@@ -25,8 +24,9 @@ infiniStatus_t Descriptor::create(
 
     CHECK_SAME_SHAPE(y_shape, x_shape);
 
-    CREATE_ELEMENTWISE_CUDA_DESCRIPTOR(handle, dtype, out_desc, input_desc_vec)
-    
+    // create MOORE elementwise descriptor
+    CREATE_ELEMENTWISE_MOORE_DESCRIPTOR(handle, dtype, out_desc, input_desc_vec)
+
     return INFINI_STATUS_SUCCESS;
 }
 
@@ -36,22 +36,24 @@ infiniStatus_t Descriptor::calculate(
     void *output,
     std::vector<const void *> inputs,
     void *stream) const {
+
     if (workspace_size < _workspace_size) {
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
+
     switch (_dtype) {
     case INFINI_DTYPE_F16:
-        return _device_info->calculate<256, cuda::AsinhOp,half>(_info, workspace, output, inputs, stream);
+        return _device_info->calculate<256, cuda::AsinhOp, half>(_info, workspace, output, inputs, stream);
     case INFINI_DTYPE_BF16:
-        return _device_info->calculate<256, cuda::AsinhOp,cuda_bfloat16>(_info, workspace, output, inputs, stream);
+        return _device_info->calculate<256, cuda::AsinhOp, cuda_bfloat16>(_info, workspace, output, inputs, stream);
     case INFINI_DTYPE_F32:
-        return _device_info->calculate<256, cuda::AsinhOp,float>(_info, workspace, output, inputs, stream);
+        return _device_info->calculate<256, cuda::AsinhOp, float>(_info, workspace, output, inputs, stream);
     case INFINI_DTYPE_F64:
-        return _device_info->calculate<256, cuda::AsinhOp,double>(_info, workspace, output, inputs, stream);
+        return _device_info->calculate<256, cuda::AsinhOp, double>(_info, workspace, output, inputs, stream);
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
 
-} 
-
-} // namespace op::asinh::nvidia
+    return INFINI_STATUS_SUCCESS;
+}
+} // namespace op::asinh::moore

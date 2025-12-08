@@ -24,7 +24,7 @@ public :
         }
     }
 
-} AsinOp;
+} AsinhOp;
 
 } // namespace op::Asinh::cuda
 
