@@ -74,60 +74,76 @@ def linearFunction(c, bias, x, w, alpha, beta):
     )
     return ans
 
+def computeQuant(
+        handle,
+        device,
+        x, 
+        symmetric,
+        sync=None,
+):
+    x_shape = x.shape
+    dtype = x.dt
+    M, K = x_shape
 
-def quantWeights(w: torch.Tensor, symmetric, axis):
-    """
-    对权重矩阵 w ∈ [K, N] 做 per-channel (按列) 量化。
-    返回:
-      w_packed: int8 量化权重，形状 [K, N]
-      w_scale:  每列的scale，形状 [1, N]，dtype与w相同
-      w_zero:   每列的zero point，形状 [1, N]，dtype与w相同
-    """
-    assert w.dim() == 2, "w must be [K, N]"
+    x_packed = TestTensor(x_shape, None, InfiniDtype.I8, device, mode="zeros")
+    x_scale = TestTensor((M, 1), None, dtype, device)
     if symmetric:
-        # 对称量化：zero=0, 只用最大绝对值
-        w_abs_max = torch.max(w.abs(), dim=axis, keepdim=True)[0]
-
-        # 避免除 0
-        w_scale = w_abs_max / 127.0
-        w_scale = torch.clamp(w_scale, min=1e-8)
-
-        # 计算量化值 q = round(w / scale)
-        w_q = torch.round(w / w_scale)
-
-        # 限制到 [-128, 127]
-        w_q = torch.clamp(w_q, -128, 127)
-
-        # 转 int8
-        w_packed = w_q.to(torch.int8)
-
-        # 对称量化 zero 固定为 0
-        w_zero = None
-
-        return w_packed, w_scale.to(w.dtype), w_zero
+        x_zero = None
     else:
-        # 计算每列的最小值和最大值
-        w_min = w.min(dim=axis, keepdim=True)[0]
-        w_max = w.max(dim=axis, keepdim=True)[0]
+        x_zero = TestTensor((M, 1), None, dtype, device)
+    if sync is not None:
+        sync()
 
-        # 避免除以零
-        w_scale = (w_max - w_min) / 255.0
-        w_scale = torch.clamp(w_scale, min=1e-8)
+    descriptor = infiniopOperatorDescriptor_t()
+    check_error(
+        LIBINFINIOP.infiniopCreateQuantDescriptor(
+            handle,
+            ctypes.byref(descriptor),
+            x_packed.descriptor,
+            x_scale.descriptor,
+            None if symmetric else x_zero.descriptor,
+            x.descriptor,
+        )
+    )
 
-        # 计算zero point
-        w_zero = -w_min / w_scale - 128.0
+    # Invalidate the shape and strides in the descriptor to prevent them from being directly used by the kernel
+    x.destroy_desc()
+    x_packed.destroy_desc()
+    x_scale.destroy_desc()
+    if symmetric == False:
+        x_zero.destroy_desc()
 
-        # 计算量化值
-        w_q = torch.round(w / w_scale + w_zero)
+    workspace_size = c_uint64(0)
+    check_error(
+        LIBINFINIOP.infiniopGetQuantWorkspaceSize(
+            descriptor, ctypes.byref(workspace_size)
+        )
+    )
+    workspace = TestWorkspace(workspace_size.value, x.device)
+    
+    def lib_quant():
+        check_error(
+            LIBINFINIOP.infiniopQuant(
+                descriptor,
+                workspace.data(),
+                workspace_size.value,
+                x_packed.data(),
+                x_scale.data(),
+                None if symmetric else x_zero.data(),
+                x.data(),
+                None,
+            )
+        )
 
-        # 限制范围[-128, 127]
-        w_q = torch.clamp(w_q, -128, 127)
-
-        # 转为int8
-        w_packed = w_q.to(torch.int8)
-
-        return w_packed, w_scale.to(w.dtype), w_zero.to(w.dtype)
-
+    lib_quant()
+    
+    if sync is not None:
+        sync()
+    check_error(LIBINFINIOP.infiniopDestroyQuantDescriptor(descriptor))
+    if symmetric:
+        return x_packed.actual_tensor(), x_scale.actual_tensor(), None
+    else:
+        return x_packed.actual_tensor(), x_scale.actual_tensor(), x_zero.actual_tensor()
 
 def test(
     handle,
@@ -143,7 +159,7 @@ def test(
     sync=None,
 ):
     print(
-        f"Testing Linear on {InfiniDeviceNames[device]} with x_shape:{x_shape}, w_shape:{w_shape}, symmetric:{symmetric}, alpha:{alpha}, beta:{beta}, inplace:{inplace} dtype:{InfiniDtypeNames[dtype]}"
+        f"Testing Quant Linear on {InfiniDeviceNames[device]} with x_shape:{x_shape}, w_shape:{w_shape}, symmetric:{symmetric}, alpha:{alpha}, beta:{beta}, inplace:{inplace} dtype:{InfiniDtypeNames[dtype]}"
     )
     M, K = x_shape
     N = w_shape[1]
@@ -163,7 +179,36 @@ def test(
         alpha,
         beta,
     )
-    x_p, x_s, x_z = quantWeights(x.torch_tensor(), symmetric, 1)
+    w_data_t = w.actual_tensor().clone().t().contiguous()
+    w_t = TestTensor((N, K), w_data_t.stride(), dtype, device, mode="manual", set_tensor=w_data_t)
+    
+    w_packed, w_scale, w_zero = computeQuant(
+        handle,
+        device,
+        w_t, 
+        symmetric,
+        sync=None)
+    
+    weights = TestTensor(
+        w_shape, w_packed.t().contiguous().stride(), InfiniDtype.I8, device, mode="manual", set_tensor=w_packed.t().contiguous()
+    )
+    weights_scale = TestTensor(
+        (1, N), w_scale.t().contiguous().stride(), dtype, device, mode="manual", set_tensor=w_scale.t().contiguous()
+    )
+    if symmetric:
+        weights_zero = None
+    else:
+        weights_zero = TestTensor(
+            (1, N), w_zero.t().contiguous().stride(), dtype, device, mode="manual", set_tensor=w_zero.t().contiguous()
+        )
+    
+    x_p, x_s, x_z = computeQuant(
+        handle,
+        device,
+        x, 
+        symmetric,
+        sync=None)
+    
     x_packed = TestTensor(
         x_shape, x_p.stride(), InfiniDtype.I8, device, mode="manual", set_tensor=x_p
     )
@@ -172,21 +217,9 @@ def test(
         x_zero = None
     else:
         x_zero = TestTensor((M, 1), x_z.stride(), dtype, device, mode="manual", set_tensor=x_z)
-
-    w_packed, w_scale, w_zero = quantWeights(w.torch_tensor(), symmetric, 0)
-    weights = TestTensor(
-        w_shape, w_packed.stride(), InfiniDtype.I8, device, mode="manual", set_tensor=w_packed
-    )
-    weights_scale = TestTensor(
-        (1, N), w_scale.stride(), dtype, device, mode="manual", set_tensor=w_scale
-    )
-    if symmetric:
-        weights_zero = None
-    else:
-        weights_zero = TestTensor(
-            (1, N), w_zero.stride(), dtype, device, mode="manual", set_tensor=w_zero
-        )
-
+    
+    
+    
     if sync is not None:
         sync()
 
@@ -258,7 +291,7 @@ def test(
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:
         debug(d.actual_tensor(), ans, atol=atol, rtol=rtol)
-
+    
     assert torch.allclose(d.actual_tensor(), ans, atol=atol, rtol=rtol)
 
     # Profiling workflow
