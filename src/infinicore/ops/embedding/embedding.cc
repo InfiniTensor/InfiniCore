@@ -9,7 +9,7 @@ Tensor embedding(Tensor input, // LongTensor of arbitrary shape containing the i
 ) {
     auto input_shape = input->shape();
     auto weight_shape = weight->shape();
-    auto vocab_size = weight_shape[0];
+    // auto vocab_size = weight_shape[0];
     auto embedding_dim = weight_shape[1];
 
     // Assign memory to out variables
@@ -23,11 +23,10 @@ Tensor embedding(Tensor input, // LongTensor of arbitrary shape containing the i
 
 void embedding_(Tensor out, Tensor input, Tensor weight) {
     assert(infinicore::DataType::I64 == input->dtype() || (infinicore::DataType::I32 == input->dtype()));
-    assert(infinicore::Device::Type::CPU == input->device());
+    assert(infinicore::Device::Type::CPU == input->device().getType());
 
     auto input_shape = input->shape();
     auto weight_shape = weight->shape();
-    auto vocab_size = weight_shape[0];
     auto embedding_dim = weight_shape[1];
 
     // Calculate the number of token
@@ -47,7 +46,7 @@ void embedding_(Tensor out, Tensor input, Tensor weight) {
             const int64_t *input_arr = reinterpret_cast<const int64_t *>(input->data());
             for (Size i = 0; i < counts; ++i) {
                 int64_t idx = input_arr[i];
-                assert((idx >= 0) && (idx < vocab_size));
+                assert((idx >= 0) && (idx < weight_shape[0]));
                 std::memcpy(out_ptr + i * bytes,
                             weight_ptr + idx * bytes,
                             bytes);
@@ -57,7 +56,7 @@ void embedding_(Tensor out, Tensor input, Tensor weight) {
 
             for (Size i = 0; i < counts; ++i) {
                 int32_t idx = input_arr[i];
-                assert((idx >= 0) && (idx < vocab_size));
+                assert((idx >= 0) && (idx < weight_shape[0]));
                 std::memcpy(out_ptr + i * bytes,
                             weight_ptr + idx * bytes,
                             bytes);
@@ -69,7 +68,7 @@ void embedding_(Tensor out, Tensor input, Tensor weight) {
             const int64_t *input_arr = reinterpret_cast<const int64_t *>(input->data());
             for (Size i = 0; i < counts; ++i) {
                 int64_t idx = input_arr[i];
-                assert((idx >= 0) && (idx < vocab_size));
+                assert((idx >= 0) && (idx < weight_shape[0]));
                 context::memcpyD2D(out_ptr + i * bytes,
                                    weight_ptr + idx * bytes,
                                    bytes);
@@ -78,7 +77,7 @@ void embedding_(Tensor out, Tensor input, Tensor weight) {
             const int32_t *input_arr = reinterpret_cast<const int32_t *>(input->data());
             for (Size i = 0; i < counts; ++i) {
                 int32_t idx = input_arr[i];
-                assert((idx >= 0) && (idx < vocab_size));
+                assert((idx >= 0) && (idx < weight_shape[0]));
                 context::memcpyD2D(out_ptr + i * bytes,
                                    weight_ptr + idx * bytes,
                                    bytes);

@@ -99,7 +99,7 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
 | `--metax-gpu=[y\|n]`     | 是否编译沐曦 GPU 接口实现         | n
 | `--use-mc=[y\|n]`        | 是否沐曦 GPU 接口实现使用maca SDK | n
 | `--moore-gpu=[y\|n]`     | 是否编译摩尔线程 GPU 接口实现     | n
-| `--iluvatar-gpu=[y\|n]`  | 是否编译沐曦 GPU 接口实现         | n
+| `--iluvatar-gpu=[y\|n]`  | 是否编译天数 GPU 接口实现         | n
 | `--qy-gpu=[y\|n]`        | 是否编译QY GPU 接口实现           | n
 | `--hygon-dcu=[y\|n]`     | 是否编译海光 DCU 接口实现         | n
 | `--kunlun-xpu=[y\|n]`    | 是否编译昆仑 XPU 接口实现         | n

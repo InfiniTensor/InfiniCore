@@ -162,6 +162,7 @@ std::string TensorImpl::info() const {
         ss << s << " ";
     }
     ss << "] dtype=" << toString(this->dtype());
+    ss << " device=" << this->device().toString();
 
     return ss.str();
 }

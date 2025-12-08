@@ -1,7 +1,6 @@
 #include "infinicore/nn/rmsnorm.hpp"
 #include "infinicore/ops.hpp"
 #include <cmath>
-#include <spdlog/spdlog.h>
 #include <stdexcept>
 
 namespace infinicore::nn {
@@ -13,15 +12,7 @@ RMSNorm::RMSNorm(size_t normalized_shape, double eps, const DataType &dtype, con
 
     device_ = device;
 
-    // Initialize parameter using macro
     INFINICORE_NN_PARAMETER_INIT(weight, ({normalized_shape}, dtype_, device));
-
-    // Initialize weight to ones (standard practice for RMSNorm)
-    auto ones_tensor = Tensor::ones({normalized_shape}, dtype_, device);
-    weight_->copy_from(ones_tensor);
-
-    spdlog::debug("Created RMSNorm module: normalized_shape={}, eps={}, dtype={}",
-                  normalized_shape, eps, static_cast<int>(dtype_));
 }
 
 Tensor RMSNorm::forward(const Tensor &x) const {

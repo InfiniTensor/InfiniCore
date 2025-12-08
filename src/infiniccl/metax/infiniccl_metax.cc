@@ -2,8 +2,13 @@
 
 #include "../../utils.h"
 
+#ifdef ENABLE_METAX_MC_API
+#include <mccl.h>
+#include <mcr/mc_runtime_api.h>
+#else
 #include <hccl.h>
 #include <hcr/hc_runtime_api.h>
+#endif
 
 #include <iostream>
 #include <vector>
