@@ -39,11 +39,18 @@ from infinicore.dtype import (
     uint8,
 )
 from infinicore.ops.add import add
+from infinicore.ops.addbmm import addbmm
 from infinicore.ops.attention import attention
+from infinicore.ops.floor import floor
+from infinicore.ops.hypot import hypot
+from infinicore.ops.index_add import index_add
+from infinicore.ops.index_copy import index_copy
+from infinicore.ops.acos import acos
 from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.rearrange import rearrange
+from infinicore.ops.take import take
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -97,21 +104,28 @@ __all__ = [
     "short",
     "uint8",
     # Operations.
+    "acos",
     "add",
+    "addbmm",
     "attention",
+    "index_add",
+    "index_copy",
     "matmul",
     "mul",
     "narrow",
     "rearrange",
     "empty",
     "empty_like",
+    "floor",
     "from_blob",
     "from_list",
     "from_numpy",
     "from_torch",
+    "hypot",
     "ones",
     "strided_empty",
     "strided_from_blob",
+    "take",
     "zeros",
 ]
 
