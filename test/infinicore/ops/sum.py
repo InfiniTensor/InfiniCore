@@ -20,7 +20,7 @@ _TEST_CASES_DATA = [
     ((8, 8), None, None, None, None),
     ((8, 8), (16, 1), 1, False, None),
     ((2, 3, 4), None, 0, True, None),
-    ((1, 8), None, (0,), False, None),
+    ((1, 8), None, (0,), False, None), #tuple 导致 infini_list  kwargs dim,[0]
     ((16, 64), (128, 1), None, None, None),
     ((4, 5, 6), (60, 12, 2), 2, True, None),
 ]
@@ -61,7 +61,10 @@ def parse_test_cases():
                     description="Sum - OUT_OF_PLACE",
                 )
             )
-
+            """
+            infini_kwargs[key] = infini_list
+            or infini_kwargs[key] = value
+            """
     return test_cases
 
 
@@ -77,9 +80,9 @@ class OpTest(BaseOperatorTest):
     def torch_operator(self, *args, **kwargs):
         return torch.sum(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
-    #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.sum(*args, **kwargs)
+    def infinicore_operator(self, *args, **kwargs):
+        """InfiniCore implementation (operator not yet available)."""
+        return infinicore.sum(*args, **kwargs) # todo 找到具体对应的 python/infinicore/ops/sum.py
 
 
 def main():

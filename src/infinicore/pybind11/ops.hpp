@@ -34,6 +34,7 @@ inline void bind(py::module &m) {
     bind_swiglu(m);
     bind_rope(m);
     bind_embedding(m);
+    bind_sum(m);
 }
 
 } // namespace infinicore::ops
