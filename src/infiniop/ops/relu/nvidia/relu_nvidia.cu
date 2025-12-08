@@ -1,7 +1,13 @@
 #ifdef ENABLE_NINETOOTHED
 
 #include "../../../../../build/ninetoothed/relu.h"
+#endif
 #include "../../../devices/nvidia/nvidia_common.cuh"
+
+#include "../../../elementwise/nvidia/elementwise_nvidia.cuh"
+
+#include "../cuda/kernel.cuh"
+
 #include "relu_nvidia.cuh"
 
 namespace op::relu::nvidia {
@@ -40,6 +46,7 @@ infiniStatus_t Descriptor::calculate(
     if (workspace_size < _workspace_size) {
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
+#ifdef ENABLE_NINETOOTHED
 
     const auto &ndim{_info.getNdim()};
     const auto &x_shape_{_info.getInputShape(0)};
@@ -72,9 +79,21 @@ infiniStatus_t Descriptor::calculate(
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
-
+#else
+    switch (_dtype) {
+    case INFINI_DTYPE_BF16:
+        return _device_info->calculate<256, cuda::ReluOp, cuda_bfloat16>(_info, workspace, output, inputs, stream);
+    case INFINI_DTYPE_F16:
+        return _device_info->calculate<256, cuda::ReluOp, half>(_info, workspace, output, inputs, stream);
+    case INFINI_DTYPE_F32:
+        return _device_info->calculate<256, cuda::ReluOp, float>(_info, workspace, output, inputs, stream);
+    case INFINI_DTYPE_F64:
+        return _device_info->calculate<256, cuda::ReluOp, double>(_info, workspace, output, inputs, stream);
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+#endif
     return INFINI_STATUS_SUCCESS;
 }
 } // namespace op::relu::nvidia
 
-#endif

@@ -10,6 +10,7 @@
 #include "infiniop/ops/conv.h"
 #include "infiniop/ops/dequantize_awq.h"
 #include "infiniop/ops/gemm.h"
+#include "infiniop/ops/layer_norm.h"
 #include "infiniop/ops/mul.h"
 #include "infiniop/ops/random_sample.h"
 #include "infiniop/ops/rearrange.h"
