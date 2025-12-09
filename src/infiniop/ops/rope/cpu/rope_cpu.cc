@@ -38,34 +38,65 @@ infiniStatus_t calculateRoPE(const RoPEInfo &info,
                              const Tindex *pos_ids,
                              const Tdata *sin_table,
                              const Tdata *cos_table) {
+
+    // Calculate position ID stride for batch dimension
+    size_t pos_stride_batch = info.pos_has_batch_dim ? info.seqlen : 0;
+
+    // Parallelize over batch and head dimensions - remove collapse clause
 #pragma omp parallel for
-    for (ptrdiff_t h = 0; h < ptrdiff_t(info.nhead); h++) {
-        for (size_t tok = 0; tok < info.seqlen; tok++) {
-            size_t x_offset = tok * info.x_stride_seqlen + h * info.x_stride_nhead;
-            size_t y_offset = tok * info.y_stride_seqlen + h * info.y_stride_nhead;
-            size_t pos_id = size_t(pos_ids[tok]);
-            size_t table_offset = pos_id * info.table_dim;
+    for (ptrdiff_t b = 0; b < ptrdiff_t(info.batch); b++) {
+        for (ptrdiff_t h = 0; h < ptrdiff_t(info.nhead); h++) {
+            for (size_t tok = 0; tok < info.seqlen; tok++) {
+                // Calculate memory offsets with batch dimension
+                size_t x_offset = (info.has_batch_dim ? b * info.x_stride_batch : 0) + tok * info.x_stride_seqlen + h * info.x_stride_nhead;
 
-            for (size_t i = 0; i < info.table_dim; i++) {
-                size_t pos0 = info.algo == infiniopRoPEAlgo_t::INFINIOP_ROPE_ALGO_GPT_J ? 2 * i : i;
-                size_t pos1 = info.algo == infiniopRoPEAlgo_t::INFINIOP_ROPE_ALGO_GPT_J ? 2 * i + 1 : i + info.table_dim;
+                size_t y_offset = (info.has_batch_dim ? b * info.y_stride_batch : 0) + tok * info.y_stride_seqlen + h * info.y_stride_nhead;
 
-                if constexpr (std::is_same<Tdata, fp16_t>::value || std::is_same<Tdata, bf16_t>::value) {
-                    float x0 = utils::cast<float>(x[x_offset + pos0]),
-                          x1 = utils::cast<float>(x[x_offset + pos1]),
-                          sin__ = utils::cast<float>(sin_table[table_offset + i]),
-                          cos__ = utils::cast<float>(cos_table[table_offset + i]);
-
-                    y[y_offset + pos0] = utils::cast<Tdata>(x0 * cos__ - x1 * sin__);
-                    y[y_offset + pos1] = utils::cast<Tdata>(x0 * sin__ + x1 * cos__);
+                // Calculate position ID offset
+                size_t pos_offset;
+                if (info.pos_has_batch_dim) {
+                    // Per-batch position IDs
+                    pos_offset = b * pos_stride_batch + tok;
                 } else {
-                    Tdata x0 = x[x_offset + pos0],
-                          x1 = x[x_offset + pos1],
-                          sin__ = sin_table[table_offset + i],
-                          cos__ = cos_table[table_offset + i];
+                    // Shared position IDs across batch
+                    pos_offset = tok;
+                }
 
-                    y[y_offset + pos0] = x0 * cos__ - x1 * sin__;
-                    y[y_offset + pos1] = x0 * sin__ + x1 * cos__;
+                size_t pos_id = size_t(pos_ids[pos_offset]);
+                size_t table_offset = pos_id * info.table_dim;
+
+                for (size_t i = 0; i < info.table_dim; i++) {
+                    // Calculate positions based on algorithm
+                    size_t pos0, pos1;
+                    if (info.algo == infiniopRoPEAlgo_t::INFINIOP_ROPE_ALGO_GPT_J) {
+                        // GPT-J style: interleaved pairs
+                        pos0 = 2 * i;
+                        pos1 = 2 * i + 1;
+                    } else {
+                        // Original style: first half and second half
+                        pos0 = i;
+                        pos1 = i + info.table_dim;
+                    }
+
+                    if constexpr (std::is_same<Tdata, fp16_t>::value || std::is_same<Tdata, bf16_t>::value) {
+                        // Convert to float for computation
+                        float x0 = utils::cast<float>(x[x_offset + pos0]),
+                              x1 = utils::cast<float>(x[x_offset + pos1]),
+                              sin__ = utils::cast<float>(sin_table[table_offset + i]),
+                              cos__ = utils::cast<float>(cos_table[table_offset + i]);
+
+                        y[y_offset + pos0] = utils::cast<Tdata>(x0 * cos__ - x1 * sin__);
+                        y[y_offset + pos1] = utils::cast<Tdata>(x0 * sin__ + x1 * cos__);
+                    } else {
+                        // Use native types
+                        Tdata x0 = x[x_offset + pos0],
+                              x1 = x[x_offset + pos1],
+                              sin__ = sin_table[table_offset + i],
+                              cos__ = cos_table[table_offset + i];
+
+                        y[y_offset + pos0] = x0 * cos__ - x1 * sin__;
+                        y[y_offset + pos1] = x0 * sin__ + x1 * cos__;
+                    }
                 }
             }
         }
@@ -121,6 +152,8 @@ infiniStatus_t Descriptor::calculate(
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
+
+    return INFINI_STATUS_SUCCESS;
 }
 
 #undef ROPE_TYPE
