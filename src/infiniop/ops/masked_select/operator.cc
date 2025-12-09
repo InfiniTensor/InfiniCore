@@ -20,9 +20,9 @@
 // #ifdef ENABLE_KUNLUN_API
 // #include "kunlun/masked_select_kunlun.h"
 // #endif
-// #ifdef ENABLE_MOORE_API
-// #include "moore/masked_select_moore.h"
-// #endif
+#ifdef ENABLE_MOORE_API
+#include "moore/masked_select_moore.h"
+#endif
 
 __C infiniStatus_t infiniopCreateMaskedSelectDescriptor(
     infiniopHandle_t handle,
@@ -66,9 +66,9 @@ __C infiniStatus_t infiniopCreateMaskedSelectDescriptor(
 // #ifdef ENABLE_KUNLUN_API
 //         CREATE(INFINI_DEVICE_KUNLUN, kunlun)
 // #endif
-// #ifdef ENABLE_MOORE_API
-//         CREATE(INFINI_DEVICE_MOORE, moore)
-// #endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore)
+#endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
@@ -108,9 +108,9 @@ __C infiniStatus_t infiniopGetMaskedSelectWorkspaceSize(infiniopMaskedSelectDesc
 // #ifdef ENABLE_KUNLUN_API
 //         GET(INFINI_DEVICE_KUNLUN, kunlun)
 // #endif
-// #ifdef ENABLE_MOORE_API
-//         GET(INFINI_DEVICE_MOORE, moore)
-// #endif
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, moore)
+#endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
@@ -157,9 +157,9 @@ __C infiniStatus_t infiniopMaskedSelect(
 // #ifdef ENABLE_KUNLUN_API
 //         CALCULATE(INFINI_DEVICE_KUNLUN, kunlun)
 // #endif
-// #ifdef ENABLE_MOORE_API
-//         CALCULATE(INFINI_DEVICE_MOORE, moore)
-// #endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore)
+#endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
@@ -199,9 +199,9 @@ __C infiniStatus_t infiniopDestroyMaskedSelectDescriptor(infiniopMaskedSelectDes
 // #ifdef ENABLE_KUNLUN_API
 //         DESTROY(INFINI_DEVICE_KUNLUN, kunlun)
 // #endif
-// #ifdef ENABLE_MOORE_API
-//         DESTROY(INFINI_DEVICE_MOORE, moore)
-// #endif
+#ifdef ENABLE_MOORE_API
+        DESTROY(INFINI_DEVICE_MOORE, moore)
+#endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }

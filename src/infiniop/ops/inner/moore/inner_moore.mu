@@ -1,14 +1,14 @@
-#include "../../../devices/nvidia/nvidia_common.cuh"
-#include "inner_nvidia.cuh"
+#include "../../../devices/moore/moore_common.h"
+#include "inner_moore.h"
 
-#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
+#include "../../../devices/moore/moore_kernel_common.h"
 
-#include "../cuda/kernel.cuh"
+#include "inner_kernel.h"
 
-namespace op::inner::nvidia {
+namespace op::inner::moore {
 
 struct Descriptor::Opaque {
-    std::shared_ptr<device::nvidia::Handle::Internal> internal;
+    std::shared_ptr<device::moore::Handle::Internal> internal;
 };
 
 Descriptor::~Descriptor() {
@@ -31,7 +31,7 @@ infiniStatus_t Descriptor::create(
     // input, other, out strides
     workspace_size += (info.input_ndim + info.other_ndim + info.out_ndim) * sizeof(ptrdiff_t);
     *desc_ptr = new Descriptor(
-        new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
+        new Opaque{reinterpret_cast<device::moore::Handle *>(handle)->internal()},
         info, workspace_size, handle->device, handle->device_id);
     return INFINI_STATUS_SUCCESS;
 }
@@ -42,7 +42,7 @@ template<size_t BLOCK_SIZE, typename T>
 infiniStatus_t launchKernel(
     const InnerInfo &info,
     const T *input, const T *other, T *out,
-    cudaStream_t stream, void *workspace, size_t workspace_size) {
+    musaStream_t stream, void *workspace, size_t workspace_size) {
 
     size_t input_ndim = info.input_ndim;
     size_t other_ndim = info.other_ndim;
@@ -53,31 +53,29 @@ infiniStatus_t launchKernel(
     size_t workspace_offset = 0;
     unsigned char *workspace_ptr = reinterpret_cast<unsigned char *>(workspace);
 
-    size_t *out_shape_cuda = reinterpret_cast<size_t *>(workspace_ptr + workspace_offset);
+    size_t *out_shape_musa = reinterpret_cast<size_t *>(workspace_ptr + workspace_offset);
     workspace_offset += out_ndim * sizeof(size_t);
 
-    ptrdiff_t *input_strides_cuda = reinterpret_cast<ptrdiff_t *>(workspace_ptr + workspace_offset);
-    ptrdiff_t *other_strides_cuda = input_strides_cuda + input_ndim;
-    ptrdiff_t *out_strides_cuda = other_strides_cuda + other_ndim;
+    ptrdiff_t *input_strides_musa = reinterpret_cast<ptrdiff_t *>(workspace_ptr + workspace_offset);
+    ptrdiff_t *other_strides_musa = input_strides_musa + input_ndim;
+    ptrdiff_t *out_strides_musa = other_strides_musa + other_ndim;
     workspace_offset += (info.input_ndim + info.other_ndim + info.out_ndim) * sizeof(ptrdiff_t);
 
     assert(workspace_offset == workspace_size);
 
-    CHECK_CUDA(cudaMemcpyAsync(out_shape_cuda, info.out_shape.data(), out_ndim * sizeof(size_t), cudaMemcpyHostToDevice, stream));
-    CHECK_CUDA(cudaMemcpyAsync(input_strides_cuda, info.input_strides.data(), input_ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, stream));
-    CHECK_CUDA(cudaMemcpyAsync(other_strides_cuda, info.other_strides.data(), other_ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, stream));
-    CHECK_CUDA(cudaMemcpyAsync(out_strides_cuda, info.out_strides.data(), out_ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, stream));
+    CHECK_MOORE(musaMemcpyAsync(out_shape_musa, info.out_shape.data(), out_ndim * sizeof(size_t), musaMemcpyHostToDevice, stream));
+    CHECK_MOORE(musaMemcpyAsync(input_strides_musa, info.input_strides.data(), input_ndim * sizeof(ptrdiff_t), musaMemcpyHostToDevice, stream));
+    CHECK_MOORE(musaMemcpyAsync(other_strides_musa, info.other_strides.data(), other_ndim * sizeof(ptrdiff_t), musaMemcpyHostToDevice, stream));
+    CHECK_MOORE(musaMemcpyAsync(out_strides_musa, info.out_strides.data(), out_ndim * sizeof(ptrdiff_t), musaMemcpyHostToDevice, stream));
 
     size_t block_size = BLOCK_SIZE;
     size_t grid_size = (total_elements + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
     innerKernel<BLOCK_SIZE, T><<<grid_size, block_size, 0, stream>>>(
         input, other, out,
-        total_elements, oper_len, out_shape_cuda,
-        input_strides_cuda, other_strides_cuda, out_strides_cuda,
+        total_elements, oper_len, out_shape_musa,
+        input_strides_musa, other_strides_musa, out_strides_musa,
         input_ndim, other_ndim, out_ndim);
-
-    // CHECK_CUDA(cudaDeviceSynchronize());
 
     return INFINI_STATUS_SUCCESS;
 }
@@ -91,7 +89,7 @@ infiniStatus_t Descriptor::calculate(
     const void *other,
     void *stream_) const {
 
-    cudaStream_t stream = (cudaStream_t)stream_;
+    musaStream_t stream = (musaStream_t)stream_;
 #define CALCULATE_INNER(BLOCK_SIZE, T)                          \
     launchKernel<BLOCK_SIZE, T>(                                \
         _info,                                                  \
@@ -101,7 +99,7 @@ infiniStatus_t Descriptor::calculate(
 #define CALCULATE_INNER_WITH_BLOCK_SIZE(BLOCK_SIZE)             \
     {                                                           \
         if (_info.dtype == INFINI_DTYPE_BF16)                   \
-            return CALCULATE_INNER(BLOCK_SIZE, __nv_bfloat16);  \
+            return CALCULATE_INNER(BLOCK_SIZE, __mt_bfloat16);  \
         else if(_info.dtype == INFINI_DTYPE_F16)                \
             return CALCULATE_INNER(BLOCK_SIZE, half);           \
         else if(_info.dtype == INFINI_DTYPE_F32)                \
@@ -110,12 +108,12 @@ infiniStatus_t Descriptor::calculate(
             return INFINI_STATUS_BAD_TENSOR_DTYPE;              \
     }
 
-    if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_1024) {
-        CALCULATE_INNER_WITH_BLOCK_SIZE(CUDA_BLOCK_SIZE_1024)
-    } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_512) {
-        CALCULATE_INNER_WITH_BLOCK_SIZE(CUDA_BLOCK_SIZE_512)
-    } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_4096) {
-        CALCULATE_INNER_WITH_BLOCK_SIZE(CUDA_BLOCK_SIZE_4096)
+    if (_opaque->internal->maxThreadsPerBlock() == MOORE_BLOCK_SIZE_1024) {
+        CALCULATE_INNER_WITH_BLOCK_SIZE(MOORE_BLOCK_SIZE_1024)
+    } else if (_opaque->internal->maxThreadsPerBlock() == MOORE_BLOCK_SIZE_512) {
+        CALCULATE_INNER_WITH_BLOCK_SIZE(MOORE_BLOCK_SIZE_512)
+    } else if (_opaque->internal->maxThreadsPerBlock() == MOORE_BLOCK_SIZE_2048) {
+        CALCULATE_INNER_WITH_BLOCK_SIZE(MOORE_BLOCK_SIZE_2048)
     } else {
         return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
     }

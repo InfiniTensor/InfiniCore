@@ -20,9 +20,9 @@
 // #ifdef ENABLE_KUNLUN_API
 // #include "kunlun/inner_kunlun.h"
 // #endif
-// #ifdef ENABLE_MOORE_API
-// #include "moore/inner_moore.h"
-// #endif
+#ifdef ENABLE_MOORE_API
+#include "moore/inner_moore.h"
+#endif
 
 __C infiniStatus_t infiniopCreateInnerDescriptor(
     infiniopHandle_t handle,
@@ -68,9 +68,9 @@ __C infiniStatus_t infiniopCreateInnerDescriptor(
 // #ifdef ENABLE_KUNLUN_API
 //         CREATE(INFINI_DEVICE_KUNLUN, kunlun)
 // #endif
-// #ifdef ENABLE_MOORE_API
-//         CREATE(INFINI_DEVICE_MOORE, moore)
-// #endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore)
+#endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
@@ -110,9 +110,9 @@ __C infiniStatus_t infiniopGetInnerWorkspaceSize(infiniopInnerDescriptor_t desc,
 // #ifdef ENABLE_KUNLUN_API
 //         GET(INFINI_DEVICE_KUNLUN, kunlun)
 // #endif
-// #ifdef ENABLE_MOORE_API
-//         GET(INFINI_DEVICE_MOORE, moore)
-// #endif
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, moore)
+#endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
@@ -158,9 +158,9 @@ __C infiniStatus_t infiniopInner(
 // #ifdef ENABLE_KUNLUN_API
 //         CALCULATE(INFINI_DEVICE_KUNLUN, kunlun)
 // #endif
-// #ifdef ENABLE_MOORE_API
-//         CALCULATE(INFINI_DEVICE_MOORE, moore)
-// #endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore)
+#endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
@@ -200,9 +200,9 @@ __C infiniStatus_t infiniopDestroyInnerDescriptor(infiniopInnerDescriptor_t desc
 // #ifdef ENABLE_KUNLUN_API
 //         DESTROY(INFINI_DEVICE_KUNLUN, kunlun)
 // #endif
-// #ifdef ENABLE_MOORE_API
-//         DESTROY(INFINI_DEVICE_MOORE, moore)
-// #endif
+#ifdef ENABLE_MOORE_API
+        DESTROY(INFINI_DEVICE_MOORE, moore)
+#endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }

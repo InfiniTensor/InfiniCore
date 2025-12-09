@@ -1,8 +1,6 @@
 #ifndef __TANHSHRINK_CUDA_H__
 #define __TANHSHRINK_CUDA_H__
 
-#include <cmath>
-
 namespace op::tanhshrink::cuda {
 
 typedef struct TanhshrinkOp {

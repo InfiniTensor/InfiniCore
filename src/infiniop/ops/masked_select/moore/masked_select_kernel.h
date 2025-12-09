@@ -2,7 +2,7 @@
 #define __MASKED_SELECT_KERNEL_CUH__
 
 template<size_t BLOCK_SIZE>
-INFINIOP_CUDA_KERNEL maskedSelectGetMarkScanOnceKernel(
+INFINIOP_MOORE_KERNEL maskedSelectGetMarkScanOnceKernel(
     const bool *mask, size_t *mark_scan, size_t total_elements,
     size_t *shape, ptrdiff_t *mask_strides, size_t ndim) {
 
@@ -11,7 +11,7 @@ INFINIOP_CUDA_KERNEL maskedSelectGetMarkScanOnceKernel(
     size_t tid = threadIdx.x;
     size_t index = blockDim.x * blockIdx.x + threadIdx.x;
     if (index < total_elements) {
-        size_t mask_offset = device::nvidia::indexToOffset(index, ndim, shape, mask_strides);
+        size_t mask_offset = device::moore::indexToOffset(index, ndim, shape, mask_strides);
         smem[tid] = mask[mask_offset];
     } else {
         smem[tid] = 0;
@@ -34,7 +34,7 @@ INFINIOP_CUDA_KERNEL maskedSelectGetMarkScanOnceKernel(
 }
 
 template<size_t BLOCK_SIZE>
-INFINIOP_CUDA_KERNEL maskedSelectScanWithStrideKernel(
+INFINIOP_MOORE_KERNEL maskedSelectScanWithStrideKernel(
     size_t *mark_scan, size_t total_elements, size_t stride) {
 
     __shared__ __align__(128) size_t smem[BLOCK_SIZE];
@@ -60,7 +60,7 @@ INFINIOP_CUDA_KERNEL maskedSelectScanWithStrideKernel(
 }
 
 template<size_t BLOCK_SIZE>
-INFINIOP_CUDA_KERNEL maskedSelectCountScanResultKernel(
+INFINIOP_MOORE_KERNEL maskedSelectCountScanResultKernel(
     size_t *mark_scan, size_t *scan_result, size_t total_elements) {
 
     size_t index = blockDim.x * blockIdx.x + threadIdx.x;
@@ -81,7 +81,7 @@ INFINIOP_CUDA_KERNEL maskedSelectCountScanResultKernel(
 }
 
 template<size_t BLOCK_SIZE, typename T>
-INFINIOP_CUDA_KERNEL maskedSelectGetDataKernel(
+INFINIOP_MOORE_KERNEL maskedSelectGetDataKernel(
     const T *input, const bool *mask, size_t *scan_result, T *data, size_t total_elements,
     size_t *shape, ptrdiff_t *input_strides, ptrdiff_t *mask_strides, size_t ndim) {
 
@@ -90,8 +90,8 @@ INFINIOP_CUDA_KERNEL maskedSelectGetDataKernel(
     if (index >= total_elements)
         return;
 
-    size_t input_offset = device::nvidia::indexToOffset(index, ndim, shape, input_strides);
-    size_t mask_offset = device::nvidia::indexToOffset(index, ndim, shape, mask_strides);
+    size_t input_offset = device::moore::indexToOffset(index, ndim, shape, input_strides);
+    size_t mask_offset = device::moore::indexToOffset(index, ndim, shape, mask_strides);
 
     if (mask[mask_offset]) {
         data[scan_result[index] - 1] = input[input_offset];

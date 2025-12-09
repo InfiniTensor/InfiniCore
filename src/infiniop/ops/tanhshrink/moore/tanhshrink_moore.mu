@@ -1,9 +1,9 @@
-#include "../../../elementwise/nvidia/elementwise_nvidia.cuh"
+#include "../../../elementwise/moore/elementwise_moore.h"
 
-#include "../cuda/kernel.cuh"
-#include "tan_nvidia.cuh"
+#include "tanhshrink_moore_kernel.h"
+#include "tanhshrink_moore.h"
 
-namespace op::tan::nvidia {
+namespace op::tanhshrink::moore {
 
 Descriptor::~Descriptor() = default;
 
@@ -13,7 +13,7 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t out_desc,
     std::vector<infiniopTensorDescriptor_t> input_desc_vec) {
 
-    auto handle = reinterpret_cast<device::nvidia::Handle *>(handle_);
+    auto handle = reinterpret_cast<device::moore::Handle *>(handle_);
     auto dtype = out_desc->dtype();
 
     const auto &input_desc = input_desc_vec.at(0);
@@ -24,8 +24,7 @@ infiniStatus_t Descriptor::create(
 
     CHECK_SAME_SHAPE(output_shape, input_shape);
 
-    // create CUDA elementwise descriptor
-    CREATE_ELEMENTWISE_CUDA_DESCRIPTOR(handle, dtype, out_desc, input_desc_vec)
+    CREATE_ELEMENTWISE_MOORE_DESCRIPTOR(handle, dtype, out_desc, input_desc_vec)
 
     return INFINI_STATUS_SUCCESS;
 }
@@ -43,15 +42,15 @@ infiniStatus_t Descriptor::calculate(
 
     switch (_dtype) {
     case INFINI_DTYPE_BF16:
-        return _device_info->calculate<256, cuda::TanOp, cuda_bfloat16>(_info, workspace, output, inputs, stream);
+        return _device_info->calculate<256, moore::TanhshrinkOp, mt_bfloat16>(_info, workspace, output, inputs, stream);
     case INFINI_DTYPE_F16:
-        return _device_info->calculate<256, cuda::TanOp, half>(_info, workspace, output, inputs, stream);
+        return _device_info->calculate<256, moore::TanhshrinkOp, half>(_info, workspace, output, inputs, stream);
     case INFINI_DTYPE_F32:
-        return _device_info->calculate<256, cuda::TanOp, float>(_info, workspace, output, inputs, stream);
+        return _device_info->calculate<256, moore::TanhshrinkOp, float>(_info, workspace, output, inputs, stream);
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
 
     return INFINI_STATUS_SUCCESS;
 }
-} // namespace op::tan::nvidia
+} // namespace op::tanhshrink::moore

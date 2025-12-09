@@ -48,9 +48,9 @@ void calculate(Tensor out, Tensor input, Tensor other) {
 static bool registered = []() {
     Inner::dispatcher().registerDevice({
             Device::Type::CPU,
-            Device::Type::NVIDIA
+            Device::Type::NVIDIA,
             // Device::Type::METAX,
-            // Device::Type::MOORE,
+            Device::Type::MOORE
             // Device::Type::ILUVATAR
         }, &calculate, false);
     return true;

@@ -1,7 +1,7 @@
-#ifndef __TAN_CUDA_H__
-#define __TAN_CUDA_H__
+#ifndef __TAN_MOORE_KERNEL_H__
+#define __TAN_MOORE_KERNEL_H__
 
-namespace op::tan::cuda {
+namespace op::tan::moore {
 
 typedef struct TanOp {
 public:
@@ -23,6 +23,6 @@ public:
     }
 } TanOp;
 
-} // namespace op::tan::cuda
+} // namespace op::tan::moore
 
-#endif // __TAN_CUDA_H__
+#endif // __TAN_MOORE_KERNEL_H__
