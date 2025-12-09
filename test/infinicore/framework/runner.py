@@ -9,13 +9,13 @@ from . import TestConfig, TestRunner, get_args, get_test_devices
 class GenericTestRunner:
     """Generic test runner that handles the common execution flow"""
 
-    def __init__(self, operator_test_class):
+    def __init__(self, operator_test_class, args = None):
         """
         Args:
             operator_test_class: A class that implements BaseOperatorTest interface
         """
         self.operator_test = operator_test_class()
-        self.args = get_args()
+        self.args = args or get_args()
 
     def run(self):
         """Execute the complete test suite
