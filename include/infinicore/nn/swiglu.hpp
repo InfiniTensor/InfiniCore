@@ -1,10 +1,20 @@
 #pragma once
 
 #include "module.hpp"
-#include "../ops.hpp"
+#include "functional.hpp"
 
 namespace infinicore::nn {
 
+/**
+ * @brief SwiGLU module
+ *
+ * Applies SwiGLU (Swish-Gated Linear Unit) activation: output = up * gate * sigmoid(gate)
+ *
+ * This module wraps the functional::swiglu() operation. Since SwiGLU has no parameters
+ * or buffers, you can use either the module or the functional version:
+ * - Module: SwiGLU swiglu; output = swiglu.forward(up, gate);
+ * - Functional: output = functional::swiglu(up, gate);
+ */
 class SwiGLU : public Module {
 public:
     /**

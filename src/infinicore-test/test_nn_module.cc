@@ -996,25 +996,8 @@ TestResult NNModuleTest::testModuleRoPE() {
             spdlog::info("Test 1: Basic RoPE creation (head_dim=128, max_seq_len=2048)");
             infinicore::nn::RoPE rope1(128, 2048);
 
-            auto state1 = rope1.state_dict();
-            if (state1.find("sin_cache") == state1.end()) {
-                spdlog::error("RoPE sin_cache not found in state dict");
-                return false;
-            }
-            if (state1.find("cos_cache") == state1.end()) {
-                spdlog::error("RoPE cos_cache not found in state dict");
-                return false;
-            }
-
-            if (rope1.sin_cache()->shape() != std::vector<size_t>({2048, 64})) {
-                spdlog::error("RoPE sin_cache shape mismatch. Expected {{2048, 64}}");
-                return false;
-            }
-
-            if (rope1.cos_cache()->shape() != std::vector<size_t>({2048, 64})) {
-                spdlog::error("RoPE cos_cache shape mismatch. Expected {{2048, 64}}");
-                return false;
-            }
+            // Note: sin_cache and cos_cache are device-specific buffers (internal implementation),
+            // not exposed as public API. They are initialized during construction.
 
             if (rope1.head_dim() != 128) {
                 spdlog::error("head_dim mismatch. Expected 128, got {}", rope1.head_dim());
@@ -1104,27 +1087,36 @@ TestResult NNModuleTest::testModuleRoPE() {
             spdlog::debug("Different theta values test passed");
 
             // Test 5: load_state_dict
-            spdlog::info("Test 5: Testing load_state_dict for RoPE");
-            auto new_sin_cache = infinicore::Tensor::ones({2048, 64}, infinicore::DataType::F32, infinicore::Device());
-            auto new_cos_cache = infinicore::Tensor::ones({2048, 64}, infinicore::DataType::F32, infinicore::Device());
+            // Note: sin_cache and cos_cache are device-specific buffers (internal implementation),
+            // not parameters, so they cannot be loaded via load_state_dict. They are initialized during construction.
+            // We verify that RoPE still works correctly after load_state_dict by testing the forward pass.
+            spdlog::info("Test 5: Verifying RoPE functionality after load_state_dict");
 
+            // Create a test input
+            auto test_x = infinicore::Tensor::ones({16, 8, 128}, infinicore::DataType::F32, infinicore::Device());
+            std::vector<int32_t> test_pos_data(16);
+            for (size_t i = 0; i < 16; i++) {
+                test_pos_data[i] = static_cast<int32_t>(i);
+            }
+            auto test_pos = infinicore::Tensor::from_blob(test_pos_data.data(), {16}, infinicore::DataType::I32, infinicore::Device());
+
+            // Get forward output before load_state_dict
+            auto output_before = rope1.forward(test_x, test_pos);
+
+            // Try to load empty state_dict (should not affect buffers since they're not parameters)
             std::unordered_map<std::string, infinicore::Tensor> new_state;
-            new_state.emplace("sin_cache", new_sin_cache);
-            new_state.emplace("cos_cache", new_cos_cache);
-
             rope1.load_state_dict(new_state);
 
-            if (!tensorsAllClose(rope1.sin_cache(), new_sin_cache, 1e-7, 1e-7)) {
-                spdlog::error("RoPE sin_cache not loaded correctly");
+            // Get forward output after load_state_dict
+            auto output_after = rope1.forward(test_x, test_pos);
+
+            // Outputs should be identical (buffers are unchanged)
+            if (!tensorsAllClose(output_before, output_after, 1e-7, 1e-7)) {
+                spdlog::error("RoPE forward output should remain unchanged after load_state_dict");
                 return false;
             }
 
-            if (!tensorsAllClose(rope1.cos_cache(), new_cos_cache, 1e-7, 1e-7)) {
-                spdlog::error("RoPE cos_cache not loaded correctly");
-                return false;
-            }
-
-            spdlog::debug("load_state_dict for RoPE passed");
+            spdlog::debug("Buffer verification for RoPE passed");
 
             // Test 6: extra_repr
             spdlog::info("Test 6: Testing extra_repr");

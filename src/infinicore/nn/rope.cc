@@ -12,7 +12,7 @@ namespace infinicore::nn {
 RoPE::RoPE(size_t head_dim,
            size_t max_seq_len,
            double theta,
-           infiniopRoPEAlgo_t algo,
+           RoPEAlgo algo,
            const DataType &dtype,
            const Device &device)
     : head_dim_(head_dim),
@@ -37,9 +37,12 @@ RoPE::RoPE(size_t head_dim,
 void RoPE::initialize_cache() {
     size_t cache_dim = head_dim_ / 2;
 
-    // Create sin and cos cache tables: [max_seq_len, cache_dim]
-    INFINICORE_NN_PARAMETER_INIT(sin_cache, ({max_seq_len_, cache_dim}, dtype_, device_));
-    INFINICORE_NN_PARAMETER_INIT(cos_cache, ({max_seq_len_, cache_dim}, dtype_, device_));
+    // Create sin and cos cache tables as device-specific buffers: [max_seq_len, cache_dim]
+    // TODO: Optimize by sharing sin/cos cache tables among multiple RoPE layers with the same
+    //       configuration (head_dim, max_seq_len, theta, algo, dtype). This would reduce memory
+    //       usage when multiple layers share the same RoPE parameters.
+    sin_cache_ = Tensor::empty({max_seq_len_, cache_dim}, dtype_, device_);
+    cos_cache_ = Tensor::empty({max_seq_len_, cache_dim}, dtype_, device_);
 
     // Pre-compute sin and cos values
     // The frequency calculation differs based on algorithm:
@@ -58,11 +61,11 @@ void RoPE::initialize_cache() {
             // Compute inverse frequency based on algorithm
             double inv_freq;
 
-            if (algo_ == INFINIOP_ROPE_ALGO_GPT_J) {
+            if (algo_ == RoPEAlgo::GPT_J) {
                 // GPT_J: pairs are (2j, 2j+1) for cache entry j
                 // Frequency for pair j: theta^(-2j/head_dim)
                 inv_freq = 1.0 / std::pow(theta_, 2.0 * static_cast<double>(j) / static_cast<double>(head_dim_));
-            } else if (algo_ == INFINIOP_ROPE_ALGO_GPT_NEOX) {
+            } else if (algo_ == RoPEAlgo::GPT_NEOX) {
                 // GPT_NEOX: pairs are (j, j+head_dim/2) for cache entry j
                 // Frequency for pair j (corresponding to dimension j): theta^(-j/head_dim)
                 inv_freq = 1.0 / std::pow(theta_, static_cast<double>(j) / static_cast<double>(head_dim_));
@@ -96,18 +99,19 @@ void RoPE::initialize_cache() {
 
     // copy_from handles cross-device copying automatically
     // Direct copy from CPU to target device avoids double copying
-    sin_cache_->copy_from(sin_cpu);
-    cos_cache_->copy_from(cos_cpu);
+    sin_cache_.value()->copy_from(sin_cpu);
+    cos_cache_.value()->copy_from(cos_cpu);
 }
 
 Tensor RoPE::forward(const Tensor &x, const Tensor &pos) const {
     // Delegate to InfiniCore op (backed by InfiniRT/InfiniOP)
     // Validation is handled by the op layer
-    return op::rope(x, pos, sin_cache_, cos_cache_, algo_);
+    // Conversion from RoPEAlgo to infiniopRoPEAlgo_t happens in ops layer
+    return op::rope(x, pos, sin_cache_.value(), cos_cache_.value(), algo_);
 }
 
 std::string RoPE::extra_repr() const {
-    std::string algo_str = (algo_ == INFINIOP_ROPE_ALGO_GPT_J) ? "GPT_J" : "GPT_NEOX";
+    std::string algo_str = (algo_ == RoPEAlgo::GPT_J) ? "GPT_J" : "GPT_NEOX";
     return "RoPE(head_dim=" + std::to_string(head_dim_) + ", max_seq_len=" + std::to_string(max_seq_len_) + ", theta=" + std::to_string(theta_) + ", algo=" + algo_str + ", dtype=" + std::to_string(static_cast<int>(dtype_)) + ")";
 }
 
