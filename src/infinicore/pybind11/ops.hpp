@@ -2,6 +2,7 @@
 
 #include <pybind11/pybind11.h>
 
+#include "ops/adaptive_max_pool1d.hpp"
 #include "ops/add.hpp"
 #include "ops/attention.hpp"
 #include "ops/asinh.hpp"
@@ -25,6 +26,7 @@ namespace py = pybind11;
 namespace infinicore::ops {
 
 inline void bind(py::module &m) {
+    bind_adaptive_max_pool1d(m);
     bind_add(m);
     bind_attention(m);
     bind_asinh(m);
