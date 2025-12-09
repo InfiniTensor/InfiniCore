@@ -7,6 +7,11 @@ class Parameter : public Tensor {
 public:
     Parameter();
 
+    Parameter(const Tensor &tensor,
+              Size tp_dim = 0,
+              Size tp_rank = 0,
+              Size tp_size = 1);
+
     Parameter(const Shape &shape,
               const DataType &dtype,
               const Device &device,

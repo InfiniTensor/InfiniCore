@@ -33,14 +33,17 @@ inline struct SpdlogInitializer {
         }                                                                                                    \
     } while (false)
 
-#define INFINICORE_ASSERT_TENSORS_SAME_DEVICE(FIRST___, ...)                        \
-    do {                                                                            \
-        const auto &first_device___ = (FIRST___)->device();                         \
-        for (const auto &tensor___ : {__VA_ARGS__}) {                               \
-            if (first_device___ != (tensor___)->device()) {                         \
-                throw std::runtime_error("Tensor devices mismatch "                 \
-                                         + first_device___.toString() + " vs "      \
-                                         + (tensor___)->device().toString() + "."); \
-            }                                                                       \
-        }                                                                           \
+#define INFINICORE_ASSERT_TENSORS_SAME_DEVICE(FIRST___, ...)                      \
+    do {                                                                          \
+        const auto &first_device___ = (FIRST___)->device();                       \
+        for (const auto &tensor___ : {__VA_ARGS__}) {                             \
+            if (first_device___ != (tensor___)->device()) {                       \
+                throw std::runtime_error("Tensor devices mismatch "               \
+                                         + first_device___.toString() + " vs "    \
+                                         + (tensor___)->device().toString()       \
+                                         + " from " + std::string(__func__)       \
+                                         + " at " + std::string(__FILE__)         \
+                                         + ":" + std::to_string(__LINE__) + "."); \
+            }                                                                     \
+        }                                                                         \
     } while (0)

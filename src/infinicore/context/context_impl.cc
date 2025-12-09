@@ -13,14 +13,14 @@ Runtime *ContextImpl::getCurrentRuntime() {
         // Try to find the first non-CPU device, fallback to CPU
         for (int i = int(Device::Type::COUNT) - 1; i > 0; i--) {
             if (!runtime_table_[i].empty() && runtime_table_[i][0] != nullptr) {
-                current_runtime_ = runtime_table_[i][0].get();
+                current_runtime_ = runtime_table_[i][0].get()->activate();
                 spdlog::debug("Lazy init: Set current_runtime_ to {} (ptr={})", current_runtime_->device().toString(), static_cast<void *>(current_runtime_));
                 return current_runtime_;
             }
         }
         // Fallback to CPU runtime
         if (!runtime_table_[0].empty() && runtime_table_[0][0] != nullptr) {
-            current_runtime_ = runtime_table_[0][0].get();
+            current_runtime_ = runtime_table_[0][0].get()->activate();
             spdlog::debug("Lazy init: Set current_runtime_ to {} (ptr={})", current_runtime_->device().toString(), static_cast<void *>(current_runtime_));
         }
     } else {
