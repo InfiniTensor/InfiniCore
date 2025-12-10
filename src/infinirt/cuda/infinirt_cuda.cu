@@ -4,7 +4,19 @@
 
 #define CHECK_CUDART(RT_API) CHECK_INTERNAL(RT_API, cudaSuccess)
 
+// 根据宏定义选择命名空间并实现
+#if defined(ENABLE_NVIDIA_API)
 namespace infinirt::cuda {
+#elif defined(ENABLE_ILUVATAR_API)
+namespace infinirt::iluvatar {
+#elif defined(ENABLE_QY_API)
+namespace infinirt::qy {
+#elif defined(ENABLE_HYGON_API)
+namespace infinirt::hygon {
+#else
+namespace infinirt::cuda { // 默认回退
+#endif
+
 infiniStatus_t getDeviceCount(int *count) {
     CHECK_CUDART(cudaGetDeviceCount(count));
     return INFINI_STATUS_SUCCESS;
@@ -156,4 +168,4 @@ infiniStatus_t freeAsync(void *ptr, infinirtStream_t stream) {
     CHECK_CUDART(cudaFreeAsync(ptr, (cudaStream_t)stream));
     return INFINI_STATUS_SUCCESS;
 }
-} // namespace infinirt::cuda
+}

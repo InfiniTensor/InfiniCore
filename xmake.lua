@@ -349,8 +349,6 @@ target("infiniccl")
 target_end()
 
 target("infinicore_c_api")
-
-target("infinicore_c_api")
     set_kind("phony")
     add_deps("infiniop", "infinirt", "infiniccl")
     after_build(function (target) print(YELLOW .. "[Congratulations!] Now you can install the libraries with \"xmake install\"" .. NC) end)
@@ -360,6 +358,7 @@ target("infinicore_cpp_api")
     set_kind("shared")
     add_deps("infiniop", "infinirt", "infiniccl")
     set_languages("cxx17")
+    set_symbols("visibility")
 
     local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
 

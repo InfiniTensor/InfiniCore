@@ -18,22 +18,39 @@ void Module::load_state_dict(const std::unordered_map<std::string, Tensor> &_sta
 
 void Module::load_parameter(const std::string &name, const Tensor &param) {
     // This function only handles direct parameters (no hierarchical traversal)
-    auto it = parameters_.find(name);
-    if (it != parameters_.end()) {
+    auto all_params = state_dict();
+    auto it = all_params.find(name);
+    if (it != all_params.end()) {
         auto existing_param = it->second;
-        // Assert dtype matches
-        if (existing_param->dtype() != param->dtype()) {
-            throw std::runtime_error(
-                "dtype mismatch for parameter '" + name + "': "
-                                                          "expected "
-                + std::to_string(static_cast<int>(existing_param->dtype())) + ", got " + std::to_string(static_cast<int>(param->dtype())));
+        try {
+            existing_param.load(param);
+        } catch (const std::exception &e) {
+            throw std::runtime_error("Error loading parameter '" + name + "'. \n" + e.what());
         }
-        existing_param.load(param);
         return;
     }
 
     // Parameter not found
-    spdlog::debug("load_parameter: Parameter '{}' not found. Available: {} params",
+    spdlog::debug("load_parameter_: Parameter '{}' not found. Available: {} params",
+                  name, parameters_.size());
+    throw std::runtime_error("Parameter '" + name + "' not found in module.");
+}
+
+void Module::load_parameter_(const std::string &name, const Tensor &param) {
+    // This function only handles direct parameters (no hierarchical traversal)
+    auto it = parameters_.find(name);
+    if (it != parameters_.end()) {
+        auto existing_param = it->second;
+        try {
+            existing_param.load(param);
+        } catch (const std::exception &e) {
+            throw std::runtime_error("Error loading parameter '" + name + "'. \n" + e.what());
+        }
+        return;
+    }
+
+    // Parameter not found
+    spdlog::debug("load_parameter_: Parameter '{}' not found. Available: {} params",
                   name, parameters_.size());
     throw std::runtime_error("Parameter '" + name + "' not found in module.");
 }
@@ -59,7 +76,7 @@ void Module::load_state_dict_recursively(const std::unordered_map<std::string, T
         std::string full_name = prefix.empty() ? param_name : prefix + "." + param_name;
         auto it = _state_dict.find(full_name);
         if (it != _state_dict.end()) {
-            load_parameter(param_name, it->second);
+            load_parameter_(param_name, it->second);
         }
     }
 

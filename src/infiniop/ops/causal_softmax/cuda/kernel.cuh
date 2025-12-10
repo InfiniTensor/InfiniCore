@@ -28,7 +28,7 @@ __device__ void causalSoftmaxKernel(
         //          1 | * * * ... * *   |
         //          2 | * * * ... * * * |
         //  height: 3  col_id->
-        if (width + blockIdx.x >= threadIdx.x + height) {
+        if (width + blockIdx.x >= col + height) {
             if constexpr (std::is_same_v<Tdata, half> || std::is_same_v<Tdata, cuda_bfloat16>) {
                 y[col] = hexp(x[col] - max_);
             } else {
