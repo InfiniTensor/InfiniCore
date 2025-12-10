@@ -4,7 +4,7 @@
 #include "common/op.hpp"
 
 namespace infinicore::op {
-class AdaptiveMaxPool1D {
+class AdaptiveMaxPool1d {
 public:
     using schema = void (*)(Tensor, Tensor, size_t);
     static void execute(Tensor y, Tensor x, size_t output_size);

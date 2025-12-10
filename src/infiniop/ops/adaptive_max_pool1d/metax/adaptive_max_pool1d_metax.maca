@@ -1,12 +1,12 @@
-#include "../../../devices/nvidia/nvidia_common.cuh"
-#include "adaptive_max_pool1d_nvidia.cuh"
+#include "../../../devices/metax/metax_common.h"
+#include "adaptive_max_pool1d_metax.cuh"
 
-#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
+#include "../../../devices/metax/metax_kernel_common.h"
 
 #include "../cuda/kernel.cuh"
 
 template <unsigned int BLOCK_SIZE, typename Tdata, typename Tcompute>
-INFINIOP_CUDA_KERNEL adaptiveMaxPool1dKernel(
+INFINIOP_METAX_KERNEL adaptiveMaxPool1dKernel(
     Tdata *__restrict__ y,
     ptrdiff_t stride_y_batch,
     ptrdiff_t stride_y_channel,
@@ -17,21 +17,21 @@ INFINIOP_CUDA_KERNEL adaptiveMaxPool1dKernel(
     size_t channels,
     size_t input_length,
     size_t output_length,
-    size_t ndim){
+    size_t ndim) {
 
     adaptiveMaxPool1dBlock<BLOCK_SIZE, Tdata, Tcompute>(
         y, stride_y_batch, stride_y_channel,
         x, stride_x_batch, stride_x_channel, stride_x_length,
-        channels, input_length, output_length, ndim);
+        channels, input_length, output_length,ndim);
 }
 
-namespace op::adaptive_max_pool1d::nvidia {
+namespace op::adaptive_max_pool1d::metax {
 
 struct Descriptor::Opaque {
-    std::shared_ptr<device::nvidia::Handle::Internal> internal;
+    std::shared_ptr<device::metax::Handle::Internal> internal;
 };
 
-Descriptor::~Descriptor() {
+Descriptor::~Descriptor(){
     delete _opaque;
 }
 
@@ -41,12 +41,13 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t y_desc,
     infiniopTensorDescriptor_t x_desc,
     size_t output_size) {
+
     auto result = AdaptiveMaxPool1dInfo::create(y_desc, x_desc, output_size);
     CHECK_RESULT(result);
     auto info = result.take();
 
     *desc_ptr = new Descriptor(
-        new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
+        new Opaque{reinterpret_cast<device::metax::Handle *>(handle)->internal()},
         std::move(info),
         0,
         handle->device, handle->device_id);
@@ -55,18 +56,18 @@ infiniStatus_t Descriptor::create(
 
 template <unsigned int BLOCK_SIZE>
 infiniStatus_t launchKernel(
-    uint32_t num_blocks,
+    uint32_t numblock,
     void *y, infiniDtype_t dtype,
-    ptrdiff_t stride_y_batch, ptrdiff_t stride_y_channel,
-    const void *x,
+    ptrdiff_t stride_x_batch, ptrdiff_t stride_y_channel,
+    cosnt void *x,
     ptrdiff_t stride_x_batch, ptrdiff_t stride_x_channel, ptrdiff_t stride_x_length,
     size_t channels, size_t input_length, size_t output_length, size_t ndim,
-    cudaStream_t cuda_stream) {
+    hcStream_t stream){
 
-#define LAUNCH_KERNEL(Tdata, Tcompute)                                                       \
-    adaptiveMaxPool1dKernel<BLOCK_SIZE, Tdata, Tcompute><<<num_blocks, BLOCK_SIZE, 0, cuda_stream>>>( \
-        reinterpret_cast<Tdata *>(y),                                                        \
-        stride_y_batch, stride_y_channel,                                                    \
+#define LAUNCH_KERNEL(Tdata, Tcompute)                                                          \
+    adaptiveMaxPool1dKernel<BLOCK_SIZE, Tdata, Tcompute><<<numblock, BLOCK_SIZE, 0, stream>>> ( \
+        reinterpret_cast<Tdata *>(y),                                                           \
+        stride_y_batch, stride_y_channel,                                                       \
         reinterpret_cast<const Tdata *>(x),                                                  \
         stride_x_batch, stride_x_channel, stride_x_length,                                   \
         channels, input_length, output_length, ndim)
@@ -74,7 +75,7 @@ infiniStatus_t launchKernel(
     if (dtype == INFINI_DTYPE_F16) {
         LAUNCH_KERNEL(half, float);
     } else if (dtype == INFINI_DTYPE_BF16) {
-        LAUNCH_KERNEL(__nv_bfloat16, float);
+        LAUNCH_KERNEL(__hpcc_bfloat16, float);
     } else if (dtype == INFINI_DTYPE_F32) {
         LAUNCH_KERNEL(float, float);
     } else if (dtype == INFINI_DTYPE_F64) {
@@ -82,16 +83,15 @@ infiniStatus_t launchKernel(
     } else {
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
-
 #undef LAUNCH_KERNEL
 
     return INFINI_STATUS_SUCCESS;
 }
 
-infiniStatus_t Descriptor::calculate(
+nfiniStatus_t Descriptor::calculate(
     void *workspace, size_t workspace_size,
     void *y, const void *x,
-    void *stream) const {
+    void *stream_) const {
 
     if (workspace_size < _workspace_size) {
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
@@ -111,24 +111,10 @@ infiniStatus_t Descriptor::calculate(
     ptrdiff_t stride_y_channel = ndim > 2 ? _info.y_strides[1] : 0;
 
     uint32_t num_blocks = static_cast<uint32_t>(batch_size * channels);
-    auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
+    auto stream = reinterpret_cast<hcStream_t>(stream_);
 
-    if (_opaque->internal->maxThreadsPerBlock() >= CUDA_BLOCK_SIZE_1024) {
-        CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_1024>(
-            num_blocks, y, _info.atype,
-            stride_y_batch, stride_y_channel,
-            x, stride_x_batch, stride_x_channel, stride_x_length,
-            channels, input_length, output_length, ndim,
-            cuda_stream));
-    } else if (_opaque->internal->maxThreadsPerBlock() >= CUDA_BLOCK_SIZE_512) {
-        CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_512>(
-            num_blocks, y, _info.atype,
-            stride_y_batch, stride_y_channel,
-            x, stride_x_batch, stride_x_channel, stride_x_length,
-            channels, input_length, output_length, ndim,
-            cuda_stream));
-    } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_4096) {
-        CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_4096>(
+    if (_opaque->internal->maxThreadsPerBlock() >= METAX_BLOCK_SIZE_1024) {
+        CHECK_STATUS(launchKernel<METAX_BLOCK_SIZE_1024>(
             num_blocks, y, _info.atype,
             stride_y_batch, stride_y_channel,
             x, stride_x_batch, stride_x_channel, stride_x_length,
@@ -141,4 +127,4 @@ infiniStatus_t Descriptor::calculate(
     return INFINI_STATUS_SUCCESS;
 }
 
-} // namespace op::adaptive_max_pool1d::nvidia
+} // namespace op::adaptive_max_pool1d::metax

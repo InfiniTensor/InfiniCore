@@ -1,12 +1,12 @@
-#include "../../../devices/nvidia/nvidia_common.cuh"
-#include "adaptive_max_pool1d_nvidia.cuh"
+#include "../../../devices/moore/moore_common.h"
+#include "adaptive_max_pool1d_moore.h"
 
-#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
+#include "../../../devices/moore/moore_kernel_common.h"
 
 #include "../cuda/kernel.cuh"
 
 template <unsigned int BLOCK_SIZE, typename Tdata, typename Tcompute>
-INFINIOP_CUDA_KERNEL adaptiveMaxPool1dKernel(
+INFINIOP_MOORE_KERNEL adaptiveMaxPool1dKernel(
     Tdata *__restrict__ y,
     ptrdiff_t stride_y_batch,
     ptrdiff_t stride_y_channel,
@@ -25,10 +25,10 @@ INFINIOP_CUDA_KERNEL adaptiveMaxPool1dKernel(
         channels, input_length, output_length, ndim);
 }
 
-namespace op::adaptive_max_pool1d::nvidia {
+namespace op::adaptive_max_pool1d::moore {
 
 struct Descriptor::Opaque {
-    std::shared_ptr<device::nvidia::Handle::Internal> internal;
+    std::shared_ptr<device::moore::Handle::Internal> internal;
 };
 
 Descriptor::~Descriptor() {
@@ -46,7 +46,7 @@ infiniStatus_t Descriptor::create(
     auto info = result.take();
 
     *desc_ptr = new Descriptor(
-        new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
+        new Opaque{reinterpret_cast<device::moore::Handle *>(handle)->internal()},
         std::move(info),
         0,
         handle->device, handle->device_id);
@@ -61,10 +61,10 @@ infiniStatus_t launchKernel(
     const void *x,
     ptrdiff_t stride_x_batch, ptrdiff_t stride_x_channel, ptrdiff_t stride_x_length,
     size_t channels, size_t input_length, size_t output_length, size_t ndim,
-    cudaStream_t cuda_stream) {
+    musaStream_t musa_stream) {
 
 #define LAUNCH_KERNEL(Tdata, Tcompute)                                                       \
-    adaptiveMaxPool1dKernel<BLOCK_SIZE, Tdata, Tcompute><<<num_blocks, BLOCK_SIZE, 0, cuda_stream>>>( \
+    adaptiveMaxPool1dKernel<BLOCK_SIZE, Tdata, Tcompute><<<num_blocks, BLOCK_SIZE, 0, musa_stream>>>( \
         reinterpret_cast<Tdata *>(y),                                                        \
         stride_y_batch, stride_y_channel,                                                    \
         reinterpret_cast<const Tdata *>(x),                                                  \
@@ -74,7 +74,7 @@ infiniStatus_t launchKernel(
     if (dtype == INFINI_DTYPE_F16) {
         LAUNCH_KERNEL(half, float);
     } else if (dtype == INFINI_DTYPE_BF16) {
-        LAUNCH_KERNEL(__nv_bfloat16, float);
+        LAUNCH_KERNEL(__mt_bfloat16, float);
     } else if (dtype == INFINI_DTYPE_F32) {
         LAUNCH_KERNEL(float, float);
     } else if (dtype == INFINI_DTYPE_F64) {
@@ -111,29 +111,29 @@ infiniStatus_t Descriptor::calculate(
     ptrdiff_t stride_y_channel = ndim > 2 ? _info.y_strides[1] : 0;
 
     uint32_t num_blocks = static_cast<uint32_t>(batch_size * channels);
-    auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
+    auto musa_stream = reinterpret_cast<musaStream_t>(stream);
 
-    if (_opaque->internal->maxThreadsPerBlock() >= CUDA_BLOCK_SIZE_1024) {
-        CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_1024>(
+    if (_opaque->internal->maxThreadsPerBlock() >= MOORE_BLOCK_SIZE_1024) {
+        CHECK_STATUS(launchKernel<MOORE_BLOCK_SIZE_1024>(
             num_blocks, y, _info.atype,
             stride_y_batch, stride_y_channel,
             x, stride_x_batch, stride_x_channel, stride_x_length,
             channels, input_length, output_length, ndim,
-            cuda_stream));
-    } else if (_opaque->internal->maxThreadsPerBlock() >= CUDA_BLOCK_SIZE_512) {
-        CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_512>(
+            musa_stream));
+    } else if (_opaque->internal->maxThreadsPerBlock() >= MOORE_BLOCK_SIZE_512) {
+        CHECK_STATUS(launchKernel<MOORE_BLOCK_SIZE_512>(
             num_blocks, y, _info.atype,
             stride_y_batch, stride_y_channel,
             x, stride_x_batch, stride_x_channel, stride_x_length,
             channels, input_length, output_length, ndim,
-            cuda_stream));
-    } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_4096) {
-        CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_4096>(
+            musa_stream));
+    } else if (_opaque->internal->maxThreadsPerBlock() == MOORE_BLOCK_SIZE_2048) {
+        CHECK_STATUS(launchKernel<MOORE_BLOCK_SIZE_2048>(
             num_blocks, y, _info.atype,
             stride_y_batch, stride_y_channel,
             x, stride_x_batch, stride_x_channel, stride_x_length,
             channels, input_length, output_length, ndim,
-            cuda_stream));
+            musa_stream));
     } else {
         return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
     }
@@ -141,4 +141,4 @@ infiniStatus_t Descriptor::calculate(
     return INFINI_STATUS_SUCCESS;
 }
 
-} // namespace op::adaptive_max_pool1d::nvidia
+} // namespace op::adaptive_max_pool1d::moore

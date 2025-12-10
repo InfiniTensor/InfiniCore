@@ -7,8 +7,8 @@
 
 namespace op::adaptive_max_pool1d {
 
-class AdaptiveMaxPool1DInfo {
-    AdaptiveMaxPool1DInfo() = default;
+class AdaptiveMaxPool1dInfo {
+    AdaptiveMaxPool1dInfo() = default;
 
 public:
     infiniDtype_t atype;
@@ -21,7 +21,7 @@ public:
     size_t input_length() const { return input_size; }
     size_t output_length() const { return output_size; }
 
-    static utils::Result<AdaptiveMaxPool1DInfo> create(
+    static utils::Result<AdaptiveMaxPool1dInfo> create(
         infiniopTensorDescriptor_t y_desc,
         infiniopTensorDescriptor_t x_desc,
         size_t output_size) { 
@@ -52,7 +52,7 @@ public:
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
 
-        return utils::Result<AdaptiveMaxPool1DInfo>(AdaptiveMaxPool1DInfo{
+        return utils::Result<AdaptiveMaxPool1dInfo>(AdaptiveMaxPool1dInfo{
             atype,
             y_desc->shape(),
             y_desc->strides(),

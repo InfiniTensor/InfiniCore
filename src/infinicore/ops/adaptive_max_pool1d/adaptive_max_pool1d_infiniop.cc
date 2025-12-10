@@ -45,7 +45,7 @@ void calculate(Tensor y, Tensor x, size_t out) {
 }
 
 static bool registered = []() {
-    AdaptiveMaxPool1D::dispatcher().registerAll(&calculate, false);
+    AdaptiveMaxPool1d::dispatcher().registerAll(&calculate, false);
     return true;
 }();
 

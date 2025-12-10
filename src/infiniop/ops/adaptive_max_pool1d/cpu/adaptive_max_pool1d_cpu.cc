@@ -14,14 +14,14 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t y_desc,
     infiniopTensorDescriptor_t x_desc,
     size_t output_size) {
-    auto result = AdaptiveMaxPool1DInfo::create(y_desc, x_desc, output_size);
+    auto result = AdaptiveMaxPool1dInfo::create(y_desc, x_desc, output_size);
     CHECK_RESULT(result);
     *desc_ptr = new Descriptor(nullptr, result.take(), 0, handle->device, handle->device_id);
     return INFINI_STATUS_SUCCESS;
 }
 
 template <typename T>
-infiniStatus_t adaptiveMaxPool1D(const AdaptiveMaxPool1DInfo *info, T *y, const T *x) {
+infiniStatus_t adaptiveMaxPool1d(const AdaptiveMaxPool1dInfo *info, T *y, const T *x) {
 
     const size_t ndim = info->ndim();
     const size_t batch_size = info->shape[0];
@@ -83,13 +83,13 @@ infiniStatus_t Descriptor::calculate(
     void *stream) const {
     
     if (_info.atype == INFINI_DTYPE_F32) {
-        return adaptiveMaxPool1D(&_info, (float *)y, (const float *)x);
+        return adaptiveMaxPool1d(&_info, (float *)y, (const float *)x);
     } else if (_info.atype == INFINI_DTYPE_F16) {
-        return adaptiveMaxPool1D(&_info, (fp16_t *)y, (const fp16_t *)x);
+        return adaptiveMaxPool1d(&_info, (fp16_t *)y, (const fp16_t *)x);
     } else if (_info.atype == INFINI_DTYPE_BF16) {
-        return adaptiveMaxPool1D(&_info, (bf16_t *)y, (const bf16_t *)x);
+        return adaptiveMaxPool1d(&_info, (bf16_t *)y, (const bf16_t *)x);
     } else if (_info.atype == INFINI_DTYPE_F64) {
-        return adaptiveMaxPool1D(&_info, (double *)y, (const double *)x);
+        return adaptiveMaxPool1d(&_info, (double *)y, (const double *)x);
     }
     
     return INFINI_STATUS_BAD_TENSOR_DTYPE;

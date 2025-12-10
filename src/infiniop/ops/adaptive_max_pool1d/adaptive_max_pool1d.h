@@ -10,12 +10,12 @@
     class Descriptor final : public InfiniopDescriptor {         \
         struct Opaque;                                           \
         Opaque *_opaque;                                         \
-        AdaptiveMaxPool1DInfo _info;                             \
+        AdaptiveMaxPool1dInfo _info;                             \
         size_t _workspace_size;                                  \
                                                                  \
         Descriptor(                                              \
             Opaque *opaque,                                      \
-            AdaptiveMaxPool1DInfo info,                          \
+            AdaptiveMaxPool1dInfo info,                          \
             size_t workspace_size,                               \
             infiniDevice_t device_type,                          \
             int device_id)                                       \
