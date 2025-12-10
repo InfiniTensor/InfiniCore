@@ -1,8 +1,12 @@
 from infinicore.lib import _infinicore
 from infinicore.tensor import Tensor
+import infinicore
 
 
 def aminmax(input, dim=None, keepdim=False, *, out=None):
+    if infinicore.use_ntops and input.device.type in ("cuda", "musa"):
+        return infinicore.ntops.torch.aminmax(input, dim=dim, keepdim=keepdim, out=out)
+
     if out is None:
         min_tensor, max_tensor = _infinicore.aminmax(input._underlying, dim, keepdim)
         return (Tensor(min_tensor), Tensor(max_tensor))
