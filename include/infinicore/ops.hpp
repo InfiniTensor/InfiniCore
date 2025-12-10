@@ -4,6 +4,7 @@
 #include "ops/attention.hpp"
 #include "ops/causal_softmax.hpp"
 #include "ops/matmul.hpp"
+#include "ops/maximum.hpp"
 #include "ops/ones.hpp"
 #include "ops/rearrange.hpp"
 #include "ops/rms_norm.hpp"
