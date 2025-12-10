@@ -58,8 +58,8 @@ template <unsigned int BLOCK_SIZE>
 infiniStatus_t launchKernel(
     uint32_t numblock,
     void *y, infiniDtype_t dtype,
-    ptrdiff_t stride_x_batch, ptrdiff_t stride_y_channel,
-    cosnt void *x,
+    ptrdiff_t stride_y_batch, ptrdiff_t stride_y_channel,
+    const void *x,
     ptrdiff_t stride_x_batch, ptrdiff_t stride_x_channel, ptrdiff_t stride_x_length,
     size_t channels, size_t input_length, size_t output_length, size_t ndim,
     hcStream_t stream){
@@ -88,7 +88,7 @@ infiniStatus_t launchKernel(
     return INFINI_STATUS_SUCCESS;
 }
 
-nfiniStatus_t Descriptor::calculate(
+infiniStatus_t Descriptor::calculate(
     void *workspace, size_t workspace_size,
     void *y, const void *x,
     void *stream_) const {
@@ -119,7 +119,7 @@ nfiniStatus_t Descriptor::calculate(
             stride_y_batch, stride_y_channel,
             x, stride_x_batch, stride_x_channel, stride_x_length,
             channels, input_length, output_length, ndim,
-            cuda_stream));
+            stream));
     } else {
         return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
     }
