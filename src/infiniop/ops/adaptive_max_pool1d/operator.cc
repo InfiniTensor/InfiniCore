@@ -5,11 +5,11 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/adaptive_max_pool1d_cpu.h"
 #endif
-// #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
-// #include "nvidia/adaptive_max_pool1d_cuda.h"
-// #endif
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
+#include "nvidia/adaptive_max_pool1d_nvidia.cuh"
+#endif
 #ifdef ENABLE_METAX_API
-#include "metax/adaptive_max_pool1d_metax.h"
+#include "metax/adaptive_max_pool1d_metax.cuh"
 #endif
 #ifdef ENABLE_MOORE_API
 #include "moore/adaptive_max_pool1d_moore.h"
@@ -35,12 +35,12 @@ __C infiniStatus_t infiniopCreateAdaptiveMaxPool1dDescriptor(
 #ifdef ENABLE_CPU_API
         CREATE(INFINI_DEVICE_CPU, cpu);
 #endif
-// #ifdef ENABLE_NVIDIA_API
-//         CREATE(INFINI_DEVICE_NVIDIA, nvidia);
-// #endif
-// #ifdef ENABLE_ILUVATAR_API
-//         CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
-// #endif
+#ifdef ENABLE_NVIDIA_API
+        CREATE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, metax);
 #endif
@@ -65,12 +65,12 @@ __C infiniStatus_t infiniopGetAdaptiveMaxPool1dWorkspaceSize(
 #ifdef ENABLE_CPU_API
         GET(INFINI_DEVICE_CPU, cpu);
 #endif
-// #ifdef ENABLE_NVIDIA_API
-//         GET(INFINI_DEVICE_NVIDIA, nvidia);
-// #endif
-// #ifdef ENABLE_ILUVATAR_API
-//         GET(INFINI_DEVICE_ILUVATAR, nvidia);
-// #endif
+#ifdef ENABLE_NVIDIA_API
+        GET(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        GET(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
 #ifdef ENABLE_METAX_API
         GET(INFINI_DEVICE_METAX, metax);
 #endif
@@ -99,12 +99,12 @@ __C infiniStatus_t infiniopAdaptiveMaxPool1d(
 #ifdef ENABLE_CPU_API
         CALCULATE(INFINI_DEVICE_CPU, cpu);
 #endif
-// #ifdef ENABLE_NVIDIA_API
-//         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
-// #endif
-// #ifdef ENABLE_ILUVATAR_API
-//         CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
-// #endif
+#ifdef ENABLE_NVIDIA_API
+        CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
@@ -128,12 +128,12 @@ __C infiniStatus_t infiniopDestroyAdaptiveMaxPool1dDescriptor(
 #ifdef ENABLE_CPU_API
         DESTROY(INFINI_DEVICE_CPU, cpu);
 #endif
-// #ifdef ENABLE_NVIDIA_API
-//         DESTROY(INFINI_DEVICE_NVIDIA, nvidia);
-// #endif
-// #ifdef ENABLE_ILUVATAR_API
-//         DESTROY(INFINI_DEVICE_ILUVATAR, nvidia);
-// #endif
+#ifdef ENABLE_NVIDIA_API
+        DESTROY(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        DESTROY(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
 #ifdef ENABLE_METAX_API
         DESTROY(INFINI_DEVICE_METAX, metax);
 #endif
