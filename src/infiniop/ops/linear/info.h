@@ -30,19 +30,18 @@ public:
         float beta) {
 
         CHECK_OR_RETURN(
-            d_desc != nullptr && c_desc != nullptr && bias_desc != nullptr && x_desc != nullptr && x_scale_desc != nullptr && weights_desc != nullptr && weights_scale_desc != nullptr,
+            d_desc != nullptr && c_desc != nullptr && x_desc != nullptr && x_scale_desc != nullptr && weights_desc != nullptr && weights_scale_desc != nullptr,
             INFINI_STATUS_NULL_POINTER);
 
         const infiniDtype_t dtype = d_desc->dtype();
         const infiniDtype_t packed_type = x_desc->dtype();
-        CHECK_OR_RETURN(dtype == c_desc->dtype() && dtype == bias_desc->dtype() && dtype == x_scale_desc->dtype() && dtype == weights_scale_desc->dtype(),
+        CHECK_OR_RETURN(dtype == c_desc->dtype() && dtype == x_scale_desc->dtype() && dtype == weights_scale_desc->dtype(),
                         INFINI_STATUS_BAD_TENSOR_DTYPE);
         CHECK_OR_RETURN(packed_type == weights_desc->dtype(),
                         INFINI_STATUS_BAD_TENSOR_DTYPE);
         CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_BF16, INFINI_DTYPE_F32);
         CHECK_DTYPE(packed_type, INFINI_DTYPE_I8);
-        CHECK_OR_RETURN(bias_desc->ndim() == 1,
-                        INFINI_STATUS_BAD_TENSOR_SHAPE);
+
         CHECK_OR_RETURN(d_desc->ndim() == 2
                             && c_desc->ndim() == 2
                             && x_desc->ndim() == 2
@@ -54,8 +53,7 @@ public:
         size_t M = d_desc->dim(0);
         size_t N = d_desc->dim(1);
         size_t K = x_desc->dim(1);
-        CHECK_OR_RETURN(N == bias_desc->dim(0),
-                        INFINI_STATUS_BAD_TENSOR_SHAPE);
+
         CHECK_OR_RETURN(M == x_desc->dim(0)
                             || M == x_scale_desc->dim(0)
                             || 1 == x_scale_desc->dim(1)

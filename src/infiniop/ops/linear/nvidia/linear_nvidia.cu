@@ -63,11 +63,21 @@ INFINIOP_CUDA_KERNEL post(
     Tdata *y, int32_t *y_packed, const Tdata *c, const Tdata *bias, const int8_t *x_packed, const Tdata *x_scale, const Tdata *x_zero, const int8_t *w_packed, const Tdata *w_scale, const Tdata *w_zero, int M, int K, int N, float alpha, float beta) {
     postKernel<Tdata>(y, y_packed, c, bias, x_packed, x_scale, x_zero, w_packed, w_scale, w_zero, M, K, N, alpha, beta);
 }
+template <typename Tdata>
+INFINIOP_CUDA_KERNEL post(
+    Tdata *y, int32_t *y_packed, const Tdata *c, const int8_t *x_packed, const Tdata *x_scale, const Tdata *x_zero, const int8_t *w_packed, const Tdata *w_scale, const Tdata *w_zero, int M, int K, int N, float alpha, float beta) {
+    postKernel<Tdata>(y, y_packed, c, x_packed, x_scale, x_zero, w_packed, w_scale, w_zero, M, K, N, alpha, beta);
+}
 
 template <typename Tdata>
 INFINIOP_CUDA_KERNEL postSym(
     Tdata *y, int32_t *y_packed, const Tdata *c, const Tdata *bias, const int8_t *x_packed, const Tdata *x_scale, const int8_t *w_packed, const Tdata *w_scale, int M, int K, int N, float alpha, float beta) {
     postSymKernel<Tdata>(y, y_packed, c, bias, x_packed, x_scale, w_packed, w_scale, M, K, N, alpha, beta);
+}
+template <typename Tdata>
+INFINIOP_CUDA_KERNEL postSym(
+    Tdata *y, int32_t *y_packed, const Tdata *c, const int8_t *x_packed, const Tdata *x_scale, const int8_t *w_packed, const Tdata *w_scale, int M, int K, int N, float alpha, float beta) {
+    postSymKernel<Tdata>(y, y_packed, c, x_packed, x_scale, w_packed, w_scale, M, K, N, alpha, beta);
 }
 
 namespace op::linear::nvidia {
@@ -145,10 +155,18 @@ infiniStatus_t Descriptor::launchKernel(const LinearInfo &info, Tdata *y, const 
     int num_block_y = (M + BLOCK_SIZE_y - 1) / BLOCK_SIZE_y;
     dim3 block_dim(BLOCK_SIZE_x, BLOCK_SIZE_y, 1);
     dim3 grid_dim(num_block_x, num_block_y, 1);
-    if (x_zero == nullptr && w_zero == nullptr) {
-        postSym<Tdata><<<grid_dim, block_dim, 0, stream>>>(y, y_packed, c, bias, x_packed, x_scale, w_packed, w_scale, M, K, N, alpha, beta);
+    if (bias == nullptr) {
+        if (x_zero == nullptr && w_zero == nullptr) {
+            postSym<Tdata><<<grid_dim, block_dim, 0, stream>>>(y, y_packed, c, x_packed, x_scale, w_packed, w_scale, M, K, N, alpha, beta);
+        } else {
+            post<Tdata><<<grid_dim, block_dim, 0, stream>>>(y, y_packed, c, x_packed, x_scale, x_zero, w_packed, w_scale, w_zero, M, K, N, alpha, beta);
+        }
     } else {
-        post<Tdata><<<grid_dim, block_dim, 0, stream>>>(y, y_packed, c, bias, x_packed, x_scale, x_zero, w_packed, w_scale, w_zero, M, K, N, alpha, beta);
+        if (x_zero == nullptr && w_zero == nullptr) {
+            postSym<Tdata><<<grid_dim, block_dim, 0, stream>>>(y, y_packed, c, bias, x_packed, x_scale, w_packed, w_scale, M, K, N, alpha, beta);
+        } else {
+            post<Tdata><<<grid_dim, block_dim, 0, stream>>>(y, y_packed, c, bias, x_packed, x_scale, x_zero, w_packed, w_scale, w_zero, M, K, N, alpha, beta);
+        }
     }
 
     return INFINI_STATUS_SUCCESS;

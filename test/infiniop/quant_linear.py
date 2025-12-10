@@ -24,12 +24,13 @@ from enum import Enum, auto
 # ==============================================================================
 # These are not meant to be imported from other modules
 _TEST_CASES_ = [
-    # x_shape, w_shape, y_shape, alpha, beta
-    ((8, 8), (8, 8), False, (8, 8), 1.0, 0.0),
-    ((128, 512), (512, 1024), True, (128, 1024), 1.0, 0.0),
-    ((128, 128), (128, 128), False, (128, 128), 2.0, 1.0),
-    ((256, 1024), (1024, 2048), True, (256, 2048), 1.0, 1.0),
-    ((256, 2048), (2048, 1024), False, (256, 1024), 1.5, 2.5),
+    # x_shape, w_shape, symmetric, bias_exit, y_shape, alpha, beta
+    ((8, 8), (8, 8), False, True, (8, 8), 1.0, 0.0),
+    ((128, 512), (512, 1024), True, False, (128, 1024), 1.0, 0.0),
+    ((128, 128), (128, 128), False, True, (128, 128), 2.0, 1.0),
+    ((256, 1024), (1024, 2048), True, False, (256, 2048), 1.0, 1.0),
+    ((256, 2048), (2048, 1024), False, True, (256, 1024), 1.5, 2.5),
+    ((1024, 2048), (2048, 4096), True, False, (1024, 4096), 1.0, 0.0),
 ]
 
 
@@ -67,11 +68,17 @@ NUM_ITERATIONS = 1000
 
 
 def linearFunction(c, bias, x, w, alpha, beta):
-    ans = (
-        alpha * torch.matmul(x.to(torch.float32), w.to(torch.float32)).to(x.dtype)
-        + beta * c
-        + bias
-    )
+    if bias is not None:
+        ans = (
+            alpha * torch.matmul(x.to(torch.float32), w.to(torch.float32)).to(x.dtype)
+            + beta * c
+            + bias
+        )
+    else:
+        ans = (
+            alpha * torch.matmul(x.to(torch.float32), w.to(torch.float32)).to(x.dtype)
+            + beta * c
+        )
     return ans
 
 def computeQuant(
@@ -151,6 +158,7 @@ def test(
     x_shape,
     w_shape,
     symmetric,
+    bias_exit,
     y_shape,
     alpha,
     beta,
@@ -159,11 +167,14 @@ def test(
     sync=None,
 ):
     print(
-        f"Testing Quant Linear on {InfiniDeviceNames[device]} with x_shape:{x_shape}, w_shape:{w_shape}, symmetric:{symmetric}, alpha:{alpha}, beta:{beta}, inplace:{inplace} dtype:{InfiniDtypeNames[dtype]}"
+        f"Testing Quant Linear on {InfiniDeviceNames[device]} with x_shape:{x_shape}, w_shape:{w_shape}, symmetric:{symmetric}, bias:{bias_exit} ,alpha:{alpha}, beta:{beta}, inplace:{inplace} dtype:{InfiniDtypeNames[dtype]}"
     )
     M, K = x_shape
     N = w_shape[1]
-    bias = TestTensor((N,), None, dtype, device)
+    if bias_exit:
+        bias = TestTensor((N,), None, dtype, device)
+    else:
+        bias = None
     x = TestTensor(x_shape, None, dtype, device)
     w = TestTensor(w_shape, None, dtype, device)
     y = TestTensor(y_shape, None, dtype, device)
@@ -173,7 +184,7 @@ def test(
         d = TestTensor(y_shape, None, dtype, device)
     ans = linearFunction(
         y.torch_tensor(),
-        bias.torch_tensor(),
+        bias.torch_tensor() if bias_exit else None,
         x.torch_tensor(),
         w.torch_tensor(),
         alpha,
@@ -230,7 +241,7 @@ def test(
             ctypes.byref(descriptor),
             d.descriptor,
             y.descriptor,
-            bias.descriptor,
+            bias.descriptor if bias_exit else None,
             x_packed.descriptor,
             x_scale.descriptor,
             None if symmetric else x_zero.descriptor,
@@ -246,7 +257,8 @@ def test(
     x.destroy_desc()
     y.destroy_desc()
     d.destroy_desc()
-    bias.destroy_desc()
+    if bias_exit:
+        bias.destroy_desc()
     x_packed.destroy_desc()
     x_scale.destroy_desc()
     if symmetric == False:
@@ -272,7 +284,7 @@ def test(
                 workspace_size.value,
                 d.data(),
                 y.data(),
-                bias.data(),
+                bias.data() if bias_exit else None,
                 x_packed.data(),
                 x_scale.data(),
                 None if symmetric else x_zero.data(),
@@ -297,7 +309,7 @@ def test(
     # Profiling workflow
     if PROFILE:
         # fmt: off
-        profile_operation("PyTorch", lambda: linearFunction(y.torch_tensor(), bias.torch_tensor(), x.torch_tensor(), w.torch_tensor(), alpha, beta), device, NUM_PRERUN, NUM_ITERATIONS)
+        profile_operation("PyTorch", lambda: linearFunction(y.torch_tensor(), bias.torch_tensor() if bias_exit else None, x.torch_tensor(), w.torch_tensor(), alpha, beta), device, NUM_PRERUN, NUM_ITERATIONS)
         profile_operation("    lib", lambda: lib_linear(), device, NUM_PRERUN, NUM_ITERATIONS)
         # fmt: on
 
