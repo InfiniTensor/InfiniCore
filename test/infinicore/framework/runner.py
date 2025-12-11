@@ -53,6 +53,8 @@ class GenericTestRunner:
         # summary_passed returns True if no tests failed (skipped/partial are OK)
         summary_passed = runner.print_summary()
 
+        print("---------------SAVE CONFIG--------------------------------------")
+        print(self.args.save)
         if getattr(self.args, 'save', None):
             self._save_report(runner)
             

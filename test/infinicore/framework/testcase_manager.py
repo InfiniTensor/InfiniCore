@@ -84,7 +84,7 @@ class TestCaseManager:
 
             # Execute
             results = self._execute_tests(
-                op_name, cfg["test_cases"], cfg["args"], cfg["op_funcs"]
+                op_name, cfg["test_cases"], cfg["args"], cfg["op_funcs"], cfg["op_paths"]
             )
 
             # # Report
@@ -245,7 +245,7 @@ class TestCaseManager:
 
         return test_cases_list
 
-    def _execute_tests(self, op_name, test_cases, args, op_funcs):
+    def _execute_tests(self, op_name, test_cases, args, op_funcs, op_paths):
         class DynamicOpTest(BaseOperatorTest):
             def __init__(self):
                 super().__init__(op_name)

@@ -63,7 +63,7 @@ def main():
     # Filter out None/False values and specific keys not meant for override config
     override_dict = {
         k: v for k, v in vars(args).items()
-        if k not in ["file_path", "save"] and v is not None and v is not False
+        if k not in ["file_path"] and v is not None and v is not False
     }
 
     if override_dict:
