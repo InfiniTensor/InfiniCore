@@ -1,6 +1,6 @@
 #include "../../../elementwise/moore/elementwise_moore.h"
 
-#include "tanhshrink_moore_kernel.h"
+#include "../cuda/kernel.cuh"
 #include "tanhshrink_moore.h"
 
 namespace op::tanhshrink::moore {
@@ -42,11 +42,11 @@ infiniStatus_t Descriptor::calculate(
 
     switch (_dtype) {
     case INFINI_DTYPE_BF16:
-        return _device_info->calculate<256, moore::TanhshrinkOp, mt_bfloat16>(_info, workspace, output, inputs, stream);
+        return _device_info->calculate<256, cuda::TanhshrinkOp, mt_bfloat16>(_info, workspace, output, inputs, stream);
     case INFINI_DTYPE_F16:
-        return _device_info->calculate<256, moore::TanhshrinkOp, half>(_info, workspace, output, inputs, stream);
+        return _device_info->calculate<256, cuda::TanhshrinkOp, half>(_info, workspace, output, inputs, stream);
     case INFINI_DTYPE_F32:
-        return _device_info->calculate<256, moore::TanhshrinkOp, float>(_info, workspace, output, inputs, stream);
+        return _device_info->calculate<256, cuda::TanhshrinkOp, float>(_info, workspace, output, inputs, stream);
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }

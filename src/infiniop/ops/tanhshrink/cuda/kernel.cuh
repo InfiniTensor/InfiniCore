@@ -11,14 +11,14 @@ public:
         if constexpr (std::is_same_v<T, cuda_bfloat16>) {
             // BF16
             const float x_f = __bfloat162float(x);
-            return __float2bfloat16(x_f - __tanhf(x_f));
+            return __float2bfloat16(x_f - tanhf(x_f));
         } else if constexpr (std::is_same_v<T, half>) {
             // FP16
             const float x_f = __half2float(x);
-            return __float2half(x_f - __tanhf(x_f));
+            return __float2half(x_f - tanhf(x_f));
         } else if constexpr (std::is_same_v<T, float>) {
             // FP32
-            return x - __tanhf(x);
+            return x - tanhf(x);
         }
     }
 } TanhshrinkOp;
