@@ -12,10 +12,6 @@ from .reporter import TestReporter
 class GenericTestRunner:
     """Generic test runner that handles the common execution flow"""
 
-<<<<<<< HEAD
-
-=======
->>>>>>> main
     def __init__(self, operator_test_class, args=None):
         """
         Args:
@@ -72,14 +68,7 @@ class GenericTestRunner:
             0: All tests passed or were skipped/partial (no failures)
             1: One or more tests failed
         """
-<<<<<<< HEAD
-        success, runner = self.run()
-
-        if getattr(self.args, 'save', None):
-            self._save_report(runner)
-=======
         success, runner = self.run()        
->>>>>>> main
 
         sys.exit(0 if success else 1)
 
@@ -88,26 +77,8 @@ class GenericTestRunner:
         Helper method to collect metadata and trigger report saving.
         """
         try:
-<<<<<<< HEAD
-            # 1. Infer active device string dynamically
-            from .devices import InfiniDeviceEnum
-            
-            # Get actual device IDs used (e.g. [0, 1])
-            device_ids = get_test_devices(self.args)
-            
-            # Map IDs to Names (e.g. {0: "CPU", 1: "NVIDIA"})
-            id_to_name = {v: k for k, v in vars(InfiniDeviceEnum).items() if not k.startswith('_')}
-            
-            # Convert list of IDs to list of Names
-            device_names = [id_to_name.get(d_id, str(d_id)) for d_id in device_ids]
-            device_str = ", ".join(device_names) if device_names else "CPU"
-
-            # 2. Prepare metadata (Paths)
-            # Try to infer from source code first
-=======
             
             # 1. Prepare metadata (Paths)
->>>>>>> main
             t_path = self._infer_op_path(self.operator_test.torch_operator, "torch")
             i_path = self._infer_op_path(self.operator_test.infinicore_operator, "infinicore")
             
@@ -116,30 +87,17 @@ class GenericTestRunner:
                 "infinicore": i_path
             }
 
-<<<<<<< HEAD
-            # 3. Generate Report Entry
-            entry = TestReporter.prepare_report_entry(
-=======
             # 2. Generate Report Entries
             entries = TestReporter.prepare_report_entry(
->>>>>>> main
                 op_name=self.operator_test.operator_name,
                 test_cases=self.operator_test.test_cases,
                 args=self.args,
                 op_paths=op_paths,
-<<<<<<< HEAD
-                device=device_str,
-=======
->>>>>>> main
                 results_list=runner.test_results
             )
 
             # 4. Save to File
-<<<<<<< HEAD
-            TestReporter.save_all_results(self.args.save, [entry])
-=======
             TestReporter.save_all_results(self.args.save, entries)
->>>>>>> main
             
         except Exception as e:
             import traceback; traceback.print_exc()

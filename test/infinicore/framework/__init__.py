@@ -37,10 +37,7 @@ __all__ = [
     "TestConfig",
     "TestResult",
     "TestRunner",
-<<<<<<< HEAD
     "TestCaseManager",
-=======
->>>>>>> main
     "TestReporter",
     # Core functions
     "add_common_test_args",
