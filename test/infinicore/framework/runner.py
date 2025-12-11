@@ -80,14 +80,17 @@ class GenericTestRunner:
         """
         try:
             
-            # 1. Prepare metadata (Paths)
-            t_path = self._infer_op_path(self.operator_test.torch_operator, "torch")
-            i_path = self._infer_op_path(self.operator_test.infinicore_operator, "infinicore")
-            
-            op_paths = {
-                "torch": t_path,
-                "infinicore": i_path
-            }
+            op_paths = getattr(self.operator_test, "op_paths", None)
+
+            if not op_paths:
+                # 1. Prepare metadata (Paths)
+                t_path = self._infer_op_path(self.operator_test.torch_operator, "torch")
+                i_path = self._infer_op_path(self.operator_test.infinicore_operator, "infinicore")
+                
+                op_paths = {
+                    "torch": t_path,
+                    "infinicore": i_path
+                }
 
             # 2. Generate Report Entries
             entries = TestReporter.prepare_report_entry(
@@ -97,7 +100,6 @@ class GenericTestRunner:
                 op_paths=op_paths,
                 results_list=runner.test_results
             )
-            # print(entries)
 
             # 4. Save to File
             TestReporter.save_all_results(self.args.save, entries)

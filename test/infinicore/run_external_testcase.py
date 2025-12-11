@@ -3,34 +3,6 @@ import os
 import argparse
 import time
 
-# # ==============================================================================
-# # 🛠️ 关键路径适配：解决命名冲突
-# # ==============================================================================
-
-# # 1. 识别冲突目录 (脚本自身所在的目录)
-# conflict_dir = os.path.dirname(os.path.abspath(__file__)) 
-# # 值: /home/baoming/workplace/InfiniCore/test/infinicore
-
-# # 🚨 移除冲突目录！这是解决问题的核心步骤。
-# # 必须移除它，才能强制 Python 去搜索 sys.path 中正确的路径。
-# if conflict_dir in sys.path:
-#     sys.path.remove(conflict_dir)
-
-# # 2. 插入项目根目录 (包含真正的 'infinicore' 库)
-# # 路径上溯 3 级: conflict_dir -> parent_dir -> test -> InfiniCore/
-# project_root = os.path.abspath(os.path.join(conflict_dir, "../../.."))
-# if project_root not in sys.path:
-#     sys.path.insert(0, project_root)
-
-# # 3. 插入测试基目录 (包含 'framework' 包)
-# parent_dir = os.path.dirname(conflict_dir)
-# if parent_dir not in sys.path:
-#     # 插入到 project_root 之后，确保 'infinicore' 库优先，但 'framework' 也能找到
-#     sys.path.insert(1, parent_dir) 
-
-# # ==============================================================================
-
-# 现在可以安全地导入依赖于 infinicore 的模块了
 from framework.testcase_manager import TestCaseManager
 
 def main():
@@ -80,34 +52,45 @@ def main():
         
         # Simple exit code logic based on results
         success = True
-        # if isinstance(results, list):
-        #     for entry in results:
+        failure_count = 0
+        
+        # Ensure results is a non-empty list
+        if isinstance(results, list) and results:
+            # results is a list of sub-lists (e.g., [[TestResult,...], [...]])
+            for op_results_list in results:
                 
-        #         # # ----------------------------------------------------
-        #         # import json # 需要在文件开头导入
-        #         # print("--- 实际的 entry 内容 ---")
-        #         # print(type(entry))
-        #         # print(json.dumps(entry, indent=4))
-        #         # print("------------------------")
-        #         # # ----------------------------------------------------
-        #         cases = entry.get("testcases", [])
-        #         for case in cases:
-        #             res = case.get("result", {})
-        #             status = res.get("status", {})
-        #             if not status.get("success", False):
-        #                 success = False
-        #                 print(f"❌ Failure detected: {status.get('error', 'Unknown error')}")
-        #                 break
-                
-        #         if not success:
-        #             break
-            
+                # op_results_list contains all TestResult objects for a specific Operator
+                for res_obj in op_results_list:
+                    # Check if it is a TestResult object (safety check)
+                    if not hasattr(res_obj, 'success'):
+                        # Skip if not a TestResult object
+                        continue
+
+                    # Access TestResult object attributes directly
+                    if not res_obj.success:
+                        success = False
+                        failure_count += 1
+                        
+                        # Attempt to retrieve Operator name and Test Case description
+                        case_desc = getattr(res_obj.test_case, 'description', 'No description')
+                        error_msg = res_obj.error_message
+                        
+                        # Print clear error logs
+                        print(f"❌ Failure detected:")
+                        print(f"   - Case:    {case_desc}")
+                        # Raw result object usually has device ID (no string name), fetching ID
+                        print(f"   - Device:  {res_obj.device}") 
+                        print(f"   - Error:   {error_msg if error_msg else 'Test failed but no specific error message provided.'}")
+
+        if not success:
+            print(f"\n⚠️  Test Suite Failed: {failure_count} case(s) failed.")
+            sys.exit(1)
+        
+        print("\n✅ All tests passed successfully.")
+
     except Exception as e:
         import traceback; traceback.print_exc()
         print(f"\n❌ Execution Error: {e}")
-        sys.exit(1)
-
-    if not success:
         sys.exit(1)
 
 if __name__ == "__main__":

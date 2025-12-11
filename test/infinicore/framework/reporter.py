@@ -61,35 +61,61 @@ class TestReporter:
 
             # --- B. Build Kwargs ---
             display_kwargs = {}
-            
-            # B1. Process existing kwargs
             for k, v in tc.kwargs.items():
-                # Handle Inplace: "out": index -> "out": "input_name"
+                # 1. Handle Inplace output index: "out": 0 -> "out": "in_0" / "a_spec"
                 if k == "out" and isinstance(v, int):
                     if 0 <= v < len(tc.inputs):
-                        display_kwargs[k] = tc.inputs[v].name
+                        # Prioritize the input's name; otherwise, default to index-based name
+                        display_kwargs[k] = getattr(tc.inputs[v], "name", None) or f"in_{v}"
                     else:
                         display_kwargs[k] = f"Invalid_Index_{v}"
+                
+                # 2. Handle TensorSpec objects
+                elif isinstance(v, TensorSpec):
+                    spec_dict = TestReporter._spec_to_dict(v)
+                    # If the object has a name, explicitly overwrite it; otherwise, keep original
+                    if getattr(v, "name", None):
+                        spec_dict["name"] = v.name
+                    display_kwargs[k] = spec_dict
+                
+                # 3. Direct assignment for other types
                 else:
-                    display_kwargs[k] = (TestReporter._spec_to_dict(v) if isinstance(v, TensorSpec) else v)
+                    display_kwargs[k] = v
 
-            # B2. Inject Outputs into Kwargs
-            if hasattr(tc, "output_specs") and tc.output_specs:
+            # --- B2. Inject Outputs ---
+            # Handle output list (output_specs)
+            if getattr(tc, "output_specs", None):
                 for i, spec in enumerate(tc.output_specs):
-                    display_kwargs[f"out_{i}"] = TestReporter._spec_to_dict(spec)
-            elif tc.output_spec:
-                if "out" not in display_kwargs:
-                    display_kwargs["out"] = TestReporter._spec_to_dict(tc.output_spec)
+                    out_dict = TestReporter._spec_to_dict(spec)
+                    # Prioritize intrinsic name; otherwise, default to "out_i"
+                    out_dict["name"] = getattr(spec, "name", None) or f"out_{i}"
+                    display_kwargs[f"out_{i}"] = out_dict
+            
+            # Handle single output (output_spec), preventing overwrite of existing "out"
+            elif tc.output_spec and "out" not in display_kwargs:
+                out_dict = TestReporter._spec_to_dict(tc.output_spec)
+                # Prioritize intrinsic name; otherwise, default to "out" (fixes null issue)
+                out_dict["name"] = getattr(tc.output_spec, "name", "out")
+                display_kwargs["out"] = out_dict
 
-            # --- C. Build Test Case Dictionary ---
+            # --- C. Build Inputs ---
+            # Iterate inputs: prioritize original name, fallback to "in_i"
+            processed_inputs = []
+            for i, inp in enumerate(tc.inputs):
+                inp_dict = TestReporter._spec_to_dict(inp)
+                # Simplified logic: Use "name" attribute if present and non-empty, else use f"in_{i}"
+                inp_dict["name"] = getattr(inp, "name", None) or f"in_{i}"
+                processed_inputs.append(inp_dict)
+
+            
             case_data = {
                 "description": tc.description,
-                "inputs": [TestReporter._spec_to_dict(i) for i in tc.inputs],
+                "inputs": processed_inputs,
                 "kwargs": display_kwargs, 
                 "comparison_target": tc.comparison_target,
                 "tolerance": tc.tolerance,
             }
-
+            
             # --- D. Inject Result ---
             if res:
                 case_data["result"] = TestReporter._fmt_result(res)
@@ -117,13 +143,7 @@ class TestReporter:
         indent_12 = ' ' * 12
         indent_16 = ' ' * 16
         indent_20 = ' ' * 20
-        # # ----------------------------------------------------
-        # import json # 需要在文件开头导入
-        # print("--- 实际的 total results 内容 ---")
-        # print(type(total_results))
-        # print(json.dumps(total_results, indent=4))
-        # print("------------------------")
-        # # ----------------------------------------------------
+        
         print(f"💾 Saving to: {final_path}")
         try:
             with open(final_path, "w", encoding="utf-8") as f:
@@ -131,15 +151,6 @@ class TestReporter:
 
                 for i, entry in enumerate(total_results):
                     f.write(f"{indent_4}{{\n")
-                    
-                    
-                    # # ----------------------------------------------------
-                    # import json # 需要在文件开头导入
-                    # print("--- 实际的 entry 内容 ---")
-                    # print(type(entry))
-                    # print(json.dumps(entry, indent=4))
-                    # print("------------------------")
-                    # # ----------------------------------------------------
 
                     keys = list(entry.keys())
                     for j, key in enumerate(keys):
