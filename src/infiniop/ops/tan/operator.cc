@@ -8,9 +8,9 @@
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
 #include "nvidia/tan_nvidia.cuh"
 #endif
-// #ifdef ENABLE_METAX_API
-// #include "metax/tan_metax.h"
-// #endif
+#ifdef ENABLE_METAX_API
+#include "metax/tan_metax.h"
+#endif
 #ifdef ENABLE_MOORE_API
 #include "moore/tan_moore.h"
 #endif
@@ -40,9 +40,9 @@ __C infiniStatus_t infiniopCreateTanDescriptor(
 // #ifdef ENABLE_ILUVATAR_API
 //         CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
 // #endif
-// #ifdef ENABLE_METAX_API
-//         CREATE(INFINI_DEVICE_METAX, metax);
-// #endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax);
+#endif
 #ifdef ENABLE_MOORE_API
         CREATE(INFINI_DEVICE_MOORE, moore);
 #endif
@@ -71,9 +71,9 @@ __C infiniStatus_t infiniopGetTanWorkspaceSize(infiniopTanDescriptor_t desc, siz
 // #ifdef ENABLE_ILUVATAR_API
 //         GET(INFINI_DEVICE_ILUVATAR, nvidia);
 // #endif
-// #ifdef ENABLE_METAX_API
-//         GET(INFINI_DEVICE_METAX, metax);
-// #endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax);
+#endif
 #ifdef ENABLE_MOORE_API
         GET(INFINI_DEVICE_MOORE, moore);
 #endif
@@ -109,9 +109,9 @@ __C infiniStatus_t infiniopTan(
 // #ifdef ENABLE_ILUVATAR_API
 //         CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
 // #endif
-// #ifdef ENABLE_METAX_API
-//         CALCULATE(INFINI_DEVICE_METAX, metax);
-// #endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax);
+#endif
 #ifdef ENABLE_MOORE_API
         CALCULATE(INFINI_DEVICE_MOORE, moore);
 #endif
@@ -142,9 +142,9 @@ infiniopDestroyTanDescriptor(infiniopTanDescriptor_t desc) {
 // #ifdef ENABLE_ILUVATAR_API
 //         DELETE(INFINI_DEVICE_ILUVATAR, nvidia);
 // #endif
-// #ifdef ENABLE_METAX_API
-//         DELETE(INFINI_DEVICE_METAX, metax);
-// #endif
+#ifdef ENABLE_METAX_API
+        DELETE(INFINI_DEVICE_METAX, metax);
+#endif
 #ifdef ENABLE_MOORE_API
         DELETE(INFINI_DEVICE_MOORE, moore);
 #endif

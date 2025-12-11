@@ -1,5 +1,5 @@
-#ifndef __MASKED_SELECT_KERNEL_CUH__
-#define __MASKED_SELECT_KERNEL_CUH__
+#ifndef __MASKED_SELECT_MOORE_KERNEL_CUH__
+#define __MASKED_SELECT_MOORE_KERNEL_CUH__
 
 template<size_t BLOCK_SIZE>
 INFINIOP_MOORE_KERNEL maskedSelectGetMarkScanOnceKernel(

@@ -8,18 +8,9 @@
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/inner_nvidia.cuh"
 #endif
-// #ifdef ENABLE_METAX_API
-// #include "metax/inner_metax.h"
-// #endif
-// #ifdef ENABLE_ASCEND_API
-// #include "ascend/inner_ascend.h"
-// #endif
-// #ifdef ENABLE_CAMBRICON_API
-// #include "bang/inner_bang.h"
-// #endif
-// #ifdef ENABLE_KUNLUN_API
-// #include "kunlun/inner_kunlun.h"
-// #endif
+#ifdef ENABLE_METAX_API
+#include "metax/inner_metax.h"
+#endif
 #ifdef ENABLE_MOORE_API
 #include "moore/inner_moore.h"
 #endif
@@ -47,27 +38,12 @@ __C infiniStatus_t infiniopCreateInnerDescriptor(
 #ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-// #ifdef ENABLE_ILUVATAR_API
-//         CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
-// #endif
-// #ifdef ENABLE_QY_API
-//         CREATE(INFINI_DEVICE_QY, nvidia);
-// #endif
-// #ifdef ENABLE_HYGON_API
-//         CREATE(INFINI_DEVICE_HYGON, nvidia);
-// #endif
-// #ifdef ENABLE_CAMBRICON_API
-//         CREATE(INFINI_DEVICE_CAMBRICON, bang)
-// #endif
-// #ifdef ENABLE_METAX_API
-//         CREATE(INFINI_DEVICE_METAX, metax)
-// #endif
-// #ifdef ENABLE_ASCEND_API
-//         CREATE(INFINI_DEVICE_ASCEND, ascend)
-// #endif
-// #ifdef ENABLE_KUNLUN_API
-//         CREATE(INFINI_DEVICE_KUNLUN, kunlun)
-// #endif
+#ifdef ENABLE_ILUVATAR_API
+        CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax)
+#endif
 #ifdef ENABLE_MOORE_API
         CREATE(INFINI_DEVICE_MOORE, moore)
 #endif
@@ -89,27 +65,12 @@ __C infiniStatus_t infiniopGetInnerWorkspaceSize(infiniopInnerDescriptor_t desc,
 #ifdef ENABLE_NVIDIA_API
         GET(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-// #ifdef ENABLE_ILUVATAR_API
-//         GET(INFINI_DEVICE_ILUVATAR, nvidia);
-// #endif
-// #ifdef ENABLE_QY_API
-//         GET(INFINI_DEVICE_QY, nvidia);
-// #endif
-// #ifdef ENABLE_HYGON_API
-//         GET(INFINI_DEVICE_HYGON, nvidia);
-// #endif
-// #ifdef ENABLE_METAX_API
-//         GET(INFINI_DEVICE_METAX, metax)
-// #endif
-// #ifdef ENABLE_ASCEND_API
-//         GET(INFINI_DEVICE_ASCEND, ascend)
-// #endif
-// #ifdef ENABLE_CAMBRICON_API
-//         GET(INFINI_DEVICE_CAMBRICON, bang)
-// #endif
-// #ifdef ENABLE_KUNLUN_API
-//         GET(INFINI_DEVICE_KUNLUN, kunlun)
-// #endif
+#ifdef ENABLE_ILUVATAR_API
+        GET(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax)
+#endif
 #ifdef ENABLE_MOORE_API
         GET(INFINI_DEVICE_MOORE, moore)
 #endif
@@ -137,27 +98,12 @@ __C infiniStatus_t infiniopInner(
 #ifdef ENABLE_NVIDIA_API
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-// #ifdef ENABLE_ILUVATAR_API
-//         CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
-// #endif
-// #ifdef ENABLE_QY_API
-//         CALCULATE(INFINI_DEVICE_QY, nvidia);
-// #endif
-// #ifdef ENABLE_HYGON_API
-//         CALCULATE(INFINI_DEVICE_HYGON, nvidia);
-// #endif
-// #ifdef ENABLE_CAMBRICON_API
-//         CALCULATE(INFINI_DEVICE_CAMBRICON, bang)
-// #endif
-// #ifdef ENABLE_METAX_API
-//         CALCULATE(INFINI_DEVICE_METAX, metax)
-// #endif
-// #ifdef ENABLE_ASCEND_API
-//         CALCULATE(INFINI_DEVICE_ASCEND, ascend)
-// #endif
-// #ifdef ENABLE_KUNLUN_API
-//         CALCULATE(INFINI_DEVICE_KUNLUN, kunlun)
-// #endif
+#ifdef ENABLE_ILUVATAR_API
+        CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax)
+#endif
 #ifdef ENABLE_MOORE_API
         CALCULATE(INFINI_DEVICE_MOORE, moore)
 #endif
@@ -179,27 +125,12 @@ __C infiniStatus_t infiniopDestroyInnerDescriptor(infiniopInnerDescriptor_t desc
 #ifdef ENABLE_NVIDIA_API
         DESTROY(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-// #ifdef ENABLE_ILUVATAR_API
-//         DESTROY(INFINI_DEVICE_ILUVATAR, nvidia);
-// #endif
-// #ifdef ENABLE_QY_API
-//         DESTROY(INFINI_DEVICE_QY, nvidia);
-// #endif
-// #ifdef ENABLE_HYGON_API
-//         DESTROY(INFINI_DEVICE_HYGON, nvidia);
-// #endif
-// #ifdef ENABLE_CAMBRICON_API
-//         DESTROY(INFINI_DEVICE_CAMBRICON, bang)
-// #endif
-// #ifdef ENABLE_METAX_API
-//         DESTROY(INFINI_DEVICE_METAX, metax)
-// #endif
-// #ifdef ENABLE_ASCEND_API
-//         DESTROY(INFINI_DEVICE_ASCEND, ascend)
-// #endif
-// #ifdef ENABLE_KUNLUN_API
-//         DESTROY(INFINI_DEVICE_KUNLUN, kunlun)
-// #endif
+#ifdef ENABLE_ILUVATAR_API
+        DESTROY(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        DESTROY(INFINI_DEVICE_METAX, metax)
+#endif
 #ifdef ENABLE_MOORE_API
         DESTROY(INFINI_DEVICE_MOORE, moore)
 #endif

@@ -1,5 +1,5 @@
-#ifndef __INNER_KERNEL_H__
-#define __INNER_KERNEL_H__
+#ifndef __INNER_MOORE_KERNEL_H__
+#define __INNER_MOORE_KERNEL_H__
 
 template<size_t BLOCK_SIZE, typename T>
 INFINIOP_MOORE_KERNEL innerKernel(
