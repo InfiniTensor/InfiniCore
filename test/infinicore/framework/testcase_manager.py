@@ -6,14 +6,25 @@ import argparse
 from typing import Any, Optional, Tuple, Union, Dict, List
 from dataclasses import is_dataclass
 
-import infinicore
-import torch
+# # Path adaptation
+# current_dir = os.path.dirname(os.path.abspath(__file__))
+# parent_dir = os.path.dirname(current_dir)
 
-# Path adaptation
-current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.dirname(current_dir)
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
+# # 🚀 关键修改：上溯两级，获取项目根目录
+# project_root = os.path.dirname(parent_dir) # 从 test/ 上溯到 InfiniCore/
+
+# if project_root not in sys.path:
+#     sys.path.insert(0, project_root)
+
+# # 确保 framework 模块能够被找到
+# if parent_dir not in sys.path:
+#     sys.path.insert(1, parent_dir) 
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+import infinicore
+from infinicore import float32
+import torch
 
 from framework.base import BaseOperatorTest, TestCase, TensorSpec
 from framework.config import get_args, get_supported_hardware_platforms
@@ -51,6 +62,18 @@ class TestCaseManager:
             print(f"ℹ️ No file provided. Using default built-in case.")
             test_configs = self._load_default_case(overrides)
 
+        # =======================================================
+        # ✅ 新增：打印 test_configs 的内容
+        print("\n--- 📝 Loaded Test Configurations (test_configs) ---")
+        try:
+            # 使用 json.dumps 格式化输出，确保清晰可读
+            print(json.dumps(test_configs, indent=4))
+        except TypeError:
+            # 如果配置中包含不可序列化的对象，直接打印
+            print(test_configs)
+        print("----------------------------------------------------\n")
+        # =======================================================
+
         total_results = []
 
         # 2. Execute & Collect Results
@@ -64,20 +87,20 @@ class TestCaseManager:
                 op_name, cfg["test_cases"], cfg["args"], cfg["op_funcs"]
             )
 
-            # Report
-            entry = TestReporter.prepare_report_entry(
-                op_name=op_name,
-                test_cases=cfg["test_cases"],
-                args=cfg["args"],
-                op_paths=cfg["op_paths"],
-                results_list=results,
-            )
+            # # Report
+            # entry = TestReporter.prepare_report_entry(
+            #     op_name=op_name,
+            #     test_cases=cfg["test_cases"],
+            #     args=cfg["args"],
+            #     op_paths=cfg["op_paths"],
+            #     results_list=results,
+            # )
             
-            total_results.append(entry)
+            total_results.append(results)
 
-        # 3. Save
-        if save_path:
-            TestReporter.save_all_results(save_path, total_results)
+        # # 3. Save
+        # if save_path:
+        #     TestReporter.save_all_results(save_path, total_results)
 
         return total_results
 
@@ -170,20 +193,28 @@ class TestCaseManager:
 
         test_cases_list = []
         for idx, sub in enumerate(cases_data):
-            # Compact list/dict comprehensions
+            # 1. 解析 inputs (TensorSpec 列表)
             inputs = [
                 self._parse_spec(inp, f"in_{i}")
                 for i, inp in enumerate(sub.get("inputs", []))
             ]
             
-            kwargs = {
-                k: (
-                    self._parse_spec(v, k)
-                    if isinstance(v, dict) and "shape" in v
-                    else v
-                )
-                for k, v in sub.get("kwargs", {}).items()
-            }
+            # 2. 解析 kwargs
+            kwargs = {}
+            out_tensor_index = None  # 记录 out 引用的是第几个 input
+
+            for k, v in sub.get("kwargs", {}).items():
+                if isinstance(v, dict) and "shape" in v:
+                    kwargs[k] = self._parse_spec(v, k)
+                elif k == "out" and isinstance(v, str):
+                    # 在 inputs 里按 name 找到对应的 TensorSpec 下标
+                    for i, spec in enumerate(inputs):
+                        if spec.name == v:
+                            out_tensor_index = i
+                            break
+                    # 不把字符串直接塞进 kwargs，避免传给 torch.add
+                else:
+                    kwargs[k] = v
 
             out_spec = (
                 self._parse_spec(sub["output_spec"], "out")

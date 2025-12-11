@@ -95,12 +95,13 @@ class GenericTestRunner:
                 op_paths=op_paths,
                 results_list=runner.test_results
             )
+            # print(entries)
 
             # 4. Save to File
             TestReporter.save_all_results(self.args.save, entries)
             
         except Exception as e:
-            import traceback; traceback.print_exc()
+            # import traceback; traceback.print_exc()
             print(f"⚠️ Failed to save report: {e}")
 
     def _infer_op_path(self, method, lib_prefix):

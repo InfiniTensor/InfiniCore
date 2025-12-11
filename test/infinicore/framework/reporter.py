@@ -117,7 +117,13 @@ class TestReporter:
         indent_12 = ' ' * 12
         indent_16 = ' ' * 16
         indent_20 = ' ' * 20
-
+        # # ----------------------------------------------------
+        # import json # 需要在文件开头导入
+        # print("--- 实际的 total results 内容 ---")
+        # print(type(total_results))
+        # print(json.dumps(total_results, indent=4))
+        # print("------------------------")
+        # # ----------------------------------------------------
         print(f"💾 Saving to: {final_path}")
         try:
             with open(final_path, "w", encoding="utf-8") as f:
@@ -125,8 +131,17 @@ class TestReporter:
 
                 for i, entry in enumerate(total_results):
                     f.write(f"{indent_4}{{\n")
-                    keys = list(entry.keys())
+                    
+                    
+                    # # ----------------------------------------------------
+                    # import json # 需要在文件开头导入
+                    # print("--- 实际的 entry 内容 ---")
+                    # print(type(entry))
+                    # print(json.dumps(entry, indent=4))
+                    # print("------------------------")
+                    # # ----------------------------------------------------
 
+                    keys = list(entry.keys())
                     for j, key in enumerate(keys):
                         val = entry[key]
                         comma = "," if j < len(keys) - 1 else ""
