@@ -70,7 +70,6 @@ class TestCaseManager:
                 test_cases=cfg["test_cases"],
                 args=cfg["args"],
                 op_paths=cfg["op_paths"],
-                device=cfg["target_device"],
                 results_list=results,
             )
             
@@ -236,6 +235,7 @@ class TestCaseManager:
     # --- Helpers ---
 
     def _discover_op_path(self, op_name: str, candidates: List[str]) -> str:
+        print(f"[DEBUG] _discover_op_path called with op_name='{op_name}', candidates={candidates}")
         for prefix in candidates:
             path = f"{prefix}.{op_name}"
             try:
@@ -243,6 +243,7 @@ class TestCaseManager:
                 return path
             except (ImportError, AttributeError, ValueError):
                 continue
+        
         raise ValueError(f"❌ Cannot find op '{op_name}' in {candidates}")
 
     def _parse_spec(self, d, name):

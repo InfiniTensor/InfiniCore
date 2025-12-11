@@ -32,13 +32,13 @@ def main():
     parser.add_argument("--num_iterations", type=int, default=None, help="Override measured iterations")
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging")
     
-    # parser.add_argument(
-    #     "--save", 
-    #     nargs="?", 
-    #     const="test_report.json", 
-    #     default=None, 
-    #     help="Save test results to JSON. Default file: test_report.json"
-    # )
+    parser.add_argument(
+        "--save", 
+        nargs="?", 
+        const="test_report.json", 
+        default=None, 
+        help="Save test results to JSON. Default file: test_report.json"
+    )
     
     args = parser.parse_args()
 
