@@ -5,7 +5,7 @@ import traceback
 from pathlib import Path
 import importlib.util
 
-from framework import get_hardware_args_group
+from framework import get_hardware_args_group, add_common_test_args
 
 
 def find_ops_directory(location=None):
@@ -650,24 +650,9 @@ def main():
         action="store_true",
         help="List all available test files without running them",
     )
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable verbose mode to stop on first error with full traceback",
-    )
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Enable debug mode to debug value mismatches",
-    )
-    parser.add_argument(
-        "--bench",
-        nargs="?",
-        const="both",
-        choices=["host", "device", "both"],
-        help="Enable performance benchmarking mode. "
-        "Options: host (CPU time only), device (GPU time only), both (default)",
-    )
+    
+    # Call common method to add shared arguments (bench, debug, verbose, save...)
+    add_common_test_args(parser)
 
     get_hardware_args_group(parser)
 

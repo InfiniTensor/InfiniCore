@@ -90,6 +90,7 @@ public:
 private:
     TestResult testBasicModuleCreation();      // Merged: creation, parameters, state_dict, load_state_dict
     TestResult testTensorParallelParameters(); // Module with tensor parallel parameters
+    TestResult testParalleLinear();            // Module with ColumnParallelLinear, RowParallelLinear
     TestResult testLoadStateDict();            // Advanced: hierarchical modules
     TestResult testModuleHierarchy();          // Demonstrates proper hierarchical construction pattern
     TestResult testParameterLoading();         // Test blob parameter loading

@@ -122,6 +122,11 @@ Tensor RoPE::forward(const Tensor &x, const Tensor &pos, bool in_place) const {
     return op::rope(x, pos, sin_cache_, cos_cache_, algo_);
 }
 
+Tensor RoPE::forward(const Tensor &y, const Tensor &x, const Tensor &pos) const {
+    op::rope_(y, x, pos, sin_cache_, cos_cache_, algo_);
+    return y;
+}
+
 std::string RoPE::extra_repr() const {
     std::string algo_str = (algo_ == Algo::GPT_J) ? "GPT_J" : "GPT_NEOX";
     return "RoPE(head_dim=" + std::to_string(head_dim_) + ", max_seq_len=" + std::to_string(max_seq_len_) + ", theta=" + std::to_string(theta_) + ", algo=" + algo_str + ", dtype=" + std::to_string(static_cast<int>(dtype_)) + ")";

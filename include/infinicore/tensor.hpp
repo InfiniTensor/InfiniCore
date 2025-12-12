@@ -84,6 +84,8 @@ public:
     TensorImpl *operator->();
     const TensorImpl *operator->() const;
 
+    operator bool() const;
+
 protected:
     Tensor(std::shared_ptr<TensorImpl> impl) : impl_(std::move(impl)) {}
     std::shared_ptr<TensorImpl> impl_;
