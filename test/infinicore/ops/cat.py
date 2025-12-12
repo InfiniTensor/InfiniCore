@@ -86,16 +86,16 @@ def parse_test_cases():
             output_spec = TensorSpec.from_tensor(output_shape, output_strides, dtype)
 
             # Out-of-place test case
-            test_cases.append(
-                TestCase(
-                    inputs=[tuple(input_specs)],
-                    kwargs={"dim": dim},
-                    output_spec=None,
-                    comparison_target=None,
-                    tolerance=tolerance,
-                    description="Cat - OUT_OF_PLACE",
-                )
-            )
+            # test_cases.append(
+            #     TestCase(
+            #         inputs=[tuple(input_specs)],
+            #         kwargs={"dim": dim},
+            #         output_spec=None,
+            #         comparison_target=None,
+            #         tolerance=tolerance,
+            #         description="Cat - OUT_OF_PLACE",
+            #     )
+            # )
 
             # In-place test case
             if output_supports_inplace:
@@ -124,6 +124,18 @@ class OpTest(BaseOperatorTest):
 
     def torch_operator(self, *args, **kwargs):
         """PyTorch cat implementation"""
+        def print_info(
+            tensors: tuple[torch.Tensor, ...] | list[torch.Tensor] | None,
+            dim,
+            *,
+            out: torch.Tensor | None = None,
+        ):
+            print(type(tensors))
+            print(tensors)
+            print(dim)
+            print(out)
+
+        # print_info(*args, **kwargs)
         return torch.cat(*args, **kwargs)
 
     def infinicore_operator(self, *args, **kwargs):

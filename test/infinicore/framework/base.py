@@ -353,7 +353,8 @@ class BaseOperatorTest(ABC):
                     inp, comparison_target == i
                 )
                 infini_inputs.append(infini_list)
-                cloned_tensors.append(cloned_list)
+                if (cloned_list):
+                    cloned_tensors.append(cloned_list)
             else:
                 infini_inputs.append(inp)
 
@@ -374,7 +375,8 @@ class BaseOperatorTest(ABC):
                 infini_list, cloned_list = self.prepare_infinicore_list(
                     value, key == "out"
                 )
-                cloned_tensors.append(cloned_list)
+                if cloned_list:
+                    cloned_tensors.append(cloned_list)
                 infini_kwargs[key] = infini_list
             else:
                 infini_kwargs[key] = value

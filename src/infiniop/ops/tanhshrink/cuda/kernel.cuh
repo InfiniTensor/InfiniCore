@@ -19,6 +19,8 @@ public:
         } else if constexpr (std::is_same_v<T, float>) {
             // FP32
             return x - tanhf(x);
+        } else {
+            return x - tanhf(x);
         }
     }
 } TanhshrinkOp;

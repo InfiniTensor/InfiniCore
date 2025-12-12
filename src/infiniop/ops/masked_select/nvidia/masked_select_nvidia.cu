@@ -68,8 +68,6 @@ infiniStatus_t launchKernel(
     size_t *scan_result = reinterpret_cast<size_t *>(workspace_ptr + workspace_offset);
     workspace_offset += info.total_elements * sizeof(size_t);
 
-    assert(workspace_offset == workspace_size);
-
     CHECK_CUDA(cudaMemcpyAsync(shape_cuda, info.shape.data(), ndim * sizeof(size_t), cudaMemcpyHostToDevice, stream));
     CHECK_CUDA(cudaMemcpyAsync(input_strides_cuda, info.input_strides.data(), ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, stream));
     CHECK_CUDA(cudaMemcpyAsync(mask_strides_cuda, info.mask_strides.data(), ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, stream));

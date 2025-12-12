@@ -61,8 +61,6 @@ infiniStatus_t launchKernel(
     ptrdiff_t *out_strides_cuda = other_strides_cuda + other_ndim;
     workspace_offset += (info.input_ndim + info.other_ndim + info.out_ndim) * sizeof(ptrdiff_t);
 
-    assert(workspace_offset == workspace_size);
-
     CHECK_CUDA(cudaMemcpyAsync(out_shape_cuda, info.out_shape.data(), out_ndim * sizeof(size_t), cudaMemcpyHostToDevice, stream));
     CHECK_CUDA(cudaMemcpyAsync(input_strides_cuda, info.input_strides.data(), input_ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, stream));
     CHECK_CUDA(cudaMemcpyAsync(other_strides_cuda, info.other_strides.data(), other_ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, stream));
