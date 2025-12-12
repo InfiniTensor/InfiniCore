@@ -151,7 +151,7 @@ class TestCaseManager:
             raise ValueError(f"❌ Config for '{op_name}' missing 'testcases' list.")
 
         test_cases_list = []
-for idx, sub in enumerate(cases_data):
+        for idx, sub in enumerate(cases_data):
             # 1. Parse inputs (list of TensorSpecs)
             inputs = [
                 self._parse_spec(inp, f"in_{i}")
