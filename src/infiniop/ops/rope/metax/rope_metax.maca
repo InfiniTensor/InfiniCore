@@ -13,16 +13,24 @@ INFINIOP_METAX_KERNEL ropeThreadPerItemKernel(
     const Tangle *__restrict__ sin_table,
     const Tangle *__restrict__ cos_table,
     size_t table_dim,
+    size_t pos_stride_batch, // Stride for batch dimension in pos_ids
+    bool pos_has_batch_dim,  // Whether pos_ids has batch dimension
+    bool has_batch_dim,      // Whether tensors have batch dimension
+    ptrdiff_t y_stride_batch,
     ptrdiff_t y_stride_seqlen,
     ptrdiff_t y_stride_nhead,
+    ptrdiff_t x_stride_batch,
     ptrdiff_t x_stride_seqlen,
     ptrdiff_t x_stride_nhead) {
     ropeThreadPerItemBlock<IsGPTJ>(
         y_, x_, pos_ids,
         sin_table, cos_table,
         table_dim,
-        y_stride_seqlen, y_stride_nhead,
-        x_stride_seqlen, x_stride_nhead);
+        pos_stride_batch,
+        pos_has_batch_dim,
+        has_batch_dim,
+        y_stride_batch, y_stride_seqlen, y_stride_nhead,
+        x_stride_batch, x_stride_seqlen, x_stride_nhead);
 }
 
 namespace op::rope::metax {
@@ -70,19 +78,43 @@ infiniStatus_t calculateRoPE(const RoPEInfo &info,
                              const Tdata *sin_table,
                              const Tdata *cos_table,
                              hcStream_t stream) {
-    auto dimx = uint32_t(info.seqlen),
-         dimy = uint32_t(info.nhead);
+    auto dimx = uint32_t(info.seqlen);
+    auto dimy = uint32_t(info.nhead);
+
+    // For 3D tensors, batch dimension is not in blockIdx
+    auto dimz = info.has_batch_dim ? uint32_t(info.batch) : 1;
+
     int nthreads = std::max(int(info.table_dim), block_size);
     bool is_gpt_j = info.algo == infiniopRoPEAlgo_t::INFINIOP_ROPE_ALGO_GPT_J;
 
-    if (is_gpt_j) {
-        ropeThreadPerItemKernel<true><<<dim3(dimx, dimy), nthreads, 0, stream>>>(
-            y, x, pos_ids, sin_table, cos_table, info.table_dim,
-            info.y_stride_seqlen, info.y_stride_nhead, info.x_stride_seqlen, info.x_stride_nhead);
+    // Calculate position ID stride for batch dimension
+    size_t pos_stride_batch = info.pos_has_batch_dim ? info.seqlen : 0;
+
+    dim3 grid_dim;
+    if (info.has_batch_dim) {
+        // 4D tensors: use 3D grid [seqlen, nhead, batch]
+        grid_dim = dim3(dimx, dimy, dimz);
     } else {
-        ropeThreadPerItemKernel<false><<<dim3(dimx, dimy), nthreads, 0, stream>>>(
+        // 3D tensors: use 2D grid [seqlen, nhead], batch dimension is 1
+        grid_dim = dim3(dimx, dimy);
+    }
+
+    if (is_gpt_j) {
+        ropeThreadPerItemKernel<true><<<grid_dim, nthreads, 0, stream>>>(
             y, x, pos_ids, sin_table, cos_table, info.table_dim,
-            info.y_stride_seqlen, info.y_stride_nhead, info.x_stride_seqlen, info.x_stride_nhead);
+            pos_stride_batch,
+            info.pos_has_batch_dim,
+            info.has_batch_dim,
+            info.y_stride_batch, info.y_stride_seqlen, info.y_stride_nhead,
+            info.x_stride_batch, info.x_stride_seqlen, info.x_stride_nhead);
+    } else {
+        ropeThreadPerItemKernel<false><<<grid_dim, nthreads, 0, stream>>>(
+            y, x, pos_ids, sin_table, cos_table, info.table_dim,
+            pos_stride_batch,
+            info.pos_has_batch_dim,
+            info.has_batch_dim,
+            info.y_stride_batch, info.y_stride_seqlen, info.y_stride_nhead,
+            info.x_stride_batch, info.x_stride_seqlen, info.x_stride_nhead);
     }
 
     return INFINI_STATUS_SUCCESS;

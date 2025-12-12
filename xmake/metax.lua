@@ -47,7 +47,7 @@ target("infiniop-metax")
     on_install(function (target) end)
     set_languages("cxx17")
     set_warnings("all", "error")
-    add_cxflags("-lstdc++", "-fPIC", "-Wno-defaulted-function-deleted", "-Wno-strict-aliasing")
+    add_cxflags("-lstdc++", "-fPIC", "-Wno-defaulted-function-deleted", "-Wno-strict-aliasing", {force = true})
     add_files("../src/infiniop/devices/metax/*.cc", "../src/infiniop/ops/*/metax/*.cc")
     add_files("../src/infiniop/ops/*/metax/*.maca", {rule = "maca"})
 

@@ -14,7 +14,7 @@ infinicore::ops 模块包含了 InfiniCore 所有 C++ 算子的接口和实现�
 - execute 函数，算子的计算逻辑。
 - dispatcher 分发器，用于注册算子在不同设备上的 kernel 实现。一个进程中，一种算子只有一个全局分发器，每种设备上只能同时注册一个 kernel 实现，可以多次注册对之前的实现进行覆盖。详细信息请参考 `include/infinicore/ops/common/dispatcher.hpp`。
 
-示例 `Matmul` 算子的头文件如下：
+示例 `Gemm` 算子的头文件如下：
 
 ```c++
 #pragma once
@@ -23,15 +23,17 @@ infinicore::ops 模块包含了 InfiniCore 所有 C++ 算子的接口和实现�
 #include "common/op.hpp"
 
 namespace infinicore::op {
-class Matmul {
+
+class Gemm {
 public:
-    using schema = void (*)(Tensor, Tensor, Tensor);
-    static void execute(Tensor c, Tensor a, Tensor b);
+    using schema = void (*)(Tensor, Tensor, Tensor, float, float);
+    static void execute(Tensor c, Tensor a, Tensor b, float alpha, float beta);
     static common::OpDispatcher<schema> &dispatcher();
 };
 
-Tensor matmul(Tensor a, Tensor b);
-void matmul_(Tensor c, Tensor a, Tensor b);
+Tensor gemm(Tensor a, Tensor b, float alpha = 1.0f, float beta = 0.0f);
+void gemm_(Tensor c, Tensor a, Tensor b, float alpha, float beta);
+
 }
 ```
 
@@ -39,38 +41,46 @@ void matmul_(Tensor c, Tensor a, Tensor b);
 
 在 `src/infinicore/ops/*OPNAME*/*OPNAME*.cpp` 文件中实现算子的计算逻辑。
 
-- execute 函数，使用算子的分发器，调用对应硬件上的核函数。
+- execute 函数，使用算子的分发器，调用对应硬件上的核函数。可以通过 `context::setDevice` 来改变当前运行时的设备种类。
 - 计算接口，使用 execute 函数实现算子接口的计算逻辑，包括 in-place 和 out-of-place 两种模式，其中 in-place 模式的接口函数名以 `_` 结尾，将输出接口写入给定的参数中；out-of-place 模式的接口会为输出创建新的 Tensor。
 
-示例 `Matmul` 算子的实现如下：
+示例 `Gemm` 算子的实现如下：
 
 ```c++
-#include "infinicore/ops/matmul.hpp"
+#include "infinicore/ops/gemm.hpp"
+
+#include "../../utils.hpp"
 
 namespace infinicore::op {
 
-common::OpDispatcher<Matmul::schema> &Matmul::dispatcher() {
-    static common::OpDispatcher<Matmul::schema> dispatcher_;
+common::OpDispatcher<Gemm::schema> &Gemm::dispatcher() {
+    static common::OpDispatcher<Gemm::schema> dispatcher_;
     return dispatcher_;
 };
 
-void Matmul::execute(Tensor c, Tensor a, Tensor b) {
-    dispatcher().lookup(context::getDevice().getType())(c, a, b);
+void Gemm::execute(Tensor c, Tensor a, Tensor b, float alpha, float beta) {
+    // 检查张量设备是否一致
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(c, a, b);
+    // 将运行时设备设置为与张量一致。若设备为CPU时，该接口不会进行任何操作
+    infinicore::context::setDevice(c->device());
+    // 根据张量的设备种类选择 kernel，执行计算
+    dispatcher().lookup(c->device().getType())(c, a, b, alpha, beta);
 }
 
-Tensor matmul(Tensor a, Tensor b) {
+Tensor gemm(Tensor a, Tensor b, float alpha, float beta) {
     Shape shape = a->shape();
     Size size = a->ndim();
     shape[size - 1] = b->size(size - 1);
     auto c = Tensor::empty(shape, a->dtype(), a->device());
-    matmul_(c, a, b);
+    gemm_(c, a, b, alpha, beta);
     return c;
 }
 
-void matmul_(Tensor c, Tensor a, Tensor b) {
-    Matmul::execute(c, a, b);
+void gemm_(Tensor c, Tensor a, Tensor b, float alpha, float beta) {
+    Gemm::execute(c, a, b, alpha, beta);
 }
-}
+
+} 
 ```
 
 ### 3. Kernel 注册
@@ -91,7 +101,7 @@ void registerAll(Fn fn, bool override_existing = true);
 Fn lookup(Device::Type device_type) const;
 ```
 
-如果你为多个（或全部）设备注册了同一个 kernel 实现，那么你需要自行实现不同设备的分发机制。比如本框架中的 InfiniOP 算子库，其算子接口在不同平台都保持了一致，并根据当前设备类型自动分发，因此在注册时会为所有平台注册同一个计算函数。以 Matmul 算子为例：
+如果你为多个（或全部）设备注册了同一个 kernel 实现，那么你需要自行实现不同设备的分发机制。比如本框架中的 InfiniOP 算子库，其算子接口在不同平台都保持了一致，并根据当前设备类型自动分发，因此在注册时会为所有平台注册同一个计算函数。以 Gemm 算子为例：
 
 ```c++
 namespace infinicore::op::matmul_impl::infiniop {
@@ -107,19 +117,18 @@ thread_local common::OpCache<size_t, infiniopGemmDescriptor_t> caches(
     });
 
 // 计算函数
-void calculate(Tensor c, Tensor a, Tensor b){
+void calculate(Tensor c, Tensor a, Tensor b, float alpha, float beta) {
     // ...
     INFINICORE_CHECK_ERROR(infiniopGemm(
         desc, workspace->data(), workspace_size,
-        c->data(), a->data(), b->data(), 1.f, 0.f, context::getStream()));
+        c->data(), a->data(), b->data(), alpha, beta, context::getStream()));
 }
 
 // 在加载 InfiniCore 时为全平台注册 InfiniOP实现
 static bool registered = []() {
-    Matmul::dispatcher().registerAll(&calculate, false);
+    Gemm::dispatcher().registerAll(&calculate, false);
     return true;
 }();
-
 }
 ```
 

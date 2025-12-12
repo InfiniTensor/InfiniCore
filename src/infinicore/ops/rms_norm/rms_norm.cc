@@ -1,5 +1,7 @@
 #include "infinicore/ops/rms_norm.hpp"
 
+#include "../../utils.hpp"
+
 namespace infinicore::op {
 
 common::OpDispatcher<RMSNorm::schema> &RMSNorm::dispatcher() {
@@ -8,7 +10,9 @@ common::OpDispatcher<RMSNorm::schema> &RMSNorm::dispatcher() {
 };
 
 void RMSNorm::execute(Tensor y, Tensor x, Tensor weight, float epsilon) {
-    dispatcher().lookup(context::getDevice().getType())(y, x, weight, epsilon);
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(y, x, weight);
+    infinicore::context::setDevice(y->device());
+    dispatcher().lookup(y->device().getType())(y, x, weight, epsilon);
 }
 
 Tensor rms_norm(Tensor x, Tensor weight, float epsilon) {

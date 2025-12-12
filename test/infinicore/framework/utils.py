@@ -118,6 +118,13 @@ def get_tolerance(tolerance_map, tensor_dtype, default_atol=0, default_rtol=1e-3
     return tolerance["atol"], tolerance["rtol"]
 
 
+def clone_torch_tensor(torch_tensor):
+    cloned = torch_tensor.clone().detach()
+    if not torch_tensor.is_contiguous():
+        cloned = rearrange_tensor(cloned, torch_tensor.stride())
+    return cloned
+
+
 def infinicore_tensor_from_torch(torch_tensor):
     infini_device = infinicore.device(torch_tensor.device.type, 0)
     if torch_tensor.is_contiguous():
@@ -152,6 +159,10 @@ def convert_infinicore_to_torch(infini_result):
         dtype=to_torch_dtype(infini_result.dtype),
         device=infini_result.device.type,
     )
+    if not infini_result.is_contiguous():
+        torch_result_from_infini = rearrange_tensor(
+            torch_result_from_infini, infini_result.stride()
+        )
     temp_tensor = infinicore_tensor_from_torch(torch_result_from_infini)
     temp_tensor.copy_(infini_result)
     return torch_result_from_infini
@@ -223,7 +234,10 @@ def compare_results(
             return result_equal
 
     # Convert infinicore result to PyTorch tensor for comparison
-    torch_result_from_infini = convert_infinicore_to_torch(infini_result)
+    if isinstance(infini_result, torch.Tensor):
+        torch_result_from_infini = infini_result
+    else:
+        torch_result_from_infini = convert_infinicore_to_torch(infini_result)
 
     # Debug mode: detailed comparison
     if debug_mode:

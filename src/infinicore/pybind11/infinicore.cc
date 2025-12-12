@@ -1,6 +1,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
+#include "../utils.hpp"
 #include "context.hpp"
 #include "device.hpp"
 #include "device_event.hpp"

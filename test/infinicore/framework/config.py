@@ -44,6 +44,42 @@ def get_hardware_args_group(parser):
 
     return hardware_group
 
+def add_common_test_args(parser: argparse.ArgumentParser):
+    """
+    Adds common test/execution arguments to the passed parser object.
+    Includes: bench, debug, verbose, save args.
+    """
+    # Create an argument group to make help info clearer
+    group = parser.add_argument_group("Common Execution Options")
+
+    group.add_argument(
+        "--bench",
+        nargs="?",
+        const="both",
+        choices=["host", "device", "both"],
+        help="Enable performance benchmarking mode. "
+        "Options: host (CPU time only), device (GPU time only), both (default)",
+    )
+    
+    group.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug mode for detailed tensor comparison",
+    )
+    
+    group.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Enable verbose mode to stop on first error with full traceback",
+    )
+
+    group.add_argument(
+        "--save",
+        nargs="?",
+        const="test_report.json",
+        default=None,
+        help="Save test results to a JSON file. Defaults to 'test_report.json' if no filename provided.",
+    )
 
 def get_args():
     """Parse command line arguments for operator testing"""
@@ -78,14 +114,6 @@ Examples:
 
     # Core testing options
     parser.add_argument(
-        "--bench",
-        nargs="?",
-        const="both",
-        choices=["host", "device", "both"],
-        help="Enable performance benchmarking mode. "
-        "Options: host (CPU time only), device (GPU time only), both (default)",
-    )
-    parser.add_argument(
         "--num_prerun",
         type=lambda x: max(0, int(x)),
         default=10,
@@ -97,16 +125,9 @@ Examples:
         default=1000,
         help="Number of iterations for benchmarking (default: 1000)",
     )
-    parser.add_argument(
-        "--debug",
-        action="store_true",
-        help="Enable debug mode for detailed tensor comparison",
-    )
-    parser.add_argument(
-        "--verbose",
-        action="store_true",
-        help="Enable verbose mode to stop on first error with full traceback",
-    )
+
+    # Call the common method to add arguments
+    add_common_test_args(parser)
 
     # Device options using shared hardware info
     hardware_group = get_hardware_args_group(parser)

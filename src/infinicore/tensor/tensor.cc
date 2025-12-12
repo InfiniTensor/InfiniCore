@@ -60,6 +60,10 @@ Tensor Tensor::strided_from_blob(void *raw_ptr, const Shape &shape, const Stride
     return Tensor{TensorImpl::strided_from_blob(raw_ptr, shape, strides, dtype, device)};
 }
 
+Tensor::operator bool() const {
+    return impl_ != nullptr;
+}
+
 TensorMetaData::TensorMetaData(const Shape &_shape, const Strides &_strides, const DataType &_dtype)
     : shape(_shape), strides(_strides), dtype(_dtype) {
     INFINICORE_CHECK_ERROR(infiniopCreateTensorDescriptor(&desc, shape.size(), shape.data(), strides.data(), (infiniDtype_t)dtype));
@@ -162,6 +166,7 @@ std::string TensorImpl::info() const {
         ss << s << " ";
     }
     ss << "] dtype=" << toString(this->dtype());
+    ss << " device=" << this->device().toString();
 
     return ss.str();
 }

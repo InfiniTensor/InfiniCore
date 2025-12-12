@@ -33,7 +33,8 @@ _TEST_CASES_ = [
 
 # w (weight) types
 # Note: 'None' means the same as input dtype
-_X_DTYPES = [] # [InfiniDtype.F32, InfiniDtype.BF16, InfiniDtype.F16]
+# _X_DTYPES = [InfiniDtype.F32, InfiniDtype.BF16, InfiniDtype.F16]
+_X_DTYPES = [] # CPU CI
 # x types used for testing
 _VALUE_DTYPES = [InfiniDtype.F32]
 
@@ -193,6 +194,7 @@ def test(
         )
 
     lib_topkrouter()
+
 
     lable_values, lable_indices = torch_topkrouter(x.actual_tensor(), correction_bias.actual_tensor(), routed_scaling_factor, topk)
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
