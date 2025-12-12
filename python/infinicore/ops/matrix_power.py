@@ -31,6 +31,9 @@ def matrix_power(input, n, *, out=None):
             result = out
         return result
     
+    if infinicore.use_ntops and input.device.type in ("cuda", "musa") and out is None:
+        return infinicore.ntops.torch.matrix_power(input, n)
+    
     if out is None:
         return Tensor(_infinicore.matrix_power(input._underlying, n))
     

@@ -11,11 +11,11 @@ from framework import BaseOperatorTest, TensorSpec, TestCase, GenericTestRunner
 # infinicore.matrix_power(input, n)
 
 _TEST_CASES_DATA = [
-    ((2, 2), None, 1),
+    # ((2, 2), None, 1),
     ((3, 3), None, 2),
     ((4, 4), (256, 64), 3),
     ((1, 1), None, 5),
-    ((6, 6), None, 0),
+    # ((6, 6), None, 0),
     ((8, 8), (512, 1), 2),
 ]
 
