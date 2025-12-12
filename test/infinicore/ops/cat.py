@@ -3,8 +3,9 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import torch
 import infinicore
+import torch
+# import infinicore
 from framework import (
     BaseOperatorTest,
     TensorSpec,
@@ -86,16 +87,16 @@ def parse_test_cases():
             output_spec = TensorSpec.from_tensor(output_shape, output_strides, dtype)
 
             # Out-of-place test case
-            # test_cases.append(
-            #     TestCase(
-            #         inputs=[tuple(input_specs)],
-            #         kwargs={"dim": dim},
-            #         output_spec=None,
-            #         comparison_target=None,
-            #         tolerance=tolerance,
-            #         description="Cat - OUT_OF_PLACE",
-            #     )
-            # )
+            test_cases.append(
+                TestCase(
+                    inputs=[tuple(input_specs)],
+                    kwargs={"dim": dim},
+                    output_spec=None,
+                    comparison_target=None,
+                    tolerance=tolerance,
+                    description="Cat - OUT_OF_PLACE",
+                )
+            )
 
             # In-place test case
             if output_supports_inplace:
