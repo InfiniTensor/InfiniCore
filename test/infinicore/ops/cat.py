@@ -124,18 +124,6 @@ class OpTest(BaseOperatorTest):
 
     def torch_operator(self, *args, **kwargs):
         """PyTorch cat implementation"""
-        def print_info(
-            tensors: tuple[torch.Tensor, ...] | list[torch.Tensor] | None,
-            dim,
-            *,
-            out: torch.Tensor | None = None,
-        ):
-            print(type(tensors))
-            print(tensors)
-            print(dim)
-            print(out)
-
-        # print_info(*args, **kwargs)
         return torch.cat(*args, **kwargs)
 
     def infinicore_operator(self, *args, **kwargs):
