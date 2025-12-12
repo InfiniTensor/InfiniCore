@@ -44,6 +44,7 @@ from infinicore.ops.erf import erf
 from infinicore.ops.erfc import erfc
 from infinicore.ops.erfinv import erfinv
 from infinicore.ops.matmul import matmul
+from infinicore.ops.matrix_power import matrix_power
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.rearrange import rearrange
@@ -106,6 +107,7 @@ __all__ = [
     "erfc",
     "erfinv",
     "matmul",
+    "matrix_power",
     "mul",
     "narrow",
     "rearrange",
