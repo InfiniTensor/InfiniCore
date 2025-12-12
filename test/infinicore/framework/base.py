@@ -30,8 +30,10 @@ class TestConfig:
         num_prerun=10,
         num_iterations=1000,
         verbose=False,
+        equal_nan=False,
     ):
         self.debug = debug
+        self.equal_nan = equal_nan
         self.bench = bench
         self.num_prerun = num_prerun
         self.num_iterations = num_iterations
@@ -353,8 +355,11 @@ class BaseOperatorTest(ABC):
                     inp, comparison_target == i
                 )
                 infini_inputs.append(infini_list)
-                if (cloned_list):
-                    cloned_tensors.append(cloned_list)
+                # assuming no input lists are operated inplace
+                if len(cloned_list) > 0:
+                    raise Exception(
+                        "Unconsidered case: inplace operation on input list"
+                    )
             else:
                 infini_inputs.append(inp)
 
@@ -375,7 +380,9 @@ class BaseOperatorTest(ABC):
                 infini_list, cloned_list = self.prepare_infinicore_list(
                     value, key == "out"
                 )
-                if cloned_list:
+                if key == "out" and len(cloned_list) > 0:
+                    # not expected to reach here until an operator supports inplace on list output
+                    # torch.broadcast_tensors returns a list of tensors but doesn't require an out kwarg.
                     cloned_tensors.append(cloned_list)
                 infini_kwargs[key] = infini_list
             else:
@@ -542,7 +549,11 @@ class BaseOperatorTest(ABC):
                 rtol = test_case.tolerance.get("rtol", 1e-3)
 
                 compare_fn = create_test_comparator(
-                    config, atol, rtol, f"{test_case.description} - output_{i}"
+                    config,
+                    atol,
+                    rtol,
+                    f"{test_case.description} - output_{i}",
+                    equal_nan=config.equal_nan,
                 )
 
                 is_valid = compare_fn(infini_out, torch_out)
@@ -591,7 +602,11 @@ class BaseOperatorTest(ABC):
             rtol = test_case.tolerance.get("rtol", 1e-3)
 
             compare_fn = create_test_comparator(
-                config, atol, rtol, test_case.description
+                config,
+                atol,
+                rtol,
+                test_case.description,
+                equal_nan=config.equal_nan,
             )
 
             is_valid = compare_fn(infini_comparison, torch_comparison)
