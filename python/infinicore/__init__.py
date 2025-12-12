@@ -40,6 +40,9 @@ from infinicore.dtype import (
 )
 from infinicore.ops.add import add
 from infinicore.ops.attention import attention
+from infinicore.ops.erf import erf
+from infinicore.ops.erfc import erfc
+from infinicore.ops.erfinv import erfinv
 from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
@@ -99,6 +102,9 @@ __all__ = [
     # Operations.
     "add",
     "attention",
+    "erf",
+    "erfc",
+    "erfinv",
     "matmul",
     "mul",
     "narrow",

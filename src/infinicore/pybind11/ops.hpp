@@ -5,6 +5,9 @@
 #include "ops/add.hpp"
 #include "ops/attention.hpp"
 #include "ops/causal_softmax.hpp"
+#include "ops/erf.hpp"
+#include "ops/erfc.hpp"
+#include "ops/erfinv.hpp"
 #include "ops/embedding.hpp"
 #include "ops/linear.hpp"
 #include "ops/matmul.hpp"
@@ -34,6 +37,9 @@ inline void bind(py::module &m) {
     bind_swiglu(m);
     bind_rope(m);
     bind_embedding(m);
+    bind_erf(m);
+    bind_erfc(m);
+    bind_erfinv(m);
 }
 
 } // namespace infinicore::ops
