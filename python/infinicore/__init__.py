@@ -45,6 +45,7 @@ from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.rearrange import rearrange
+from infinicore.ops.argwhere import argwhere
 from infinicore.tensor import (
     Tensor,
     empty,
