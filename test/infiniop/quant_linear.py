@@ -342,9 +342,10 @@ def compare(
         bias = None
     x = TestTensor(x_shape, None, dtype, device)
     w = TestTensor(w_shape, None, dtype, device)
-    y = TestTensor(y_shape, None, dtype, device)
+    c = TestTensor(y_shape, None, dtype, device)
+    c_data = c.torch_tensor().clone()
     d = TestTensor(y_shape, None, dtype, device)
-        
+    y = TestTensor(y_shape, c_data.stride(), dtype, device, mode="manual", set_tensor=c_data)
     
     w_data_t = w.actual_tensor().clone().t().contiguous()
     w_t = TestTensor((N, K), w_data_t.stride(), dtype, device, mode="manual", set_tensor=w_data_t)
@@ -394,8 +395,8 @@ def compare(
         LIBINFINIOP.infiniopCreateLinearDescriptor(
             handle,
             ctypes.byref(descriptor),
-            y.descriptor,
-            y.descriptor,
+            d.descriptor,
+            c.descriptor,
             bias.descriptor if bias_exit else None,
             x_packed.descriptor,
             x_scale.descriptor,
@@ -409,9 +410,9 @@ def compare(
     )
 
     # Invalidate the shape and strides in the descriptor to prevent them from being directly used by the kernel
-    #x.destroy_desc()
-    y.destroy_desc()
-    #d.destroy_desc()
+    
+    d.destroy_desc()
+    c.destroy_desc()
     if bias_exit:
         bias.destroy_desc()
     x_packed.destroy_desc()
@@ -437,8 +438,8 @@ def compare(
                 descriptor,
                 workspace.data(),
                 workspace_size.value,
-                y.data(),
-                y.data(),
+                d.data(),
+                c.data(),
                 bias.data() if bias_exit else None,
                 x_packed.data(),
                 x_scale.data(),
@@ -451,18 +452,26 @@ def compare(
         )
 
     lib_linear()
+    if PROFILE:
+        # fmt: off
+        profile_operation("quant_linear", lambda: lib_linear(), device, NUM_PRERUN, NUM_ITERATIONS)
+        # fmt: on
 
-    
+    check_error(LIBINFINIOP.infiniopDestroyLinearDescriptor(descriptor))
+    #下面开始计算GEMM
+    descriptor = infiniopOperatorDescriptor_t()
     check_error(
         LIBINFINIOP.infiniopCreateGemmDescriptor(
             handle,
             ctypes.byref(descriptor),
-            d.descriptor,
+            y.descriptor,
             x.descriptor,
             w.descriptor,
         )
     )
-    
+    y.destroy_desc()
+    x.destroy_desc()
+    w.destroy_desc()
     #计算GEMM的workspace和数值结果
     workspace_size = c_uint64(0)
     check_error(
@@ -479,7 +488,7 @@ def compare(
                 descriptor,
                 workspace.data(),
                 workspace_size.value,
-                d.data(),
+                y.data(),
                 x.data(),
                 w.data(),
                 alpha,
@@ -503,10 +512,9 @@ def compare(
     if PROFILE:
         # fmt: off
         profile_operation("gemm        ", lambda: lib_gemm(), device, NUM_PRERUN, NUM_ITERATIONS)
-        profile_operation("quant_linear", lambda: lib_linear(), device, NUM_PRERUN, NUM_ITERATIONS)
         # fmt: on
 
-    check_error(LIBINFINIOP.infiniopDestroyLinearDescriptor(descriptor)) #只要一个Destroy即可
+    check_error(LIBINFINIOP.infiniopDestroyGemmDescriptor(descriptor)) 
     
 
 if __name__ == "__main__":
