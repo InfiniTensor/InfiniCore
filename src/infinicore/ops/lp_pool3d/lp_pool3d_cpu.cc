@@ -10,7 +10,7 @@
 
 namespace infinicore::op::lp_pool3d_impl::cpu {
 
-void calculate(Tensor output, Tensor input, float norm_type, tuple_size_3d kernel_size, tuple_size_3d stride, bool ceil_mode) {
+void calculate(Tensor output, Tensor input, float norm_type, const std::tuple<size_t, size_t, size_t> kernel_size, const std::tuple<size_t, size_t, size_t> stride, bool ceil_mode) {
     // input: [N, C, D_in, H_in, W_in], output: [N, C, D_out, H_out, W_out]
     auto input_shapes = input->shape();
     auto input_strides = input->strides();

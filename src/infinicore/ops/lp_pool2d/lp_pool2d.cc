@@ -9,7 +9,7 @@ common::OpDispatcher<Lp_Pool2d::schema> &Lp_Pool2d::dispatcher() {
     return dispatcher_;
 };
 
-void Lp_Pool2d::execute(Tensor output, Tensor input, float norm_type, tuple_size_2d kernel_size, tuple_size_2d stride, bool ceil_mode) {
+void Lp_Pool2d::execute(Tensor output, Tensor input, float norm_type, const std::tuple<size_t, size_t> kernel_size, const std::tuple<size_t, size_t> stride, bool ceil_mode) {
     infinicore::context::setDevice(input->device(), true);
     auto device_type = context::getDevice().getType();
     auto func = dispatcher().lookup(device_type);
@@ -21,7 +21,7 @@ void Lp_Pool2d::execute(Tensor output, Tensor input, float norm_type, tuple_size
     func(output, input, norm_type, kernel_size, stride, ceil_mode);
 }
 
-Tensor lp_pool2d(Tensor input, float norm_type, tuple_size_2d kernel_size, tuple_size_2d stride, bool ceil_mode) {
+Tensor lp_pool2d(Tensor input, float norm_type, const std::tuple<size_t, size_t> kernel_size, const std::tuple<size_t, size_t> stride, bool ceil_mode) {
     const auto ndim = input->ndim();
     auto input_shape = input->shape();
 
@@ -55,7 +55,7 @@ Tensor lp_pool2d(Tensor input, float norm_type, tuple_size_2d kernel_size, tuple
     return output;
 }
 
-void lp_pool2d_(Tensor output, Tensor input, float norm_type, tuple_size_2d kernel_size, tuple_size_2d stride, bool ceil_mode) {
+void lp_pool2d_(Tensor output, Tensor input, float norm_type, const std::tuple<size_t, size_t> kernel_size, const std::tuple<size_t, size_t> stride, bool ceil_mode) {
     Lp_Pool2d::execute(output, input, norm_type, kernel_size, stride, ceil_mode);
 }
 } // namespace infinicore::op
