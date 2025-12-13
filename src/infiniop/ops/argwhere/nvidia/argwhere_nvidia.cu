@@ -1,6 +1,6 @@
 #include "../../../devices/nvidia/nvidia_common.cuh"
 #include "../../../devices/nvidia/nvidia_kernel_common.cuh"
-#include "../cuda/kernel.cu"
+#include "../cuda/kernel.cuh"
 #include "argwhere_nvidia.cuh"
 #include "infinicore.h"
 #include <cstddef>

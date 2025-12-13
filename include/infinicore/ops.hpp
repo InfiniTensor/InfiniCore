@@ -1,8 +1,10 @@
 #pragma once
 
 #include "ops/add.hpp"
+#include "ops/asin.hpp"
 #include "ops/attention.hpp"
 #include "ops/causal_softmax.hpp"
+#include "ops/fmin.hpp"
 #include "ops/matmul.hpp"
 #include "ops/ones.hpp"
 #include "ops/rearrange.hpp"

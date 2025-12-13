@@ -40,12 +40,16 @@ from infinicore.dtype import (
     uint8,
 )
 from infinicore.ops.add import add
+from infinicore.ops.addr import addr
+from infinicore.ops.asin import asin
 from infinicore.ops.attention import attention
 from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.rearrange import rearrange
 from infinicore.ops.argwhere import argwhere
+from infinicore.ops.fmin import fmin
+
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -101,6 +105,9 @@ __all__ = [
     "uint8",
     # Operations.
     "add",
+    "addr",
+    "asin",
+    "argwhere",
     "attention",
     "matmul",
     "mul",
@@ -112,6 +119,7 @@ __all__ = [
     "from_list",
     "from_numpy",
     "from_torch",
+    "fmin",
     "ones",
     "strided_empty",
     "strided_from_blob",

@@ -4,11 +4,14 @@
 #include "infiniop/handle.h"
 #include "infiniop/ops/adaptive_avg_pool3d.h"
 #include "infiniop/ops/add.h"
+#include "infiniop/ops/addr.h"
+#include "infiniop/ops/asin.h"
 #include "infiniop/ops/attention.h"
 #include "infiniop/ops/causal_softmax.h"
 #include "infiniop/ops/clip.h"
 #include "infiniop/ops/conv.h"
 #include "infiniop/ops/dequantize_awq.h"
+#include "infiniop/ops/fmin.h"
 #include "infiniop/ops/gelu.h"
 #include "infiniop/ops/gemm.h"
 #include "infiniop/ops/layer_norm.h"
@@ -32,5 +35,6 @@
 #include "infiniop/ops/topksoftmax.h"
 #include "infiniop/ops/zeros.h"
 #include "infiniop/tensor_descriptor.h"
+
 
 #endif // __INFINIOP_API_H__
