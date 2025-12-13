@@ -144,13 +144,26 @@ void rearrange(
 utils::Result<RearrangeMeta> RearrangeMeta::distributeUnit(const std::vector<size_t> &candidates) const {
     // 获取当前的unit大小
     size_t current_unit = _meta[0];
+    size_t ndim_value = this->ndim();
 
-    // 寻找满足条件的unit值：当前unit能被其整除
+    // 寻找满足条件的unit值：当前unit能被其整除，且所有strides也能被其整除
     size_t new_unit = 0;
     for (size_t candidate : candidates) {
         if (current_unit % candidate == 0) {
-            new_unit = candidate;
-            break;
+            // 检查所有 strides 是否都能被 candidate 整除（确保内存对齐）
+            bool strides_aligned = true;
+            for (size_t i = 0; i < ndim_value; ++i) {
+                ptrdiff_t dst_stride = std::abs(dst_strides()[i]);
+                ptrdiff_t src_stride = std::abs(src_strides()[i]);
+                if (dst_stride % candidate != 0 || src_stride % candidate != 0) {
+                    strides_aligned = false;
+                    break;
+                }
+            }
+            if (strides_aligned) {
+                new_unit = candidate;
+                break;
+            }
         }
     }
 
@@ -163,9 +176,6 @@ utils::Result<RearrangeMeta> RearrangeMeta::distributeUnit(const std::vector<siz
     if (new_unit == current_unit) {
         return Result<RearrangeMeta>(_meta);
     }
-
-    // 获取当前维度
-    size_t ndim_value = this->ndim();
 
     // 创建新的布局数组
     std::vector<ptrdiff_t> layout(2 + (ndim_value + 1) * 3, 0);

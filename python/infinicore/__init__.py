@@ -41,10 +41,14 @@ from infinicore.dtype import (
 )
 from infinicore.ops.add import add
 from infinicore.ops.attention import attention
+from infinicore.ops.asinh import asinh
 from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.rearrange import rearrange
+from infinicore.ops.baddbmm import baddbmm
+from infinicore.ops.bilinear import bilinear
+from infinicore.ops.fmod import fmod
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -101,6 +105,10 @@ __all__ = [
     # Operations.
     "add",
     "attention",
+    "asinh",
+    "baddbmm",
+    "bilinear",
+    "fmod",
     "matmul",
     "mul",
     "narrow",
