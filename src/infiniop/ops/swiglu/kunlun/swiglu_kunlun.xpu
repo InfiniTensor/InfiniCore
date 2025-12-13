@@ -2,16 +2,6 @@
 #include "kernel.h"
 #include "swiglu_kunlun.h"
 
-namespace op::elementwise::kunlun {
-
-using SwiGLUOp = op::swiglu::kunlun::SwiGLUOp;
-
-// __global__ template function instantiation
-INSTANTIATE_ELEMENTWISE_KERNEL(SwiGLUOp::num_inputs, SwiGLUOp, float);
-INSTANTIATE_ELEMENTWISE_KERNEL(SwiGLUOp::num_inputs, SwiGLUOp, half);
-INSTANTIATE_ELEMENTWISE_KERNEL(SwiGLUOp::num_inputs, SwiGLUOp, bfloat16_t);
-} // namespace op::elementwise::kunlun
-
 namespace op::swiglu::kunlun {
 
 Descriptor::~Descriptor() = default;

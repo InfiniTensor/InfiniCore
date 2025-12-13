@@ -33,6 +33,10 @@ _TEST_CASES_ = [
     ((4, 1, 32), (64, 64, 1), None),
     ((11, 33, 128), None, (8000, 200, 1)),
     ((3, 32, 128), (8000, 200, 1), (7000, 128, 1)),
+    ((8, 1, 32, 128), None, None),
+    ((8, 10, 32, 64), None, None),
+    ((8, 20, 32, 64), (40960, 64, 1280, 1), (40960, 64, 1280, 1)),
+    ((8, 20, 4, 64), (1048576, 64, 262144, 1), (1048576, 64, 262144, 1)),
 ]
 
 # Data types used for testing
@@ -153,9 +157,9 @@ def test(
         f"Testing Rotary Positional Embedding on {InfiniDeviceNames[device]} with shape:{shape} x_strides:{x_strides} y_strides:{y_strides} and dtype:{InfiniDtypeNames[dtype]} inplace:{inplace} algo:{algo}"
     )
     theta = 1e5
-    pos = TestTensor.from_torch(torch.arange(0, x.shape[0]), InfiniDtype.I32, device)
+    pos = TestTensor.from_torch(torch.arange(0, x.shape[-3]), InfiniDtype.I32, device)
     sin_table, cos_table = sin_cos_table(
-        pos.torch_tensor(), x.shape[2], x.device, theta, dtype
+        pos.torch_tensor(), x.shape[-1], x.device, theta, dtype
     )
 
     rotary_embedding(

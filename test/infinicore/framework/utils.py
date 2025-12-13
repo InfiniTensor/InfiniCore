@@ -91,6 +91,7 @@ def print_discrepancy(
         print(f"  - Desired dtype: {expected.dtype}")
         print(f"  - Atol: {atol}")
         print(f"  - Rtol: {rtol}")
+        print(f"  - Equal NaN: {equal_nan}")
         print(
             f"  - Mismatched elements: {len(diff_indices)} / {actual.numel()} ({len(diff_indices) / actual.numel() * 100}%)"
         )
@@ -169,7 +170,7 @@ def convert_infinicore_to_torch(infini_result):
 
 
 def compare_results(
-    infini_result, torch_result, atol=1e-5, rtol=1e-5, debug_mode=False
+    infini_result, torch_result, atol=1e-5, rtol=1e-5, equal_nan=False, debug_mode=False
 ):
     """
     Generic function to compare infinicore result with PyTorch reference result
@@ -180,6 +181,7 @@ def compare_results(
         torch_result: PyTorch tensor reference result (single or tuple)
         atol: absolute tolerance (for floating-point only)
         rtol: relative tolerance (for floating-point only)
+        equal_nan: whether to treat NaN as equal
         debug_mode: whether to enable debug output
 
     Returns:
@@ -194,7 +196,9 @@ def compare_results(
 
         all_match = True
         for i, (infini_out, torch_out) in enumerate(zip(infini_result, torch_result)):
-            match = compare_results(infini_out, torch_out, atol, rtol, debug_mode)
+            match = compare_results(
+                infini_out, torch_out, atol, rtol, equal_nan, debug_mode
+            )
             all_match = all_match and match
 
         return all_match
@@ -241,7 +245,13 @@ def compare_results(
 
     # Debug mode: detailed comparison
     if debug_mode:
-        debug(torch_result_from_infini, torch_result, atol=atol, rtol=rtol)
+        debug(
+            torch_result_from_infini,
+            torch_result,
+            atol=atol,
+            rtol=rtol,
+            equal_nan=equal_nan,
+        )
 
     # Choose comparison method based on data type
     if is_integer_dtype(torch_result_from_infini.dtype) or is_integer_dtype(
@@ -257,10 +267,18 @@ def compare_results(
     ):
         # Complex number comparison - compare real and imaginary parts separately
         real_close = torch.allclose(
-            torch_result_from_infini.real, torch_result.real, atol=atol, rtol=rtol
+            torch_result_from_infini.real,
+            torch_result.real,
+            atol=atol,
+            rtol=rtol,
+            equal_nan=equal_nan,
         )
         imag_close = torch.allclose(
-            torch_result_from_infini.imag, torch_result.imag, atol=atol, rtol=rtol
+            torch_result_from_infini.imag,
+            torch_result.imag,
+            atol=atol,
+            rtol=rtol,
+            equal_nan=equal_nan,
         )
         result_equal = real_close and imag_close
         if debug_mode and not result_equal:
@@ -273,11 +291,15 @@ def compare_results(
     else:
         # Tolerance-based comparison for floating-point types
         return torch.allclose(
-            torch_result_from_infini, torch_result, atol=atol, rtol=rtol
+            torch_result_from_infini,
+            torch_result,
+            atol=atol,
+            rtol=rtol,
+            equal_nan=equal_nan,
         )
 
 
-def create_test_comparator(config, atol, rtol, mode_name=""):
+def create_test_comparator(config, atol, rtol, mode_name="", equal_nan=False):
     """
     Create a test-specific comparison function
 
@@ -286,6 +308,7 @@ def create_test_comparator(config, atol, rtol, mode_name=""):
         atol: absolute tolerance (for floating-point only)
         rtol: relative tolerance (for floating-point only)
         mode_name: operation mode name for debug output
+        equal_nan: whether to treat NaN as equal
 
     Returns:
         callable: function that takes (infini_result, torch_result) and returns bool
@@ -294,6 +317,9 @@ def create_test_comparator(config, atol, rtol, mode_name=""):
     def compare_test_results(infini_result, torch_result):
         if config.debug and mode_name:
             print(f"\033[94mDEBUG INFO - {mode_name}:\033[0m")
+            print(
+                f"\033[94m  Equal NaN: {'enabled' if equal_nan else 'disabled'}\033[0m"
+            )
 
         # For integer types, override tolerance to require exact equality
         actual_atol = atol
@@ -316,6 +342,7 @@ def create_test_comparator(config, atol, rtol, mode_name=""):
             torch_result,
             atol=actual_atol,
             rtol=actual_rtol,
+            equal_nan=equal_nan,
             debug_mode=config.debug,
         )
 

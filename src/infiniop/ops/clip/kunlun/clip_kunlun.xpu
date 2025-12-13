@@ -2,15 +2,6 @@
 #include "clip_kunlun.h"
 #include "kernel.h"
 
-namespace op::elementwise::kunlun {
-
-using ClipOp = op::clip::kunlun::ClipOp;
-
-INSTANTIATE_ELEMENTWISE_KERNEL(ClipOp::num_inputs, ClipOp, float);
-INSTANTIATE_ELEMENTWISE_KERNEL(ClipOp::num_inputs, ClipOp, half);
-INSTANTIATE_ELEMENTWISE_KERNEL(ClipOp::num_inputs, ClipOp, bfloat16_t);
-} // namespace op::elementwise::kunlun
-
 namespace op::clip::kunlun {
 
 Descriptor::~Descriptor() = default;

@@ -9,14 +9,37 @@ __device__ void ropeThreadPerItemBlock(
     const Tangle *__restrict__ sin_table,
     const Tangle *__restrict__ cos_table,
     size_t table_dim,
+    size_t pos_stride_batch, // Stride for batch dimension in pos_ids (0 if 1D)
+    bool pos_has_batch_dim,  // Whether pos_ids has batch dimension
+    bool has_batch_dim,      // Whether tensors have batch dimension
+    ptrdiff_t y_stride_batch,
     ptrdiff_t y_stride_seqlen,
     ptrdiff_t y_stride_nhead,
+    ptrdiff_t x_stride_batch,
     ptrdiff_t x_stride_seqlen,
     ptrdiff_t x_stride_nhead) {
 
-    auto y_offset = blockIdx.x * y_stride_seqlen + blockIdx.y * y_stride_nhead;
-    auto x_offset = blockIdx.x * x_stride_seqlen + blockIdx.y * x_stride_nhead;
-    size_t pos_id = size_t(pos_ids[blockIdx.x]);
+    // Calculate batch index: use blockIdx.z for 4D, 0 for 3D
+    const size_t batch_idx = has_batch_dim ? blockIdx.z : 0;
+    const size_t seq_idx = blockIdx.x;
+    const size_t head_idx = blockIdx.y;
+
+    // Calculate memory offsets
+    auto y_offset = (has_batch_dim ? batch_idx * y_stride_batch : 0) + seq_idx * y_stride_seqlen + head_idx * y_stride_nhead;
+
+    auto x_offset = (has_batch_dim ? batch_idx * x_stride_batch : 0) + seq_idx * x_stride_seqlen + head_idx * x_stride_nhead;
+
+    // Calculate position ID offset
+    size_t pos_offset;
+    if (pos_has_batch_dim) {
+        // Per-batch position IDs
+        pos_offset = batch_idx * pos_stride_batch + seq_idx;
+    } else {
+        // Shared position IDs across batch
+        pos_offset = seq_idx;
+    }
+
+    size_t pos_id = size_t(pos_ids[pos_offset]);
     auto table_offset = pos_id * table_dim;
 
     for (size_t i = threadIdx.x; i < table_dim; i += blockDim.x) {
