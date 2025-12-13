@@ -3,8 +3,8 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import torch
 import infinicore
+import torch
 from framework import (
     BaseOperatorTest,
     TensorSpec,
@@ -22,7 +22,7 @@ _TEST_CASES_DATA = [
     ((2, 3, 4), None, 2, True, (0, 1, 1)),
     ((1, 8), None, 0, False, None),
     ((16, 64), (128, 1), 1, True, None),
-    ((4, 5, 6), (60, 12, 2), 2, True, (12, 4, 1)),
+    # ((4, 5, 6), (60, 12, 2), 2, True, (12, 4, 1)), # 这个测试用例会导致数据重叠
 ]
 
 _TOLERANCE_MAP = {
@@ -104,9 +104,9 @@ class OpTest(BaseOperatorTest):
     def torch_operator(self, *args, **kwargs):
         return torch.logsumexp(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
-    #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.logsumexp(*args, **kwargs)
+    def infinicore_operator(self, *args, **kwargs):
+        """InfiniCore implementation (operator not yet available)."""
+        return infinicore.logsumexp(*args, **kwargs)
 
 
 def main():

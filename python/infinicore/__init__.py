@@ -45,6 +45,8 @@ from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.rearrange import rearrange
+from infinicore.ops.logsumexp import logsumexp
+from infinicore.ops.max import max
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -115,6 +117,8 @@ __all__ = [
     "strided_empty",
     "strided_from_blob",
     "zeros",
+    "logsumexp",
+    "max",
 ]
 
 use_ntops = False

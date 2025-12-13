@@ -3,8 +3,8 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import torch
 import infinicore
+import torch
 from framework import BaseOperatorTest, TensorSpec, TestCase, GenericTestRunner
 
 # Test cases format: (in_shape, in_strides_or_None, norm_type, kernel_size, stride_or_None, ceil_mode)
@@ -60,9 +60,9 @@ class OpTest(BaseOperatorTest):
     def torch_operator(self, *args, **kwargs):
         return torch.nn.functional.lp_pool1d(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
-    #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.nn.functional.lp_pool1d(*args, **kwargs)
+    def infinicore_operator(self, *args, **kwargs):
+        """InfiniCore implementation (operator not yet available)."""
+        return infinicore.nn.functional.lp_pool1d(*args, **kwargs)
 
 
 def main():
