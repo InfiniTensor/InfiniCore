@@ -47,6 +47,7 @@ from infinicore.ops.matmul import matmul
 from infinicore.ops.matrix_power import matrix_power
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
+from infinicore.ops.pixel_shuffle import pixel_shuffle
 from infinicore.ops.rearrange import rearrange
 from infinicore.tensor import (
     Tensor,
@@ -110,6 +111,7 @@ __all__ = [
     "matrix_power",
     "mul",
     "narrow",
+    "pixel_shuffle",
     "rearrange",
     "empty",
     "empty_like",

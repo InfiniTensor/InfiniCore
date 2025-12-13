@@ -13,6 +13,7 @@
 #include "ops/matmul.hpp"
 #include "ops/matrix_power.hpp"
 #include "ops/mul.hpp"
+#include "ops/pixel_shuffle.hpp"
 #include "ops/random_sample.hpp"
 #include "ops/rearrange.hpp"
 #include "ops/rms_norm.hpp"
@@ -33,6 +34,7 @@ inline void bind(py::module &m) {
     bind_matmul(m);
     bind_matrix_power(m);
     bind_mul(m);
+    bind_pixel_shuffle(m);
     bind_rearrange(m);
     bind_rms_norm(m);
     bind_silu(m);

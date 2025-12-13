@@ -42,6 +42,10 @@ def pixel_shuffle(input, upscale_factor):
     # Calculate batch dimensions (all dimensions before channel)
     batch_shape = shape[:c_dim]
     
+    # Step 0: Ensure input is contiguous before viewing
+    # This is necessary because view() requires contiguous tensor or compatible strides
+    input = input.contiguous()
+
     # Step 1: Reshape input from (..., C*r^2, H, W) to (..., C, r, r, H, W)
     new_shape = list(batch_shape) + [C, upscale_factor, upscale_factor, H, W]
     x = input.view(new_shape)
