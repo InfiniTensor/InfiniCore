@@ -44,6 +44,7 @@ def get_hardware_args_group(parser):
 
     return hardware_group
 
+
 def add_common_test_args(parser: argparse.ArgumentParser):
     """
     Adds common test/execution arguments to the passed parser object.
@@ -60,13 +61,19 @@ def add_common_test_args(parser: argparse.ArgumentParser):
         help="Enable performance benchmarking mode. "
         "Options: host (CPU time only), device (GPU time only), both (default)",
     )
-    
+
     group.add_argument(
         "--debug",
         action="store_true",
         help="Enable debug mode for detailed tensor comparison",
     )
-    
+
+    group.add_argument(
+        "--eq_nan",
+        action="store_true",
+        help="Enable equal_nan for tensor comparison",
+    )
+
     group.add_argument(
         "--verbose",
         action="store_true",
@@ -80,6 +87,7 @@ def add_common_test_args(parser: argparse.ArgumentParser):
         default=None,
         help="Save test results to a JSON file. Defaults to 'test_report.json' if no filename provided.",
     )
+
 
 def get_args():
     """Parse command line arguments for operator testing"""
@@ -100,8 +108,11 @@ Examples:
   # Run with benchmarking - device timing only  
   python test_operator.py --nvidia --bench device
 
-  # Run with debug mode on multiple devices
+  # Run with basic debug mode on multiple devices
   python test_operator.py --cpu --nvidia --debug
+
+  # Run with eq_nan debug mode to treat NaN as equal
+  python test_operator.py --cpu --nvidia --debug --eq_nan
 
   # Run with verbose mode to stop on first error with full traceback
   python test_operator.py --cpu --nvidia --verbose
@@ -216,7 +227,7 @@ def get_test_devices(args):
             devices_to_test.append(InfiniDeviceEnum.HYGON)
         except ImportError:
             print("Warning: Hygon DCU support not available")
-            
+
     if args.qy:
         try:
             # Iluvatar GPU detection
