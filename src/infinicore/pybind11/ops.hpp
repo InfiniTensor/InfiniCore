@@ -15,7 +15,7 @@
 #include "ops/rope.hpp"
 #include "ops/silu.hpp"
 #include "ops/swiglu.hpp"
-
+#include "ops/sum.hpp"
 namespace py = pybind11;
 
 namespace infinicore::ops {

@@ -22,8 +22,8 @@ def sum(input, dim=None, keepdim=False, out=None):
         tensor([15])
     """
     if out is None:
-        return Tensor(_infinicore.sum(input._underlying, dim.__underlying, keepdim.__underlying))
+        return Tensor(_infinicore.sum(input._underlying, dim, keepdim))
 
-    _infinicore.sum_(out._underlying, input._underlying, dim.__underlying, keepdim.__underlying)
+    _infinicore.sum_(out._underlying, input._underlying, dim, keepdim)
 
     return out

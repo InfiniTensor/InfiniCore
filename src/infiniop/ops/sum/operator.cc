@@ -14,6 +14,7 @@
 #endif
 #ifdef ENABLE_KUNLUN_API
 #include "kunlun/sum_kunlun.h"
+#endif
 #ifdef ENABLE_MOORE_API
 #include "moore/sum_moore.h"
 #endif
@@ -23,9 +24,9 @@ __C infiniStatus_t infiniopCreateSumDescriptor(
     infiniopSumDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t output_desc,
     infiniopTensorDescriptor_t input_desc,
-    size_t *dim,
-    bool keepdim,
-    size_t dim_size) {
+    size_t *dim, 
+    size_t dim_size,
+    bool keepdim) {
 
 #define CREATE(CASE, NAMESPACE)                                            \
     case CASE:                                                             \
@@ -35,6 +36,7 @@ __C infiniStatus_t infiniopCreateSumDescriptor(
             output_desc,                                                   \
             input_desc,                                                    \
             dim,                                                           \
+            dim_size,                                                      \
             keepdim)
 
     switch (handle->device) {
@@ -100,21 +102,21 @@ __C infiniStatus_t infiniopGetSumWorkspaceSize(infiniopSumDescriptor_t desc, siz
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
-// todo 搞懂为啥不用dim参数？
 __C infiniStatus_t infiniopSum(
     infiniopSumDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
     void *output,
     const void *input,
-    std::vector<int32_t> dim, 
+    size_t *dim, 
+    size_t dim_size,
     bool keepdim,
     void *stream) {
 
 #define CALCULATE(CASE, NAMESPACE)                                            \
     case CASE:                                                                \
         return reinterpret_cast<const op::sum::NAMESPACE::Descriptor *>(desc) \
-            ->calculate(workspace, workspace_size, output, input, dim, keepdim, stream)
+            ->calculate(workspace, workspace_size, output, input, stream)
 
     switch (desc->device_type) {
 

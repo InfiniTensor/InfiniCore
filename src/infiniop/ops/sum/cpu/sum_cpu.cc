@@ -1,91 +1,78 @@
 #include "sum_cpu.h"
 #include "../../../devices/cpu/common_cpu.h"
-
+#include "../../../../utils.h"
 namespace op::sum::cpu {
 
-Descriptor::~Descriptor() = default;
-
+Descriptor::~Descriptor() {}
+//  一个descriptor的create 一个suminfo 的create
 infiniStatus_t Descriptor::create(
-    infiniopHandle_t handle_,
+    infiniopHandle_t handle,
     Descriptor **desc_ptr,
     infiniopTensorDescriptor_t output_desc,
     infiniopTensorDescriptor_t input_desc,
-    size_t *dim, // todo 目前 pybind 的 sum.hpp里 dim 有可能是vector，有可能是 单个的整数值！！！
-    bool keepdim,
-    size_t dim_size
-    // std::vector<infiniopTensorDescriptor_t> input_desc_vec
-    ) {
-
-    auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
-    auto result = SumInfo::create(output_desc, input_desc, dim, keepdim);
+    size_t *dim, 
+    size_t dim_size, 
+    bool keepdim) {
+    // auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
+    auto result = SumInfo::create(output_desc, input_desc, dim, dim_size, keepdim);
     CHECK_RESULT(result);
-
-    *desc_ptr = new Descriptor(nullptr, result.take(), 0, handel->device, handel->device_id);
+    
+    *desc_ptr = new Descriptor(nullptr, result.take(), 0, handle->device, handle->device_id);
     return INFINI_STATUS_SUCCESS;
 }
 
-
-// 在最外围计算reduce_tensor output_tensor的shape
-// 假设reduce dim为 dim1 dim2 dim3... 其他dim记为 other1, other2, other3...  均为有序
-// reduce_tesnor = input_tensor.permute(other1, other2, other3...dim1, dim2, dim3...)
-// 计算有多少个值需要 reduce     reduce_num = shape[dim1] * shape[dim2] * shape[dim3] * ...
-// 然后这个时候reduce_tensor的shape strides都变过来了
-// for auto output_index  : output_size (整数)
-// 计算output_index 对应的 output_offset 其实就是output_index
-// 计算reduce_num个input_offset 相加 得到tempSum
-// for size_t i : output_size
-// convert(i * reduce_num) .... convert((i+1) * reduce_num - 1)
-// indexToOffset 来进行计算 就行
+namespace{
 template<typename T>
 infiniStatus_t calculateSum(
     const SumInfo *info,
     T *output,
-    const T *input,
-    size_t *dim,
-    bool keepdim,
-    size_t dim_size,
-){
-    std::vector<T> temp_sum(, 0);
-    if (dim_size == info->in_shape.size()){
-        T tempSum = 0;
-        for(size_t index = 0; index < info->input_size; index++){
-            size_t index_offset = op::common_cpu::indexToOffset(index, info->input_ndim, info->input_shape.data(), info->input_strides.data());
-            tempSum += input[index_offset];
+    const T *input){
+        // using AccumType = std::conditional_t<
+        //     std::is_same_v<T, fp16_t> || std::is_same_v<T, bf16_t>,
+        //     float,
+        //     T
+        // >;
+        if (info->reduce_dim_size == info->permuted_input_shape.size()){ // 规约到标量
+            float tempSum = 0.;
+            for(size_t index = 0; index < info->input_size; index++){
+                size_t input_offset = op::common_cpu::indexToOffset(index, info->permuted_input_shape.size(), info->permuted_input_shape.data(), info->permuted_input_strides.data());
+                tempSum += utils::cast<float>(input[input_offset]);
+            }
+            output[0] = utils::cast<T>(tempSum);
+            return INFINI_STATUS_SUCCESS;
+        } else{
+            for (size_t i = 0; i < info->output_size; i++) {
+                size_t output_offset = op::common_cpu::indexToOffset(i, info->output_shape.size(), info->output_shape.data(), info->output_strides.data());
+                float tempSum = 0.;
+                for(size_t j = 0; j < info->reduce_num; j++){
+                    size_t input_offset = op::common_cpu::indexToOffset(j + i * info->reduce_num, info->permuted_input_shape.size(), info->permuted_input_shape.data(), info->permuted_input_strides.data());
+                    tempSum += utils::cast<float>(input[input_offset]);
+                }
+                output[output_offset] = utils::cast<T>(tempSum);
+            }
+            return INFINI_STATUS_SUCCESS;
         }
-        output[0] = tempSum;
-        return INFINI_STATUS_SUCCESS;
     }
-// todo 完成对应的计算逻辑 参考Any 和 adaptive_avg_pool3d
-    for (size_t i = 0; i < output_size; i++) {
-        size_t output_offset = op::common_cpu::indexToOffset(i, info->out_ndim, info->out_shape.data(), info->out_strides.data());
-        T tempSum = 0;
-        for(size_t j = 0; j < reduce_num; j++){
-            size_t input_offset = op::common_cpu::indexToOffset(j + i * reduce_num, info->in_ndim, info->in_shape.data(), info->in_strides.data());
-            tempSum += input[input_offset];
-        }
-        output[output_offset] = tempSum;
-    }
-    return INFINI_STATUS_SUCCESS;
 }
 
-
+// src/infiniop/ops/sum/cpu/sum_cpu.cc: In instantiation of ‘infiniStatus_t op::sum::cpu::{anonymous}::calculateSum(const op::sum::SumInfo*, T*, const T*) [with T = CustomBFloat16]’:
+// src/infiniop/ops/sum/cpu/sum_cpu.cc:72:36:   required from here
+// src/infiniop/ops/sum/cpu/sum_cpu.cc:36:25: error: conversion from ‘double’ to non-scalar type ‘CustomBFloat16’ requested
 infiniStatus_t Descriptor::calculate(
     void *workspace,
     size_t workspace_size,
     void *output,
-    void *input, // todo 确保合理转化
-    // std::vector<const void *> inputs,
+    const void *input,
     void *stream) const {
-    // todo 搞懂这里的_device_info  对应的elementwise 以及 对应的info，处理逻辑等
-    switch (_info._dtype) {
+    switch (_info.dtype) {
     case INFINI_DTYPE_F16:
-        return calculateSum<fp16_t>(_info, reinterpret_cast<fp16_t *>(input));
+        return calculateSum<fp16_t>(&_info, (fp16_t *)output, reinterpret_cast<const fp16_t *>(input));
     case INFINI_DTYPE_F32:
-        return calculateSum<float>(_info, reinterpret_cast<float *>(input));
-    case INFINI_DTYPE_F64:
-        return calculateSum<double>(_info, reinterpret_cast<double *>(input));
+        return calculateSum<float>(&_info, (float *)output, reinterpret_cast<const float *>(input));
+    // case INFINI_DTYPE_F64:
+    //     return calculateSum<double>(&_info, (double *)output, reinterpret_cast<const double *>(input));
     case INFINI_DTYPE_BF16:
-        return calculateSum<bf16_t>(_info, reinterpret_cast<bf16_t *>(input));
+        return calculateSum<bf16_t>(&_info, (bf16_t *)output, reinterpret_cast<const bf16_t *>(input));
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }

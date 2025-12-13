@@ -9,15 +9,13 @@
 namespace infinicore::op {
 class Sum {
 public:
-    using schema = void (*)(Tensor, Tensor);
-    static void execute(Tensor output, Tensor input, std::);
+    using schema = void (*)(Tensor, Tensor, std::vector<size_t>, bool);
+    static void execute(Tensor output, Tensor input, std::vector<size_t> dim, bool keepdim=false);
     static common::OpDispatcher<schema> &dispatcher();
 };
 
-// Overloaded versions for different dim types
-// Tensor sum(Tensor input, int32_t dim, bool keepdim = false);
+
 Tensor sum(Tensor input, std::vector<size_t> dim, bool keepdim = false);
-// void sum_(Tensor output, Tensor input, int32_t dim, bool keepdim = false);
 void sum_(Tensor output, Tensor input, std::vector<size_t> dim, bool keepdim = false);
 
 

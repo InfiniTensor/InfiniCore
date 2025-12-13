@@ -25,17 +25,17 @@ Tensor py_sum(Tensor input, py::object dim, bool keepdim){
       }
 }
 
-Tensor py_sum_(Tensor output, Tensor input, py::object dim, bool keepdim){
+void py_sum_(Tensor output, Tensor input, py::object dim, bool keepdim){
       if(dim.is_none()){
             std::vector<size_t> dim_vec;
             for(int i = 0; i < input->shape().size(); i++){
                 dim_vec.push_back(i);
             }
-            return op::sum(output,input, dim_vec, keepdim);
+            op::sum_(output,input, dim_vec, keepdim);
       } else if (py::isinstance<py::tuple>(dim) || py::isinstance<py::list>(dim)){
-            return op::sum(output, input, dim.cast<std::vector<size_t>>(), keepdim);
+            op::sum_(output, input, dim.cast<std::vector<size_t>>(), keepdim);
       } else if (py::isinstance<py::int_>(dim)){
-            return op::sum(output, input, std::vector<size_t>(1, dim.cast<size_t>()), keepdim);
+            op::sum_(output, input, std::vector<size_t>(1, dim.cast<size_t>()), keepdim);
       } else {
             throw std::invalid_argument("dim must be a tuple or an integer");
       }

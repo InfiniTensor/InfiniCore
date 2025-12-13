@@ -10,15 +10,15 @@ namespace infinicore::op::sum_impl::infiniop {
 
 thread_local common::OpCache<size_t, infiniopSumDescriptor_t> caches(
     100, // capacity
-    [](infiniopSumescriptor_t &desc) {
+    [](infiniopSumDescriptor_t &desc) {
         if (desc != nullptr) {
             INFINICORE_CHECK_ERROR(infiniopDestroySumDescriptor(desc));
             desc = nullptr;
         }
     });
 
-void calculate(Tensor output, Tensor input, std::vector<size_t> dim, bool keepdim=false) {
-    size_t seed = hash_combine(output, input, dim, keepdim);
+void calculate(Tensor output, Tensor input, std::vector<size_t> dim, bool keepdim) {
+    size_t seed = hash_combine(output, input, dim.size(), keepdim);  // 只能处理简单类型传入vector会报错
 
     auto device_type = context::getDevice().getType();
     auto device_index = context::getDevice().getIndex();
@@ -31,7 +31,7 @@ void calculate(Tensor output, Tensor input, std::vector<size_t> dim, bool keepdi
     if (!desc_opt) {
         INFINICORE_CHECK_ERROR(infiniopCreateSumDescriptor(
             context::getInfiniopHandle(output->device()), &desc,
-            output->desc(), input->desc(), dim.data(), keepdim, dim.size()));
+            output->desc(), input->desc(), dim.data(), dim.size(),keepdim));
         cache.put(seed, desc);
     } else {
         desc = *desc_opt;
@@ -43,7 +43,7 @@ void calculate(Tensor output, Tensor input, std::vector<size_t> dim, bool keepdi
 
     INFINICORE_CHECK_ERROR(infiniopSum(
         desc, workspace->data(), workspace_size,
-        output->data(), input->data(), dim.data(), keepdim, dim.size(), context::getStream()));
+        output->data(), input->data(), dim.data(), dim.size(), keepdim, context::getStream()));
 }
 
 // static bool registered = []() {
@@ -52,7 +52,7 @@ void calculate(Tensor output, Tensor input, std::vector<size_t> dim, bool keepdi
 // }();
 
 static bool registered = []() {
-    Inner::dispatcher().registerDevice({
+    Sum::dispatcher().registerDevice({
             Device::Type::CPU,
             // Device::Type::NVIDIA,
             // Device::Type::METAX,

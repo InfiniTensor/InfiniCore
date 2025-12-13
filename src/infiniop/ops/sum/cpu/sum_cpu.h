@@ -2,12 +2,12 @@
 #define __INFINIOP_SUM_CPU_H__
 
 // #include "../../../elementwise/cpu/elementwise_cpu.h"
-#include "../sum_info.h"
+#include "../sum_desc.h"
 
 // namespace op::sum::cpu {
 // }
 
-DESCRIPTOR(cpu)
+DESCRIPTOR(cpu);
 
 
 #endif // __INFINIOP_SUM_CPU_H__
