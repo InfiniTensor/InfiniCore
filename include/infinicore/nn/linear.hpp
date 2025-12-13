@@ -1,13 +1,15 @@
 #pragma once
 
-#include "module.hpp"
 #include "../ops.hpp"
+#include "module.hpp"
+#include <infiniccl.h>
 
 namespace infinicore::nn {
 
-class Linear : public Module {
+class BaseLinear : public Module {
 public:
-    Linear(size_t in_features, size_t out_features, bool bias = true, const DataType &dtype = DataType::F32, const Device &device = Device());
+    BaseLinear(size_t in_features, size_t out_features, bool bias = true,
+               const DataType &dtype = DataType::F32, const Device &device = Device());
 
     // Forward pass: output = input @ weight.T + bias
     Tensor forward(Tensor &input) const;
@@ -22,9 +24,6 @@ public:
     bool has_bias() const { return has_bias_; }
     DataType dtype() const { return dtype_; }
 
-    // String representation
-    std::string extra_repr() const;
-
     // Accessors for parameters
     Tensor weight() const { return weight_; }
     Tensor bias() const { return bias_; }
@@ -34,7 +33,7 @@ protected:
     INFINICORE_NN_PARAMETER(weight);
     INFINICORE_NN_PARAMETER(bias);
 
-private:
+protected:
     // Helper method for common forward computation
     Tensor compute_linear(Tensor &input) const;
 
@@ -42,6 +41,57 @@ private:
     size_t out_features_;
     bool has_bias_;
     DataType dtype_;
+};
+
+} // namespace infinicore::nn
+
+namespace infinicore::nn {
+
+class Linear : public BaseLinear {
+public:
+    Linear(size_t in_features, size_t out_features, bool bias = true,
+           const DataType &dtype = DataType::F32, const Device &device = Device());
+
+    // Forward pass: output = input @ weight.T + bias
+    Tensor forward(Tensor &input) const;
+
+    // String representation
+    std::string extra_repr() const;
+};
+
+class ColumnParallelLinear : public BaseLinear {
+public:
+    ColumnParallelLinear(size_t in_features, size_t out_features, bool bias = true,
+                         const DataType &dtype = DataType::F32, const Device &device = Device(),
+                         Size tp_rank = 0, Size tp_size = 1);
+
+    // Forward pass: output = input @ weight.T + bias
+    Tensor forward(Tensor &input) const;
+
+    // String representation
+    std::string extra_repr() const;
+
+protected:
+    Size tp_rank_ = 0;
+    Size tp_size_ = 1;
+};
+
+class RowParallelLinear : public BaseLinear {
+public:
+    RowParallelLinear(size_t in_features, size_t out_features, bool bias = true,
+                      const DataType &dtype = DataType::F32, const Device &device = Device(),
+                      Size tp_rank = 0, Size tp_size = 1, infinicclComm_t communicator = nullptr);
+
+    // Forward pass: output = input @ weight.T + bias
+    Tensor forward(Tensor &input) const;
+
+    // String representation
+    std::string extra_repr() const;
+
+protected:
+    Size tp_rank_ = 0;
+    Size tp_size_ = 1;
+    infinicclComm_t communicator_;
 };
 
 } // namespace infinicore::nn

@@ -13,6 +13,7 @@ from .datatypes import to_torch_dtype, to_infinicore_dtype
 from .devices import InfiniDeviceNames, torch_device_map
 from .tensor import TensorSpec, TensorInitializer
 from .utils import (
+    clone_torch_tensor,
     create_test_comparator,
     infinicore_tensor_from_torch,
 )
@@ -29,8 +30,10 @@ class TestConfig:
         num_prerun=10,
         num_iterations=1000,
         verbose=False,
+        equal_nan=False,
     ):
         self.debug = debug
+        self.equal_nan = equal_nan
         self.bench = bench
         self.num_prerun = num_prerun
         self.num_iterations = num_iterations
@@ -321,7 +324,7 @@ class BaseOperatorTest(ABC):
         for item in input_sequence:
             if isinstance(item, torch.Tensor):
                 if clone:
-                    cloned_item = item.clone().detach()
+                    cloned_item = clone_torch_tensor(item)
                     infini_item = infinicore_tensor_from_torch(cloned_item)
                     cloned_tensors.append(cloned_item)
                 else:
@@ -340,7 +343,7 @@ class BaseOperatorTest(ABC):
             if isinstance(inp, torch.Tensor):
                 # Clone only if this input will be used for comparison
                 if comparison_target == i:
-                    cloned_inp = inp.clone().detach()
+                    cloned_inp = clone_torch_tensor(inp)
                     infini_tensor = infinicore_tensor_from_torch(cloned_inp)
                     cloned_tensors.append(cloned_inp)
                 else:
@@ -352,7 +355,11 @@ class BaseOperatorTest(ABC):
                     inp, comparison_target == i
                 )
                 infini_inputs.append(infini_list)
-                cloned_tensors.append(cloned_list)
+                # assuming no input lists are operated inplace
+                if len(cloned_list) > 0:
+                    raise Exception(
+                        "Unconsidered case: inplace operation on input list"
+                    )
             else:
                 infini_inputs.append(inp)
 
@@ -362,7 +369,7 @@ class BaseOperatorTest(ABC):
             if isinstance(value, torch.Tensor):
                 # Check if this tensor is used for output comparison
                 if key == "out" and comparison_target == "out":
-                    cloned_value = value.clone().detach()
+                    cloned_value = clone_torch_tensor(value)
                     infini_kwargs[key] = infinicore_tensor_from_torch(cloned_value)
                     cloned_tensors.append(cloned_value)
                 elif key == "out" and isinstance(comparison_target, int):
@@ -373,7 +380,10 @@ class BaseOperatorTest(ABC):
                 infini_list, cloned_list = self.prepare_infinicore_list(
                     value, key == "out"
                 )
-                cloned_tensors.append(cloned_list)
+                if key == "out" and len(cloned_list) > 0:
+                    # not expected to reach here until an operator supports inplace on list output
+                    # torch.broadcast_tensors returns a list of tensors but doesn't require an out kwarg.
+                    cloned_tensors.append(cloned_list)
                 infini_kwargs[key] = infini_list
             else:
                 infini_kwargs[key] = value
@@ -539,7 +549,11 @@ class BaseOperatorTest(ABC):
                 rtol = test_case.tolerance.get("rtol", 1e-3)
 
                 compare_fn = create_test_comparator(
-                    config, atol, rtol, f"{test_case.description} - output_{i}"
+                    config,
+                    atol,
+                    rtol,
+                    f"{test_case.description} - output_{i}",
+                    equal_nan=config.equal_nan,
                 )
 
                 is_valid = compare_fn(infini_out, torch_out)
@@ -566,12 +580,12 @@ class BaseOperatorTest(ABC):
             elif comparison_target == "out":
                 # Compare output tensor from kwargs (explicit output)
                 torch_comparison = kwargs.get("out")
-                infini_comparison = infini_kwargs.get("out")
+                infini_comparison = cloned_tensors[0]
             elif isinstance(comparison_target, int):
                 # Compare specific input tensor (in-place operation on input)
                 if 0 <= comparison_target < len(inputs):
                     torch_comparison = inputs[comparison_target]
-                    infini_comparison = infini_inputs[comparison_target]
+                    infini_comparison = cloned_tensors[0]
                 else:
                     raise ValueError(
                         f"Invalid comparison target index: {comparison_target}"
@@ -588,7 +602,11 @@ class BaseOperatorTest(ABC):
             rtol = test_case.tolerance.get("rtol", 1e-3)
 
             compare_fn = create_test_comparator(
-                config, atol, rtol, test_case.description
+                config,
+                atol,
+                rtol,
+                test_case.description,
+                equal_nan=config.equal_nan,
             )
 
             is_valid = compare_fn(infini_comparison, torch_comparison)

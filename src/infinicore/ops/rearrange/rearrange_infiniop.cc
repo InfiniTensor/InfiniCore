@@ -18,8 +18,8 @@ thread_local common::OpCache<size_t, infiniopRearrangeDescriptor_t> caches(
 void calculate(Tensor y, Tensor x) {
     size_t seed = hash_combine(y, x);
 
-    auto device_type = context::getDevice().getType();
-    auto device_index = context::getDevice().getIndex();
+    auto device_type = y->device().getType();
+    auto device_index = y->device().getIndex();
 
     auto &cache = caches.getCache(device_type, device_index);
 

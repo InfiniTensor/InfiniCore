@@ -1,5 +1,8 @@
 #include "infinicore/ops/rope.hpp"
+
+#include "../../utils.hpp"
 #include "infinicore/context/context.hpp"
+
 #include <stdexcept>
 
 namespace infinicore::op {
@@ -10,7 +13,9 @@ common::OpDispatcher<RoPE::schema> &RoPE::dispatcher() {
 };
 
 void RoPE::execute(Tensor x_out, const Tensor &x, const Tensor &pos, const Tensor &sin_table, const Tensor &cos_table, infinicore::nn::RoPE::Algo algo) {
-    auto device_type = context::getDevice().getType();
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(x_out, x, pos, sin_table, cos_table);
+    infinicore::context::setDevice(x_out->device());
+    auto device_type = x_out->device().getType();
     auto func = dispatcher().lookup(device_type);
 
     if (func == nullptr) {

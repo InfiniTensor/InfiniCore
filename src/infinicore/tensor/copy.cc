@@ -3,14 +3,15 @@
 #include "infinicore/ops.hpp"
 #include "infinicore/tensor.hpp"
 
-#include <spdlog/spdlog.h>
-
+#include <algorithm>
+#include <cstring>
+#include <iostream>
 namespace infinicore {
 Tensor TensorImpl::to(Device device) const {
     if (device == data_.memory->device()) {
         return Tensor(const_cast<TensorImpl *>(this)->shared_from_this());
     } else {
-        std::shared_ptr<TensorImpl> _t = empty(meta_.shape, meta_.dtype, device, true);
+        std::shared_ptr<TensorImpl> _t = empty(meta_.shape, meta_.dtype, device);
         _t->copy_from(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()));
         return Tensor(_t);
     }
@@ -20,26 +21,30 @@ void TensorImpl::copy_from(Tensor src) {
     if (src->shape() != this->shape()) {
         throw std::runtime_error("Cannot copy from tensor with different shape");
     }
-    if (this->device().getType() == src->device().getType()) {
+    if (this->device() == src->device()) {
         op::rearrange_(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()), src);
     } else {
         if (!src->is_contiguous()) {
             src = src->contiguous();
         }
+
+        // Use nbytes() to get the actual tensor size, not the full memory size
+        size_t copy_size = std::min(this->nbytes(), src->nbytes());
         if (this->device().getType() == Device::Type::CPU) {
             if (this->is_contiguous()) {
-                context::memcpyD2H(this->data(), src->data(), this->data_.memory->size());
+                context::memcpyD2H(this->data(), src->data(), copy_size);
             } else {
                 auto local_src = Tensor::empty(this->shape(), this->dtype(), this->device());
                 context::memcpyD2H(local_src->data(), src->data(), this->data_.memory->size());
                 op::rearrange_(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()), local_src);
             }
         } else if (src->device().getType() == Device::Type::CPU) {
+
             if (this->is_contiguous()) {
-                context::memcpyH2D(this->data(), src->data(), this->data_.memory->size());
+                context::memcpyH2D(this->data(), src->data(), copy_size);
             } else {
                 auto local_src = Tensor::empty(this->shape(), this->dtype(), this->device());
-                context::memcpyH2D(local_src->data(), src->data(), this->data_.memory->size());
+                context::memcpyH2D(local_src->data(), src->data(), copy_size);
                 op::rearrange_(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()), local_src);
             }
         }

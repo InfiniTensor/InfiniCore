@@ -5,8 +5,8 @@ from infinicore.tensor import Tensor
 class RopeAlgo:
     r"""Different types of RoPE algorithms."""
 
-    GPT_J = _infinicore.Algo.GPT_J
-    GPT_NEOX = _infinicore.Algo.GPT_NEOX
+    GPT_J = _infinicore.RoPEAlgo.GPT_J
+    GPT_NEOX = _infinicore.RoPEAlgo.GPT_NEOX
 
 
 def rope(

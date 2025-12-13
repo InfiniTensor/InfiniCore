@@ -1,4 +1,7 @@
 #include "infinicore/ops/swiglu.hpp"
+
+#include "../../utils.hpp"
+
 #include <stdexcept>
 
 namespace infinicore::op {
@@ -9,7 +12,9 @@ common::OpDispatcher<SwiGLU::schema> &SwiGLU::dispatcher() {
 };
 
 void SwiGLU::execute(Tensor c, Tensor a, Tensor b) {
-    auto device_type = context::getDevice().getType();
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(c, a, b);
+    infinicore::context::setDevice(c->device());
+    auto device_type = c->device().getType();
     auto func = dispatcher().lookup(device_type);
 
     if (func == nullptr) {

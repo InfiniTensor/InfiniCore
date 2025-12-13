@@ -1,5 +1,7 @@
 #include "infinicore/ops/mul.hpp"
 
+#include "../../utils.hpp"
+
 namespace infinicore::op {
 
 common::OpDispatcher<Mul::schema> &Mul::dispatcher() {
@@ -8,7 +10,9 @@ common::OpDispatcher<Mul::schema> &Mul::dispatcher() {
 };
 
 void Mul::execute(Tensor c, Tensor a, Tensor b) {
-    dispatcher().lookup(context::getDevice().getType())(c, a, b);
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(c, a, b);
+    infinicore::context::setDevice(c->device());
+    dispatcher().lookup(c->device().getType())(c, a, b);
 }
 
 Tensor mul(Tensor a, Tensor b) {
