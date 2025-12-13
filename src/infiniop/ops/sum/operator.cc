@@ -14,6 +14,8 @@
 #endif
 #ifdef ENABLE_KUNLUN_API
 #include "kunlun/sum_kunlun.h"
+#ifdef ENABLE_MOORE_API
+#include "moore/sum_moore.h"
 #endif
 
 __C infiniStatus_t infiniopCreateSumDescriptor(
@@ -21,17 +23,18 @@ __C infiniStatus_t infiniopCreateSumDescriptor(
     infiniopSumDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t output_desc,
     infiniopTensorDescriptor_t input_desc,
-    std::vector<int32_t> dim,
-    bool keepdim) {
+    size_t *dim,
+    bool keepdim,
+    size_t dim_size) {
 
 #define CREATE(CASE, NAMESPACE)                                            \
     case CASE:                                                             \
         return op::sum::NAMESPACE::Descriptor::create(                     \
             handle,                                                        \
             reinterpret_cast<op::sum::NAMESPACE::Descriptor **>(desc_ptr), \
-            output_desc,
-            input_desc,                                                        \
-            dim,
+            output_desc,                                                   \
+            input_desc,                                                    \
+            dim,                                                           \
             keepdim)
 
     switch (handle->device) {

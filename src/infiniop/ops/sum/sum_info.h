@@ -34,16 +34,18 @@
             Descriptor **desc_ptr, \
             infiniopTensorDescriptor_t output_desc, \
             infiniopTensorDescriptor_t input_desc, \
-            std::vector<int32_t> dim, \
-            bool keepdim); \
+            size_t *dim, \
+            bool keepdim, \
+            size_t dim_size); \
         
         infiniStatus_t calculate(   \
             void *workspace, \
             size_t workspace_size, \
             void *output, \
             const void *input, \
-            std::vector<int32_t> dim, \
+            size_t *dim, \
             bool keepdim, \
+            size_t dim_size, \
             void *stream) const; \
     }; \
 }
@@ -53,15 +55,17 @@ class SumInfo{
         SumInfo() = default;
     public:
         infiniDtype_t dtype;
-        std::vector<std::size_t> in_shape;
-        std::vector<std::size_t> out_shape;
+        std::vector<size_t> in_shape;
+        std::vector<size_t> out_shape;
         std::vector<ptrdiff_t> in_strides;
         std::vector<ptrdiff_t> out_strides;
+        size_t dim_size;
         static utils::Result<SumInfo> create(
             infiniopTensorDescriptor_t output_desc,
             infiniopTensorDescriptor_t input_desc,
-            std::vector<int32_t> dim, // todo 后续跑之前把int32_t都转成size_t
-            bool keepdim){
+            size_t *dim, // todo 后续跑之前把int32_t都转成size_t
+            bool keepdim,
+            size_t dim_size){
                 CHECK_OR_RETURN(output_desc != nullptr && input_desc != nullptr, INFINI_STATUS_NULL_POINTER); 
                 CHECK_OR_RETURN(output_desc->dtype() == input_desc->dtype(), INFINI_STATUS_BAD_TENSOR_DTYPE);
                 in_shape = input_desc->shape();
@@ -69,7 +73,8 @@ class SumInfo{
                 in_strides = input_desc->strides();
                 out_strides = output_desc->strides();
                 dtype = input_desc->dtype();
-                return utils::Result<SumInfo>(SumInfo{dtype, in_shape, out_shape, in_strides, out_strides});
+                reduce_dim_size = dim_size;
+                return utils::Result<SumInfo>(SumInfo{dtype, in_shape, out_shape, in_strides, out_strides, dim_size});
             }
         size_t workspaceSize() const { return _workspace_size; }
 };

@@ -10,8 +10,9 @@ __C __export infiniStatus_t infiniopCreateSumDescriptor(infiniopHandle_t handle,
                                                         infiniopSumDescriptor_t *desc_ptr,
                                                         infiniopTensorDescriptor_t output_desc,
                                                         infiniopTensorDescriptor_t input_desc,
-                                                        std::vector<size_t> dim, 
-                                                        bool keepdim);
+                                                        size_t *dim, 
+                                                        bool keepdim
+                                                        size_t dim_size);
 
 __C __export infiniStatus_t infiniopGetSumWorkspaceSize(infiniopSumDescriptor_t desc, size_t *size);
 
@@ -20,8 +21,9 @@ __C __export infiniStatus_t infiniopSum(infiniopSumDescriptor_t desc,
                                         size_t workspace_size,
                                         void *output,
                                         const void *input,
-                                        std::vector<size_t> dim, 
+                                        size_t *dim, 
                                         bool keepdim,
+                                        size_t dim_size,
                                         void *stream);
 
 __C __export infiniStatus_t infiniopDestroySumDescriptor(infiniopSumDescriptor_t desc);

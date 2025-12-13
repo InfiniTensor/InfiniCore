@@ -17,8 +17,8 @@ thread_local common::OpCache<size_t, infiniopSumDescriptor_t> caches(
         }
     });
 
-void calculate(Tensor output, Tensor input) {
-    size_t seed = hash_combine(output, input);
+void calculate(Tensor output, Tensor input, std::vector<size_t> dim, bool keepdim=false) {
+    size_t seed = hash_combine(output, input, dim, keepdim);
 
     auto device_type = context::getDevice().getType();
     auto device_index = context::getDevice().getIndex();
@@ -31,7 +31,7 @@ void calculate(Tensor output, Tensor input) {
     if (!desc_opt) {
         INFINICORE_CHECK_ERROR(infiniopCreateSumDescriptor(
             context::getInfiniopHandle(output->device()), &desc,
-            output->desc(), input->desc()));
+            output->desc(), input->desc(), dim.data(), keepdim, dim.size()));
         cache.put(seed, desc);
     } else {
         desc = *desc_opt;
@@ -43,11 +43,22 @@ void calculate(Tensor output, Tensor input) {
 
     INFINICORE_CHECK_ERROR(infiniopSum(
         desc, workspace->data(), workspace_size,
-        output->data(), input->data(), context::getStream()));
+        output->data(), input->data(), dim.data(), keepdim, dim.size(), context::getStream()));
 }
 
+// static bool registered = []() {
+//     Sum::dispatcher().registerAll(&calculate, false);
+//     return true;
+// }();
+
 static bool registered = []() {
-    Sum::dispatcher().registerAll(&calculate, false);
+    Inner::dispatcher().registerDevice({
+            Device::Type::CPU,
+            // Device::Type::NVIDIA,
+            // Device::Type::METAX,
+            // Device::Type::MOORE
+            // Device::Type::ILUVATAR
+        }, &calculate, false);
     return true;
 }();
 
