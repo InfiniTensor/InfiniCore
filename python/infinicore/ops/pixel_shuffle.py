@@ -1,5 +1,4 @@
 import infinicore
-import infinicore.nn.functional as F
 from infinicore.lib import _infinicore
 from infinicore.tensor import Tensor
 
@@ -17,9 +16,8 @@ def pixel_shuffle(input, upscale_factor, *, out=None):
     if infinicore.use_ntops and input.device.type in ("cuda", "musa") and out is None:
         return infinicore.ntops.torch.pixel_shuffle(input, upscale_factor)
 
-    # 2. 替代实现：使用 infinicore.nn.functional 中的 Python 实现
-    # 该实现基于 input.view() 和 input.permute()，逻辑清晰且通用
-    result = F.pixel_shuffle(input, upscale_factor)
+    # 2. 使用 infinicore C++ 实现（通过 infiniop）
+    result = _infinicore.pixel_shuffle(input, upscale_factor)
 
     # 3. 处理 out 参数
     if out is not None:
