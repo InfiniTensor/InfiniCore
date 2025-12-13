@@ -24,14 +24,13 @@ public:
     static utils::Result<AdaptiveMaxPool1dInfo> create(
         infiniopTensorDescriptor_t y_desc,
         infiniopTensorDescriptor_t x_desc,
-        size_t output_size) { 
+        size_t output_size) {
 
         auto atype = y_desc->dtype();
-        if (x_desc->dtype() != atype){
+        if (x_desc->dtype() != atype) {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
-        if (atype != INFINI_DTYPE_F16 && atype != INFINI_DTYPE_BF16 &&
-            atype != INFINI_DTYPE_F32 && atype != INFINI_DTYPE_F64) {
+        if (atype != INFINI_DTYPE_F16 && atype != INFINI_DTYPE_BF16 && atype != INFINI_DTYPE_F32 && atype != INFINI_DTYPE_F64) {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
 
@@ -43,11 +42,11 @@ public:
         }
 
         for (size_t i = 0; i < y_ndim - 1; ++i) {
-            if (x_desc->dim(i) != y_desc->dim(i)){
+            if (x_desc->dim(i) != y_desc->dim(i)) {
                 return INFINI_STATUS_BAD_TENSOR_SHAPE;
             }
         }
-        
+
         if (y_desc->dim(y_ndim - 1) != output_size) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
@@ -58,11 +57,8 @@ public:
             y_desc->strides(),
             x_desc->strides(),
             x_desc->dim(x_ndim - 1),
-            output_size
-        });
-
+            output_size});
     }
-
 };
 } // namespace op::adaptive_max_pool1d
 

@@ -1,8 +1,8 @@
 #include "adaptive_max_pool1d_cpu.h"
 #include "../../../devices/cpu/common_cpu.h"
 #include "../../../reduce/cpu/reduce.h"
-#include <cmath>
 #include <algorithm>
+#include <cmath>
 
 namespace op::adaptive_max_pool1d::cpu {
 
@@ -26,10 +26,10 @@ infiniStatus_t adaptiveMaxPool1d(const AdaptiveMaxPool1dInfo *info, T *y, const 
     const size_t ndim = info->ndim();
     const size_t batch_size = info->shape[0];
     const size_t channels = ndim > 2 ? info->shape[1] : 1;
-    
+
     const size_t input_length = info->input_length();
     const size_t output_length = info->output_length();
-    
+
     // 计算总的任务块数 (Batch * Channels)
     const ptrdiff_t total_blocks = static_cast<ptrdiff_t>(batch_size * channels);
 
@@ -44,27 +44,27 @@ infiniStatus_t adaptiveMaxPool1d(const AdaptiveMaxPool1dInfo *info, T *y, const 
         T *y_ptr_base;
 
         if (ndim > 2) { // (N, C, L)
-             x_ptr_base = x + i * info->x_strides[0] + j * info->x_strides[1];
-             y_ptr_base = y + i * info->y_strides[0] + j * info->y_strides[1];
+            x_ptr_base = x + i * info->x_strides[0] + j * info->x_strides[1];
+            y_ptr_base = y + i * info->y_strides[0] + j * info->y_strides[1];
         } else { // (N, L)
-             x_ptr_base = x + i * info->x_strides[0];
-             y_ptr_base = y + i * info->y_strides[0];
+            x_ptr_base = x + i * info->x_strides[0];
+            y_ptr_base = y + i * info->y_strides[0];
         }
 
         for (size_t out_idx = 0; out_idx < output_length; ++out_idx) {
             // 计算池化窗口范围 [start_index, end_index)
-            // 公式参考 PyTorch: 
+            // 公式参考 PyTorch:
             // start = floor(out_idx * L_in / L_out)
             // end   = ceil((out_idx + 1) * L_in / L_out)
             int start_index = std::floor((float)out_idx * input_length / output_length);
             int end_index = std::ceil((float)(out_idx + 1) * input_length / output_length);
-            
+
             start_index = std::max(start_index, 0);
             end_index = std::min(end_index, (int)input_length);
             int window_len = end_index - start_index;
 
             if (window_len <= 0) {
-                continue; 
+                continue;
             }
 
             const T *window_ptr = x_ptr_base + start_index * x_stride_last;
@@ -79,9 +79,9 @@ infiniStatus_t adaptiveMaxPool1d(const AdaptiveMaxPool1dInfo *info, T *y, const 
 
 infiniStatus_t Descriptor::calculate(
     void *workspace, size_t workspace_size,
-    void *y, const void *x, 
+    void *y, const void *x,
     void *stream) const {
-    
+
     if (_info.atype == INFINI_DTYPE_F32) {
         return adaptiveMaxPool1d(&_info, (float *)y, (const float *)x);
     } else if (_info.atype == INFINI_DTYPE_F16) {
@@ -91,7 +91,7 @@ infiniStatus_t Descriptor::calculate(
     } else if (_info.atype == INFINI_DTYPE_F64) {
         return adaptiveMaxPool1d(&_info, (double *)y, (const double *)x);
     }
-    
+
     return INFINI_STATUS_BAD_TENSOR_DTYPE;
 }
 

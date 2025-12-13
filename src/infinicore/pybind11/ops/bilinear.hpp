@@ -41,14 +41,14 @@ Returns:
     Output tensor after bilinear transformation
 )doc");
 
-      m.def("bilinear_",
-              &py_bilinear_,
-              py::arg("out"),
-              py::arg("x1"),
-              py::arg("x2"),
-              py::arg("weight"),
-              py::arg("bias"),
-              R"doc(In-place bilinear transformation of two input tensors.
+    m.def("bilinear_",
+          &py_bilinear_,
+          py::arg("out"),
+          py::arg("x1"),
+          py::arg("x2"),
+          py::arg("weight"),
+          py::arg("bias"),
+          R"doc(In-place bilinear transformation of two input tensors.
 Args:
       out: Output tensor
       x1: First input tensor
@@ -56,7 +56,6 @@ Args:
       weight: Weight tensor
       bias: Bias tensor (optional)
 )doc");
-
 }
 
 } // namespace infinicore::ops

@@ -17,7 +17,7 @@ INFINIOP_CUDA_KERNEL adaptiveMaxPool1dKernel(
     size_t channels,
     size_t input_length,
     size_t output_length,
-    size_t ndim){
+    size_t ndim) {
 
     adaptiveMaxPool1dBlock<BLOCK_SIZE, Tdata, Tcompute>(
         y, stride_y_batch, stride_y_channel,
@@ -63,12 +63,12 @@ infiniStatus_t launchKernel(
     size_t channels, size_t input_length, size_t output_length, size_t ndim,
     cudaStream_t cuda_stream) {
 
-#define LAUNCH_KERNEL(Tdata, Tcompute)                                                       \
+#define LAUNCH_KERNEL(Tdata, Tcompute)                                                                \
     adaptiveMaxPool1dKernel<BLOCK_SIZE, Tdata, Tcompute><<<num_blocks, BLOCK_SIZE, 0, cuda_stream>>>( \
-        reinterpret_cast<Tdata *>(y),                                                        \
-        stride_y_batch, stride_y_channel,                                                    \
-        reinterpret_cast<const Tdata *>(x),                                                  \
-        stride_x_batch, stride_x_channel, stride_x_length,                                   \
+        reinterpret_cast<Tdata *>(y),                                                                 \
+        stride_y_batch, stride_y_channel,                                                             \
+        reinterpret_cast<const Tdata *>(x),                                                           \
+        stride_x_batch, stride_x_channel, stride_x_length,                                            \
         channels, input_length, output_length, ndim)
 
     if (dtype == INFINI_DTYPE_F16) {

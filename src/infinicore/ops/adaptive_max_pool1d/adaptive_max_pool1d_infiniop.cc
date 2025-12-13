@@ -1,7 +1,7 @@
 #include "../../utils.hpp"
 #include "infinicore/common/hash.hpp"
-#include "infinicore/ops/common/cache.hpp"
 #include "infinicore/ops/adaptive_max_pool1d.hpp"
+#include "infinicore/ops/common/cache.hpp"
 #include <infiniop.h>
 
 namespace infinicore::op::adaptive_max_pool1d_impl::infiniop {

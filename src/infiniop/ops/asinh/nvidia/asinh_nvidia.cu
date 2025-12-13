@@ -26,7 +26,7 @@ infiniStatus_t Descriptor::create(
     CHECK_SAME_SHAPE(y_shape, x_shape);
 
     CREATE_ELEMENTWISE_CUDA_DESCRIPTOR(handle, dtype, out_desc, input_desc_vec)
-    
+
     return INFINI_STATUS_SUCCESS;
 }
 
@@ -41,17 +41,16 @@ infiniStatus_t Descriptor::calculate(
     }
     switch (_dtype) {
     case INFINI_DTYPE_F16:
-        return _device_info->calculate<256, cuda::AsinhOp,half>(_info, workspace, output, inputs, stream);
+        return _device_info->calculate<256, cuda::AsinhOp, half>(_info, workspace, output, inputs, stream);
     case INFINI_DTYPE_BF16:
-        return _device_info->calculate<256, cuda::AsinhOp,cuda_bfloat16>(_info, workspace, output, inputs, stream);
+        return _device_info->calculate<256, cuda::AsinhOp, cuda_bfloat16>(_info, workspace, output, inputs, stream);
     case INFINI_DTYPE_F32:
-        return _device_info->calculate<256, cuda::AsinhOp,float>(_info, workspace, output, inputs, stream);
+        return _device_info->calculate<256, cuda::AsinhOp, float>(_info, workspace, output, inputs, stream);
     case INFINI_DTYPE_F64:
-        return _device_info->calculate<256, cuda::AsinhOp,double>(_info, workspace, output, inputs, stream);
+        return _device_info->calculate<256, cuda::AsinhOp, double>(_info, workspace, output, inputs, stream);
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
-
-} 
+}
 
 } // namespace op::asinh::nvidia

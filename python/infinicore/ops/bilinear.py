@@ -1,6 +1,7 @@
 from infinicore.lib import _infinicore
 from infinicore.tensor import Tensor
 
+
 def bilinear(input1, input2, weight, bias=None, *, out=None):
     if out is None:
         return Tensor(

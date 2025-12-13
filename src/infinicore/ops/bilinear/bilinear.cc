@@ -1,11 +1,11 @@
 #include "infinicore/ops/bilinear.hpp"
-#include "infinicore/ops/matmul.hpp"
 #include "infinicore/ops/add.hpp"
+#include "infinicore/ops/matmul.hpp"
 #include "infinicore/ops/rearrange.hpp"
 
 #ifdef ENABLE_NVIDIA_API
 namespace op::gemm::nvidia {
-    void set_tf32_enabled(bool);
+void set_tf32_enabled(bool);
 }
 #endif
 
@@ -29,8 +29,10 @@ struct ScopedTF32Disable {
 };
 
 inline bool is_gemm_compatible_3d(const Tensor &t) {
-    if (t->ndim() != 3) return false;
-    
+    if (t->ndim() != 3) {
+        return false;
+    }
+
     const auto batch = t->shape()[0];
     const auto rows = t->shape()[1];
     const auto cols = t->shape()[2];
@@ -38,16 +40,24 @@ inline bool is_gemm_compatible_3d(const Tensor &t) {
     const auto rs = t->stride(1);
     const auto cs = t->stride(2);
 
-    if (rs != 1 && cs != 1) return false;
-    
-    if (cs == 1) {
-        if (rs < static_cast<int64_t>(cols)) return false;
-    } else {
-        if (cs < static_cast<int64_t>(rows)) return false;
+    if (rs != 1 && cs != 1) {
+        return false;
     }
-    
-    if (batch > 1 && bs == 0) return false;
-    
+
+    if (cs == 1) {
+        if (rs < static_cast<int64_t>(cols)) {
+            return false;
+        }
+    } else {
+        if (cs < static_cast<int64_t>(rows)) {
+            return false;
+        }
+    }
+
+    if (batch > 1 && bs == 0) {
+        return false;
+    }
+
     return true;
 }
 
@@ -75,9 +85,9 @@ Tensor bilinear(Tensor x1, Tensor x2, Tensor weight, std::optional<Tensor> bias)
     Tensor weight_cont = weight->is_contiguous() ? weight : weight->contiguous();
 
     Tensor weight_permuted = weight_cont->permute({1, 0, 2});
-    Tensor weight_permuted_cont = weight_permuted->is_contiguous() 
-                                  ? weight_permuted 
-                                  : weight_permuted->contiguous();
+    Tensor weight_permuted_cont = weight_permuted->is_contiguous()
+                                    ? weight_permuted
+                                    : weight_permuted->contiguous();
     Tensor weight_matrix = weight_permuted_cont->view({in1_features, out_features * in2_features});
 
     Tensor intermediate = matmul(x1_compat, weight_matrix, 1.0f);
@@ -94,9 +104,8 @@ Tensor bilinear(Tensor x1, Tensor x2, Tensor weight, std::optional<Tensor> bias)
 
     if (bias) {
         Tensor bias_broadcast = (*bias)->as_strided(
-            {batch_size, out_features}, 
-            {0, (*bias)->strides()[0]}
-        );
+            {batch_size, out_features},
+            {0, (*bias)->strides()[0]});
         out = add(out, bias_broadcast);
     }
     return out;

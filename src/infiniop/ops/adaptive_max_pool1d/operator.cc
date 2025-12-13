@@ -22,13 +22,13 @@ __C infiniStatus_t infiniopCreateAdaptiveMaxPool1dDescriptor(
     infiniopTensorDescriptor_t x_desc,
     size_t output_size) {
 
-#define CREATE(CASE, NAMESPACE)                                                 \
-    case CASE:                                                                  \
+#define CREATE(CASE, NAMESPACE)                                                            \
+    case CASE:                                                                             \
         return op::adaptive_max_pool1d::NAMESPACE::Descriptor::create(                     \
-            handle,                                                             \
+            handle,                                                                        \
             reinterpret_cast<op::adaptive_max_pool1d::NAMESPACE::Descriptor **>(desc_ptr), \
-            y_desc,                                                             \
-            x_desc,                                                             \
+            y_desc,                                                                        \
+            x_desc,                                                                        \
             output_size)
 
     switch (handle->device) {
@@ -54,13 +54,13 @@ __C infiniStatus_t infiniopCreateAdaptiveMaxPool1dDescriptor(
 }
 
 __C infiniStatus_t infiniopGetAdaptiveMaxPool1dWorkspaceSize(
-    infiniopAdaptiveMaxPool1dDescriptor_t desc, 
+    infiniopAdaptiveMaxPool1dDescriptor_t desc,
     size_t *size) {
-#define GET(CASE, NAMESPACE)                                                                                \
-    case CASE:                                                                                              \
-        *size = reinterpret_cast<op::adaptive_max_pool1d::NAMESPACE::Descriptor *>(desc)->workspaceSize();  \
+#define GET(CASE, NAMESPACE)                                                                               \
+    case CASE:                                                                                             \
+        *size = reinterpret_cast<op::adaptive_max_pool1d::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
         return INFINI_STATUS_SUCCESS;
-    
+
     switch (desc->device_type) {
 #ifdef ENABLE_CPU_API
         GET(INFINI_DEVICE_CPU, cpu);
@@ -84,14 +84,14 @@ __C infiniStatus_t infiniopGetAdaptiveMaxPool1dWorkspaceSize(
 }
 
 __C infiniStatus_t infiniopAdaptiveMaxPool1d(
-    infiniopAdaptiveMaxPool1dDescriptor_t desc, 
-    void *workspace, 
+    infiniopAdaptiveMaxPool1dDescriptor_t desc,
+    void *workspace,
     size_t workspace_size,
-    void *y, 
-    const void *x, 
+    void *y,
+    const void *x,
     void *stream) {
-#define CALCULATE(CASE, NAMESPACE)                                              \
-    case CASE:                                                                \
+#define CALCULATE(CASE, NAMESPACE)                                                                  \
+    case CASE:                                                                                      \
         return reinterpret_cast<op::adaptive_max_pool1d::NAMESPACE::Descriptor *>(desc)->calculate( \
             workspace, workspace_size, y, x, stream);
 
@@ -114,13 +114,13 @@ __C infiniStatus_t infiniopAdaptiveMaxPool1d(
     }
 #undef CALCULATE
 
-        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
 __C infiniStatus_t infiniopDestroyAdaptiveMaxPool1dDescriptor(
     infiniopAdaptiveMaxPool1dDescriptor_t desc) {
-#define DESTROY(CASE, NAMESPACE)                                              \
-    case CASE:                                                                \
+#define DESTROY(CASE, NAMESPACE)                                                         \
+    case CASE:                                                                           \
         delete reinterpret_cast<op::adaptive_max_pool1d::NAMESPACE::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS;
 

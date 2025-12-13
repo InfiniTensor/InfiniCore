@@ -15,8 +15,8 @@ __C __export infiniStatus_t infiniopCreateAdaptiveMaxPool1dDescriptor(
 __C __export infiniStatus_t infiniopGetAdaptiveMaxPool1dWorkspaceSize(infiniopAdaptiveMaxPool1dDescriptor_t desc, size_t *size);
 
 __C __export infiniStatus_t infiniopAdaptiveMaxPool1d(infiniopAdaptiveMaxPool1dDescriptor_t desc, void *workspace, size_t workspace_size,
-                                                     void *y, const void *x, void *stream);
+                                                      void *y, const void *x, void *stream);
 
 __C __export infiniStatus_t infiniopDestroyAdaptiveMaxPool1dDescriptor(infiniopAdaptiveMaxPool1dDescriptor_t desc);
 
-#endif 
+#endif

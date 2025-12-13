@@ -16,16 +16,16 @@ __device__ void adaptiveMaxPool1dBlock(
     size_t channels,
     size_t input_length,
     size_t output_length,
-    size_t ndim){
-    
+    size_t ndim) {
+
     size_t block_idx = blockIdx.x;
     size_t batch_idx = block_idx / channels;
     size_t channel_idx = block_idx % channels;
-    
+
     const Tdata *x_ptr;
     Tdata *y_ptr;
 
-    if(ndim > 2) {
+    if (ndim > 2) {
         x_ptr = x + batch_idx * stride_x_batch + channel_idx * stride_x_channel;
         y_ptr = y + batch_idx * stride_y_batch + channel_idx * stride_y_channel;
     } else {
@@ -33,11 +33,11 @@ __device__ void adaptiveMaxPool1dBlock(
         y_ptr = y + batch_idx * stride_y_batch;
     }
 
-    for (size_t out_idx = threadIdx.x; out_idx < output_length ; out_idx += BLOCK_SIZE) {
+    for (size_t out_idx = threadIdx.x; out_idx < output_length; out_idx += BLOCK_SIZE) {
         int start_index = static_cast<int>(floorf((float)out_idx * input_length / output_length));
         int end_index = static_cast<int>(ceilf((float)(out_idx + 1) * input_length / output_length));
 
-                if (end_index <= start_index) {
+        if (end_index <= start_index) {
             continue;
         }
 
@@ -49,7 +49,6 @@ __device__ void adaptiveMaxPool1dBlock(
 
         y_ptr[out_idx] = Tdata(max_val);
     }
-
 }
 
 #endif

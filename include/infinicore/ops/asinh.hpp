@@ -10,7 +10,7 @@ public:
     static void execute(Tensor y, Tensor x);
     static common::OpDispatcher<schema> &dispatcher();
 };
- 
+
 Tensor asinh(Tensor x);
 void asinh_(Tensor y, Tensor x);
 } // namespace infinicore::op

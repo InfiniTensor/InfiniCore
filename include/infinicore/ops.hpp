@@ -2,8 +2,8 @@
 
 #include "ops/adaptive_max_pool1d.hpp"
 #include "ops/add.hpp"
-#include "ops/attention.hpp"
 #include "ops/asinh.hpp"
+#include "ops/attention.hpp"
 #include "ops/baddbmm.hpp"
 #include "ops/bilinear.hpp"
 #include "ops/causal_softmax.hpp"

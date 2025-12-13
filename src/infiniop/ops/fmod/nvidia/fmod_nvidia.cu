@@ -26,7 +26,7 @@ infiniStatus_t Descriptor::create(
     CHECK_SAME_SHAPE(c_shape, a_shape, b_shape);
 
     CREATE_ELEMENTWISE_CUDA_DESCRIPTOR(handle, dtype, out_desc, input_desc_vec)
-    
+
     return INFINI_STATUS_SUCCESS;
 }
 
@@ -37,19 +37,19 @@ infiniStatus_t Descriptor::calculate(
     std::vector<const void *> inputs,
     void *stream) const {
 
-    if (workspace_size < _workspace_size){
+    if (workspace_size < _workspace_size) {
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
 
-    switch (_dtype){
+    switch (_dtype) {
     case INFINI_DTYPE_F16:
-        return _device_info->calculate<256, cuda::FmodOp, half>(_info,  workspace, output, inputs, stream);
+        return _device_info->calculate<256, cuda::FmodOp, half>(_info, workspace, output, inputs, stream);
     case INFINI_DTYPE_F32:
-        return _device_info->calculate<256, cuda::FmodOp, float>(_info,  workspace, output, inputs, stream);
+        return _device_info->calculate<256, cuda::FmodOp, float>(_info, workspace, output, inputs, stream);
     case INFINI_DTYPE_F64:
-        return _device_info->calculate<256, cuda::FmodOp, double>(_info,  workspace, output, inputs, stream);
+        return _device_info->calculate<256, cuda::FmodOp, double>(_info, workspace, output, inputs, stream);
     case INFINI_DTYPE_BF16:
-        return _device_info->calculate<256, cuda::FmodOp, cuda_bfloat16>(_info,  workspace, output, inputs, stream);
+        return _device_info->calculate<256, cuda::FmodOp, cuda_bfloat16>(_info, workspace, output, inputs, stream);
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }

@@ -11,7 +11,7 @@ namespace op::asinh::cpu {
 typedef struct AsinhOp {
 public:
     static constexpr size_t num_inputs = 1;
-    
+
     template <typename T>
     T operator()(const T &x) const {
         return std::asinh(x);

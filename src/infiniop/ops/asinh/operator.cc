@@ -5,7 +5,7 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/asinh_cpu.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) 
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
 #include "nvidia/asinh_nvidia.cuh"
 #endif
 #ifdef ENABLE_METAX_API
@@ -20,12 +20,12 @@ __C infiniStatus_t infiniopCreateAsinhDescriptor(
     infiniopAsinhDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t y_desc,
     infiniopTensorDescriptor_t x_desc) {
-#define CREATE(CASE, NAMESPACE)                                               \
-    case CASE:                                                                \
-        return op::asinh::NAMESPACE::Descriptor::create(                      \
-            handle,                                                           \
-            reinterpret_cast<op::asinh::NAMESPACE::Descriptor **>(desc_ptr),  \
-            y_desc,                                                           \
+#define CREATE(CASE, NAMESPACE)                                              \
+    case CASE:                                                               \
+        return op::asinh::NAMESPACE::Descriptor::create(                     \
+            handle,                                                          \
+            reinterpret_cast<op::asinh::NAMESPACE::Descriptor **>(desc_ptr), \
+            y_desc,                                                          \
             {x_desc})
     switch (handle->device) {
 
@@ -52,19 +52,19 @@ __C infiniStatus_t infiniopCreateAsinhDescriptor(
 
 __C infiniStatus_t infiniopGetAsinhWorkspaceSize(infiniopAsinhDescriptor_t desc, size_t *size) {
 
-#define GET(CASE, NAMESPACE)                                                                         \
-    case CASE:                                                                                       \
-        *size = reinterpret_cast<const op::asinh::NAMESPACE::Descriptor *>(desc)->workspaceSize();   \
+#define GET(CASE, NAMESPACE)                                                                       \
+    case CASE:                                                                                     \
+        *size = reinterpret_cast<const op::asinh::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
         return INFINI_STATUS_SUCCESS
 
     switch (desc->device_type) {
 #ifdef ENABLE_CPU_API
         GET(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_NVIDIA_API    
+#ifdef ENABLE_NVIDIA_API
         GET(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
-#ifdef ENABLE_ILUVATAR_API  
+#ifdef ENABLE_ILUVATAR_API
         GET(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_METAX_API
@@ -86,18 +86,18 @@ __C infiniStatus_t infiniopAsinh(infiniopAsinhDescriptor_t desc,
                                  void *y,
                                  const void *x,
                                  void *stream) {
-#define CALCULATE(CASE, NAMESPACE)                                            \
-    case CASE:                                                                \
+#define CALCULATE(CASE, NAMESPACE)                                              \
+    case CASE:                                                                  \
         return reinterpret_cast<const op::asinh::NAMESPACE::Descriptor *>(desc) \
             ->calculate(workspace, workspace_size, y, {x}, stream);
     switch (desc->device_type) {
 #ifdef ENABLE_CPU_API
         CALCULATE(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_NVIDIA_API    
+#ifdef ENABLE_NVIDIA_API
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
-#ifdef ENABLE_ILUVATAR_API  
+#ifdef ENABLE_ILUVATAR_API
         CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_METAX_API
@@ -113,19 +113,19 @@ __C infiniStatus_t infiniopAsinh(infiniopAsinhDescriptor_t desc,
 }
 
 __C infiniStatus_t infiniopDestroyAsinhDescriptor(infiniopAsinhDescriptor_t desc) {
-#define GET(CASE, NAMESPACE)                                                                      \
-    case CASE:                                                                                    \
+#define GET(CASE, NAMESPACE)                                        \
+    case CASE:                                                      \
         reinterpret_cast<op::asinh::NAMESPACE::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS;
-    
+
     switch (desc->device_type) {
 #ifdef ENABLE_CPU_API
         GET(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_NVIDIA_API    
+#ifdef ENABLE_NVIDIA_API
         GET(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
-#ifdef ENABLE_ILUVATAR_API  
+#ifdef ENABLE_ILUVATAR_API
         GET(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_METAX_API

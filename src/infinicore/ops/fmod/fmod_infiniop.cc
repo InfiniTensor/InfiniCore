@@ -34,7 +34,7 @@ void calculate(Tensor c, Tensor a, Tensor b) {
     } else {
         desc = *desc_opt;
     }
-    
+
     size_t workspace_size = 0;
     INFINICORE_CHECK_ERROR(infiniopGetFmodWorkspaceSize(desc, &workspace_size));
     std::shared_ptr<Memory> workspace = context::allocateMemory(workspace_size);
@@ -42,7 +42,6 @@ void calculate(Tensor c, Tensor a, Tensor b) {
     INFINICORE_CHECK_ERROR(infiniopFmod(
         desc, workspace->data(), workspace_size,
         c->data(), a->data(), b->data(), context::getStream()));
-
 }
 
 static bool registered = []() {

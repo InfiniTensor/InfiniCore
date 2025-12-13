@@ -9,7 +9,7 @@ infiniStatus_t Descriptor::create(
     Descriptor **desc_ptr,
     infiniopTensorDescriptor_t out_desc,
     std::vector<infiniopTensorDescriptor_t> input_desc_vec) {
-    
+
     auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
     auto dtype = out_desc->dtype();
 
@@ -27,22 +27,22 @@ infiniStatus_t Descriptor::create(
 }
 
 infiniStatus_t Descriptor::calculate(
-        void *workspace,
-        size_t workspace_size,
-        void *output,
-        std::vector<const void *> inputs,
-        void *stream) const{
+    void *workspace,
+    size_t workspace_size,
+    void *output,
+    std::vector<const void *> inputs,
+    void *stream) const {
 
     switch (_dtype) {
     case INFINI_DTYPE_F16:
         return _device_info->calculate<AsinhOp, fp16_t>(_info, output, inputs, stream);
     case INFINI_DTYPE_F32:
-        return _device_info->calculate<AsinhOp, float >(_info, output, inputs, stream);
+        return _device_info->calculate<AsinhOp, float>(_info, output, inputs, stream);
     case INFINI_DTYPE_F64:
         return _device_info->calculate<AsinhOp, double>(_info, output, inputs, stream);
     case INFINI_DTYPE_BF16:
         return _device_info->calculate<AsinhOp, bf16_t>(_info, output, inputs, stream);
-    default :
+    default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
 }

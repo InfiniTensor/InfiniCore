@@ -8,8 +8,7 @@ namespace py = pybind11;
 
 namespace infinicore::ops {
 
-
-Tensor py_baddbmm(Tensor input, Tensor batch1, Tensor batch2, float beta = 1.0f, float alpha = 1.0f) {  
+Tensor py_baddbmm(Tensor input, Tensor batch1, Tensor batch2, float beta = 1.0f, float alpha = 1.0f) {
     return op::baddbmm(input, batch1, batch2, beta, alpha);
 }
 
@@ -35,15 +34,15 @@ Args:
 Returns:
     Output tensor after baddbmm operation
 )doc");
-        m.def("baddbmm_",
-                &py_baddbmm_,
-                py::arg("out"),
-                py::arg("input"),
-                py::arg("batch1"),
-                py::arg("batch2"),
-                py::arg("beta") = 1.0f,
-                py::arg("alpha") = 1.0f,
-                R"doc(In-place batched matrix-matrix product with addition.
+    m.def("baddbmm_",
+          &py_baddbmm_,
+          py::arg("out"),
+          py::arg("input"),
+          py::arg("batch1"),
+          py::arg("batch2"),
+          py::arg("beta") = 1.0f,
+          py::arg("alpha") = 1.0f,
+          R"doc(In-place batched matrix-matrix product with addition.
 Args:
     out: Output tensor
     input: Input tensor

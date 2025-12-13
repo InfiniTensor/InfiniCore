@@ -2,7 +2,7 @@
 
 #include "../../utils.hpp"
 
-namespace infinicore::op{
+namespace infinicore::op {
 
 common::OpDispatcher<AdaptiveMaxPool1d::schema> &AdaptiveMaxPool1d::dispatcher() {
     static common::OpDispatcher<AdaptiveMaxPool1d::schema> dispatcher_;

@@ -50,4 +50,4 @@ infiniStatus_t Descriptor::calculate(
     }
     return INFINI_STATUS_SUCCESS;
 }
-} // namespace op::mul::cpu
+} // namespace op::fmod::cpu

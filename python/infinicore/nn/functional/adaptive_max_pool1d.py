@@ -32,12 +32,8 @@ def adaptive_max_pool1d(
     """
 
     if out is None:
-        return Tensor(
-            _infinicore.adaptive_max_pool1d(input._underlying, output_size)
-        )
+        return Tensor(_infinicore.adaptive_max_pool1d(input._underlying, output_size))
 
-    _infinicore.adaptive_max_pool1d_(
-        out._underlying, input._underlying, output_size
-    )
+    _infinicore.adaptive_max_pool1d_(out._underlying, input._underlying, output_size)
 
     return out
