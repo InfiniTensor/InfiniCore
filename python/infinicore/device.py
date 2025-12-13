@@ -34,7 +34,11 @@ class device:
     def __getattr__(self, name):
         # Lazily construct and cache an attribute.
         # such as, self._underlying .
-        setattr(self, name, device._to_infinicore_device(self.type, self.index))
+        if name == "_underlying":
+            setattr(self, name, device._to_infinicore_device(self.type, self.index))
+        else:
+            raise KeyError(f"device does not support '{name}' attribute.")
+
         return getattr(self, name)
 
     def __repr__(self):

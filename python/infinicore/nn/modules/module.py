@@ -481,15 +481,12 @@ class InfiniCoreModule:
                         f"While copying the parameter named {key}, expected Tensor from checkpoint but received {type(input_param)}"
                     )
 
-                if (
-                    (param.shape == input_param.shape)
-                    and (param.dtype == input_param.dtype)
-                    and (param.device == input_param.device)
+                if (param.shape == input_param.shape) and (
+                    param.dtype == input_param.dtype
                 ):
                     param.copy_(input_param)
                 else:
-                    print(f"param '{name}' don't match input_param '{key}'")
-                    setattr(self, name, input_param)
+                    raise KeyError("param don't match input_param.")
 
             elif strict:
                 missing_keys.append(key)
@@ -841,6 +838,77 @@ class InfiniCoreModule:
             if module is not None and module not in memo:
                 memo.add(module)
                 yield name, module
+
+    def get_submodule(self, target: str) -> "InfiniCoreModule":
+        """Return the submodule given by ``target`` if it exists, otherwise throw an error.
+
+        Args:
+            target: The fully-qualified string name of the submodule to look for.
+        Returns:
+            infinicore.nn.Module: The submodule referenced by ``target``
+
+        Raises:
+            AttributeError: If at any point along the path resulting from
+                the target string the (sub)path resolves to a non-existent
+                attribute name or an object that is not an instance of ``nn.Module``.
+        """
+        if target == "":
+            return self
+
+        atoms: list[str] = target.split(".")
+        mod: infinicore.nn.Module = self
+
+        for item in atoms:
+            if not hasattr(mod, item):
+                raise AttributeError(
+                    mod._get_name() + " has no attribute `" + item + "`"
+                )
+            mod = getattr(mod, item)
+            if not isinstance(mod, infinicore.nn.Module):
+                raise AttributeError("`" + item + "` is not an nn.Module")
+
+        return mod
+
+    def get_parameter(self, target: str) -> "Parameter":
+        """Return the parameter given by ``target`` if it exists, otherwise throw an error.
+
+        Args:
+            target: The fully-qualified string name of the Parameter to look for.
+
+        Returns:
+            infinicore.nn.Parameter: The Parameter referenced by ``target``
+
+        Raises:
+            AttributeError: If the target string references an invalid
+                path or resolves to something that is not an``nn.Parameter``
+        """
+        module_path, _, param_name = target.rpartition(".")
+        mod: infinicore.nn.Module = self.get_submodule(module_path)
+
+        if not hasattr(mod, param_name):
+            raise AttributeError(
+                mod._get_name() + " has no attribute `" + param_name + "`"
+            )
+
+        param: Parameter = getattr(mod, param_name)
+
+        if not isinstance(param, Parameter):
+            raise AttributeError("`" + param_name + "` is not an nn.Parameter")
+
+        return param
+
+    def load_parameter(self, target: str, input_param: Tensor):
+        """
+        load one parameter into Module.
+        Args:
+            target: The fully-qualified string name of the Parameter to look for.
+            input_param: The tensor obtained from the model.safetensors file
+        """
+        param = self.get_parameter(target)
+        if (param.shape == input_param.shape) and (param.dtype == input_param.dtype):
+            param.copy_(input_param)
+        else:
+            raise KeyError("param don't match input_param.")
 
     def eval(self: T) -> T:
         r"""Sets the module in evaluation mode.
