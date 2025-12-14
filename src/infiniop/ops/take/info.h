@@ -32,14 +32,12 @@ public:
         }
 
         // 2. 检查索引数据类型 (Indices)
-        // 索引必须是 I32 或 I64
         int idx_type = indices_desc->dtype();
         if (idx_type != INFINI_DTYPE_I32 && idx_type != INFINI_DTYPE_I64) {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
 
         // 3. 检查形状一致性 (Output vs Indices)
-        // Take 算子的输出形状必须严格等于索引的形状
         if (out_desc->ndim() != indices_desc->ndim()) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
@@ -57,9 +55,6 @@ public:
         int dtype = in_desc->dtype();
         size_t num_out = out_desc->numel();
         size_t num_in = in_desc->numel();
-
-        // 5. 返回 Info 对象
-        // 注意：构造列表顺序需与成员变量声明顺序一致
         return utils::Result<TakeInfo>(TakeInfo{
             dtype,
             idx_type,

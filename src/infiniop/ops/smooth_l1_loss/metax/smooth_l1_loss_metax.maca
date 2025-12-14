@@ -7,11 +7,6 @@
 #include <cstdio>
 #include <vector>
 
-#if defined(__MACA__) || defined(__MACACC__)
-    #include <maca_fp16.h>
-    #include <maca_bfloat16.h>
-#endif
-
 #include "../../../tensor.h"
 #include "../cuda/kernel.cuh"
 namespace op::smooth_l1_loss::metax {

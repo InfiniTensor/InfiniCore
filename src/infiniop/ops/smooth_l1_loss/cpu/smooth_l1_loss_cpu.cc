@@ -4,8 +4,6 @@
 #include <cmath>
 #include <omp.h>
 
-// [关键] 引用您找到的框架头文件
-// 它定义了 fp16_t, bf16_t 以及 utils::cast
 #include "../../../../utils/custom_types.h"
 
 namespace op::smooth_l1_loss::cpu {
@@ -66,7 +64,6 @@ void calculate_cpu_impl(
     if (reduction == 0) {
         #pragma omp parallel for schedule(static)
         for (size_t i = 0; i < numel; ++i) {
-            // [核心] 使用 utils::cast 将任意类型(fp16/bf16/float)转为 float 计算
             float in_val = utils::cast<float>(in_ptr[i]);
             float tar_val = utils::cast<float>(tar_ptr[i]);
 
@@ -137,9 +134,6 @@ infiniStatus_t Descriptor::calculate(
         DISPATCH_TYPE(float);
     case INFINI_DTYPE_F64:
         DISPATCH_TYPE(double);
-    
-    // [关键] 启用 FP16/BF16 支持
-    // 因为包含了 custom_types.h，这里可以使用 fp16_t / bf16_t
     case INFINI_DTYPE_F16:
         DISPATCH_TYPE(fp16_t);
     case INFINI_DTYPE_BF16:

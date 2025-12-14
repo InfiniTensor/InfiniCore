@@ -167,7 +167,7 @@ infiniStatus_t Descriptor::create(
 }
 
 // ==================================================================
-// Descriptor::calculate  （仅格式修改）
+// Descriptor::calculate  
 // ==================================================================
 
 infiniStatus_t Descriptor::calculate(

@@ -28,9 +28,6 @@ __C infiniStatus_t infiniopCreateTakeDescriptor(
     infiniopTensorDescriptor_t output,
     infiniopTensorDescriptor_t input,
     infiniopTensorDescriptor_t indices) {
-
-    // 使用 CREATE 宏分发到具体的后端实现
-    // 注意：Take 算子 Descriptor::create 接收 (handle, desc_ptr, output, input, indices)
     #define CREATE(CASE, NAMESPACE)                                             \
         case CASE:                                                              \
             return op::take::NAMESPACE::Descriptor::create(                     \
@@ -111,9 +108,6 @@ __C infiniStatus_t infiniopTake(
     const void *input,
     const void *indices,
     void *stream) {
-
-    // 使用 CALCULATE 宏分发
-    // calculate 接口通常为: (workspace, size, output, input, indices, stream)
     #define CALCULATE(CASE, NAMESPACE)                                          \
         case CASE:                                                              \
             return reinterpret_cast<const op::take::NAMESPACE::Descriptor *>(desc) \

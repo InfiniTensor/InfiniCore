@@ -79,9 +79,6 @@ public:
         if (beta < 0) {
             return INFINI_STATUS_BAD_PARAM; 
         }
-
-        // 6. 返回 Info 对象
-        // 注意：初始化列表顺序需与成员变量声明顺序一致
         return utils::Result<SmoothL1LossInfo>(SmoothL1LossInfo{
             input_desc->dtype(), // _dtype
             numel,               // _numel

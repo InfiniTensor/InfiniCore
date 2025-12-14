@@ -65,8 +65,6 @@ void calculate_cpu_impl(
                 // 标准类型 (float, int 等) 直接转换
                 out_ptr[i] = static_cast<TData>(0);
             } else {
-                // 【修复点】自定义类型 (fp16_t, bf16_t) 使用 utils::cast
-                // utils::cast 是框架提供的类型转换工具，定义在 utils.h 中
                 out_ptr[i] = utils::cast<TData>(0.0f);
             }
         }

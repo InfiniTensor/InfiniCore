@@ -71,8 +71,6 @@ Tensor index_copy(Tensor input, int64_t dim, Tensor index, Tensor source) {
     output->copy_from(input);
     if (!index->is_contiguous()) index = index->contiguous();
     if (!source->is_contiguous()) source = source->contiguous();
-
-    /
     IndexCopy::execute(output, output, dim, index, source);
 
     return output;

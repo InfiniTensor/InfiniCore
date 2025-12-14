@@ -6,6 +6,11 @@
 #include "ops/attention.hpp"
 #include "ops/causal_softmax.hpp"
 #include "ops/embedding.hpp"
+#include "ops/hypot.hpp"
+#include "ops/take.hpp"
+#include "ops/index_copy.hpp"
+#include "ops/index_add.hpp"
+#include "ops/smooth_l1_loss.hpp"
 #include "ops/linear.hpp"
 #include "ops/matmul.hpp"
 #include "ops/mul.hpp"
@@ -28,6 +33,11 @@ inline void bind(py::module &m) {
     bind_linear(m);
     bind_matmul(m);
     bind_mul(m);
+     bind_hypot(m);
+    bind_take(m);
+    bind_index_copy(m);
+    bind_index_add(m);
+    bind_smooth_l1_loss(m);
     bind_rearrange(m);
     bind_rms_norm(m);
     bind_silu(m);

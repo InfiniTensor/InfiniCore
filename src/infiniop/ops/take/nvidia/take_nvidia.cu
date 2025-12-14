@@ -137,7 +137,6 @@ infiniStatus_t Descriptor::calculate(
     }
 
     // 分发到对应的存储类型
-    // 注意：launch_kernel 内部会自动计算 PackSize
     switch (element_size) {
     case 1: LAUNCH_BY_SIZE(uint8_t); break;   // PackSize = 16
     case 2: LAUNCH_BY_SIZE(uint16_t); break;  // PackSize = 8 
