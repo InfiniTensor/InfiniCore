@@ -24,7 +24,7 @@ __device__ void addr_kernel(T *out, const T *input, const T *vec1,
         out_val = __hadd(__hmul(__hmul(vec1_val, vec2_val), __float2half(alpha)),
                          __hmul(__float2half(beta), in_val));
     } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
-        float a=__bfloat162float(vec1_val),b=__bfloat162float(vec2_val),in=__bfloat162float(in_val);
+        float a = __bfloat162float(vec1_val), b = __bfloat162float(vec2_val), in = __bfloat162float(in_val);
         out_val = __float2bfloat16_rn(a * b * alpha + in * beta);
     } else {
         out_val = beta * in_val + alpha * vec1_val * vec2_val;

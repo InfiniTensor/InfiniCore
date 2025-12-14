@@ -11,4 +11,4 @@ public:
     static common::OpDispatcher<schema> &dispatcher();
 };
 Tensor argwhere(Tensor x);
-}
+} // namespace infinicore::op

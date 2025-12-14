@@ -25,27 +25,26 @@ __global__ void parallel_block_argwhere_kernel(T *data, int64_t *results,
     size_t pos1[5], pos2[5]; // 两个数的在tensor中的索引
     bool is_zero1 = false, is_zero2 = false;
     int tid = threadIdx.x;
-    int leaf_num = blockDim.x * 2; 
+    int leaf_num = blockDim.x * 2;
 
     if (tid * 2 < N) {
         Index2Pos(tid * 2, ndim, shapes, pos1);
         is_zero1 = fabs(data[pos2dest(pos1, ndim, shapes, strides)]) <= 1e-5;
         tmp[tid * 2] = !is_zero1;
-    }else{
+    } else {
         tmp[tid * 2] = 0;
     }
-    
+
     if (tid * 2 + 1 < N) {
         Index2Pos(tid * 2 + 1, ndim, shapes, pos2);
         is_zero2 = fabs(data[pos2dest(pos2, ndim, shapes, strides)]) <= 1e-5;
         tmp[tid * 2 + 1] = !is_zero2;
-    }else{
+    } else {
         tmp[tid * 2 + 1] = 0;
     }
-     
 
     __syncthreads();
-  
+
     int offset = 1;
     for (int d = leaf_num >> 1; d > 0; d >>= 1) {
         if (tid < d) {
@@ -78,7 +77,6 @@ __global__ void parallel_block_argwhere_kernel(T *data, int64_t *results,
         for (int i = 0; i < ndim; i++) {
             results[tmp[2 * tid] * ndim + i] = pos1[i];
         }
-      
     }
     if (!is_zero2 && tid * 2 + 1 < N) {
         for (int i = 0; i < ndim; i++) {

@@ -1,7 +1,7 @@
 #pragma once
 
-#include <pybind11/pybind11.h>
 #include "infinicore/ops/argwhere.hpp"
+#include <pybind11/pybind11.h>
 namespace py = pybind11;
 namespace infinicore::ops {
 inline void bind_argwhere(py::module &m) {
@@ -10,4 +10,4 @@ inline void bind_argwhere(py::module &m) {
           py::arg("x"),
           R"doc(Argwhere.)doc");
 }
-}
+} // namespace infinicore::ops

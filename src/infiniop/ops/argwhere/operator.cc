@@ -21,16 +21,15 @@
 #include "moore/argwhere_moore.h"
 #endif
 
-
 __C infiniStatus_t infiniopCreateArgwhereDescriptor(
     infiniopHandle_t handle,
     infiniopArgwhereDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t input_desc) {
 
-#define CREATE(CASE, NAMESPACE)                                            \
-    case CASE:                                                             \
-        return op::argwhere::NAMESPACE::Descriptor::create(                \
-            handle,                                                        \
+#define CREATE(CASE, NAMESPACE)                                                 \
+    case CASE:                                                                  \
+        return op::argwhere::NAMESPACE::Descriptor::create(                     \
+            handle,                                                             \
             reinterpret_cast<op::argwhere::NAMESPACE::Descriptor **>(desc_ptr), \
             input_desc)
 
@@ -69,11 +68,11 @@ __C infiniStatus_t infiniopCreateArgwhereDescriptor(
 }
 
 __C infiniStatus_t infiniopGetArgwhereWorkspaceSize(
-    infiniopArgwhereDescriptor_t desc, 
+    infiniopArgwhereDescriptor_t desc,
     size_t *size) {
 
-#define GET(CASE, NAMESPACE)                                                               \
-    case CASE:                                                                             \
+#define GET(CASE, NAMESPACE)                                                                    \
+    case CASE:                                                                                  \
         *size = reinterpret_cast<op::argwhere::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
         return INFINI_STATUS_SUCCESS
 
@@ -119,8 +118,8 @@ __C infiniStatus_t infiniopArgwhere(
     const void *input,
     void *stream) {
 
-#define CALCULATE(CASE, NAMESPACE)                                            \
-    case CASE:                                                                \
+#define CALCULATE(CASE, NAMESPACE)                                                 \
+    case CASE:                                                                     \
         return reinterpret_cast<const op::argwhere::NAMESPACE::Descriptor *>(desc) \
             ->calculate(workspace, workspace_size, output, count, input, stream)
 
@@ -161,8 +160,8 @@ __C infiniStatus_t infiniopArgwhere(
 __C infiniStatus_t
 infiniopDestroyArgwhereDescriptor(infiniopArgwhereDescriptor_t desc) {
 
-#define DELETE(CASE, NAMESPACE)                                                \
-    case CASE:                                                                 \
+#define DELETE(CASE, NAMESPACE)                                                     \
+    case CASE:                                                                      \
         delete reinterpret_cast<const op::argwhere::NAMESPACE::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS
 

@@ -28,13 +28,13 @@ __C infiniStatus_t infiniopCreateFminDescriptor(
     infiniopTensorDescriptor_t a_desc,
     infiniopTensorDescriptor_t b_desc) {
 
-#define CREATE(CASE, NAMESPACE)                                            \
-    case CASE:                                                             \
+#define CREATE(CASE, NAMESPACE)                                             \
+    case CASE:                                                              \
         return op::fmin::NAMESPACE::Descriptor::create(                     \
-            handle,                                                        \
+            handle,                                                         \
             reinterpret_cast<op::fmin::NAMESPACE::Descriptor **>(desc_ptr), \
-            c_desc,                                                        \
-            {a_desc,                                                       \
+            c_desc,                                                         \
+            {a_desc,                                                        \
              b_desc})
 
     switch (handle->device) {
@@ -73,8 +73,8 @@ __C infiniStatus_t infiniopCreateFminDescriptor(
 
 __C infiniStatus_t infiniopGetFminWorkspaceSize(infiniopFminDescriptor_t desc, size_t *size) {
 
-#define GET(CASE, NAMESPACE)                                                               \
-    case CASE:                                                                             \
+#define GET(CASE, NAMESPACE)                                                                \
+    case CASE:                                                                              \
         *size = reinterpret_cast<op::fmin::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
         return INFINI_STATUS_SUCCESS
 
@@ -120,8 +120,8 @@ __C infiniStatus_t infiniopFmin(
     const void *b,
     void *stream) {
 
-#define CALCULATE(CASE, NAMESPACE)                                            \
-    case CASE:                                                                \
+#define CALCULATE(CASE, NAMESPACE)                                             \
+    case CASE:                                                                 \
         return reinterpret_cast<const op::fmin::NAMESPACE::Descriptor *>(desc) \
             ->calculate(workspace, workspace_size, c, {a, b}, stream)
 
@@ -162,8 +162,8 @@ __C infiniStatus_t infiniopFmin(
 __C infiniStatus_t
 infiniopDestroyFminDescriptor(infiniopFminDescriptor_t desc) {
 
-#define DELETE(CASE, NAMESPACE)                                                \
-    case CASE:                                                                 \
+#define DELETE(CASE, NAMESPACE)                                                 \
+    case CASE:                                                                  \
         delete reinterpret_cast<const op::fmin::NAMESPACE::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS
 

@@ -11,7 +11,7 @@ __C __export infiniStatus_t infiniopCreateArgwhereDescriptor(
     infiniopTensorDescriptor_t input_desc);
 
 __C __export infiniStatus_t infiniopGetArgwhereWorkspaceSize(
-    infiniopArgwhereDescriptor_t desc, 
+    infiniopArgwhereDescriptor_t desc,
     size_t *size);
 
 __C __export infiniStatus_t infiniopArgwhere(

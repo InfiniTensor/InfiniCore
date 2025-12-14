@@ -15,10 +15,10 @@ void Addr::execute(Tensor out, Tensor input, Tensor vec1, Tensor vec2, float bet
 }
 
 Tensor addr(Tensor input, Tensor vec1, Tensor vec2, float beta, float alpha) {
-    
+
     size_t n = vec1->shape()[0];
     size_t m = vec2->shape()[0];
-    
+
     // Create output tensor
     Tensor out = Tensor::empty({n, m}, input->dtype(), input->device());
     addr_(out, input, vec1, vec2, beta, alpha);

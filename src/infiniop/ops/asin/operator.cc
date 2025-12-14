@@ -15,7 +15,6 @@
 #include "moore/asin_moore.h"
 #endif
 
-
 __C infiniStatus_t infiniopCreateAsinDescriptor(
     infiniopHandle_t handle,
     infiniopAsinDescriptor_t *desc_ptr,
@@ -24,9 +23,9 @@ __C infiniStatus_t infiniopCreateAsinDescriptor(
 
 #define CREATE(CASE, NAMESPACE)                                             \
     case CASE:                                                              \
-        return op::asin::NAMESPACE::Descriptor::create(                      \
+        return op::asin::NAMESPACE::Descriptor::create(                     \
             handle,                                                         \
-            reinterpret_cast<op::asin::NAMESPACE::Descriptor **>(desc_ptr),  \
+            reinterpret_cast<op::asin::NAMESPACE::Descriptor **>(desc_ptr), \
             output_desc,                                                    \
             {input_desc})
 
@@ -96,7 +95,7 @@ __C infiniStatus_t infiniopAsin(
 
 #define CALCULATE(CASE, NAMESPACE)                                             \
     case CASE:                                                                 \
-        return reinterpret_cast<const op::asin::NAMESPACE::Descriptor *>(desc)  \
+        return reinterpret_cast<const op::asin::NAMESPACE::Descriptor *>(desc) \
             ->calculate(workspace, workspace_size, output, {input}, stream)
 
     switch (desc->device_type) {

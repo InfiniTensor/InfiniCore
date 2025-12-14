@@ -23,8 +23,6 @@ void Asin::execute(Tensor output, Tensor input) {
     func(output, input);
 }
 
-
-
 Tensor asin(Tensor input) {
     Shape shape = input->shape();
     auto output = Tensor::empty(shape, input->dtype(), input->device());

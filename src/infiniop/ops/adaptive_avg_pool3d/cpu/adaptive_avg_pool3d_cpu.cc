@@ -1,6 +1,6 @@
 #include "adaptive_avg_pool3d_cpu.h"
 #include "../../../devices/cpu/common_cpu.h"
-#include<array>
+#include <array>
 namespace op::adaptive_avg_pool3d::cpu {
 Descriptor::~Descriptor() = default;
 

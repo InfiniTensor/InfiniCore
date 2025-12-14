@@ -16,7 +16,6 @@
 #include "moore/addr_moore.h"
 #endif
 
-
 __C infiniStatus_t infiniopCreateAddrDescriptor(
     infiniopHandle_t handle,
     infiniopAddrDescriptor_t *desc_ptr,
@@ -27,16 +26,16 @@ __C infiniStatus_t infiniopCreateAddrDescriptor(
     float beta,
     float alpha) {
 
-#define CREATE(CASE, NAMESPACE)                                                            \
-    case CASE:                                                                             \
-        return op::addr::NAMESPACE::Descriptor::create(                                    \
-            handle,                                                                        \
-            reinterpret_cast<op::addr::NAMESPACE::Descriptor **>(desc_ptr),                \
-            out,                                                                           \
-            input,                                                                         \
-            vec1,                                                                          \
-            vec2,                                                                          \
-            beta,                                                                          \
+#define CREATE(CASE, NAMESPACE)                                             \
+    case CASE:                                                              \
+        return op::addr::NAMESPACE::Descriptor::create(                     \
+            handle,                                                         \
+            reinterpret_cast<op::addr::NAMESPACE::Descriptor **>(desc_ptr), \
+            out,                                                            \
+            input,                                                          \
+            vec1,                                                           \
+            vec2,                                                           \
+            beta,                                                           \
             alpha)
 
     switch (handle->device) {
@@ -81,8 +80,8 @@ __C infiniStatus_t infiniopGetAddrWorkspaceSize(
     infiniopAddrDescriptor_t desc,
     size_t *size) {
 
-#define GET(CASE, NAMESPACE)                                                                     \
-    case CASE:                                                                                   \
+#define GET(CASE, NAMESPACE)                                                                      \
+    case CASE:                                                                                    \
         *size = reinterpret_cast<const op::addr::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
         return INFINI_STATUS_SUCCESS
 
@@ -134,9 +133,9 @@ __C infiniStatus_t infiniopAddr(
     const void *vec2,
     void *stream) {
 
-#define CALCULATE(CASE, NAMESPACE)                                                            \
-    case CASE:                                                                                \
-        return reinterpret_cast<const op::addr::NAMESPACE::Descriptor *>(desc)                \
+#define CALCULATE(CASE, NAMESPACE)                                             \
+    case CASE:                                                                 \
+        return reinterpret_cast<const op::addr::NAMESPACE::Descriptor *>(desc) \
             ->calculate(workspace, workspace_size, out, input, vec1, vec2, stream)
 
     switch (desc->device_type) {
@@ -179,9 +178,9 @@ __C infiniStatus_t infiniopAddr(
 
 __C infiniStatus_t infiniopDestroyAddrDescriptor(infiniopAddrDescriptor_t desc) {
 
-#define DELETE(CASE, NAMESPACE)                                                                 \
-    case CASE:                                                                                  \
-        delete reinterpret_cast<const op::addr::NAMESPACE::Descriptor *>(desc);                 \
+#define DELETE(CASE, NAMESPACE)                                                 \
+    case CASE:                                                                  \
+        delete reinterpret_cast<const op::addr::NAMESPACE::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS
 
     switch (desc->device_type) {

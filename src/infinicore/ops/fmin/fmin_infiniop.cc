@@ -1,7 +1,7 @@
 #include "../../utils.hpp"
 #include "infinicore/common/hash.hpp"
-#include "infinicore/ops/fmin.hpp"
 #include "infinicore/ops/common/cache.hpp"
+#include "infinicore/ops/fmin.hpp"
 #include <infiniop.h>
 
 namespace infinicore::op::fmin_impl::infiniop {
@@ -49,4 +49,4 @@ static bool registered = []() {
     return true;
 }();
 
-} // namespace infinicore::op::Fmin_impl::infiniop
+} // namespace infinicore::op::fmin_impl::infiniop

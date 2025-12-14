@@ -17,7 +17,7 @@ public:
             return __float2half(fminf(a_f, b_f));
         }
 #elif defined(ENABLE_NVIDIA_API)
-        if constexpr (std::is_same_v<T, half> || std::is_same_v < T, cuda_bfloat16) {
+        if constexpr (std::is_same_v<T, half> || std::is_same_v<T, cuda_bfloat16>) {
             return __hmin(a, b);
         }
 #endif

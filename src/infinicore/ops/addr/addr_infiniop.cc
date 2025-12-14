@@ -19,7 +19,6 @@ void calculate(Tensor out, Tensor input, Tensor vec1, Tensor vec2, float beta, f
     // Hash the inputs including beta and alpha
     size_t seed = hash_combine(out, input, vec1, vec2, beta, alpha);
 
-
     auto device_type = context::getDevice().getType();
     auto device_index = context::getDevice().getIndex();
 

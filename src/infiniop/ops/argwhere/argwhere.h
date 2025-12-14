@@ -8,15 +8,15 @@
 
 #define DESCRIPTOR(NAMESPACE)                                    \
                                                                  \
-    namespace op::argwhere::NAMESPACE {               \
+    namespace op::argwhere::NAMESPACE {                          \
     class Descriptor final : public InfiniopDescriptor {         \
         struct Opaque;                                           \
         Opaque *_opaque;                                         \
-        ArgwhereInfo _info;                             \
+        ArgwhereInfo _info;                                      \
         size_t _workspace_size;                                  \
                                                                  \
         Descriptor(                                              \
-            ArgwhereInfo info,                          \
+            ArgwhereInfo info,                                   \
             size_t workspace_size_,                              \
             Opaque *opaque,                                      \
             infiniDevice_t device_type,                          \
@@ -40,7 +40,7 @@
             void *workspace,                                     \
             size_t workspace_size,                               \
             void **y,                                            \
-            size_t *count,                                      \
+            size_t *count,                                       \
             const void *x,                                       \
             void *stream) const;                                 \
     };                                                           \
@@ -59,19 +59,17 @@ public:
     static utils::Result<ArgwhereInfo>
     create(
         infiniopTensorDescriptor_t x_desc) {
-        CHECK_OR_RETURN(x_desc != nullptr ,
+        CHECK_OR_RETURN(x_desc != nullptr,
                         INFINI_STATUS_NULL_POINTER);
 
         const infiniDtype_t data_type = x_desc->dtype();
         CHECK_DTYPE(data_type, INFINI_DTYPE_F32);
-    
 
         return utils::Result<ArgwhereInfo>(ArgwhereInfo{
             data_type,
             x_desc->strides(),
             x_desc->shape(),
-            x_desc->numel()
-        });
+            x_desc->numel()});
     }
-};    
+};
 #endif

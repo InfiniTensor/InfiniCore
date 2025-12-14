@@ -24,4 +24,4 @@ void fmin_(Tensor c, Tensor a, Tensor b) {
     Fmin::execute(c, a, b);
 }
 
-} // namespace infinicore::ops
+} // namespace infinicore::op
