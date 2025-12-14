@@ -104,11 +104,23 @@ class OpTest(BaseOperatorTest):
         return parse_test_cases()
 
     def torch_operator(self, *args, **kwargs):
+        """
+        moore平台测试
+        original_out_tensor = kwargs.get("out")
+        cpu_args = [arg.cpu() if isinstance(arg, torch.Tensor) else arg for arg in args]
+        cpu_kwargs = {
+            k: v.cpu() if isinstance(v, torch.Tensor) else v 
+            for k, v in kwargs.items()
+        }
+        if original_out_tensor is not None and isinstance(original_out_tensor, torch.Tensor):
+            original_out_tensor.copy_(cpu_result)
+            return original_out_tensor
+        target_device = args[0].device if len(args) > 0 and isinstance(args[0], torch.Tensor) else "musa"
+        return cpu_result.to(target_device)"""
         return torch.addbmm(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
-    #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.addbmm(*args, **kwargs)
+    def infinicore_operator(self, *args, **kwargs):
+        return infinicore.addbmm(*args, **kwargs)
 
 
 def main():
