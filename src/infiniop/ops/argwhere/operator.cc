@@ -9,7 +9,7 @@
 #include "nvidia/argwhere_nvidia.cuh"
 #endif
 #ifdef ENABLE_METAX_API
-#include "metax/argwhere_metax.cuh"
+#include "metax/argwhere_metax.h"
 #endif
 #ifdef ENABLE_KUNLUN_API
 #include "kunlun/argwhere_kunlun.cuh"
@@ -18,7 +18,7 @@
 #include "cambricon/argwhere_cambricon.cuh"
 #endif
 #ifdef ENABLE_MOORE_API
-#include "moore/argwhere_moore.cuh"
+#include "moore/argwhere_moore.h"
 #endif
 
 
@@ -179,6 +179,18 @@ infiniopDestroyArgwhereDescriptor(infiniopArgwhereDescriptor_t desc) {
 #endif
 #ifdef ENABLE_QY_API
         DELETE(INFINI_DEVICE_QY, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        DELETE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_KUNLUN_API
+        DELETE(INFINI_DEVICE_KUNLUN, kunlun);
+#endif
+#ifdef ENABLE_CAMBRICON_API
+        DELETE(INFINI_DEVICE_CAMBRICON, bang);
+#endif
+#ifdef ENABLE_MOORE_API
+        DELETE(INFINI_DEVICE_MOORE, moore);
 #endif
 
     default:

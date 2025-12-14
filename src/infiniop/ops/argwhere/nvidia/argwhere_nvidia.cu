@@ -12,7 +12,7 @@ infiniStatus_t launchKernel(const void *data, int64_t *results, size_t N,
                             infiniDtype_t dtype, size_t *count) {
 
     if (dtype == INFINI_DTYPE_F32) {
-        parallel_block_argwhere_kernel<float><<<1, M / 2, M>>>(
+        parallel_block_argwhere_kernel<float><<<1, M / 2, M * sizeof(size_t)>>>(
             (float *)data, results, N, shapes, strides, ndim, count);
     } else {
         return INFINI_STATUS_BAD_TENSOR_DTYPE;

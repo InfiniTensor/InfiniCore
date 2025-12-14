@@ -1,7 +1,8 @@
-#ifndef __ASIN_CUDA_H__
-#define __ASIN_CUDA_H__
+#ifndef __ASIN_MOORE_KERNEL_H__
+#define __ASIN_MOORE_KERNEL_H__
 
-namespace op::asin::cuda {
+
+namespace op::asin::moore {
 typedef struct AsinOp {
   static constexpr size_t num_inputs = 1;
 
@@ -37,6 +38,6 @@ typedef struct AsinOp {
     }
   }
 } AsinOp;
-} // namespace op::asin::cuda
+} // namespace op::asin::moore
 
-#endif // __ASIN_CUDA_H__
+#endif // __ASIN_MOORE_KERNEL_H__
