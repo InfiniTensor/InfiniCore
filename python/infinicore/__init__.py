@@ -45,6 +45,10 @@ from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.rearrange import rearrange
+from infinicore.ops.hypot import hypot
+from infinicore.ops.index_add import index_add
+from infinicore.ops.index_copy import index_copy
+from infinicore.ops.take import take
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -111,6 +115,10 @@ __all__ = [
     "from_list",
     "from_numpy",
     "from_torch",
+    "hypot",
+    "index_copy",
+    "index_add",
+    "take",
     "ones",
     "strided_empty",
     "strided_from_blob",
