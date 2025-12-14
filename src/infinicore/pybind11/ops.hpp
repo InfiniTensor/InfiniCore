@@ -15,6 +15,7 @@
 #include "ops/rope.hpp"
 #include "ops/silu.hpp"
 #include "ops/swiglu.hpp"
+#include "ops/zeros_.hpp"
 
 namespace py = pybind11;
 
@@ -34,6 +35,7 @@ inline void bind(py::module &m) {
     bind_swiglu(m);
     bind_rope(m);
     bind_embedding(m);
+    bind_zeros_(m);
 }
 
 } // namespace infinicore::ops
