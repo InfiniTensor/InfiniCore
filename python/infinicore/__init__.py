@@ -45,6 +45,10 @@ from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.rearrange import rearrange
+from infinicore.ops.dot import dot
+from infinicore.ops.histc import histc
+from infinicore.ops.log10 import log10
+from infinicore.ops.log1p import log1p
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -115,6 +119,10 @@ __all__ = [
     "strided_empty",
     "strided_from_blob",
     "zeros",
+    "dot",
+    "log10",
+    "log1p",
+    "histc",
 ]
 
 use_ntops = False

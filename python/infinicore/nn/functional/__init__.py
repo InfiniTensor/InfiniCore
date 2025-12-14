@@ -6,6 +6,7 @@ from .rms_norm import rms_norm
 from .rope import RopeAlgo, rope
 from .silu import silu
 from .swiglu import swiglu
+from .avg_pool3d import avg_pool3d
 
 __all__ = [
     "causal_softmax",
@@ -17,4 +18,5 @@ __all__ = [
     "embedding",
     "rope",
     "RopeAlgo",
+    "avg_pool3d",
 ]
