@@ -7,6 +7,7 @@
 #include "infiniop/ops/adaptive_avg_pool1d.h"
 #include "infiniop/ops/addbmm.h"
 #include "infiniop/ops/affine_grid.h"
+#include "infiniop/ops/floor.h"
 #include "infiniop/ops/attention.h"
 #include "infiniop/ops/causal_softmax.h"
 #include "infiniop/ops/clip.h"

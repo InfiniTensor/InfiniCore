@@ -1,6 +1,6 @@
 #ifndef __INFINIOP_AFFINE_GRID_API_H__
 #define __INFINIOP_AFFINE_GRID_API_H__
-
+#include <stdint.h>
 #include "../operator_descriptor.h"
 
 typedef struct InfiniopDescriptor *infiniopAffineGridDescriptor_t;

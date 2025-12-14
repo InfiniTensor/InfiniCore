@@ -1,7 +1,7 @@
 #include "../../utils.hpp"
 #include "infinicore/common/hash.hpp"
 #include "infinicore/ops/common/cache.hpp"
-#include "infinicore/ops/floor.hpp" // 引入 Floor 头文件
+#include "infinicore/ops/floor.hpp" 
 #include <infiniop.h>
 
 namespace infinicore::op::floor_impl::infiniop {

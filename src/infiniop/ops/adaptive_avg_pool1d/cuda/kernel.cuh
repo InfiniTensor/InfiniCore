@@ -10,6 +10,9 @@
 
 namespace op::adaptive_avg_pool1d::cuda {
 
+// -------------------------------------------
+// 工具：Warp 级归约求和
+// -------------------------------------------
 template<typename T>
 __device__ __forceinline__ T warp_reduce_sum(T val) {
     #pragma unroll
@@ -19,6 +22,9 @@ __device__ __forceinline__ T warp_reduce_sum(T val) {
     return val;
 }
 
+// -------------------------------------------
+// 工具：数值转换
+// -------------------------------------------
 template <typename T>
 __device__ __forceinline__ float to_float(const T &x) {
     if constexpr (std::is_same_v<T, half>) return __half2float(x);
@@ -37,7 +43,10 @@ __device__ __forceinline__ T from_float(float x) {
     else return static_cast<T>(x);
 }
 
-
+// -------------------------------------------
+// Optimization 1: Global Average Pool 特化 Kernel (osize == 1)
+// 策略：1 Block 处理 1 个 Channel，Block 内归约
+// -------------------------------------------
 template <typename T>
 __global__ void global_avg_pool1d_kernel(
     T* output,
@@ -71,7 +80,7 @@ __global__ void global_avg_pool1d_kernel(
     }
     __syncthreads();
 
-
+    // 3. 让第一个 Warp 把 shared memory 里的结果加起来
     if (wid == 0) {
         float val = (threadIdx.x < (blockDim.x + 31) / 32) ? shared_sum[lane] : 0.0f;
         val = warp_reduce_sum(val);
@@ -81,7 +90,10 @@ __global__ void global_avg_pool1d_kernel(
     }
 }
 
-
+// -------------------------------------------
+// Optimization 2: 通用 Kernel
+// 策略：使用浮点数计算索引，避免整数除法；移除不安全的向量化
+// -------------------------------------------
 template <typename T>
 __global__ void adaptive_avg_pool1d_general_kernel(
     T* output,
@@ -103,6 +115,8 @@ __global__ void adaptive_avg_pool1d_general_kernel(
 
         const T* in_ptr = input + bc_idx * isize;
 
+        // 使用浮点数计算起止点，替代 (i * isize) / osize
+        // 注意：PyTorch 官方实现使用 float 进行索引计算
         int istart = static_cast<int>(floorf(out_idx * stride_factor));
         int iend   = static_cast<int>(ceilf((out_idx + 1) * stride_factor));
         
@@ -113,7 +127,8 @@ __global__ void adaptive_avg_pool1d_general_kernel(
         float sum = 0.0f;
         int klen = iend - istart;
 
-        
+        // 标量循环：利用 L1 Cache 和编译器优化
+        // 移除手动向量化，因为 istart 不保证对齐
         for (int i = istart; i < iend; ++i) {
             sum += to_float(in_ptr[i]);
         }
@@ -136,6 +151,8 @@ void launch_adaptive_avg_pool1d(
 ) {
     // 策略分发
     if (osize == 1) {
+        // Case 1: Global Average Pooling (Gap)
+        // 每个 Block 处理一个 Channel
         int threads = 256;
         // 如果 isize 很小，减少线程数
         if (isize < 256) threads = 128;
@@ -148,12 +165,14 @@ void launch_adaptive_avg_pool1d(
         global_avg_pool1d_kernel<T><<<grid, block, 0, stream>>>(
             output, input, batch_channels, isize
         );
-    } else
+    } else {
+        // Case 2: General Case
+        // 这里的并行度基于输出元素个数
         size_t total_output = batch_channels * osize;
         int threads = 256;
         int blocks = (total_output + threads - 1) / threads;
         
-        
+        // 限制最大 Grid 大小，防止超限
         if (blocks > 65535) blocks = 65535; 
 
         adaptive_avg_pool1d_general_kernel<T><<<blocks, threads, 0, stream>>>(

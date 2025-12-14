@@ -101,8 +101,6 @@ void calculate_cpu_impl(
                 // 2. 应用仿射变换
                 float grid_x = r00 * x_norm + r01 * y_norm + tx;
                 float grid_y = r10 * x_norm + r11 * y_norm + ty;
-
-                /
                 size_t offset = (n * H * W + h * W + w) * 2;
 
                 out_ptr[offset + 0] = from_float<Tdata>(grid_x);
