@@ -1,8 +1,6 @@
 #ifndef __ASIN_CUDA_H__
 #define __ASIN_CUDA_H__
 
-#include <cmath>
-
 namespace op::asin::cuda {
 typedef struct AsinOp {
   static constexpr size_t num_inputs = 1;

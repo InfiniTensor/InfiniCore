@@ -1,7 +1,5 @@
 #ifndef __ADDR_CUDA_H__
 #define __ADDR_CUDA_H__
-#include "../../../devices/nvidia/nvidia_common.cuh"
-#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 #include <cstddef>
 #include <type_traits>
 

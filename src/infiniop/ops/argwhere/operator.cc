@@ -9,7 +9,7 @@
 #include "nvidia/argwhere_nvidia.cuh"
 #endif
 #ifdef ENABLE_METAX_API
-#include "metax/argwhere_metax.cuh"
+#include "metax/argwhere_metax.h"
 #endif
 #ifdef ENABLE_KUNLUN_API
 #include "kunlun/argwhere_kunlun.cuh"
