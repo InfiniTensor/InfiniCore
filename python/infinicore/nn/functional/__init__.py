@@ -1,6 +1,7 @@
 from .causal_softmax import causal_softmax
 from .embedding import embedding
 from .linear import linear
+from .pixel_shuffle import pixel_shuffle
 from .random_sample import random_sample
 from .rms_norm import rms_norm
 from .rope import RopeAlgo, rope
@@ -15,6 +16,7 @@ __all__ = [
     "swiglu",
     "linear",
     "embedding",
+    "pixel_shuffle",
     "rope",
     "RopeAlgo",
 ]

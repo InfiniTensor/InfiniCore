@@ -8,6 +8,9 @@
 #include "infiniop/ops/clip.h"
 #include "infiniop/ops/conv.h"
 #include "infiniop/ops/dequantize_awq.h"
+#include "infiniop/ops/erf.h"
+#include "infiniop/ops/erfc.h"
+#include "infiniop/ops/erfinv.h"
 #include "infiniop/ops/gelu.h"
 #include "infiniop/ops/gemm.h"
 #include "infiniop/ops/layer_norm.h"
@@ -15,6 +18,7 @@
 #include "infiniop/ops/lp_norm.h"
 #include "infiniop/ops/mul.h"
 #include "infiniop/ops/ones.h"
+#include "infiniop/ops/pixel_shuffle.h"
 #include "infiniop/ops/random_sample.h"
 #include "infiniop/ops/rearrange.h"
 #include "infiniop/ops/relu.h"
@@ -31,5 +35,4 @@
 #include "infiniop/ops/topksoftmax.h"
 #include "infiniop/ops/zeros.h"
 #include "infiniop/tensor_descriptor.h"
-
 #endif // __INFINIOP_API_H__

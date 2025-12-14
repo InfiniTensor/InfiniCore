@@ -1,5 +1,6 @@
 from infinicore.lib import _infinicore
 from infinicore.tensor import Tensor
+import infinicore
 
 
 def matmul(input, other, *, alpha=1.0, out=None):

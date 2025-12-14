@@ -5,10 +5,15 @@
 #include "ops/add.hpp"
 #include "ops/attention.hpp"
 #include "ops/causal_softmax.hpp"
+#include "ops/erf.hpp"
+#include "ops/erfc.hpp"
+#include "ops/erfinv.hpp"
 #include "ops/embedding.hpp"
 #include "ops/linear.hpp"
 #include "ops/matmul.hpp"
+#include "ops/matrix_power.hpp"
 #include "ops/mul.hpp"
+#include "ops/pixel_shuffle.hpp"
 #include "ops/random_sample.hpp"
 #include "ops/rearrange.hpp"
 #include "ops/rms_norm.hpp"
@@ -27,13 +32,18 @@ inline void bind(py::module &m) {
     bind_random_sample(m);
     bind_linear(m);
     bind_matmul(m);
+    bind_matrix_power(m);
     bind_mul(m);
+    bind_pixel_shuffle(m);
     bind_rearrange(m);
     bind_rms_norm(m);
     bind_silu(m);
     bind_swiglu(m);
     bind_rope(m);
     bind_embedding(m);
+    bind_erf(m);
+    bind_erfc(m);
+    bind_erfinv(m);
 }
 
 } // namespace infinicore::ops

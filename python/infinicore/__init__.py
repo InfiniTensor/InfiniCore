@@ -41,9 +41,14 @@ from infinicore.dtype import (
 )
 from infinicore.ops.add import add
 from infinicore.ops.attention import attention
+from infinicore.ops.erf import erf
+from infinicore.ops.erfc import erfc
+from infinicore.ops.erfinv import erfinv
 from infinicore.ops.matmul import matmul
+from infinicore.ops.matrix_power import matrix_power
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
+from infinicore.ops.pixel_shuffle import pixel_shuffle
 from infinicore.ops.rearrange import rearrange
 from infinicore.tensor import (
     Tensor,
@@ -101,9 +106,14 @@ __all__ = [
     # Operations.
     "add",
     "attention",
+    "erf",
+    "erfc",
+    "erfinv",
     "matmul",
+    "matrix_power",
     "mul",
     "narrow",
+    "pixel_shuffle",
     "rearrange",
     "empty",
     "empty_like",
