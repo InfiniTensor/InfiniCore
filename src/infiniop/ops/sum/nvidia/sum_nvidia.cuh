@@ -1,8 +1,8 @@
-#ifndef __SUM_CUDA_API_H__
-#define __SUM_CUDA_API_H__
+#ifndef __SUM_NVIDIA_H__
+#define __SUM_NVIDIA_H__
 
-#include "../../../elementwise/nvidia/elementwise_nvidia_api.cuh"
+#include "../sum_desc.h"
 
-ELEMENTWISE_DESCRIPTOR(sum, nvidia)
+DESCRIPTOR(nvidia);
 
 #endif // __SUM_CUDA_API_H__

@@ -1,61 +1,119 @@
-#include "../../../elementwise/nvidia/elementwise_nvidia.cuh"
-
+#include "sum_nvidia.cuh"
 #include "../cuda/kernel.cuh"
-#include "sub_nvidia.cuh"
 
-namespace op::sub::nvidia {
 
-Descriptor::~Descriptor() = default;
-
-infiniStatus_t Descriptor::create(
-    infiniopHandle_t handle_,
-    Descriptor **desc_ptr,
-    infiniopTensorDescriptor_t out_desc,
-    std::vector<infiniopTensorDescriptor_t> input_desc_vec) {
-
-    auto handle = reinterpret_cast<device::nvidia::Handle *>(handle_);
-    auto dtype = out_desc->dtype();
-
-    const auto &a_desc = input_desc_vec.at(0);
-    const auto &b_desc = input_desc_vec.at(1);
-    const auto &c_shape = out_desc->shape();
-    const auto &a_shape = a_desc->shape();
-    const auto &b_shape = b_desc->shape();
-
-    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64, INFINI_DTYPE_BF16);
-
-    CHECK_SAME_SHAPE(c_shape, a_shape, b_shape);
-
-    // create CUDA elementwise descriptor
-    CREATE_ELEMENTWISE_CUDA_DESCRIPTOR(handle, dtype, out_desc, input_desc_vec)
-
-    return INFINI_STATUS_SUCCESS;
-}
-
-infiniStatus_t Descriptor::calculate(
-    void *workspace,
-    size_t workspace_size,
-    void *output,
-    std::vector<const void *> inputs,
-    void *stream) const {
-
-    if (workspace_size < _workspace_size) {
-        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+namespace op::sum::nvidia {
+    struct Descriptor::Opaque {
+        std::shared_ptr<device::nvidia::Handle::Internal> internal;
+    };
+    
+    Descriptor::~Descriptor() {
+        delete _opaque;
     }
-
-    switch (_dtype) {
-    case INFINI_DTYPE_F16:
-        return _device_info->calculate<256, cuda::SubOp, half>(_info, workspace, output, inputs, stream);
-    case INFINI_DTYPE_F32:
-        return _device_info->calculate<256, cuda::SubOp, float>(_info, workspace, output, inputs, stream);
-    case INFINI_DTYPE_F64:
-        return _device_info->calculate<256, cuda::SubOp, double>(_info, workspace, output, inputs, stream);
-    case INFINI_DTYPE_BF16:
-        return _device_info->calculate<256, cuda::SubOp, cuda_bfloat16>(_info, workspace, output, inputs, stream);
-    default:
-        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    
+    infiniStatus_t Descriptor::create(
+        infiniopHandle_t handle,
+        Descriptor **desc_ptr,
+        infiniopTensorDescriptor_t out_desc,
+        infiniopTensorDescriptor_t input_desc,
+        infiniopTensorDescriptor_t other_desc) {
+    
+        auto result = InnerInfo::create(out_desc, input_desc, other_desc);
+        CHECK_RESULT(result);
+        auto info = result.take();
+        size_t workspace_size = 0;
+        // out_shape
+        workspace_size += info.out_ndim * sizeof(size_t);
+        // input, other, out strides
+        workspace_size += (info.input_ndim + info.other_ndim + info.out_ndim) * sizeof(ptrdiff_t);
+        *desc_ptr = new Descriptor(
+            new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
+            info, workspace_size, handle->device, handle->device_id);
+        return INFINI_STATUS_SUCCESS;
     }
-
-    return INFINI_STATUS_SUCCESS;
+    
+    namespace {
+    
+    template<size_t BLOCK_SIZE, typename T>
+    infiniStatus_t launchKernel(
+        const InnerInfo &info,
+        const T *input, const T *other, T *out,
+        cudaStream_t stream, void *workspace, size_t workspace_size) {
+    
+        size_t input_ndim = info.input_ndim;
+        size_t other_ndim = info.other_ndim;
+        size_t out_ndim = info.out_ndim;
+        size_t total_elements = info.total_elements;
+        size_t oper_len = info.oper_len;
+    
+        size_t workspace_offset = 0;
+        unsigned char *workspace_ptr = reinterpret_cast<unsigned char *>(workspace);
+    
+        size_t *out_shape_cuda = reinterpret_cast<size_t *>(workspace_ptr + workspace_offset);
+        workspace_offset += out_ndim * sizeof(size_t);
+    
+        ptrdiff_t *input_strides_cuda = reinterpret_cast<ptrdiff_t *>(workspace_ptr + workspace_offset);
+        ptrdiff_t *other_strides_cuda = input_strides_cuda + input_ndim;
+        ptrdiff_t *out_strides_cuda = other_strides_cuda + other_ndim;
+        workspace_offset += (info.input_ndim + info.other_ndim + info.out_ndim) * sizeof(ptrdiff_t);
+    
+        CHECK_CUDA(cudaMemcpyAsync(out_shape_cuda, info.out_shape.data(), out_ndim * sizeof(size_t), cudaMemcpyHostToDevice, stream));
+        CHECK_CUDA(cudaMemcpyAsync(input_strides_cuda, info.input_strides.data(), input_ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, stream));
+        CHECK_CUDA(cudaMemcpyAsync(other_strides_cuda, info.other_strides.data(), other_ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, stream));
+        CHECK_CUDA(cudaMemcpyAsync(out_strides_cuda, info.out_strides.data(), out_ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, stream));
+    
+        size_t block_size = BLOCK_SIZE;
+        size_t grid_size = (total_elements + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    
+        innerKernel<BLOCK_SIZE, T><<<grid_size, block_size, 0, stream>>>(
+            input, other, out,
+            total_elements, oper_len, out_shape_cuda,
+            input_strides_cuda, other_strides_cuda, out_strides_cuda,
+            input_ndim, other_ndim, out_ndim);
+    
+        // CHECK_CUDA(cudaDeviceSynchronize());
+    
+        return INFINI_STATUS_SUCCESS;
+    }
+    
+    }
+    
+    infiniStatus_t Descriptor::calculate(
+        void *workspace, size_t workspace_size,
+        void *out,
+        const void *input,
+        const void *other,
+        void *stream_) const {
+    
+        cudaStream_t stream = (cudaStream_t)stream_;
+    #define CALCULATE_INNER(BLOCK_SIZE, T)                          \
+        launchKernel<BLOCK_SIZE, T>(                                \
+            _info,                                                  \
+            (const T *)input, (const T *)other, (T *)out,           \
+            stream, workspace, workspace_size                       \
+        )
+    #define CALCULATE_INNER_WITH_BLOCK_SIZE(BLOCK_SIZE)             \
+        {                                                           \
+            if (_info.dtype == INFINI_DTYPE_BF16)                   \
+                return CALCULATE_INNER(BLOCK_SIZE, __nv_bfloat16);  \
+            else if(_info.dtype == INFINI_DTYPE_F16)                \
+                return CALCULATE_INNER(BLOCK_SIZE, half);           \
+            else if(_info.dtype == INFINI_DTYPE_F32)                \
+                return CALCULATE_INNER(BLOCK_SIZE, float);          \
+            else                                                    \
+                return INFINI_STATUS_BAD_TENSOR_DTYPE;              \
+        }
+    
+        if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_1024) {
+            CALCULATE_INNER_WITH_BLOCK_SIZE(CUDA_BLOCK_SIZE_1024)
+        } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_512) {
+            CALCULATE_INNER_WITH_BLOCK_SIZE(CUDA_BLOCK_SIZE_512)
+        } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_4096) {
+            CALCULATE_INNER_WITH_BLOCK_SIZE(CUDA_BLOCK_SIZE_4096)
+        } else {
+            return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
+        }
+        return INFINI_STATUS_SUCCESS;
+    }
+    
 }
-} // namespace op::sub::nvidia
