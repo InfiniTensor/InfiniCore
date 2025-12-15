@@ -26,14 +26,21 @@ def debug(actual, desired, atol=0, rtol=1e-2, equal_nan=False, verbose=True):
     elif actual.dtype == torch.bfloat16 or desired.dtype == torch.bfloat16:
         actual = actual.to(torch.float32)
         desired = desired.to(torch.float32)
+    # Note: bool tensors are handled inside print_discrepancy
 
     print_discrepancy(actual, desired, atol, rtol, equal_nan, verbose)
 
     import numpy as np
 
-    np.testing.assert_allclose(
-        actual.cpu(), desired.cpu(), rtol, atol, equal_nan, verbose=True
-    )
+    # For bool tensors, use assert_equal instead of assert_allclose
+    if actual.dtype == torch.bool or desired.dtype == torch.bool:
+        np.testing.assert_equal(
+            actual.cpu().numpy(), desired.cpu().numpy()
+        )
+    else:
+        np.testing.assert_allclose(
+            actual.cpu(), desired.cpu(), rtol, atol, equal_nan, verbose=True
+        )
 
 
 def print_discrepancy(
@@ -47,19 +54,40 @@ def print_discrepancy(
     import sys
 
     is_terminal = sys.stdout.isatty()
+    
+    # Handle bool tensors specially - PyTorch doesn't support subtraction for bool
+    is_bool = actual.dtype == torch.bool or expected.dtype == torch.bool
+    
+    if is_bool:
+        # For bool tensors, convert to int8 for comparison operations
+        actual_for_calc = actual.to(torch.int8) if actual.dtype == torch.bool else actual
+        expected_for_calc = expected.to(torch.int8) if expected.dtype == torch.bool else expected
+    else:
+        actual_for_calc = actual
+        expected_for_calc = expected
 
-    actual_isnan = torch.isnan(actual)
-    expected_isnan = torch.isnan(expected)
+    actual_isnan = torch.isnan(actual_for_calc)
+    expected_isnan = torch.isnan(expected_for_calc)
 
     # Calculate difference mask
-    nan_mismatch = (
-        actual_isnan ^ expected_isnan if equal_nan else actual_isnan | expected_isnan
-    )
-    diff_mask = nan_mismatch | (
-        torch.abs(actual - expected) > (atol + rtol * torch.abs(expected))
-    )
+    if is_bool:
+        # For bool tensors, just check equality
+        diff_mask = actual != expected
+    else:
+        nan_mismatch = (
+            actual_isnan ^ expected_isnan if equal_nan else actual_isnan | expected_isnan
+        )
+        diff_mask = nan_mismatch | (
+            torch.abs(actual_for_calc - expected_for_calc) > (atol + rtol * torch.abs(expected_for_calc))
+        )
+    
     diff_indices = torch.nonzero(diff_mask, as_tuple=False)
-    delta = actual - expected
+    
+    # Calculate delta (difference) - convert bool to int if needed
+    if is_bool:
+        delta = (actual.to(torch.int8) - expected.to(torch.int8))
+    else:
+        delta = actual_for_calc - expected_for_calc
 
     # Display formatting
     col_width = [18, 20, 20, 20]
@@ -75,11 +103,20 @@ def print_discrepancy(
     if verbose:
         for idx in diff_indices:
             index_tuple = tuple(idx.tolist())
-            actual_str = f"{actual[index_tuple]:<{col_width[1]}.{decimal_places[1]}f}"
-            expected_str = (
-                f"{expected[index_tuple]:<{col_width[2]}.{decimal_places[2]}f}"
-            )
-            delta_str = f"{delta[index_tuple]:<{col_width[3]}.{decimal_places[3]}f}"
+            if is_bool:
+                # For bool, display as True/False
+                actual_val = actual[index_tuple].item()
+                expected_val = expected[index_tuple].item()
+                actual_str = f"{str(actual_val):<{col_width[1]}}"
+                expected_str = f"{str(expected_val):<{col_width[2]}}"
+                delta_val = delta[index_tuple].item()
+                delta_str = f"{delta_val:<{col_width[3]}}"
+            else:
+                actual_str = f"{actual[index_tuple]:<{col_width[1]}.{decimal_places[1]}f}"
+                expected_str = (
+                    f"{expected[index_tuple]:<{col_width[2]}.{decimal_places[2]}f}"
+                )
+                delta_str = f"{delta[index_tuple]:<{col_width[3]}.{decimal_places[3]}f}"
             print(
                 f" > Index: {str(index_tuple):<{col_width[0]}}"
                 f"actual: {add_color(actual_str, 31)}"
@@ -95,15 +132,17 @@ def print_discrepancy(
         print(
             f"  - Mismatched elements: {len(diff_indices)} / {actual.numel()} ({len(diff_indices) / actual.numel() * 100}%)"
         )
-        print(
-            f"  - Min(actual) : {torch.min(actual):<{col_width[1]}} | Max(actual) : {torch.max(actual):<{col_width[2]}}"
-        )
-        print(
-            f"  - Min(desired): {torch.min(expected):<{col_width[1]}} | Max(desired): {torch.max(expected):<{col_width[2]}}"
-        )
-        print(
-            f"  - Min(delta)  : {torch.min(delta):<{col_width[1]}} | Max(delta)  : {torch.max(delta):<{col_width[2]}}"
-        )
+        
+        if not is_bool:
+            print(
+                f"  - Min(actual) : {torch.min(actual):<{col_width[1]}} | Max(actual) : {torch.max(actual):<{col_width[2]}}"
+            )
+            print(
+                f"  - Min(desired): {torch.min(expected):<{col_width[1]}} | Max(desired): {torch.max(expected):<{col_width[2]}}"
+            )
+            print(
+                f"  - Min(delta)  : {torch.min(delta):<{col_width[1]}} | Max(delta)  : {torch.max(delta):<{col_width[2]}}"
+            )
         print("-" * total_width)
 
     return diff_indices

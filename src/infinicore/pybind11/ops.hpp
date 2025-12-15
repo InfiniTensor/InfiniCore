@@ -7,6 +7,9 @@
 #include "ops/causal_softmax.hpp"
 #include "ops/embedding.hpp"
 #include "ops/linear.hpp"
+#include "ops/logical_or.hpp"
+#include "ops/logical_xor.hpp"
+#include "ops/logsigmoid.hpp"
 #include "ops/matmul.hpp"
 #include "ops/mul.hpp"
 #include "ops/random_sample.hpp"
@@ -26,6 +29,9 @@ inline void bind(py::module &m) {
     bind_causal_softmax(m);
     bind_random_sample(m);
     bind_linear(m);
+    bind_logical_or(m);
+    bind_logical_xor(m);
+    bind_logsigmoid(m);
     bind_matmul(m);
     bind_mul(m);
     bind_rearrange(m);
