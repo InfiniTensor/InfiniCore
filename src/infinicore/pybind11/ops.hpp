@@ -19,6 +19,7 @@
 #include "ops/silu.hpp"
 #include "ops/where.hpp"
 #include "ops/swiglu.hpp"
+#include "ops/vdot.hpp"
 
 namespace py = pybind11;
 
@@ -42,6 +43,7 @@ inline void bind(py::module &m) {
     bind_rope(m);
     bind_embedding(m);
     bind_where(m);
+    bind_vdot(m);
 }
 
 } // namespace infinicore::ops

@@ -33,6 +33,7 @@
 #include "infiniop/ops/topkrouter.h"
 #include "infiniop/ops/topksoftmax.h"
 #include "infiniop/ops/where.h"
+#include "infiniop/ops/vdot.h"
 #include "infiniop/ops/zeros.h"
 #include "infiniop/tensor_descriptor.h"
 
