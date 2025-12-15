@@ -1,6 +1,6 @@
 import torch
 import infinicore
-
+from dataclasses import dataclass, field
 
 def to_torch_dtype(infini_dtype):
     """Convert infinicore data type to PyTorch data type"""
@@ -60,3 +60,36 @@ def to_infinicore_dtype(torch_dtype):
         return infinicore.complex128
     else:
         raise ValueError(f"Unsupported torch dtype: {torch_dtype}")
+
+@dataclass
+class TestTiming:
+    """Stores performance testing timing metrics."""
+    torch_host: float = 0.0
+    torch_device: float = 0.0
+    infini_host: float = 0.0
+    infini_device: float = 0.0
+
+@dataclass
+class SingleTestResult:
+    """Stores the execution results of a single test file."""
+    name: str
+    success: bool = False
+    return_code: int = -1
+    error_message: str = ""
+    stdout: str = ""
+    stderr: str = ""
+    timing: TestTiming = field(default_factory=TestTiming)
+
+    @property
+    def status_icon(self):
+        if self.return_code == 0: return "✅"
+        if self.return_code == -2: return "⏭️"
+        if self.return_code == -3: return "⚠️"
+        return "❌"
+
+    @property
+    def status_text(self):
+        if self.return_code == 0: return "PASSED"
+        if self.return_code == -2: return "SKIPPED"
+        if self.return_code == -3: return "PARTIAL"
+        return "FAILED"

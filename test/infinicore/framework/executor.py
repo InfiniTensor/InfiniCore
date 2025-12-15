@@ -2,11 +2,11 @@ import sys
 import importlib.util
 from io import StringIO
 from contextlib import contextmanager
-from .types import TestResult, TestTiming
+from .datatypes import SingleTestResult, TestTiming
 
 @contextmanager
 def capture_output():
-    """上下文管理器：捕获 stdout 和 stderr"""
+    """Context manager: captures stdout and stderr."""
     new_out, new_err = StringIO(), StringIO()
     old_out, old_err = sys.stdout, sys.stderr
     try:
@@ -16,18 +16,18 @@ def capture_output():
         sys.stdout, sys.stderr = old_out, old_err
 
 class SingleTestExecutor:
-    def run(self, file_path) -> TestResult:
-        result = TestResult(name=file_path.stem)
+    def run(self, file_path) -> SingleTestResult:
+        result = SingleTestResult(name=file_path.stem)
         
         try:
-            # 1. 动态导入模块
+            # 1. Dynamically import the module
             module = self._import_module(file_path)
             
-            # 2. 寻找 TestRunner
+            # 2. Look for TestRunner
             if not hasattr(module, "GenericTestRunner"):
                 raise ImportError("No GenericTestRunner found in module")
             
-            # 3. 寻找 TestClass (继承自 BaseOperatorTest 的类)
+            # 3. Look for TestClass (subclass of BaseOperatorTest)
             test_class = self._find_test_class(module)
             if not test_class:
                 raise ImportError("No BaseOperatorTest subclass found")
@@ -36,16 +36,16 @@ class SingleTestExecutor:
             runner_class = module.GenericTestRunner
             runner = runner_class(test_instance.__class__)
 
-            # 4. 执行并捕获输出
+            # 4. Execute and capture output
             with capture_output() as (out, err):
                 success, internal_runner = runner.run()
 
-            # 5. 填充结果
+            # 5. Populate results
             result.success = success
             result.stdout = out.getvalue()
             result.stderr = err.getvalue()
             
-            # 从 internal_runner 提取结果详情
+            # Extract detailed results from internal_runner
             test_results = internal_runner.get_test_results() if internal_runner else []
             self._analyze_return_code(result, test_results)
             self._extract_timing(result, test_results)
@@ -72,13 +72,13 @@ class SingleTestExecutor:
         for attr_name in dir(module):
             attr = getattr(module, attr_name)
             if isinstance(attr, type) and hasattr(attr, "__bases__"):
-                # 简单判断基类名
+                # Simple check for base class name
                 if any("BaseOperatorTest" in str(b) for b in attr.__bases__):
                     return attr
         return None
 
     def _analyze_return_code(self, result, test_results):
-        # 逻辑与你原代码一致，判断是否全过、部分过或跳过
+        # Logic consistent with original code: determine if all passed, partially passed, or skipped
         if not result.success:
             result.return_code = -1
             return
@@ -90,7 +90,7 @@ class SingleTestExecutor:
         else: result.return_code = 0
 
     def _extract_timing(self, result, test_results):
-        # 累加时间
+        # Accumulate timing
         t = result.timing
         t.torch_host = sum(r.torch_host_time for r in test_results)
         t.torch_device = sum(r.torch_device_time for r in test_results)

@@ -230,6 +230,51 @@ class TestReporter:
             import traceback; traceback.print_exc()
             print(f"   ❌ Save failed: {e}")
 
+    @staticmethod
+    def print_header(ops_dir, count):
+        print(f"InfiniCore Operator Test Runner")
+        print(f"Directory: {ops_dir}")
+        print(f"Tests found: {count}\n")
+
+    @staticmethod
+    def print_live_result(result, verbose=False):
+        """Print single-line result in real-time."""
+        
+        print(f"{result.status_icon}  {result.name}: {result.status_text} (code: {result.return_code})")
+        
+        if result.stdout:
+            print(result.stdout.rstrip())
+            
+        if result.stderr:
+            print("\nSTDERR:", result.stderr.rstrip())
+            
+        if result.error_message:
+            print(f"💥 Error: {result.error_message}")
+
+        if result.stdout or result.stderr or verbose:
+            print("-" * 40)
+
+    @staticmethod
+    def print_summary(results, cumulative_timing, total_expected=0):
+        print(f"\n{'='*80}\nCUMULATIVE TEST SUMMARY\n{'='*80}")
+        
+        passed = [r for r in results if r.return_code == 0]
+        failed = [r for r in results if r.return_code == -1]
+        
+        print(f"Total: {len(results)} | Passed: {len(passed)} | Failed: {len(failed)}")
+        
+        if cumulative_timing:
+            print(f"{'-'*40}\nBENCHMARK SUMMARY:")
+            print(f"  PyTorch Host:    {cumulative_timing.torch_host:.3f} ms")
+            print(f"  InfiniCore Host: {cumulative_timing.infini_host:.3f} ms")
+            print(f"{'-'*40}")
+
+        if failed:
+            print(f"\n❌ FAILED ({len(failed)}):")
+            for r in failed: print(f"  {r.name}")
+
+        return len(failed) == 0
+
     # --- Internal Helpers ---
     @staticmethod
     def _write_smart_field(f, key, value, indent, sub_indent, close_comma=""):
