@@ -22,5 +22,6 @@
 #include "infiniop/ops/swiglu.h"
 #include "infiniop/ops/topkrouter.h"
 #include "infiniop/tensor_descriptor.h"
+#include "infiniop/ops/softmax.h"
 
 #endif // __INFINIOP_API_H__

@@ -457,6 +457,39 @@ def sub_(lib):
 
 
 @OpRegister.operator
+def softmax_(lib):
+    lib.infiniopCreateSoftmaxDescriptor.restype = c_int32
+    lib.infiniopCreateSoftmaxDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_int32,
+    ]
+
+    lib.infiniopGetSoftmaxWorkspaceSize.restype = c_int32
+    lib.infiniopGetSoftmaxWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopSoftmax.restype = c_int32
+    lib.infiniopSoftmax.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroySoftmaxDescriptor.restype = c_int32
+    lib.infiniopDestroySoftmaxDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def swiglu_(lib):
     lib.infiniopCreateSwiGLUDescriptor.restype = c_int32
     lib.infiniopCreateSwiGLUDescriptor.argtypes = [
