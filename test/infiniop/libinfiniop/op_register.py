@@ -651,6 +651,37 @@ def topkrouter_(lib):
 
 
 @OpRegister.operator
+def topksoftmax_(lib):
+    lib.infiniopCreateTopksoftmaxDescriptor.restype = c_int32
+    lib.infiniopCreateTopksoftmaxDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+    ]
+    lib.infiniopGetTopksoftmaxWorkspaceSize.restype = c_int32
+    lib.infiniopGetTopksoftmaxWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopTopksoftmax.restype = c_int32
+    lib.infiniopTopksoftmax.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_size_t,
+        c_int32,
+        c_void_p,
+    ]
+    lib.infiniopDestroyTopksoftmaxDescriptor.restype = c_int32
+    lib.infiniopDestroyTopksoftmaxDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def dequantize_(lib):
     lib.infiniopCreateDequantizeAWQDescriptor.restype = c_int32
     lib.infiniopCreateDequantizeAWQDescriptor.argtypes = [
