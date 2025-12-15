@@ -23,6 +23,8 @@ def to_torch_dtype(infini_dtype):
         return torch.int64
     elif infini_dtype == infinicore.uint8:
         return torch.uint8
+    elif infini_dtype == infinicore.bool:
+        return torch.bool
     else:
         raise ValueError(f"Unsupported infinicore dtype: {infini_dtype}")
 
@@ -45,6 +47,8 @@ def to_infinicore_dtype(torch_dtype):
         return infinicore.int64
     elif torch_dtype == torch.uint8:
         return infinicore.uint8
+    elif torch_dtype == torch.bool:
+        return infinicore.bool
     else:
         raise ValueError(f"Unsupported torch dtype: {torch_dtype}")
 

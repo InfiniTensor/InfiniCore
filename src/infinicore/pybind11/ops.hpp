@@ -17,6 +17,7 @@
 #include "ops/rms_norm.hpp"
 #include "ops/rope.hpp"
 #include "ops/silu.hpp"
+#include "ops/where.hpp"
 #include "ops/swiglu.hpp"
 
 namespace py = pybind11;
@@ -40,6 +41,7 @@ inline void bind(py::module &m) {
     bind_swiglu(m);
     bind_rope(m);
     bind_embedding(m);
+    bind_where(m);
 }
 
 } // namespace infinicore::ops

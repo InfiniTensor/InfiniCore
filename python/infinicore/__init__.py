@@ -44,6 +44,7 @@ from infinicore.ops.attention import attention
 from infinicore.ops.logical_or import logical_or
 from infinicore.ops.logical_xor import logical_xor
 from infinicore.ops.logsigmoid import logsigmoid
+from infinicore.ops.where import where
 from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
@@ -107,6 +108,7 @@ __all__ = [
     "logical_or",
     "logical_xor",
     "logsigmoid",
+    "where",
     "matmul",
     "mul",
     "narrow",
