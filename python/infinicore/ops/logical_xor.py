@@ -1,8 +1,13 @@
+import infinicore
 from infinicore.lib import _infinicore
 from infinicore.tensor import Tensor
 
 
 def logical_xor(input, other, *, out=None):
+    if infinicore.use_ntops and input.device.type in ("cuda", "musa"):
+        return infinicore.ntops.torch.logical_xor(input, other, out = out)
+
+
     if out is None:
         return Tensor(_infinicore.logical_xor(input._underlying, other._underlying))
 

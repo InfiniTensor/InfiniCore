@@ -6,7 +6,7 @@ from infinicore.tensor import Tensor
 def silu(input: Tensor, inplace: bool = False, *, out=None) -> Tensor:
     r"""Apply the Sigmoid Linear Unit (SiLU) function, element-wise."""
 
-    if infinicore.use_ntops and input.device.type in ("cuda", "musa") and out is None:
+    if infinicore.use_ntops and input.device.type in ("cuda", "musa"):
         return infinicore.ntops.torch.silu(input, inplace=inplace)
 
     if inplace:
