@@ -1,10 +1,10 @@
-#include "../../../devices/nvidia/nvidia_common.cuh"
-#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
+#include "../../../devices/metax/metax_common.h"
+#include "../../../devices/metax/metax_kernel_common.h"
 #include "../cuda/kernel.cuh"
-#include "paged_caching_nvidia.cuh"
+#include "paged_caching_metax.h"
 
 template <typename Tdata, int NUM_THREADS>
-INFINIOP_CUDA_KERNEL pagedCaching(
+INFINIOP_METAX_KERNEL pagedCaching(
     Tdata *k_cache, Tdata *v_cache,
     const Tdata *k, const Tdata *v,
     const int32_t *slot_mapping,
@@ -16,10 +16,10 @@ INFINIOP_CUDA_KERNEL pagedCaching(
         block_size, k_src_stride, v_src_stride, k_cache_block_stride, v_cache_block_stride);
 }
 
-namespace op::paged_caching::nvidia {
+namespace op::paged_caching::metax {
 // PIMPL struct definition
 struct Descriptor::Opaque {
-    std::shared_ptr<device::nvidia::Handle::Internal> internal;
+    std::shared_ptr<device::metax::Handle::Internal> internal;
 };
 
 // Destructor implementation
@@ -42,7 +42,7 @@ infiniStatus_t Descriptor::create(
 
     // Create and return the Descriptor instance.
     *desc_ptr = new Descriptor(
-        new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
+        new Opaque{reinterpret_cast<device::metax::Handle *>(handle)->internal()},
         info.take(), 0, handle->device, handle->device_id);
 
     return INFINI_STATUS_SUCCESS;
@@ -59,7 +59,7 @@ infiniStatus_t launchKernel(const PagedCachingInfo &info,
                             size_t num_tokens, size_t num_kv_heads, size_t head_size, size_t block_size,
                             ptrdiff_t k_src_stride, ptrdiff_t v_src_stride,
                             ptrdiff_t k_cache_block_stride, ptrdiff_t v_cache_block_stride,
-                            cudaStream_t stream) {
+                            hcStream_t stream) {
 
     // Grid dimension is 1D, with one block per token, as we decided.
     dim3 grid(uint32_t(num_kv_heads), uint32_t(num_tokens), 1);
@@ -85,12 +85,12 @@ infiniStatus_t launchKernel(const PagedCachingInfo &info,
                 k_cache_block_stride,
                 v_cache_block_stride);
     } else if (dtype == INFINI_DTYPE_BF16) {
-        pagedCaching<__nv_bfloat16, NUM_THREADS>
+        pagedCaching<__hpcc_bfloat16, NUM_THREADS>
             <<<grid, block, shared_mem_size, stream>>>(
-                (__nv_bfloat16 *)k_cache,
-                (__nv_bfloat16 *)v_cache,
-                (const __nv_bfloat16 *)k,
-                (const __nv_bfloat16 *)v,
+                (__hpcc_bfloat16 *)k_cache,
+                (__hpcc_bfloat16 *)v_cache,
+                (const __hpcc_bfloat16 *)k,
+                (const __hpcc_bfloat16 *)v,
                 (const int32_t *)slot_mapping,
                 head_size,
                 block_size,
@@ -126,27 +126,20 @@ infiniStatus_t Descriptor::calculate(
     const void *slot_mapping,
     void *stream_) const {
 
-    cudaStream_t stream = (cudaStream_t)stream_;
+    hcStream_t stream = (hcStream_t)stream_;
 
     // Dispatch logic based on the GPU's maximum threads per block.
     // This allows selecting the largest, most efficient block size the hardware supports.
-    if (_opaque->internal->maxThreadsPerBlock() >= CUDA_BLOCK_SIZE_1024) {
+    if (_opaque->internal->maxThreadsPerBlock() >= METAX_BLOCK_SIZE_1024) {
         // Dispatch based on data type for a 1024-thread block.
-        launchKernel<CUDA_BLOCK_SIZE_1024>(
+        launchKernel<METAX_BLOCK_SIZE_1024>(
             _info, k_cache, v_cache, _info.dtype, k, v, slot_mapping,
             _info.num_tokens, _info.num_kv_heads, _info.head_size, _info.block_size,
             _info.k_src_stride, _info.v_src_stride,
             _info.k_cache_block_stride, _info.v_cache_block_stride,
             stream);
-    } else if (_opaque->internal->maxThreadsPerBlock() >= CUDA_BLOCK_SIZE_512) {
-        launchKernel<CUDA_BLOCK_SIZE_512>(
-            _info, k_cache, v_cache, _info.dtype, k, v, slot_mapping,
-            _info.num_tokens, _info.num_kv_heads, _info.head_size, _info.block_size,
-            _info.k_src_stride, _info.v_src_stride,
-            _info.k_cache_block_stride, _info.v_cache_block_stride,
-            stream);
-    } else if (_opaque->internal->maxThreadsPerBlock() >= CUDA_BLOCK_SIZE_4096) {
-        launchKernel<CUDA_BLOCK_SIZE_4096>(
+    } else if (_opaque->internal->maxThreadsPerBlock() >= METAX_BLOCK_SIZE_512) {
+        launchKernel<METAX_BLOCK_SIZE_512>(
             _info, k_cache, v_cache, _info.dtype, k, v, slot_mapping,
             _info.num_tokens, _info.num_kv_heads, _info.head_size, _info.block_size,
             _info.k_src_stride, _info.v_src_stride,
@@ -160,4 +153,4 @@ infiniStatus_t Descriptor::calculate(
     return INFINI_STATUS_SUCCESS;
 }
 
-} // namespace op::paged_caching::nvidia
+} // namespace op::paged_caching::metax
