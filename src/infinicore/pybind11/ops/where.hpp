@@ -23,6 +23,11 @@ inline void bind_where(py::module &m) {
           py::arg("x"),
           py::arg("y"),
           R"doc(In-place elementwise where(cond, x, y) selection into out tensor.)doc");
+
+    m.def("where_indices",
+          &op::where_indices,
+          py::arg("cond"),
+          R"doc(Return a tuple of index tensors where condition is True.)doc");
 }
 
 } // namespace infinicore::ops

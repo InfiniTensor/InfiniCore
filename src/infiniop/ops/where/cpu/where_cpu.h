@@ -29,5 +29,3 @@ public:
 } // namespace op::where::cpu
 
 #endif // __WHERE_CPU_H__
-
-

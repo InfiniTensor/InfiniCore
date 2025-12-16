@@ -25,4 +25,3 @@ void logical_or_(Tensor c, Tensor a, Tensor b) {
     LogicalOr::execute(c, a, b);
 }
 } // namespace infinicore::op
-

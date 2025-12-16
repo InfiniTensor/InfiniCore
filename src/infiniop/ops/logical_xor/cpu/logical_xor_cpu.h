@@ -22,4 +22,3 @@ public:
 } // namespace op::logical_xor::cpu
 
 #endif // __LOGICAL_XOR_CPU_H__
-

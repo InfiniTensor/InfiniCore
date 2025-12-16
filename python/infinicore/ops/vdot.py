@@ -9,5 +9,3 @@ def vdot(a: Tensor, b: Tensor) -> Tensor:
     for real-valued tensors (no complex conjugation).
     """
     return Tensor(_infinicore.vdot(a._underlying, b._underlying))
-
-

@@ -18,4 +18,3 @@ public:
 } // namespace op::logsigmoid::cpu
 
 #endif // __LOGSIGMOID_CPU_H__
-

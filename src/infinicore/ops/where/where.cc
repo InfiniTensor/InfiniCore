@@ -35,6 +35,27 @@ void where_(Tensor out, Tensor cond, Tensor x, Tensor y) {
     Where::execute(out, cond, x, y);
 }
 
+common::OpDispatcher<WhereIndices::schema> &WhereIndices::dispatcher() {
+    static common::OpDispatcher<WhereIndices::schema> dispatcher_;
+    return dispatcher_;
+}
+
+std::vector<Tensor> WhereIndices::execute(Tensor cond) {
+    infinicore::context::setDevice(cond->device());
+    auto device_type = cond->device().getType();
+    auto func = dispatcher().lookup(device_type);
+
+    if (func == nullptr) {
+        throw std::runtime_error(
+            "No WhereIndices implementation found for device type: "
+            + std::to_string(static_cast<int>(device_type)));
+    }
+
+    return func(cond);
+}
+
+std::vector<Tensor> where_indices(Tensor cond) {
+    return WhereIndices::execute(cond);
+}
+
 } // namespace infinicore::op
-
-

@@ -50,4 +50,3 @@ static bool registered = []() {
 }();
 
 } // namespace infinicore::op::logsigmoid_impl::infiniop
-

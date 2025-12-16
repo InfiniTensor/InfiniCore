@@ -15,9 +15,9 @@ __C infiniStatus_t infiniopCreateLogicalXorDescriptor(
 
 #define CREATE(CASE, NAMESPACE)                                                    \
     case CASE:                                                                     \
-        return op::logical_xor::NAMESPACE::Descriptor::create(                       \
+        return op::logical_xor::NAMESPACE::Descriptor::create(                     \
             handle,                                                                \
-            reinterpret_cast<op::logical_xor::NAMESPACE::Descriptor **>(desc_ptr),   \
+            reinterpret_cast<op::logical_xor::NAMESPACE::Descriptor **>(desc_ptr), \
             c_desc,                                                                \
             {a_desc, b_desc})
 
@@ -81,7 +81,7 @@ __C infiniStatus_t infiniopLogicalXor(
 __C infiniStatus_t infiniopDestroyLogicalXorDescriptor(infiniopLogicalXorDescriptor_t desc) {
 #define DELETE(CASE, NAMESPACE)                                                        \
     case CASE:                                                                         \
-        delete reinterpret_cast<const op::logical_xor::NAMESPACE::Descriptor *>(desc);  \
+        delete reinterpret_cast<const op::logical_xor::NAMESPACE::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS;
 
     switch (desc->device_type) {
@@ -96,4 +96,3 @@ __C infiniStatus_t infiniopDestroyLogicalXorDescriptor(infiniopLogicalXorDescrip
 
 #undef DELETE
 }
-

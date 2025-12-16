@@ -133,5 +133,3 @@ infiniStatus_t Descriptor::calculate(
 }
 
 } // namespace op::vdot::cpu
-
-

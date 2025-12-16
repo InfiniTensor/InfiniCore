@@ -22,4 +22,3 @@ public:
 } // namespace op::logical_or::cpu
 
 #endif // __LOGICAL_OR_CPU_H__
-

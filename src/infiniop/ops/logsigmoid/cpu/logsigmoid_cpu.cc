@@ -49,4 +49,3 @@ infiniStatus_t Descriptor::calculate(
     return INFINI_STATUS_SUCCESS;
 }
 } // namespace op::logsigmoid::cpu
-

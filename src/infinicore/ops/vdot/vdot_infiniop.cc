@@ -50,5 +50,3 @@ static bool registered = []() {
 }();
 
 } // namespace infinicore::op::vdot_impl::infiniop
-
-

@@ -32,4 +32,3 @@ void logsigmoid_(Tensor output, Tensor input) {
     LogSigmoid::execute(output, input);
 }
 } // namespace infinicore::op
-

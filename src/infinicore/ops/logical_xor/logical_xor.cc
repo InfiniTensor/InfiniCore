@@ -25,4 +25,3 @@ void logical_xor_(Tensor c, Tensor a, Tensor b) {
     LogicalXor::execute(c, a, b);
 }
 } // namespace infinicore::op
-

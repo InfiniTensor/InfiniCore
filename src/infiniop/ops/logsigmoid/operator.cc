@@ -12,12 +12,12 @@ __C infiniStatus_t infiniopCreateLogSigmoidDescriptor(
     infiniopTensorDescriptor_t y_desc,
     infiniopTensorDescriptor_t x_desc) {
 
-#define CREATE(CASE, NAMESPACE)                                                    \
-    case CASE:                                                                     \
-        return op::logsigmoid::NAMESPACE::Descriptor::create(                        \
-            handle,                                                                \
+#define CREATE(CASE, NAMESPACE)                                                   \
+    case CASE:                                                                    \
+        return op::logsigmoid::NAMESPACE::Descriptor::create(                     \
+            handle,                                                               \
             reinterpret_cast<op::logsigmoid::NAMESPACE::Descriptor **>(desc_ptr), \
-            y_desc,                                                                \
+            y_desc,                                                               \
             {x_desc})
 
     switch (handle->device) {
@@ -35,9 +35,9 @@ __C infiniStatus_t infiniopCreateLogSigmoidDescriptor(
 
 __C infiniStatus_t infiniopGetLogSigmoidWorkspaceSize(infiniopLogSigmoidDescriptor_t desc, size_t *size) {
 
-#define GET(CASE, NAMESPACE)                                                                           \
-    case CASE:                                                                                         \
-        *size = reinterpret_cast<op::logsigmoid::NAMESPACE::Descriptor *>(desc)->workspaceSize();     \
+#define GET(CASE, NAMESPACE)                                                                      \
+    case CASE:                                                                                    \
+        *size = reinterpret_cast<op::logsigmoid::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
         return INFINI_STATUS_SUCCESS;
 
     switch (desc->device_type) {
@@ -60,9 +60,9 @@ __C infiniStatus_t infiniopLogSigmoid(
     const void *x,
     void *stream) {
 
-#define CALCULATE(CASE, NAMESPACE)                                                    \
-    case CASE:                                                                        \
-        return reinterpret_cast<const op::logsigmoid::NAMESPACE::Descriptor *>(desc)  \
+#define CALCULATE(CASE, NAMESPACE)                                                   \
+    case CASE:                                                                       \
+        return reinterpret_cast<const op::logsigmoid::NAMESPACE::Descriptor *>(desc) \
             ->calculate(workspace, workspace_size, y, {x}, stream)
 
     switch (desc->device_type) {
@@ -81,8 +81,8 @@ __C infiniStatus_t infiniopLogSigmoid(
 __C infiniStatus_t
 infiniopDestroyLogSigmoidDescriptor(infiniopLogSigmoidDescriptor_t desc) {
 
-#define DELETE(CASE, NAMESPACE)                                                        \
-    case CASE:                                                                         \
+#define DELETE(CASE, NAMESPACE)                                                       \
+    case CASE:                                                                        \
         delete reinterpret_cast<const op::logsigmoid::NAMESPACE::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS;
 
@@ -98,4 +98,3 @@ infiniopDestroyLogSigmoidDescriptor(infiniopLogSigmoidDescriptor_t desc) {
 
 #undef DELETE
 }
-

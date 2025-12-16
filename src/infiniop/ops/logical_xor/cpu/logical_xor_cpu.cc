@@ -113,4 +113,3 @@ infiniStatus_t Descriptor::calculate(
     return INFINI_STATUS_BAD_TENSOR_DTYPE;
 }
 } // namespace op::logical_xor::cpu
-

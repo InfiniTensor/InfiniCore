@@ -50,5 +50,3 @@ static bool registered = []() {
 }();
 
 } // namespace infinicore::op::where_impl::infiniop
-
-

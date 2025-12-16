@@ -88,5 +88,3 @@ infiniStatus_t Descriptor::calculate(
 }
 
 } // namespace op::where::cpu
-
-

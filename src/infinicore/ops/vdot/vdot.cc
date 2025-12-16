@@ -46,5 +46,3 @@ void vdot_(Tensor out, Tensor a, Tensor b) {
 }
 
 } // namespace infinicore::op
-
-

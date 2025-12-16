@@ -31,6 +31,30 @@ __C __export infiniStatus_t infiniopWhere(
 __C __export infiniStatus_t infiniopDestroyWhereDescriptor(
     infiniopWhereDescriptor_t desc);
 
+// where(cond) -> indices tuple
+typedef struct InfiniopDescriptor *infiniopWhereIndicesDescriptor_t;
+
+__C __export infiniStatus_t infiniopCreateWhereIndicesDescriptor(
+    infiniopHandle_t handle,
+    infiniopWhereIndicesDescriptor_t *desc_ptr,
+    infiniopTensorDescriptor_t cond_desc);
+
+__C __export infiniStatus_t infiniopGetWhereIndicesWorkspaceSize(
+    infiniopWhereIndicesDescriptor_t desc,
+    size_t *size);
+
+__C __export infiniStatus_t infiniopWhereIndices(
+    infiniopWhereIndicesDescriptor_t desc,
+    void *workspace,
+    size_t workspace_size,
+    void **outputs,  // NDIM 个输出张量的指针数组
+    const void *cond,
+    void *stream,
+    size_t *num_true);  // 输出：True 元素的数量
+
+__C __export infiniStatus_t infiniopDestroyWhereIndicesDescriptor(
+    infiniopWhereIndicesDescriptor_t desc);
+
 #endif
 
 
