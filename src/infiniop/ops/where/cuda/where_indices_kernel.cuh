@@ -2,7 +2,7 @@
 #define __WHERE_INDICES_KERNEL_CUH__
 
 #include <cstddef>
-#include <cuda_runtime.h>
+// 不在这里包含 cuda_runtime.h，让各个平台的头文件提供必要的定义
 
 namespace op::where::cuda {
 
