@@ -1,3 +1,4 @@
+import infinicore
 from infinicore.lib import _infinicore
 from infinicore.tensor import Tensor
 
