@@ -4,7 +4,6 @@
 #include "../../../devices/moore/moore_handle.h"
 #include "../../../operator.h"
 #include "../../../tensor.h"
-#include "../cuda/kernel.cuh"
 
 namespace op::vdot::moore {
 
