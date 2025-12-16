@@ -76,9 +76,13 @@ infiniStatus_t IndicesDescriptor::calculate(void *workspace,
     // 复制 shape 和 strides 到设备（用于 markTrueElements）
     size_t *d_shape;
     ptrdiff_t *d_strides;
-    CHECK_METAX(hcMallocAsync(&d_shape, sizeof(size_t) * _ndim, hc_stream));
+    void *d_shape_void;
+    void *d_strides_void;
+    CHECK_METAX(hcMallocAsync(&d_shape_void, sizeof(size_t) * _ndim, hc_stream));
     CHECK_METAX(
-        hcMallocAsync(&d_strides, sizeof(ptrdiff_t) * _ndim, hc_stream));
+        hcMallocAsync(&d_strides_void, sizeof(ptrdiff_t) * _ndim, hc_stream));
+    d_shape = reinterpret_cast<size_t *>(d_shape_void);
+    d_strides = reinterpret_cast<ptrdiff_t *>(d_strides_void);
     CHECK_METAX(hcMemcpyAsync(d_shape, _shape, sizeof(size_t) * _ndim,
                                hcMemcpyHostToDevice, hc_stream));
     CHECK_METAX(hcMemcpyAsync(d_strides, _strides, sizeof(ptrdiff_t) * _ndim,
@@ -113,8 +117,10 @@ infiniStatus_t IndicesDescriptor::calculate(void *workspace,
 
     // 复制 output_ptrs 到设备
     int64_t **d_output_ptrs;
+    void *d_output_ptrs_void;
     CHECK_METAX(
-        hcMallocAsync(&d_output_ptrs, sizeof(int64_t *) * _ndim, hc_stream));
+        hcMallocAsync(&d_output_ptrs_void, sizeof(int64_t *) * _ndim, hc_stream));
+    d_output_ptrs = reinterpret_cast<int64_t **>(d_output_ptrs_void);
     CHECK_METAX(hcMemcpyAsync(d_output_ptrs, output_ptrs,
                                sizeof(int64_t *) * _ndim, hcMemcpyHostToDevice,
                                hc_stream));
@@ -125,9 +131,9 @@ infiniStatus_t IndicesDescriptor::calculate(void *workspace,
             d_output_ptrs, flags, cond_ptr, d_shape, d_strides, _numel, _ndim);
 
     // 清理
-    CHECK_METAX(hcFreeAsync(d_shape, hc_stream));
-    CHECK_METAX(hcFreeAsync(d_strides, hc_stream));
-    CHECK_METAX(hcFreeAsync(d_output_ptrs, hc_stream));
+    CHECK_METAX(hcFreeAsync(d_shape_void, hc_stream));
+    CHECK_METAX(hcFreeAsync(d_strides_void, hc_stream));
+    CHECK_METAX(hcFreeAsync(d_output_ptrs_void, hc_stream));
     delete[] output_ptrs;
 
     return INFINI_STATUS_SUCCESS;
