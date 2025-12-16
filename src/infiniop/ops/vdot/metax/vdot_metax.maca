@@ -1,7 +1,7 @@
-#include "../../../devices/metax/metax_handle.h"
-#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
+#include "../../../devices/metax/metax_common.h"
 #include "vdot_metax.h"
-#include <cuda_runtime.h>
+#include "../../../devices/metax/metax_kernel_common.h"
+#include "../cuda/kernel.cuh"
 
 namespace op::vdot::metax {
 
@@ -48,7 +48,7 @@ infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size,
                                      void *out, const void *a, const void *b,
                                      void *stream) const {
 
-    auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
+    auto hc_stream = reinterpret_cast<hcStream_t>(stream);
     constexpr unsigned int BLOCK_SIZE = 256;
 
     switch (_in_dtype) {
@@ -57,9 +57,9 @@ infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size,
         const float *a_f = reinterpret_cast<const float *>(a);
         const float *b_f = reinterpret_cast<const float *>(b);
         op::vdot::cuda::vdotKernel<BLOCK_SIZE, float, float>
-            <<<1, BLOCK_SIZE, 0, cuda_stream>>>(out_f, a_f, b_f, _length, _a_stride,
+            <<<1, BLOCK_SIZE, 0, hc_stream>>>(out_f, a_f, b_f, _length, _a_stride,
                                                 _b_stride);
-        CHECK_CUDA(cudaGetLastError());
+        CHECK_METAX(hcGetLastError());
         break;
     }
     case INFINI_DTYPE_F64: {
@@ -67,9 +67,9 @@ infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size,
         const double *a_d = reinterpret_cast<const double *>(a);
         const double *b_d = reinterpret_cast<const double *>(b);
         op::vdot::cuda::vdotKernel<BLOCK_SIZE, double, double>
-            <<<1, BLOCK_SIZE, 0, cuda_stream>>>(out_d, a_d, b_d, _length, _a_stride,
+            <<<1, BLOCK_SIZE, 0, hc_stream>>>(out_d, a_d, b_d, _length, _a_stride,
                                                 _b_stride);
-        CHECK_CUDA(cudaGetLastError());
+        CHECK_METAX(hcGetLastError());
         break;
     }
     case INFINI_DTYPE_F16: {
@@ -82,16 +82,16 @@ infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size,
             const __half *a_h = reinterpret_cast<const __half *>(a);
             const __half *b_h = reinterpret_cast<const __half *>(b);
             op::vdot::cuda::vdotKernel<BLOCK_SIZE, __half, float>
-                <<<1, BLOCK_SIZE, 0, cuda_stream>>>(tmp_out, a_h, b_h, _length,
+                <<<1, BLOCK_SIZE, 0, hc_stream>>>(tmp_out, a_h, b_h, _length,
                                                     _a_stride, _b_stride);
-            CHECK_CUDA(cudaGetLastError());
+            CHECK_METAX(hcGetLastError());
             float result_f;
-            CHECK_CUDA(cudaMemcpyAsync(&result_f, tmp_out, sizeof(float),
-                                       cudaMemcpyDeviceToHost, cuda_stream));
-            CHECK_CUDA(cudaStreamSynchronize(cuda_stream));
+            CHECK_METAX(hcMemcpyAsync(&result_f, tmp_out, sizeof(float),
+                                       hcMemcpyDeviceToHost, hc_stream));
+            CHECK_METAX(hcStreamSynchronize(hc_stream));
             __half h_result = __float2half(result_f);
-            CHECK_CUDA(cudaMemcpyAsync(out, &h_result, sizeof(__half),
-                                       cudaMemcpyHostToDevice, cuda_stream));
+            CHECK_METAX(hcMemcpyAsync(out, &h_result, sizeof(__half),
+                                       hcMemcpyHostToDevice, hc_stream));
         }
         break;
     }
@@ -102,19 +102,19 @@ infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size,
         }
         float *tmp_out = reinterpret_cast<float *>(workspace);
         {
-            const __nv_bfloat16 *a_bf = reinterpret_cast<const __nv_bfloat16 *>(a);
-            const __nv_bfloat16 *b_bf = reinterpret_cast<const __nv_bfloat16 *>(b);
-            op::vdot::cuda::vdotKernel<BLOCK_SIZE, __nv_bfloat16, float>
-                <<<1, BLOCK_SIZE, 0, cuda_stream>>>(tmp_out, a_bf, b_bf, _length,
+            const __hpcc_bfloat16 *a_bf = reinterpret_cast<const __hpcc_bfloat16 *>(a);
+            const __hpcc_bfloat16 *b_bf = reinterpret_cast<const __hpcc_bfloat16 *>(b);
+            op::vdot::cuda::vdotKernel<BLOCK_SIZE, __hpcc_bfloat16, float>
+                <<<1, BLOCK_SIZE, 0, hc_stream>>>(tmp_out, a_bf, b_bf, _length,
                                                     _a_stride, _b_stride);
-            CHECK_CUDA(cudaGetLastError());
+            CHECK_METAX(hcGetLastError());
             float result_f;
-            CHECK_CUDA(cudaMemcpyAsync(&result_f, tmp_out, sizeof(float),
-                                       cudaMemcpyDeviceToHost, cuda_stream));
-            CHECK_CUDA(cudaStreamSynchronize(cuda_stream));
-            __nv_bfloat16 bf_result = __float2bfloat16(result_f);
-            CHECK_CUDA(cudaMemcpyAsync(out, &bf_result, sizeof(__nv_bfloat16),
-                                       cudaMemcpyHostToDevice, cuda_stream));
+            CHECK_METAX(hcMemcpyAsync(&result_f, tmp_out, sizeof(float),
+                                       hcMemcpyDeviceToHost, hc_stream));
+            CHECK_METAX(hcStreamSynchronize(hc_stream));
+            __hpcc_bfloat16 bf_result = __float2bfloat16(result_f);
+            CHECK_METAX(hcMemcpyAsync(out, &bf_result, sizeof(__hpcc_bfloat16),
+                                       hcMemcpyHostToDevice, hc_stream));
         }
         break;
     }
@@ -126,3 +126,4 @@ infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size,
 }
 
 } // namespace op::vdot::metax
+

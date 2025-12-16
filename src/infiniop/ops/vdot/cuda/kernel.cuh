@@ -1,8 +1,8 @@
 #ifndef __VDOT_CUDA_KERNEL_CUH__
 #define __VDOT_CUDA_KERNEL_CUH__
 
-#include <cuda_runtime.h>
 #include <cstddef>
+// 不在这里包含 cuda_runtime.h，让各个平台的头文件提供必要的定义
 
 namespace op::vdot::cuda {
 
