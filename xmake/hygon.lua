@@ -79,6 +79,11 @@ target("infiniop-hygon")
     add_files("../src/infiniop/ops/layer_norm/nvidia/*.cu")
     add_files("../src/infiniop/ops/relu/nvidia/*.cu")
     add_files("../src/infiniop/ops/softmax/nvidia/*.cu")
+    add_files("../src/infiniop/ops/sigmoid/nvidia/*.cu")
+    add_files("../src/infiniop/ops/gelu/nvidia/*.cu")
+    add_files("../src/infiniop/ops/tanh/nvidia/*.cu")
+    add_files("../src/infiniop/ops/quickgelu/nvidia/*.cu")
+    add_files("../src/infiniop/ops/gelutanh/nvidia/*.cu")
 
     if has_config("ninetoothed") then
         add_files("../build/ninetoothed/*.c", {cxflags = {"-Wno-return-type"}})

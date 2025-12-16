@@ -488,6 +488,159 @@ def softmax_(lib):
         infiniopOperatorDescriptor_t,
     ]
 
+@OpRegister.operator
+def sigmoid_(lib):
+    lib.infiniopCreateSigmoidDescriptor.restype = c_int32
+    lib.infiniopCreateSigmoidDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+    lib.infiniopGetSigmoidWorkspaceSize.restype = c_int32
+    lib.infiniopGetSigmoidWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopSigmoid.restype = c_int32
+    lib.infiniopSigmoid.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroySigmoidDescriptor.restype = c_int32
+    lib.infiniopDestroySigmoidDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+@OpRegister.operator
+def gelu_(lib):
+    lib.infiniopCreateGeluDescriptor.restype = c_int32
+    lib.infiniopCreateGeluDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetGeluWorkspaceSize.restype = c_int32
+    lib.infiniopGetGeluWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopGelu.restype = c_int32
+    lib.infiniopGelu.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyGeluDescriptor.restype = c_int32
+    lib.infiniopDestroyGeluDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+@OpRegister.operator
+def tanh_(lib):
+    lib.infiniopCreateTanhDescriptor.restype = c_int32
+    lib.infiniopCreateTanhDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetTanhWorkspaceSize.restype = c_int32
+    lib.infiniopGetTanhWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopTanh.restype = c_int32
+    lib.infiniopTanh.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyTanhDescriptor.restype = c_int32
+    lib.infiniopDestroyTanhDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+@OpRegister.operator
+def quickgelu_(lib):
+    lib.infiniopCreateQuickGeluDescriptor.restype = c_int32
+    lib.infiniopCreateQuickGeluDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetQuickGeluWorkspaceSize.restype = c_int32
+    lib.infiniopGetQuickGeluWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopQuickGelu.restype = c_int32
+    lib.infiniopQuickGelu.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyQuickGeluDescriptor.restype = c_int32
+    lib.infiniopDestroyQuickGeluDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+@OpRegister.operator
+def gelutanh_(lib):
+    lib.infiniopCreateGeluTanhDescriptor.restype = c_int32
+    lib.infiniopCreateGeluTanhDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetGeluTanhWorkspaceSize.restype = c_int32
+    lib.infiniopGetGeluTanhWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopGeluTanh.restype = c_int32
+    lib.infiniopGeluTanh.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyGeluTanhDescriptor.restype = c_int32
+    lib.infiniopDestroyGeluTanhDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
 
 @OpRegister.operator
 def swiglu_(lib):

@@ -23,5 +23,10 @@
 #include "infiniop/ops/topkrouter.h"
 #include "infiniop/tensor_descriptor.h"
 #include "infiniop/ops/softmax.h"
+#include "infiniop/ops/sigmoid.h"
+#include "infiniop/ops/gelu.h"
+#include "infiniop/ops/tanh.h"
+#include "infiniop/ops/quickgelu.h"
+#include "infiniop/ops/gelutanh.h"
 
 #endif // __INFINIOP_API_H__
