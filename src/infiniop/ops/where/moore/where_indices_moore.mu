@@ -1,9 +1,8 @@
-#include "../../../devices/moore/moore_handle.h"
-#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
-#include "../cuda/where_indices_kernel.cuh"
+#include "../../../devices/moore/moore_common.h"
 #include "where_indices_moore.h"
+#include "../../../devices/moore/moore_kernel_common.h"
+#include "../cuda/where_indices_kernel.cuh"
 #include <cub/device/device_scan.cuh>
-#include <cuda_runtime.h>
 
 namespace op::where::moore {
 
@@ -33,7 +32,7 @@ size_t IndicesDescriptor::workspaceSize() const {
     // CUB scan workspace
     size_t scan_workspace = 0;
     int64_t *dummy = nullptr;
-    CHECK_CUDA(inclusiveSum<int64_t>(
+    CHECK_MOORE(inclusiveSum<int64_t>(
         nullptr, scan_workspace,
         dummy, n,
         nullptr));
@@ -78,7 +77,7 @@ infiniStatus_t IndicesDescriptor::calculate(
     void *stream,
     size_t *num_true) const {
 
-    auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
+    auto musa_stream = reinterpret_cast<musaStream_t>(stream);
     const bool *cond_ptr = reinterpret_cast<const bool *>(cond);
 
     // 分配 workspace 中的内存
@@ -90,35 +89,34 @@ infiniStatus_t IndicesDescriptor::calculate(
     // 复制 shape 和 strides 到设备（用于 markTrueElements）
     size_t *d_shape;
     ptrdiff_t *d_strides;
-    CHECK_CUDA(cudaMallocAsync(&d_shape, sizeof(size_t) * _ndim, cuda_stream));
-    CHECK_CUDA(cudaMallocAsync(&d_strides, sizeof(ptrdiff_t) * _ndim, cuda_stream));
-    CHECK_CUDA(cudaMemcpyAsync(
+    CHECK_MOORE(musaMallocAsync(&d_shape, sizeof(size_t) * _ndim, musa_stream));
+    CHECK_MOORE(musaMallocAsync(&d_strides, sizeof(ptrdiff_t) * _ndim, musa_stream));
+    CHECK_MOORE(musaMemcpyAsync(
         d_shape, _shape, sizeof(size_t) * _ndim,
-        cudaMemcpyHostToDevice, cuda_stream));
-    CHECK_CUDA(cudaMemcpyAsync(
+        musaMemcpyHostToDevice, musa_stream));
+    CHECK_MOORE(musaMemcpyAsync(
         d_strides, _strides, sizeof(ptrdiff_t) * _ndim,
-        cudaMemcpyHostToDevice, cuda_stream));
+        musaMemcpyHostToDevice, musa_stream));
 
     // 阶段1: 标记 True 元素
     constexpr int BLOCK_SIZE = 256;
     int grid_size = static_cast<int>((_numel + BLOCK_SIZE - 1) / BLOCK_SIZE);
-    op::where::cuda::markTrueElements<int64_t><<<grid_size, BLOCK_SIZE, 0, cuda_stream>>>(
+    op::where::cuda::markTrueElements<int64_t><<<grid_size, BLOCK_SIZE, 0, musa_stream>>>(
         flags, cond_ptr, d_shape, d_strides, _numel, _ndim);
-    CHECK_CUDA(cudaGetLastError());
 
     // 阶段2: 计算前缀和（inclusive scan）
     size_t temp_workspace_size = scan_workspace_size;
-    CHECK_CUDA(inclusiveSum<int64_t>(
+    CHECK_MOORE(inclusiveSum<int64_t>(
         scan_workspace, temp_workspace_size,
         flags, static_cast<int>(_numel),
-        cuda_stream));
+        musa_stream));
 
     // 获取 True 元素的总数
     int64_t num_true_val = 0;
-    CHECK_CUDA(cudaMemcpyAsync(
+    CHECK_MOORE(musaMemcpyAsync(
         &num_true_val, flags + _numel - 1, sizeof(int64_t),
-        cudaMemcpyDeviceToHost, cuda_stream));
-    CHECK_CUDA(cudaStreamSynchronize(cuda_stream));
+        musaMemcpyDeviceToHost, musa_stream));
+    CHECK_MOORE(musaStreamSynchronize(musa_stream));
     *num_true = static_cast<size_t>(num_true_val);
 
     // 阶段3: 收集每个维度的索引
@@ -131,23 +129,23 @@ infiniStatus_t IndicesDescriptor::calculate(
 
     // 复制 output_ptrs 到设备
     int64_t **d_output_ptrs;
-    CHECK_CUDA(cudaMallocAsync(&d_output_ptrs, sizeof(int64_t *) * _ndim, cuda_stream));
-    CHECK_CUDA(cudaMemcpyAsync(
+    CHECK_MOORE(musaMallocAsync(&d_output_ptrs, sizeof(int64_t *) * _ndim, musa_stream));
+    CHECK_MOORE(musaMemcpyAsync(
         d_output_ptrs, output_ptrs, sizeof(int64_t *) * _ndim,
-        cudaMemcpyHostToDevice, cuda_stream));
+        musaMemcpyHostToDevice, musa_stream));
 
     // 启动收集索引的 kernel
-    op::where::cuda::collectIndices<int64_t><<<grid_size, BLOCK_SIZE, 0, cuda_stream>>>(
+    op::where::cuda::collectIndices<int64_t><<<grid_size, BLOCK_SIZE, 0, musa_stream>>>(
         d_output_ptrs, flags, cond_ptr, d_shape, d_strides, _numel, _ndim);
-    CHECK_CUDA(cudaGetLastError());
 
     // 清理
-    CHECK_CUDA(cudaFreeAsync(d_shape, cuda_stream));
-    CHECK_CUDA(cudaFreeAsync(d_strides, cuda_stream));
-    CHECK_CUDA(cudaFreeAsync(d_output_ptrs, cuda_stream));
+    CHECK_MOORE(musaFreeAsync(d_shape, musa_stream));
+    CHECK_MOORE(musaFreeAsync(d_strides, musa_stream));
+    CHECK_MOORE(musaFreeAsync(d_output_ptrs, musa_stream));
     delete[] output_ptrs;
 
     return INFINI_STATUS_SUCCESS;
 }
 
 } // namespace op::where::moore
+
