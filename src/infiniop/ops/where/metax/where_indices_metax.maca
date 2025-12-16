@@ -130,6 +130,9 @@ infiniStatus_t IndicesDescriptor::calculate(void *workspace,
         <<<grid_size, BLOCK_SIZE, 0, hc_stream>>>(
             d_output_ptrs, flags, cond_ptr, d_shape, d_strides, _numel, _ndim);
 
+    // 同步流，确保所有异步操作（包括 collectIndices kernel）完成
+    CHECK_METAX(hcStreamSynchronize(hc_stream));
+
     // 清理
     CHECK_METAX(hcFreeAsync(d_shape_void, hc_stream));
     CHECK_METAX(hcFreeAsync(d_strides_void, hc_stream));

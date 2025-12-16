@@ -144,6 +144,9 @@ infiniStatus_t IndicesDescriptor::calculate(
         d_output_ptrs, flags, cond_ptr, d_shape, d_strides, _numel, _ndim);
     CHECK_CUDA(cudaGetLastError());
 
+    // 同步流，确保所有异步操作（包括 collectIndices kernel）完成
+    CHECK_CUDA(cudaStreamSynchronize(cuda_stream));
+
     // 清理
     CHECK_CUDA(cudaFreeAsync(d_shape, cuda_stream));
     CHECK_CUDA(cudaFreeAsync(d_strides, cuda_stream));

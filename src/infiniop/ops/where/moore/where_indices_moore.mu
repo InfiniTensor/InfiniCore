@@ -138,6 +138,9 @@ infiniStatus_t IndicesDescriptor::calculate(
     op::where::cuda::collectIndices<int64_t><<<grid_size, BLOCK_SIZE, 0, musa_stream>>>(
         d_output_ptrs, flags, cond_ptr, d_shape, d_strides, _numel, _ndim);
 
+    // 同步流，确保所有异步操作（包括 collectIndices kernel）完成
+    CHECK_MOORE(musaStreamSynchronize(musa_stream));
+
     // 清理
     CHECK_MOORE(musaFree(d_shape));
     CHECK_MOORE(musaFree(d_strides));

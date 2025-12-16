@@ -231,7 +231,10 @@ __C infiniStatus_t infiniopDestroyWhereIndicesDescriptor(infiniopWhereIndicesDes
 
 #define DELETE_INDICES(CASE, NAMESPACE)                                                 \
     case CASE:                                                                          \
-        delete reinterpret_cast<const op::where::NAMESPACE::IndicesDescriptor *>(desc); \
+        if (desc != nullptr) {                                                         \
+            delete reinterpret_cast<op::where::NAMESPACE::IndicesDescriptor *>(       \
+                const_cast<void *>(reinterpret_cast<const void *>(desc)));             \
+        }                                                                               \
         return INFINI_STATUS_SUCCESS;
 
     switch (desc->device_type) {
