@@ -89,8 +89,8 @@ infiniStatus_t IndicesDescriptor::calculate(
     // 复制 shape 和 strides 到设备（用于 markTrueElements）
     size_t *d_shape;
     ptrdiff_t *d_strides;
-    CHECK_MOORE(musaMallocAsync(&d_shape, sizeof(size_t) * _ndim, musa_stream));
-    CHECK_MOORE(musaMallocAsync(&d_strides, sizeof(ptrdiff_t) * _ndim, musa_stream));
+    CHECK_MOORE(musaMalloc(&d_shape, sizeof(size_t) * _ndim));
+    CHECK_MOORE(musaMalloc(&d_strides, sizeof(ptrdiff_t) * _ndim));
     CHECK_MOORE(musaMemcpyAsync(
         d_shape, _shape, sizeof(size_t) * _ndim,
         musaMemcpyHostToDevice, musa_stream));
@@ -129,7 +129,7 @@ infiniStatus_t IndicesDescriptor::calculate(
 
     // 复制 output_ptrs 到设备
     int64_t **d_output_ptrs;
-    CHECK_MOORE(musaMallocAsync(&d_output_ptrs, sizeof(int64_t *) * _ndim, musa_stream));
+    CHECK_MOORE(musaMalloc(&d_output_ptrs, sizeof(int64_t *) * _ndim));
     CHECK_MOORE(musaMemcpyAsync(
         d_output_ptrs, output_ptrs, sizeof(int64_t *) * _ndim,
         musaMemcpyHostToDevice, musa_stream));
@@ -139,9 +139,9 @@ infiniStatus_t IndicesDescriptor::calculate(
         d_output_ptrs, flags, cond_ptr, d_shape, d_strides, _numel, _ndim);
 
     // 清理
-    CHECK_MOORE(musaFreeAsync(d_shape, musa_stream));
-    CHECK_MOORE(musaFreeAsync(d_strides, musa_stream));
-    CHECK_MOORE(musaFreeAsync(d_output_ptrs, musa_stream));
+    CHECK_MOORE(musaFree(d_shape));
+    CHECK_MOORE(musaFree(d_strides));
+    CHECK_MOORE(musaFree(d_output_ptrs));
     delete[] output_ptrs;
 
     return INFINI_STATUS_SUCCESS;
