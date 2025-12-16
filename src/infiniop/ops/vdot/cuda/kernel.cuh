@@ -1,7 +1,8 @@
 #ifndef __VDOT_CUDA_KERNEL_CUH__
 #define __VDOT_CUDA_KERNEL_CUH__
 
-#include <cub/block/block_reduce.cuh>
+#include <cuda_runtime.h>
+#include <cstddef>
 
 namespace op::vdot::cuda {
 
@@ -10,24 +11,30 @@ __global__ void vdotKernel(Tcompute *out, const Tdata *a, const Tdata *b,
                            size_t length, ptrdiff_t a_stride,
                            ptrdiff_t b_stride) {
 
-    Tcompute dot = 0;
-
-    // Each thread computes its partial dot product
+    // 每个线程计算部分点积
+    Tcompute local_sum = 0;
     for (size_t i = threadIdx.x; i < length; i += BLOCK_SIZE) {
-        Tcompute a_val = Tcompute(a[i * a_stride]);
-        Tcompute b_val = Tcompute(b[i * b_stride]);
-        dot += a_val * b_val;
+        Tcompute a_val = static_cast<Tcompute>(a[i * a_stride]);
+        Tcompute b_val = static_cast<Tcompute>(b[i * b_stride]);
+        local_sum += a_val * b_val;
     }
 
-    // Use CUB block-level reduction
-    using BlockReduce = cub::BlockReduce<Tcompute, BLOCK_SIZE>;
-    __shared__ typename BlockReduce::TempStorage temp_storage;
+    // 使用共享内存进行 block 内归约（不依赖 CUB）
+    __shared__ Tcompute sdata[BLOCK_SIZE];
+    sdata[threadIdx.x] = local_sum;
+    __syncthreads();
 
-    Tcompute block_dot = BlockReduce(temp_storage).Sum(dot);
+    // 标准的二分归约算法
+    for (unsigned int s = BLOCK_SIZE / 2; s > 0; s >>= 1) {
+        if (threadIdx.x < s) {
+            sdata[threadIdx.x] += sdata[threadIdx.x + s];
+        }
+        __syncthreads();
+    }
 
-    // Thread 0 writes the result
+    // Thread 0 写入结果
     if (threadIdx.x == 0) {
-        *out = block_dot;
+        *out = sdata[0];
     }
 }
 

@@ -1,7 +1,6 @@
 #include "../../../devices/moore/moore_handle.h"
 #include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 #include "vdot_moore.h"
-#include <cub/block/block_reduce.cuh>
 #include <cuda_runtime.h>
 
 namespace op::vdot::moore {

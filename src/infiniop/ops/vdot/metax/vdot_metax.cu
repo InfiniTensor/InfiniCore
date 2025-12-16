@@ -1,7 +1,6 @@
 #include "../../../devices/metax/metax_handle.h"
 #include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 #include "vdot_metax.h"
-#include <cub/block/block_reduce.cuh>
 #include <cuda_runtime.h>
 
 namespace op::vdot::metax {
