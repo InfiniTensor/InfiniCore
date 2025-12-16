@@ -117,10 +117,10 @@ class BenchmarkUtils:
         if infinicore.use_ntops:
             import triton
 
-            cache = triton.runtime.driver.active.get_empty_cache_for_benchmark()
+            # cache = triton.runtime.driver.active.get_empty_cache_for_benchmark()
 
-            def _clear_cache():
-                triton.runtime.driver.active.clear_cache(cache)
+            # def _clear_cache():
+            #     triton.runtime.driver.active.clear_cache(cache)
 
         # Create pairs of DeviceEvents for each iteration
         start_events = [
