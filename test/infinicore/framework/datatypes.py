@@ -68,6 +68,7 @@ class TestTiming:
     torch_device: float = 0.0
     infini_host: float = 0.0
     infini_device: float = 0.0
+    operators_tested: int = 0
 
 @dataclass
 class SingleTestResult:

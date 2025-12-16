@@ -256,24 +256,81 @@ class TestReporter:
 
     @staticmethod
     def print_summary(results, cumulative_timing, total_expected=0):
+        """Prints the final comprehensive test summary and statistics, ensuring consistency with original output."""
         print(f"\n{'='*80}\nCUMULATIVE TEST SUMMARY\n{'='*80}")
         
         passed = [r for r in results if r.return_code == 0]
         failed = [r for r in results if r.return_code == -1]
-        
-        print(f"Total: {len(results)} | Passed: {len(passed)} | Failed: {len(failed)}")
-        
+        skipped = [r for r in results if r.return_code == -2]
+        partial = [r for r in results if r.return_code == -3]
+
+        total = len(results)
+        print(f"Total tests run: {total}")
+        print(f"Passed: {len(passed)}")
+        print(f"Failed: {len(failed)}")
+        if skipped: print(f"Skipped: {len(skipped)}")
+        if partial: print(f"Partial: {len(partial)}")
+
+        # 1. Print Benchmark data
         if cumulative_timing:
-            print(f"{'-'*40}\nBENCHMARK SUMMARY:")
-            print(f"  PyTorch Host:    {cumulative_timing.torch_host:.3f} ms")
-            print(f"  InfiniCore Host: {cumulative_timing.infini_host:.3f} ms")
-            print(f"{'-'*40}")
+            # Assuming bench_mode is "both" for simplicity in this file, or passed via a config
+            # We call the modified _print_timing to handle the display logic.
+            TestReporter._print_timing(cumulative_timing, bench_mode="both")
 
-        if failed:
-            print(f"\n❌ FAILED ({len(failed)}):")
-            for r in failed: print(f"  {r.name}")
+        # 2. Restore PASSED OPERATORS list
+        if passed:
+            print(f"\n✅ PASSED OPERATORS ({len(passed)}):")
+            # Print operators, grouped (assuming 10 per line as per the old pattern)
+            operators = [r.name for r in passed]
+            for i in range(0, len(operators), 10):
+                print("  " + ", ".join(operators[i : i + 10]))
+        else:
+            print(f"\n✅ PASSED OPERATORS: None")
 
+        # 3. Restore Success Rate
+        if total > 0:
+            # Calculate success rate based on actually executed tests (excluding skipped)
+            executed_tests = total - len(skipped)
+            if executed_tests > 0:
+                success_rate = len(passed) / executed_tests * 100
+                print(f"\nSuccess rate: {success_rate:.1f}%")
+
+        if not failed:
+            print(f"\n🎉 All tests passed!")
+        else:
+            print(f"\n❌ {len(failed)} tests failed")
+            
         return len(failed) == 0
+
+    @staticmethod
+    def _print_timing(t, bench_mode="both"):
+        """Prints detailed timing breakdown for host and device, based on bench_mode."""
+        
+        print(f"{'-'*40}")
+        
+        # Restore Operators Tested field using the new dataclass field
+        if hasattr(t, 'operators_tested'):
+            print(f"BENCHMARK SUMMARY:")
+            print(f"  Operators Tested: {t.operators_tested}")
+        
+        # Restore detailed Host/Device distinction
+        if bench_mode in ["host", "both"]:
+            print(
+                f"  PyTorch Host Total Time:     {t.torch_host:12.3f} ms"
+            )
+            print(
+                f"  InfiniCore Host Total Time:  {t.infini_host:12.3f} ms"
+            )
+        
+        if bench_mode in ["device", "both"]:
+            print(
+                f"  PyTorch Device Total Time:   {t.torch_device:12.3f} ms"
+            )
+            print(
+                f"  InfiniCore Device Total Time: {t.infini_device:12.3f} ms"
+            )
+        
+        print(f"{'-'*40}")
 
     # --- Internal Helpers ---
     @staticmethod
