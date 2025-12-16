@@ -59,7 +59,6 @@ infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size,
         op::vdot::cuda::vdotKernel<BLOCK_SIZE, float, float>
             <<<1, BLOCK_SIZE, 0, musa_stream>>>(out_f, a_f, b_f, _length, _a_stride,
                                                 _b_stride);
-        CHECK_MOORE(musaGetLastError());
         break;
     }
     case INFINI_DTYPE_F64: {
@@ -69,7 +68,6 @@ infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size,
         op::vdot::cuda::vdotKernel<BLOCK_SIZE, double, double>
             <<<1, BLOCK_SIZE, 0, musa_stream>>>(out_d, a_d, b_d, _length, _a_stride,
                                                 _b_stride);
-        CHECK_MOORE(musaGetLastError());
         break;
     }
     case INFINI_DTYPE_F16: {
@@ -84,7 +82,6 @@ infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size,
             op::vdot::cuda::vdotKernel<BLOCK_SIZE, __half, float>
                 <<<1, BLOCK_SIZE, 0, musa_stream>>>(tmp_out, a_h, b_h, _length,
                                                     _a_stride, _b_stride);
-            CHECK_MOORE(musaGetLastError());
             float result_f;
             CHECK_MOORE(musaMemcpyAsync(&result_f, tmp_out, sizeof(float),
                                        musaMemcpyDeviceToHost, musa_stream));
@@ -107,7 +104,6 @@ infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size,
             op::vdot::cuda::vdotKernel<BLOCK_SIZE, __mt_bfloat16, float>
                 <<<1, BLOCK_SIZE, 0, musa_stream>>>(tmp_out, a_bf, b_bf, _length,
                                                     _a_stride, _b_stride);
-            CHECK_MOORE(musaGetLastError());
             float result_f;
             CHECK_MOORE(musaMemcpyAsync(&result_f, tmp_out, sizeof(float),
                                        musaMemcpyDeviceToHost, musa_stream));
