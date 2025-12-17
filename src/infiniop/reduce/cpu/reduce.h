@@ -66,6 +66,20 @@ T sumSquared(const T *data, size_t len, ptrdiff_t stride = 1) {
 float sumSquared(const fp16_t *data, size_t len, ptrdiff_t stride = 1);
 float sumSquared(const bf16_t *data, size_t len, ptrdiff_t stride = 1);
 
+template <typename T, typename = std::enable_if_t<ReduceToSame<T>::value>>
+T sumBinomialSquare(const T *data1, const T *data2, size_t len, ptrdiff_t stride1 = 1, ptrdiff_t stride2 = 1) {
+    T result = 0;
+    for (size_t i = 0; i < len; i++) {
+        T val = data1[i * stride1] + data2[i * stride2];
+        result += val * val;
+    }
+
+    return result;
+}
+
+float sumBinomialSquare(const fp16_t *data1, const fp16_t *data2, size_t len, ptrdiff_t stride1 = 1, ptrdiff_t stride2 = 1);
+float sumBinomialSquare(const bf16_t *data1, const bf16_t *data2, size_t len, ptrdiff_t stride1 = 1, ptrdiff_t stride2 = 1);
+
 } // namespace reduce_op
 
 } // namespace op::common_cpu

@@ -31,6 +31,23 @@ __device__ __forceinline__ Tcompute sumSquared(const Tdata *data_ptr, size_t cou
     return BlockReduce(temp_storage).Sum(ss);
 }
 
+// Sum((x1+x2)^2) on contiguous data of length count
+template <unsigned int BLOCK_SIZE, typename Tdata, typename Tcompute>
+__device__ __forceinline__ Tcompute sumBinomialSquare(const Tdata *data_ptr1, const Tdata *data_ptr2, size_t count) {
+    Tcompute ss = 0;
+
+    // Each thread computes its partial sum
+    for (size_t i = threadIdx.x; i < count; i += BLOCK_SIZE) {
+        ss += Tcompute(data_ptr1[i] + data_ptr2[i]) * Tcompute(data_ptr1[i] + data_ptr2[i]);
+    }
+
+    // Use CUB block-level reduction
+    using BlockReduce = cub::BlockReduce<Tcompute, BLOCK_SIZE>;
+    __shared__ typename BlockReduce::TempStorage temp_storage;
+
+    return BlockReduce(temp_storage).Sum(ss);
+}
+
 // Sum(x) on contiguous data of length count
 template <unsigned int BLOCK_SIZE, typename Tdata, typename Tcompute>
 __device__ __forceinline__ Tcompute sum(const Tdata *data_ptr, size_t count) {
@@ -67,8 +84,7 @@ __device__ __forceinline__ Tdata max(const Tdata *data_ptr, size_t count) {
     __shared__ typename BlockReduce::TempStorage temp_storage;
 
 #ifdef ENABLE_HYGON_API
-    return BlockReduce(temp_storage).Reduce(
-        max_, [](const Tdata &a, const Tdata &b) { return (a > b) ? a : b; }, BLOCK_SIZE);
+    return BlockReduce(temp_storage).Reduce(max_, [](const Tdata &a, const Tdata &b) { return (a > b) ? a : b; }, BLOCK_SIZE);
 #else
 #if CUDART_VERSION >= 12090
     return BlockReduce(temp_storage).Reduce(max_, ::cuda::maximum(), BLOCK_SIZE);

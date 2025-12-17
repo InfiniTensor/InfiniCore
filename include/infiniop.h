@@ -3,6 +3,7 @@
 
 #include "infiniop/handle.h"
 #include "infiniop/ops/add.h"
+#include "infiniop/ops/add_rms_norm.h"
 #include "infiniop/ops/attention.h"
 #include "infiniop/ops/causal_softmax.h"
 #include "infiniop/ops/clip.h"
