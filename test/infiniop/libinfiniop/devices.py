@@ -9,6 +9,7 @@ class InfiniDeviceEnum:
     KUNLUN = 7
     HYGON = 8
     QY = 9
+    OPENCL = 10
 
 
 InfiniDeviceNames = {
@@ -22,6 +23,7 @@ InfiniDeviceNames = {
     InfiniDeviceEnum.KUNLUN: "Kunlun",
     InfiniDeviceEnum.HYGON: "Hygon",
     InfiniDeviceEnum.QY: "QY",
+    InfiniDeviceEnum.OPENCL: "Opencl",
 }
 
 # Mapping that maps InfiniDeviceEnum to torch device string
@@ -36,4 +38,5 @@ torch_device_map = {
     InfiniDeviceEnum.KUNLUN: "cuda",
     InfiniDeviceEnum.HYGON: "cuda",
     InfiniDeviceEnum.QY: "cuda",
+    InfiniDeviceEnum.OPENCL: "cpu",
 }

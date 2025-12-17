@@ -23,6 +23,9 @@
 #ifdef ENABLE_KUNLUN_API
 #include "kunlun/rearrange_kunlun.h"
 #endif
+#ifdef ENABLE_OPENCL_API
+#include "opencl/rearrange_opencl.h"
+#endif
 
 __C infiniStatus_t infiniopCreateRearrangeDescriptor(
     infiniopHandle_t handle,
@@ -69,6 +72,9 @@ __C infiniStatus_t infiniopCreateRearrangeDescriptor(
 #endif
 #ifdef ENABLE_KUNLUN_API
         CREATE(INFINI_DEVICE_KUNLUN, kunlun);
+#endif
+#ifdef ENABLE_OPENCL_API
+        CREATE(INFINI_DEVICE_OPENCL, opencl);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -120,6 +126,9 @@ __C infiniStatus_t infiniopRearrange(
 #ifdef ENABLE_KUNLUN_API
         CALCULATE(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
+#ifdef ENABLE_OPENCL_API
+        CALCULATE(INFINI_DEVICE_OPENCL, opencl);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -167,6 +176,9 @@ __C infiniStatus_t infiniopDestroyRearrangeDescriptor(
 #endif
 #ifdef ENABLE_KUNLUN_API
         DELETE(INFINI_DEVICE_KUNLUN, kunlun);
+#endif
+#ifdef ENABLE_OPENCL_API
+        DELETE(INFINI_DEVICE_OPENCL, opencl);
 #endif
 
     default:
