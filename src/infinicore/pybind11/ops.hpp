@@ -4,9 +4,14 @@
 
 #include "ops/add.hpp"
 #include "ops/attention.hpp"
+#include "ops/avg_pool3d.hpp"
 #include "ops/causal_softmax.hpp"
+#include "ops/dot.hpp"
 #include "ops/embedding.hpp"
+#include "ops/histc.hpp"
 #include "ops/linear.hpp"
+#include "ops/log10.hpp"
+#include "ops/log1p.hpp"
 #include "ops/matmul.hpp"
 #include "ops/mul.hpp"
 #include "ops/random_sample.hpp"
@@ -15,6 +20,7 @@
 #include "ops/rope.hpp"
 #include "ops/silu.hpp"
 #include "ops/swiglu.hpp"
+#include "ops/zeros_.hpp"
 
 namespace py = pybind11;
 
@@ -34,6 +40,12 @@ inline void bind(py::module &m) {
     bind_swiglu(m);
     bind_rope(m);
     bind_embedding(m);
+    bind_histc(m);
+    bind_zeros_(m);
+    bind_log10(m);
+    bind_avg_pool3d(m);
+    bind_dot(m);
+    bind_log1p(m);
 }
 
 } // namespace infinicore::ops
