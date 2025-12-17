@@ -1,3 +1,5 @@
+#include "../../../devices/nvidia/nvidia_common.cuh"
+#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 #include "sum_nvidia.cuh"
 #include "../cuda/kernel.cuh"
 
@@ -14,18 +16,18 @@ namespace op::sum::nvidia {
     infiniStatus_t Descriptor::create(
         infiniopHandle_t handle,
         Descriptor **desc_ptr,
-        infiniopTensorDescriptor_t out_desc,
+        infiniopTensorDescriptor_t output_desc,
         infiniopTensorDescriptor_t input_desc,
-        infiniopTensorDescriptor_t other_desc) {
-    
-        auto result = InnerInfo::create(out_desc, input_desc, other_desc);
+        size_t *dim,
+        size_t dim_size,
+        bool keepdim) {
+        auto result = SumInfo::create(output_desc, input_desc, dim, dim_size, keepdim);
         CHECK_RESULT(result);
         auto info = result.take();
         size_t workspace_size = 0;
-        // out_shape
-        workspace_size += info.out_ndim * sizeof(size_t);
-        // input, other, out strides
-        workspace_size += (info.input_ndim + info.other_ndim + info.out_ndim) * sizeof(ptrdiff_t);
+        // workspace_size += (info.permuted_input_shape.size() + info.output_shape.size()) * sizeof(size_t);
+        // workspace_size += (info.permuted_input_strides.size() + info.output_strides.size()) * sizeof(ptrdiff_t);
+        workspace_size += (input_desc->ndim() + output_desc->ndim()) * (sizeof(size_t) + sizeof(ptrdiff_t));
         *desc_ptr = new Descriptor(
             new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
             info, workspace_size, handle->device, handle->device_id);
@@ -36,41 +38,42 @@ namespace op::sum::nvidia {
     
     template<size_t BLOCK_SIZE, typename T>
     infiniStatus_t launchKernel(
-        const InnerInfo &info,
-        const T *input, const T *other, T *out,
+        const SumInfo &info,
+        T *output, const T *input,
         cudaStream_t stream, void *workspace, size_t workspace_size) {
-    
-        size_t input_ndim = info.input_ndim;
-        size_t other_ndim = info.other_ndim;
-        size_t out_ndim = info.out_ndim;
-        size_t total_elements = info.total_elements;
-        size_t oper_len = info.oper_len;
-    
-        size_t workspace_offset = 0;
+        size_t input_ndim = info.permuted_input_shape.size();
+        size_t output_ndim = info.output_shape.size();
+        size_t input_size = info.input_size;
+        size_t output_size = info.output_size;
+        size_t reduce_num = info.reduce_num;
         unsigned char *workspace_ptr = reinterpret_cast<unsigned char *>(workspace);
+        size_t workspace_offset = 0;
+        size_t *permuted_input_shape_cuda = reinterpret_cast<size_t *>(workspace_ptr + workspace_offset);
+        size_t *output_shape_cuda = permuted_input_shape_cuda + input_ndim;
+        workspace_offset += (input_ndim + output_ndim) * sizeof(size_t);
     
-        size_t *out_shape_cuda = reinterpret_cast<size_t *>(workspace_ptr + workspace_offset);
-        workspace_offset += out_ndim * sizeof(size_t);
+        ptrdiff_t *permuted_input_strides_cuda = reinterpret_cast<ptrdiff_t *>(workspace_ptr + workspace_offset);
+        ptrdiff_t *output_strides_cuda = permuted_input_strides_cuda + input_ndim;
+        workspace_offset += (input_ndim + output_ndim) * sizeof(ptrdiff_t);
     
-        ptrdiff_t *input_strides_cuda = reinterpret_cast<ptrdiff_t *>(workspace_ptr + workspace_offset);
-        ptrdiff_t *other_strides_cuda = input_strides_cuda + input_ndim;
-        ptrdiff_t *out_strides_cuda = other_strides_cuda + other_ndim;
-        workspace_offset += (info.input_ndim + info.other_ndim + info.out_ndim) * sizeof(ptrdiff_t);
+        CHECK_CUDA(cudaMemcpyAsync(permuted_input_shape_cuda,   info.permuted_input_shape.data(),   input_ndim * sizeof(size_t),     cudaMemcpyHostToDevice, stream));
+        CHECK_CUDA(cudaMemcpyAsync(output_shape_cuda,           info.output_shape.data(),           output_ndim * sizeof(size_t),    cudaMemcpyHostToDevice, stream));
+        CHECK_CUDA(cudaMemcpyAsync(permuted_input_strides_cuda, info.permuted_input_strides.data(), input_ndim * sizeof(ptrdiff_t),  cudaMemcpyHostToDevice, stream));
+        CHECK_CUDA(cudaMemcpyAsync(output_strides_cuda,         info.output_strides.data(),         output_ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, stream));
     
-        CHECK_CUDA(cudaMemcpyAsync(out_shape_cuda, info.out_shape.data(), out_ndim * sizeof(size_t), cudaMemcpyHostToDevice, stream));
-        CHECK_CUDA(cudaMemcpyAsync(input_strides_cuda, info.input_strides.data(), input_ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, stream));
-        CHECK_CUDA(cudaMemcpyAsync(other_strides_cuda, info.other_strides.data(), other_ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, stream));
-        CHECK_CUDA(cudaMemcpyAsync(out_strides_cuda, info.out_strides.data(), out_ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, stream));
-    
-        size_t block_size = BLOCK_SIZE;
-        size_t grid_size = (total_elements + BLOCK_SIZE - 1) / BLOCK_SIZE;
-    
-        innerKernel<BLOCK_SIZE, T><<<grid_size, block_size, 0, stream>>>(
-            input, other, out,
-            total_elements, oper_len, out_shape_cuda,
-            input_strides_cuda, other_strides_cuda, out_strides_cuda,
-            input_ndim, other_ndim, out_ndim);
-    
+        if(info.reduce_num == input_size){
+            T zero = T(0);
+            CHECK_CUDA(cudaMemcpyAsync(output, &zero, sizeof(T), cudaMemcpyHostToDevice, stream));
+            size_t grid_size = (input_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+            sumAllKernel<BLOCK_SIZE, T><<<grid_size, BLOCK_SIZE, BLOCK_SIZE*sizeof(T), stream>>>(
+                output, input, input_size, input_ndim, permuted_input_shape_cuda, permuted_input_strides_cuda);
+        } else {
+            // todo one block one reduce_num, now one thread one reduce_num
+            size_t grid_size = (info.output_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+            sumKernel<BLOCK_SIZE, T><<<grid_size, BLOCK_SIZE, 0, stream>>>(
+                output, input, input_ndim, output_ndim, output_size, reduce_num, 
+                permuted_input_shape_cuda, output_shape_cuda, permuted_input_strides_cuda, output_strides_cuda);
+        }
         // CHECK_CUDA(cudaDeviceSynchronize());
     
         return INFINI_STATUS_SUCCESS;
@@ -79,41 +82,43 @@ namespace op::sum::nvidia {
     }
     
     infiniStatus_t Descriptor::calculate(
-        void *workspace, size_t workspace_size,
-        void *out,
+        void *workspace,
+        size_t workspace_size,
+        void *output,
         const void *input,
-        const void *other,
         void *stream_) const {
-    
-        cudaStream_t stream = (cudaStream_t)stream_;
-    #define CALCULATE_INNER(BLOCK_SIZE, T)                          \
-        launchKernel<BLOCK_SIZE, T>(                                \
-            _info,                                                  \
-            (const T *)input, (const T *)other, (T *)out,           \
-            stream, workspace, workspace_size                       \
-        )
-    #define CALCULATE_INNER_WITH_BLOCK_SIZE(BLOCK_SIZE)             \
-        {                                                           \
-            if (_info.dtype == INFINI_DTYPE_BF16)                   \
-                return CALCULATE_INNER(BLOCK_SIZE, __nv_bfloat16);  \
-            else if(_info.dtype == INFINI_DTYPE_F16)                \
-                return CALCULATE_INNER(BLOCK_SIZE, half);           \
-            else if(_info.dtype == INFINI_DTYPE_F32)                \
-                return CALCULATE_INNER(BLOCK_SIZE, float);          \
-            else                                                    \
-                return INFINI_STATUS_BAD_TENSOR_DTYPE;              \
+
+            cudaStream_t stream = (cudaStream_t)stream_;
+            
+            #define CALCULATE_SUM(BLOCK_SIZE, T)                        \
+            launchKernel<BLOCK_SIZE, T>(                                \
+                _info,                                                  \
+                (T *)output,   (const T *)input,                        \
+                stream, workspace, workspace_size                       \
+            )
+
+            #define CALCULATE_SUM_WITH_BLOCK_SIZE(BLOCK_SIZE)           \
+            {                                                           \
+                if (_info.dtype == INFINI_DTYPE_BF16)                   \
+                    return CALCULATE_SUM(BLOCK_SIZE, __nv_bfloat16);    \
+                else if(_info.dtype == INFINI_DTYPE_F16)                \
+                    return CALCULATE_SUM(BLOCK_SIZE, half);             \
+                else if(_info.dtype == INFINI_DTYPE_F32)                \
+                    return CALCULATE_SUM(BLOCK_SIZE, float);            \
+                else                                                    \
+                    return INFINI_STATUS_BAD_TENSOR_DTYPE;              \
+            }
+
+            if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_1024) {
+                CALCULATE_SUM_WITH_BLOCK_SIZE(CUDA_BLOCK_SIZE_1024)
+            } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_512) {
+                CALCULATE_SUM_WITH_BLOCK_SIZE(CUDA_BLOCK_SIZE_512)
+            } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_4096) {
+                CALCULATE_SUM_WITH_BLOCK_SIZE(CUDA_BLOCK_SIZE_4096)
+            } else {
+                return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
+            }
+            return INFINI_STATUS_SUCCESS;
         }
-    
-        if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_1024) {
-            CALCULATE_INNER_WITH_BLOCK_SIZE(CUDA_BLOCK_SIZE_1024)
-        } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_512) {
-            CALCULATE_INNER_WITH_BLOCK_SIZE(CUDA_BLOCK_SIZE_512)
-        } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_4096) {
-            CALCULATE_INNER_WITH_BLOCK_SIZE(CUDA_BLOCK_SIZE_4096)
-        } else {
-            return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
-        }
-        return INFINI_STATUS_SUCCESS;
-    }
     
 }
