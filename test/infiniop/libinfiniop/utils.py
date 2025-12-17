@@ -433,6 +433,11 @@ def get_args():
         action="store_true",
         help="Run HYGON DCU test",
     )
+    parser.add_argument(
+        "--opencl",
+        action="store_true",
+        help="Run OPENCL test",
+    )
 
     return parser.parse_args()
 
@@ -693,6 +698,7 @@ def test_operator(device, test_func, test_cases, tensor_dtypes):
         to be passed to `test_func`.
     - tensor_dtypes (list): A list of tensor data types (e.g., `torch.float32`) to test.
     """
+    LIBINFINIOP.infinirtInit()
     LIBINFINIOP.infinirtSetDevice(device, ctypes.c_int(0))
     handle = create_handle()
     tensor_dtypes = filter_tensor_dtypes_by_device(device, tensor_dtypes)
@@ -730,6 +736,8 @@ def get_test_devices(args):
         devices_to_test.append(InfiniDeviceEnum.ILUVATAR)
     if args.qy:
         devices_to_test.append(InfiniDeviceEnum.QY)
+    if args.opencl:
+        devices_to_test.append(InfiniDeviceEnum.OPENCL)
     if args.cambricon:
         import torch_mlu
 
@@ -768,6 +776,12 @@ def get_sync_func(device):
 
     if device == InfiniDeviceEnum.CPU or device == InfiniDeviceEnum.CAMBRICON:
         sync = None
+    elif device == InfiniDeviceEnum.OPENCL:
+
+        def opencl_sync():
+            LIBINFINIOP.infinirtDeviceSynchronize()
+
+        return opencl_sync
     else:
         sync = getattr(torch, torch_device_map[device]).synchronize
 

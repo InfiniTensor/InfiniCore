@@ -308,6 +308,9 @@ target("infiniop")
     if has_config("hygon-dcu") then
         add_deps("infiniop-hygon")
     end
+    if has_config("opencl") then
+        add_deps("infiniop-opencl")
+    end
     set_languages("cxx17")
     add_files("src/infiniop/devices/handle.cc")
     add_files("src/infiniop/ops/*/operator.cc")
