@@ -2,18 +2,11 @@
 #include "../../handle.h"
 #include "infiniop/ops/paged_attention.h"
 
-// Add necessary includes for different platforms
-#ifdef ENABLE_CPU_API
-// #include "cpu/paged_attention_cpu.h" // Placeholder for future CPU implementation
-#endif
-#if defined(ENABLE_NVIDIA_API)
+#ifdef ENABLE_NVIDIA_API
 #include "nvidia/paged_attention_nvidia.cuh"
 #endif
 #ifdef ENABLE_METAX_API
-// #include "metax/paged_attention_metax.h" // Placeholder
-#endif
-#ifdef ENABLE_ASCEND_API
-// #include "ascend/paged_attention_ascend.h" // Placeholder
+#include "metax/paged_attention_metax.h"
 #endif
 
 __C infiniStatus_t infiniopCreatePagedAttentionDescriptor(
@@ -38,17 +31,11 @@ __C infiniStatus_t infiniopCreatePagedAttentionDescriptor(
             out_desc, q_desc, k_cache_desc, v_cache_desc, block_tables_desc, seq_lens_desc, alibi_opt, scale);
 
     switch (handle->device) {
-#ifdef ENABLE_CPU_API
-        // CREATE(INFINI_DEVICE_CPU, cpu) // Uncomment when CPU implementation is ready
-#endif
 #ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
 #ifdef ENABLE_METAX_API
-        // CREATE(INFINI_DEVICE_METAX, metax) // Placeholder for future Metax implementation
-#endif
-#ifdef ENABLE_ASCEND_API
-        // CREATE(INFINI_DEVICE_ASCEND, ascend) // Placeholder for future Ascend implementation
+        CREATE(INFINI_DEVICE_METAX, metax)
 #endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -64,17 +51,11 @@ __C infiniStatus_t infiniopGetPagedAttentionWorkspaceSize(
         return INFINI_STATUS_SUCCESS;
 
     switch (desc->device_type) {
-#ifdef ENABLE_CPU_API
-        // GET(INFINI_DEVICE_CPU, cpu) // Uncomment when CPU implementation is ready
-#endif
 #ifdef ENABLE_NVIDIA_API
         GET(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
 #ifdef ENABLE_METAX_API
-        // GET(INFINI_DEVICE_METAX, metax) // Placeholder
-#endif
-#ifdef ENABLE_ASCEND_API
-        // GET(INFINI_DEVICE_ASCEND, ascend) // Placeholder
+        GET(INFINI_DEVICE_METAX, metax)
 #endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -94,17 +75,11 @@ __C infiniStatus_t infiniopPagedAttention(
             seq_lens, alibi_slopes, stream);
 
     switch (desc->device_type) {
-#ifdef ENABLE_CPU_API
-        // CALCULATE(INFINI_DEVICE_CPU, cpu) // Uncomment when CPU implementation is ready
-#endif
 #ifdef ENABLE_NVIDIA_API
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
 #ifdef ENABLE_METAX_API
-        // CALCULATE(INFINI_DEVICE_METAX, metax) // Placeholder
-#endif
-#ifdef ENABLE_ASCEND_API
-        // CALCULATE(INFINI_DEVICE_ASCEND, ascend) // Placeholder
+        CALCULATE(INFINI_DEVICE_METAX, metax)
 #endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -119,17 +94,11 @@ __C infiniStatus_t infiniopDestroyPagedAttentionDescriptor(
         return INFINI_STATUS_SUCCESS;
 
     switch (desc->device_type) {
-#ifdef ENABLE_CPU_API
-        // DESTROY(INFINI_DEVICE_CPU, cpu) // Uncomment when CPU implementation is ready
-#endif
 #ifdef ENABLE_NVIDIA_API
         DESTROY(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
 #ifdef ENABLE_METAX_API
-        // DESTROY(INFINI_DEVICE_METAX, metax) // Placeholder
-#endif
-#ifdef ENABLE_ASCEND_API
-        // DESTROY(INFINI_DEVICE_ASCEND, ascend) // Placeholder
+        DESTROY(INFINI_DEVICE_METAX, metax)
 #endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
