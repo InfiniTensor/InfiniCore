@@ -37,8 +37,9 @@ INFINIOP_CUDA_KERNEL sumAllKernel(
         size_t input_offset = indexToOffset(idx, permuted_input_shape_size, permuted_input_shape, permuted_input_strides);
         s_data[tid] = input[input_offset];
     } else {
-        s_data[tid] = 0.;
+        s_data[tid] = T(0);
     }
+    __syncthreads();
     for(size_t s = blockDim.x / 2; s > 0; s >>=1){
         if(tid < s){
             s_data[tid] += s_data[tid + s];
@@ -70,7 +71,7 @@ INFINIOP_CUDA_KERNEL sumKernel(
     size_t idx = tid + blockIdx.x * blockDim.x;
     if(idx >= output_size) return;
     size_t output_index = indexToOffset(idx, output_shape_size, output_shape, output_strides);
-    T tempSum = 0.;
+    T tempSum = T(0);
     for(size_t i = 0; i < reduce_num; i++){
         size_t input_offset = indexToOffset(i + idx * reduce_num, permuted_input_shape_size, permuted_input_shape, permuted_input_strides);
         tempSum += input[input_offset];
