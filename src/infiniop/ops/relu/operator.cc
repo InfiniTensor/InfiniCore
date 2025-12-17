@@ -15,6 +15,9 @@
 #include "metax/relu_metax.h"
 #endif
 #endif
+#ifdef ENABLE_MOORE_API
+#include "moore/relu_moore.h"
+#endif
 
 __C infiniStatus_t infiniopCreateReluDescriptor(
     infiniopHandle_t handle,
@@ -58,6 +61,10 @@ __C infiniStatus_t infiniopCreateReluDescriptor(
 #endif
 #endif
 
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore);
+#endif
+
 
 
     default:
@@ -99,6 +106,9 @@ __C infiniStatus_t infiniopGetReluWorkspaceSize(infiniopReluDescriptor_t desc, s
 #ifdef ENABLE_NINETOOTHED
         GET(INFINI_DEVICE_METAX, metax)
 #endif
+#endif
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, moore);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -148,6 +158,9 @@ __C infiniStatus_t infiniopRelu(
         CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
 #endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -190,6 +203,9 @@ infiniopDestroyReluDescriptor(infiniopReluDescriptor_t desc) {
 #ifdef ENABLE_NINETOOTHED
         DELETE(INFINI_DEVICE_METAX, metax);
 #endif
+#endif
+#ifdef ENABLE_MOORE_API
+        DELETE(INFINI_DEVICE_MOORE, moore);
 #endif
 
     default:

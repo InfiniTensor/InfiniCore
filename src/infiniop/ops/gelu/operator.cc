@@ -11,6 +11,9 @@
 #ifdef ENABLE_METAX_API
 #include "metax/gelu_metax.h"
 #endif
+#ifdef ENABLE_MOORE_API
+#include "moore/gelu_moore.h"
+#endif
 
 __C infiniStatus_t infiniopCreateGeluDescriptor(
     infiniopHandle_t handle,
@@ -46,6 +49,9 @@ __C infiniStatus_t infiniopCreateGeluDescriptor(
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -79,6 +85,9 @@ __C infiniStatus_t infiniopGetGeluWorkspaceSize(infiniopGeluDescriptor_t desc, s
 #endif
 #ifdef ENABLE_HYGON_API
         GET(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, moore);
 #endif
 
     default:
@@ -122,6 +131,9 @@ __C infiniStatus_t infiniopGelu(
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -157,6 +169,9 @@ infiniopDestroyGeluDescriptor(infiniopGeluDescriptor_t desc) {
 #endif
 #ifdef ENABLE_HYGON_API
         DELETE(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_MOORE_API
+        DELETE(INFINI_DEVICE_MOORE, moore);
 #endif
 
     default:

@@ -41,6 +41,7 @@ target("infiniop-moore")
     on_install(function (target) end)
     set_languages("cxx17")
     set_warnings("all", "error")
+    set_symbols("debug")     -- add debug symbols
     add_cxflags("-lstdc++", "-fPIC", "-Wno-comment")
     add_files("../src/infiniop/devices/moore/*.cc")
     add_files("../src/infiniop/ops/*/moore/*.mu", {rule = "mu"})
