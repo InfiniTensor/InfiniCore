@@ -131,6 +131,16 @@ infiniStatus_t memcpyAsync(void *dst, const void *src, size_t size, infinirtMemc
     return INFINI_STATUS_SUCCESS;
 }
 
+infiniStatus_t memcpyPeer(void *dst, int dst_device, const void *src, int src_device, size_t size) {
+    CHECK_BANGRT(cnrtMemcpyPeer(dst, dst_device, (void *)src, src_device, size));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t memcpyPeerAsync(void *dst, int dst_device, const void *src, int src_device, size_t size, infinirtStream_t stream) {
+    CHECK_BANGRT(cnrtMemcpyPeerAsync(dst, dst_device, (void *)src, src_device, size, (cnrtQueue_t)stream));
+    return INFINI_STATUS_SUCCESS;
+}
+
 // Does not support async malloc. Use blocking-style malloc instead
 infiniStatus_t mallocAsync(void **p_ptr, size_t size, infinirtStream_t stream) {
     CHECK_BANGRT(cnrtMalloc(p_ptr, size));

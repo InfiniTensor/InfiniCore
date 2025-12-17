@@ -96,6 +96,14 @@ void Runtime::memcpyD2D(void *dst, const void *src, size_t size, bool async) {
     }
 }
 
+void Runtime::memcpyD2DPeer(void *dst, int dst_device, const void *src, int src_device, size_t size, bool async) {
+    if (async) {
+        INFINICORE_CHECK_ERROR(infinirtMemcpyPeerAsync(dst, dst_device, src, src_device, size, stream_));
+    } else {
+        INFINICORE_CHECK_ERROR(infinirtMemcpyPeer(dst, dst_device, src, src_device, size));
+    }
+}
+
 // Timing method implementations
 infinirtEvent_t Runtime::createEvent() {
     infinirtEvent_t event;

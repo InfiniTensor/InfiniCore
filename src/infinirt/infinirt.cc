@@ -185,6 +185,14 @@ __C infiniStatus_t infinirtMemcpyAsync(void *dst, const void *src, size_t size, 
     INFINIRT_CALL_DEVICE_API(memcpyAsync, (dst, src, size, kind, stream));
 }
 
+__C infiniStatus_t infinirtMemcpyPeer(void *dst, int dst_device, const void *src, int src_device, size_t size) {
+    INFINIRT_CALL_DEVICE_API(memcpyPeer, (dst, dst_device, src, src_device, size));
+}
+
+__C infiniStatus_t infinirtMemcpyPeerAsync(void *dst, int dst_device, const void *src, int src_device, size_t size, infinirtStream_t stream) {
+    INFINIRT_CALL_DEVICE_API(memcpyPeerAsync, (dst, dst_device, src, src_device, size, stream));
+}
+
 __C infiniStatus_t infinirtMallocAsync(void **p_ptr, size_t size, infinirtStream_t stream) {
     INFINIRT_CALL_DEVICE_API(mallocAsync, (p_ptr, size, stream));
 }

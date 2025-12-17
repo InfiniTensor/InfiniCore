@@ -29,6 +29,7 @@ void memcpyH2D(void *dst, const void *src, size_t size, bool async = true);
 void memcpyD2H(void *dst, const void *src, size_t size);
 void memcpyD2D(void *dst, const void *src, size_t size, bool async = true);
 void memcpyH2H(void *dst, const void *src, size_t size);
+void memcpyD2DPeer(void *dst, int dst_device, const void *src, int src_device, size_t size, bool async = true);
 
 // Timing APIs for performance measurement
 infinirtEvent_t createEvent();

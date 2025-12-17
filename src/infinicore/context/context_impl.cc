@@ -145,6 +145,10 @@ void memcpyH2H(void *dst, const void *src, size_t size) {
     return ContextImpl::singleton().getCpuRuntime()->memcpyD2D(dst, src, size);
 }
 
+void memcpyD2DPeer(void *dst, int dst_device, const void *src, int src_device, size_t size, bool async) {
+    return ContextImpl::singleton().getCurrentRuntime()->memcpyD2DPeer(dst, dst_device, src, src_device, size, async);
+}
+
 // Timing API implementations
 infinirtEvent_t createEvent() {
     return ContextImpl::singleton().getCurrentRuntime()->createEvent();
