@@ -1,6 +1,5 @@
 #include "infinirt_moore.h"
 #include "../../utils.h"
-#include <chrono>
 #include <musa_runtime.h>
 #include <musa_runtime_api.h>
 
@@ -83,23 +82,7 @@ infiniStatus_t eventDestroy(infinirtEvent_t event) {
 }
 
 infiniStatus_t eventElapsedTime(float *ms_ptr, infinirtEvent_t start, infinirtEvent_t end) {
-    // MUSA may not have direct musaEventElapsedTime API
-    // Use a fallback method: synchronize events and measure CPU time difference
-    // Note: This includes synchronization overhead, so timing may not be as accurate
-    // as native GPU event timing, but it allows benchmarking to work
-
-    // Synchronize start event and record CPU time
-    CHECK_MUSART(musaEventSynchronize((musaEvent_t)start));
-    auto start_cpu_time = std::chrono::steady_clock::now();
-
-    // Synchronize end event and record CPU time
-    CHECK_MUSART(musaEventSynchronize((musaEvent_t)end));
-    auto end_cpu_time = std::chrono::steady_clock::now();
-
-    // Calculate elapsed time in milliseconds
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_cpu_time - start_cpu_time);
-    *ms_ptr = static_cast<float>(duration.count()) / 1000.0f;
-
+    CHECK_MUSART(musaEventElapsedTime(ms_ptr, (musaEvent_t)start, (musaEvent_t)end));
     return INFINI_STATUS_SUCCESS;
 }
 
