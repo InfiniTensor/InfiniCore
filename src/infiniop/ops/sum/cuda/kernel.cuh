@@ -23,7 +23,7 @@ indexToOffset(
 
 // BLOCK_SIZE = 256, GRID_SIZE = (input_size + BLOCK_SIZE - 1) / BLOCK_SIZE
 template<size_t BLOCK_SIZE, typename T>
-INFINIOP_CUDA_KERNEL sumAllKernel(
+__global__ void sumAllKernel(
     T *output,
     const T *input,
     size_t input_size,
@@ -54,7 +54,7 @@ INFINIOP_CUDA_KERNEL sumAllKernel(
 
 // 规约到非标量的情况, 假设output是[output_size, reduce_num]这种结构，暂时一个thread负责一个[1, reduce_num]的块 后续可以优化为一个block负责一个[1, reduce_num]的块
 template<size_t BLOCK_SIZE, typename T>
-INFINIOP_CUDA_KERNEL sumKernel(
+__global__ void sumKernel(
     T *output,
     const T *input,
     // size_t reduce_dim_size,

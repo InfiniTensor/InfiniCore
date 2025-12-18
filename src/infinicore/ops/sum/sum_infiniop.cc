@@ -55,8 +55,8 @@ static bool registered = []() {
     Sum::dispatcher().registerDevice({
             Device::Type::CPU,
             Device::Type::NVIDIA,
-            // Device::Type::METAX,
-            // Device::Type::MOORE
+            Device::Type::METAX,
+            Device::Type::MOORE,
             Device::Type::ILUVATAR
         }, &calculate, false);
     return true;
