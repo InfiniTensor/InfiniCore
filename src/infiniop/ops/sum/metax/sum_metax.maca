@@ -1,6 +1,6 @@
 #include "../../../devices/metax/metax_common.h"
 #include "../../../devices/metax/metax_kernel_common.h"
-#include "sum_metax.cuh"
+#include "sum_metax.h"
 #include "../cuda/kernel.cuh"
 
 

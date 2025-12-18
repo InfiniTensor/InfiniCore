@@ -1,6 +1,6 @@
 #include "../../../devices/moore/moore_common.h"
 #include "../../../devices/moore/moore_kernel_common.h"
-#include "sum_moore.cuh"
+#include "sum_moore.h"
 #include "../cuda/kernel.cuh"
 
 
