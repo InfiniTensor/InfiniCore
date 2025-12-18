@@ -87,7 +87,7 @@ namespace op::sum::moore {
         const void *input,
         void *stream_) const {
 
-            musaStream_t stream = (muaStream_t)stream_;
+            musaStream_t stream = (musaStream_t)stream_;
             
             #define CALCULATE_SUM(BLOCK_SIZE, T)                        \
             launchKernel<BLOCK_SIZE, T>(                                \
