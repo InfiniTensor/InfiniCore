@@ -2,6 +2,7 @@
 #include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 #include "../../../tensor.h"
 #include "rearrange_kernel.cuh"
+#include "rearrange_transpose_kernel.cuh"
 #include "rearrange_nvidia.cuh"
 #include <algorithm>
 #include <cmath>
@@ -73,6 +74,91 @@ struct SplitDim {
     int array_struct_idx_grid;
     size_t dim_len;
 };
+
+/**
+ * 检测是否为完全转置模式（行主序到列主序，或反之）
+ * 
+ * 判断逻辑：
+ * 1. 检查src_strides和dst_strides是否呈现相反的递增/递减趋势
+ * 2. 对于行主序到列主序转换：src_strides递减，dst_strides递增
+ * 3. 只对满足条件的大规模转置启用优化
+ * 
+ * @param meta 重排元数据
+ * @return true如果是完全转置模式且适合优化
+ */
+bool isFullTransposePattern(const utils::RearrangeMeta &meta) {
+    const size_t ndim = meta.ndim();
+    
+    // 只针对特定维度范围启用转置优化
+    // 避免对小规模或不适合的case使用
+    if (ndim < 4 || ndim > 6) {
+        return false;
+    }
+    
+    const ptrdiff_t *src_strides = meta.src_strides();
+    const ptrdiff_t *dst_strides = meta.dst_strides();
+    const ptrdiff_t *idx_strides = meta.idx_strides();
+    const size_t unit = meta.unit();
+    
+    // 构建实际的shape
+    std::vector<size_t> shape(ndim);
+    auto prev_idx_stride = meta.count();
+    for (size_t i = 0; i < ndim; ++i) {
+        shape[i] = prev_idx_stride / idx_strides[i];
+        prev_idx_stride = idx_strides[i];
+    }
+    
+    // 计算总元素数，只对大规模转置启用优化
+    size_t total_elements = 1;
+    for (size_t i = 0; i < ndim; ++i) {
+        total_elements *= shape[i];
+    }
+    
+    // 只对大规模数据启用转置优化（>100K元素）
+    if (total_elements < 100000) {
+        return false;
+    }
+    
+    // 跳过大小为1的维度，构建有效维度的索引
+    std::vector<size_t> valid_dims;
+    for (size_t i = 0; i < ndim; ++i) {
+        if (shape[i] > 1) {
+            valid_dims.push_back(i);
+        }
+    }
+    
+    // 至少需要4个有效维度才启用转置优化
+    if (valid_dims.size() < 4) {
+        return false;
+    }
+    
+    // 检查是否为row-major到column-major的完全转换
+    // 这是最容易识别的模式：src_strides递减，dst_strides递增（或相反）
+    
+    // 计算stride的排序
+    std::vector<std::pair<ptrdiff_t, size_t>> src_stride_order;
+    std::vector<std::pair<ptrdiff_t, size_t>> dst_stride_order;
+    
+    for (size_t i = 0; i < valid_dims.size(); ++i) {
+        size_t dim = valid_dims[i];
+        src_stride_order.push_back({std::abs(src_strides[dim]), dim});
+        dst_stride_order.push_back({std::abs(dst_strides[dim]), dim});
+    }
+    
+    std::sort(src_stride_order.begin(), src_stride_order.end());
+    std::sort(dst_stride_order.begin(), dst_stride_order.end());
+    
+    // 检查排序后的维度顺序是否完全相反
+    bool is_reversed = true;
+    for (size_t i = 0; i < valid_dims.size(); ++i) {
+        if (src_stride_order[i].second != dst_stride_order[valid_dims.size() - 1 - i].second) {
+            is_reversed = false;
+            break;
+        }
+    }
+    
+    return is_reversed;
+}
 
 /**
  * 根据给定的元数据准备张量重排参数，该函数主要完成以下工作：
@@ -492,7 +578,7 @@ infiniStatus_t launchDynamicKernel(
         kernel_func = (void *)rearrange_dynamic_kernel<float4>;
         break;
     case 32:
-        kernel_func = (void *)rearrange_dynamic_kernel<double4>;
+        kernel_func = (void *)rearrange_dynamic_kernel<double4_32a>;
         break;
     default:
         return INFINI_STATUS_BAD_PARAM;
@@ -617,6 +703,63 @@ infiniStatus_t launchKernel(
     return INFINI_STATUS_SUCCESS;
 }
 
+/**
+ * 启动转置优化的kernel
+ * 针对完全转置场景使用优化的实现
+ */
+infiniStatus_t launchTransposeKernel(
+    void *y,
+    const void *x,
+    const utils::RearrangeMeta &meta,
+    cudaStream_t stream) {
+    
+    const size_t ndim = meta.ndim();
+    const size_t unit = meta.unit();
+    const ptrdiff_t *idx_strides = meta.idx_strides();
+    const ptrdiff_t *src_strides = meta.src_strides();
+    const ptrdiff_t *dst_strides = meta.dst_strides();
+    
+    // 构建shape
+    std::vector<size_t> shape(ndim);
+    auto prev_idx_stride = meta.count();
+    for (size_t i = 0; i < ndim; ++i) {
+        shape[i] = prev_idx_stride / idx_strides[i];
+        prev_idx_stride = idx_strides[i];
+    }
+    
+    // 计算总元素数
+    size_t total_elements = 1;
+    for (size_t i = 0; i < ndim; ++i) {
+        total_elements *= shape[i];
+    }
+    
+    // 根据ndim和unit选择合适的kernel
+    if (ndim == 6 && total_elements > 100000 && unit == 4) {
+        // 大规模6D转置 - F32使用特化kernel
+        const int threads = 256;
+        const int blocks = (total_elements + threads - 1) / threads;
+        
+        auto *src_f32 = reinterpret_cast<float *>(const_cast<void *>(x));
+        auto *dst_f32 = reinterpret_cast<float *>(y);
+        
+        transpose_6d_kernel_optimized<float><<<blocks, threads, 0, stream>>>(
+            dst_f32, src_f32,
+            shape[0], shape[1], shape[2], shape[3], shape[4], shape[5],
+            src_strides[0] / unit, src_strides[1] / unit, src_strides[2] / unit,
+            src_strides[3] / unit, src_strides[4] / unit, src_strides[5] / unit,
+            dst_strides[0] / unit, dst_strides[1] / unit, dst_strides[2] / unit,
+            dst_strides[3] / unit, dst_strides[4] / unit, dst_strides[5] / unit,
+            total_elements);
+            
+        CHECK_OR_RETURN(cudaGetLastError() == cudaSuccess, INFINI_STATUS_INTERNAL_ERROR);
+        return INFINI_STATUS_SUCCESS;
+    }
+    
+    // 对于其他情况，暂不使用通用转置（性能不够好）
+    // 返回错误让它回退到原有实现
+    return INFINI_STATUS_BAD_PARAM;
+}
+
 infiniStatus_t Descriptor::calculate(
     void *y,
     const void *x,
@@ -629,6 +772,18 @@ infiniStatus_t Descriptor::calculate(
         CHECK_OR_RETURN(cudaMemcpyAsync(y, x, _meta.unit(), cudaMemcpyDeviceToDevice, cuda_stream) == cudaSuccess,
                         INFINI_STATUS_INTERNAL_ERROR);
         return INFINI_STATUS_SUCCESS;
+    }
+
+    // 检测是否为完全转置模式
+    // 目前只针对6D大规模转置优化
+    if (_meta.ndim() == 6 && isFullTransposePattern(_meta)) {
+        // 使用优化的转置kernel
+        auto status = launchTransposeKernel(y, x, _meta, cuda_stream);
+        // 如果转置kernel成功，直接返回
+        if (status == INFINI_STATUS_SUCCESS) {
+            return status;
+        }
+        // 否则回退到通用实现
     }
 
     // 获取设备属性

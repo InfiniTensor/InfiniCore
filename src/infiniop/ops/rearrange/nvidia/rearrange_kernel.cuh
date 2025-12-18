@@ -182,7 +182,7 @@ struct Constraint {
     DEFINE_REARRANGE_KERNEL(float1, constraint_num, block_array_size, grid_array_size) \
     DEFINE_REARRANGE_KERNEL(float2, constraint_num, block_array_size, grid_array_size) \
     DEFINE_REARRANGE_KERNEL(float4, constraint_num, block_array_size, grid_array_size) \
-    DEFINE_REARRANGE_KERNEL(double4, constraint_num, block_array_size, grid_array_size)
+    DEFINE_REARRANGE_KERNEL(double4_32a, constraint_num, block_array_size, grid_array_size)
 
 // 与 MAX_BLOCK_ARRAY_SIZE 和 MAX_GRID_ARRAY_SIZE 耦合，需要同时修改
 // 为1-6和1-6的所有组合生成内核
@@ -323,7 +323,7 @@ template __global__ void rearrange_dynamic_kernel<uchar2>(void *, const void *, 
 template __global__ void rearrange_dynamic_kernel<float1>(void *, const void *, const size_t, const size_t, const ARRAY_TYPE_SIZE *, const ARRAY_TYPE_STRIDE *, const ARRAY_TYPE_STRIDE *, const size_t, const ARRAY_TYPE_SIZE *, const ARRAY_TYPE_STRIDE *, const ARRAY_TYPE_STRIDE *, const size_t, const Constraint<ARRAY_TYPE_SIZE> *);
 template __global__ void rearrange_dynamic_kernel<float2>(void *, const void *, const size_t, const size_t, const ARRAY_TYPE_SIZE *, const ARRAY_TYPE_STRIDE *, const ARRAY_TYPE_STRIDE *, const size_t, const ARRAY_TYPE_SIZE *, const ARRAY_TYPE_STRIDE *, const ARRAY_TYPE_STRIDE *, const size_t, const Constraint<ARRAY_TYPE_SIZE> *);
 template __global__ void rearrange_dynamic_kernel<float4>(void *, const void *, const size_t, const size_t, const ARRAY_TYPE_SIZE *, const ARRAY_TYPE_STRIDE *, const ARRAY_TYPE_STRIDE *, const size_t, const ARRAY_TYPE_SIZE *, const ARRAY_TYPE_STRIDE *, const ARRAY_TYPE_STRIDE *, const size_t, const Constraint<ARRAY_TYPE_SIZE> *);
-template __global__ void rearrange_dynamic_kernel<double4>(void *, const void *, const size_t, const size_t, const ARRAY_TYPE_SIZE *, const ARRAY_TYPE_STRIDE *, const ARRAY_TYPE_STRIDE *, const size_t, const ARRAY_TYPE_SIZE *, const ARRAY_TYPE_STRIDE *, const ARRAY_TYPE_STRIDE *, const size_t, const Constraint<ARRAY_TYPE_SIZE> *);
+template __global__ void rearrange_dynamic_kernel<double4_32a>(void *, const void *, const size_t, const size_t, const ARRAY_TYPE_SIZE *, const ARRAY_TYPE_STRIDE *, const ARRAY_TYPE_STRIDE *, const size_t, const ARRAY_TYPE_SIZE *, const ARRAY_TYPE_STRIDE *, const ARRAY_TYPE_STRIDE *, const size_t, const Constraint<ARRAY_TYPE_SIZE> *);
 
 // 准备参数结构体
 struct RearrangeParams {
@@ -371,7 +371,7 @@ utils::Result<void *> getRearrangeKernel(const RearrangeParams &params) {
         GET_REARRANGE_KERNEL(float4, block_array_size, grid_array_size, constraint_num);  \
         break;                                                                            \
     case 32:                                                                              \
-        GET_REARRANGE_KERNEL(double4, block_array_size, grid_array_size, constraint_num); \
+        GET_REARRANGE_KERNEL(double4_32a, block_array_size, grid_array_size, constraint_num); \
         break;                                                                            \
     default:                                                                              \
         return INFINI_STATUS_BAD_PARAM;                                                   \
