@@ -5,8 +5,11 @@
 #include "rearrange_nvidia.cuh"
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
+#include <cstdio>
 #include <memory>
 #include <stdint.h>
+#include <string>
 #include <vector>
 
 namespace op::rearrange::nvidia {
@@ -140,17 +143,80 @@ utils::Result<RearrangeParams> prepareRearrangeParams(const utils::RearrangeMeta
                   return std::abs(dims[a].src_stride) < std::abs(dims[b].src_stride);
               });
 
-    // 维度选择循环
+    // 辅助函数：检查block_size是否是warp-friendly的
+    auto is_warp_friendly = [](size_t size) -> bool {
+        // 检查是否是32的倍数，或者是常见的高效配置
+        if (size % 32 == 0) return true;
+        // 小于32的2的幂次也是可以的
+        if (size <= 32 && (size & (size - 1)) == 0) return true;
+        return false;
+    };
+
+    // 辅助函数：计算warp效率损失
+    auto warp_efficiency = [](size_t size) -> double {
+        if (size == 0) return 0.0;
+        size_t warps = (size + 31) / 32;
+        size_t wasted = warps * 32 - size;
+        return 1.0 - (double)wasted / (double)(warps * 32);
+    };
+
+    // 维度选择循环 - 带warp对齐优化
     for (size_t i = 0; i < ndim; ++i) {
         size_t dim_idx = dim_order[i];
         size_t dim_len = shape[dim_idx];
+        size_t next_block_size = block_elements * dim_len;
 
-        if (block_elements * dim_len <= (size_t)max_threads) {
-            block_dim_choose[dim_idx] = true;
-            block_elements *= dim_len;
+        if (next_block_size <= (size_t)max_threads) {
+            // 检查是否应该添加这个维度
+            bool should_add = true;
+
+            // 优化策略1: 如果当前已经是warp-friendly且下一个会破坏对齐，考虑跳过
+            if (is_warp_friendly(block_elements) && !is_warp_friendly(next_block_size)) {
+                // 检查是否接近max_threads且效率会显著下降
+                if (next_block_size > max_threads * 0.95) {
+                    double current_eff = warp_efficiency(block_elements);
+                    double next_eff = warp_efficiency(next_block_size);
+                    
+                    // 如果效率损失超过5%，不添加这个维度
+                    if (current_eff - next_eff > 0.05) {
+                        should_add = false;
+                    }
+                }
+            }
+
+            // 优化策略2: 对于会产生接近1024但不对齐的情况，尝试调整
+            if (should_add && next_block_size > 992 && next_block_size < 1024 && !is_warp_friendly(next_block_size)) {
+                // 如果当前block_elements是warp-friendly的，并且已经足够大（>512），停止添加
+                if (is_warp_friendly(block_elements) && block_elements >= 512) {
+                    should_add = false;
+                }
+            }
+
+            if (should_add) {
+                block_dim_choose[dim_idx] = true;
+                block_elements = next_block_size;
+            }
         } else if (block_elements > 1 && dim_len > 1) {
             // 需要分割此维度
             size_t num_per_block = std::min(dim_len, (size_t)max_threads / block_elements);
+            
+            // 优化分割：尽量让分割后的block_size是32的倍数
+            if (num_per_block > 1 && block_elements > 1) {
+                size_t target_block_size = block_elements * num_per_block;
+                
+                // 如果不是warp-friendly，尝试调整num_per_block
+                if (!is_warp_friendly(target_block_size) && target_block_size > 32) {
+                    // 尝试找到最近的能产生warp-aligned结果的num_per_block
+                    for (size_t try_num = num_per_block; try_num > 0; try_num--) {
+                        size_t try_size = block_elements * try_num;
+                        if (is_warp_friendly(try_size) && try_size >= 512) {
+                            num_per_block = try_num;
+                            break;
+                        }
+                    }
+                }
+            }
+            
             if (num_per_block > 0) {
                 size_t num_per_grid = (dim_len + num_per_block - 1) / num_per_block;
 
@@ -174,11 +240,42 @@ utils::Result<RearrangeParams> prepareRearrangeParams(const utils::RearrangeMeta
         size_t dim_len = shape[dim_idx];
 
         if (dim_len <= (size_t)max_threads) {
-            block_dim_choose[dim_idx] = true;
-            block_elements = dim_len;
+            // 优化：如果dim_len不是warp-friendly，尝试调整到最近的warp边界
+            if (!is_warp_friendly(dim_len) && dim_len > 32) {
+                // 尝试选择32的倍数
+                size_t aligned_len = (dim_len / 32) * 32;
+                if (aligned_len >= 512 && aligned_len <= (size_t)max_threads) {
+                    // 使用分割策略
+                    size_t num_per_grid = (dim_len + aligned_len - 1) / aligned_len;
+                    SplitDim split_dim = {
+                        dim_idx,
+                        aligned_len,
+                        num_per_grid,
+                        0,
+                        0,
+                        dim_len};
+                    split_dims.push_back(split_dim);
+                    block_elements = aligned_len;
+                } else {
+                    block_dim_choose[dim_idx] = true;
+                    block_elements = dim_len;
+                }
+            } else {
+                block_dim_choose[dim_idx] = true;
+                block_elements = dim_len;
+            }
         } else {
             // 需要分割
             size_t num_per_block = std::min(dim_len, (size_t)max_threads);
+            
+            // 优化：优先选择32的倍数
+            if (!is_warp_friendly(num_per_block) && num_per_block > 32) {
+                size_t aligned = (num_per_block / 32) * 32;
+                if (aligned >= 512) {
+                    num_per_block = aligned;
+                }
+            }
+            
             size_t num_per_grid = (dim_len + num_per_block - 1) / num_per_block;
 
             SplitDim split_dim = {
@@ -294,6 +391,171 @@ utils::Result<RearrangeParams> prepareRearrangeParams(const utils::RearrangeMeta
     return utils::Result<RearrangeParams>(params);
 }
 
+// ==============================================================================
+// 动态Kernel启动函数 - 支持任意维度
+// ==============================================================================
+
+template <unsigned int BLOCK_SIZE>
+infiniStatus_t launchDynamicKernel(
+    void *y,
+    const void *x,
+    size_t grid_size,
+    const RearrangeParams &params,
+    size_t unit_size,
+    cudaStream_t stream) {
+
+    // 检查参数有效性
+    if (params.block_len.empty() || params.grid_len.empty()) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    size_t block_dim = params.block_len.size();
+    size_t grid_dim = params.grid_len.size();
+    size_t block_len_total = params.block_len_total;
+    size_t constraint_num = params.constraints.size();
+
+    // 准备device端数组
+    ARRAY_TYPE_SIZE *d_block_len = nullptr;
+    ARRAY_TYPE_STRIDE *d_src_block_stride = nullptr;
+    ARRAY_TYPE_STRIDE *d_dst_block_stride = nullptr;
+    ARRAY_TYPE_SIZE *d_grid_len = nullptr;
+    ARRAY_TYPE_STRIDE *d_src_grid_stride = nullptr;
+    ARRAY_TYPE_STRIDE *d_dst_grid_stride = nullptr;
+    Constraint<ARRAY_TYPE_SIZE> *d_constraints = nullptr;
+
+    // 分配设备内存
+    CHECK_OR_RETURN(cudaMalloc(&d_block_len, block_dim * sizeof(ARRAY_TYPE_SIZE)) == cudaSuccess,
+                    INFINI_STATUS_INTERNAL_ERROR);
+    CHECK_OR_RETURN(cudaMalloc(&d_src_block_stride, block_dim * sizeof(ARRAY_TYPE_STRIDE)) == cudaSuccess,
+                    INFINI_STATUS_INTERNAL_ERROR);
+    CHECK_OR_RETURN(cudaMalloc(&d_dst_block_stride, block_dim * sizeof(ARRAY_TYPE_STRIDE)) == cudaSuccess,
+                    INFINI_STATUS_INTERNAL_ERROR);
+    CHECK_OR_RETURN(cudaMalloc(&d_grid_len, grid_dim * sizeof(ARRAY_TYPE_SIZE)) == cudaSuccess,
+                    INFINI_STATUS_INTERNAL_ERROR);
+    CHECK_OR_RETURN(cudaMalloc(&d_src_grid_stride, grid_dim * sizeof(ARRAY_TYPE_STRIDE)) == cudaSuccess,
+                    INFINI_STATUS_INTERNAL_ERROR);
+    CHECK_OR_RETURN(cudaMalloc(&d_dst_grid_stride, grid_dim * sizeof(ARRAY_TYPE_STRIDE)) == cudaSuccess,
+                    INFINI_STATUS_INTERNAL_ERROR);
+
+    // 使用异步拷贝提升性能
+    CHECK_OR_RETURN(cudaMemcpyAsync(d_block_len, params.block_len.data(), 
+                                     block_dim * sizeof(ARRAY_TYPE_SIZE), 
+                                     cudaMemcpyHostToDevice, stream) == cudaSuccess,
+                    INFINI_STATUS_INTERNAL_ERROR);
+    CHECK_OR_RETURN(cudaMemcpyAsync(d_src_block_stride, params.src_block_stride.data(), 
+                                     block_dim * sizeof(ARRAY_TYPE_STRIDE), 
+                                     cudaMemcpyHostToDevice, stream) == cudaSuccess,
+                    INFINI_STATUS_INTERNAL_ERROR);
+    CHECK_OR_RETURN(cudaMemcpyAsync(d_dst_block_stride, params.dst_block_stride.data(), 
+                                     block_dim * sizeof(ARRAY_TYPE_STRIDE), 
+                                     cudaMemcpyHostToDevice, stream) == cudaSuccess,
+                    INFINI_STATUS_INTERNAL_ERROR);
+    CHECK_OR_RETURN(cudaMemcpyAsync(d_grid_len, params.grid_len.data(), 
+                                     grid_dim * sizeof(ARRAY_TYPE_SIZE), 
+                                     cudaMemcpyHostToDevice, stream) == cudaSuccess,
+                    INFINI_STATUS_INTERNAL_ERROR);
+    CHECK_OR_RETURN(cudaMemcpyAsync(d_src_grid_stride, params.src_grid_stride.data(), 
+                                     grid_dim * sizeof(ARRAY_TYPE_STRIDE), 
+                                     cudaMemcpyHostToDevice, stream) == cudaSuccess,
+                    INFINI_STATUS_INTERNAL_ERROR);
+    CHECK_OR_RETURN(cudaMemcpyAsync(d_dst_grid_stride, params.dst_grid_stride.data(), 
+                                     grid_dim * sizeof(ARRAY_TYPE_STRIDE), 
+                                     cudaMemcpyHostToDevice, stream) == cudaSuccess,
+                    INFINI_STATUS_INTERNAL_ERROR);
+
+    // 处理约束
+    if (constraint_num > 0) {
+        CHECK_OR_RETURN(cudaMalloc(&d_constraints, constraint_num * sizeof(Constraint<ARRAY_TYPE_SIZE>)) == cudaSuccess,
+                        INFINI_STATUS_INTERNAL_ERROR);
+        CHECK_OR_RETURN(cudaMemcpyAsync(d_constraints, params.constraints.data(), 
+                                         constraint_num * sizeof(Constraint<ARRAY_TYPE_SIZE>), 
+                                         cudaMemcpyHostToDevice, stream) == cudaSuccess,
+                        INFINI_STATUS_INTERNAL_ERROR);
+    }
+
+    // 根据unit_size选择合适的kernel
+    void *kernel_func = nullptr;
+    switch (unit_size) {
+    case 1:
+        kernel_func = (void *)rearrange_dynamic_kernel<uchar1>;
+        break;
+    case 2:
+        kernel_func = (void *)rearrange_dynamic_kernel<uchar2>;
+        break;
+    case 4:
+        kernel_func = (void *)rearrange_dynamic_kernel<float1>;
+        break;
+    case 8:
+        kernel_func = (void *)rearrange_dynamic_kernel<float2>;
+        break;
+    case 16:
+        kernel_func = (void *)rearrange_dynamic_kernel<float4>;
+        break;
+    case 32:
+        kernel_func = (void *)rearrange_dynamic_kernel<double4>;
+        break;
+    default:
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    // 准备kernel参数
+    void *args[] = {
+        &y, &x,
+        const_cast<size_t *>(&block_dim),
+        const_cast<size_t *>(&block_len_total),
+        &d_block_len,
+        &d_src_block_stride,
+        &d_dst_block_stride,
+        const_cast<size_t *>(&grid_dim),
+        &d_grid_len,
+        &d_src_grid_stride,
+        &d_dst_grid_stride,
+        const_cast<size_t *>(&constraint_num),
+        &d_constraints};
+
+    // 启动kernel
+    cudaError_t launch_result = cudaLaunchKernel(
+        kernel_func,
+        static_cast<unsigned int>(grid_size),
+        static_cast<unsigned int>(BLOCK_SIZE),
+        args, 0, stream);
+
+    // 检查kernel启动是否成功
+    if (launch_result != cudaSuccess) {
+        // 清理设备内存
+        cudaFree(d_block_len);
+        cudaFree(d_src_block_stride);
+        cudaFree(d_dst_block_stride);
+        cudaFree(d_grid_len);
+        cudaFree(d_src_grid_stride);
+        cudaFree(d_dst_grid_stride);
+        if (d_constraints) {
+            cudaFree(d_constraints);
+        }
+        return INFINI_STATUS_INTERNAL_ERROR;
+    }
+
+    // 同步stream确保kernel完成后再释放内存
+    // 注意：cudaFree会隐式同步，所以这里不需要显式cudaStreamSynchronize
+    
+    // 清理设备内存
+    cudaFree(d_block_len);
+    cudaFree(d_src_block_stride);
+    cudaFree(d_dst_block_stride);
+    cudaFree(d_grid_len);
+    cudaFree(d_src_grid_stride);
+    cudaFree(d_dst_grid_stride);
+    if (d_constraints) {
+        cudaFree(d_constraints);
+    }
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+// ==============================================================================
+// 静态Kernel启动函数 - 为常见维度组合优化
+// ==============================================================================
+
 // 带约束的内核启动模板函数
 template <unsigned int BLOCK_SIZE>
 infiniStatus_t launchKernel(
@@ -388,17 +650,73 @@ infiniStatus_t Descriptor::calculate(
         return INFINI_STATUS_BAD_PARAM;
     }
 
-    // 根据设备属性选择合适的内核
+    size_t block_size = params.block_len_total;
+    size_t block_dim = params.block_len.size();
+    size_t grid_dim = params.grid_len.size();
+
+    // 调试输出（通过环境变量REARRANGE_DEBUG=1启用）
+    static bool debug_enabled = []() {
+        const char* env = std::getenv("REARRANGE_DEBUG");
+        return env != nullptr && std::string(env) == "1";
+    }();
+    
+    if (debug_enabled) {
+        printf("\n=== Rearrange Debug Info ===\n");
+        printf("ndim: %zu, unit_size: %zu\n", _meta.ndim(), _meta.unit());
+        printf("block_dim: %zu, block_size: %zu\n", block_dim, block_size);
+        printf("grid_dim: %zu, grid_size: %zu\n", grid_dim, grid_size);
+        printf("block_len: [");
+        for (size_t i = 0; i < params.block_len.size(); ++i) {
+            printf("%zu%s", params.block_len[i], i + 1 < params.block_len.size() ? ", " : "");
+        }
+        printf("]\n");
+        printf("grid_len: [");
+        for (size_t i = 0; i < params.grid_len.size(); ++i) {
+            printf("%zu%s", params.grid_len[i], i + 1 < params.grid_len.size() ? ", " : "");
+        }
+        printf("]\n");
+        printf("constraints: %zu\n", params.constraints.size());
+        printf("============================\n");
+    }
+
+    // 检查是否需要使用动态kernel (fallback策略)
+    bool use_dynamic_kernel = false;
+    
+    // 情况1: 维度超出静态kernel的支持范围
+    if (block_dim > MAX_BLOCK_ARRAY_SIZE || grid_dim > MAX_GRID_ARRAY_SIZE) {
+        use_dynamic_kernel = true;
+    }
+    
+    // 情况2: 约束数量超出静态kernel的支持范围
+    if (params.constraints.size() > 2) {
+        use_dynamic_kernel = true;
+    }
+
+    if (debug_enabled) {
+        printf("kernel_type: %s\n", use_dynamic_kernel ? "DYNAMIC" : "STATIC");
+        printf("block_size_choice: %s\n", block_size <= CUDA_BLOCK_SIZE_512 ? "512" : "1024");
+    }
+
     infiniStatus_t status = INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
 
-    size_t block_size = params.block_len_total;
-
-    if (block_size <= CUDA_BLOCK_SIZE_512) {
-        status = launchKernel<CUDA_BLOCK_SIZE_512>(y, x, grid_size, params, _meta.unit(), cuda_stream);
-    } else if (block_size <= CUDA_BLOCK_SIZE_1024) {
-        status = launchKernel<CUDA_BLOCK_SIZE_1024>(y, x, grid_size, params, _meta.unit(), cuda_stream);
+    if (use_dynamic_kernel) {
+        // 使用动态kernel处理高维度或特殊情况
+        if (block_size <= CUDA_BLOCK_SIZE_512) {
+            status = launchDynamicKernel<CUDA_BLOCK_SIZE_512>(y, x, grid_size, params, _meta.unit(), cuda_stream);
+        } else if (block_size <= CUDA_BLOCK_SIZE_1024) {
+            status = launchDynamicKernel<CUDA_BLOCK_SIZE_1024>(y, x, grid_size, params, _meta.unit(), cuda_stream);
+        } else {
+            return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
+        }
     } else {
-        return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
+        // 使用静态优化kernel处理常见情况
+        if (block_size <= CUDA_BLOCK_SIZE_512) {
+            status = launchKernel<CUDA_BLOCK_SIZE_512>(y, x, grid_size, params, _meta.unit(), cuda_stream);
+        } else if (block_size <= CUDA_BLOCK_SIZE_1024) {
+            status = launchKernel<CUDA_BLOCK_SIZE_1024>(y, x, grid_size, params, _meta.unit(), cuda_stream);
+        } else {
+            return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
+        }
     }
 
     return status;
