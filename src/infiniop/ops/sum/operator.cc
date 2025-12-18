@@ -59,6 +59,9 @@ __C infiniStatus_t infiniopCreateSumDescriptor(
 #ifdef ENABLE_KUNLUN_API
         CREATE(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -92,6 +95,9 @@ __C infiniStatus_t infiniopGetSumWorkspaceSize(infiniopSumDescriptor_t desc, siz
 #endif
 #ifdef ENABLE_KUNLUN_API
         GET(INFINI_DEVICE_KUNLUN, kunlun);
+#endif
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, moore);
 #endif
 
     default:
@@ -138,6 +144,9 @@ __C infiniStatus_t infiniopSum(
 #ifdef ENABLE_KUNLUN_API
         CALCULATE(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -174,7 +183,9 @@ infiniopDestroySumDescriptor(infiniopSumDescriptor_t desc) {
 #ifdef ENABLE_KUNLUN_API
         DELETE(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
-
+#ifdef ENABLE_MOORE_API
+        DELETE(INFINI_DEVICE_MOORE, moore);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
