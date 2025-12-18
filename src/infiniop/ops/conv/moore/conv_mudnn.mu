@@ -26,13 +26,6 @@ infiniStatus_t Descriptor::create(
     const void *dilations,
     size_t n) {
 
-    // Debug: Print input parameters
-    printf("DEBUG: conv_mudnn create called with handle_=%p, n=%zu\n", (void*)handle_, n);
-    if (y_desc) printf("DEBUG: y_desc dims=");
-    if (x_desc) printf("DEBUG: x_desc dims=");
-    if (w_desc) printf("DEBUG: w_desc dims=");
-    fflush(stdout);
-
     auto handle = reinterpret_cast<device::moore::Handle *>(handle_);
     auto dtype = y_desc->dtype();
 
@@ -42,10 +35,6 @@ infiniStatus_t Descriptor::create(
     CHECK_RESULT(result);
 
     auto info = result.take();
-
-    printf("DEBUG: Creating descriptor with batch=%zu, in_channels=%zu, out_channels=%zu, ndim=%zu\n",
-           info.batch(), info.in_channels(), info.out_channels(), info.ndim());
-    fflush(stdout);
 
     *desc_ptr = new Descriptor(
         dtype, info, 0,
@@ -64,260 +53,187 @@ infiniStatus_t calculate(
     const void *bias,
     void *stream) {
 
-    printf("DEBUG: conv_mudnn calculate called with info batch=%zu\n", info.batch());
-    printf("DEBUG: Pointers - y=%p, x=%p, w=%p, bias=%p, stream=%p\n", y, x, w, bias, stream);
-    fflush(stdout);
+    auto conv_operator = std::make_unique<::musa::dnn::Convolution>();
+    conv_operator->SetComputeMode(::musa::dnn::Convolution::ComputeMode::TENSOR);
 
     // Use muDNN handle management
     return _internal->useMudnn((musaStream_t)stream, [&](::musa::dnn::Handle &mudnn_handle) -> infiniStatus_t {
 
-        printf("DEBUG: Inside muDNN lambda\n");
-        printf("DEBUG: About to create conv_operator\n");
-        fflush(stdout);
-
-        // Create convolution operator
-        auto conv_operator = std::make_unique<::musa::dnn::Convolution>();
-
-        printf("DEBUG: conv_operator created successfully\n");
-        fflush(stdout);
-
-        conv_operator->SetComputeMode(::musa::dnn::Convolution::ComputeMode::TENSOR);
-
-        printf("DEBUG: SetComputeMode done\n");
-        fflush(stdout);
-
-        // Set tensor data types
-        ::musa::dnn::Tensor::Type tensor_type;
-        if constexpr (std::is_same<Tdata, half>::value) {
-            tensor_type = ::musa::dnn::Tensor::Type::HALF;
-        } else if constexpr (std::is_same<Tdata, __mt_bfloat16>::value) {
-            tensor_type = ::musa::dnn::Tensor::Type::BFLOAT16;
-        } else {
-            tensor_type = ::musa::dnn::Tensor::Type::FLOAT;
-        }
-
-printf("1111\n");
-        fflush(stdout);
-
-        // Create tensors
+        // 3. Create Tensor
         ::musa::dnn::Tensor input_tensor, output_tensor, weight_tensor, bias_tensor;
 
-        printf("DEBUG: About to configure input_tensor\n");
-        fflush(stdout);
-
-        // Configure input tensor [N, C, H, W, ...]
-        input_tensor.SetType(tensor_type);
-
-        printf("DEBUG: SetType done, about to SetFormat\n");
-        fflush(stdout);
-
-        input_tensor.SetFormat(::musa::dnn::Tensor::Format::NCHW);
-
-        printf("DEBUG: SetFormat done, about to create input_dims\n");
-        fflush(stdout);
-
-        std::vector<int64_t> input_dims = {
-            static_cast<int64_t>(info.batch()),
-            static_cast<int64_t>(info.in_channels())
-        };
-
-        printf("DEBUG: Basic input_dims: batch=%ld, in_channels=%ld\n",
-               input_dims[0], input_dims[1]);
-        fflush(stdout);
-
-        for (size_t i = 0; i < info.ndim(); ++i) {
-            input_dims.push_back(static_cast<int64_t>(info.input_dim(i)));
-            printf("DEBUG: input_dim[%zu]=%zu\n", i, info.input_dim(i));
-            fflush(stdout);
+        if constexpr (std::is_same<Tdata, half>::value) {
+            input_tensor.SetType(::musa::dnn::Tensor::Type::HALF);
+            output_tensor.SetType(::musa::dnn::Tensor::Type::HALF);
+            weight_tensor.SetType(::musa::dnn::Tensor::Type::HALF);
+            bias_tensor.SetType(::musa::dnn::Tensor::Type::HALF);
+        } else if constexpr (std::is_same<Tdata, __mt_bfloat16>::value) {
+            input_tensor.SetType(::musa::dnn::Tensor::Type::BFLOAT16);
+            output_tensor.SetType(::musa::dnn::Tensor::Type::BFLOAT16);
+            weight_tensor.SetType(::musa::dnn::Tensor::Type::BFLOAT16);
+            bias_tensor.SetType(::musa::dnn::Tensor::Type::BFLOAT16);
+        } else {
+            input_tensor.SetType(::musa::dnn::Tensor::Type::FLOAT);
+            output_tensor.SetType(::musa::dnn::Tensor::Type::FLOAT);
+            weight_tensor.SetType(::musa::dnn::Tensor::Type::FLOAT);
+            bias_tensor.SetType(::musa::dnn::Tensor::Type::FLOAT);
         }
 
-        printf("DEBUG: About to SetNdInfo for input_tensor\n");
-        fflush(stdout);
-
-        // Calculate strides like GEMM does
-        std::vector<int64_t> input_strides(input_dims.size());
-        input_strides[input_dims.size() - 1] = 1;  // Innermost dimension has stride 1
-
-        // Calculate strides for other dimensions (row-major)
-        for (int i = input_dims.size() - 2; i >= 0; --i) {
-            input_strides[i] = input_strides[i + 1] * input_dims[i + 1];
-        }
-
-        printf("DEBUG: input_strides calculated\n");
-        fflush(stdout);
-
-        input_tensor.SetNdInfo(static_cast<int>(input_dims.size()), input_dims.data(), input_strides.data());
-
-        printf("DEBUG: SetNdInfo done, about to SetAddr\n");
-        fflush(stdout);
-
+        // 4. Bind Tensor addr
         input_tensor.SetAddr(const_cast<void*>(x));
-
-        printf("DEBUG: input_tensor configuration done\n");
-        fflush(stdout);
-
-printf("2222\n");
-        fflush(stdout);
-
-        // Configure output tensor [N, K, H_out, W_out, ...]
-        output_tensor.SetType(tensor_type);
-        output_tensor.SetFormat(::musa::dnn::Tensor::Format::NCHW);
-        std::vector<int64_t> output_dims = {
-            static_cast<int64_t>(info.batch()),
-            static_cast<int64_t>(info.out_channels())
-        };
-        for (size_t i = 0; i < info.ndim(); ++i) {
-            output_dims.push_back(static_cast<int64_t>(info.output_dim(i)));
-        }
-
-        // Calculate strides for output tensor
-        std::vector<int64_t> output_strides(output_dims.size());
-        output_strides[output_dims.size() - 1] = 1;
-        for (int i = output_dims.size() - 2; i >= 0; --i) {
-            output_strides[i] = output_strides[i + 1] * output_dims[i + 1];
-        }
-
-        output_tensor.SetNdInfo(static_cast<int>(output_dims.size()), output_dims.data(), output_strides.data());
         output_tensor.SetAddr(y);
-
-printf("3333\n");
-        fflush(stdout);
-
-        // Configure weight tensor [K, C, H_k, W_k, ...]
-        weight_tensor.SetType(tensor_type);
-        weight_tensor.SetFormat(::musa::dnn::Tensor::Format::NCHW);
-        std::vector<int64_t> weight_dims = {
-            static_cast<int64_t>(info.out_channels()),
-            static_cast<int64_t>(info.in_channels())
-        };
-
-printf("4444\n");
-        fflush(stdout);
-
-        for (size_t i = 0; i < info.ndim(); ++i) {
-            weight_dims.push_back(static_cast<int64_t>(info.kernel_dim(i)));
-        }
-
-        // Calculate strides for weight tensor
-        std::vector<int64_t> weight_strides(weight_dims.size());
-        weight_strides[weight_dims.size() - 1] = 1;
-        for (int i = weight_dims.size() - 2; i >= 0; --i) {
-            weight_strides[i] = weight_strides[i + 1] * weight_dims[i + 1];
-        }
-
-        weight_tensor.SetNdInfo(static_cast<int>(weight_dims.size()), weight_dims.data(), weight_strides.data());
         weight_tensor.SetAddr(const_cast<void*>(w));
+        bias_tensor.SetAddr(const_cast<void*>(bias));
+{
+        // 5. Config Tensor input_tensor: [N, C, spatial...]
+        const size_t ndim = info.ndim();
+        std::vector<int64_t> x_dims;
+        x_dims.reserve(ndim + 2);
 
-printf("5555\n");
-fflush(stdout);
+        x_dims.push_back(static_cast<int64_t>(info.batch()));
+        x_dims.push_back(static_cast<int64_t>(info.in_channels()));
+        for (size_t i = 0; i < ndim; ++i) {
+            x_dims.push_back(static_cast<int64_t>(info.input_dim(i)));
+        }
 
+        // contiguous stride
+        std::vector<int64_t> x_stride(x_dims.size());
+        x_stride.back() = 1;
+        for (int i = static_cast<int>(x_dims.size()) - 2; i >= 0; --i) {
+            x_stride[i] = x_stride[i + 1] * x_dims[i + 1];
+        }
 
-        // Configure bias tensor if provided
+        input_tensor.SetNdInfo(
+            static_cast<int>(x_dims.size()),
+            x_dims.data(),
+            x_stride.data()
+        );
+
+}
+{
+        // 6. Config Tensor weight_tensor: [Cout, Cin, kernel...]
+        const size_t ndim = info.ndim();
+        std::vector<int64_t> w_dims;
+        w_dims.reserve(ndim + 2);
+
+        w_dims.push_back(static_cast<int64_t>(info.out_channels()));
+        w_dims.push_back(static_cast<int64_t>(info.in_channels())); // groups=1
+        for (size_t i = 0; i < ndim; ++i) {
+            w_dims.push_back(static_cast<int64_t>(info.kernel_dim(i)));
+        }
+
+        std::vector<int64_t> w_stride(w_dims.size());
+        w_stride.back() = 1;
+        for (int i = static_cast<int>(w_dims.size()) - 2; i >= 0; --i) {
+            w_stride[i] = w_stride[i + 1] * w_dims[i + 1];
+        }
+
+        weight_tensor.SetNdInfo(
+            static_cast<int>(w_dims.size()),
+            w_dims.data(),
+            w_stride.data()
+        );
+
+}
+{
+        // 7. Config Tensor output_tensor: [N, Cout, spatial...]
+        const size_t ndim = info.ndim();
+        std::vector<int64_t> y_dims;
+        y_dims.reserve(ndim + 2);
+
+        y_dims.push_back(static_cast<int64_t>(info.batch()));
+        y_dims.push_back(static_cast<int64_t>(info.out_channels()));
+        for (size_t i = 0; i < ndim; ++i) {
+            y_dims.push_back(static_cast<int64_t>(info.output_dim(i)));
+        }
+
+        std::vector<int64_t> y_stride(y_dims.size());
+        y_stride.back() = 1;
+        for (int i = static_cast<int>(y_dims.size()) - 2; i >= 0; --i) {
+            y_stride[i] = y_stride[i + 1] * y_dims[i + 1];
+        }
+
+        output_tensor.SetNdInfo(
+            static_cast<int>(y_dims.size()),
+            y_dims.data(),
+            y_stride.data()
+        );
+}
+
+        // 8. Bias tensor (if exists)
         if (bias != nullptr) {
-            bias_tensor.SetType(tensor_type);
-            bias_tensor.SetFormat(::musa::dnn::Tensor::Format::NCHW);
-
-            // For convolution bias, it should be a 1D tensor [out_channels]
-            std::vector<int64_t> bias_dims = {
+            std::array<int64_t, 1> b_dims = {
                 static_cast<int64_t>(info.out_channels())
             };
-
-            // For 1D bias tensor, stride is simply [1]
-            std::vector<int64_t> bias_strides = {1};
-
-            bias_tensor.SetNdInfo(static_cast<int>(bias_dims.size()), bias_dims.data(), bias_strides.data());
-            bias_tensor.SetAddr(const_cast<void*>(bias));
+            std::array<int64_t, 1> b_stride = {1};
+            bias_tensor.SetNdInfo(1, b_dims.data(), b_stride.data());
         }
 
-
-printf("6666\n");
-fflush(stdout);
-
-
-
-        // Set convolution parameters
+        // 9. Configure convolution descriptor (from ConvInfo)
         std::vector<int> pad_dims(info.ndim());
         std::vector<int> stride_dims(info.ndim());
         std::vector<int> dilation_dims(info.ndim());
 
         for (size_t i = 0; i < info.ndim(); ++i) {
-            pad_dims[i] = static_cast<int>(info.pad_info(i));
-            stride_dims[i] = static_cast<int>(info.stride_info(i));
-            dilation_dims[i] = static_cast<int>(info.dilation_info(i));
+            pad_dims[i]       = static_cast<int>(info.pad_info(i));
+            stride_dims[i]    = static_cast<int>(info.stride_info(i));
+            dilation_dims[i]  = static_cast<int>(info.dilation_info(i));
         }
 
+        // Current infiniop ConvInfo implies groups == 1
+        conv_operator->SetGroups(1);
 
+        // muDNN convolution configuration
+        conv_operator->SetNdInfo(
+            static_cast<int>(info.ndim()),
+            pad_dims.data(),
+            stride_dims.data(),
+            dilation_dims.data()
+        );
 
-printf("7777\n");
-fflush(stdout);
-
-
-
-        conv_operator->SetGroups(1);  // Default to groups = 1
-        conv_operator->SetNdInfo(info.ndim(), pad_dims.data(), stride_dims.data(), dilation_dims.data());
-
-        // Get recommended algorithm
+     
+        // 10. Select algorithm (simple version: always query)
         ::musa::dnn::Convolution::Algorithm algo;
-        conv_operator->GetRecommendForwardAlgorithm(mudnn_handle, algo, output_tensor, input_tensor, weight_tensor);
+        conv_operator->GetRecommendForwardAlgorithm(
+            mudnn_handle,
+            algo,
+            output_tensor,
+            input_tensor,
+            weight_tensor
+        );
 
-printf("8888\n");
-fflush(stdout);
+        // 11. Workspace memory handler
+        ::musa::dnn::MemoryMaintainer maintainer =
+            [](size_t size) -> ::musa::dnn::MemoryHandler {
+                void* ptr = nullptr;
+                musaMalloc(&ptr, size);
+                return ::musa::dnn::MemoryHandler(
+                    ptr,
+                    [](void* p) { if (p) musaFree(p); }
+                );
+            };
 
+        // 12. Run convolution (no fused activation)
+        ::musa::dnn::Tensor add_tensor;  // unused
+        ::musa::dnn::Convolution::FusedActivationDesc act;
+        act.SetMode(::musa::dnn::Convolution::FusedActivationDesc::Mode::IDENTITY);
 
-        // Workspace memory handler
-        ::musa::dnn::MemoryMaintainer maintainer = [](size_t size) -> ::musa::dnn::MemoryHandler {
-            void* ptr = nullptr;
-            musaMalloc(&ptr, size);
-            return ::musa::dnn::MemoryHandler(ptr, [](void* p) { if(p) musaFree(p); });
-        };
-
-printf("9999\n");
-fflush(stdout);
-
-
-        // Create empty activation (identity)
-        ::musa::dnn::Convolution::FusedActivationDesc act_desc;
-        act_desc.SetMode(::musa::dnn::Convolution::FusedActivationDesc::Mode::IDENTITY);
-
-        // Run convolution
-        if (bias != nullptr) {
-
-printf("10\n");
-fflush(stdout);
-
-
-            // Run with bias using RunFusion
-            conv_operator->RunFusion(
-                mudnn_handle,
-                output_tensor,
-                input_tensor,
-                weight_tensor,
-                bias_tensor,
-                ::musa::dnn::Tensor(),  // add tensor (empty)
-                act_desc,
-                algo,
-                maintainer
-            );
-        } else {
-
-printf("11\n");
-fflush(stdout);
-
-
-            // Run without bias using standard Run
-            conv_operator->Run(
-                mudnn_handle,
-                output_tensor,
-                input_tensor,
-                weight_tensor,
-                algo,
-                maintainer
-            );
-        }
+        conv_operator->RunFusion(
+            mudnn_handle,
+            output_tensor,
+            input_tensor,
+            weight_tensor,
+            bias != nullptr ? bias_tensor : ::musa::dnn::Tensor(),
+            add_tensor,
+            act,
+            algo,
+            maintainer
+        );
 
         return INFINI_STATUS_SUCCESS;
     });
 }
+
 
 infiniStatus_t Descriptor::calculate(
     void *workspace,
@@ -328,37 +244,23 @@ infiniStatus_t Descriptor::calculate(
     const void *bias,
     void *stream) const {
 
-    printf("DEBUG: Descriptor::calculate called\n");
-    fflush(stdout);
 
     // Check for null pointers
     if (!_opaque) {
-        printf("ERROR: _opaque is null!\n");
-        fflush(stdout);
         return INFINI_STATUS_BAD_PARAM;
     }
     if (!_opaque->internal) {
-        printf("ERROR: _opaque->internal is null!\n");
-        fflush(stdout);
         return INFINI_STATUS_BAD_PARAM;
     }
 
     switch (_dtype) {
         case INFINI_DTYPE_F16:
-            printf("DEBUG: Calling mudnn::calculate<half>\n");
-            fflush(stdout);
             return mudnn::calculate<half>(_info, _opaque->internal, y, x, w, bias, stream);
         case INFINI_DTYPE_F32:
-            printf("DEBUG: Calling mudnn::calculate<float>\n");
-            fflush(stdout);
             return mudnn::calculate<float>(_info, _opaque->internal, y, x, w, bias, stream);
         case INFINI_DTYPE_BF16:
-            printf("DEBUG: Calling mudnn::calculate<__mt_bfloat16>\n");
-            fflush(stdout);
             return mudnn::calculate<__mt_bfloat16>(_info, _opaque->internal, y, x, w, bias, stream);
         default:
-            printf("ERROR: Unsupported dtype: %d\n", _dtype);
-            fflush(stdout);
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
 }
