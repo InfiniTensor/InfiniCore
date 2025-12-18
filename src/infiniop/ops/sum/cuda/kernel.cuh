@@ -30,26 +30,27 @@ __global__ void sumAllKernel(
     size_t permuted_input_shape_size,
     size_t *permuted_input_shape,
     ptrdiff_t *permuted_input_strides){
-    __shared__ T s_data[BLOCK_SIZE];
+    __shared__ float s_data[BLOCK_SIZE];
     size_t tid = threadIdx.x;
     size_t idx = tid + blockIdx.x * blockDim.x;
     if(idx < input_size){
         size_t input_offset = indexToOffset(idx, permuted_input_shape_size, permuted_input_shape, permuted_input_strides);
-        s_data[tid] = input[input_offset];
+        s_data[tid] = static_cast<float>(input[input_offset]);
     } else {
         // s_data[tid] = T(0);
-        s_data[tid] = static_cast<T>(0.f);
+        s_data[tid] = static_cast<float>(0.f);
     }
     __syncthreads();
     for(size_t s = blockDim.x / 2; s > 0; s >>=1){
         if(tid < s){
+            // error: no viable overloaded '+='
             s_data[tid] += s_data[tid + s];
         }
         __syncthreads();
     }
 
     if(tid == 0){
-        atomicAdd(output, s_data[0]);
+        atomicAdd(output, static_cast<T>(s_data[0]));
     }
 }
 
@@ -73,12 +74,12 @@ __global__ void sumKernel(
     if(idx >= output_size) return;
     size_t output_index = indexToOffset(idx, output_shape_size, output_shape, output_strides);
     // T tempSum = T(0);
-    T tempSum = static_cast<T>(0.f);
+    float tempSum = static_cast<float>(0.f);
     for(size_t i = 0; i < reduce_num; i++){
         size_t input_offset = indexToOffset(i + idx * reduce_num, permuted_input_shape_size, permuted_input_shape, permuted_input_strides);
-        tempSum += input[input_offset];
+        tempSum += static_cast<float>(input[input_offset]);
     }
-    output[output_index] = tempSum;
-}
+        output[output_index] = static_cast<T>(tempSum);
+    }
 
 #endif // __SUM_CUDA_H__
