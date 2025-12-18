@@ -1,0 +1,119 @@
+import sys
+import os
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+import torch
+import infinicore
+from framework import BaseOperatorTest, TensorSpec, TestCase, GenericTestRunner
+
+
+def row_major_strides(shape):
+    """生成行优先stride"""
+    stride = 1
+    strides = [1]
+    for dim in reversed(shape[1:]):
+        stride *= dim
+        strides.insert(0, stride)
+    return tuple(strides)
+
+
+def column_major_strides(shape):
+    """生成列优先stride"""
+    stride = 1
+    strides = [stride]
+    for dim in shape[:-1]:
+        stride *= dim
+        strides.append(stride)
+    return tuple(strides)
+
+
+# Test cases: (shape, input_strides, output_strides)
+_TEST_CASES_DATA = [
+    # 2D转置
+    ((100, 100), (1, 100), (100, 1)),
+    ((2000, 2000), (1, 2000), (2000, 1)),
+    
+    # 5D行列转置
+    ((3, 4, 7, 53, 9), 
+     row_major_strides((3, 4, 7, 53, 9)),
+     column_major_strides((3, 4, 7, 53, 9))),
+    
+    # 6D行列转置 (主要优化目标)
+    ((3, 4, 50, 50, 5, 7),
+     row_major_strides((3, 4, 50, 50, 5, 7)),
+     column_major_strides((3, 4, 50, 50, 5, 7))),
+]
+
+_TOLERANCE_MAP = {
+    infinicore.float16: {"atol": 0, "rtol": 0},
+    infinicore.float32: {"atol": 0, "rtol": 0},
+}
+
+_TENSOR_DTYPES = [infinicore.float16, infinicore.float32]
+
+
+def parse_test_cases():
+    test_cases = []
+    for data in _TEST_CASES_DATA:
+        shape, in_strides, out_strides = data
+        
+        for dtype in _TENSOR_DTYPES:
+            tol = _TOLERANCE_MAP.get(dtype, {"atol": 0, "rtol": 0})
+            
+            # 输入tensor规格
+            in_spec = TensorSpec.from_tensor(shape, in_strides, dtype)
+            
+            test_cases.append(
+                TestCase(
+                    inputs=[in_spec],
+                    kwargs={"output_strides": out_strides},
+                    output_spec=None,
+                    comparison_target=None,
+                    tolerance=tol,
+                    description=f"rearrange {shape} {dtype}",
+                )
+            )
+    
+    return test_cases
+
+
+class OpTest(BaseOperatorTest):
+    """Rearrange operator test - stride重排操作"""
+    
+    def __init__(self):
+        super().__init__("Rearrange")
+    
+    def get_test_cases(self):
+        return parse_test_cases()
+    
+    def torch_operator(self, input_tensor, output_strides):
+        """PyTorch实现的rearrange - 使用as_strided"""
+        # 创建输出tensor
+        output = torch.empty_like(input_tensor)
+        # 重新设置stride
+        output = output.as_strided(input_tensor.shape, output_strides)
+        # 执行拷贝
+        output.copy_(input_tensor)
+        return output
+    
+    def infinicore_operator(self, input_tensor, output_strides):
+        """InfiniCore实现的rearrange - 使用as_strided"""
+        # 创建输出tensor
+        output = infinicore.empty_like(input_tensor)
+        # 重新设置stride
+        output = output.as_strided(input_tensor.shape, output_strides)
+        # 执行拷贝
+        output.copy_(input_tensor)
+        return output
+
+
+def main():
+    """Main entry point"""
+    runner = GenericTestRunner(OpTest)
+    runner.run_and_exit()
+
+
+if __name__ == "__main__":
+    main()
+
