@@ -22,23 +22,23 @@ indexToOffset(
 // todo 去除 indexToOffset 和 common 中 device::nvidia::indexToOffset 重名的影响
 
 // BLOCK_SIZE = 256, GRID_SIZE = (input_size + BLOCK_SIZE - 1) / BLOCK_SIZE
-template<size_t BLOCK_SIZE, typename T>
+template<size_t BLOCK_SIZE, typename Tdata, typename Tcompute>
 __global__ void sumAllKernel(
-    T *output,
-    const T *input,
+    Tcompute *output,
+    const Tdata *input,
     size_t input_size,
     size_t permuted_input_shape_size,
     size_t *permuted_input_shape,
     ptrdiff_t *permuted_input_strides){
-    __shared__ float s_data[BLOCK_SIZE];
+    __shared__ Tcompute s_data[BLOCK_SIZE];
     size_t tid = threadIdx.x;
     size_t idx = tid + blockIdx.x * blockDim.x;
     if(idx < input_size){
         size_t input_offset = indexToOffset(idx, permuted_input_shape_size, permuted_input_shape, permuted_input_strides);
-        s_data[tid] = static_cast<float>(input[input_offset]);
+        s_data[tid] = static_cast<Tcompute>(input[input_offset]);
     } else {
         // s_data[tid] = T(0);
-        s_data[tid] = static_cast<float>(0.f);
+        s_data[tid] = static_cast<Tcompute>(0.f);
     }
     __syncthreads();
     for(size_t s = blockDim.x / 2; s > 0; s >>=1){
@@ -50,7 +50,8 @@ __global__ void sumAllKernel(
     }
 
     if(tid == 0){
-        atomicAdd(output, static_cast<T>(s_data[0]));
+        // atomicAdd(output, static_cast<T>(s_data[0]));  src/infiniop/ops/sum/moore/sum_moore.mu:4: src/infiniop/ops/sum/moore/../cuda/kernel.cuh:53:9: error: no matching function for call to 'atomicAdd'
+        atomicAdd(output, s_data[0]);
     }
 }
 

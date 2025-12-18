@@ -62,11 +62,28 @@ namespace op::sum::moore {
         CHECK_MOORE(musaMemcpyAsync(permuted_input_strides_musa, info.permuted_input_strides.data(), input_ndim * sizeof(ptrdiff_t),  musaMemcpyHostToDevice, stream));
     
         if(info.reduce_num == input_size){
-            T zero = static_cast<T>(0.0f);
-            CHECK_MOORE(musaMemcpyAsync(output, &zero, sizeof(T), musaMemcpyHostToDevice, stream));
-            size_t grid_size = (input_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
-            sumAllKernel<BLOCK_SIZE, T><<<grid_size, BLOCK_SIZE, BLOCK_SIZE*sizeof(T), stream>>>(
-                output, input, input_size, input_ndim, permuted_input_shape_musa, permuted_input_strides_musa);
+            if(std::is_same_v<T, __mt_bfloat16>){
+                // 需要解决 moore不支持bf16的atomic add的问题
+                float zero = 0.0f;
+                float* tmp_output;
+                CHECK_MOORE(musaMalloc(&tmp_output, sizeof(float), stream))
+                CHECK_MOORE(musaMemcpyAsync(tmp_output, &zero, sizeof(float), musaMemcpyHostToDevice, stream));
+                size_t grid_size = (input_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+                sumAllKernel<BLOCK_SIZE, T, float><<<grid_size, BLOCK_SIZE, BLOCK_SIZE*sizeof(float), stream>>>(
+                    tmp_output, input, input_size, input_ndim, permuted_input_shape_musa, permuted_input_strides_musa);
+                // 可以自定义 kernel，将 float -> T，这里直接memcpy了
+                float host_val;
+                CHECK_MOORE(musaMemcpy(&host_val, tmp_output, sizeof(float), musaMemcpyDeviceToHost));
+                T out_val = static_cast<T>(host_val);
+                CHECK_MOORE(musaMemcpyAsync(output, &out_val, sizeof(T), musaMemcpyHostToDevice, stream));
+                CHECK_MOORE(musaFree(tmp_output));
+            } else{
+                T zero = static_cast<T>(0.0f);
+                CHECK_MOORE(musaMemcpyAsync(output, &zero, sizeof(T), musaMemcpyHostToDevice, stream));
+                size_t grid_size = (input_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+                sumAllKernel<BLOCK_SIZE, T, T><<<grid_size, BLOCK_SIZE, BLOCK_SIZE*sizeof(T), stream>>>(
+                    output, input, input_size, input_ndim, permuted_input_shape_musa, permuted_input_strides_musa);
+            }
         } else {
             // todo one block one reduce_num, now one thread one reduce_num
             size_t grid_size = (info.output_size + BLOCK_SIZE - 1) / BLOCK_SIZE;

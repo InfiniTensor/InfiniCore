@@ -65,7 +65,7 @@ namespace op::sum::nvidia {
             T zero = static_cast<T>(0.0f);
             CHECK_CUDA(cudaMemcpyAsync(output, &zero, sizeof(T), cudaMemcpyHostToDevice, stream));
             size_t grid_size = (input_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
-            sumAllKernel<BLOCK_SIZE, T><<<grid_size, BLOCK_SIZE, BLOCK_SIZE*sizeof(T), stream>>>(
+            sumAllKernel<BLOCK_SIZE, T, T><<<grid_size, BLOCK_SIZE, BLOCK_SIZE*sizeof(T), stream>>>(
                 output, input, input_size, input_ndim, permuted_input_shape_cuda, permuted_input_strides_cuda);
         } else {
             // todo one block one reduce_num, now one thread one reduce_num
