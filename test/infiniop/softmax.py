@@ -34,15 +34,19 @@ _TEST_CASES_ = [
     ((1, 16, 512, 512), 1),
     ((1, 16, 512, 512), 2),
     ((1, 16, 512, 512), 3),
+    ((1, 32, 4096, 4096), 3),   # GPT-3 / LLaMA attention
+    ((2, 16, 2048, 2048), 3),
+    ((4, 8, 1024, 1024), 3),
 ]
 
 # Data types used for testing
-_TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.F32]
+_TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.F32, InfiniDtype.BF16]
 
 # Tolerance map for different data types
 _TOLERANCE_MAP = {
     InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-2},
     InfiniDtype.F32: {"atol": 3e-5, "rtol": 1e-5},
+    InfiniDtype.BF16: {"atol": 1e-2, "rtol": 1e-2},
 }
 
 
