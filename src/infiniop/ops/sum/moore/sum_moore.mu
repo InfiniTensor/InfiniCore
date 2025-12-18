@@ -62,11 +62,11 @@ namespace op::sum::moore {
         CHECK_MOORE(musaMemcpyAsync(permuted_input_strides_musa, info.permuted_input_strides.data(), input_ndim * sizeof(ptrdiff_t),  musaMemcpyHostToDevice, stream));
     
         if(info.reduce_num == input_size){
-            if(std::is_same_v<T, __mt_bfloat16>){
+            if constexpr (std::is_same_v<T, __mt_bfloat16>){
                 // 需要解决 moore不支持bf16的atomic add的问题
                 float zero = 0.0f;
                 float* tmp_output;
-                CHECK_MOORE(musaMalloc(&tmp_output, sizeof(float), stream))
+                CHECK_MOORE(musaMalloc(&tmp_output, sizeof(float)));
                 CHECK_MOORE(musaMemcpyAsync(tmp_output, &zero, sizeof(float), musaMemcpyHostToDevice, stream));
                 size_t grid_size = (input_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
                 sumAllKernel<BLOCK_SIZE, T, float><<<grid_size, BLOCK_SIZE, BLOCK_SIZE*sizeof(float), stream>>>(
