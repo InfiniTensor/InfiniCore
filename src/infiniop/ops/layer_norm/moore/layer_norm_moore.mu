@@ -189,7 +189,12 @@ infiniStatus_t Descriptor::calculate(
 #define CALC(BLOCK_SIZE, TDATA) \
     calculate_layer_norm<BLOCK_SIZE, TDATA>(_info, (TDATA *)output, (const TDATA *)input, (const TDATA *)weight, (const TDATA *)bias, stream, workspace)
 
-    if (_opaque->internal->maxThreadsPerBlock() == MOORE_BLOCK_SIZE_1024) {
+    // Some MUSA targets report maxThreadsPerBlock() == 2048, but a 2048-thread BlockReduce
+    // can exceed the shared-memory limit. Clamp to 1024/512 for compatibility.
+    int max_threads = _opaque->internal->maxThreadsPerBlock();
+    unsigned int block_size = (max_threads >= (int)MOORE_BLOCK_SIZE_1024) ? MOORE_BLOCK_SIZE_1024 : MOORE_BLOCK_SIZE_512;
+
+    if (block_size == MOORE_BLOCK_SIZE_1024) {
         if (_info.dtype == INFINI_DTYPE_F16) {
             return CALC(MOORE_BLOCK_SIZE_1024, half);
         } else if (_info.dtype == INFINI_DTYPE_F32) {
@@ -199,23 +204,13 @@ infiniStatus_t Descriptor::calculate(
         } else {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
-    } else if (_opaque->internal->maxThreadsPerBlock() == MOORE_BLOCK_SIZE_512) {
+    } else if (block_size == MOORE_BLOCK_SIZE_512) {
         if (_info.dtype == INFINI_DTYPE_F16) {
             return CALC(MOORE_BLOCK_SIZE_512, half);
         } else if (_info.dtype == INFINI_DTYPE_F32) {
             return CALC(MOORE_BLOCK_SIZE_512, float);
         } else if (_info.dtype == INFINI_DTYPE_BF16) {
             return CALC(MOORE_BLOCK_SIZE_512, __mt_bfloat16);
-        } else {
-            return INFINI_STATUS_BAD_TENSOR_DTYPE;
-        }
-    } else if (_opaque->internal->maxThreadsPerBlock() == MOORE_BLOCK_SIZE_2048) {
-        if (_info.dtype == INFINI_DTYPE_F16) {
-            return CALC(MOORE_BLOCK_SIZE_2048, half);
-        } else if (_info.dtype == INFINI_DTYPE_F32) {
-            return CALC(MOORE_BLOCK_SIZE_2048, float);
-        } else if (_info.dtype == INFINI_DTYPE_BF16) {
-            return CALC(MOORE_BLOCK_SIZE_2048, __mt_bfloat16);
         } else {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
