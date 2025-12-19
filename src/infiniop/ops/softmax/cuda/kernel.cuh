@@ -2,6 +2,39 @@
 #define __SOFTMAX_KERNEL_CUH__
 
 #include <cub/block/block_reduce.cuh>
+#include <type_traits>
+
+#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
+
+template <typename T>
+__device__ __forceinline__ float toFloat(const T x) {
+    return static_cast<float>(x);
+}
+
+template <>
+__device__ __forceinline__ float toFloat<half>(const half x) {
+    return __half2float(x);
+}
+
+template <>
+__device__ __forceinline__ float toFloat<cuda_bfloat16>(const cuda_bfloat16 x) {
+    return __bfloat162float(x);
+}
+
+template <typename T>
+__device__ __forceinline__ T fromFloat(const float x) {
+    return static_cast<T>(x);
+}
+
+template <>
+__device__ __forceinline__ half fromFloat<half>(const float x) {
+    return __float2half(x);
+}
+
+template <>
+__device__ __forceinline__ cuda_bfloat16 fromFloat<cuda_bfloat16>(const float x) {
+    return __float2bfloat16(x);
+}
 
 struct __align__(8) DataMaxSum { // update the global max and sum, store the
                                  // output at max_tmp and sum_tmp
@@ -29,7 +62,7 @@ __device__ void blockSoftmaxKernel(
     dms_partial.sum_tmp = 0.0f;
     DataMaxSum dms_input;
     for (int ind = threadIdx.x; ind < dimsize; ind += BLOCK_SIZE) {
-        dms_input.max_tmp = static_cast<float>(input[tid + ind * stride]);
+        dms_input.max_tmp = toFloat(input[tid + ind * stride]);
 
         dms_input.sum_tmp = 1.0f;
         dms_partial = reduce_dms_op(dms_partial,
@@ -47,11 +80,8 @@ __device__ void blockSoftmaxKernel(
     float inv = __fdividef(1.0F, dms_total.sum_tmp);
 
     for (int ind = threadIdx.x; ind < dimsize; ind += BLOCK_SIZE) {
-        output[tid + ind * stride] = static_cast<T>(
-            __expf(static_cast<float>(
-                       input[tid + ind * stride])
-                   - dms_total.max_tmp)
-            * inv);
+        output[tid + ind * stride] = fromFloat<T>(
+            __expf(toFloat(input[tid + ind * stride]) - dms_total.max_tmp) * inv);
     }
 }
 
@@ -91,7 +121,7 @@ __device__ void warpSoftmaxKernel(T const *input, T *output,
         float max_data = -__FLT_MAX__;
 
         for (int ph = 0; threadIdx.x + ph * BLOCK_SIZE_x < dimsize; ph++) {
-            dataPerThreadx[ph] = static_cast<float>(input[tid + (threadIdx.x + ph * BLOCK_SIZE_x) * stride]);
+            dataPerThreadx[ph] = toFloat(input[tid + (threadIdx.x + ph * BLOCK_SIZE_x) * stride]);
             max_data = max(max_data, dataPerThreadx[ph]);
         }
 
@@ -118,7 +148,7 @@ __device__ void warpSoftmaxKernel(T const *input, T *output,
         //--------------------------------------------
 
         for (int ph = 0; threadIdx.x + ph * BLOCK_SIZE_x < dimsize; ph++) {
-            output[tid + (threadIdx.x + ph * BLOCK_SIZE_x) * stride] = static_cast<T>(
+            output[tid + (threadIdx.x + ph * BLOCK_SIZE_x) * stride] = fromFloat<T>(
                 dataPerThreadx[ph] * __fdividef(1.0F, sum_total[threadIdx.y]));
         }
     }

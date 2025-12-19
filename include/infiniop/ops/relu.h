@@ -10,6 +10,8 @@ __C __export infiniStatus_t infiniopCreateReluDescriptor(infiniopHandle_t handle
                                                          infiniopTensorDescriptor_t y,
                                                          infiniopTensorDescriptor_t x);
 
+__C infiniStatus_t infiniopGetReluWorkspaceSize(infiniopReluDescriptor_t desc, size_t *size);
+
 __C __export infiniStatus_t infiniopRelu(infiniopReluDescriptor_t desc,
                                          void *workspace,
                                          size_t workspace_size,
