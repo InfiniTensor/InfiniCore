@@ -8,6 +8,9 @@
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/quickgelu_nvidia.cuh"
 #endif
+#ifdef ENABLE_MOORE_API
+#include "moore/quickgelu_moore.h"
+#endif
 
 __C infiniStatus_t infiniopCreateQuickGeluDescriptor(
     infiniopHandle_t handle,
@@ -37,6 +40,9 @@ __C infiniStatus_t infiniopCreateQuickGeluDescriptor(
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -65,6 +71,9 @@ __C infiniStatus_t infiniopGetQuickGeluWorkspaceSize(
 // #endif
 #ifdef ENABLE_HYGON_API
         GET(INFINI_DEVICE_HYGON, nvidia)
+#endif
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, moore);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -99,6 +108,9 @@ __C infiniStatus_t infiniopQuickGelu(
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -127,6 +139,9 @@ __C infiniStatus_t infiniopDestroyQuickGeluDescriptor(
 // #endif
 #ifdef ENABLE_HYGON_API
         DELETE(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_MOORE_API
+        DELETE(INFINI_DEVICE_MOORE, moore);
 #endif
 
     default:

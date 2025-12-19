@@ -5,6 +5,9 @@
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/softmax_nvidia.cuh"
 #endif
+#ifdef ENABLE_MOORE_API
+#include "moore/softmax_moore.h"
+#endif
 
 __C infiniStatus_t infiniopCreateSoftmaxDescriptor(
     infiniopHandle_t handle,
@@ -34,6 +37,9 @@ __C infiniStatus_t infiniopCreateSoftmaxDescriptor(
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore)
+#endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
@@ -57,6 +63,9 @@ __C infiniStatus_t infiniopGetSoftmaxWorkspaceSize(infiniopSoftmaxDescriptor_t d
 #endif
 #ifdef ENABLE_HYGON_API
         GET(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, moore)
 #endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -87,6 +96,9 @@ __C infiniStatus_t infiniopSoftmax(
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore)
+#endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
@@ -110,6 +122,9 @@ __C infiniStatus_t infiniopDestroySoftmaxDescriptor(infiniopSoftmaxDescriptor_t 
 #endif
 #ifdef ENABLE_HYGON_API
         DESTROY(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_MOORE_API
+        DESTROY(INFINI_DEVICE_MOORE, moore)
 #endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
