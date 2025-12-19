@@ -7,7 +7,7 @@
 
 namespace infinicore::nn {
 Parameter::Parameter()
-    : Tensor(Tensor::empty({}, DataType::F32, Device(Device::Type::CPU, 0), false)) {
+    : Tensor() {
 }
 
 inline Shape get_partipion_shape_(const Shape &shape, Size tp_dim, Size tp_size) {
@@ -24,6 +24,12 @@ inline Shape get_partipion_shape_(const Shape &shape, Size tp_dim, Size tp_size)
     return part_shape;
 }
 
+Parameter::Parameter(const Tensor &tensor, Size tp_dim, Size tp_rank, Size tp_size) : Tensor(tensor), tp_dim_(tp_dim), tp_rank_(tp_rank), tp_size_(tp_size) {
+    if (tp_rank_ >= tp_size_) {
+        throw std::runtime_error("Tensor parallel rank " + std::to_string(tp_rank_) + " must be less than tensor parallel size " + std::to_string(tp_size_) + ".");
+    }
+}
+
 Parameter::Parameter(
     const Shape &shape,
     const DataType &dtype,
@@ -31,10 +37,7 @@ Parameter::Parameter(
     Size tp_dim,
     Size tp_rank,
     Size tp_size)
-    : Tensor(Tensor::empty(get_partipion_shape_(shape, tp_dim, tp_size), dtype, device, false)), tp_dim_(tp_dim), tp_rank_(tp_rank), tp_size_(tp_size) {
-    if (tp_rank_ >= tp_size_) {
-        throw std::runtime_error("Tensor parallel rank " + std::to_string(tp_rank_) + " must be less than tensor parallel size " + std::to_string(tp_size_) + ".");
-    }
+    : Parameter(Tensor::empty(get_partipion_shape_(shape, tp_dim, tp_size), dtype, device, false), tp_dim, tp_rank, tp_size) {
 }
 
 void Parameter::load_blob(const void *data) {
@@ -50,10 +53,10 @@ void Parameter::load(const Tensor &tensor) {
     expected_shape[tp_dim_] *= tp_size_;
 
     if (expected_shape != tensor->shape()) {
-        throw std::runtime_error("Shape mismatch when loading tensor into parameter.");
+        throw std::runtime_error("Shape mismatch when loading tensor into parameter. Weight: " + impl_->info() + ", Tensor: " + tensor->info() + ".");
     }
     if (impl_->dtype() != tensor->dtype()) {
-        throw std::runtime_error("Dtype mismatch when loading tensor into parameter.");
+        throw std::runtime_error("Dtype mismatch when loading tensor into parameter. Weight: " + impl_->info() + ", Tensor: " + tensor->info() + ".");
     }
     if (tp_size_ > 1) {
         impl_->copy_from(tensor->narrow({{tp_dim_, tp_rank_ * impl_->size(tp_dim_), impl_->size(tp_dim_)}}));

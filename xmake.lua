@@ -66,6 +66,13 @@ if has_config("cudnn") then
     add_defines("ENABLE_CUDNN_API")
 end
 
+option("cuda_arch")
+    set_showmenu(true)
+    set_description("Set CUDA GPU architecture (e.g. sm_90)")
+    set_values("sm_50", "sm_60", "sm_70", "sm_75", "sm_80", "sm_86", "sm_89", "sm_90", "sm_90a")
+    set_category("option")
+option_end()
+
 -- 寒武纪
 option("cambricon-mlu")
     set_default(false)
@@ -349,8 +356,6 @@ target("infiniccl")
 target_end()
 
 target("infinicore_c_api")
-
-target("infinicore_c_api")
     set_kind("phony")
     add_deps("infiniop", "infinirt", "infiniccl")
     after_build(function (target) print(YELLOW .. "[Congratulations!] Now you can install the libraries with \"xmake install\"" .. NC) end)
@@ -360,6 +365,7 @@ target("infinicore_cpp_api")
     set_kind("shared")
     add_deps("infiniop", "infinirt", "infiniccl")
     set_languages("cxx17")
+    set_symbols("visibility")
 
     local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
 

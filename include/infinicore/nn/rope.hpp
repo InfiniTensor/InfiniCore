@@ -52,6 +52,24 @@ public:
      */
     Tensor forward(const Tensor &x, const Tensor &pos, bool in_place = false) const;
 
+    /**
+     * @brief Forward pass: apply RoPE to a tensor in place
+     *
+     * @param y Output tensor of shape (..., head_dim) where ... is any number of dimensions
+     * @param x Input tensor of shape (..., head_dim) where ... is any number of dimensions
+     * @param pos Position IDs tensor of shape (*,) typically [seq_len] or [batch, seq_len]
+     * @return Rotated tensor with same shape as input
+     *
+     * Applies rotary position embeddings to the input tensor.
+     * For attention mechanisms, call this method separately for query and key tensors.
+     *
+     * Common input shapes:
+     *   - [batch, num_heads, seq_len, head_dim]
+     *   - [batch, seq_len, num_heads, head_dim]
+     *   - [seq_len, head_dim]
+     */
+    Tensor forward(const Tensor &y, const Tensor &x, const Tensor &pos) const;
+
     // Module information
     size_t head_dim() const { return head_dim_; }
     size_t max_seq_len() const { return max_seq_len_; }

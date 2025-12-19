@@ -18,17 +18,15 @@ thread_local common::OpCache<size_t, infiniopGemmDescriptor_t> caches(
 void calculate(Tensor c, Tensor a, Tensor b, float alpha, float beta) {
     size_t seed = hash_combine(c, b, a, alpha, beta);
 
-    auto device_type = context::getDevice().getType();
-    auto device_index = context::getDevice().getIndex();
-
-    auto &cache = caches.getCache(device_type, device_index);
+    auto device = context::getDevice();
+    auto &cache = caches.getCache(device);
 
     auto desc_opt = cache.get(seed);
     infiniopGemmDescriptor_t desc = nullptr;
 
     if (!desc_opt) {
         INFINICORE_CHECK_ERROR(infiniopCreateGemmDescriptor(
-            context::getInfiniopHandle(c->device()), &desc,
+            context::getInfiniopHandle(device), &desc,
             c->desc(), a->desc(), b->desc()));
         cache.put(seed, desc);
     } else {

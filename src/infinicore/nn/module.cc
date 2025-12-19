@@ -22,7 +22,11 @@ void Module::load_parameter(const std::string &name, const Tensor &param) {
     auto it = all_params.find(name);
     if (it != all_params.end()) {
         auto existing_param = it->second;
-        existing_param.load(param);
+        try {
+            existing_param.load(param);
+        } catch (const std::exception &e) {
+            throw std::runtime_error("Error loading parameter '" + name + "'. \n" + e.what());
+        }
         return;
     }
 
@@ -37,14 +41,11 @@ void Module::load_parameter_(const std::string &name, const Tensor &param) {
     auto it = parameters_.find(name);
     if (it != parameters_.end()) {
         auto existing_param = it->second;
-        // Assert dtype matches
-        if (existing_param->dtype() != param->dtype()) {
-            throw std::runtime_error(
-                "dtype mismatch for parameter '" + name + "': "
-                                                          "expected "
-                + std::to_string(static_cast<int>(existing_param->dtype())) + ", got " + std::to_string(static_cast<int>(param->dtype())));
+        try {
+            existing_param.load(param);
+        } catch (const std::exception &e) {
+            throw std::runtime_error("Error loading parameter '" + name + "'. \n" + e.what());
         }
-        existing_param.load(param);
         return;
     }
 

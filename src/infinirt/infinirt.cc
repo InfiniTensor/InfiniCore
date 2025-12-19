@@ -10,6 +10,8 @@
 
 thread_local infiniDevice_t CURRENT_DEVICE_TYPE = INFINI_DEVICE_CPU;
 thread_local int CURRENT_DEVICE_ID = 0;
+thread_local infiniDevice_t PREVIOUS_NON_CPU_DEVICE_TYPE = INFINI_DEVICE_TYPE_COUNT;
+thread_local int PREVIOUS_NON_CPU_DEVICE_ID = 0;
 
 __C infiniStatus_t infinirtInit() {
 #ifdef ENABLE_ASCEND_API
@@ -96,6 +98,16 @@ __C infiniStatus_t infinirtGetDeviceCount(infiniDevice_t device, int *count) {
 }
 
 __C infiniStatus_t infinirtSetDevice(infiniDevice_t device, int device_id) {
+    bool skip_set = CURRENT_DEVICE_TYPE == INFINI_DEVICE_CPU && device == PREVIOUS_NON_CPU_DEVICE_TYPE && device_id == PREVIOUS_NON_CPU_DEVICE_ID;
+    if (CURRENT_DEVICE_TYPE != INFINI_DEVICE_CPU) {
+        PREVIOUS_NON_CPU_DEVICE_TYPE = CURRENT_DEVICE_TYPE;
+        PREVIOUS_NON_CPU_DEVICE_ID = CURRENT_DEVICE_ID;
+    }
+    if (skip_set) {
+        CURRENT_DEVICE_TYPE = device;
+        CURRENT_DEVICE_ID = device_id;
+        return INFINI_STATUS_SUCCESS;
+    }
     INFINIRT_CALL_DEVICE_API_AND(device, setDevice, (device_id),
                                  { CURRENT_DEVICE_TYPE = device;
                                    CURRENT_DEVICE_ID = device_id; });
