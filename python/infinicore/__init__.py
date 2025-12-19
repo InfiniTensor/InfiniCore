@@ -41,10 +41,14 @@ from infinicore.dtype import (
 )
 from infinicore.ops.add import add
 from infinicore.ops.attention import attention
+from infinicore.ops.cat import cat
+from infinicore.ops.inner import inner
+from infinicore.ops.masked_select import masked_select
 from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.rearrange import rearrange
+from infinicore.ops.tan import tan
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -101,10 +105,14 @@ __all__ = [
     # Operations.
     "add",
     "attention",
+    "cat",
+    "inner",
+    "masked_select",
     "matmul",
     "mul",
     "narrow",
     "rearrange",
+    "tan",
     "empty",
     "empty_like",
     "from_blob",
