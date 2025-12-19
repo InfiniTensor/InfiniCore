@@ -4,6 +4,7 @@
 
 #include "ops/add.hpp"
 #include "ops/attention.hpp"
+#include "ops/bitwise_left_shift.hpp"
 #include "ops/causal_softmax.hpp"
 #include "ops/embedding.hpp"
 #include "ops/linear.hpp"
@@ -15,6 +16,11 @@
 #include "ops/rope.hpp"
 #include "ops/silu.hpp"
 #include "ops/swiglu.hpp"
+#include "ops/zeros_.hpp"
+#include "ops/index_select.hpp"
+#include "ops/fold.hpp"
+#include "ops/mish.hpp"
+#include "ops/log2.hpp"
 
 namespace py = pybind11;
 
@@ -34,6 +40,12 @@ inline void bind(py::module &m) {
     bind_swiglu(m);
     bind_rope(m);
     bind_embedding(m);
+    bind_zeros_(m);
+    bind_bitwise_left_shift(m);
+    bind_index_select(m);
+    bind_fold(m);
+    bind_mish(m);
+    bind_log2(m);
 }
 
 } // namespace infinicore::ops

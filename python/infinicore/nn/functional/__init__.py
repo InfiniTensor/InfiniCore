@@ -6,6 +6,8 @@ from .rms_norm import rms_norm
 from .rope import RopeAlgo, rope
 from .silu import silu
 from .swiglu import swiglu
+from .fold import fold
+from .mish import mish
 
 __all__ = [
     "causal_softmax",
@@ -17,4 +19,6 @@ __all__ = [
     "embedding",
     "rope",
     "RopeAlgo",
+    "fold",
+    "mish",
 ]

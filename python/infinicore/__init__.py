@@ -45,6 +45,9 @@ from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.rearrange import rearrange
+from infinicore.ops.bitwise_left_shift import bitwise_left_shift
+from infinicore.ops.index_select import index_select
+from infinicore.ops.log2 import log2
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -115,6 +118,8 @@ __all__ = [
     "strided_empty",
     "strided_from_blob",
     "zeros",
+    "bitwise_left_shift",
+    "index_select",
 ]
 
 use_ntops = False
