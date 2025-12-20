@@ -3,6 +3,14 @@
 
 namespace op::gemm::nvidia {
 
+// 添加线程局部控制开关
+thread_local bool g_tf32_enabled = true;
+
+// 暴露设置函数（非静态，以便外部链接）
+void set_tf32_enabled(bool enabled) {
+    g_tf32_enabled = enabled;
+}
+
 struct Descriptor::Opaque {
     std::shared_ptr<device::nvidia::Handle::Internal> internal;
 };
@@ -71,7 +79,8 @@ infiniStatus_t Descriptor::calculate(
 #if defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
         compute_type = CUDA_R_32F;
 #else
-        compute_type = CUBLAS_COMPUTE_32F_FAST_TF32;
+        // compute_type = CUBLAS_COMPUTE_32F_FAST_TF32;
+        compute_type = g_tf32_enabled ? CUBLAS_COMPUTE_32F_FAST_TF32 : CUBLAS_COMPUTE_32F;
 #endif
         break;
 
