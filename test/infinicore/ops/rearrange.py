@@ -63,13 +63,15 @@ def parse_test_cases():
             
             # 输入tensor规格
             in_spec = TensorSpec.from_tensor(shape, in_strides, dtype)
+            # 输出tensor规格：预先创建一个具有目标 strides 的 out，避免每次 iteration 分配
+            out_spec = TensorSpec.from_tensor(shape, out_strides, dtype)
             
             test_cases.append(
                 TestCase(
                     inputs=[in_spec],
-                    kwargs={"output_strides": out_strides},
-                    output_spec=None,
-                    comparison_target=None,
+                    kwargs={},  # out 由框架根据 output_spec 自动创建并传入 operator
+                    output_spec=out_spec,
+                    comparison_target="out",  # in-place(out) benchmark：只测 copy_ 内核
                     tolerance=tol,
                     description=f"rearrange {shape} {dtype}",
                 )
@@ -87,25 +89,15 @@ class OpTest(BaseOperatorTest):
     def get_test_cases(self):
         return parse_test_cases()
     
-    def torch_operator(self, input_tensor, output_strides):
-        """PyTorch实现的rearrange - 使用as_strided"""
-        # 创建输出tensor
-        output = torch.empty_like(input_tensor)
-        # 重新设置stride
-        output = output.as_strided(input_tensor.shape, output_strides)
-        # 执行拷贝
-        output.copy_(input_tensor)
-        return output
+    def torch_operator(self, input_tensor, out):
+        """PyTorch实现：out 已是目标 strides（由 output_spec 创建）"""
+        out.copy_(input_tensor)
+        return out
     
-    def infinicore_operator(self, input_tensor, output_strides):
-        """InfiniCore实现的rearrange - 使用as_strided"""
-        # 创建输出tensor
-        output = infinicore.empty_like(input_tensor)
-        # 重新设置stride
-        output = output.as_strided(input_tensor.shape, output_strides)
-        # 执行拷贝
-        output.copy_(input_tensor)
-        return output
+    def infinicore_operator(self, input_tensor, out):
+        """InfiniCore实现：out 已是目标 strides（由 output_spec 创建）"""
+        out.copy_(input_tensor)
+        return out
 
 
 def main():

@@ -114,10 +114,12 @@ bool isFullTransposePattern(const utils::RearrangeMeta &meta) {
         total_elements *= shape[i];
     }
     
-    // 只对大规模数据启用转置优化（>100K元素）
-    if (total_elements < 100000) {
-        return false;
-    }
+    // 只对足够规模的数据启用转置优化
+    // 6D: 100K+; 5D: 20K+（用于覆盖 (3,4,7,53,9) 这类中等规模 full-transpose）; 4D: 50K+
+    size_t threshold = 100000;
+    if (ndim == 5) threshold = 20000;
+    if (ndim == 4) threshold = 50000;
+    if (total_elements < threshold) return false;
     
     // 跳过大小为1的维度，构建有效维度的索引
     std::vector<size_t> valid_dims;
@@ -732,24 +734,233 @@ infiniStatus_t launchTransposeKernel(
     for (size_t i = 0; i < ndim; ++i) {
         total_elements *= shape[i];
     }
-    
+
+    // 2D 大矩阵 row<->col major layout transform：
+    // - src column-major (stride=(1, M)) -> dst row-major (stride=(N, 1))
+    // - src row-major (stride=(N, 1)) -> dst column-major (stride=(1, M))
+    // 这类 case 本质等价于一次 2D transpose，必须用 tiled transpose 才能接近带宽上限
+    // 2D transpose-like layout transforms:
+    // Only enable for sufficiently large matrices; for small sizes (e.g., 100x100),
+    // the generic rearrange kernel can be faster than a shared-memory tiled transpose.
+    if (ndim == 2 && total_elements >= 65536 && (unit == 2 || unit == 4)) {
+        const size_t d0 = shape[0]; // M
+        const size_t d1 = shape[1]; // N
+
+        const ptrdiff_t s0 = src_strides[0];
+        const ptrdiff_t s1 = src_strides[1];
+        const ptrdiff_t t0 = dst_strides[0];
+        const ptrdiff_t t1 = dst_strides[1];
+
+        // 只支持正 stride（负 stride 暂不处理）
+        if (s0 > 0 && s1 > 0 && t0 > 0 && t1 > 0) {
+            const ptrdiff_t u = static_cast<ptrdiff_t>(unit);
+
+            // Pattern A: src col-major -> dst row-major
+            // src: (1, d0) * unit, dst: (d1, 1) * unit
+            const bool src_is_col_major = (s0 == u) && (s1 == static_cast<ptrdiff_t>(d0) * u);
+            const bool dst_is_row_major = (t0 == static_cast<ptrdiff_t>(d1) * u) && (t1 == u);
+
+            // Pattern B: src row-major -> dst col-major
+            // src: (d1, 1) * unit, dst: (1, d0) * unit
+            const bool src_is_row_major = (s0 == static_cast<ptrdiff_t>(d1) * u) && (s1 == u);
+            const bool dst_is_col_major = (t0 == u) && (t1 == static_cast<ptrdiff_t>(d0) * u);
+
+            // Optional one-shot debug for pattern matching
+            static bool transpose_debug_enabled = []() {
+                const char* env = std::getenv("REARRANGE_DEBUG_TRANSPOSE");
+                return env != nullptr && std::string(env) == "1";
+            }();
+            static bool transpose_debug_printed = false;
+            if (transpose_debug_enabled && !transpose_debug_printed) {
+                transpose_debug_printed = true;
+                printf("\n=== Rearrange Transpose Debug ===\n");
+                printf("ndim=2, unit=%zu, shape=(%zu,%zu), total=%zu\n", unit, d0, d1, total_elements);
+                printf("src_strides(bytes)=(%td,%td), dst_strides(bytes)=(%td,%td)\n", s0, s1, t0, t1);
+                printf("match: src_col=%d dst_row=%d src_row=%d dst_col=%d\n",
+                       (int)src_is_col_major, (int)dst_is_row_major, (int)src_is_row_major, (int)dst_is_col_major);
+                printf("===============================\n");
+            }
+
+            // block=(32,8) + shared-memory tile，来自 CUDA transpose sample
+            dim3 block(TILE_DIM, BLOCK_ROWS, 1);
+            dim3 block_small(TILE_DIM_SMALL, BLOCK_ROWS_SMALL, 1);
+
+            if (src_is_col_major && dst_is_row_major) {
+                // 解释为：transpose A(N,M)->B(M,N) 的 contiguous row-major transpose
+                const size_t rows = d1; // N
+                const size_t cols = d0; // M
+                const bool use_small = (rows <= 256 && cols <= 256);
+                dim3 grid(
+                    (cols + (use_small ? TILE_DIM_SMALL : TILE_DIM) - 1) / (use_small ? TILE_DIM_SMALL : TILE_DIM),
+                    (rows + (use_small ? TILE_DIM_SMALL : TILE_DIM) - 1) / (use_small ? TILE_DIM_SMALL : TILE_DIM),
+                    1);
+
+                const ptrdiff_t src_row = src_strides[1] / unit; // M
+                const ptrdiff_t src_col = src_strides[0] / unit; // 1
+                const ptrdiff_t dst_row = dst_strides[0] / unit; // N
+                const ptrdiff_t dst_col = dst_strides[1] / unit; // 1
+
+                if (unit == 4) {
+                    using T = uint32_t;
+                    if (use_small) {
+                        transpose_2d_kernel_tiled_small<T><<<grid, block_small, 0, stream>>>(
+                            reinterpret_cast<T *>(y),
+                            reinterpret_cast<const T *>(x),
+                            rows, cols,
+                            src_row, src_col,
+                            dst_row, dst_col);
+                    } else {
+                        transpose_2d_kernel_tiled<T><<<grid, block, 0, stream>>>(
+                            reinterpret_cast<T *>(y),
+                            reinterpret_cast<const T *>(x),
+                            rows, cols,
+                            src_row, src_col,
+                            dst_row, dst_col);
+                    }
+                } else {
+                    using T = uint16_t;
+                    if (use_small) {
+                        transpose_2d_kernel_tiled_small<T><<<grid, block_small, 0, stream>>>(
+                            reinterpret_cast<T *>(y),
+                            reinterpret_cast<const T *>(x),
+                            rows, cols,
+                            src_row, src_col,
+                            dst_row, dst_col);
+                    } else {
+                        transpose_2d_kernel_tiled<T><<<grid, block, 0, stream>>>(
+                            reinterpret_cast<T *>(y),
+                            reinterpret_cast<const T *>(x),
+                            rows, cols,
+                            src_row, src_col,
+                            dst_row, dst_col);
+                    }
+                }
+                CHECK_OR_RETURN(cudaGetLastError() == cudaSuccess, INFINI_STATUS_INTERNAL_ERROR);
+                return INFINI_STATUS_SUCCESS;
+            }
+
+            if (src_is_row_major && dst_is_col_major) {
+                // 解释为：transpose A(M,N)->B(N,M)，写入到 dst 的 col-major 布局（等价 row-major N×M）
+                const size_t rows = d0; // M
+                const size_t cols = d1; // N
+                const bool use_small = (rows <= 256 && cols <= 256);
+                dim3 grid(
+                    (cols + (use_small ? TILE_DIM_SMALL : TILE_DIM) - 1) / (use_small ? TILE_DIM_SMALL : TILE_DIM),
+                    (rows + (use_small ? TILE_DIM_SMALL : TILE_DIM) - 1) / (use_small ? TILE_DIM_SMALL : TILE_DIM),
+                    1);
+
+                const ptrdiff_t src_row = src_strides[0] / unit; // N
+                const ptrdiff_t src_col = src_strides[1] / unit; // 1
+                const ptrdiff_t dst_row = dst_strides[1] / unit; // M
+                const ptrdiff_t dst_col = dst_strides[0] / unit; // 1
+
+                if (unit == 4) {
+                    using T = uint32_t;
+                    if (use_small) {
+                        transpose_2d_kernel_tiled_small<T><<<grid, block_small, 0, stream>>>(
+                            reinterpret_cast<T *>(y),
+                            reinterpret_cast<const T *>(x),
+                            rows, cols,
+                            src_row, src_col,
+                            dst_row, dst_col);
+                    } else {
+                        transpose_2d_kernel_tiled<T><<<grid, block, 0, stream>>>(
+                            reinterpret_cast<T *>(y),
+                            reinterpret_cast<const T *>(x),
+                            rows, cols,
+                            src_row, src_col,
+                            dst_row, dst_col);
+                    }
+                } else {
+                    using T = uint16_t;
+                    if (use_small) {
+                        transpose_2d_kernel_tiled_small<T><<<grid, block_small, 0, stream>>>(
+                            reinterpret_cast<T *>(y),
+                            reinterpret_cast<const T *>(x),
+                            rows, cols,
+                            src_row, src_col,
+                            dst_row, dst_col);
+                    } else {
+                        transpose_2d_kernel_tiled<T><<<grid, block, 0, stream>>>(
+                            reinterpret_cast<T *>(y),
+                            reinterpret_cast<const T *>(x),
+                            rows, cols,
+                            src_row, src_col,
+                            dst_row, dst_col);
+                    }
+                }
+                CHECK_OR_RETURN(cudaGetLastError() == cudaSuccess, INFINI_STATUS_INTERNAL_ERROR);
+                return INFINI_STATUS_SUCCESS;
+            }
+        }
+    }
+
     // 根据ndim和unit选择合适的kernel
-    if (ndim == 6 && total_elements > 100000 && unit == 4) {
-        // 大规模6D转置 - F32使用特化kernel
+    if (ndim == 5 && total_elements > 20000 && (unit == 2 || unit == 4)) {
+        constexpr int VEC = 4;
         const int threads = 256;
-        const int blocks = (total_elements + threads - 1) / threads;
+        const int blocks = (static_cast<int>((total_elements + VEC - 1) / VEC) + threads - 1) / threads;
+
+        if (unit == 4) {
+            auto *src_f32 = reinterpret_cast<float *>(const_cast<void *>(x));
+            auto *dst_f32 = reinterpret_cast<float *>(y);
+
+            transpose_5d_kernel_inc<float, VEC><<<blocks, threads, 0, stream>>>(
+                dst_f32, src_f32,
+                shape[0], shape[1], shape[2], shape[3], shape[4],
+                src_strides[0] / unit, src_strides[1] / unit, src_strides[2] / unit, src_strides[3] / unit, src_strides[4] / unit,
+                dst_strides[0] / unit, dst_strides[1] / unit, dst_strides[2] / unit, dst_strides[3] / unit, dst_strides[4] / unit,
+                total_elements);
+        } else {
+            using T = uint16_t;
+            auto *src_u16 = reinterpret_cast<T *>(const_cast<void *>(x));
+            auto *dst_u16 = reinterpret_cast<T *>(y);
+
+            transpose_5d_kernel_inc<T, VEC><<<blocks, threads, 0, stream>>>(
+                dst_u16, src_u16,
+                shape[0], shape[1], shape[2], shape[3], shape[4],
+                src_strides[0] / unit, src_strides[1] / unit, src_strides[2] / unit, src_strides[3] / unit, src_strides[4] / unit,
+                dst_strides[0] / unit, dst_strides[1] / unit, dst_strides[2] / unit, dst_strides[3] / unit, dst_strides[4] / unit,
+                total_elements);
+        }
+
+        CHECK_OR_RETURN(cudaGetLastError() == cudaSuccess, INFINI_STATUS_INTERNAL_ERROR);
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    if (ndim == 6 && total_elements > 100000 && (unit == 2 || unit == 4)) {
+        // 大规模6D转置 - F16/F32使用特化kernel
+        constexpr int VEC = 4;
+        const int threads = 256;
+        const int blocks = (static_cast<int>((total_elements + VEC - 1) / VEC) + threads - 1) / threads;
         
-        auto *src_f32 = reinterpret_cast<float *>(const_cast<void *>(x));
-        auto *dst_f32 = reinterpret_cast<float *>(y);
-        
-        transpose_6d_kernel_optimized<float><<<blocks, threads, 0, stream>>>(
-            dst_f32, src_f32,
-            shape[0], shape[1], shape[2], shape[3], shape[4], shape[5],
-            src_strides[0] / unit, src_strides[1] / unit, src_strides[2] / unit,
-            src_strides[3] / unit, src_strides[4] / unit, src_strides[5] / unit,
-            dst_strides[0] / unit, dst_strides[1] / unit, dst_strides[2] / unit,
-            dst_strides[3] / unit, dst_strides[4] / unit, dst_strides[5] / unit,
-            total_elements);
+        if (unit == 4) {
+            auto *src_f32 = reinterpret_cast<float *>(const_cast<void *>(x));
+            auto *dst_f32 = reinterpret_cast<float *>(y);
+
+            transpose_6d_kernel_inc<float, VEC><<<blocks, threads, 0, stream>>>(
+                dst_f32, src_f32,
+                shape[0], shape[1], shape[2], shape[3], shape[4], shape[5],
+                src_strides[0] / unit, src_strides[1] / unit, src_strides[2] / unit,
+                src_strides[3] / unit, src_strides[4] / unit, src_strides[5] / unit,
+                dst_strides[0] / unit, dst_strides[1] / unit, dst_strides[2] / unit,
+                dst_strides[3] / unit, dst_strides[4] / unit, dst_strides[5] / unit,
+                total_elements);
+        } else {
+            // unit == 2 : use uint16_t for bitwise copy (float16/bfloat16 are both 2 bytes here)
+            using T = uint16_t;
+            auto *src_u16 = reinterpret_cast<T *>(const_cast<void *>(x));
+            auto *dst_u16 = reinterpret_cast<T *>(y);
+
+            transpose_6d_kernel_inc<T, VEC><<<blocks, threads, 0, stream>>>(
+                dst_u16, src_u16,
+                shape[0], shape[1], shape[2], shape[3], shape[4], shape[5],
+                src_strides[0] / unit, src_strides[1] / unit, src_strides[2] / unit,
+                src_strides[3] / unit, src_strides[4] / unit, src_strides[5] / unit,
+                dst_strides[0] / unit, dst_strides[1] / unit, dst_strides[2] / unit,
+                dst_strides[3] / unit, dst_strides[4] / unit, dst_strides[5] / unit,
+                total_elements);
+        }
             
         CHECK_OR_RETURN(cudaGetLastError() == cudaSuccess, INFINI_STATUS_INTERNAL_ERROR);
         return INFINI_STATUS_SUCCESS;
@@ -774,9 +985,10 @@ infiniStatus_t Descriptor::calculate(
         return INFINI_STATUS_SUCCESS;
     }
 
-    // 检测是否为完全转置模式
-    // 目前只针对6D大规模转置优化
-    if (_meta.ndim() == 6 && isFullTransposePattern(_meta)) {
+    // 检测是否为完全转置模式：
+    // - 2D：row<->col major fast-path
+    // - 4D~6D：full-transpose (stride-order reversed) fast-path
+    if (_meta.ndim() == 2 || ((_meta.ndim() >= 4 && _meta.ndim() <= 6) && isFullTransposePattern(_meta))) {
         // 使用优化的转置kernel
         auto status = launchTransposeKernel(y, x, _meta, cuda_stream);
         // 如果转置kernel成功，直接返回
