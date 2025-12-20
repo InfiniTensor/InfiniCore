@@ -11,7 +11,7 @@
 namespace infinicore {
 
 namespace context {
-void setDevice(Device device, bool force_cpu = false);
+void setDevice(Device device);
 Device getDevice();
 size_t getDeviceCount(Device::Type type);
 

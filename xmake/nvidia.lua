@@ -3,6 +3,14 @@ if CUDNN_ROOT ~= nil then
     add_includedirs(CUDNN_ROOT .. "/include")
 end
 
+local CUTLASS_ROOT = os.getenv("CUTLASS_ROOT") or os.getenv("CUTLASS_HOME") or os.getenv("CUTLASS_PATH")
+local CUTE_ROOT = os.getenv("CUTE_ROOT") or os.getenv("CUTE_HOME") or os.getenv("CUTE_PATH")
+
+if CUTLASS_ROOT ~= nil then
+    add_includedirs(CUTLASS_ROOT)
+    add_includedirs(CUTE_ROOT)
+end
+
 target("infiniop-nvidia")
     set_kind("static")
     add_deps("infini-utils")
@@ -28,6 +36,11 @@ target("infiniop-nvidia")
 
             target:add("linkdirs", path.directory(path.directory(nvcc_path)) .. "/lib64/stubs")
             target:add("links", "cuda")
+
+            local cuda_arch = get_config("cuda_arch")
+            if cuda_arch ~= nil then
+                target:add("cu-cxxflags", "-arch=", cuda_arch)
+            end
         end
     end)
 

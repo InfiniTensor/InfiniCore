@@ -66,6 +66,13 @@ if has_config("cudnn") then
     add_defines("ENABLE_CUDNN_API")
 end
 
+option("cuda_arch")
+    set_showmenu(true)
+    set_description("Set CUDA GPU architecture (e.g. sm_90)")
+    set_values("sm_50", "sm_60", "sm_70", "sm_75", "sm_80", "sm_86", "sm_89", "sm_90", "sm_90a")
+    set_category("option")
+option_end()
+
 -- 寒武纪
 option("cambricon-mlu")
     set_default(false)

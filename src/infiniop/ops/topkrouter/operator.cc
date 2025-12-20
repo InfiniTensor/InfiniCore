@@ -8,6 +8,9 @@
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API)
 #include "nvidia/topkrouter_nvidia.cuh"
 #endif
+#ifdef ENABLE_METAX_API
+#include "metax/topkrouter_metax.h"
+#endif
 #ifdef ENABLE_KUNLUN_API
 #include "kunlun/topkrouter_kunlun.h"
 #endif
@@ -29,6 +32,9 @@ __C infiniStatus_t infiniopCreateTopkrouterDescriptor(infiniopHandle_t handle, i
 #endif
 #ifdef ENABLE_QY_API
         CREATE(INFINI_DEVICE_QY, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_KUNLUN_API
         CREATE(INFINI_DEVICE_KUNLUN, kunlun);
@@ -55,6 +61,9 @@ __C infiniStatus_t infiniopGetTopkrouterWorkspaceSize(infiniopTopkrouterDescript
 #endif
 #ifdef ENABLE_QY_API
         GET(INFINI_DEVICE_QY, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_KUNLUN_API
         GET(INFINI_DEVICE_KUNLUN, kunlun);
@@ -85,6 +94,9 @@ __C infiniStatus_t infiniopTopkrouter(infiniopTopkrouterDescriptor_t desc, void 
 #ifdef ENABLE_QY_API
         CALCULATE(INFINI_DEVICE_QY, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax);
+#endif
 #ifdef ENABLE_KUNLUN_API
         CALCULATE(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
@@ -110,6 +122,9 @@ __C infiniStatus_t infiniopDestroyTopkrouterDescriptor(infiniopTopkrouterDescrip
 #endif
 #ifdef ENABLE_QY_API
         DESTROY(INFINI_DEVICE_QY, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        DESTROY(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_KUNLUN_API
         DESTROY(INFINI_DEVICE_KUNLUN, kunlun);
