@@ -8,6 +8,9 @@
 #ifdef ENABLE_METAX_API
 #include "metax/paged_caching_metax.h"
 #endif
+#ifdef ENABLE_MOORE_API
+#include "moore/paged_caching_moore.h"
+#endif
 
 __C infiniStatus_t infiniopCreatePagedCachingDescriptor(
     infiniopHandle_t handle,
@@ -32,6 +35,9 @@ __C infiniStatus_t infiniopCreatePagedCachingDescriptor(
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, metax)
 #endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore)
+#endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
@@ -51,6 +57,9 @@ __C infiniStatus_t infiniopGetPagedCachingWorkspaceSize(
 #endif
 #ifdef ENABLE_METAX_API
         GET(INFINI_DEVICE_METAX, metax)
+#endif
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, moore)
 #endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -76,6 +85,9 @@ __C infiniStatus_t infiniopPagedCaching(
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, metax)
 #endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore)
+#endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
@@ -94,6 +106,9 @@ __C infiniStatus_t infiniopDestroyPagedCachingDescriptor(
 #endif
 #ifdef ENABLE_METAX_API
         DESTROY(INFINI_DEVICE_METAX, metax)
+#endif
+#ifdef ENABLE_MOORE_API
+        DESTROY(INFINI_DEVICE_MOORE, moore)
 #endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
