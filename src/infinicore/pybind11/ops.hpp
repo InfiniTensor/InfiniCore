@@ -7,7 +7,12 @@
 #include "ops/causal_softmax.hpp"
 #include "ops/embedding.hpp"
 #include "ops/linear.hpp"
+#include "ops/logsumexp.hpp"
+#include "ops/lp_pool1d.hpp"
+#include "ops/lp_pool2d.hpp"
+#include "ops/lp_pool3d.hpp"
 #include "ops/matmul.hpp"
+#include "ops/max.hpp"
 #include "ops/mul.hpp"
 #include "ops/random_sample.hpp"
 #include "ops/rearrange.hpp"
@@ -34,6 +39,11 @@ inline void bind(py::module &m) {
     bind_swiglu(m);
     bind_rope(m);
     bind_embedding(m);
+    bind_logsumexp(m);
+    bind_lp_pool1d(m);
+    bind_lp_pool2d(m);
+    bind_lp_pool3d(m);
+    bind_max(m);
 }
 
 } // namespace infinicore::ops
