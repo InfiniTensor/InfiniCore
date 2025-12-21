@@ -20,7 +20,7 @@ __C infiniStatus_t infiniopCreateSoftmaxDescriptor(
             reinterpret_cast<op::softmax::NAMESPACE::Descriptor **>(desc_ptr), \
             y_desc,                                                            \
             x_desc, axis);
-
+    std::cout << "handle device " << handle->device << std::endl;
     switch (handle->device) {
 #ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia)
@@ -35,6 +35,7 @@ __C infiniStatus_t infiniopCreateSoftmaxDescriptor(
         CREATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
     }
+    std::cout << "Error In CREATE NVIDIA API" << std::endl;
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 

@@ -107,6 +107,32 @@ infiniStatus_t launchKernel(void *y, const void *x, infiniDtype_t dtype,
                 <<<grid_dim, block_dim, 0, stream>>>((float *)y, (const float *)x,
                                                      othersize, dimsize, stride);
         }
+    }else if (dtype == INFINI_DTYPE_BF16){
+        if (dimsize > 1024) {
+            blockSoftmax<__nv_bfloat16, BLOCK_SIZE>
+                <<<num_blocks, BLOCK_SIZE, 0, stream>>>((__nv_bfloat16 *)y, (const __nv_bfloat16 *)x,
+                                                        dimsize, stride);
+        } else if (dimsize > 31) {
+            constexpr unsigned int BLOCK_SIZE_x = 32;
+            constexpr unsigned int BLOCK_SIZE_y = 32;
+            constexpr int numPerThreadx = 32;
+            int num_block_x = (num_blocks + BLOCK_SIZE_y - 1) / BLOCK_SIZE_y;
+            dim3 block_dim(BLOCK_SIZE_x, BLOCK_SIZE_y, 1);
+            dim3 grid_dim(num_block_x, 1, 1);
+            warpSoftmax<__nv_bfloat16, BLOCK_SIZE_x, BLOCK_SIZE_y, numPerThreadx>
+                <<<grid_dim, block_dim, 0, stream>>>((__nv_bfloat16 *)y, (const __nv_bfloat16 *)x,
+                                                     othersize, dimsize, stride);
+        } else {
+            constexpr unsigned int BLOCK_SIZE_x = 16;
+            constexpr unsigned int BLOCK_SIZE_y = 32;
+            constexpr int numPerThreadx = 2;
+            int num_block_x = (num_blocks + BLOCK_SIZE_y - 1) / BLOCK_SIZE_y;
+            dim3 block_dim(BLOCK_SIZE_x, BLOCK_SIZE_y, 1);
+            dim3 grid_dim(num_block_x, 1, 1);
+            warpSoftmax<__nv_bfloat16, BLOCK_SIZE_x, BLOCK_SIZE_y, numPerThreadx>
+                <<<grid_dim, block_dim, 0, stream>>>((__nv_bfloat16 *)y, (const __nv_bfloat16 *)x,
+                                                     othersize, dimsize, stride);
+        }
     } else {
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
