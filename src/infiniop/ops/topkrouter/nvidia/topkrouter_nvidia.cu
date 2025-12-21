@@ -43,10 +43,10 @@ template <int BLOCK_SIZE = 128>
 infiniStatus_t launch_topkrouter(float *d_values_out, int *d_indices_out, const void *d_input, const float *d_correction_bias,
                                  const float routed_scaling_factor, const size_t N, const size_t width, const size_t topk, infiniDtype_t xtype,
                                  cudaStream_t stream) {
-    const int block_threads = BLOCK_SIZE;
+    const int block_threads = width;  // 使用width作为线程数，避免越界
     dim3 blocks(N);
     dim3 threads(block_threads);
-
+    std::cout << "Launch Nvidia topk router" << std::endl;
     if (xtype == INFINI_DTYPE_F32) {
         topkrouter_kernel<float, BLOCK_SIZE><<<blocks, threads, 0, stream>>>(d_values_out, d_indices_out, (float *)d_input, d_correction_bias, routed_scaling_factor, N, width, topk);
     } else if (xtype == INFINI_DTYPE_F16) {
@@ -86,7 +86,9 @@ infiniStatus_t Descriptor::calculate(
 
     if (256 == width) {
         launch_topkrouter<256>(values, indices, x, correction_bias, routed_scaling_factor, N, width, topk, _info.xtype, cuda_stream);
-    } else {
+    } else if (64 == width){
+        launch_topkrouter<64>(values, indices, x, correction_bias, routed_scaling_factor, N, width, topk, _info.xtype, cuda_stream);
+    }else {
         return INFINI_STATUS_BAD_PARAM;
     }
 

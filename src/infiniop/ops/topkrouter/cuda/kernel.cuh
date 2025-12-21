@@ -73,12 +73,16 @@ __global__ void topkrouter_kernel(float *values_topk,             // 输出数�
     // ------------------------------------------------------ //
     //             对输入数据做 sigmoid                         //
     // ------------------------------------------------------ //
-    float value = sigmoid_func(data_input[tid]);
-
-    // ------------------------------------------------------ //
-    //             对输入数据加偏执                              //
-    // ------------------------------------------------------ //
-    value += d_correction_bias[tid];
+    float value;
+    if (tid < width) {
+        value = sigmoid_func(data_input[tid]);
+        // ------------------------------------------------------ //
+        //             对输入数据加偏执                              //
+        // ------------------------------------------------------ //
+        value += d_correction_bias[tid];
+    } else {
+        value = -FLT_MAX; // 对于越界的线程，设为最小值，这样不会被选到topk
+    }
 
     // ----------------------------------------------------------- //
     //      每个warp为一组，一共8组，找出每组的最大的前两个数据            //
@@ -91,14 +95,20 @@ __global__ void topkrouter_kernel(float *values_topk,             // 输出数�
         WarpMergeSortT(temp_storage[warp_id]).Sort(thread_values, thread_indices, CustomLess());
     }
     __syncthreads();
-    share_data[tid] = thread_values[0];
+    if (tid < width) {
+        share_data[tid] = thread_values[0];
+    }
 
     // ----------------------------------------------------------- //
     //              每个组中,前两个数据的和                            //
     // ----------------------------------------------------------- //
     __syncthreads();
     if (0 == lane_id) {
-        share_data_group[warp_id] = share_data[warp_id * warp_threads] + share_data[warp_id * warp_threads + 1];
+        int base_idx = warp_id * warp_threads;
+        // 确保不越界
+        float val1 = (base_idx < width) ? share_data[base_idx] : -FLT_MAX;
+        float val2 = (base_idx + 1 < width) ? share_data[base_idx + 1] : -FLT_MAX;
+        share_data_group[warp_id] = val1 + val2;
     }
     __syncthreads();
     // ----------------------------------------------------------- //
@@ -143,7 +153,11 @@ __global__ void topkrouter_kernel(float *values_topk,             // 输出数�
         value = 0.0f;
         if (tid < 8) {
             int index = thread_indices[0];
-            value = sigmoid_func(data_input[index]);
+            if (index < width) {
+                value = sigmoid_func(data_input[index]);
+            } else {
+                value = 0.0f;
+            }
         }
         {
             typedef cub::WarpReduce<float, warp_threads> WarpReduce;

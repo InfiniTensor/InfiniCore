@@ -29,12 +29,12 @@ from libinfiniop import (
 _TEST_CASES_ = [
     # x_shape, x_stride, topk, routed_scaling_factor
     ((1, 256), None, 8, 2.5),
+    ((24, 64), None, 8, 1.0),  # 添加64专家的测试用例，匹配router_logits_buf: [24, 64]
 ]
 
 # w (weight) types
 # Note: 'None' means the same as input dtype
-# _X_DTYPES = [InfiniDtype.F32, InfiniDtype.BF16, InfiniDtype.F16]
-_X_DTYPES = [] # CPU CI
+_X_DTYPES = [InfiniDtype.F32, InfiniDtype.F16] # 启用测试
 # x types used for testing
 _VALUE_DTYPES = [InfiniDtype.F32]
 
@@ -121,8 +121,76 @@ class DeepseekV3TopkRouter(nn.Module):
         return topk_indices, topk_weights
 
 
-def torch_topkrouter(router_logits, correction_bias, routed_scaling_factor, topk):
-    lable_indices, lable_values = DeepseekV3TopkRouter(correction_bias, routed_scaling_factor, topk)(router_logits)
+class GeneralTopkRouter(nn.Module):
+    def __init__(self, correction_bias, routed_scaling_factor: float = 1.0, topk: int = 8, n_routed_experts: int = 256):
+        super().__init__()
+        self.top_k = topk
+        self.n_routed_experts = n_routed_experts
+        self.routed_scaling_factor = routed_scaling_factor
+
+        # 根据专家数量计算分组参数
+        if n_routed_experts == 256:
+            self.n_group = 8  # 256/8 = 32 per group
+            self.topk_group = 4
+        elif n_routed_experts == 64:
+            self.n_group = 8  # 64/8 = 8 per group
+            self.topk_group = 4
+        else:
+            # 默认配置
+            self.n_group = 8
+            self.topk_group = 4
+
+        self.norm_topk_prob = True
+
+        self.e_score_correction_bias = torch.zeros(n_routed_experts, device=correction_bias.device)
+        self.e_score_correction_bias[:] = correction_bias[:]
+
+    @torch.no_grad()
+    def get_topk_indices(self, scores):
+        scores_for_choice = scores.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)
+        group_scores = (
+            scores_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
+            .topk(2, dim=-1)[0]
+            .sum(dim=-1)
+        )
+
+        group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=True)[1]
+        group_mask = torch.zeros_like(group_scores)
+        group_mask.scatter_(1, group_idx, 1)
+
+        score_mask = (
+            group_mask.unsqueeze(-1)
+            .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
+            .reshape(-1, self.n_routed_experts)
+        )
+
+        scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), 0.0)
+        topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=True)[1]
+
+        return topk_indices
+
+    def forward(self, router_logits):
+        scores = router_logits.sigmoid()
+        scores = scores.to(torch.float32)
+
+        topk_indices = self.get_topk_indices(scores)
+        topk_weights = scores.gather(1, topk_indices)
+
+        if self.norm_topk_prob:
+            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
+            topk_weights /= denominator
+        topk_weights = topk_weights * self.routed_scaling_factor
+
+        return topk_indices, topk_weights
+
+
+def torch_topkrouter(router_logits, correction_bias, routed_scaling_factor, topk, n_routed_experts=256):
+    if n_routed_experts == 256:
+        router = DeepseekV3TopkRouter(correction_bias, routed_scaling_factor, topk)
+    else:
+        router = GeneralTopkRouter(correction_bias, routed_scaling_factor, topk, n_routed_experts)
+
+    lable_indices, lable_values = router(router_logits)
     lable_indices = lable_indices.to(torch.int32)
     return lable_values, lable_indices
 
@@ -196,7 +264,7 @@ def test(
     lib_topkrouter()
 
 
-    lable_values, lable_indices = torch_topkrouter(x.actual_tensor(), correction_bias.actual_tensor(), routed_scaling_factor, topk)
+    lable_values, lable_indices = torch_topkrouter(x.actual_tensor(), correction_bias.actual_tensor(), routed_scaling_factor, topk, width)
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:
         debug(lable_values, values, atol=atol, rtol=rtol)
@@ -208,7 +276,7 @@ def test(
     # Profiling workflow
     if PROFILE:
         # fmt: off
-        profile_operation("PyTorch", lambda: torch_topkrouter(x.actual_tensor(), correction_bias.actual_tensor(), routed_scaling_factor, topk), device, NUM_PRERUN, NUM_ITERATIONS)
+        profile_operation("PyTorch", lambda: torch_topkrouter(x.actual_tensor(), correction_bias.actual_tensor(), routed_scaling_factor, topk, width), device, NUM_PRERUN, NUM_ITERATIONS)
         profile_operation("    lib", lambda: lib_topkrouter(), device, NUM_PRERUN, NUM_ITERATIONS)
         # fmt: on
     check_error(LIBINFINIOP.infiniopDestroyTopkrouterDescriptor(descriptor))

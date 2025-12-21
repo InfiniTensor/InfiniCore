@@ -187,13 +187,23 @@ infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size, flo
     size_t N = _info.N;
     size_t width = _info.width;
 
-    // 下面是 deepseek的config.json的超参数
-    const size_t n_routed_experts = 256;
-    const size_t n_group = 8;
-    const size_t topk_group = 4;
-    const bool norm_topk_prob = true;
+    // 支持不同的专家数量
+    size_t n_routed_experts, n_group, topk_group;
+    bool norm_topk_prob = true;
 
-    if ((width != n_routed_experts) || (width % n_group != 0) || (256 != width)) {
+    if (width == 256) {
+        n_routed_experts = 256;
+        n_group = 8;
+        topk_group = 4;
+    } else if (width == 64) {
+        n_routed_experts = 64;
+        n_group = 8;
+        topk_group = 4;
+    } else {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    if (width % n_group != 0) {
         return INFINI_STATUS_BAD_PARAM;
     }
 
