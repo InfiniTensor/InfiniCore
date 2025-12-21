@@ -76,7 +76,7 @@ class OpTest(BaseOperatorTest):
                 and isinstance(test_case.inputs[0], TensorSpec)
                 and test_case.inputs[0].strides is not None
             ):
-                return TestResult(
+                return CaseResult(
                     success=False,
                     return_code=-2,
                     test_case=test_case,
