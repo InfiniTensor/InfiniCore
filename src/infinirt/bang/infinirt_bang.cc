@@ -52,7 +52,19 @@ infiniStatus_t eventCreate(infinirtEvent_t *event_ptr) {
 }
 
 infiniStatus_t eventCreateWithFlags(infinirtEvent_t *event_ptr, uint32_t flags) {
-    return INFINI_STATUS_NOT_IMPLEMENTED;
+    cnrtNotifier_t notifier;
+    unsigned int cnrt_flags = CNRT_NOTIFIER_DEFAULT;
+
+    if (flags & INFINIRT_EVENT_DISABLE_TIMING) {
+        cnrt_flags |= CNRT_NOTIFIER_DISABLE_TIMING_ALL;
+    }
+    if (flags & INFINIRT_EVENT_BLOCKING_SYNC) {
+        cnrt_flags |= CNRT_NOTIFIER_DISABLE_TIMING_SW;
+    }
+
+    CHECK_BANGRT(cnrtNotifierCreateWithFlags(&notifier, cnrt_flags));
+    *event_ptr = notifier;
+    return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t eventRecord(infinirtEvent_t event, infinirtStream_t stream) {
@@ -83,7 +95,8 @@ infiniStatus_t eventDestroy(infinirtEvent_t event) {
 }
 
 infiniStatus_t eventElapsedTime(float *ms_ptr, infinirtEvent_t start, infinirtEvent_t end) {
-    return INFINI_STATUS_NOT_IMPLEMENTED;
+    CHECK_BANGRT(cnrtNotifierElapsedTime((cnrtNotifier_t)start, (cnrtNotifier_t)end, ms_ptr));
+    return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t mallocDevice(void **p_ptr, size_t size) {

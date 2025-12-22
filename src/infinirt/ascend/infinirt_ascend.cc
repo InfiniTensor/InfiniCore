@@ -95,7 +95,8 @@ infiniStatus_t eventDestroy(infinirtEvent_t event) {
 }
 
 infiniStatus_t eventElapsedTime(float *ms_ptr, infinirtEvent_t start, infinirtEvent_t end) {
-    return INFINI_STATUS_NOT_IMPLEMENTED;
+    CHECK_ACLRT(aclrtEventElapsedTime(ms_ptr, (aclrtEvent)start, (aclrtEvent)end));
+    return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t mallocDevice(void **p_ptr, size_t size) {

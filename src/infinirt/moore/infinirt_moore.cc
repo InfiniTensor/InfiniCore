@@ -51,7 +51,21 @@ infiniStatus_t eventCreate(infinirtEvent_t *event_ptr) {
 }
 
 infiniStatus_t eventCreateWithFlags(infinirtEvent_t *event_ptr, uint32_t flags) {
-    return INFINI_STATUS_NOT_IMPLEMENTED;
+    musaEvent_t event;
+    unsigned int musa_flags = musaEventDefault;
+
+    // 映射 InfiniCore 的 flags 到 HC Runtime flags
+    if (flags & INFINIRT_EVENT_DISABLE_TIMING) {
+        musa_flags |= musaEventDisableTiming;
+    }
+    if (flags & INFINIRT_EVENT_BLOCKING_SYNC) {
+        musa_flags |= musaEventBlockingSync;
+    }
+
+    CHECK_MUSART(musaEventCreateWithFlags(&event, musa_flags));
+
+    *event_ptr = event;
+    return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t eventRecord(infinirtEvent_t event, infinirtStream_t stream) {
