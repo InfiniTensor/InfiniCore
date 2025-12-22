@@ -1,0 +1,72 @@
+#ifndef __VAR_MEAN_INFO_H__
+#define __VAR_MEAN_INFO_H__
+#include "../../../utils.h"
+#include "../../tensor.h"
+#include <vector>
+#include <cstddef>
+#include <algorithm>
+
+
+
+// 类似sum的实现，但是需要计算var和mean
+// var 和 mean的output shape一致， output strides一致， output size一致
+// 在info这里做permute就行了！
+namespace op::var_mean{
+    class VarMeanInfo{
+    VarMeanInfo() = default;
+    public:
+        infiniDtype_t dtype;
+        std::vector<size_t> permuted_input_shape; // need to permute shape for reduce tensor (other1, other2, other3...reduce_dim1, reduce_dim2, reduce_dim3...)
+        std::vector<size_t> output_shape;
+        std::vector<ptrdiff_t> permuted_input_strides; // need to permute strides for reduce tensor (other1, other2, other3...reduce_dim1, reduce_dim2, reduce_dim3...)
+        std::vector<ptrdiff_t> output_strides;
+        size_t reduce_dim_size; // reduce dim size
+        size_t reduce_num; // number of elements to reduce for each output element
+        size_t input_size; // total number of input elements
+        size_t output_size; // total number of output elements
+        bool unbiased_var;
+        static utils::Result<VarMeanInfo> create(
+            infiniopTensorDescriptor_t var_output_desc,
+            // infiniopTensorDescriptor_t mean_output_desc, mean_output_desc和var_output_desc一致
+            infiniopTensorDescriptor_t input_desc,
+            size_t *dim, 
+            size_t dim_size,
+            bool unbiased,
+            bool keepdim){
+                auto input_shape = input_desc->shape();
+                auto input_strides = input_desc->strides();
+                size_t input_ndim = input_desc->ndim();
+                size_t reduce_num = 1;
+                for(size_t i = 0; i < dim_size; i++){
+                    reduce_num *= input_shape[dim[i]];
+                }
+                std::vector<size_t> permute_order;
+                for(size_t i = 0; i < input_ndim; i++){
+                    if(std::find(dim, dim + dim_size, i) == dim + dim_size){
+                        permute_order.push_back(i);
+                    }
+                }
+                for(size_t i = 0; i < dim_size; i++){
+                    permute_order.push_back(dim[i]);
+                }
+                std::vector<size_t> permuted_input_shape;
+                std::vector<ptrdiff_t> permuted_input_strides;
+                for(size_t i = 0; i < permute_order.size(); i++){
+                    permuted_input_shape.push_back(input_shape[permute_order[i]]);
+                    permuted_input_strides.push_back(input_strides[permute_order[i]]);
+                }
+                return utils::Result<VarMeanInfo>(VarMeanInfo{input_desc->dtype(),
+                                                      permuted_input_shape,
+                                                      var_output_desc->shape(), 
+                                                      permuted_input_strides, 
+                                                      var_output_desc->strides(), 
+                                                      dim_size, 
+                                                      reduce_num, 
+                                                      input_desc->numel(), 
+                                                      var_output_desc->numel(),
+                                                      unbiased});
+            }
+};
+}
+
+#endif

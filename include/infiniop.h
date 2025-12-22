@@ -2,7 +2,8 @@
 #define __INFINIOP_API_H__
 
 #include "infiniop/handle.h"
-#include "infiniop/ops/sum.h" // done
+#include "infiniop/ops/sum.h"
+#include "infiniop/ops/var_mean.h"
 #include "infiniop/ops/add.h"
 #include "infiniop/ops/attention.h"
 #include "infiniop/ops/causal_softmax.h"

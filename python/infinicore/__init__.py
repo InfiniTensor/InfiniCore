@@ -46,6 +46,7 @@ from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.rearrange import rearrange
 from infinicore.ops.sum import sum
+from infinicore.ops.var_mean import var_mean
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -117,6 +118,7 @@ __all__ = [
     "strided_from_blob",
     "zeros",
     "sum",
+    "var_mean",
 ]
 
 use_ntops = False

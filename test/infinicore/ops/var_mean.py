@@ -15,7 +15,7 @@ from framework import (
 
 # Test cases format: (in_shape, in_strides_or_None, dim_or_None, unbiased_or_None, keepdim_or_None)
 # var_mean returns (var, mean)
-
+# Changed in torch version 2.0: Previously this argument was called unbiased and was a boolean with True corresponding to correction=1 and False being correction=0.
 _TEST_CASES_DATA = [
     ((8, 8), None, None, None, None),
     ((8, 8), (16, 1), 1, True, False),
@@ -78,9 +78,9 @@ class OpTest(BaseOperatorTest):
     def torch_operator(self, *args, **kwargs):
         return torch.var_mean(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
-    #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.var_mean(*args, **kwargs)
+    def infinicore_operator(self, *args, **kwargs):
+        """InfiniCore implementation (operator not yet available)."""
+        return infinicore.var_mean(*args, **kwargs)
 
 
 def main():
