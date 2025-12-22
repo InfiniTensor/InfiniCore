@@ -20,7 +20,6 @@ DECLARE_INFINIOP_TEST(sub)
 DECLARE_INFINIOP_TEST(zeros)
 DECLARE_INFINIOP_TEST(ones)
 DECLARE_INFINIOP_TEST(paged_attention)
-DECLARE_INFINIOP_TEST(topksoftmax)
 
 DECLARE_INFINIOP_TEST(sigmoid)
 DECLARE_INFINIOP_TEST(topkrouter)
@@ -38,26 +37,27 @@ DECLARE_INFINIOP_TEST(topksoftmax)
 /*
  * Register all the tests here
  */
-#define TEST_BUILDER_MAPPINGS                                                                               \
-    {                                                                                                       \
-        REGISTER_INFINIOP_TEST(gemm)                                                                        \
-            REGISTER_INFINIOP_TEST(random_sample)                                                           \
-                REGISTER_INFINIOP_TEST(add)                                                                 \
-                    REGISTER_INFINIOP_TEST(mul)                                                             \
-                        REGISTER_INFINIOP_TEST(clip)                                                        \
-                            REGISTER_INFINIOP_TEST(swiglu)                                                  \
-                                REGISTER_INFINIOP_TEST(rope)                                                \
-                                    REGISTER_INFINIOP_TEST(rms_norm)                                        \
-                                        REGISTER_INFINIOP_TEST(causal_softmax)                              \
-                                            REGISTER_INFINIOP_TEST(rearrange)                               \
-                                                REGISTER_INFINIOP_TEST(sub)                                 \
-                                                    REGISTER_INFINIOP_TEST(paged_attention)                 \
-                                                        REGISTER_INFINIOP_TEST(zeros)                       \
-                                                            REGISTER_INFINIOP_TEST(ones)                    \
-                                                                REGISTER_INFINIOP_TEST(sigmoid)             \
-                                                                    REGISTER_INFINIOP_TEST(topkrouter)      \
-                                                                        REGISTER_INFINIOP_TEST(topksoftmax) \
-                                                                            REGISTER_INFINIOP_TEST(silu)}
+#define TEST_BUILDER_MAPPINGS                   \
+    {                                           \
+        REGISTER_INFINIOP_TEST(gemm)            \
+        REGISTER_INFINIOP_TEST(random_sample)   \
+        REGISTER_INFINIOP_TEST(add)             \
+        REGISTER_INFINIOP_TEST(mul)             \
+        REGISTER_INFINIOP_TEST(clip)            \
+        REGISTER_INFINIOP_TEST(swiglu)          \
+        REGISTER_INFINIOP_TEST(rope)            \
+        REGISTER_INFINIOP_TEST(rms_norm)        \
+        REGISTER_INFINIOP_TEST(causal_softmax)  \
+        REGISTER_INFINIOP_TEST(rearrange)       \
+        REGISTER_INFINIOP_TEST(sub)             \
+        REGISTER_INFINIOP_TEST(paged_attention) \
+        REGISTER_INFINIOP_TEST(zeros)           \
+        REGISTER_INFINIOP_TEST(ones)            \
+        REGISTER_INFINIOP_TEST(sigmoid)         \
+        REGISTER_INFINIOP_TEST(topkrouter)      \
+        REGISTER_INFINIOP_TEST(topksoftmax)     \
+        REGISTER_INFINIOP_TEST(silu)            \
+    }
 
 namespace infiniop_test {
 
