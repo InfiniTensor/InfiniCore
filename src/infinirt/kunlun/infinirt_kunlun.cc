@@ -142,14 +142,18 @@ infiniStatus_t memcpyAsync(void *dst, const void *src, size_t size, infinirtMemc
 }
 
 infiniStatus_t memcpyPeer(void *dst, int dst_device, const void *src, int src_device, size_t size) {
-    CHECK_KUNLUNRT(xpu_memcpy_peer(dst_device, dst, src_device, src, size));
-    return INFINI_STATUS_SUCCESS;
+    return INFINI_STATUS_NOT_IMPLEMENTED;
+    // Commented before validation
+    // CHECK_KUNLUNRT(xpu_memcpy_peer(dst_device, dst, src_device, src, size));
+    // return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t memcpyPeerAsync(void *dst, int dst_device, const void *src, int src_device, size_t size, infinirtStream_t stream) {
+    return INFINI_STATUS_NOT_IMPLEMENTED;
+    // Commented before validation
     // kunlunxin p series does not support async peer memcpy
-    CHECK_KUNLUNRT(xpu_memcpy_peer(dst_device, dst, src_device, src, size));
-    return INFINI_STATUS_SUCCESS;
+    // CHECK_KUNLUNRT(xpu_memcpy_peer(dst_device, dst, src_device, src, size));
+    // return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t mallocAsync(void **p_ptr, size_t size, infinirtStream_t stream) {
