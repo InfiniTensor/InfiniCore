@@ -363,7 +363,7 @@ def rearrange_tensor(tensor, new_strides):
     left = 0
     right = 0
     for i in range(len(shape)):
-        if new_strides[i] > 0:
+        if new_strides[i] >= 0:
             new_size[i] = (shape[i] - 1) * new_strides[i] + 1
             right += new_strides[i] * (shape[i] - 1)
         else:  # TODO: Support negative strides in the future
@@ -391,7 +391,7 @@ def rearrange_tensor(tensor, new_strides):
     new_positions += offset
 
     # Copy the original data to the new tensor
-    new_tensor.view(-1).index_add_(0, new_positions, tensor.view(-1))
+    new_tensor.reshape(-1).index_add_(0, new_positions, tensor.reshape(-1))
     new_tensor.set_(new_tensor.untyped_storage(), offset, shape, tuple(new_strides))
 
     return new_tensor

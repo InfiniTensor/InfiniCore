@@ -49,6 +49,8 @@ from infinicore.ops.narrow import narrow
 from infinicore.ops.rearrange import rearrange
 from infinicore.ops.argwhere import argwhere
 from infinicore.ops.fmin import fmin
+from infinicore.ops.squeeze import squeeze
+from infinicore.ops.unsqueeze import unsqueeze
 
 from infinicore.tensor import (
     Tensor,
@@ -112,6 +114,8 @@ __all__ = [
     "matmul",
     "mul",
     "narrow",
+    "squeeze",
+    "unsqueeze",
     "rearrange",
     "empty",
     "empty_like",

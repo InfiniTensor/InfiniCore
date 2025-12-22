@@ -20,16 +20,6 @@ def rope(
 ) -> Tensor:
     r"""Rotary Position Embedding(RoPE)."""
 
-    bs, seq_len, num_heads, head_dim = x.shape
-    x_stride = x.stride()
-    assert seq_len * x_stride[1] == x_stride[0], (
-        "x need to be continuous in dim=0 and dim=1"
-    )
-
-    x = x.view((bs * seq_len, num_heads, head_dim))
-    bs, num = pos_ids.shape
-    pos_ids = pos_ids.view((bs * num,))
-
     if out is None:
         return Tensor(
             _infinicore.rope(
@@ -39,9 +29,8 @@ def rope(
                 cos_table._underlying,
                 algo,
             )
-        ).view((bs, seq_len, num_heads, head_dim))
+        )
 
-    out = out.view((bs * seq_len, num_heads, head_dim))
     _infinicore.rope_(
         out._underlying,
         x._underlying,
@@ -50,4 +39,4 @@ def rope(
         cos_table._underlying,
         algo,
     )
-    return out.view((bs, seq_len, num_heads, head_dim))
+    return out
