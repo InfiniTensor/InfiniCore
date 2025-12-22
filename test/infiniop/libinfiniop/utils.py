@@ -296,7 +296,7 @@ def rearrange_tensor(tensor, new_strides):
     left = 0
     right = 0
     for i in range(len(shape)):
-        if new_strides[i] > 0:
+        if new_strides[i] >= 0:
             new_size[i] = (shape[i] - 1) * new_strides[i] + 1
             right += new_strides[i] * (shape[i] - 1)
         else:  # TODO: Support negative strides in the future
