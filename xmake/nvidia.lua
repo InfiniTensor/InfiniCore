@@ -4,11 +4,11 @@ if CUDNN_ROOT ~= nil then
 end
 
 local CUTLASS_ROOT = os.getenv("CUTLASS_ROOT") or os.getenv("CUTLASS_HOME") or os.getenv("CUTLASS_PATH")
-local CUTE_ROOT = os.getenv("CUTE_ROOT") or os.getenv("CUTE_HOME") or os.getenv("CUTE_PATH")
+-- local CUTE_ROOT = os.getenv("CUTE_ROOT") or os.getenv("CUTE_HOME") or os.getenv("CUTE_PATH")
 
 if CUTLASS_ROOT ~= nil then
     add_includedirs(CUTLASS_ROOT)
-    add_includedirs(CUTE_ROOT)
+    -- add_includedirs(CUTE_ROOT)
 end
 
 target("infiniop-nvidia")
