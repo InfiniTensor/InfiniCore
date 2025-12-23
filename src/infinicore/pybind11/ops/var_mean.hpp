@@ -9,7 +9,7 @@ namespace py = pybind11;
 namespace infinicore::ops {
 
 
-Tensor py_var_mean(Tensor input, py::object dim,  bool unbiased, bool keepdim){
+std::pair<Tensor, Tensor> py_var_mean(Tensor input, py::object dim,  bool unbiased, bool keepdim){
       if(dim.is_none()){
             std::vector<size_t> dim_vec;
             for(int i = 0; i < input->shape().size(); i++){
