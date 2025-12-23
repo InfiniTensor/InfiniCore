@@ -104,6 +104,14 @@ infiniStatus_t Descriptor::calculate(
                 _info.q_stride, _info.kv_block_stride, _info.kv_head_stride,
                 stream);
 
+        } else if (_info.head_size == 64) {
+            launchKernel<64, CUDA_BLOCK_SIZE_1024>(
+                out, q, k_cache, v_cache, _info.dtype, block_tables, seq_lens, alibi_slopes,
+                _info.num_heads, _info.num_seqs,
+                _info.num_kv_heads, _info.scale, _info.max_num_blocks_per_seq, _info.block_size,
+                _info.q_stride, _info.kv_block_stride, _info.kv_head_stride,
+                stream);
+
         } else {
             printf("head_size: %zu\n", _info.head_size);
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
@@ -111,6 +119,14 @@ infiniStatus_t Descriptor::calculate(
     } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_512) {
         if (_info.head_size == 128) {
             launchKernel<128, CUDA_BLOCK_SIZE_512>(
+                out, q, k_cache, v_cache, _info.dtype, block_tables, seq_lens, alibi_slopes,
+                _info.num_heads, _info.num_seqs,
+                _info.num_kv_heads, _info.scale, _info.max_num_blocks_per_seq, _info.block_size,
+                _info.q_stride, _info.kv_block_stride, _info.kv_head_stride,
+                stream);
+
+        } else if (_info.head_size == 64) {
+            launchKernel<64, CUDA_BLOCK_SIZE_512>(
                 out, q, k_cache, v_cache, _info.dtype, block_tables, seq_lens, alibi_slopes,
                 _info.num_heads, _info.num_seqs,
                 _info.num_kv_heads, _info.scale, _info.max_num_blocks_per_seq, _info.block_size,
@@ -129,6 +145,14 @@ infiniStatus_t Descriptor::calculate(
                 _info.num_kv_heads, _info.scale, _info.max_num_blocks_per_seq, _info.block_size,
                 _info.q_stride, _info.kv_block_stride, _info.kv_head_stride,
                 stream);
+        } else if (_info.head_size == 64) {
+            launchKernel<64, CUDA_BLOCK_SIZE_4096>(
+                out, q, k_cache, v_cache, _info.dtype, block_tables, seq_lens, alibi_slopes,
+                _info.num_heads, _info.num_seqs,
+                _info.num_kv_heads, _info.scale, _info.max_num_blocks_per_seq, _info.block_size,
+                _info.q_stride, _info.kv_block_stride, _info.kv_head_stride,
+                stream);
+
         } else {
             printf("head_size: %zu", _info.head_size);
             return INFINI_STATUS_BAD_TENSOR_SHAPE;

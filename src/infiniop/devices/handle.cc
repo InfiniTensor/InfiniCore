@@ -5,7 +5,7 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/cpu_handle.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API) || defined(ENABLE_QY_API)
 #include "nvidia/nvidia_handle.h"
 #endif
 #ifdef ENABLE_CAMBRICON_API
@@ -43,6 +43,9 @@ __C infiniStatus_t infiniopCreateHandle(infiniopHandle_t *handle_ptr) {
 #endif
 #ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_QY_API
+        CREATE(INFINI_DEVICE_QY, qy);
 #endif
 #ifdef ENABLE_ILUVATAR_API
         CREATE(INFINI_DEVICE_ILUVATAR, iluvatar);
@@ -86,6 +89,9 @@ __C infiniStatus_t infiniopDestroyHandle(infiniopHandle_t handle) {
 #endif
 #ifdef ENABLE_NVIDIA_API
         DELETE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_QY_API
+        DELETE(INFINI_DEVICE_QY, qy);
 #endif
 #ifdef ENABLE_ILUVATAR_API
         DELETE(INFINI_DEVICE_ILUVATAR, iluvatar);

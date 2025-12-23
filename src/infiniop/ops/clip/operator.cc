@@ -5,7 +5,7 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/clip_cpu.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API)
 #include "nvidia/clip_nvidia.cuh"
 #endif
 #ifdef ENABLE_METAX_API
@@ -42,6 +42,9 @@ __C infiniStatus_t infiniopCreateClipDescriptor(
 #ifdef ENABLE_ILUVATAR_API
         CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
+#ifdef ENABLE_QY_API
+        CREATE(INFINI_DEVICE_QY, nvidia);
+#endif
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, metax);
 #endif
@@ -72,6 +75,9 @@ __C infiniStatus_t infiniopGetClipWorkspaceSize(infiniopClipDescriptor_t desc, s
 #endif
 #ifdef ENABLE_ILUVATAR_API
         GET(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_QY_API
+        GET(INFINI_DEVICE_QY, nvidia);
 #endif
 #ifdef ENABLE_METAX_API
         GET(INFINI_DEVICE_METAX, metax)
@@ -112,6 +118,9 @@ __C infiniStatus_t infiniopClip(
 #ifdef ENABLE_ILUVATAR_API
         CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
+#ifdef ENABLE_QY_API
+        CALCULATE(INFINI_DEVICE_QY, nvidia);
+#endif
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
@@ -144,6 +153,9 @@ infiniopDestroyClipDescriptor(infiniopClipDescriptor_t desc) {
 #endif
 #ifdef ENABLE_ILUVATAR_API
         DELETE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_QY_API
+        DELETE(INFINI_DEVICE_QY, nvidia);
 #endif
 #ifdef ENABLE_METAX_API
         DELETE(INFINI_DEVICE_METAX, metax);

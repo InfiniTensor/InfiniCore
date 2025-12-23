@@ -5,7 +5,7 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/conv_cpu.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API)
 #include "nvidia/conv_nvidia.cuh"
 #endif
 
@@ -42,6 +42,9 @@ __C __export infiniStatus_t infiniopCreateConvDescriptor(infiniopHandle_t handle
 #ifdef ENABLE_ILUVATAR_API
         CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
+#ifdef ENABLE_QY_API
+        CREATE(INFINI_DEVICE_QY, nvidia);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -69,6 +72,9 @@ infiniopGetConvWorkspaceSize(
 #endif
 #ifdef ENABLE_ILUVATAR_API
         GET(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_QY_API
+        GET(INFINI_DEVICE_QY, nvidia);
 #endif
 
     default:
@@ -106,6 +112,9 @@ __C infiniStatus_t infiniopConv(
 #ifdef ENABLE_ILUVATAR_API
         CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
+#ifdef ENABLE_QY_API
+        CALCULATE(INFINI_DEVICE_QY, nvidia);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -129,6 +138,9 @@ infiniopDestroyConvDescriptor(infiniopConvDescriptor_t desc) {
 #endif
 #ifdef ENABLE_ILUVATAR_API
         DELETE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_QY_API
+        DELETE(INFINI_DEVICE_QY, nvidia);
 #endif
 
     default:

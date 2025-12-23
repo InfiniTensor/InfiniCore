@@ -46,6 +46,7 @@ typedef enum {
     INFINI_DEVICE_ILUVATAR = 6,
     INFINI_DEVICE_KUNLUN = 7,
     INFINI_DEVICE_HYGON = 8,
+    INFINI_DEVICE_QY = 9,
     INFINI_DEVICE_TYPE_COUNT
 } infiniDevice_t;
 

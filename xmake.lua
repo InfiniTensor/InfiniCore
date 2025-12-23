@@ -100,6 +100,18 @@ if has_config("iluvatar-gpu") then
     includes("xmake/iluvatar.lua")
 end
 
+-- QY
+option("qy-gpu")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Whether to compile implementations for Qy GPU")
+option_end()
+
+if has_config("qy-gpu") then
+    add_defines("ENABLE_QY_API")
+    includes("xmake/qy.lua")
+end
+
 -- 沐曦
 option("metax-gpu")
     set_default(false)
@@ -201,6 +213,7 @@ target("infinirt")
     end
     if has_config("nv-gpu") then
         add_deps("infinirt-nvidia")
+
     end
     if has_config("cambricon-mlu") then
         add_deps("infinirt-cambricon")
@@ -216,6 +229,10 @@ target("infinirt")
     end
     if has_config("iluvatar-gpu") then
         add_deps("infinirt-iluvatar")
+    end
+    if has_config("qy-gpu") then
+        add_deps("infinirt-qy")
+        add_files("build/.objs/infinirt-qy/rules/qy.cuda/src/infinirt/cuda/*.cu.o", {public = true})
     end
     if has_config("kunlun-xpu") then
         add_deps("infinirt-kunlun")
@@ -241,6 +258,11 @@ target("infiniop")
     end
     if has_config("iluvatar-gpu") then
         add_deps("infiniop-iluvatar")
+    end
+    if has_config("qy-gpu") then
+        add_deps("infiniop-qy")
+        add_files("build/.objs/infiniop-qy/rules/qy.cuda/src/infiniop/ops/*/nvidia/*.cu.o", {public = true})
+        add_files("build/.objs/infiniop-qy/rules/qy.cuda/src/infiniop/devices/nvidia/*.cu.o", {public = true})
     end
 
     if has_config("cambricon-mlu") then
@@ -291,6 +313,10 @@ target("infiniccl")
     end
     if has_config("iluvatar-gpu") then
         add_deps("infiniccl-iluvatar")
+    end
+    if has_config("qy-gpu") then
+        add_deps("infiniccl-qy")
+        add_files("build/.objs/infiniccl-qy/rules/qy.cuda/src/infiniccl/cuda/*.cu.o", {public = true})
     end
 
     if has_config("moore-gpu") then

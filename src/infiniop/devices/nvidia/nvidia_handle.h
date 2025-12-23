@@ -46,6 +46,17 @@ public:
 
 } // namespace hygon
 
+namespace qy {
+
+struct Handle : public nvidia::Handle {
+    Handle(int device_id);
+
+public:
+    static infiniStatus_t create(InfiniopHandle **handle_ptr, int device_id);
+};
+
+} // namespace qy
+
 } // namespace device
 
 #endif // __INFINIOP_CUDA_HANDLE_H__

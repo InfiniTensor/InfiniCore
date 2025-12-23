@@ -12,7 +12,7 @@ void printUsage() {
     std::cout << "infiniccl-test --<device>" << std::endl
               << std::endl;
     std::cout << "  --<device>" << std::endl;
-    std::cout << "    Specify the device type --(nvidia|cambricon|ascend|metax|moore|iluvatar|kunlun|hygon)." << std::endl
+    std::cout << "    Specify the device type --(nvidia|qy|cambricon|ascend|metax|moore|iluvatar|kunlun|hygon)." << std::endl
               << std::endl;
     std::cout << "The program will run tests on all visible devices of the specified device type."
               << " Use Environmental Variables such as CUDA_VSIBLE_DEVICES to limit visible device IDs.";
@@ -45,6 +45,7 @@ ParsedArgs parseArgs(int argc, char *argv[]) {
         else PARSE_DEVICE("--iluvatar", INFINI_DEVICE_ILUVATAR)
         else PARSE_DEVICE("--kunlun", INFINI_DEVICE_KUNLUN)
         else PARSE_DEVICE("--hygon", INFINI_DEVICE_HYGON)
+        else PARSE_DEVICE("--qy", INFINI_DEVICE_QY)
         else {
             printUsage();
         }

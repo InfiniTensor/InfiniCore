@@ -50,7 +50,7 @@ exp_(const float val) {
     return expf(val);
 }
 
-#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_QY_API) && !defined(ENABLE_HYGON_API)
 __forceinline__ __device__ long double
 exp_(const long double val) {
     return expl(val);
