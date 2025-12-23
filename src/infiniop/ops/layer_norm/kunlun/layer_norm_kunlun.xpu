@@ -6,21 +6,21 @@
 
 template <unsigned int BLOCK_SIZE, typename Tdata, typename Tcompute>
 __global__ void layerNormKernel(
-    int32_t loop_idx,
-    Tdata *output,                 // [b, seq, dim]
-    Tdata *output_standardization, // [b, seq, dim]
-    Tdata *output_rstd_deviation,  // [b, seq]
-    const Tdata *input,            // [b, seq, dim]
-    const Tdata *weight,           // [dim]
-    const Tdata *bias,             // [None | dim]
+    // int32_t loop_idx,
+    Tdata *output,
+    Tdata *output_standardization,
+    Tdata *output_rstd_deviation,
+    const Tdata *input,
+    const Tdata *weight,
+    const Tdata *bias,
     float eps,
     int32_t normalized_size,
     int32_t othersize,
-    const void *shape,                          // [ndim]
-    const void *output_strides,                 // [ndim]
-    const void *output_standardization_strides, // [ndim]
-    const void *output_rstd_deviation_strides,  // [ndim - 1]
-    const void *input_strides,                  // [ndim]
+    const void *shape,
+    const void *output_strides,
+    const void *output_standardization_strides,
+    const void *output_rstd_deviation_strides,
+    const void *input_strides,
     int32_t weight_strides,
     int32_t bias_strides,
     int32_t ndim,
@@ -41,82 +41,82 @@ __global__ void layerNormKernel(
     GM2LM_ASYNC(input_strides, input_strides_local, ndim * sizeof(_ptrdiff_t));
     mfence();
 
-    // Calculate block tile coordinates
-    int32_t block_idx = cluster_id() + loop_idx * cluster_num();
-    if (block_idx >= othersize) {
-        return;
-    }
-
-    int32_t t_coords[ndim - 1];
-    int32_t temp_block_idx = block_idx;
-    for (int i = ndim - 2; i >= 0; i--) {
-        int32_t dim_i = shape_local[i].value;
-        t_coords[i] = temp_block_idx % dim_i;
-        temp_block_idx /= dim_i;
-    }
-
-    // Calculate offsets
-    int32_t offset_output = 0;
-    int32_t offset_output_standardization = 0;
-    int32_t offset_output_rstd_deviation = 0;
-    int32_t offset_input = 0;
-    for (int i = 0; i < ndim - 1; i++) {
-        int32_t dim_i = shape_local[i].value;
-        offset_output += t_coords[i] * output_strides_local[i].value;
-        offset_output_standardization += t_coords[i] * output_standardization_strides_local[i].value;
-        offset_output_rstd_deviation += t_coords[i] * output_rstd_deviation_strides_local[i].value;
-        offset_input += t_coords[i] * input_strides_local[i].value;
-    }
-
-    // Shared memory allocation
-    __shared__ Tdata input_sm[SM_SIZE / sizeof(Tdata)];
-    __shared__ Tdata weight_sm[SM_SIZE / sizeof(Tdata)];
-    __shared__ Tdata bias_sm[SM_SIZE / sizeof(Tdata)];
-    __shared__ Tdata output_sm[SM_SIZE / sizeof(Tdata)];
-    __shared__ Tdata output_standardization_sm[SM_SIZE / sizeof(Tdata)];
-    __shared__ Tdata output_rstd_sm[1];
-
-    // Copy data to shared memory
-    if (weight_strides == 1 && bias_strides == 1 && core_id() == 0) {
-        GM2SM_ASYNC(input + offset_input, input_sm, normalized_size * sizeof(Tdata));
-        GM2SM_ASYNC(weight, weight_sm, normalized_size * sizeof(Tdata));
-        if (bias_exist) {
-            GM2SM_ASYNC(bias, bias_sm, normalized_size * sizeof(Tdata));
+    int32_t num_clusters = cluster_num();
+    int32_t num_loops = (othersize + num_clusters - 1) / num_clusters;
+    for (int32_t loop_idx = 0; loop_idx < num_loops; ++loop_idx) {
+        // Calculate block tile coordinates
+        int32_t block_idx = cluster_id() + loop_idx * cluster_num();
+        if (block_idx >= othersize) {
+            return;
         }
-    } else {
-        for (int32_t i = core_id(); i < normalized_size; i += BLOCK_SIZE) {
-            // Load input
-            GM2SM_ASYNC(input + offset_input + i * input_strides_local[ndim - 1].value, input_sm + i, sizeof(Tdata));
-            // Load weight
-            GM2SM_ASYNC(weight + i * weight_strides, weight_sm + i, sizeof(Tdata));
-            // Load bias
+        
+        int32_t temp_block_idx = block_idx;
+
+        // Decode multi-dimensional coordinates and accumulate offsets in one pass (reverse order)
+        int32_t offset_output = 0;
+        int32_t offset_output_standardization = 0;
+        int32_t offset_output_rstd_deviation = 0;
+        int32_t offset_input = 0;
+        for (int i = ndim - 2; i >= 0; --i) {
+            int32_t dim_i = shape_local[i].value;
+            int32_t coord = temp_block_idx % dim_i;
+            temp_block_idx /= dim_i;
+            offset_output += coord * output_strides_local[i].value;
+            offset_output_standardization += coord * output_standardization_strides_local[i].value;
+            offset_output_rstd_deviation += coord * output_rstd_deviation_strides_local[i].value;
+            offset_input += coord * input_strides_local[i].value;
+        }
+
+        // Shared memory allocation
+        __shared__ Tdata input_sm[SM_SIZE / sizeof(Tdata)];
+        __shared__ Tdata weight_sm[SM_SIZE / sizeof(Tdata)];
+        __shared__ Tdata bias_sm[SM_SIZE / sizeof(Tdata)];
+        __shared__ Tdata output_sm[SM_SIZE / sizeof(Tdata)];
+        __shared__ Tdata output_standardization_sm[SM_SIZE / sizeof(Tdata)];
+        __shared__ Tdata output_rstd_sm[1];
+
+        // Copy data to shared memory
+        if (weight_strides == 1 && bias_strides == 1 && core_id() == 0) {
+            GM2SM_ASYNC(input + offset_input, input_sm, normalized_size * sizeof(Tdata));
+            GM2SM_ASYNC(weight, weight_sm, normalized_size * sizeof(Tdata));
             if (bias_exist) {
-                GM2SM_ASYNC(bias + i * bias_strides, bias_sm + i, sizeof(Tdata));
+                GM2SM_ASYNC(bias, bias_sm, normalized_size * sizeof(Tdata));
+            }
+        } else {
+            for (int32_t i = core_id(); i < normalized_size; i += BLOCK_SIZE) {
+                // Load input
+                GM2SM_ASYNC(input + offset_input + i * input_strides_local[ndim - 1].value, input_sm + i, sizeof(Tdata));
+                // Load weight
+                GM2SM_ASYNC(weight + i * weight_strides, weight_sm + i, sizeof(Tdata));
+                // Load bias
+                if (bias_exist) {
+                    GM2SM_ASYNC(bias + i * bias_strides, bias_sm + i, sizeof(Tdata));
+                }
             }
         }
-    }
-    sync_cluster();
+        sync_cluster();
 
-    // Compute layer norm in each cluster
-    layerNormCluster<BLOCK_SIZE, Tdata, Tcompute>(
-        output_sm,
-        output_standardization_sm,
-        output_rstd_sm,
-        input_sm,
-        weight_sm,
-        bias_sm,
-        eps,
-        normalized_size,
-        bias_exist);
-    sync_cluster();
+        // Compute layer norm in each cluster
+        layerNormCluster<BLOCK_SIZE, Tdata, Tcompute>(
+            output_sm,
+            output_standardization_sm,
+            output_rstd_sm,
+            input_sm,
+            weight_sm,
+            bias_sm,
+            eps,
+            normalized_size,
+            bias_exist);
+        sync_cluster();
 
-    // Copy results back to global memory
-    if (core_id() == 0) {
-        SM2GM_ASYNC(output_sm, output + offset_output, normalized_size * sizeof(Tdata));
-        SM2GM_ASYNC(output_standardization_sm, output_standardization + offset_output_standardization, normalized_size * sizeof(Tdata));
-        SM2GM_ASYNC(output_rstd_sm, output_rstd_deviation + offset_output_rstd_deviation, sizeof(Tdata));
+        // Copy results back to global memory
+        if (core_id() == 0) {
+            SM2GM_ASYNC(output_sm, output + offset_output, normalized_size * sizeof(Tdata));
+            SM2GM_ASYNC(output_standardization_sm, output_standardization + offset_output_standardization, normalized_size * sizeof(Tdata));
+            SM2GM_ASYNC(output_rstd_sm, output_rstd_deviation + offset_output_rstd_deviation, sizeof(Tdata));
+        }
+        sync_cluster();
     }
-    sync_cluster();
 }
 
 template <unsigned int BLOCK_SIZE, typename Tdata, typename Tcompute>
@@ -176,26 +176,19 @@ __global__ void layerNormKernelV2(
 
     // Every normalization vector as a tile to be processed
     for (int32_t tid = thread_idx; tid < othersize; tid += nthreads) {
-        // Calculate tile coordinates
-        int32_t t_coords[ndim - 1];
         int32_t temp_tid = tid;
-        for (int i = 0; i < ndim - 1; i++) {
-            int32_t dim_i = shape_local[i].value;
-            t_coords[i] = temp_tid % dim_i;
-            temp_tid /= dim_i;
-        }
-
-        // Calculate offsets
         int32_t offset_output = 0;
         int32_t offset_output_standardization = 0;
         int32_t offset_output_rstd_deviation = 0;
         int32_t offset_input = 0;
-        for (int i = 0; i < ndim - 1; i++) {
+        for (int i = 0; i < ndim - 1; ++i) {
             int32_t dim_i = shape_local[i].value;
-            offset_output += t_coords[i] * output_strides_local[i].value;
-            offset_output_standardization += t_coords[i] * output_standardization_strides_local[i].value;
-            offset_output_rstd_deviation += t_coords[i] * output_rstd_deviation_strides_local[i].value;
-            offset_input += t_coords[i] * input_strides_local[i].value;
+            int32_t coord = temp_tid % dim_i;
+            temp_tid /= dim_i;
+            offset_output += coord * output_strides_local[i].value;
+            offset_output_standardization += coord * output_standardization_strides_local[i].value;
+            offset_output_rstd_deviation += coord * output_rstd_deviation_strides_local[i].value;
+            offset_input += coord * input_strides_local[i].value;
         }
 
         // Load input into local memory
@@ -305,33 +298,29 @@ infiniStatus_t launchLayerNormKernel(
                 static_cast<int32_t>(ndim),
                 info.bias_exist);
     } else {
-        int32_t num_blocks = static_cast<int32_t>(info.othersize) > 255
-                               ? 255
-                               : static_cast<int32_t>(info.othersize);
-        int32_t num_loops = (static_cast<int32_t>(info.othersize) + num_blocks - 1) / num_blocks;
-        for (int32_t i = 0; i < num_loops; i++) {
-            layerNormKernel<BLOCK_SIZE, Tdata, float>
-                <<<num_blocks, BLOCK_SIZE, stream>>>(
-                    i,
-                    output,
-                    output_standardization,
-                    output_rstd_deviation,
-                    input,
-                    weight,
-                    bias,
-                    info.eps,
-                    normalized_size,
-                    static_cast<int32_t>(info.othersize),
-                    reinterpret_cast<__global_ptr__ const void *>(shape_kunlun),
-                    reinterpret_cast<__global_ptr__ const void *>(output_strides_kunlun),
-                    reinterpret_cast<__global_ptr__ const void *>(output_standardization_strides_kunlun),
-                    reinterpret_cast<__global_ptr__ const void *>(output_rstd_deviation_strides_kunlun),
-                    reinterpret_cast<__global_ptr__ const void *>(input_strides_kunlun),
-                    static_cast<int32_t>(info.weight_strides[0]),
-                    static_cast<int32_t>(info.bias_exist ? info.bias_strides[0] : 0),
-                    static_cast<int32_t>(ndim),
-                    info.bias_exist);
-        }
+        int32_t NUM_CLUSTERS = static_cast<int32_t>(info.othersize) > MAX_CLUSTERS
+                                 ? MAX_CLUSTERS
+                                 : static_cast<int32_t>(info.othersize);
+        layerNormKernel<BLOCK_SIZE, Tdata, float>
+            <<<NUM_CLUSTERS, BLOCK_SIZE, stream>>>(
+                output,
+                output_standardization,
+                output_rstd_deviation,
+                input,
+                weight,
+                bias,
+                info.eps,
+                normalized_size,
+                static_cast<int32_t>(info.othersize),
+                reinterpret_cast<__global_ptr__ const void *>(shape_kunlun),
+                reinterpret_cast<__global_ptr__ const void *>(output_strides_kunlun),
+                reinterpret_cast<__global_ptr__ const void *>(output_standardization_strides_kunlun),
+                reinterpret_cast<__global_ptr__ const void *>(output_rstd_deviation_strides_kunlun),
+                reinterpret_cast<__global_ptr__ const void *>(input_strides_kunlun),
+                static_cast<int32_t>(info.weight_strides[0]),
+                static_cast<int32_t>(info.bias_exist ? info.bias_strides[0] : 0),
+                static_cast<int32_t>(ndim),
+                info.bias_exist);
     }
     return INFINI_STATUS_SUCCESS;
 }
