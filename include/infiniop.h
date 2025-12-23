@@ -31,5 +31,7 @@
 #include "infiniop/ops/topksoftmax.h"
 #include "infiniop/ops/zeros.h"
 #include "infiniop/tensor_descriptor.h"
+#include "infiniop/ops/paged_attention.h"
+#include "infiniop/ops/paged_caching.h"
 
 #endif // __INFINIOP_API_H__
