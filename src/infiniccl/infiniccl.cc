@@ -26,6 +26,7 @@ __C infiniStatus_t infinicclCommInitAll(
         COMM_INIT_ALL(INFINI_DEVICE_METAX, metax);
         COMM_INIT_ALL(INFINI_DEVICE_MOORE, moore);
         COMM_INIT_ALL(INFINI_DEVICE_KUNLUN, kunlun);
+        COMM_INIT_ALL(INFINI_DEVICE_QY, cuda);
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -51,6 +52,7 @@ __C infiniStatus_t infinicclCommDestroy(infinicclComm_t comm) {
         COMM_DESTROY(INFINI_DEVICE_METAX, metax);
         COMM_DESTROY(INFINI_DEVICE_MOORE, moore);
         COMM_DESTROY(INFINI_DEVICE_KUNLUN, kunlun);
+        COMM_DESTROY(INFINI_DEVICE_QY, cuda);
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -83,6 +85,7 @@ __C infiniStatus_t infinicclAllReduce(
         ALL_REDUCE(INFINI_DEVICE_METAX, metax);
         ALL_REDUCE(INFINI_DEVICE_MOORE, moore);
         ALL_REDUCE(INFINI_DEVICE_KUNLUN, kunlun);
+        ALL_REDUCE(INFINI_DEVICE_QY, cuda);
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

@@ -23,7 +23,7 @@ __C infiniStatus_t infinirtGetAllDeviceCount(int *count_array) {
         return INFINI_STATUS_NULL_POINTER;
     }
     for (size_t i = 0; i < INFINI_DEVICE_TYPE_COUNT; i++) {
-        if (i == INFINI_DEVICE_ILUVATAR || i == INFINI_DEVICE_KUNLUN || i == INFINI_DEVICE_HYGON) {
+        if (i == INFINI_DEVICE_ILUVATAR || i == INFINI_DEVICE_QY || i == INFINI_DEVICE_KUNLUN || i == INFINI_DEVICE_HYGON) {
             count_array[i] = 0;
             continue;
         }
@@ -78,6 +78,9 @@ __C infiniStatus_t infinirtGetDevice(infiniDevice_t *device_ptr, int *device_id_
             _status = infinirt::cuda::API PARAMS;                      \
             break;                                                     \
         case INFINI_DEVICE_HYGON:                                      \
+            _status = infinirt::cuda::API PARAMS;                      \
+            break;                                                     \
+        case INFINI_DEVICE_QY:                                         \
             _status = infinirt::cuda::API PARAMS;                      \
             break;                                                     \
         default:                                                       \

@@ -5,7 +5,7 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/logsoftmax_cpu.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API)
 #include "nvidia/logsoftmax_nvidia.cuh"
 #endif
 #ifdef ENABLE_METAX_API
@@ -39,6 +39,9 @@ __C infiniStatus_t infiniopCreateLogSoftmaxDescriptor(
 #ifdef ENABLE_ILUVATAR_API
         // CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
+#ifdef ENABLE_QY_API
+        CREATE(INFINI_DEVICE_QY, nvidia)
+#endif
 #ifdef ENABLE_METAX_API
         // CREATE(INFINI_DEVICE_METAX, metax)
 #endif
@@ -65,6 +68,9 @@ __C infiniStatus_t infiniopGetLogSoftmaxWorkspaceSize(infiniopLogSoftmaxDescript
 #endif
 #ifdef ENABLE_ILUVATAR_API
         // GET(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_QY_API
+        GET(INFINI_DEVICE_QY, nvidia)
 #endif
 #ifdef ENABLE_METAX_API
         // GET(INFINI_DEVICE_METAX, metax)
@@ -98,6 +104,9 @@ __C infiniStatus_t infiniopLogSoftmax(
 #ifdef ENABLE_ILUVATAR_API
         // CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
+#ifdef ENABLE_QY_API
+        CALCULATE(INFINI_DEVICE_QY, nvidia)
+#endif
 #ifdef ENABLE_METAX_API
         // CALCULATE(INFINI_DEVICE_METAX, metax)
 #endif
@@ -124,6 +133,9 @@ __C infiniStatus_t infiniopDestroyLogSoftmaxDescriptor(infiniopLogSoftmaxDescrip
 #endif
 #ifdef ENABLE_ILUVATAR_API
         // DESTROY(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_QY_API
+        DESTROY(INFINI_DEVICE_QY, nvidia)
 #endif
 #ifdef ENABLE_METAX_API
         // DESTROY(INFINI_DEVICE_METAX, metax)

@@ -65,8 +65,10 @@ cudnnDataType_t getCudnnDtype(infiniDtype_t dt) {
         return CUDNN_DATA_HALF;
     case INFINI_DTYPE_F32:
         return CUDNN_DATA_FLOAT;
+#ifndef ENABLE_QY_API
     case INFINI_DTYPE_F64:
         return CUDNN_DATA_DOUBLE;
+#endif
     case INFINI_DTYPE_BF16:
         return CUDNN_DATA_BFLOAT16;
     case INFINI_DTYPE_I8:
@@ -115,5 +117,17 @@ infiniStatus_t Handle::create(InfiniopHandle **handle_ptr, int device_id) {
 }
 
 } // namespace hygon
+
+namespace qy {
+
+Handle::Handle(int device_id)
+    : nvidia::Handle(INFINI_DEVICE_QY, device_id) {}
+
+infiniStatus_t Handle::create(InfiniopHandle **handle_ptr, int device_id) {
+    *handle_ptr = new Handle(device_id);
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace qy
 
 } // namespace device

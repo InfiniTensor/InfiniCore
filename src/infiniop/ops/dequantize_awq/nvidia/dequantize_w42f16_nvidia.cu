@@ -1,4 +1,4 @@
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API)
 
 #include "../../../devices/nvidia/nvidia_handle.cuh"
 #include "../../../devices/nvidia/nvidia_kernel_common.cuh"
@@ -8,6 +8,61 @@
 #include "../dequantize_awq.h"
 #include <cuda_fp16.h>
 
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 750)
+__global__ void __launch_bounds__(64)
+    dequantize_weights(int *__restrict__ B, half *__restrict__ scaling_factors,
+                       int *__restrict__ zeros, half *__restrict__ C, int G) {
+    // static constexpr uint32_t ZERO = 0x0;
+    half B_shared[32 * (128 + 8)];
+
+    half *B_shared_ptr2 = B_shared;
+
+    int N = blockDim.x * gridDim.x; // 2
+    int col = (blockIdx.x * blockDim.x + threadIdx.x);
+    int row = (blockIdx.y * blockDim.y + threadIdx.y);
+    int index1 = 8 * col + 8 * row * N;
+    half *C_ptr2 = C + index1;
+
+    int index2 = col + row * N;
+    int *B_ptr2 = B + index2;
+
+    int index3 = col + (int)(row / G) * N;
+    int *zeros_ptr2 = zeros + index3;
+    int index4 = 8 * col + (int)(row / G) * N * 8;
+    half *scaling_factors_ptr2 = scaling_factors + index4;
+
+    uint32_t zeros_loaded = *(uint32_t *)(zeros_ptr2);
+    uint4 B_loaded_zero = dequantize_s4_to_fp16x2(zeros_loaded);
+    uint4 B_loaded_scale = *(uint4 *)(scaling_factors_ptr2);
+
+    uint32_t B_loaded = *(uint32_t *)B_ptr2;
+    uint4 B_loaded_fp16 = dequantize_s4_to_fp16x2(B_loaded);
+
+    // Reinterpret uint4 components as __half2
+    __half2 *B_loaded_fp16_h2 = reinterpret_cast<__half2 *>(&B_loaded_fp16);
+    __half2 *B_loaded_zero_h2 = reinterpret_cast<__half2 *>(&B_loaded_zero);
+    __half2 *B_loaded_scale_h2 = reinterpret_cast<__half2 *>(&B_loaded_scale);
+
+    // Replace PTX sub.f16x2 with __hsub2 for each component
+    B_loaded_fp16_h2[0] = __hsub2(B_loaded_fp16_h2[0], B_loaded_zero_h2[0]);
+    B_loaded_fp16_h2[1] = __hsub2(B_loaded_fp16_h2[1], B_loaded_zero_h2[1]);
+    B_loaded_fp16_h2[2] = __hsub2(B_loaded_fp16_h2[2], B_loaded_zero_h2[2]);
+    B_loaded_fp16_h2[3] = __hsub2(B_loaded_fp16_h2[3], B_loaded_zero_h2[3]);
+
+    // Replace PTX fma.rn.f16x2 with __hfma2 for each component
+    B_loaded_fp16_h2[0] = __hfma2(B_loaded_fp16_h2[0], B_loaded_scale_h2[0], __float2half2_rn(0.0f));
+    B_loaded_fp16_h2[1] = __hfma2(B_loaded_fp16_h2[1], B_loaded_scale_h2[1], __float2half2_rn(0.0f));
+    B_loaded_fp16_h2[2] = __hfma2(B_loaded_fp16_h2[2], B_loaded_scale_h2[2], __float2half2_rn(0.0f));
+    B_loaded_fp16_h2[3] = __hfma2(B_loaded_fp16_h2[3], B_loaded_scale_h2[3], __float2half2_rn(0.0f));
+
+    // Store back to shared memory
+    *(uint4 *)B_shared_ptr2 = B_loaded_fp16;
+
+    for (int i = 0; i < 8; ++i) {
+        *(C_ptr2 + i) = B_shared[i];
+    }
+}
+#else
 __global__ void __launch_bounds__(64)
     dequantize_weights(int *__restrict__ B, half *__restrict__ scaling_factors,
                        int *__restrict__ zeros, half *__restrict__ C, int group_size) {
@@ -67,6 +122,7 @@ __global__ void __launch_bounds__(64)
         *(C_ptr2 + i) = B_shared[i];
     }
 }
+#endif
 
 namespace op::dequantize_awq::nvidia {
 
