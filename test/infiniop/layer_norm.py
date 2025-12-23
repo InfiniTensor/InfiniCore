@@ -86,12 +86,9 @@ def torch_layer_norm(
     bias_f32 = bias.to(torch.float32) if bias_exist and bias is not None else None
 
     mean = input_f32.mean(dim=-1, keepdim=True)          # [..., 1]
-    # print("mean in torch", mean)
     var = input_f32.var(dim=-1, keepdim=True, correction=0)  # [..., 1]
-    # print("var in torch", var)
 
     rstd = torch.rsqrt(var + eps)  # [..., 1]
-    # print("rstd in torch", rstd)
     centered_input = input_f32 - mean  # [..., D]
     normalized = centered_input * rstd  # [..., D]
 
