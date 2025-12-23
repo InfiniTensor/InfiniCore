@@ -119,8 +119,9 @@ def test(
     sync=None,
 ):
     print(
-        f"Testing layer_norm on {InfiniDeviceNames[device]} with input_shape:{input_shape},"
-        f"bias:{bias_exist},eps:{eps},"
+        f"Testing layer_norm on {InfiniDeviceNames[device]} with input_shape:{input_shape}, "
+        f"bias:{bias_exist}, eps:{eps}, input_strides:{input_strides}, output_strides:{output_strides}, "
+        f"weight_strides:{weight_strides}, inplace:{inplace}, "
         f"dtype:{InfiniDtypeNames[dtype]}"
     )
 
