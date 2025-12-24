@@ -938,3 +938,42 @@ def tanh_(lib):
     lib.infiniopDestroyTanhDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
+
+@OpRegister.operator
+def scaled_mm_int8_(lib):
+    lib.infiniopCreateI8GemmDescriptor.restype = c_int32
+    lib.infiniopCreateI8GemmDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetI8GemmWorkspaceSize.restype = c_int32
+    lib.infiniopGetI8GemmWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopI8Gemm.restype = c_int32
+    lib.infiniopI8Gemm.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyI8GemmDescriptor.restype = c_int32
+    lib.infiniopDestroyI8GemmDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]

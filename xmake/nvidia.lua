@@ -11,6 +11,15 @@ if CUTLASS_ROOT ~= nil then
     -- add_includedirs(CUTE_ROOT)
 end
 
+-- function get_cugencodes()
+--     local codes = get_config("cuda_arch")
+--     if codes then
+--         return { codes }
+--     else
+--         return { "native" }
+--     end
+-- end
+
 target("infiniop-nvidia")
     set_kind("static")
     add_deps("infini-utils")
@@ -22,7 +31,9 @@ target("infiniop-nvidia")
     if has_config("cudnn") then
         add_links("cudnn")
     end
-    add_cugencodes("native")
+
+    -- add_cugencodes("native")
+    -- add_cugencodes(get_cugencodes())
 
     on_load(function (target)
         import("lib.detect.find_tool")
@@ -36,11 +47,6 @@ target("infiniop-nvidia")
 
             target:add("linkdirs", path.directory(path.directory(nvcc_path)) .. "/lib64/stubs")
             target:add("links", "cuda")
-
-            local cuda_arch = get_config("cuda_arch")
-            if cuda_arch ~= nil then
-                target:add("cu-cxxflags", "-arch=", cuda_arch)
-            end
         end
     end)
 
@@ -64,6 +70,7 @@ target("infiniop-nvidia")
     end
 
     add_cuflags("-Xcompiler=-Wno-error=deprecated-declarations")
+    add_cuflags("-gencode=arch=compute_90a,code=sm_90a")
 
     set_languages("cxx17")
     add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")

@@ -64,11 +64,15 @@ infiniStatus_t Descriptor::calculate(
 
 
     if (sm_version >= 75 && sm_version < 80) {
+        std::cout << "SM75 int8_scaled_mm is not implemented yet.\n";
+
         // TORCH_CHECK(out_dtype == torch::kHalf, "out_dtype must be Half for SM75");
         // sm75_dispatch_shape<cutlass::half_t, cutlass::arch::Sm75, cutlass::gemm::GemmShape<8, 8, 16>>(
         //     // out, mat_a, mat_b, scales_a, scales_b, bias);
         //     out, a, b, a_scale, b_scale, bias, _info.m, _info.n, _info.k, _info.a_matrix.ld(), _info.b_matrix.ld(), _info.out_matrix.ld(), stream);
     } else if (sm_version >= 80 && sm_version < 90) {
+        std::cout << "SM80 int8_scaled_mm is not implemented yet.\n";
+
         // sm86/sm89 has a much smaller shared memory size (100K) than sm80 (160K)
         // if (sm_version == 86 || sm_version == 89) {
         // if (out_dtype == torch::kBFloat16) {
@@ -94,20 +98,25 @@ infiniStatus_t Descriptor::calculate(
     } else if (sm_version == 90) {
     #if defined CUDA_VERSION && CUDA_VERSION >= 12000
         // cutlass 3.x
+        std::cout << "SM90 int8_scaled_mm is using cutlass 3.x\n";
+        std::cout << "Output dtype: " << (int) this->_out_dtype << "\n";
         if (this->_out_dtype == INFINI_DTYPE_BF16) {
-        sm90_dispatch_shape<cutlass::bfloat16_t>(
-            out, a, b, a_scale, b_scale, bias, 
-            _info.m, _info.n, _info.k, 
-            _info.a_matrix.ld(), _info.b_matrix.ld(), _info.out_matrix.ld(), 
-            stream);
+            std::cout << "Using bfloat16 output\n";
+            sm90_dispatch_shape<cutlass::bfloat16_t>(
+                out, a, b, a_scale, b_scale, bias, 
+                _info.m, _info.n, _info.k, 
+                _info.a_matrix.ld(), _info.b_matrix.ld(), _info.out_matrix.ld(), 
+                stream);
         } else {
-        sm90_dispatch_shape<cutlass::half_t>(
-            out, a, b, a_scale, b_scale, bias, 
-            _info.m, _info.n, _info.k, 
-            _info.a_matrix.ld(), _info.b_matrix.ld(), _info.out_matrix.ld(), 
-            stream);
+            std::cout << "Using half output\n";
+            sm90_dispatch_shape<cutlass::half_t>(
+                out, a, b, a_scale, b_scale, bias, 
+                _info.m, _info.n, _info.k, 
+                _info.a_matrix.ld(), _info.b_matrix.ld(), _info.out_matrix.ld(), 
+                stream);
         }
     #else
+        std::cout << "SM90 int8_scaled_mm is not implemented yet.\n";
         // // fallback to cutlass 2.x
         // if (out_dtype == torch::kBFloat16) {
         // sm80_dispatch_shape<cutlass::bfloat16_t, cutlass::arch::Sm80, cutlass::gemm::GemmShape<16, 8, 32>>(
@@ -120,6 +129,7 @@ infiniStatus_t Descriptor::calculate(
         // }
     #endif
     } else {
+        std::cout << "int8_scaled_mm is not implemented for SM" << sm_version << " yet.\n";
         // TORCH_CHECK_NOT_IMPLEMENTED(false, "No implemented int8_scaled_mm for current compute capability.");
         return INFINI_STATUS_NOT_IMPLEMENTED;
     }

@@ -158,11 +158,11 @@ void cutlass_int8_scaled_mm(
   typename Gemm::Arguments args{
       {m, n, k}, {a_ptr, lda}, {b_ptr, ldb}, {b_s_ptr, 0}, {a_s_ptr, 0}, {bias_ptr, ldc}, {o_ptr, ldd}, visitor_args};
 
-
+  
   /* 需要先看看是否需要workspace */
   // auto workspace = torch::empty(
   //     gemm_op.get_workspace_size(args), torch::TensorOptions().dtype(torch::kUInt8).device(mat_a.device()));
-
+  std::cout << "Workspace size toto: " << gemm_op.get_workspace_size(args) << " bytes\n";
   // auto stream = at::cuda::getCurrentCUDAStream(mat_a.get_device());
 
   auto can_implement = gemm_op.can_implement(args);
@@ -625,6 +625,7 @@ void cutlass_int8_scaled_mm_sm90(
   //     cutlassGetStatusString(can_implement));
 
   // auto status = gemm_op(args, workspace.data_ptr(), (cudaStream_t)stream);
+  std::cout << "Workspace size sm90: " << gemm_op.get_workspace_size(args) << " bytes\n";
 
   auto status = gemm_op(args, nullptr, (cudaStream_t)stream);
   // TORCH_CHECK(status == cutlass::Status::kSuccess, "gemm executioin failed, error: ", cutlassGetStatusString(status));

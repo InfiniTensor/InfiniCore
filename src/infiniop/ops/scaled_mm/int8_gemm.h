@@ -18,7 +18,7 @@
                    size_t workspace_size,                                      \
                    infiniDtype_t out_dtype,                                    \
                    infiniDevice_t device_type, int device_id)                  \
-            : InfiniopDescriptor{device_type, device_id},                      \
+            : InfiniopDescriptor{device_type, device_id}, _out_dtype(out_dtype), \
               _opaque(opaque), _info(info), _workspace_size(workspace_size) {} \
                                                                                \
     public:                                                                    \
