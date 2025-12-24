@@ -177,269 +177,311 @@ void cutlass_int8_scaled_mm(
   // TORCH_CHECK(status == cutlass::Status::kSuccess, "gemm executioin failed, error: ", cutlassGetStatusString(status));
 }
 
-// template <typename ElementOutput, typename ArchTag, typename InstructionShape>
-// void sm75_dispatch_shape(
-//     torch::Tensor& out,
-//     const torch::Tensor& mat_a,
-//     const torch::Tensor& mat_b,
-//     const torch::Tensor& scales_a,
-//     const torch::Tensor& scales_b,
-//     const c10::optional<torch::Tensor>& bias) {
-//   int m = mat_a.size(0);
-//   if (m <= 32) {
-//     cutlass_int8_scaled_mm<
-//         ElementOutput,
-//         ArchTag,
-//         cutlass::gemm::GemmShape<32, 128, 64>,
-//         cutlass::gemm::GemmShape<32, 64, 64>,
-//         InstructionShape,
-//         2>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//   } else if (m <= 64) {
-//     cutlass_int8_scaled_mm<
-//         ElementOutput,
-//         ArchTag,
-//         cutlass::gemm::GemmShape<64, 128, 128>,
-//         cutlass::gemm::GemmShape<64, 64, 64>,
-//         InstructionShape,
-//         2>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//   } else if (m <= 256) {
-//     cutlass_int8_scaled_mm<
-//         ElementOutput,
-//         ArchTag,
-//         cutlass::gemm::GemmShape<128, 128, 128>,
-//         cutlass::gemm::GemmShape<64, 64, 64>,
-//         InstructionShape,
-//         2>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//   } else {
-//     cutlass_int8_scaled_mm<
-//         ElementOutput,
-//         ArchTag,
-//         cutlass::gemm::GemmShape<128, 128, 64>,
-//         cutlass::gemm::GemmShape<64, 64, 64>,
-//         InstructionShape,
-//         2>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//   }
-// }
+template <typename ElementOutput, typename ArchTag, typename InstructionShape>
+void sm75_dispatch_shape(
+    void *out,
+    const void *a,
+    const void *b,
+    const void *a_scale,
+    const void *b_scale,
+    const void *bias,
+    int m,
+    int n,
+    int k,
+    int lda,
+    int ldb,
+    int ldd,
+    void* stream
+){
+    // torch::Tensor& out,
+    // const torch::Tensor& mat_a,
+    // const torch::Tensor& mat_b,
+    // const torch::Tensor& scales_a,
+    // const torch::Tensor& scales_b,
+    // const c10::optional<torch::Tensor>& bias) {
+  // int m = mat_a.size(0);
+  if (m <= 32) {
+    cutlass_int8_scaled_mm<
+        ElementOutput,
+        ArchTag,
+        cutlass::gemm::GemmShape<32, 128, 64>,
+        cutlass::gemm::GemmShape<32, 64, 64>,
+        InstructionShape,
+        2>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+  } else if (m <= 64) {
+    cutlass_int8_scaled_mm<
+        ElementOutput,
+        ArchTag,
+        cutlass::gemm::GemmShape<64, 128, 128>,
+        cutlass::gemm::GemmShape<64, 64, 64>,
+        InstructionShape,
+        2>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+  } else if (m <= 256) {
+    cutlass_int8_scaled_mm<
+        ElementOutput,
+        ArchTag,
+        cutlass::gemm::GemmShape<128, 128, 128>,
+        cutlass::gemm::GemmShape<64, 64, 64>,
+        InstructionShape,
+        2>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+  } else {
+    cutlass_int8_scaled_mm<
+        ElementOutput,
+        ArchTag,
+        cutlass::gemm::GemmShape<128, 128, 64>,
+        cutlass::gemm::GemmShape<64, 64, 64>,
+        InstructionShape,
+        2>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+  }
+}
 
-// template <typename ElementOutput, typename ArchTag, typename InstructionShape>
-// void sm80_dispatch_shape(
-//     torch::Tensor& out,
-//     const torch::Tensor& mat_a,
-//     const torch::Tensor& mat_b,
-//     const torch::Tensor& scales_a,
-//     const torch::Tensor& scales_b,
-//     const c10::optional<torch::Tensor>& bias) {
-//   int m = mat_a.size(0);
-//   int n = mat_b.size(1);
-//   if (m <= 16) {
-//     if (n <= 4096) {
-//       cutlass_int8_scaled_mm<
-//           ElementOutput,
-//           ArchTag,
-//           cutlass::gemm::GemmShape<16, 64, 128>,
-//           cutlass::gemm::GemmShape<16, 64, 64>,
-//           InstructionShape,
-//           6>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//     } else {
-//       cutlass_int8_scaled_mm<
-//           ElementOutput,
-//           ArchTag,
-//           cutlass::gemm::GemmShape<16, 64, 128>,
-//           cutlass::gemm::GemmShape<16, 64, 64>,
-//           InstructionShape,
-//           5>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//     }
-//   } else if (m <= 32) {
-//     if (n <= 4096) {
-//       cutlass_int8_scaled_mm<
-//           ElementOutput,
-//           ArchTag,
-//           cutlass::gemm::GemmShape<32, 64, 128>,
-//           cutlass::gemm::GemmShape<32, 64, 64>,
-//           InstructionShape,
-//           6>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//     } else {
-//       cutlass_int8_scaled_mm<
-//           ElementOutput,
-//           ArchTag,
-//           cutlass::gemm::GemmShape<32, 64, 128>,
-//           cutlass::gemm::GemmShape<32, 64, 64>,
-//           InstructionShape,
-//           5>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//     }
-//   } else if (m <= 64) {
-//     if (n <= 4096) {
-//       cutlass_int8_scaled_mm<
-//           ElementOutput,
-//           ArchTag,
-//           cutlass::gemm::GemmShape<64, 64, 128>,
-//           cutlass::gemm::GemmShape<32, 64, 64>,
-//           InstructionShape,
-//           5>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//     } else {
-//       cutlass_int8_scaled_mm<
-//           ElementOutput,
-//           ArchTag,
-//           cutlass::gemm::GemmShape<64, 128, 128>,
-//           cutlass::gemm::GemmShape<64, 64, 64>,
-//           InstructionShape,
-//           5>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//     }
-//   } else if (m <= 128 && n < 8192) {
-//     cutlass_int8_scaled_mm<
-//         ElementOutput,
-//         ArchTag,
-//         cutlass::gemm::GemmShape<64, 128, 128>,
-//         cutlass::gemm::GemmShape<64, 64, 64>,
-//         InstructionShape,
-//         5>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//   } else {
-//     cutlass_int8_scaled_mm<
-//         ElementOutput,
-//         ArchTag,
-//         cutlass::gemm::GemmShape<128, 128, 64>,
-//         cutlass::gemm::GemmShape<64, 64, 64>,
-//         InstructionShape,
-//         5>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//   }
-// }
+template <typename ElementOutput, typename ArchTag, typename InstructionShape>
+void sm80_dispatch_shape(
+    void *out,
+    const void *a,
+    const void *b,
+    const void *a_scale,
+    const void *b_scale,
+    const void *bias,
+    int m,
+    int n,
+    int k,
+    int lda,
+    int ldb,
+    int ldd,
+    void* stream
+){
+    // torch::Tensor& out,
+    // const torch::Tensor& mat_a,
+    // const torch::Tensor& mat_b,
+    // const torch::Tensor& scales_a,
+    // const torch::Tensor& scales_b,
+    // const c10::optional<torch::Tensor>& bias) {
+  // int m = mat_a.size(0);
+  // int n = mat_b.size(1);
+  if (m <= 16) {
+    if (n <= 4096) {
+      cutlass_int8_scaled_mm<
+          ElementOutput,
+          ArchTag,
+          cutlass::gemm::GemmShape<16, 64, 128>,
+          cutlass::gemm::GemmShape<16, 64, 64>,
+          InstructionShape,
+          6>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+    } else {
+      cutlass_int8_scaled_mm<
+          ElementOutput,
+          ArchTag,
+          cutlass::gemm::GemmShape<16, 64, 128>,
+          cutlass::gemm::GemmShape<16, 64, 64>,
+          InstructionShape,
+          5>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+    }
+  } else if (m <= 32) {
+    if (n <= 4096) {
+      cutlass_int8_scaled_mm<
+          ElementOutput,
+          ArchTag,
+          cutlass::gemm::GemmShape<32, 64, 128>,
+          cutlass::gemm::GemmShape<32, 64, 64>,
+          InstructionShape,
+          6>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+    } else {
+      cutlass_int8_scaled_mm<
+          ElementOutput,
+          ArchTag,
+          cutlass::gemm::GemmShape<32, 64, 128>,
+          cutlass::gemm::GemmShape<32, 64, 64>,
+          InstructionShape,
+          5>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+    }
+  } else if (m <= 64) {
+    if (n <= 4096) {
+      cutlass_int8_scaled_mm<
+          ElementOutput,
+          ArchTag,
+          cutlass::gemm::GemmShape<64, 64, 128>,
+          cutlass::gemm::GemmShape<32, 64, 64>,
+          InstructionShape,
+          5>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+    } else {
+      cutlass_int8_scaled_mm<
+          ElementOutput,
+          ArchTag,
+          cutlass::gemm::GemmShape<64, 128, 128>,
+          cutlass::gemm::GemmShape<64, 64, 64>,
+          InstructionShape,
+          5>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+    }
+  } else if (m <= 128 && n < 8192) {
+    cutlass_int8_scaled_mm<
+        ElementOutput,
+        ArchTag,
+        cutlass::gemm::GemmShape<64, 128, 128>,
+        cutlass::gemm::GemmShape<64, 64, 64>,
+        InstructionShape,
+        5>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+  } else {
+    cutlass_int8_scaled_mm<
+        ElementOutput,
+        ArchTag,
+        cutlass::gemm::GemmShape<128, 128, 64>,
+        cutlass::gemm::GemmShape<64, 64, 64>,
+        InstructionShape,
+        5>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+  }
+}
 
-// // Dispatch shape for sm89 (L40S, L20, RTX 4090), according to:
-// // https://github.com/vllm-project/vllm/blob/main/csrc/quantization/cutlass_w8a8/scaled_mm_c2x_sm89_int8_dispatch.cuh
-// template <typename ElementOutput, typename ArchTag, typename InstructionShape>
-// void sm89_dispatch_shape(
-//     torch::Tensor& out,
-//     const torch::Tensor& mat_a,
-//     const torch::Tensor& mat_b,
-//     const torch::Tensor& scales_a,
-//     const torch::Tensor& scales_b,
-//     const c10::optional<torch::Tensor>& bias) {
-//   int m = mat_a.size(0);
-//   int n = mat_b.size(1);
-//   if (m <= 16) {
-//     if (n <= 8192) {
-//       cutlass_int8_scaled_mm<
-//           ElementOutput,
-//           ArchTag,
-//           cutlass::gemm::GemmShape<16, 64, 128>,
-//           cutlass::gemm::GemmShape<16, 64, 64>,
-//           InstructionShape,
-//           5>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//     } else {
-//       cutlass_int8_scaled_mm<
-//           ElementOutput,
-//           ArchTag,
-//           cutlass::gemm::GemmShape<16, 128, 128>,
-//           cutlass::gemm::GemmShape<16, 64, 64>,
-//           InstructionShape,
-//           4>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//     }
-//   } else if (m <= 32) {
-//     if (n <= 8192) {
-//       cutlass_int8_scaled_mm<
-//           ElementOutput,
-//           ArchTag,
-//           cutlass::gemm::GemmShape<32, 64, 128>,
-//           cutlass::gemm::GemmShape<16, 64, 64>,
-//           InstructionShape,
-//           5>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//     } else {
-//       cutlass_int8_scaled_mm<
-//           ElementOutput,
-//           ArchTag,
-//           cutlass::gemm::GemmShape<32, 128, 128>,
-//           cutlass::gemm::GemmShape<32, 64, 64>,
-//           InstructionShape,
-//           4>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//     }
-//   } else if (m <= 64) {
-//     if (n <= 8192) {
-//       cutlass_int8_scaled_mm<
-//           ElementOutput,
-//           ArchTag,
-//           cutlass::gemm::GemmShape<64, 64, 128>,
-//           cutlass::gemm::GemmShape<32, 64, 64>,
-//           InstructionShape,
-//           5>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//     } else {
-//       cutlass_int8_scaled_mm<
-//           ElementOutput,
-//           ArchTag,
-//           cutlass::gemm::GemmShape<64, 128, 128>,
-//           cutlass::gemm::GemmShape<64, 64, 64>,
-//           InstructionShape,
-//           3>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//     }
-//   } else if (m <= 128) {
-//     if (n <= 8192) {
-//       cutlass_int8_scaled_mm<
-//           ElementOutput,
-//           ArchTag,
-//           cutlass::gemm::GemmShape<64, 128, 128>,
-//           cutlass::gemm::GemmShape<32, 64, 64>,
-//           InstructionShape,
-//           3>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//     } else if (n <= 16384) {
-//       cutlass_int8_scaled_mm<
-//           ElementOutput,
-//           ArchTag,
-//           cutlass::gemm::GemmShape<128, 128, 64>,
-//           cutlass::gemm::GemmShape<64, 64, 64>,
-//           InstructionShape,
-//           5>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//     } else {
-//       cutlass_int8_scaled_mm<
-//           ElementOutput,
-//           ArchTag,
-//           cutlass::gemm::GemmShape<64, 64, 128>,
-//           cutlass::gemm::GemmShape<32, 64, 64>,
-//           InstructionShape,
-//           5>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//     }
-//   } else if (m <= 256) {
-//     if (n <= 4096) {
-//       cutlass_int8_scaled_mm<
-//           ElementOutput,
-//           ArchTag,
-//           cutlass::gemm::GemmShape<64, 128, 128>,
-//           cutlass::gemm::GemmShape<64, 64, 64>,
-//           InstructionShape,
-//           3>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//     } else if (n <= 8192) {
-//       cutlass_int8_scaled_mm<
-//           ElementOutput,
-//           ArchTag,
-//           cutlass::gemm::GemmShape<128, 128, 64>,
-//           cutlass::gemm::GemmShape<64, 64, 64>,
-//           InstructionShape,
-//           5>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//     } else if (n <= 16384) {
-//       cutlass_int8_scaled_mm<
-//           ElementOutput,
-//           ArchTag,
-//           cutlass::gemm::GemmShape<256, 128, 64>,
-//           cutlass::gemm::GemmShape<64, 64, 64>,
-//           InstructionShape,
-//           3>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//     } else {
-//       cutlass_int8_scaled_mm<
-//           ElementOutput,
-//           ArchTag,
-//           cutlass::gemm::GemmShape<128, 128, 64>,
-//           cutlass::gemm::GemmShape<64, 64, 64>,
-//           InstructionShape,
-//           5>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//     }
-//   } else {
-//     cutlass_int8_scaled_mm<
-//         ElementOutput,
-//         ArchTag,
-//         cutlass::gemm::GemmShape<128, 128, 64>,
-//         cutlass::gemm::GemmShape<64, 64, 64>,
-//         InstructionShape,
-//         5>(out, mat_a, mat_b, scales_a, scales_b, bias);
-//   }
-// }
+// Dispatch shape for sm89 (L40S, L20, RTX 4090), according to:
+// https://github.com/vllm-project/vllm/blob/main/csrc/quantization/cutlass_w8a8/scaled_mm_c2x_sm89_int8_dispatch.cuh
+template <typename ElementOutput, typename ArchTag, typename InstructionShape>
+void sm89_dispatch_shape(
+    void *out,
+    const void *a,
+    const void *b,
+    const void *a_scale,
+    const void *b_scale,
+    const void *bias,
+    int m,
+    int n,
+    int k,
+    int lda,
+    int ldb,
+    int ldd,
+    void* stream
+){
+    // torch::Tensor& out,
+    // const torch::Tensor& mat_a,
+    // const torch::Tensor& mat_b,
+    // const torch::Tensor& scales_a,
+    // const torch::Tensor& scales_b,
+    // const c10::optional<torch::Tensor>& bias) {
+  // int m = mat_a.size(0);
+  // int n = mat_b.size(1);
+  if (m <= 16) {
+    if (n <= 8192) {
+      cutlass_int8_scaled_mm<
+          ElementOutput,
+          ArchTag,
+          cutlass::gemm::GemmShape<16, 64, 128>,
+          cutlass::gemm::GemmShape<16, 64, 64>,
+          InstructionShape,
+          5>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+    } else {
+      cutlass_int8_scaled_mm<
+          ElementOutput,
+          ArchTag,
+          cutlass::gemm::GemmShape<16, 128, 128>,
+          cutlass::gemm::GemmShape<16, 64, 64>,
+          InstructionShape,
+          4>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+    }
+  } else if (m <= 32) {
+    if (n <= 8192) {
+      cutlass_int8_scaled_mm<
+          ElementOutput,
+          ArchTag,
+          cutlass::gemm::GemmShape<32, 64, 128>,
+          cutlass::gemm::GemmShape<16, 64, 64>,
+          InstructionShape,
+          5>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+    } else {
+      cutlass_int8_scaled_mm<
+          ElementOutput,
+          ArchTag,
+          cutlass::gemm::GemmShape<32, 128, 128>,
+          cutlass::gemm::GemmShape<32, 64, 64>,
+          InstructionShape,
+          4>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+    }
+  } else if (m <= 64) {
+    if (n <= 8192) {
+      cutlass_int8_scaled_mm<
+          ElementOutput,
+          ArchTag,
+          cutlass::gemm::GemmShape<64, 64, 128>,
+          cutlass::gemm::GemmShape<32, 64, 64>,
+          InstructionShape,
+          5>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+    } else {
+      cutlass_int8_scaled_mm<
+          ElementOutput,
+          ArchTag,
+          cutlass::gemm::GemmShape<64, 128, 128>,
+          cutlass::gemm::GemmShape<64, 64, 64>,
+          InstructionShape,
+          3>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+    }
+  } else if (m <= 128) {
+    if (n <= 8192) {
+      cutlass_int8_scaled_mm<
+          ElementOutput,
+          ArchTag,
+          cutlass::gemm::GemmShape<64, 128, 128>,
+          cutlass::gemm::GemmShape<32, 64, 64>,
+          InstructionShape,
+          3>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+    } else if (n <= 16384) {
+      cutlass_int8_scaled_mm<
+          ElementOutput,
+          ArchTag,
+          cutlass::gemm::GemmShape<128, 128, 64>,
+          cutlass::gemm::GemmShape<64, 64, 64>,
+          InstructionShape,
+          5>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+    } else {
+      cutlass_int8_scaled_mm<
+          ElementOutput,
+          ArchTag,
+          cutlass::gemm::GemmShape<64, 64, 128>,
+          cutlass::gemm::GemmShape<32, 64, 64>,
+          InstructionShape,
+          5>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+    }
+  } else if (m <= 256) {
+    if (n <= 4096) {
+      cutlass_int8_scaled_mm<
+          ElementOutput,
+          ArchTag,
+          cutlass::gemm::GemmShape<64, 128, 128>,
+          cutlass::gemm::GemmShape<64, 64, 64>,
+          InstructionShape,
+          3>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+    } else if (n <= 8192) {
+      cutlass_int8_scaled_mm<
+          ElementOutput,
+          ArchTag,
+          cutlass::gemm::GemmShape<128, 128, 64>,
+          cutlass::gemm::GemmShape<64, 64, 64>,
+          InstructionShape,
+          5>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+    } else if (n <= 16384) {
+      cutlass_int8_scaled_mm<
+          ElementOutput,
+          ArchTag,
+          cutlass::gemm::GemmShape<256, 128, 64>,
+          cutlass::gemm::GemmShape<64, 64, 64>,
+          InstructionShape,
+          3>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+    } else {
+      cutlass_int8_scaled_mm<
+          ElementOutput,
+          ArchTag,
+          cutlass::gemm::GemmShape<128, 128, 64>,
+          cutlass::gemm::GemmShape<64, 64, 64>,
+          InstructionShape,
+          5>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+    }
+  } else {
+    cutlass_int8_scaled_mm<
+        ElementOutput,
+        ArchTag,
+        cutlass::gemm::GemmShape<128, 128, 64>,
+        cutlass::gemm::GemmShape<64, 64, 64>,
+        InstructionShape,
+        5>(out, a, b, a_scale, b_scale, bias, m, n, k, lda, ldb, ldd, stream);
+  }
+}
 
 template <
     typename ElementOutput,
