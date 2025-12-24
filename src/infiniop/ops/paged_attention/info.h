@@ -29,6 +29,7 @@ public:
     ptrdiff_t q_stride;
     ptrdiff_t kv_block_stride;
     ptrdiff_t kv_head_stride;
+    ptrdiff_t o_stride;
 
     static utils::Result<PagedAttentionInfo> create(
         infiniopTensorDescriptor_t out_desc,
@@ -69,6 +70,7 @@ public:
         ptrdiff_t q_stride = q_desc->stride(0);
         ptrdiff_t kv_block_stride = k_cache_desc->stride(0);
         ptrdiff_t kv_head_stride = k_cache_desc->stride(1);
+        ptrdiff_t o_stride = out_desc->stride(0);
 
         return utils::Result<PagedAttentionInfo>(PagedAttentionInfo{
             dtype,
@@ -81,7 +83,8 @@ public:
             max_num_blocks_per_seq,
             q_stride,
             kv_block_stride,
-            kv_head_stride});
+            kv_head_stride,
+            o_stride});
     }
 };
 

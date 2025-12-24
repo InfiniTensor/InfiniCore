@@ -22,15 +22,14 @@ __device__ void pagedAttentionKernel(
     const size_t block_size,
     const ptrdiff_t q_stride,
     const ptrdiff_t kv_block_stride,
-    const ptrdiff_t kv_head_stride) {
+    const ptrdiff_t kv_head_stride,
+    const ptrdiff_t o_stride) {
     //================================================================================
     // 1. Setup & Query Loading (No changes in this section)
     //================================================================================
     const int seq_idx = blockIdx.y;
     const int head_idx = blockIdx.x;
     const int num_heads = gridDim.x;
-    const ptrdiff_t o_stride = q_stride / 3; // qkv
-    // const int batch_size = gridDim.y;
     const int32_t seq_len = seq_lens_[seq_idx];
     if (seq_len == 0) {
         return;
