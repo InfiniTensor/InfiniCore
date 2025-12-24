@@ -52,118 +52,28 @@ _TEST_CASES = [
 
 # Data types used for testing
 _TENSOR_DTYPES = [InfiniDtype.BF16, InfiniDtype.F16]
-# _TENSOR_DTYPES = [InfiniDtype.F16]
 
 # Tolerance map for different data types
 _TOLERANCE_MAP = {
-    InfiniDtype.F16: {"atol": 1e-2, "rtol": 5e-2},
-    InfiniDtype.BF16: {"atol": 1e-2, "rtol": 5e-2},
-    InfiniDtype.F32: {"atol": 3e-5, "rtol": 5e-3},
+    InfiniDtype.F16: {"atol": 3e-1, "rtol": 1e-2},
+    InfiniDtype.BF16: {"atol": 3e-1, "rtol": 1e-2},
 }
 
 DEBUG = False
 PROFILE = False
 NUM_PRERUN = 10
 NUM_ITERATIONS = 1000
+    
+def to_int8(tensor: torch.Tensor) -> torch.Tensor:
+    return torch.round(tensor.clamp(min=-128, max=127)).to(dtype=torch.int8)
 
-
-def linearFunction(c, bias, x, w, alpha, beta):
-    ans = (
-        alpha * torch.matmul(x.to(torch.float32), w.to(torch.float32)).to(x.dtype)
-        + beta * c
-        + bias
-    )
-    return ans
-
-def scaled_mm_int8_with_bias(
-    A_int8,           # (M, K) int8
-    B_int8,           # (K, N) int8
-    bias,             # (N,) or (M, N) — 通常为 (N,)
-    scale_a,          # scalar or (M,) or ()
-    scale_b,          # scalar or (N,) or ()
-    scale_bias=None,  # scalar or (N,) — 可选：若 bias 也是量化过的
-    out_dtype=torch.float16
-):
-    """
-    Perform scaled int8 matrix multiplication with bias:
-        output = (A_int8 * scale_a) @ (B_int8 * scale_b) + bias
-
-    If bias is already in the correct scale (e.g., float), apply directly.
-    If bias is quantized (e.g., int32), use scale_bias to dequantize it.
-    """
-    # Dequantize A and B
-    A_f = A_int8.to(out_dtype) * scale_a
-    B_f = B_int8.to(out_dtype) * scale_b
-
-    # Matrix multiplication
-    output = torch.mm(A_f, B_f)  # (M, N)
-
-    # Handle bias
+def torch_scaled_mm(a, b, scale_a, scale_b, out_dtype, bias):
+    o = torch.matmul(a.to(torch.float32), b.to(torch.float32))
     if bias is not None:
-        if scale_bias is not None:
-            # Assume bias is int32 or int8 and needs scaling
-            bias_f = bias.to(out_dtype) * scale_bias
-        else:
-            # Assume bias is already in float
-            bias_f = bias.to(out_dtype)
-        output = output + bias_f
-
-    return output
-
-
-def quantWeights(w: torch.Tensor, symmetric, axis):
-    """
-    对权重矩阵 w ∈ [K, N] 做 per-channel (按列) 量化。
-    返回:
-      w_packed: int8 量化权重，形状 [K, N]
-      w_scale:  每列的scale，形状 [1, N]，dtype与w相同
-      w_zero:   每列的zero point，形状 [1, N]，dtype与w相同
-    """
-    assert w.dim() == 2, "w must be [K, N]"
-    if symmetric:
-        # 对称量化：zero=0, 只用最大绝对值
-        w_abs_max = torch.max(w.abs(), dim=axis, keepdim=True)[0]
-
-        # 避免除 0
-        w_scale = w_abs_max / 127.0
-        w_scale = torch.clamp(w_scale, min=1e-8)
-
-        # 计算量化值 q = round(w / scale)
-        w_q = torch.round(w / w_scale)
-
-        # 限制到 [-128, 127]
-        w_q = torch.clamp(w_q, -128, 127)
-
-        # 转 int8
-        w_packed = w_q.to(torch.int8)
-
-        # 对称量化 zero 固定为 0
-        w_zero = None
-
-        return w_packed, w_scale.to(w.dtype), w_zero
+        o = o.to(torch.float32) * scale_a.view(-1, 1) * scale_b.view(1, -1) + bias
     else:
-        # 计算每列的最小值和最大值
-        w_min = w.min(dim=axis, keepdim=True)[0]
-        w_max = w.max(dim=axis, keepdim=True)[0]
-
-        # 避免除以零
-        w_scale = (w_max - w_min) / 255.0
-        w_scale = torch.clamp(w_scale, min=1e-8)
-
-        # 计算zero point
-        w_zero = -w_min / w_scale - 128.0
-
-        # 计算量化值
-        w_q = torch.round(w / w_scale + w_zero)
-
-        # 限制范围[-128, 127]
-        w_q = torch.clamp(w_q, -128, 127)
-
-        # 转为int8
-        w_packed = w_q.to(torch.int8)
-
-        return w_packed, w_scale.to(w.dtype), w_zero.to(w.dtype)
-
+        o = o.to(torch.float32) * scale_a.view(-1, 1) * scale_b.view(1, -1)
+    return o.to(out_dtype)
 
 def test(
     handle,
@@ -183,59 +93,30 @@ def test(
     )
     M, K = x_shape
     N = w_shape[1]
-    bias = TestTensor((N,), None, dtype, device)
-    x = TestTensor(x_shape, None, dtype, device)
-    w = TestTensor(w_shape, None, dtype, device)
-    y = TestTensor(y_shape, None, dtype, device)
+    
+    x_packed = to_int8(torch.randn((M, K), device="cuda") * 5)
+    weights = to_int8(torch.randn((N, K), device="cuda").t() * 5)
+    
+    x_scale = torch.randn((M,), device="cuda", dtype=torch.float32)
+    weights_scale = torch.randn((N,), device="cuda", dtype=torch.float32)
+    bias = torch.randn((N,), device="cuda", dtype=torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16) * 10
 
-    if inplace == Inplace.INPLACE:
-        d = y
-    else:
-        d = TestTensor(y_shape, None, dtype, device)
-    ans1 = linearFunction(
-        y.torch_tensor(),
-        bias.torch_tensor(),
-        x.torch_tensor(),
-        w.torch_tensor(),
-        alpha,
-        beta,
-    )
-
-    x_p, x_s, x_z = quantWeights(x.torch_tensor(), symmetric, 1)
+    ans = torch_scaled_mm(x_packed, weights, x_scale, weights_scale, torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16, bias=bias)
+    
     x_packed = TestTensor(
-        x_shape, x_p.stride(), InfiniDtype.I8, device, mode="manual", set_tensor=x_p
+        (M, K), x_packed.stride(), InfiniDtype.I8, device, mode="manual", set_tensor=x_packed
     )
-    x_scale = TestTensor((M, 1), x_s.stride(), InfiniDtype.F32, device, mode="manual", set_tensor=x_s)
-    if symmetric:
-        x_zero = None
-    else:
-        x_zero = TestTensor((M, 1), x_z.stride(), dtype, device, mode="manual", set_tensor=x_z)
-
-    w_packed, w_scale, w_zero = quantWeights(w.torch_tensor(), symmetric, 0)
+    x_scale = TestTensor(
+        (M,), x_scale.stride(), InfiniDtype.F32, device, mode="manual", set_tensor=x_scale
+    )
     weights = TestTensor(
-        w_shape, w_packed.stride(), InfiniDtype.I8, device, mode="manual", set_tensor=w_packed
+        (K, N), weights.stride(), InfiniDtype.I8, device, mode="manual", set_tensor=weights
     )
     weights_scale = TestTensor(
-        (1, N), w_scale.stride(), InfiniDtype.F32, device, mode="manual", set_tensor=w_scale
+        (N,), weights_scale.stride(), InfiniDtype.F32, device, mode="manual", set_tensor=weights_scale
     )
-    if symmetric:
-        weights_zero = None
-    else:
-        weights_zero = TestTensor(
-            (1, N), w_zero.stride(), dtype, device, mode="manual", set_tensor=w_zero
-        )
-
-    if sync is not None:
-        sync()
-        
-    ans = scaled_mm_int8_with_bias(
-        x_packed.torch_tensor().to(torch.int8),
-        weights.torch_tensor().to(torch.int8),
-        bias.torch_tensor(),
-        x_scale.torch_tensor(),
-        weights_scale.torch_tensor(),
-        out_dtype=torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16
-    )
+    y = TestTensor(y_shape, None, dtype, device)
+    bias = TestTensor((N,), bias.stride(), dtype, device, mode="manual", set_tensor=bias)
 
     descriptor = infiniopOperatorDescriptor_t()
     check_error(
@@ -251,27 +132,13 @@ def test(
         )
     )
 
-    # # Invalidate the shape and strides in the descriptor to prevent them from being directly used by the kernel
-    x.destroy_desc()
-    y.destroy_desc()
-    d.destroy_desc()
-    bias.destroy_desc()
-    x_packed.destroy_desc()
-    x_scale.destroy_desc()
-    if symmetric == False:
-        x_zero.destroy_desc()
-    weights.destroy_desc()
-    weights_scale.destroy_desc()
-    if symmetric == False:
-        weights_zero.destroy_desc()
-
     workspace_size = c_uint64(0)
     check_error(
         LIBINFINIOP.infiniopGetI8GemmWorkspaceSize(
             descriptor, ctypes.byref(workspace_size)
         )
     )
-    workspace = TestWorkspace(workspace_size.value, x.device)
+    workspace = TestWorkspace(workspace_size.value, x_packed.device)
 
     def lib_linear():
         check_error(
@@ -296,12 +163,9 @@ def test(
 
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:
-        debug(d.actual_tensor(), ans, atol=atol, rtol=rtol)
+        debug(y.actual_tensor(), ans, atol=atol, rtol=rtol)
 
-    # print(y.actual_tensor())
-    # print(ans1)
-    
-    # assert torch.allclose(y.actual_tensor(), ans, atol=atol, rtol=rtol)
+    assert torch.allclose(y.actual_tensor(), ans, atol=atol, rtol=rtol)
 
     # Profiling workflow
     if PROFILE:
