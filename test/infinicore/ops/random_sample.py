@@ -222,8 +222,8 @@ class OpTest(BaseOperatorTest):
 
             # Re-run operations with the same logits to get results for comparison
             # prepare_pytorch_inputs_and_kwargs will reuse self._current_logits if it exists
-            from framework.results import CaseResult
-            from framework.utils.tensor_utils import (
+            from framework.base import TestResult
+            from framework.utils import (
                 convert_infinicore_to_torch,
                 infinicore_tensor_from_torch,
             )
@@ -268,8 +268,8 @@ class OpTest(BaseOperatorTest):
 
             # Check if indices are equal (standard case)
             if ic_idx == ref_idx:
-                # Return a successful CaseResult object
-                return CaseResult(
+                # Return a successful TestResult object
+                return TestResult(
                     success=True,
                     return_code=0,
                     test_case=test_case,
@@ -283,8 +283,8 @@ class OpTest(BaseOperatorTest):
                 logits_ic = logits_tensor[ic_idx].item()
                 if logits_ic == logits_ref:
                     # Valid: different indices but same logits value
-                    # Return a successful CaseResult object
-                    return CaseResult(
+                    # Return a successful TestResult object
+                    return TestResult(
                         success=True,
                         return_code=0,
                         test_case=test_case,

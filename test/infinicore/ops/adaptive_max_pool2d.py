@@ -7,7 +7,6 @@ import torch
 import infinicore
 from framework import (
     BaseOperatorTest,
-    CaseResult,
     TensorSpec,
     TestCase,
     GenericTestRunner,
@@ -77,7 +76,7 @@ class OpTest(BaseOperatorTest):
                 and isinstance(test_case.inputs[0], TensorSpec)
                 and test_case.inputs[0].strides is not None
             ):
-                return CaseResult(
+                return TestResult(
                     success=False,
                     return_code=-2,
                     test_case=test_case,

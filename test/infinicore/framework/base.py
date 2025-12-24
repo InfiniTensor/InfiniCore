@@ -8,15 +8,15 @@ import infinicore
 import traceback
 from abc import ABC, abstractmethod
 
-from .results import CaseResult
+from .test_case import TestCase, TestResult
 from .datatypes import to_torch_dtype, to_infinicore_dtype
 from .devices import InfiniDeviceNames, torch_device_map
 from .tensor import TensorSpec, TensorInitializer
-from .utils.tensor_utils import (
+from .utils import (
     clone_torch_tensor,
+    create_test_comparator,
     infinicore_tensor_from_torch,
 )
-from .utils.compare_utils import create_test_comparator
 from .benchmark import BenchmarkUtils
 
 
@@ -84,7 +84,7 @@ class TestRunner:
                 try:
                     print(f"{test_case}")
 
-                    # Execute test and get CaseResult object
+                    # Execute test and get TestResult object
                     test_result = test_func(device, test_case, self.config)
                     self.test_results.append(test_result)
 
@@ -118,8 +118,8 @@ class TestRunner:
                     print(f"\033[91m✗\033[0m {error_msg}")
                     self.failed_tests.append(error_msg)
 
-                    # Create a failed CaseResult
-                    failed_result = CaseResult(
+                    # Create a failed TestResult
+                    failed_result = TestResult(
                         success=False,
                         return_code=-1,
                         error_message=str(e),
@@ -400,12 +400,12 @@ class BaseOperatorTest(ABC):
             config: Test configuration
 
         Returns:
-            CaseResult: Test case result object containing status and timing information
+            TestResult: Test result object containing status and timing information
         """
         device_str = torch_device_map[device]
 
-        # Initialize test case result
-        test_result = CaseResult(
+        # Initialize test result
+        test_result = TestResult(
             success=False,
             return_code=-1,  # Default to failure
             test_case=test_case,
