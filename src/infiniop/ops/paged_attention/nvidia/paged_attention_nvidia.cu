@@ -106,10 +106,6 @@ infiniStatus_t Descriptor::calculate(
                 _info.num_kv_heads, _info.scale, _info.max_num_blocks_per_seq, _info.block_size,
                 _info.q_stride, _info.kv_block_stride, _info.kv_head_stride, _info.o_stride,
                 stream);
-
-        } else {
-            printf("head_size: %zu\n", _info.head_size);
-            return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
     } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_512) {
         if (_info.head_size == 128) {
@@ -119,10 +115,6 @@ infiniStatus_t Descriptor::calculate(
                 _info.num_kv_heads, _info.scale, _info.max_num_blocks_per_seq, _info.block_size,
                 _info.q_stride, _info.kv_block_stride, _info.kv_head_stride, _info.o_stride,
                 stream);
-
-        } else {
-            printf("head_size: %zu\n", _info.head_size);
-            return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
     } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_4096) {
         if (_info.head_size == 128) {
@@ -132,9 +124,6 @@ infiniStatus_t Descriptor::calculate(
                 _info.num_kv_heads, _info.scale, _info.max_num_blocks_per_seq, _info.block_size,
                 _info.q_stride, _info.kv_block_stride, _info.kv_head_stride, _info.o_stride,
                 stream);
-        } else {
-            printf("head_size: %zu", _info.head_size);
-            return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
     } else {
         return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;

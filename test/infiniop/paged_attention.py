@@ -91,7 +91,7 @@ def ref_single_query_cached_kv_attention(
 # These are not meant to be imported from other modules
 _TEST_CASES_ = [
     # (num_seqs, num_heads, num_kv_heads, head_size, block_size, max_seq_len, use_alibi)
-    (1, 1, 1, 128, 16, 1024, False),
+    (1, 1, 1, 256, 16, 1024, False),
     (4, 40, 40, 128, 16, 1024, False),
     (6, 40, 40, 128, 16, 1024, False),
     (3, 8, 8, 128, 16, 1024, False),

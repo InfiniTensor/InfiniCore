@@ -51,6 +51,14 @@ public:
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
 
+        if (block_tables_desc->dtype() != INFINI_DTYPE_I32) {
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
+
+        if (seq_lens_desc->dtype() != INFINI_DTYPE_I32) {
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
+
         // --- Extract shape dimensions ---
         auto q_shape = q_desc->shape();
         auto k_cache_shape = k_cache_desc->shape();
@@ -58,6 +66,14 @@ public:
         size_t num_seqs = q_shape[0];
         size_t num_heads = q_shape[1];
         size_t head_size = q_shape[2];
+
+        if (head_size != 128) {
+            // 输出具体的错误原因和当前的参数值
+            std::cerr << "[Error] Now only supports head_size = 128, but got "
+                      << head_size << "." << std::endl;
+            // 建议返回 SHAPE 相关的错误码
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
 
         size_t num_kv_heads = k_cache_shape[1];
         size_t block_size = v_cache_desc->shape()[2]; // 使用V cache的block size维度更可靠
