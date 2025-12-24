@@ -1,7 +1,7 @@
 #include "../../../devices/nvidia/nvidia_handle.cuh"
 #include "../../../devices/nvidia/nvidia_kernel_common.cuh"
-#include "int8_gemm_nvidia.cuh"
 #include "int8_gemm_kernel.cuh"
+#include "int8_gemm_nvidia.cuh"
 
 namespace op::i8gemm::nvidia {
 
@@ -14,13 +14,13 @@ Descriptor::~Descriptor() {
 }
 
 inline int getSMVersion() {
-  int device{-1};
-  CHECK_CUDA(cudaGetDevice(&device));
-  int sm_major = 0;
-  int sm_minor = 0;
-  CHECK_CUDA(cudaDeviceGetAttribute(&sm_major, cudaDevAttrComputeCapabilityMajor, device));
-  CHECK_CUDA(cudaDeviceGetAttribute(&sm_minor, cudaDevAttrComputeCapabilityMinor, device));
-  return sm_major * 10 + sm_minor;
+    int device{-1};
+    CHECK_CUDA(cudaGetDevice(&device));
+    int sm_major = 0;
+    int sm_minor = 0;
+    CHECK_CUDA(cudaDeviceGetAttribute(&sm_major, cudaDevAttrComputeCapabilityMajor, device));
+    CHECK_CUDA(cudaDeviceGetAttribute(&sm_minor, cudaDevAttrComputeCapabilityMinor, device));
+    return sm_major * 10 + sm_minor;
 }
 
 infiniStatus_t Descriptor::create(
@@ -66,14 +66,40 @@ infiniStatus_t Descriptor::calculate(
     } else if (sm_version >= 80 && sm_version < 90) {
         // sm86/sm89 has a much smaller shared memory size (100K) than sm80 (160K)
         if (sm_version == 86 || sm_version == 89) {
-        if (this->_out_dtype == INFINI_DTYPE_BF16) {
-            sm89_dispatch_shape<cutlass::bfloat16_t, cutlass::arch::Sm80, cutlass::gemm::GemmShape<16, 8, 32>>(
-                out, a, b, a_scale, b_scale, bias, _info.m, _info.n, _info.k, _info.a_matrix.ld(), _info.b_matrix.ld(), _info.out_matrix.ld(), stream);
+            if (this->_out_dtype == INFINI_DTYPE_BF16) {
+                sm89_dispatch_shape<cutlass::bfloat16_t, cutlass::arch::Sm80, cutlass::gemm::GemmShape<16, 8, 32>>(
+                    out, a, b, a_scale, b_scale, bias, _info.m, _info.n, _info.k, _info.a_matrix.ld(), _info.b_matrix.ld(), _info.out_matrix.ld(), stream);
+            } else {
+                sm89_dispatch_shape<cutlass::half_t, cutlass::arch::Sm80, cutlass::gemm::GemmShape<16, 8, 32>>(
+                    out, a, b, a_scale, b_scale, bias, _info.m, _info.n, _info.k, _info.a_matrix.ld(), _info.b_matrix.ld(), _info.out_matrix.ld(), stream);
+            }
         } else {
-            sm89_dispatch_shape<cutlass::half_t, cutlass::arch::Sm80, cutlass::gemm::GemmShape<16, 8, 32>>(
-                out, a, b, a_scale, b_scale, bias, _info.m, _info.n, _info.k, _info.a_matrix.ld(), _info.b_matrix.ld(), _info.out_matrix.ld(), stream);
+            if (this->_out_dtype == INFINI_DTYPE_BF16) {
+                sm80_dispatch_shape<cutlass::bfloat16_t, cutlass::arch::Sm80, cutlass::gemm::GemmShape<16, 8, 32>>(
+                    out, a, b, a_scale, b_scale, bias, _info.m, _info.n, _info.k, _info.a_matrix.ld(), _info.b_matrix.ld(), _info.out_matrix.ld(), stream);
+            } else {
+                sm80_dispatch_shape<cutlass::half_t, cutlass::arch::Sm80, cutlass::gemm::GemmShape<16, 8, 32>>(
+                    out, a, b, a_scale, b_scale, bias, _info.m, _info.n, _info.k, _info.a_matrix.ld(), _info.b_matrix.ld(), _info.out_matrix.ld(), stream);
+            }
         }
+    } else if (sm_version == 90) {
+#if defined CUDA_VERSION && CUDA_VERSION >= 12000
+        // cutlass 3.x
+        if (this->_out_dtype == INFINI_DTYPE_BF16) {
+            sm90_dispatch_shape<cutlass::bfloat16_t>(
+                out, a, b, a_scale, b_scale, bias,
+                _info.m, _info.n, _info.k,
+                _info.a_matrix.ld(), _info.b_matrix.ld(), _info.out_matrix.ld(),
+                stream);
         } else {
+            sm90_dispatch_shape<cutlass::half_t>(
+                out, a, b, a_scale, b_scale, bias,
+                _info.m, _info.n, _info.k,
+                _info.a_matrix.ld(), _info.b_matrix.ld(), _info.out_matrix.ld(),
+                stream);
+        }
+#else
+        // // fallback to cutlass 2.x
         if (this->_out_dtype == INFINI_DTYPE_BF16) {
             sm80_dispatch_shape<cutlass::bfloat16_t, cutlass::arch::Sm80, cutlass::gemm::GemmShape<16, 8, 32>>(
                 out, a, b, a_scale, b_scale, bias, _info.m, _info.n, _info.k, _info.a_matrix.ld(), _info.b_matrix.ld(), _info.out_matrix.ld(), stream);
@@ -81,36 +107,10 @@ infiniStatus_t Descriptor::calculate(
             sm80_dispatch_shape<cutlass::half_t, cutlass::arch::Sm80, cutlass::gemm::GemmShape<16, 8, 32>>(
                 out, a, b, a_scale, b_scale, bias, _info.m, _info.n, _info.k, _info.a_matrix.ld(), _info.b_matrix.ld(), _info.out_matrix.ld(), stream);
         }
-        }
-    } else if (sm_version == 90) {
-    #if defined CUDA_VERSION && CUDA_VERSION >= 12000
-        // cutlass 3.x
-        if (this->_out_dtype == INFINI_DTYPE_BF16) {
-            sm90_dispatch_shape<cutlass::bfloat16_t>(
-                out, a, b, a_scale, b_scale, bias, 
-                _info.m, _info.n, _info.k, 
-                _info.a_matrix.ld(), _info.b_matrix.ld(), _info.out_matrix.ld(), 
-                stream);
-        } else {
-            sm90_dispatch_shape<cutlass::half_t>(
-                out, a, b, a_scale, b_scale, bias, 
-                _info.m, _info.n, _info.k, 
-                _info.a_matrix.ld(), _info.b_matrix.ld(), _info.out_matrix.ld(), 
-                stream);
-        }
-    #else
-        // // fallback to cutlass 2.x
-        if (this->_out_dtype == INFINI_DTYPE_BF16) {
-        sm80_dispatch_shape<cutlass::bfloat16_t, cutlass::arch::Sm80, cutlass::gemm::GemmShape<16, 8, 32>>(
-            out, a, b, a_scale, b_scale, bias, _info.m, _info.n, _info.k, _info.a_matrix.ld(), _info.b_matrix.ld(), _info.out_matrix.ld(), stream);
-        } else {
-        sm80_dispatch_shape<cutlass::half_t, cutlass::arch::Sm80, cutlass::gemm::GemmShape<16, 8, 32>>(
-            out, a, b, a_scale, b_scale, bias, _info.m, _info.n, _info.k, _info.a_matrix.ld(), _info.b_matrix.ld(), _info.out_matrix.ld(), stream);
-        }
-    #endif
+#endif
     } else {
         return INFINI_STATUS_NOT_IMPLEMENTED;
     }
     return INFINI_STATUS_SUCCESS;
 }
-} // namespace op::gemm::nvidia
+} // namespace op::i8gemm::nvidia

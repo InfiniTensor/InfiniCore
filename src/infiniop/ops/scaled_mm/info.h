@@ -22,7 +22,6 @@ struct BlasMatrix {
     // ptrdiff_t col_stride;
     int col_stride;
 
-
     static utils::Result<BlasMatrix> create(infiniopTensorDescriptor_t layout) {
         BlasMatrix ans;
 
