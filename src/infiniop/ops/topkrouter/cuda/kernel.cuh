@@ -1,21 +1,12 @@
 #ifndef _TOPKROUTER_KERNEL_CUH__
 #define _TOPKROUTER_KERNEL_CUH__
-#include <cfloat>
-#include <cub/block/block_load.cuh>
-#include <cub/block/block_radix_sort.cuh>
-#include <cub/block/block_reduce.cuh>
-#include <cub/block/block_store.cuh>
-#include <cub/cub.cuh>
-#include <cuda_bf16.h>
-#include <cuda_fp16.h>
-#include <cuda_runtime.h>
 
 template <typename T>
 inline __device__ float exp_func(T x) {
     float data;
     if constexpr (std::is_same_v<T, float>) {
         data = x;
-    } else if constexpr (std::is_same_v<T, __nv_bfloat16>) {
+    } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
         data = __bfloat162float(x);
     } else if constexpr (std::is_same_v<T, half>) {
         data = __half2float(x);
@@ -73,16 +64,12 @@ __global__ void topkrouter_kernel(float *values_topk,             // 输出数�
     // ------------------------------------------------------ //
     //             对输入数据做 sigmoid                         //
     // ------------------------------------------------------ //
-    float value;
-    if (tid < width) {
-        value = sigmoid_func(data_input[tid]);
-        // ------------------------------------------------------ //
-        //             对输入数据加偏执                              //
-        // ------------------------------------------------------ //
-        value += d_correction_bias[tid];
-    } else {
-        value = -FLT_MAX; // 对于越界的线程，设为最小值，这样不会被选到topk
-    }
+    float value = sigmoid_func(data_input[tid]);
+
+    // ------------------------------------------------------ //
+    //             对输入数据加偏执                              //
+    // ------------------------------------------------------ //
+    value += d_correction_bias[tid];
 
     // ----------------------------------------------------------- //
     //      每个warp为一组，一共8组，找出每组的最大的前两个数据            //
@@ -95,20 +82,14 @@ __global__ void topkrouter_kernel(float *values_topk,             // 输出数�
         WarpMergeSortT(temp_storage[warp_id]).Sort(thread_values, thread_indices, CustomLess());
     }
     __syncthreads();
-    if (tid < width) {
-        share_data[tid] = thread_values[0];
-    }
+    share_data[tid] = thread_values[0];
 
     // ----------------------------------------------------------- //
     //              每个组中,前两个数据的和                            //
     // ----------------------------------------------------------- //
     __syncthreads();
     if (0 == lane_id) {
-        int base_idx = warp_id * warp_threads;
-        // 确保不越界
-        float val1 = (base_idx < width) ? share_data[base_idx] : -FLT_MAX;
-        float val2 = (base_idx + 1 < width) ? share_data[base_idx + 1] : -FLT_MAX;
-        share_data_group[warp_id] = val1 + val2;
+        share_data_group[warp_id] = share_data[warp_id * warp_threads] + share_data[warp_id * warp_threads + 1];
     }
     __syncthreads();
     // ----------------------------------------------------------- //
@@ -153,11 +134,7 @@ __global__ void topkrouter_kernel(float *values_topk,             // 输出数�
         value = 0.0f;
         if (tid < 8) {
             int index = thread_indices[0];
-            if (index < width) {
-                value = sigmoid_func(data_input[index]);
-            } else {
-                value = 0.0f;
-            }
+            value = sigmoid_func(data_input[index]);
         }
         {
             typedef cub::WarpReduce<float, warp_threads> WarpReduce;

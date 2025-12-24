@@ -22,17 +22,17 @@ __C infiniStatus_t infiniopCreateSoftmaxDescriptor(
             x_desc, axis);
     std::cout << "handle device " << handle->device << std::endl;
     switch (handle->device) {
-#ifdef ENABLE_NVIDIA_API
-        CREATE(INFINI_DEVICE_NVIDIA, nvidia)
-#endif
-#ifdef ENABLE_ILUVATAR_API
-        CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
-#endif
-#ifdef ENABLE_QY_API
-        CREATE(INFINI_DEVICE_QY, nvidia);
-#endif
-#ifdef ENABLE_HYGON_API
-        CREATE(INFINI_DEVICE_HYGON, nvidia);
+        #ifdef ENABLE_NVIDIA_API
+                CREATE(INFINI_DEVICE_NVIDIA, nvidia)
+        #endif
+        #ifdef ENABLE_ILUVATAR_API
+                CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
+        #endif
+        #ifdef ENABLE_QY_API
+                CREATE(INFINI_DEVICE_QY, nvidia);
+        #endif
+        #ifdef ENABLE_HYGON_API
+                CREATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
     }
     std::cout << "Error In CREATE NVIDIA API" << std::endl;
