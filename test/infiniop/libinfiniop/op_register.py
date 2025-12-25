@@ -20,6 +20,36 @@ class OpRegister:
         for op in cls.registry:
             op(lib)
 
+@OpRegister.operator
+def atanh_(lib):
+    lib.infiniopCreateAtanhDescriptor.restype = c_int32
+    lib.infiniopCreateAtanhDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetAtanhWorkspaceSize.restype = c_int32
+    lib.infiniopGetAtanhWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopAtanh.restype = c_int32
+    lib.infiniopAtanh.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,  # workspace
+        c_size_t,  # workspace_size
+        c_void_p,  # y_data
+        c_void_p,  # a_data
+        c_void_p,  # stream
+    ]
+
+    lib.infiniopDestroyAtanhDescriptor.restype = c_int32
+    lib.infiniopDestroyAtanhDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
 
 @OpRegister.operator
 def add_(lib):

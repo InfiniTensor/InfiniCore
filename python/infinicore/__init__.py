@@ -47,6 +47,7 @@ from infinicore.ops.narrow import narrow
 from infinicore.ops.rearrange import rearrange
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.unsqueeze import unsqueeze
+from infinicore.ops.atanh import atanh
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -108,6 +109,7 @@ __all__ = [
     "narrow",
     "squeeze",
     "unsqueeze",
+    "atanh",
     "rearrange",
     "empty",
     "empty_like",
