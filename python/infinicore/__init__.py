@@ -47,6 +47,8 @@ from infinicore.ops.narrow import narrow
 from infinicore.ops.rearrange import rearrange
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.unsqueeze import unsqueeze
+from infinicore.ops.paged_caching import paged_caching
+from infinicore.ops.paged_attention import paged_attention
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -115,6 +117,8 @@ __all__ = [
     "from_list",
     "from_numpy",
     "from_torch",
+    "paged_caching",
+    "paged_attention",
     "ones",
     "strided_empty",
     "strided_from_blob",
