@@ -95,6 +95,45 @@ def attention_(lib):
         infiniopOperatorDescriptor_t,
     ]
 
+@OpRegister.operator
+def bi_attention_(lib):
+    lib.infiniopCreateBiAttentionDescriptor.restype = c_int32
+    lib.infiniopCreateBiAttentionDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_size_t,
+    ]
+
+    lib.infiniopGetBiAttentionWorkspaceSize.restype = c_int32
+    lib.infiniopGetBiAttentionWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopBiAttention.restype = c_int32
+    lib.infiniopBiAttention.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyBiAttentionDescriptor.restype = c_int32
+    lib.infiniopDestroyBiAttentionDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
 
 @OpRegister.operator
 def causal_softmax_(lib):

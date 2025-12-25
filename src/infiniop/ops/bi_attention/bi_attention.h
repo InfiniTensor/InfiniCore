@@ -1,12 +1,12 @@
-#ifndef BI_ATTENTION_H
-#define BI_ATTENTION_H
+#ifndef ATTENTION_H
+#define ATTENTION_H
 
 #include "../../operator.h"
 #include "info.h"
 
 #define DESCRIPTOR(NAMESPACE)                                    \
                                                                  \
-    namespace op::bi_attention::NAMESPACE {                         \
+    namespace op::attention::NAMESPACE {                         \
     class Descriptor final : public InfiniopDescriptor {         \
         struct Opaque;                                           \
         Opaque *_opaque;                                         \

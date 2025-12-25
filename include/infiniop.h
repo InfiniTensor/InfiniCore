@@ -30,6 +30,7 @@
 #include "infiniop/ops/topkrouter.h"
 #include "infiniop/ops/topksoftmax.h"
 #include "infiniop/ops/zeros.h"
+#include "infiniop/ops/bi_attention.h"
 #include "infiniop/tensor_descriptor.h"
 
 #endif // __INFINIOP_API_H__
