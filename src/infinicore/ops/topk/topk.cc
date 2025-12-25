@@ -27,13 +27,8 @@ void TopK::execute(Tensor values_output, Tensor indices_output, Tensor input, si
 
 std::pair<Tensor, Tensor>  topk(Tensor input, size_t k, size_t dim, bool largest, bool sorted) {
     auto in_shape = input->shape();
-    std::vector<size_t> out_shape;
-    // if (dim.empty()) {
-    //     // dim 为空时，对所有维度求和
-    //     for (size_t i = 0; i < in_shape.size(); i++) {
-    //         dim.push_back(i);
-    //     }
-    // }
+    std::vector<size_t> out_shape = in_shape;
+    out_shape[dim] = k;
     
     auto values_output = Tensor::empty(out_shape, input->dtype(), input->device());
     auto indices_output = Tensor::empty(out_shape, DataType::U64, input->device());

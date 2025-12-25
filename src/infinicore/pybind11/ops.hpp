@@ -16,6 +16,7 @@
 #include "ops/silu.hpp"
 #include "ops/swiglu.hpp"
 #include "ops/sum.hpp"
+#include "ops/topk.hpp"
 namespace py = pybind11;
 
 namespace infinicore::ops {
@@ -35,6 +36,7 @@ inline void bind(py::module &m) {
     bind_rope(m);
     bind_embedding(m);
     bind_sum(m);
+    bind_topk(m);
 }
 
 } // namespace infinicore::ops
