@@ -12,14 +12,10 @@ struct BlasMatrix {
     int ndim;
     int batch;
     int stride;
-    // ptrdiff_t stride;
 
     int rows;
     int cols;
     int row_stride;
-    // ptrdiff_t row_stride;
-
-    // ptrdiff_t col_stride;
     int col_stride;
 
     static utils::Result<BlasMatrix> create(infiniopTensorDescriptor_t layout) {
@@ -80,7 +76,6 @@ public:
     BlasMatrix out_matrix;
 
     int m, n, k, batch;
-    // bool is_transed;
 
     static utils::Result<I8GemmInfo> create(
         infiniopTensorDescriptor_t out_desc,
@@ -105,16 +100,6 @@ public:
         if (!a_matrix->match_batch(batch) || !b_matrix->match_batch(batch)) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
-
-        // auto is_transed = false;
-        // if ((layout == MatrixLayout::COL_MAJOR && c_matrix->col_stride == 1)
-        //     || (layout == MatrixLayout::ROW_MAJOR && c_matrix->row_stride == 1)) {
-        //     c_matrix->transpose();
-        //     b_matrix->transpose();
-        //     a_matrix->transpose();
-        //     std::swap(a_matrix, b_matrix);
-        //     is_transed = true;
-        // }
 
         auto m = out_matrix->rows;
         auto n = out_matrix->cols;

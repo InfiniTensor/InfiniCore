@@ -59,7 +59,6 @@ infiniStatus_t Descriptor::calculate(
     void *stream) const {
     auto sm_version = getSMVersion();
     if (sm_version >= 75 && sm_version < 80) {
-        // TORCH_CHECK(out_dtype == torch::kHalf, "out_dtype must be Half for SM75");
         CHECK_DTYPE(this->_out_dtype, INFINI_DTYPE_F16);
         sm75_dispatch_shape<cutlass::half_t, cutlass::arch::Sm75, cutlass::gemm::GemmShape<8, 8, 16>>(
             out, a, b, a_scale, b_scale, bias, _info.m, _info.n, _info.k, _info.a_matrix.ld(), _info.b_matrix.ld(), _info.out_matrix.ld(), stream);

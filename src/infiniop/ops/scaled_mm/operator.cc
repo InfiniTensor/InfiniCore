@@ -2,24 +2,18 @@
 #include "../../handle.h"
 #include "infiniop/ops/int8_gemm.h"
 
-// #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API)
 #if defined(ENABLE_NVIDIA_API)
 #include "nvidia/int8_gemm_nvidia.cuh"
 #endif
 
 __C infiniStatus_t infiniopCreateI8GemmDescriptor(infiniopHandle_t handle,
                                                   infiniopI8GemmDescriptor_t *desc_ptr,
-                                                  //   infiniopTensorDescriptor_t d_desc,
                                                   infiniopTensorDescriptor_t out_desc,
                                                   infiniopTensorDescriptor_t bias_desc,
                                                   infiniopTensorDescriptor_t a_desc,
                                                   infiniopTensorDescriptor_t a_scale_desc,
-                                                  //   infiniopTensorDescriptor_t a_zero_desc,
                                                   infiniopTensorDescriptor_t b_desc,
                                                   infiniopTensorDescriptor_t b_scale_desc) {
-//   infiniopTensorDescriptor_t b_zero_desc,
-//   float alpha,
-//   float beta) {
 #define CREATE(CASE, NAMESPACE)                                               \
     case CASE:                                                                \
         return op::i8gemm::NAMESPACE::Descriptor::create(                     \
@@ -35,9 +29,6 @@ __C infiniStatus_t infiniopCreateI8GemmDescriptor(infiniopHandle_t handle,
 #ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-        // #ifdef ENABLE_QY_API
-        //         CREATE(INFINI_DEVICE_QY, nvidia)
-        // #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -53,9 +44,6 @@ __C infiniStatus_t infiniopGetI8GemmWorkspaceSize(infiniopI8GemmDescriptor_t des
 #ifdef ENABLE_NVIDIA_API
         GET(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-        // #ifdef ENABLE_QY_API
-        //         GET(INFINI_DEVICE_QY, nvidia)
-        // #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -66,27 +54,20 @@ __C infiniStatus_t infiniopI8Gemm(infiniopI8GemmDescriptor_t desc,
                                   void *workspace,
                                   size_t workspace_size,
                                   void *out,
-                                  //   const void *c,
                                   const void *bias,
                                   const void *a,
                                   const void *a_scale,
-                                  //   const void *a_zero,
                                   const void *b,
                                   const void *b_scale,
-                                  //   const void *b_zero,
                                   void *stream) {
 #define CACULATE(CASE, NAMESPACE)                                                      \
     case CASE:                                                                         \
         return reinterpret_cast<op::i8gemm::NAMESPACE::Descriptor *>(desc)->calculate( \
             workspace, workspace_size, out, bias, a, a_scale, b, b_scale, stream);
-
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API
         CACULATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-        // #ifdef ENABLE_QY_API
-        //         CACULATE(INFINI_DEVICE_QY, nvidia)
-        // #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -98,14 +79,10 @@ __C infiniStatus_t infiniopDestroyI8GemmDescriptor(infiniopI8GemmDescriptor_t de
     case CASE:                                                              \
         delete reinterpret_cast<op::i8gemm::NAMESPACE::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS;
-
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API
         DESTROY(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-        // #ifdef ENABLE_QY_API
-        //         DESTROY(INFINI_DEVICE_QY, nvidia)
-        // #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
