@@ -1,3 +1,4 @@
+from .api import TestAPI, TestDiscoverer
 from .base import TestConfig, TestRunner, BaseOperatorTest
 from .entities import TestCase
 from .benchmark import BenchmarkUtils, BenchmarkResult
@@ -41,8 +42,10 @@ __all__ = [
     "OperatorResult",
     "TensorInitializer",
     "TensorSpec",
+    "TestAPI",
     "TestCase",
     "TestConfig",
+    "TestDiscoverer",
     "TestExecutor",
     "TestSummary",
     "TestRunner",
