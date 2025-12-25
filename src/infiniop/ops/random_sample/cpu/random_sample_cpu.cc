@@ -3,6 +3,7 @@
 #include "../info.h"
 #include "infinicore.h"
 #include <algorithm>
+#include <cstdio>
 
 namespace op::random_sample::cpu {
 
@@ -75,7 +76,8 @@ struct Algo {
     infiniStatus_t random(
         void *workspace, size_t workspace_size,
         void *result, void const *probs, size_t n,
-        float random_val, float topp, int topk, float temperature,
+        float random_val, float topp, int topk, float temperature, float repetition_penalty,
+        const uint32_t *previous_tokens, size_t previous_tokens_len,
         void *stream) {
 
         struct KVPair {
@@ -88,10 +90,51 @@ struct Algo {
         };
 
         auto idx = reinterpret_cast<Tidx *>(result);
+
+        // Apply repetition penalty if needed
+        std::vector<typename ComputeType<Tval>::type> penalized_probs(n);
+        if (repetition_penalty != 1.0f) {
+            // Initialize with original values
+            for (size_t i = 0; i < n; i++) {
+                penalized_probs[i] = get<Tidx, Tval>(probs, i);
+            }
+
+            // If previous_tokens are provided, only penalize those tokens (proper repetition penalty)
+            // Otherwise, penalize all tokens (full-history penalty for backward compatibility)
+            if (previous_tokens != nullptr && previous_tokens_len > 0) {
+                // Proper repetition penalty: only penalize previously generated tokens
+                for (size_t i = 0; i < previous_tokens_len; i++) {
+                    uint32_t token_id = previous_tokens[i];
+                    if (token_id < n) {
+                        auto val = penalized_probs[token_id];
+                        if (val > 0) {
+                            penalized_probs[token_id] = val / repetition_penalty;
+                        } else {
+                            penalized_probs[token_id] = val * repetition_penalty;
+                        }
+                    }
+                }
+            } else {
+                // Full-history penalty: penalize all tokens (backward compatibility)
+                for (size_t i = 0; i < n; i++) {
+                    auto val = penalized_probs[i];
+                    if (val > 0) {
+                        penalized_probs[i] = val / repetition_penalty;
+                    } else {
+                        penalized_probs[i] = val * repetition_penalty;
+                    }
+                }
+            }
+        }
+
         // build & sort
         std::vector<KVPair> pairs(n);
         for (size_t i = 0; i < n; i++) {
-            pairs[i] = {static_cast<Tidx>(i), get<Tidx, Tval>(probs, i)};
+            if (repetition_penalty != 1.0f) {
+                pairs[i] = {static_cast<Tidx>(i), penalized_probs[i]};
+            } else {
+                pairs[i] = {static_cast<Tidx>(i), get<Tidx, Tval>(probs, i)};
+            }
         }
         std::sort(pairs.begin(), pairs.end());
         // softmax & sum
@@ -101,7 +144,9 @@ struct Algo {
             pairs[i].val = pairs[i - 1].val + std::exp((pairs[i].val - max_val) / temperature);
         }
         // topk & topp & limit
-        auto const pk = pairs[std::min(static_cast<size_t>(topk), n) - 1].val,
+        // Handle disabled topk (0 or -1 means consider all tokens, like vLLM)
+        size_t effective_topk = (topk <= 0) ? n : std::min(static_cast<size_t>(topk), n);
+        auto const pk = pairs[effective_topk - 1].val,
                    pp = pairs[n - 1].val * topp,
                    plimit = random_val * std::min(pk, pp);
         // sample
@@ -125,12 +170,16 @@ infiniStatus_t Descriptor::calculate(
     float topp,
     int topk,
     float temperature,
+    float repetition_penalty,
+    const uint32_t *previous_tokens,
+    size_t previous_tokens_len,
     void *stream) const {
 
     Calculate::calculate<Algo>(
         Algo{}, _info, workspace, workspace_size,
         result, probs,
-        random_val, topp, topk, temperature,
+        random_val, topp, topk, temperature, repetition_penalty,
+        previous_tokens, previous_tokens_len,
         stream);
 
     return INFINI_STATUS_SUCCESS;

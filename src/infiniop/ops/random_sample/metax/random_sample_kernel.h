@@ -3,6 +3,10 @@
 #include <hccub/device/device_radix_sort.cuh>
 #include <hccub/device/device_reduce.cuh>
 #include <hccub/device/device_scan.cuh>
+#include <hcr/hc_runtime_api.h>
+#include <vector>
+#include <algorithm>
+#include <cstdio>
 
 namespace op::random_sample::metax {
 
@@ -75,6 +79,8 @@ utils::Result<size_t> calculateWorkspace(size_t n_) {
     size_random += align256(sizeof(Tval) * n);
     // indices_out
     size_random += align256(sizeof(Tidx) * n);
+    // sorted_out (needed when repetition_penalty != 1.0)
+    size_random += align256(sizeof(Tval) * n);
     // cub device api
     size_t size_radix_sort;
     CHECK_METAX((radixSort<Tval, Tidx>(
@@ -161,6 +167,8 @@ static __global__ void randomSampleKernel(
     const Tidx *__restrict__ indices_out,
     size_t n,
     float random, float topp, size_t topk) {
+    // topk should already be validated to be > 0 and <= n by the caller
+    // (disabled topk 0/-1 is converted to n before calling this kernel)
     topk = cub::Min()(topk, n);
     auto p = (Tval)(random * cub::Min()(topp * (float)sorted[n - 1], (float)sorted[topk - 1]));
     for (size_t i = 0;; ++i) {
@@ -205,7 +213,8 @@ struct Algo {
     infiniStatus_t random(
         void *workspace_, size_t workspace_size,
         void *result_, const void *probs, size_t n,
-        float random_val, float topp, int topk, float temperature,
+        float random_val, float topp, int topk, float temperature, float repetition_penalty,
+        const uint32_t *previous_tokens, size_t previous_tokens_len,
         void *stream_) const {
 
         using Tval = typename CudaTval<Tval_>::Type;
@@ -226,19 +235,81 @@ struct Algo {
         auto indices_out = reinterpret_cast<Tidx *>(workspace);
         workspace += align256(sizeof(Tidx) * n);
 
-        workspace_ = reinterpret_cast<void *>(workspace);
-        workspace_size = workspace_end - workspace;
-
         auto block = cub::Min()((size_t)block_size, n);
         auto grid = (n + block - 1) / block;
-        // sort
-        fillIndices<<<grid, block, 0, stream>>>(indices, n);
-        CHECK_METAX(radixSort(
-            workspace_, workspace_size,
-            logits, sorted,
-            indices, indices_out,
-            n,
-            stream));
+
+        // Apply repetition penalty if needed (penalize all tokens before sorting)
+        if (repetition_penalty != 1.0f) {
+            // Allocate temporary output buffer for radixSort from workspace (before CUB workspace)
+            auto sorted_out = reinterpret_cast<Tval *>(workspace);
+            workspace += align256(sizeof(Tval) * n);
+
+            // Now set CUB workspace pointer and size
+            workspace_ = reinterpret_cast<void *>(workspace);
+            workspace_size = workspace_end - workspace;
+
+            // Copy logits to host memory
+            std::vector<Tval> host_logits(n);
+            CHECK_METAX(hcMemcpyAsync(host_logits.data(), logits, n * sizeof(Tval), hcMemcpyDeviceToHost, stream));
+            CHECK_METAX(hcStreamSynchronize(stream));
+
+            // Apply penalty: if previous_tokens are provided, only penalize those tokens
+            // Otherwise, penalize all tokens (full-history penalty for backward compatibility)
+            if (previous_tokens != nullptr && previous_tokens_len > 0) {
+                // Proper repetition penalty: only penalize previously generated tokens
+                for (size_t i = 0; i < previous_tokens_len; i++) {
+                    uint32_t token_id = previous_tokens[i];
+                    if (token_id < n) {
+                        float val = static_cast<float>(host_logits[token_id]);
+                        if (val > 0) {
+                            host_logits[token_id] = static_cast<Tval>(val / repetition_penalty);
+                        } else {
+                            host_logits[token_id] = static_cast<Tval>(val * repetition_penalty);
+                        }
+                    }
+                }
+            } else {
+                // Full-history penalty: penalize all tokens (backward compatibility)
+                for (size_t i = 0; i < n; i++) {
+                    float val = static_cast<float>(host_logits[i]);
+                    if (val > 0) {
+                        host_logits[i] = static_cast<Tval>(val / repetition_penalty);
+                    } else {
+                        host_logits[i] = static_cast<Tval>(val * repetition_penalty);
+                    }
+                }
+            }
+
+
+            // Copy penalized logits to sorted buffer (will be used as input to radixSort)
+            CHECK_METAX(hcMemcpyAsync(sorted, host_logits.data(), n * sizeof(Tval), hcMemcpyHostToDevice, stream));
+            CHECK_METAX(hcStreamSynchronize(stream));
+
+            // sort with penalized logits
+            fillIndices<<<grid, block, 0, stream>>>(indices, n);
+            CHECK_METAX(radixSort(
+                workspace_, workspace_size,
+                sorted, sorted_out,
+                indices, indices_out,
+                n,
+                stream));
+
+            // Copy sorted_out back to sorted for softmax
+            CHECK_METAX(hcMemcpyAsync(sorted, sorted_out, n * sizeof(Tval), hcMemcpyDeviceToDevice, stream));
+        } else {
+            // Set CUB workspace pointer and size
+            workspace_ = reinterpret_cast<void *>(workspace);
+            workspace_size = workspace_end - workspace;
+
+            // sort
+            fillIndices<<<grid, block, 0, stream>>>(indices, n);
+            CHECK_METAX(radixSort(
+                workspace_, workspace_size,
+                logits, sorted,
+                indices, indices_out,
+                n,
+                stream));
+        }
         // softmax
         partialSoftmaxKernel<<<grid, block, 0, stream>>>(sorted, n, temperature);
         setSoftmaxMaxKernel<<<1, 1, 0, stream>>>(sorted);
@@ -248,10 +319,13 @@ struct Algo {
             sorted, n,
             stream));
         // sample
+        // Handle disabled topk (0 or -1 means consider all tokens, like vLLM)
+        int effective_topk = (topk <= 0) ? static_cast<int>(n) : topk;
         randomSampleKernel<<<1, 1, 0, stream>>>(
             result,
             sorted, indices_out, n,
-            random_val, topp, topk);
+            random_val, topp, effective_topk);
+
         return INFINI_STATUS_SUCCESS;
     }
 };
