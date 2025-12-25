@@ -1,88 +1,16 @@
 import sys
 import argparse
+import json
+import os
 from pathlib import Path
 
-# Import components from the unified framework package
-from framework.executor import TestExecutor
-from framework.results import TestSummary, TestTiming
-from framework import get_hardware_args_group, add_common_test_args
-
-
-class TestDiscoverer:
-    def __init__(self, ops_dir_path=None):
-        self.ops_dir = self._resolve_dir(ops_dir_path)
-
-    def _resolve_dir(self, path):
-        if path:
-            p = Path(path)
-            if p.exists():
-                return p
-
-        # Default fallback logic: 'ops' directory under the parent of the current file's parent.
-        # Note: Since this file is in 'infinicore/', we look at parent.
-        # It is recommended to pass an explicit path in run.py.
-        fallback = Path(__file__).parent / "ops"
-        return fallback if fallback.exists() else None
-
-    def get_available_operators(self):
-        """Returns a list of names of all available operators."""
-        if not self.ops_dir:
-            return []
-        files = self.scan()
-        return sorted([f.stem for f in files])
-
-    def get_raw_python_files(self):
-        """
-        Get all .py files in the directory (excluding run.py) without content validation.
-        Used for debugging: helps identify files that exist but failed validation.
-        """
-        if not self.ops_dir or not self.ops_dir.exists():
-            return []
-
-        files = list(self.ops_dir.glob("*.py"))
-        # Exclude run.py itself and __init__.py
-        return [
-            f.name for f in files if f.name != "run.py" and not f.name.startswith("__")
-        ]
-
-    def scan(self, specific_ops=None):
-        """Scans and returns a list of Path objects that meet the criteria."""
-        if not self.ops_dir or not self.ops_dir.exists():
-            return []
-
-        # 1. Find all .py files
-        files = list(self.ops_dir.glob("*.py"))
-
-        target_ops_set = set(specific_ops) if specific_ops else None
-
-        # 2. Filter out non-test files (via content check)
-        valid_files = []
-        for f in files:
-            # A. Basic Name Filtering
-            if f.name.startswith("_") or f.name == "run.py":
-                continue
-
-            # B. Specific Ops Filtering
-            if target_ops_set and f.stem not in target_ops_set:
-                continue
-
-            # C. Content Check (Expensive I/O)
-            # Only perform this check if the file passed the name filters above.
-            if self._is_operator_test(f):
-                valid_files.append(f)
-
-        return valid_files
-
-    def _is_operator_test(self, file_path):
-        """Checks if the file content contains operator test characteristics."""
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                content = f.read()
-                return "infinicore" in content and (
-                    "BaseOperatorTest" in content or "GenericTestRunner" in content
-                )
-        except:
-            return False
+from framework import (
+    get_hardware_args_group,
+    add_common_test_args,
+    InfiniDeviceEnum,
+    InfiniDeviceNames,
+)
+from framework.api import TestAPI, TestDiscoverer
 
 
 def generate_help_epilog(ops_dir=None):
@@ -161,6 +89,115 @@ def generate_help_epilog(ops_dir=None):
     return "\n".join(epilog_parts)
 
 
+def fill_defaults_for_local_mode(args):
+    """
+    Helper function specifically for Local Scan mode to fill default arguments.
+    Since parser defaults are set to None (to handle override logic in load mode),
+    we need to manually fill None with default values in local mode.
+    """
+    # 1. Copy args to avoid modifying the original object and affecting other logic
+    # argparse.Namespace can be converted to dict and back, or copied directly
+    local_args = argparse.Namespace(**vars(args))
+
+    # 2. Fill default values for numeric arguments
+    if local_args.num_prerun is None:
+        local_args.num_prerun = 10
+
+    if local_args.num_iterations is None:
+        local_args.num_iterations = 1000
+
+    return local_args
+
+
+def load_and_override_cases(load_paths, args):
+    """
+    Load JSON, apply CLI overrides, and handle all argument logic.
+    """
+    cases = []
+    files_to_read = []
+
+    # 1. Scan
+    for p_str in load_paths:
+        p = Path(p_str)
+        if p.is_dir():
+            files_to_read.extend(p.glob("**/*.json"))
+        elif p.is_file():
+            files_to_read.append(p)
+
+    # 2. Load
+    for f_path in files_to_read:
+        try:
+            with open(f_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if isinstance(data, list):
+                    cases.extend(data)
+                elif isinstance(data, dict):
+                    cases.append(data)
+        except Exception as e:
+            print(f"❌ Error loading {f_path}: {e}")
+
+    # ==================================================
+    # Device Logic using InfiniDeviceEnum
+    # ==================================================
+    # 1. Identify active devices from CLI arguments
+    cli_active_devices = []
+
+    # Iterate through the Enum to check corresponding CLI args
+    # Logic: Enum name (e.g., CAMBRICON) -> lower() -> arg name (cambricon)
+    # Value: InfiniDeviceNames mapping (e.g., "Cambricon")
+    for device_enum, device_name in InfiniDeviceNames.items():
+        # device_name is like "CPU", "NVIDIA", "Cambricon"
+        # arg_name becomes "cpu", "nvidia", "cambricon"
+        arg_name = device_name.lower()
+
+        if getattr(args, arg_name, False):
+            cli_active_devices.append(device_name)
+
+    print(f"\n[Config Processing]")
+    for case in cases:
+        if "args" not in case or case["args"] is None:
+            case["args"] = {}
+        case_args = case["args"]
+
+        # 2. Apply Device Overrides (CLI > JSON)
+        if cli_active_devices:
+            case["device"] = ",".join(cli_active_devices)
+
+        final_dev_str = case.get("device", "").upper()  # Uppercase for easier matching
+
+        # 3. Set Boolean flags in case_args based on final device string
+        for device_enum, device_name in InfiniDeviceNames.items():
+            arg_name = device_name.lower()
+            # Check if the standard name (e.g., "Cambricon" or "NVIDIA") is in the device string
+            # We convert both to upper to ensure case-insensitive matching
+            is_active = device_name.upper() in final_dev_str
+            case_args[arg_name] = is_active
+
+        case_args["save"] = getattr(args, "save", None)
+        # Standard arguments (CLI > JSON > Default)
+        case_args["bench"] = (
+            args.bench if args.bench is not None else case_args.get("bench")
+        )
+
+        # Boolean Flags
+        case_args["verbose"] = args.verbose or case_args.get("verbose", False)
+        case_args["debug"] = args.debug or case_args.get("debug", False)
+        case_args["eq_nan"] = args.eq_nan or case_args.get("eq_nan", False)
+        case_args["num_prerun"] = (
+            args.num_prerun
+            if args.num_prerun is not None
+            else (case_args.get("num_prerun") or 10)
+        )
+        case_args["num_iterations"] = (
+            args.num_iterations
+            if args.num_iterations is not None
+            else (case_args.get("num_iterations") or 1000)
+        )
+
+    print(f"📂 Processed {len(cases)} cases ready for execution.\n")
+    return cases
+
+
 def main():
     """Main entry point for the InfiniCore Operator Test Runner."""
     parser = argparse.ArgumentParser(
@@ -179,6 +216,15 @@ def main():
         action="store_true",
         help="List all available test files without running them",
     )
+    parser.add_argument(
+        "--load",
+        nargs="+",
+        help="Load test cases from JSON",
+    )
+
+    # Default value is None to determine if user provided input
+    parser.add_argument("--num_prerun", type=lambda x: max(0, int(x)), default=None)
+    parser.add_argument("--num_iterations", type=lambda x: max(0, int(x)), default=None)
 
     # Add common test arguments (including --save, --bench, etc.)
     add_common_test_args(parser)
@@ -191,86 +237,81 @@ def main():
 
     # 1. Discovery
     discoverer = TestDiscoverer(args.ops_dir)
+
     if args.list:
         print("Available operators:", discoverer.get_available_operators())
         return
 
-    if args.verbose:
-        print(f"Verbose mode: ENABLED (will stop on first error with full traceback)")
+    # ==========================================================================
+    # Branch 1: Load Mode (JSON Data Driven)
+    # ==========================================================================
+    if args.load:
+        # 1. Load and override arguments
+        json_cases = load_and_override_cases(args.load, args)
+        if not json_cases:
+            sys.exit(1)
 
-    if args.bench:
-        print(f"Benchmark mode: {args.bench.upper()} timing")
+        # 2. Determine global Bench status (for Summary display)
+        bench = json_cases[0]["args"].get("bench")
+        verbose = json_cases[0]["args"].get("verbose")
 
-    target_ops = None
+        if verbose:
+            print(
+                f"Verbose mode: ENABLED (will stop on first error with full traceback)"
+            )
 
-    if args.ops:
-        # Get all available operator names
-        available_ops = set(discoverer.get_available_operators())
-        requested_ops = set(args.ops)
+        if bench:
+            print(f"Benchmark mode: {args.bench.upper()} timing")
 
-        # Classify using set operations
-        valid_ops = list(requested_ops & available_ops)  # Intersection: Valid ops
-        invalid_ops = list(requested_ops - available_ops)  # Difference: Invalid ops
+        # 3. Initialize and Execute
+        test_api = TestAPI(ops_dir=args.ops_dir, verbose=verbose, bench_mode=bench)
 
-        # Warn if there are invalid operators
-        if invalid_ops:
-            print(f"⚠️  Warning: The following requested operators were not found:")
-            print(f"   {', '.join(invalid_ops)}")
-            print(f"   (Use --list to see available operators)")
+        success = test_api.test(json_cases_list=json_cases)
+        sys.exit(0 if success else 1)
 
-        if not valid_ops:
-            # Case A: User input provided, but ALL were invalid.
-            print(f"⚠️  No valid operators remained from your list.")
-            print(f"🔄 Fallback: Proceeding to run ALL available tests...")
+    # ==========================================================================
+    # Branch 2: Local Scan Mode
+    # ==========================================================================
+    else:
+        if args.verbose:
+            print(
+                f"Verbose mode: ENABLED (will stop on first error with full traceback)"
+            )
 
-        else:
-            # Case B: At least some valid operators found.
-            print(f"🎯 Targeted operators: {', '.join(valid_ops)}")
-            target_ops = valid_ops
+        if args.bench:
+            print(f"Benchmark mode: {args.bench.upper()} timing")
 
-    test_files = discoverer.scan(target_ops)
-    if not test_files:
-        print("No tests found.")
-        sys.exit(0)
+        # 2. Filtering
+        target_ops = None
+        if args.ops:
+            available_ops = set(discoverer.get_available_operators())
+            requested_ops = set(args.ops)
+            valid_ops = list(requested_ops & available_ops)
+            invalid_ops = list(requested_ops - available_ops)
 
-    # 2. Preparation
-    executor = TestExecutor()
-    cumulative_timing = TestTiming()
-    test_summary = TestSummary(args.verbose, args.bench)
-    results = []
+            if invalid_ops:
+                print(f"⚠️  Warning: The following requested operators were not found:")
+                print(f"   {', '.join(invalid_ops)}")
 
-    test_summary.print_header(discoverer.ops_dir, len(test_files))
+            if not valid_ops:
+                print(f"⚠️  No valid operators remained. Running ALL tests...")
+            else:
+                print(f"🎯 Targeted operators: {', '.join(valid_ops)}")
+                target_ops = valid_ops
 
-    # 3. Execution Loop
-    for f in test_files:
-        result = executor.execute(f)
-        results.append(result)
+        # 3. Execution Preparation
+        # Fill defaults for local mode (since parser default is None)
+        global_exec_args = fill_defaults_for_local_mode(args)
 
-        # Real-time reporting and printing of stdout
-        test_summary.print_live_result(result)
+        # 4. Initialize API & Execute
+        test_api = TestAPI(
+            ops_dir=args.ops_dir, verbose=args.verbose, bench_mode=args.bench
+        )
 
-        # Accumulate timing
-        if result.success:
-            cumulative_timing.torch_host += result.timing.torch_host
-            cumulative_timing.infini_host += result.timing.infini_host
-            cumulative_timing.torch_device += result.timing.torch_device
-            cumulative_timing.infini_device += result.timing.infini_device
-            cumulative_timing.operators_tested += 1
-
-        # Fail fast in verbose mode
-        if args.verbose and not result.success:
-            print("\nStopping due to failure in verbose mode.")
-            break
-
-    # 4. Final Report & Save
-    all_passed = test_summary.print_summary(
-        results,
-        cumulative_timing if args.bench else None,
-        ops_dir=discoverer.ops_dir,
-        total_expected=len(test_files),
-    )
-
-    sys.exit(0 if all_passed else 1)
+        success = test_api.test(
+            target_ops=target_ops, global_exec_args=global_exec_args
+        )
+        sys.exit(0 if success else 1)
 
 
 if __name__ == "__main__":
