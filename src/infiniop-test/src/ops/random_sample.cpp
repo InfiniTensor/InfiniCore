@@ -66,6 +66,7 @@ std::shared_ptr<infiniop_test::Result> Test::run(
                                   topp,
                                   topk,
                                   temperature,
+                                  1.0f,  // repetition_penalty (default to 1.0 for backward compatibility)
                                   nullptr),
              return TEST_FAILED(OP_EXECUTION_FAILED, "Failed during execution."));
 
@@ -87,6 +88,7 @@ std::shared_ptr<infiniop_test::Result> Test::run(
                 topp,
                 topk,
                 temperature,
+                1.0f,  // repetition_penalty (default to 1.0 for backward compatibility)
                 nullptr);
         },
         warm_ups, iterations);

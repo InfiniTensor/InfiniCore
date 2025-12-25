@@ -4,7 +4,7 @@ from .structs import (
     infiniopOperatorDescriptor_t,
 )
 
-from ctypes import c_int32, c_void_p, c_size_t, POINTER, c_float
+from ctypes import c_int32, c_uint32, c_void_p, c_size_t, POINTER, c_float
 
 
 class OpRegister:
@@ -376,12 +376,15 @@ def random_sample_(lib):
         infiniopOperatorDescriptor_t,
         c_void_p,
         c_size_t,
-        c_size_t,
+        c_void_p,
         c_void_p,
         c_float,
         c_float,
         c_int32,
         c_float,
+        c_float,
+        POINTER(c_uint32),  # previous_tokens array (uint32_t*)
+        c_size_t,          # previous_tokens_len
         c_void_p,
     ]
 

@@ -120,7 +120,7 @@ class TestTensor(CTensor):
 
     def is_broadcast(self):
         return self.strides is not None and 0 in self.strides
-    
+
     @staticmethod
     def from_binary(binary_file, shape, strides, dt: InfiniDtype, device: InfiniDeviceEnum):
         data = np.fromfile(binary_file, dtype=to_numpy_dtype(dt))
@@ -346,6 +346,11 @@ def get_args():
         action="store_true",
         help="Run HYGON DCU test",
     )
+    parser.add_argument(
+        "--torch-only",
+        action="store_true",
+        help="Run only torch reference implementation, skip InfiniCore API calls",
+    )
 
     return parser.parse_args()
 
@@ -476,7 +481,7 @@ def print_discrepancy(
 
     actual = actual.to("cpu")
     expected = expected.to("cpu")
-    
+
     actual_isnan = torch.isnan(actual)
     expected_isnan = torch.isnan(expected)
 
