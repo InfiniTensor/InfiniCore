@@ -2,7 +2,7 @@
 #include "../../handle.h"
 #include "infiniop/ops/int8_gemm.h"
 
-#if defined(ENABLE_NVIDIA_API)
+#if defined(ENABLE_NVIDIA_API) && defined(ENABLE_CUTLASS_API)
 #include "nvidia/int8_gemm_nvidia.cuh"
 #endif
 
@@ -26,7 +26,7 @@ __C infiniStatus_t infiniopCreateI8GemmDescriptor(infiniopHandle_t handle,
             b_desc,                                                           \
             b_scale_desc);
     switch (handle->device) {
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) && defined(ENABLE_CUTLASS_API)
         CREATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
     default:
@@ -41,7 +41,7 @@ __C infiniStatus_t infiniopGetI8GemmWorkspaceSize(infiniopI8GemmDescriptor_t des
     case CASE:                                                                                   \
         *size = reinterpret_cast<op::i8gemm::NAMESPACE::Descriptor *>(desc)->minWorkspaceSize(); \
         return INFINI_STATUS_SUCCESS;
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) && defined(ENABLE_CUTLASS_API)
         GET(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
     default:
@@ -65,7 +65,7 @@ __C infiniStatus_t infiniopI8Gemm(infiniopI8GemmDescriptor_t desc,
         return reinterpret_cast<op::i8gemm::NAMESPACE::Descriptor *>(desc)->calculate( \
             workspace, workspace_size, out, bias, a, a_scale, b, b_scale, stream);
     switch (desc->device_type) {
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) && defined(ENABLE_CUTLASS_API)
         CACULATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
     default:
@@ -80,7 +80,7 @@ __C infiniStatus_t infiniopDestroyI8GemmDescriptor(infiniopI8GemmDescriptor_t de
         delete reinterpret_cast<op::i8gemm::NAMESPACE::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS;
     switch (desc->device_type) {
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) && defined(ENABLE_CUTLASS_API)
         DESTROY(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
     default:

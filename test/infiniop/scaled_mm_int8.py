@@ -25,11 +25,9 @@ from enum import Enum, auto
 # These are not meant to be imported from other modules
 _TEST_CASES_ = [
     # x_shape, w_shape, y_shape, alpha, beta
-    # ((8, 8), (8, 8), False, (8, 8), 1.0, 0.0),
-    ((128, 512), (512, 1024), True, (128, 1024), 1.0, 0.0),
-    # ((128, 128), (128, 128), False, (128, 128), 2.0, 1.0),
-    ((256, 1024), (1024, 2048), True, (256, 2048), 1.0, 1.0),
-    ((1024, 2048), (2048, 1024), True, (1024, 1024), 1.0, 0.0),
+    ((128, 512), (512, 1024), (128, 1024)),
+    ((256, 1024), (1024, 2048), (256, 2048)),
+    ((1024, 2048), (2048, 1024), (1024, 1024)),
 ]
 
 
@@ -40,7 +38,6 @@ class Inplace(Enum):
 
 # Inplace options applied for each test case in _TEST_CASES_
 _INPLACE = [
-    # Inplace.OUT_OF_PLACE,
     Inplace.INPLACE,
 ]
 
@@ -80,16 +77,13 @@ def test(
     device,
     x_shape,
     w_shape,
-    symmetric,
     y_shape,
-    alpha,
-    beta,
     inplace=Inplace.OUT_OF_PLACE,
     dtype=InfiniDtype.BF16,
     sync=None,
 ):
     print(
-        f"Testing Linear on {InfiniDeviceNames[device]} with x_shape:{x_shape}, w_shape:{w_shape}, symmetric:{symmetric}, alpha:{alpha}, beta:{beta}, inplace:{inplace} dtype:{InfiniDtypeNames[dtype]}"
+        f"Testing Linear on {InfiniDeviceNames[device]} with x_shape:{x_shape}, w_shape:{w_shape}, inplace:{inplace} dtype:{InfiniDtypeNames[dtype]}"
     )
     M, K = x_shape
     N = w_shape[1]
@@ -170,7 +164,7 @@ def test(
     # Profiling workflow
     if PROFILE:
         # fmt: off
-        profile_operation("PyTorch", lambda: linearFunction(y.torch_tensor(), bias.torch_tensor(), x.torch_tensor(), w.torch_tensor(), alpha, beta), device, NUM_PRERUN, NUM_ITERATIONS)
+        profile_operation("PyTorch", lambda: torch_scaled_mm(x_packed, weights, x_scale, weights_scale, torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16, bias=bias), device, NUM_PRERUN, NUM_ITERATIONS)
         profile_operation("    lib", lambda: lib_linear(), device, NUM_PRERUN, NUM_ITERATIONS)
         # fmt: on
 
