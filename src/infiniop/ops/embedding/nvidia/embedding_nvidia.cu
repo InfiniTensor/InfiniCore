@@ -79,15 +79,25 @@ infiniStatus_t Descriptor::calculate(
     }
 
     auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
-    constexpr size_t BLOCK_SIZE = 256;
-    size_t grid_size = (_num_indices + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+    // Dynamic block size optimization based on embedding_dim
+    // Smaller embedding_dim benefits from larger block size (better occupancy)
+    // Larger embedding_dim benefits from smaller block size (more registers per thread)
+    size_t block_size = 256; // Default
+    if (_embedding_dim <= 64) {
+        block_size = 512; // Small embedding_dim: use larger block for better occupancy
+    } else if (_embedding_dim >= 1024) {
+        block_size = 128; // Large embedding_dim: use smaller block to reduce register pressure
+    }
+
+    size_t grid_size = (_num_indices + block_size - 1) / block_size;
 
     // Launch kernel based on dtypes
     if (_input_dtype == INFINI_DTYPE_I32) {
         const int32_t *indices_ptr = reinterpret_cast<const int32_t *>(input);
 
         if (_weight_dtype == INFINI_DTYPE_F32) {
-            embeddingKernel<float, int32_t><<<grid_size, BLOCK_SIZE, 0, cuda_stream>>>(
+            embeddingKernel<float, int32_t><<<grid_size, block_size, 0, cuda_stream>>>(
                 reinterpret_cast<float *>(output),
                 indices_ptr,
                 reinterpret_cast<const float *>(weight),
@@ -95,7 +105,7 @@ infiniStatus_t Descriptor::calculate(
                 _embedding_dim,
                 _vocab_size);
         } else if (_weight_dtype == INFINI_DTYPE_F16) {
-            embeddingKernel<half, int32_t><<<grid_size, BLOCK_SIZE, 0, cuda_stream>>>(
+            embeddingKernel<half, int32_t><<<grid_size, block_size, 0, cuda_stream>>>(
                 reinterpret_cast<half *>(output),
                 indices_ptr,
                 reinterpret_cast<const half *>(weight),
@@ -103,7 +113,7 @@ infiniStatus_t Descriptor::calculate(
                 _embedding_dim,
                 _vocab_size);
         } else if (_weight_dtype == INFINI_DTYPE_BF16) {
-            embeddingKernel<cuda_bfloat16, int32_t><<<grid_size, BLOCK_SIZE, 0, cuda_stream>>>(
+            embeddingKernel<cuda_bfloat16, int32_t><<<grid_size, block_size, 0, cuda_stream>>>(
                 reinterpret_cast<cuda_bfloat16 *>(output),
                 indices_ptr,
                 reinterpret_cast<const cuda_bfloat16 *>(weight),
@@ -117,7 +127,7 @@ infiniStatus_t Descriptor::calculate(
         const int64_t *indices_ptr = reinterpret_cast<const int64_t *>(input);
 
         if (_weight_dtype == INFINI_DTYPE_F32) {
-            embeddingKernel<float, int64_t><<<grid_size, BLOCK_SIZE, 0, cuda_stream>>>(
+            embeddingKernel<float, int64_t><<<grid_size, block_size, 0, cuda_stream>>>(
                 reinterpret_cast<float *>(output),
                 indices_ptr,
                 reinterpret_cast<const float *>(weight),
@@ -125,7 +135,7 @@ infiniStatus_t Descriptor::calculate(
                 _embedding_dim,
                 _vocab_size);
         } else if (_weight_dtype == INFINI_DTYPE_F16) {
-            embeddingKernel<half, int64_t><<<grid_size, BLOCK_SIZE, 0, cuda_stream>>>(
+            embeddingKernel<half, int64_t><<<grid_size, block_size, 0, cuda_stream>>>(
                 reinterpret_cast<half *>(output),
                 indices_ptr,
                 reinterpret_cast<const half *>(weight),
@@ -133,7 +143,7 @@ infiniStatus_t Descriptor::calculate(
                 _embedding_dim,
                 _vocab_size);
         } else if (_weight_dtype == INFINI_DTYPE_BF16) {
-            embeddingKernel<cuda_bfloat16, int64_t><<<grid_size, BLOCK_SIZE, 0, cuda_stream>>>(
+            embeddingKernel<cuda_bfloat16, int64_t><<<grid_size, block_size, 0, cuda_stream>>>(
                 reinterpret_cast<cuda_bfloat16 *>(output),
                 indices_ptr,
                 reinterpret_cast<const cuda_bfloat16 *>(weight),
