@@ -51,7 +51,7 @@ infiniStatus_t calculateRoPE(const RoPEInfo &info,
     k_dim.x = 4;
     k_dim.y = 1;
     k_dim.z = 1;
-    k_type = CNRT_FUNC_TYPE_UNION1;
+    k_type = cnrtFuncTypeUnion1;
 
     // Launch kernel
     ropeKernel<<<k_dim, k_type, queue>>>(
