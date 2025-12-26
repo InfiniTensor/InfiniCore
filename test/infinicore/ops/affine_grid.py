@@ -75,9 +75,8 @@ class OpTest(BaseOperatorTest):
     def torch_operator(self, *args, **kwargs):
         return torch.nn.functional.affine_grid(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
-    #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.nn.functional.affine_grid(*args, **kwargs)
+    def infinicore_operator(self, *args, **kwargs):
+         return infinicore.nn.functional.affine_grid(*args, **kwargs)
 
 
 def main():
