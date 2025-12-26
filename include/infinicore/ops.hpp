@@ -4,6 +4,7 @@
 #include "ops/add_rms_norm.hpp"
 #include "ops/attention.hpp"
 #include "ops/causal_softmax.hpp"
+#include "ops/embedding.hpp"
 #include "ops/flash_attention.hpp"
 #include "ops/kv_caching.hpp"
 #include "ops/matmul.hpp"
