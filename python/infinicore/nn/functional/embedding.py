@@ -22,9 +22,8 @@ def embedding(
         and (sparse is False)
     ), "Unsupported parameters."
 
-    assert "cpu" == input.device.type, (
-        "The device of 'input' variable must be on the CPU."
-    )
+    # Note: embedding now supports device-side input for graph recording
+    # The C++ implementation handles both CPU and device-side inputs
 
     if out is None:
         return Tensor(_infinicore.embedding(input._underlying, weight._underlying))
