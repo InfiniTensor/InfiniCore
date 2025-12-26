@@ -982,6 +982,51 @@ def paged_attention_(lib):
         infiniopOperatorDescriptor_t,
     ]
 
+@OpRegister.operator
+def paged_attention_prefill_(lib):
+    # 1. 创建描述符接口
+    lib.infiniopCreatePagedAttentionPrefillDescriptor.restype = c_int32
+    lib.infiniopCreatePagedAttentionPrefillDescriptor.argtypes = [
+        infiniopHandle_t,                      # handle
+        POINTER(infiniopOperatorDescriptor_t), # desc_ptr
+        infiniopTensorDescriptor_t,            # out_desc
+        infiniopTensorDescriptor_t,            # q_desc
+        infiniopTensorDescriptor_t,            # k_cache_desc
+        infiniopTensorDescriptor_t,            # v_cache_desc
+        infiniopTensorDescriptor_t,            # block_tables_desc
+        infiniopTensorDescriptor_t,            # seq_lens_desc
+        infiniopTensorDescriptor_t,            # alibi_slopes_desc (Optional)
+        c_float,                               # scale
+    ]
+
+    # 2. 获取工作空间大小接口
+    lib.infiniopGetPagedAttentionPrefillWorkspaceSize.restype = c_int32
+    lib.infiniopGetPagedAttentionPrefillWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,          # desc
+        POINTER(c_size_t),                     # size_ptr
+    ]
+
+    # 3. 执行算子接口
+    lib.infiniopPagedAttentionPrefill.restype = c_int32
+    lib.infiniopPagedAttentionPrefill.argtypes = [
+        infiniopOperatorDescriptor_t,          # desc
+        c_void_p,                              # workspace
+        c_size_t,                              # workspace_size
+        c_void_p,                              # out
+        c_void_p,                              # q
+        c_void_p,                              # k_cache
+        c_void_p,                              # v_cache
+        c_void_p,                              # block_tables
+        c_void_p,                              # seq_lens
+        c_void_p,                              # alibi_slopes
+        c_void_p,                              # stream
+    ]
+
+    # 4. 销毁描述符接口
+    lib.infiniopDestroyPagedAttentionPrefillDescriptor.restype = c_int32
+    lib.infiniopDestroyPagedAttentionPrefillDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,          # desc
+    ]
 
 @OpRegister.operator
 def paged_caching_(lib):
@@ -1020,5 +1065,47 @@ def paged_caching_(lib):
     # infiniopDestroyPagedCachingDescriptor
     lib.infiniopDestroyPagedCachingDescriptor.restype = c_int32
     lib.infiniopDestroyPagedCachingDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
+def paged_caching_prefill_(lib):
+    # infiniopCreatePagedCachingPrefillDescriptor
+    lib.infiniopCreatePagedCachingPrefillDescriptor.restype = c_int32
+    lib.infiniopCreatePagedCachingPrefillDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,  # k_desc
+        infiniopTensorDescriptor_t,  # v_desc
+        infiniopTensorDescriptor_t,  # k_cache_desc
+        infiniopTensorDescriptor_t,  # v_cache_desc
+        infiniopTensorDescriptor_t,  # slot_mapping_desc
+    ]
+
+    # infiniopGetPagedCachingPrefillWorkspaceSize
+    lib.infiniopGetPagedCachingPrefillWorkspaceSize.restype = c_int32
+    lib.infiniopGetPagedCachingPrefillWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    # infiniopPagedCachingPrefill
+    lib.infiniopPagedCachingPrefill.restype = c_int32
+    lib.infiniopPagedCachingPrefill.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,  # workspace
+        c_size_t,  # workspace_size
+        c_void_p,  # k
+        c_void_p,  # v
+        c_void_p,  # k_cache
+        c_void_p,  # v_cache
+        c_void_p,  # slot_mapping
+        c_void_p,  # stream
+    ]
+
+    # infiniopDestroyPagedCachingPrefillDescriptor
+    lib.infiniopDestroyPagedCachingPrefillDescriptor.restype = c_int32
+    lib.infiniopDestroyPagedCachingPrefillDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]

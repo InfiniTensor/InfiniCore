@@ -32,6 +32,8 @@
 #include "infiniop/ops/zeros.h"
 #include "infiniop/tensor_descriptor.h"
 #include "infiniop/ops/paged_attention.h"
+#include "infiniop/ops/paged_attention_prefill.h"
 #include "infiniop/ops/paged_caching.h"
+#include "infiniop/ops/paged_caching_prefill.h"
 
 #endif // __INFINIOP_API_H__
