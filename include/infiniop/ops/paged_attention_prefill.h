@@ -80,6 +80,7 @@ __C __export infiniStatus_t infiniopPagedAttentionPrefill(
     const void *block_tables,
     const void *seq_lens,
     const void *seq_offsets,
+    const void *cache_lens,
     const void *alibi_slopes,
     void *stream);
 

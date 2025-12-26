@@ -1,6 +1,6 @@
 #include "../../operator.h"
 #include "../../handle.h"
-#include "infiniop/ops/paged_attention.h"
+#include "infiniop/ops/paged_attention_prefill.h"
 
 #ifdef ENABLE_NVIDIA_API
 #include "nvidia/paged_attention_prefill_nvidia.cuh"
@@ -8,7 +8,7 @@
 
 __C infiniStatus_t infiniopCreatePagedAttentionPrefillDescriptor(
     infiniopHandle_t handle,
-    infiniopPagedAttentionDescriptor_t *desc_ptr,
+    infiniopPagedAttentionPrefillDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t out_desc,
     infiniopTensorDescriptor_t q_desc,
     infiniopTensorDescriptor_t k_cache_desc,
@@ -39,7 +39,7 @@ __C infiniStatus_t infiniopCreatePagedAttentionPrefillDescriptor(
 }
 
 __C infiniStatus_t infiniopGetPagedAttentionPrefillWorkspaceSize(
-    infiniopPagedAttentionDescriptor_t desc,
+    infiniopPagedAttentionPrefillDescriptor_t desc,
     size_t *size) {
 
 #define GET(CASE, NAMESPACE)                                                                                   \
@@ -57,7 +57,7 @@ __C infiniStatus_t infiniopGetPagedAttentionPrefillWorkspaceSize(
 }
 
 __C infiniStatus_t infiniopPagedAttentionPrefill(
-    infiniopPagedAttentionDescriptor_t desc,
+    infiniopPagedAttentionPrefillDescriptor_t desc,
     void *workspace, size_t workspace_size,
     void *out, const void *q, const void *k_cache, const void *v_cache,
     const void *block_tables, const void *seq_lens, const void *seq_offsets, const void *cache_lens, const void *alibi_slopes,
@@ -79,7 +79,7 @@ __C infiniStatus_t infiniopPagedAttentionPrefill(
 }
 
 __C infiniStatus_t infiniopDestroyPagedAttentionPrefillDescriptor(
-    infiniopPagedAttentionDescriptor_t desc) {
+    infiniopPagedAttentionPrefillDescriptor_t desc) {
 
 #define DESTROY(CASE, NAMESPACE)                                                             \
     case CASE:                                                                               \
