@@ -159,6 +159,16 @@ infiniStatus_t memcpyAsync(void *dst, const void *src, size_t size, infinirtMemc
     return INFINI_STATUS_SUCCESS;
 }
 
+infiniStatus_t memcpyPeer(void *dst, int dst_device, const void *src, int src_device, size_t size) {
+    CHECK_CUDART(cudaMemcpyPeer(dst, dst_device, src, src_device, size));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t memcpyPeerAsync(void *dst, int dst_device, const void *src, int src_device, size_t size, infinirtStream_t stream) {
+    CHECK_CUDART(cudaMemcpyPeerAsync(dst, dst_device, src, src_device, size, (cudaStream_t)stream));
+    return INFINI_STATUS_SUCCESS;
+}
+
 infiniStatus_t mallocAsync(void **p_ptr, size_t size, infinirtStream_t stream) {
     CHECK_CUDART(cudaMallocAsync(p_ptr, size, (cudaStream_t)stream));
     return INFINI_STATUS_SUCCESS;

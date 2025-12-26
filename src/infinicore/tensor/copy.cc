@@ -21,7 +21,9 @@ void TensorImpl::copy_from(Tensor src) {
     if (src->shape() != this->shape()) {
         throw std::runtime_error("Cannot copy from tensor with different shape");
     }
-    if (this->device() == src->device()) {
+    auto this_device = this->device();
+    auto src_device = src->device();
+    if (this_device == src_device) {
         op::rearrange_(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()), src);
     } else {
         if (!src->is_contiguous()) {
@@ -30,23 +32,39 @@ void TensorImpl::copy_from(Tensor src) {
 
         // Use nbytes() to get the actual tensor size, not the full memory size
         size_t copy_size = std::min(this->nbytes(), src->nbytes());
-        if (this->device().getType() == Device::Type::CPU) {
-            context::setDevice(src->device());
+        if (this_device.getType() == src_device.getType()) {
+            context::setDevice(this_device);
+            // Same device type, e.g., NVIDIA to NVIDIA, different indices; won't be CPU
             if (this->is_contiguous()) {
-                context::memcpyD2H(this->data(), src->data(), copy_size);
+                context::memcpyD2DPeer(this->data(), this_device.getIndex(),
+                                       src->data(), src_device.getIndex(),
+                                       copy_size);
             } else {
                 auto local_src = Tensor::empty(this->shape(), this->dtype(), this->device());
-                context::memcpyD2H(local_src->data(), src->data(), this->data_.memory->size());
+                context::memcpyD2DPeer(local_src->data(), this_device.getIndex(),
+                                       src->data(), src_device.getIndex(),
+                                       copy_size);
                 op::rearrange_(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()), local_src);
             }
-        } else if (src->device().getType() == Device::Type::CPU) {
-            context::setDevice(this->device());
-            if (this->is_contiguous()) {
-                context::memcpyH2D(this->data(), src->data(), copy_size);
-            } else {
-                auto local_src = Tensor::empty(this->shape(), this->dtype(), this->device());
-                context::memcpyH2D(local_src->data(), src->data(), copy_size);
-                op::rearrange_(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()), local_src);
+        } else {
+            if (this_device.getType() == Device::Type::CPU) {
+                context::setDevice(src_device);
+                if (this->is_contiguous()) {
+                    context::memcpyD2H(this->data(), src->data(), copy_size);
+                } else {
+                    auto local_src = Tensor::empty(this->shape(), this->dtype(), this->device());
+                    context::memcpyD2H(local_src->data(), src->data(), this->data_.memory->size());
+                    op::rearrange_(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()), local_src);
+                }
+            } else if (src_device.getType() == Device::Type::CPU) {
+                context::setDevice(this_device);
+                if (this->is_contiguous()) {
+                    context::memcpyH2D(this->data(), src->data(), copy_size);
+                } else {
+                    auto local_src = Tensor::empty(this->shape(), this->dtype(), this->device());
+                    context::memcpyH2D(local_src->data(), src->data(), copy_size);
+                    op::rearrange_(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()), local_src);
+                }
             }
         }
     }
