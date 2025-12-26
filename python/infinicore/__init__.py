@@ -42,6 +42,7 @@ from infinicore.dtype import (
 from infinicore.ops.add import add
 from infinicore.ops.attention import attention
 from infinicore.ops.matmul import matmul
+from infinicore.ops.maximum import maximum
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.rearrange import rearrange
@@ -104,6 +105,7 @@ __all__ = [
     "add",
     "attention",
     "matmul",
+    "maximum",
     "mul",
     "narrow",
     "squeeze",
