@@ -1,7 +1,7 @@
 #include "../../utils.hpp"
 #include "infinicore/common/hash.hpp"
-#include "infinicore/ops/embedding.hpp"
 #include "infinicore/ops/common/cache.hpp"
+#include "infinicore/ops/embedding.hpp"
 #include <infiniop.h>
 
 namespace infinicore::op::embedding_impl::infiniop {

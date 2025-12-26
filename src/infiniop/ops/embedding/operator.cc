@@ -18,7 +18,7 @@ __C infiniStatus_t infiniopCreateEmbeddingDescriptor(
 
 #define CREATE(CASE, NAMESPACE)                                                  \
     case CASE:                                                                   \
-        return op::embedding::NAMESPACE::Descriptor::create(                   \
+        return op::embedding::NAMESPACE::Descriptor::create(                     \
             handle,                                                              \
             reinterpret_cast<op::embedding::NAMESPACE::Descriptor **>(desc_ptr), \
             output_desc,                                                         \
@@ -89,8 +89,8 @@ __C infiniStatus_t infiniopEmbedding(
 
 __C infiniStatus_t infiniopDestroyEmbeddingDescriptor(infiniopEmbeddingDescriptor_t desc) {
 
-#define DELETE(CASE, NAMESPACE)                                                 \
-    case CASE:                                                                  \
+#define DELETE(CASE, NAMESPACE)                                                      \
+    case CASE:                                                                       \
         delete reinterpret_cast<const op::embedding::NAMESPACE::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS;
 

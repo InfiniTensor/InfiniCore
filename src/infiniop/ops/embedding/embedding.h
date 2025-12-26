@@ -20,8 +20,8 @@
             size_t num_indices,                           \
             size_t embedding_dim,                         \
             size_t vocab_size,                            \
-            infiniDtype_t input_dtype,                   \
-            infiniDtype_t weight_dtype,                  \
+            infiniDtype_t input_dtype,                    \
+            infiniDtype_t weight_dtype,                   \
             Opaque *opaque,                               \
             infiniDevice_t device_type,                   \
             int device_id)                                \

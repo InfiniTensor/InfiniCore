@@ -1,6 +1,6 @@
 #include "infinicore/ops/embedding.hpp"
-#include "infinicore/context/context.hpp"
 #include "../../utils.hpp"
+#include "infinicore/context/context.hpp"
 #include <cstring>
 #include <stdexcept>
 
@@ -12,12 +12,14 @@ common::OpDispatcher<Embedding::schema> &Embedding::dispatcher() {
 }
 
 void Embedding::execute(Tensor out, Tensor input, Tensor weight) {
-    // Check that output and weight are on the same device
-    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(out, weight);
-    
+    // Check that all tensors are on the same device
+    // This is critical: if input is on CPU while out/weight are on GPU,
+    // passing CPU pointer to CUDA kernel will cause memory access errors
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(out, input, weight);
+
     // Set device context
     infinicore::context::setDevice(out->device());
-    
+
     // Use dispatcher to lookup kernel (infiniop implementation)
     dispatcher().lookup(out->device().getType())(out, input, weight);
 }

@@ -16,17 +16,17 @@ INFINIOP_CUDA_KERNEL embeddingKernel(
     size_t vocab_size) {
     // Calculate global thread index
     size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    
+
     if (idx < num_indices) {
         // Get the index value
         IndexType index_val = indices[idx];
-        
+
         // Bounds check - handle negative indices gracefully
         if (index_val >= 0 && static_cast<size_t>(index_val) < vocab_size) {
             // Copy embedding vector from weight to output
             const T *src = weight + static_cast<size_t>(index_val) * embedding_dim;
             T *dst = output + idx * embedding_dim;
-            
+
             // Copy embedding_dim elements
             // Use vectorized copy for better performance when possible
             size_t i = 0;

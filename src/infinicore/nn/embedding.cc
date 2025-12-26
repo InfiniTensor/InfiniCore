@@ -43,10 +43,17 @@ Embedding::Embedding(size_t num_embeddings,
 }
 
 Tensor Embedding::forward(const Tensor &indices) const {
+    // Ensure indices are on the same device as weight
+    // This avoids synchronous memcpy in ops layer which would hurt performance
+    Tensor indices_on_device = indices;
+    if (indices->device() != device_) {
+        indices_on_device = indices->to(device_);
+    }
+
     // Ensure indices are contiguous for efficient access
     // op::embedding now supports device-side input for graph recording
-    Tensor indices_contiguous = indices->is_contiguous() ? indices : indices->contiguous();
-    
+    Tensor indices_contiguous = indices_on_device->is_contiguous() ? indices_on_device : indices_on_device->contiguous();
+
     // Use op::embedding which now supports device-side input and batch dimension
     // This enables full graph recording support without synchronization
     return op::embedding(indices_contiguous, weight_);
