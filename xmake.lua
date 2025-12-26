@@ -315,7 +315,7 @@ target("infiniop")
     end
     set_languages("cxx17")
     add_files("src/infiniop/devices/handle.cc")
-    add_files("src/infiniop/ops/*/operator.cc")
+    add_files("src/infiniop/ops/*/operator.cc", "src/infiniop/ops/*/*/operator.cc")
     add_files("src/infiniop/*.cc")
 
     set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
