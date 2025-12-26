@@ -10,7 +10,7 @@ from framework import (
     InfiniDeviceEnum,
     InfiniDeviceNames,
 )
-from framework.api import TestAPI, TestDiscoverer
+from framework.test_manager import TestCollector, TestManager
 
 
 def generate_help_epilog(ops_dir=None):
@@ -18,10 +18,10 @@ def generate_help_epilog(ops_dir=None):
     Generate dynamic help epilog containing available operators and hardware platforms.
     Maintains the original output format for backward compatibility.
     """
-    # === Adapter: Use TestDiscoverer to get operator list ===
-    # Temporarily instantiate a Discoverer just to fetch the list
-    discoverer = TestDiscoverer(ops_dir)
-    operators = discoverer.get_available_operators()
+    # === Adapter: Use TestCollector to get operator list ===
+    # Temporarily instantiate a Collector just to fetch the list
+    collector = TestCollector(ops_dir)
+    operators = collector.get_available_operators()
 
     # Build epilog text (fully replicating original logic)
     epilog_parts = []
@@ -256,9 +256,9 @@ def main():
         print(f"Passing extra arguments to test scripts: {unknown_args}")
 
     # 1. Discovery
-    discoverer = TestDiscoverer(args.ops_dir)
+    collector = TestCollector(args.ops_dir)
     if args.list:
-        print("Available operators:", discoverer.get_available_operators())
+        print("Available operators:", collector.get_available_operators())
         return
 
     # ==========================================================================
@@ -283,9 +283,9 @@ def main():
             print(f"Benchmark mode: {args.bench.upper()} timing")
 
         # 3. Initialize and Execute
-        test_api = TestAPI(ops_dir=args.ops_dir, verbose=verbose, bench_mode=bench)
+        test_manager = TestManager(ops_dir=args.ops_dir, verbose=verbose, bench_mode=bench)
 
-        success = test_api.test(json_cases_list=json_cases)
+        success = test_manager.test(json_cases_list=json_cases)
 
     # ==========================================================================
     # Branch 2: Local Scan Mode
@@ -302,7 +302,7 @@ def main():
         # 2. Filtering
         target_ops = None
         if args.ops:
-            available_ops = set(discoverer.get_available_operators())
+            available_ops = set(collector.get_available_operators())
             requested_ops = set(args.ops)
             valid_ops = list(requested_ops & available_ops)
             invalid_ops = list(requested_ops - available_ops)
@@ -326,11 +326,11 @@ def main():
         global_exec_args = fill_defaults_for_local_mode(args)
 
         # 4. Initialize API & Execute
-        test_api = TestAPI(
+        test_manager = TestManager(
             ops_dir=args.ops_dir, verbose=args.verbose, bench_mode=args.bench
         )
 
-        success = test_api.test(
+        success = test_manager.test(
             target_ops=target_ops, global_exec_args=global_exec_args
         )
     sys.exit(0 if success else 1)

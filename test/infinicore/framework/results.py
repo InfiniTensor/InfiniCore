@@ -119,9 +119,9 @@ class TestSummary:
     #  Part 2: Console Output (View)
     # =========================================================
 
-    def list_tests(self, discoverer):
-        ops_dir = discoverer.ops_dir
-        operators = discoverer.get_available_operators()
+    def list_tests(self, collector):
+        ops_dir = collector.ops_dir
+        operators = collector.get_available_operators()
 
         if operators:
             print(f"Available operator test files in {ops_dir}:")
@@ -130,7 +130,7 @@ class TestSummary:
             print(f"\nTotal: {len(operators)} operators")
         else:
             print(f"No valid operator tests found in {ops_dir}")
-            raw_files = discoverer.get_raw_python_files()
+            raw_files = collector.get_raw_python_files()
             if raw_files:
                 print(
                     f"\n💡 Debug Hint: Found Python files but they are not valid tests:"

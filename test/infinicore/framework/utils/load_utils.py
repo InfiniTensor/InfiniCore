@@ -131,7 +131,7 @@ if __name__ == "__main__":
     main()
 '''
 
-class DynamicCaseGenerator:
+class TestGenerator:
 
     def __init__(self, project_root):
         self.project_root = os.path.abspath(project_root)
@@ -140,7 +140,7 @@ class DynamicCaseGenerator:
         generated_files = []
         for idx, op_config in enumerate(json_list):
             op_name = op_config.get("operator", "Unknown")
-            file_name = f"test_dynamic_{op_name}_{idx}.py"
+            file_name = f"test_{op_name}_{idx}.py"
             file_path = os.path.join(output_dir, file_name)
 
             # 1. Fetch operator names

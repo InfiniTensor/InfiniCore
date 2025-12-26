@@ -1,4 +1,3 @@
-from .api import TestAPI, TestDiscoverer
 from .base import TestConfig, TestRunner, BaseOperatorTest
 from .entities import TestCase
 from .benchmark import BenchmarkUtils, BenchmarkResult
@@ -12,6 +11,7 @@ from .datatypes import to_torch_dtype, to_infinicore_dtype
 from .devices import InfiniDeviceEnum, InfiniDeviceNames, torch_device_map
 from .results import TestTiming, OperatorResult, CaseResult, TestSummary
 from .runner import GenericTestRunner
+from .test_manager import TestManager, TestCollector
 from .tensor import TensorSpec, TensorInitializer
 from .executor import TestExecutor
 from .utils.compare_utils import (
@@ -21,6 +21,7 @@ from .utils.compare_utils import (
     get_tolerance,
 )
 from .utils.json_utils import save_json_report
+from .utils.load_utils import TestGenerator
 from .utils.tensor_utils import (
     infinicore_tensor_from_torch,
     convert_infinicore_to_torch,
@@ -40,13 +41,14 @@ __all__ = [
     "InfiniDeviceEnum",
     "InfiniDeviceNames",
     "OperatorResult",
+    "TestGenerator",
     "TensorInitializer",
     "TensorSpec",
-    "TestAPI",
     "TestCase",
+    "TestCollector",
     "TestConfig",
-    "TestDiscoverer",
     "TestExecutor",
+    "TestManager",
     "TestSummary",
     "TestRunner",
     "TestTiming",

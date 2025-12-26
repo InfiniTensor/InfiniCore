@@ -4,10 +4,10 @@ import tempfile
 from pathlib import Path
 from .executor import TestExecutor
 from .results import TestSummary, TestTiming
-from .utils.op_test_utils import DynamicCaseGenerator
+from .utils.load_utils import TestGenerator
 
 
-class TestDiscoverer:
+class TestCollector:
     """
     Responsible for scanning and verifying operator test files.
     """
@@ -66,14 +66,14 @@ class TestDiscoverer:
             return False
 
 
-class TestAPI:
+class TestManager:
     """
     High-level API to execute operator tests.
     Encapsulates the test loop, timing aggregation, and reporting.
     """
 
     def __init__(self, ops_dir=None, verbose=False, bench_mode=None):
-        self.discoverer = TestDiscoverer(ops_dir)
+        self.collector = TestCollector(ops_dir)
         self.verbose = verbose
         self.bench_mode = bench_mode
 
@@ -105,7 +105,7 @@ class TestAPI:
                 project_root = getattr(
                     self, "project_root", Path(__file__).resolve().parent.parent
                 )
-                generator = DynamicCaseGenerator(project_root=str(project_root))
+                generator = TestGenerator(project_root=str(project_root))
 
                 # Generate files
                 dynamic_paths = generator.generate(json_cases_list, temp_dir_str)
@@ -122,8 +122,8 @@ class TestAPI:
             else:
                 # [Mode B] Local File Scan
                 # print(f"📂 Mode: Local File Scan")
-                test_files = self.discoverer.scan(target_ops)
-                display_location = str(self.discoverer.ops_dir)
+                test_files = self.collector.scan(target_ops)
+                display_location = str(self.collector.ops_dir)
 
                 # ✅ Key Logic: Apply global_exec_args passed from run.py to all files
                 # If global_exec_args is None (run.py should theoretically fill this), executor falls back to default behavior
