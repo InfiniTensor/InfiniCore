@@ -384,6 +384,43 @@ def rms_norm_(lib):
 
 
 @OpRegister.operator
+def add_rms_norm_(lib):
+    lib.infiniopCreateAddRMSNormDescriptor.restype = c_int32
+    lib.infiniopCreateAddRMSNormDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_float,
+    ]
+
+    lib.infiniopGetAddRMSNormWorkspaceSize.restype = c_int32
+    lib.infiniopGetAddRMSNormWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopAddRMSNorm.restype = c_int32
+    lib.infiniopAddRMSNorm.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyAddRMSNormDescriptor.restype = c_int32
+    lib.infiniopDestroyAddRMSNormDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def rope_(lib):
     lib.infiniopCreateRoPEDescriptor.restype = c_int32
     lib.infiniopCreateRoPEDescriptor.argtypes = [

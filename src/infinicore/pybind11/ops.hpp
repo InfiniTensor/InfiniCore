@@ -3,6 +3,7 @@
 #include <pybind11/pybind11.h>
 
 #include "ops/add.hpp"
+#include "ops/add_rms_norm.hpp"
 #include "ops/attention.hpp"
 #include "ops/causal_softmax.hpp"
 #include "ops/embedding.hpp"
@@ -22,6 +23,7 @@ namespace infinicore::ops {
 
 inline void bind(py::module &m) {
     bind_add(m);
+    bind_add_rms_norm(m);
     bind_attention(m);
     bind_causal_softmax(m);
     bind_random_sample(m);
