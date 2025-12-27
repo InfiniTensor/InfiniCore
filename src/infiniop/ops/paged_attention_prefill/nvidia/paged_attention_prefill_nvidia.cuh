@@ -3,6 +3,6 @@
 
 #include "../paged_attention_prefill.h"
 
-DESCRIPTOR(nvidia)
+DESCRIPTOR_PREFILL(nvidia)
 
-#endif
+#endif // __PAGED_ATTENTION_PREFILL_NVIDIA_H__

@@ -1,10 +1,13 @@
 #include "../../operator.h"
 #include "../../handle.h"
-#include "infiniop/ops/paged_attention_prefill.h"
+#include "infiniop/ops/paged_attention_prefill.h" // 假设你在外部 include 路径里也放了这个
 
 #ifdef ENABLE_NVIDIA_API
 #include "nvidia/paged_attention_prefill_nvidia.cuh"
 #endif
+
+// 注意：你需要确保在外部头文件中定义了 infiniopPagedAttentionPrefillDescriptor_t 等类型
+// 或者复用类似的定义。这里假设你已经有对应的 .h 定义。
 
 __C infiniStatus_t infiniopCreatePagedAttentionPrefillDescriptor(
     infiniopHandle_t handle,
@@ -15,19 +18,18 @@ __C infiniStatus_t infiniopCreatePagedAttentionPrefillDescriptor(
     infiniopTensorDescriptor_t v_cache_desc,
     infiniopTensorDescriptor_t block_tables_desc,
     infiniopTensorDescriptor_t seq_lens_desc,
+    infiniopTensorDescriptor_t new_lens_desc,
     infiniopTensorDescriptor_t alibi_slopes_desc,
     float scale) {
 
-    // 使用 Prefill 特有的 std::optional 逻辑，与 DESCRIPTOR 宏中的 create 签名对齐
-    std::optional<infiniopTensorDescriptor_t> alibi_opt = 
-        (alibi_slopes_desc == nullptr) ? std::nullopt : std::make_optional(alibi_slopes_desc);
+    infiniopTensorDescriptor_t alibi_opt = (alibi_slopes_desc == nullptr) ? nullptr : alibi_slopes_desc;
 
-#define CREATE(CASE, NAMESPACE)                                                        \
-    case CASE:                                                                         \
-        return op::paged_attention_prefill::NAMESPACE::Descriptor::create(             \
-            handle,                                                                    \
+#define CREATE(CASE, NAMESPACE)                                                            \
+    case CASE:                                                                             \
+        return op::paged_attention_prefill::NAMESPACE::Descriptor::create(                 \
+            handle,                                                                        \
             reinterpret_cast<op::paged_attention_prefill::NAMESPACE::Descriptor **>(desc_ptr), \
-            out_desc, q_desc, k_cache_desc, v_cache_desc, block_tables_desc, seq_lens_desc, alibi_opt, scale);
+            out_desc, q_desc, k_cache_desc, v_cache_desc, block_tables_desc, seq_lens_desc, new_lens_desc, alibi_opt, scale);
 
     switch (handle->device) {
 #ifdef ENABLE_NVIDIA_API
@@ -41,13 +43,12 @@ __C infiniStatus_t infiniopGetPagedAttentionPrefillWorkspaceSize(
     infiniopPagedAttentionPrefillDescriptor_t desc,
     size_t *size) {
 
-#define GET(CASE, NAMESPACE)                                                           \
-    case CASE:                                                                         \
+#define GET(CASE, NAMESPACE)                                                                           \
+    case CASE:                                                                                         \
         *size = reinterpret_cast<op::paged_attention_prefill::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
         return INFINI_STATUS_SUCCESS;
 
-    // desc 本身继承自 InfiniopDescriptor，直接访问 device_type
-    switch (reinterpret_cast<InfiniopDescriptor *>(desc)->device_type) {
+    switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API
         GET(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
@@ -59,16 +60,17 @@ __C infiniStatus_t infiniopPagedAttentionPrefill(
     infiniopPagedAttentionPrefillDescriptor_t desc,
     void *workspace, size_t workspace_size,
     void *out, const void *q, const void *k_cache, const void *v_cache,
-    const void *block_tables, const void *seq_lens, const void *alibi_slopes,
+    const void *block_tables, const void *seq_lens, const void *new_lens, 
+    const void *alibi_slopes,
     void *stream) {
 
-#define CALCULATE(CASE, NAMESPACE)                                                     \
-    case CASE:                                                                         \
+#define CALCULATE(CASE, NAMESPACE)                                                              \
+    case CASE:                                                                                  \
         return reinterpret_cast<op::paged_attention_prefill::NAMESPACE::Descriptor *>(desc)->calculate( \
-            workspace, workspace_size, out, q, k_cache, v_cache, block_tables,         \
-            seq_lens, alibi_slopes, stream);
+            workspace, workspace_size, out, q, k_cache, v_cache, block_tables,                  \
+            seq_lens, new_lens, alibi_slopes, stream);
 
-    switch (reinterpret_cast<InfiniopDescriptor *>(desc)->device_type) {
+    switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
@@ -79,12 +81,12 @@ __C infiniStatus_t infiniopPagedAttentionPrefill(
 __C infiniStatus_t infiniopDestroyPagedAttentionPrefillDescriptor(
     infiniopPagedAttentionPrefillDescriptor_t desc) {
 
-#define DESTROY(CASE, NAMESPACE)                                                       \
-    case CASE:                                                                         \
+#define DESTROY(CASE, NAMESPACE)                                                             \
+    case CASE:                                                                               \
         delete reinterpret_cast<op::paged_attention_prefill::NAMESPACE::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS;
 
-    switch (reinterpret_cast<InfiniopDescriptor *>(desc)->device_type) {
+    switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API
         DESTROY(INFINI_DEVICE_NVIDIA, nvidia)
 #endif

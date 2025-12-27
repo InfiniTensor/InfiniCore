@@ -995,6 +995,7 @@ def paged_attention_prefill_(lib):
         infiniopTensorDescriptor_t,            # v_cache_desc
         infiniopTensorDescriptor_t,            # block_tables_desc
         infiniopTensorDescriptor_t,            # seq_lens_desc
+        infiniopTensorDescriptor_t,            # new_lens_desc (新增参数)
         infiniopTensorDescriptor_t,            # alibi_slopes_desc (Optional)
         c_float,                               # scale
     ]
@@ -1018,6 +1019,7 @@ def paged_attention_prefill_(lib):
         c_void_p,                              # v_cache
         c_void_p,                              # block_tables
         c_void_p,                              # seq_lens
+        c_void_p,                              # new_lens (新增参数)
         c_void_p,                              # alibi_slopes
         c_void_p,                              # stream
     ]

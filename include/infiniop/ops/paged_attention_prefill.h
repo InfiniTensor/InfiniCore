@@ -8,19 +8,17 @@ typedef struct InfiniopDescriptor *infiniopPagedAttentionPrefillDescriptor_t;
 
 /**
  * @brief Creates a descriptor for the Paged Attention Prefill operation.
- * * Unlike the standard Paged Attention (Decode), the Prefill version supports
- * multiple query tokens per sequence (q_desc has an additional length dimension)
- * and internally applies a causal mask.
  * * @param handle The handle to the InfiniOP library context.
  * @param desc_ptr A pointer to store the created descriptor.
- * @param out_desc Descriptor for the output tensor. Shape: [batch, max_q_len, num_heads, head_size]
- * @param q_desc Descriptor for the query tensor. Shape: [batch, max_q_len, num_heads, head_size]
+ * @param out_desc Descriptor for the output tensor.
+ * @param q_desc Descriptor for the query tensor.
  * @param k_cache_desc Descriptor for the global physical key cache.
  * @param v_cache_desc Descriptor for the global physical value cache.
  * @param block_tables_desc Descriptor for the block tables mapping logic to physical blocks.
- * @param seq_lens_desc Descriptor for the total sequence lengths (history + current prefill tokens).
+ * @param seq_lens_desc Descriptor for the total sequence lengths (history + current).
+ * @param new_lens_desc Descriptor for the current prefill sequence lengths.
  * @param alibi_slopes_desc Optional descriptor for the ALiBi slopes tensor. Can be NULL.
- * @param scale The attention scaling factor (usually 1/sqrt(head_size)).
+ * @param scale The attention scaling factor.
  * @return infiniStatus_t Status code of the operation.
  */
 __C __export infiniStatus_t infiniopCreatePagedAttentionPrefillDescriptor(
@@ -32,14 +30,12 @@ __C __export infiniStatus_t infiniopCreatePagedAttentionPrefillDescriptor(
     infiniopTensorDescriptor_t v_cache_desc,
     infiniopTensorDescriptor_t block_tables_desc,
     infiniopTensorDescriptor_t seq_lens_desc,
+    infiniopTensorDescriptor_t new_lens_desc, // 新增：对应实现中的第 9 个参数
     infiniopTensorDescriptor_t alibi_slopes_desc,
     float scale);
 
 /**
  * @brief Retrieves the workspace size required for the Paged Attention Prefill operation.
- * * @param desc The Paged Attention Prefill descriptor.
- * @param size A pointer to store the required workspace size in bytes.
- * @return infiniStatus_t Status code of the operation.
  */
 __C __export infiniStatus_t infiniopGetPagedAttentionPrefillWorkspaceSize(
     infiniopPagedAttentionPrefillDescriptor_t desc, size_t *size);
@@ -50,13 +46,14 @@ __C __export infiniStatus_t infiniopGetPagedAttentionPrefillWorkspaceSize(
  * @param workspace Pointer to the workspace memory.
  * @param workspace_size The size of the workspace.
  * @param out Pointer to the output tensor data.
- * @param q Pointer to the query tensor data (contains multiple tokens per sequence).
+ * @param q Pointer to the query tensor data.
  * @param k_cache Pointer to the global key cache data.
  * @param v_cache Pointer to the global value cache data.
  * @param block_tables Pointer to the block tables data.
- * @param seq_lens Pointer to the sequence lengths (total tokens after current prefill).
+ * @param seq_lens Pointer to the total sequence lengths data.
+ * @param new_lens Pointer to the current prefill sequence lengths data.
  * @param alibi_slopes Pointer to the ALiBi slopes data. Can be NULL.
- * @param stream The CUDA/device stream for the operation. Can be NULL.
+ * @param stream The CUDA/device stream for the operation.
  * @return infiniStatus_t Status code of the operation.
  */
 __C __export infiniStatus_t infiniopPagedAttentionPrefill(
@@ -69,13 +66,12 @@ __C __export infiniStatus_t infiniopPagedAttentionPrefill(
     const void *v_cache,
     const void *block_tables,
     const void *seq_lens,
+    const void *new_lens, // 新增：对应实现中的第 10 个参数
     const void *alibi_slopes,
     void *stream);
 
 /**
  * @brief Destroys a Paged Attention Prefill descriptor.
- * * @param desc The descriptor to be destroyed.
- * @return infiniStatus_t Status code of the operation.
  */
 __C __export infiniStatus_t infiniopDestroyPagedAttentionPrefillDescriptor(
     infiniopPagedAttentionPrefillDescriptor_t desc);
