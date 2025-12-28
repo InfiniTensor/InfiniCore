@@ -3,74 +3,18 @@
 
 #include <cuda_fp16.h>
 #include <float.h>
+#include <math.h>
 
 namespace op::paged_attention_prefill::cuda {
 
 // =============================================================
-//  Internal Helper: Block-level Reductions (Self-contained)
+//  Naive Kernel: No Shared Memory, No Warp Shuffle
+//  Correctness prioritized.
+//  Changed to __global__ so it can be launched directly.
 // =============================================================
 
-template<typename T>
-__device__ __forceinline__ T warpReduceMax(T val) {
-    #pragma unroll
-    for (int mask = 16; mask > 0; mask /= 2)
-        val = max(val, __shfl_xor_sync(0xffffffff, val, mask));
-    return val;
-}
-
-template<typename T>
-__device__ __forceinline__ T warpReduceSum(T val) {
-    #pragma unroll
-    for (int mask = 16; mask > 0; mask /= 2)
-        val += __shfl_xor_sync(0xffffffff, val, mask);
-    return val;
-}
-
-template<typename T, int NUM_THREADS>
-struct BlockReduce {
-    static __device__ __forceinline__ T max(T val) {
-        static __shared__ T shared[32]; // Max 32 warps for 1024 threads
-        int lane = threadIdx.x % 32;
-        int wid = threadIdx.x / 32;
-
-        val = warpReduceMax(val);
-        if (lane == 0) shared[wid] = val;
-        __syncthreads();
-
-        // Load back to first warp
-        val = (threadIdx.x < (NUM_THREADS / 32)) ? shared[lane] : -FLT_MAX;
-        
-        if (wid == 0) {
-            val = warpReduceMax(val);
-        }
-        // Broadcast result to all threads
-        return __shfl_sync(0xffffffff, val, 0);
-    }
-
-    static __device__ __forceinline__ T sum(T val) {
-        static __shared__ T shared[32];
-        int lane = threadIdx.x % 32;
-        int wid = threadIdx.x / 32;
-
-        val = warpReduceSum(val);
-        if (lane == 0) shared[wid] = val;
-        __syncthreads();
-
-        val = (threadIdx.x < (NUM_THREADS / 32)) ? shared[lane] : (T)0.0f;
-        
-        if (wid == 0) {
-            val = warpReduceSum(val);
-        }
-        return __shfl_sync(0xffffffff, val, 0);
-    }
-};
-
-// =============================================================
-//  Main Kernel
-// =============================================================
-
-template <typename Tdata, typename Tcompute, size_t HEAD_SIZE, size_t NUM_THREADS>
-__device__ void pagedAttentionPrefillKernel(
+template <typename Tdata, typename Tcompute>
+__global__ void pagedAttentionPrefillKernel(
     Tdata *out_,
     const Tdata *q_,
     const Tdata *k_cache_,
@@ -79,6 +23,7 @@ __device__ void pagedAttentionPrefillKernel(
     const int32_t *seq_lens_,
     const int32_t *new_lens_,
     const float *alibi_slopes_,
+    const size_t num_heads,
     const size_t num_kv_heads,
     const float scale,
     const size_t max_num_blocks_per_seq,
@@ -87,132 +32,139 @@ __device__ void pagedAttentionPrefillKernel(
     const ptrdiff_t q_stride,
     const ptrdiff_t kv_block_stride,
     const ptrdiff_t kv_head_stride,
-    const ptrdiff_t o_stride) {
-    
+    const ptrdiff_t o_stride,
+    const size_t head_size_const) {
+
     // --- 1. Coordinate Setup ---
+    // Grid: (num_heads, max_new_len, num_seqs)
+    // Block: (HEAD_SIZE, 1, 1)
     const int seq_idx = blockIdx.z;
     const int q_token_idx = blockIdx.y; 
     const int head_idx = blockIdx.x;
-    
+    const int dim_idx = threadIdx.x; 
+
+    // Check boundary
     const int32_t cur_new_len = new_lens_[seq_idx];
-    
     if (q_token_idx >= cur_new_len) {
         return;
     }
+    
+    // Safety check for head size
+    if (dim_idx >= head_size_const) return;
 
+    // Dimensions
     const int32_t total_seq_len = seq_lens_[seq_idx];
     const int32_t history_len = total_seq_len - cur_new_len;
-    const int32_t global_token_idx = history_len + q_token_idx;
+    const int32_t global_token_idx = history_len + q_token_idx; 
 
-    const size_t num_queries_per_kv = gridDim.x / num_kv_heads;
+    const size_t num_queries_per_kv = num_heads / num_kv_heads;
     const size_t kv_head_idx = head_idx / num_queries_per_kv;
-    const float alibi_slope = (alibi_slopes_ == nullptr) ? 0.0f : alibi_slopes_[head_idx];
 
     const int32_t *block_table = block_tables_ + seq_idx * max_num_blocks_per_seq;
-
-    const Tdata *q_ptr = q_ + seq_idx * q_stride + (q_token_idx * gridDim.x + head_idx) * HEAD_SIZE;
-    Tdata *out_ptr = out_ + seq_idx * o_stride + (q_token_idx * gridDim.x + head_idx) * HEAD_SIZE;
-
-    // --- 2. Load Query to Shared Memory ---
-    extern __shared__ char shared_mem_char[];
-    Tcompute *shared_mem = reinterpret_cast<Tcompute *>(shared_mem_char);
-    Tcompute *q_shared = shared_mem; // Size: HEAD_SIZE
     
-    // [WARNING] This assumes total_seq_len fits in remaining shared memory.
-    // If context length > shared memory capacity, this will crash/corrupt.
-    Tcompute *logits = shared_mem + HEAD_SIZE; 
+    // Q ptr: [seq, new_len, head, dim]
+    const Tdata *q_ptr_base = q_ + seq_idx * q_stride + 
+                              (q_token_idx * num_heads + head_idx) * head_size_const;
     
-    for (size_t i = threadIdx.x; i < HEAD_SIZE; i += NUM_THREADS) {
-        q_shared[i] = static_cast<Tcompute>(q_ptr[i]);
+    // Out ptr
+    Tdata *out_ptr = out_ + seq_idx * o_stride + 
+                     (q_token_idx * num_heads + head_idx) * head_size_const;
+
+    const float alibi_slope = (alibi_slopes_ == nullptr) ? 0.0f : alibi_slopes_[head_idx];
+
+    // 只让第一个 Sequence, 第一个 Token, 第一个 Head 的第一个线程执行打印
+    if (seq_idx == 0 && q_token_idx == 0 && head_idx == 0 && dim_idx == 0) {
+        printf("DEBUG: Scale=%f, HeadSize=%zu, BlockSize=%zu\n", scale, head_size_const, block_size);
+        
+        // 检查 Q 的前 5 个元素
+        for(int i=0; i<5; ++i) printf("Q[%d]=%f ", i, (float)q_ptr_base[i]);
+        printf("\n");
+
+        // 检查第一个 KV Block 的前 5 个元素
+        const int32_t first_physical_block = block_table[0];
+        const Tdata *first_k = k_cache_ + first_physical_block * kv_block_stride;
+        for(int i=0; i<5; ++i) printf("K_cache[0][%d]=%f ", i, (float)first_k[i]);
+        printf("\n");
     }
-    __syncthreads();
 
-    // --- 3. Compute Attention Scores ---
+    // --- Pass 1: Find Global Max ---
+    Tcompute max_score = -FLT_MAX;
 
-    // --- Step 3.1: Calculate Local Max Logit (Pass 1) ---
-    Tcompute local_max = -FLT_MAX;
-
-    for (int t = threadIdx.x; t < total_seq_len; t += NUM_THREADS) {
-        if (t > global_token_idx) continue;
+    for (int t = 0; t < total_seq_len; ++t) {
+        if (t > global_token_idx) break;
 
         const int32_t b_idx = t / block_size;
         const int32_t t_off = t % block_size;
         const int32_t physical_block = block_table[b_idx];
 
-        const Tdata *k_vec = k_cache_ + physical_block * kv_block_stride + kv_head_idx * kv_head_stride + t_off * HEAD_SIZE;
+        const Tdata *k_vec = k_cache_ + physical_block * kv_block_stride + 
+                             kv_head_idx * kv_head_stride + t_off * head_size_const;
 
         Tcompute score = 0.0f;
-        #pragma unroll
-        for (int i = 0; i < HEAD_SIZE; ++i) {
-            score += q_shared[i] * static_cast<Tcompute>(k_vec[i]);
+        for (int d = 0; d < head_size_const; ++d) {
+            score += static_cast<Tcompute>(q_ptr_base[d]) * static_cast<Tcompute>(k_vec[d]);
         }
         score *= scale;
-        
+
         if (alibi_slope != 0.0f) {
             score += alibi_slope * (t - total_seq_len + 1);
         }
 
-        if (score > local_max) local_max = score;
+        if (score > max_score) max_score = score;
     }
 
-    // Block Reduce Max (Corrected: using internal helper)
-    Tcompute global_max = BlockReduce<Tcompute, NUM_THREADS>::max(local_max);
-    
-    // Note: No need to store in s_global_max manually, BlockReduce broadcasts it.
+    // --- Pass 2: Calculate Denominator (Sum Exp) ---
+    Tcompute sum_exp = 0.0f;
 
-    // --- Step 3.2: Calculate Exp Sum & Store Probabilities (Pass 2) ---
-    // We re-compute scores to fill 'logits' (memory bounded optimization).
-    // Using global_max from Step 3.1 directly.
-    
-    Tcompute local_sum = 0.0f;
+    for (int t = 0; t < total_seq_len; ++t) {
+        if (t > global_token_idx) break;
 
-    for (int t = threadIdx.x; t < total_seq_len; t += NUM_THREADS) {
-        if (t <= global_token_idx) {
-            const int32_t b_idx = t / block_size;
-            const int32_t t_off = t % block_size;
-            const int32_t physical_block = block_table[b_idx];
-            const Tdata *k_vec = k_cache_ + physical_block * kv_block_stride + kv_head_idx * kv_head_stride + t_off * HEAD_SIZE;
+        const int32_t b_idx = t / block_size;
+        const int32_t t_off = t % block_size;
+        const int32_t physical_block = block_table[b_idx];
+        const Tdata *k_vec = k_cache_ + physical_block * kv_block_stride + 
+                             kv_head_idx * kv_head_stride + t_off * head_size_const;
 
-            Tcompute score = 0.0f;
-            #pragma unroll
-            for (int i = 0; i < HEAD_SIZE; ++i) {
-                score += q_shared[i] * static_cast<Tcompute>(k_vec[i]);
-            }
-            score *= scale;
-            if (alibi_slope != 0.0f) {
-                score += alibi_slope * (t - total_seq_len + 1);
-            }
-
-            // Compute Exp and Store
-            Tcompute val = expf(score - global_max);
-            logits[t] = val; // Storing P (unnormalized) for V pass
-            local_sum += val;
-        } else {
-            logits[t] = 0.0f; 
+        Tcompute score = 0.0f;
+        for (int d = 0; d < head_size_const; ++d) {
+            score += static_cast<Tcompute>(q_ptr_base[d]) * static_cast<Tcompute>(k_vec[d]);
         }
-    }
-    __syncthreads();
-    
-    // Block Reduce Sum (Corrected)
-    Tcompute global_sum = BlockReduce<Tcompute, NUM_THREADS>::sum(local_sum);
-    Tcompute inv_sum = 1.0f / (global_sum + 1e-6f);
+        score *= scale;
+        if (alibi_slope != 0.0f) score += alibi_slope * (t - total_seq_len + 1);
 
-    // --- 4. Weighted Sum V ---
-    // Threads parallelize over HEAD_SIZE dimension
-    for (int h = threadIdx.x; h < HEAD_SIZE; h += NUM_THREADS) {
-        Tcompute acc = 0.0f;
-        for (int t = 0; t <= global_token_idx; ++t) {
-             const int32_t b_idx = t / block_size;
-             const int32_t t_off = t % block_size;
-             const int32_t physical_block = block_table[b_idx];
-             
-             Tcompute prob = logits[t] * inv_sum;
-             
-             const Tdata *v_vec = v_cache_ + physical_block * kv_block_stride + kv_head_idx * kv_head_stride + t_off * HEAD_SIZE;
-             acc += prob * static_cast<Tcompute>(v_vec[h]);
-        }
-        out_ptr[h] = static_cast<Tdata>(acc);
+        sum_exp += expf(score - max_score);
     }
+
+    // --- Pass 3: Calculate Weighted Sum (V) ---
+    Tcompute acc = 0.0f;
+    Tcompute inv_sum = 1.0f / (sum_exp + 1e-6f);
+
+    for (int t = 0; t < total_seq_len; ++t) {
+        if (t > global_token_idx) break;
+
+        const int32_t b_idx = t / block_size;
+        const int32_t t_off = t % block_size;
+        const int32_t physical_block = block_table[b_idx];
+
+        // Re-compute Score
+        const Tdata *k_vec = k_cache_ + physical_block * kv_block_stride + 
+                             kv_head_idx * kv_head_stride + t_off * head_size_const;
+        Tcompute score = 0.0f;
+        for (int d = 0; d < head_size_const; ++d) {
+            score += static_cast<Tcompute>(q_ptr_base[d]) * static_cast<Tcompute>(k_vec[d]);
+        }
+        score *= scale;
+        if (alibi_slope != 0.0f) score += alibi_slope * (t - total_seq_len + 1);
+
+        Tcompute prob = expf(score - max_score) * inv_sum;
+
+        const Tdata *v_vec = v_cache_ + physical_block * kv_block_stride + 
+                             kv_head_idx * kv_head_stride + t_off * head_size_const;
+        
+        acc += prob * static_cast<Tcompute>(v_vec[dim_idx]);
+    }
+
+    out_ptr[dim_idx] = static_cast<Tdata>(acc);
 }
 
 } // namespace op::paged_attention_prefill::cuda
