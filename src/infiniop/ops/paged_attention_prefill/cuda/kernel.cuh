@@ -62,30 +62,32 @@ __global__ void pagedAttentionPrefillKernel(
 
     const int32_t *block_table = block_tables_ + seq_idx * max_num_blocks_per_seq;
     
-    // Q ptr: [seq, new_len, head, dim]
+    // 假设 q_stride 传入的是单个 Sequence 在内存中占据的 Tdata 数量 (即 max_new_len * num_heads * head_size)
     const Tdata *q_ptr_base = q_ + seq_idx * q_stride + 
-                              (q_token_idx * num_heads + head_idx) * head_size_const;
+                            q_token_idx * (num_heads * head_size_const) + 
+                            head_idx * head_size_const;
     
-    // Out ptr
+    // --- 2. 修改 Out 的基地址计算 ---
     Tdata *out_ptr = out_ + seq_idx * o_stride + 
-                     (q_token_idx * num_heads + head_idx) * head_size_const;
+                    q_token_idx * (num_heads * head_size_const) + 
+                    head_idx * head_size_const;
 
     const float alibi_slope = (alibi_slopes_ == nullptr) ? 0.0f : alibi_slopes_[head_idx];
 
-    // 只让第一个 Sequence, 第一个 Token, 第一个 Head 的第一个线程执行打印
-    if (seq_idx == 0 && q_token_idx == 0 && head_idx == 0 && dim_idx == 0) {
-        printf("DEBUG: Scale=%f, HeadSize=%zu, BlockSize=%zu\n", scale, head_size_const, block_size);
+    // // 只让第一个 Sequence, 第一个 Token, 第一个 Head 的第一个线程执行打印
+    // if (seq_idx == 0 && q_token_idx == 0 && head_idx == 0 && dim_idx == 0) {
+    //     printf("DEBUG: Scale=%f, HeadSize=%zu, BlockSize=%zu\n", scale, head_size_const, block_size);
         
-        // 检查 Q 的前 5 个元素
-        for(int i=0; i<5; ++i) printf("Q[%d]=%f ", i, (float)q_ptr_base[i]);
-        printf("\n");
+    //     // 检查 Q 的前 5 个元素
+    //     for(int i=0; i<5; ++i) printf("Q[%d]=%f ", i, (float)q_ptr_base[i]);
+    //     printf("\n");
 
-        // 检查第一个 KV Block 的前 5 个元素
-        const int32_t first_physical_block = block_table[0];
-        const Tdata *first_k = k_cache_ + first_physical_block * kv_block_stride;
-        for(int i=0; i<5; ++i) printf("K_cache[0][%d]=%f ", i, (float)first_k[i]);
-        printf("\n");
-    }
+    //     // 检查第一个 KV Block 的前 5 个元素
+    //     const int32_t first_physical_block = block_table[0];
+    //     const Tdata *first_k = k_cache_ + first_physical_block * kv_block_stride;
+    //     for(int i=0; i<5; ++i) printf("K_cache[0][%d]=%f ", i, (float)first_k[i]);
+    //     printf("\n");
+    // }
 
     // --- Pass 1: Find Global Max ---
     Tcompute max_score = -FLT_MAX;

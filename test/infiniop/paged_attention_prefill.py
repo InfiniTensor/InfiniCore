@@ -119,7 +119,7 @@ def test(
         print(f"--- Round {r+1} ---")
         
         # 1. 模拟调度与物理写入
-        new_lens_torch = torch.randint(max_step_len, max_step_len + 1, (num_seqs,), dtype=torch.int32)
+        new_lens_torch = torch.randint(1, max_step_len + 1, (num_seqs,), dtype=torch.int32)
         total_lens_list = []
         all_block_tables = []
         
@@ -138,9 +138,9 @@ def test(
             v_new = torch.randn(cur_new_len, num_kv_heads, head_size)
             q_val = torch.randn(cur_new_len, num_heads, head_size)
 
-            k_new = torch.ones_like(k_new)
-            v_new = torch.ones_like(v_new)
-            q_val = torch.ones_like(q_val)
+            # k_new = torch.ones_like(k_new)
+            # v_new = torch.ones_like(v_new)
+            # q_val = torch.ones_like(q_val)
 
             q_new_torch[i, :cur_new_len, :, :] = q_val
             
@@ -155,9 +155,14 @@ def test(
         k_cache._data_tensor.copy_(k_cache._torch_tensor)
         v_cache._data_tensor.copy_(v_cache._torch_tensor)
 
-        # 2. 准备算子 Tensor
+        # 2. 准备 Q Tensor
         q_new = TestTensor.from_torch(q_new_torch, dtype, device)
+
+        # 3. 准备 out Tensor，确保初始值为 0
         out = TestTensor((num_seqs, max_new_len, num_heads, head_size), None, dtype, device)
+        out.torch_tensor().zero_() 
+        out._data_tensor.zero_()
+
         seq_lens = TestTensor.from_torch(torch.tensor(total_lens_list, dtype=torch.int32), InfiniDtype.I32, device)
         
         max_blocks = max(len(t) for t in all_block_tables)
@@ -224,19 +229,8 @@ def test(
         # 5. 验证
         # ======================================================================
 
-        print(f"[debug] ans: {ans[:, 0, 0, :5]}")
-        print(f"[debug] out: {out.actual_tensor()[:, 0, 0, :5]}")
-
-        diff = ans - out.actual_tensor()
-        print(f"[debug] diff-shape: {diff.shape}")
-        print(f"[debug] diff: {diff}")
-
-        print(f"[debug] max ans: {torch.max(ans)}")
-        print(f"[debug] min ans: {torch.min(ans)}")
-
-        print(f"[debug] max out.actual_tensor(): {torch.max(out.actual_tensor())}")
-        print(f"[debug] min out.actual_tensor(): {torch.min(out.actual_tensor())}")
-
+        # print(f"[debug] ans: {ans[:, 0, 0, :5]}")
+        # print(f"[debug] out: {out.actual_tensor()[:, 0, 0, :5]}")
 
         atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
         # compare out.actual_tensor() with reference result ans
@@ -251,9 +245,10 @@ def test(
 # ==============================================================================
 _TEST_CASES_ = [
     # (num_seqs, num_heads, num_kv_heads, head_size, block_size, max_step_len)
-    # (2, 8, 8, 128, 16, 32),
-    # (4, 16, 16, 64, 8, 64),
-    (2, 1, 1, 128, 8, 16),
+    (2, 8, 8, 128, 16, 32),
+    (4, 16, 16, 128, 8, 64),
+    (16, 1, 1, 128, 8, 16),
+    (1, 1, 1, 128, 8, 16),
 ]
 
 _TENSOR_DTYPES = [InfiniDtype.F32]
