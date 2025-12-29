@@ -3,8 +3,8 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import torch
 import infinicore
+import torch
 from framework import (
     BaseOperatorTest,
     TensorSpec,
@@ -55,6 +55,7 @@ def parse_test_cases():
                     comparison_target=None,
                     tolerance=tol,
                     description=f"topk - OUT_OF_PLACE",
+                    output_count=2,
                 )
             )
 
@@ -75,6 +76,11 @@ class OpTest(BaseOperatorTest):
         return parse_test_cases()
 
     def torch_operator(self, *args, **kwargs):
+        print("args = ", args)
+        a, b = torch.topk(*args, **kwargs)
+        print("torch returned:")
+        print("values = ", a)
+        print("indices = ", b)
         return torch.topk(*args, **kwargs)
 
     def infinicore_operator(self, *args, **kwargs):

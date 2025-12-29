@@ -164,7 +164,8 @@ namespace op::topk::nvidia {
         const size_t* final_idx = sel_idx;
     
         if (sorted) {
-            if(k > BLOCK_SIZE * SORT_ITEMS_PER_THREAD)SORT_ITEMS_PER_THREAD = (k + BLOCK_SIZE - 1) / BLOCK_SIZE;
+            // if(k > BLOCK_SIZE * SORT_ITEMS_PER_THREAD)SORT_ITEMS_PER_THREAD = (k + BLOCK_SIZE - 1) / BLOCK_SIZE;
+            if(k > BLOCK_SIZE * SORT_ITEMS_PER_THREAD) return INFINI_STATUS_BAD_PARAM;
             op::topk::cuda::sort_sel_rowwise<BLOCK_SIZE, SORT_ITEMS_PER_THREAD, Tdata><<<n_iteration, BLOCK_SIZE, 0, stream>>>(
                 sel_vals, sel_idx,
                 sel_sorted_vals, sel_sorted_idx,
