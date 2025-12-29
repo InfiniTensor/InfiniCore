@@ -24,10 +24,10 @@ __C infiniStatus_t infiniopCreatePagedAttentionPrefillDescriptor(
 
     infiniopTensorDescriptor_t alibi_opt = (alibi_slopes_desc == nullptr) ? nullptr : alibi_slopes_desc;
 
-#define CREATE(CASE, NAMESPACE)                                                            \
-    case CASE:                                                                             \
-        return op::paged_attention_prefill::NAMESPACE::Descriptor::create(                 \
-            handle,                                                                        \
+#define CREATE(CASE, NAMESPACE)                                                                \
+    case CASE:                                                                                 \
+        return op::paged_attention_prefill::NAMESPACE::Descriptor::create(                     \
+            handle,                                                                            \
             reinterpret_cast<op::paged_attention_prefill::NAMESPACE::Descriptor **>(desc_ptr), \
             out_desc, q_desc, k_cache_desc, v_cache_desc, block_tables_desc, seq_lens_desc, new_lens_desc, alibi_opt, scale);
 
@@ -43,8 +43,8 @@ __C infiniStatus_t infiniopGetPagedAttentionPrefillWorkspaceSize(
     infiniopPagedAttentionPrefillDescriptor_t desc,
     size_t *size) {
 
-#define GET(CASE, NAMESPACE)                                                                           \
-    case CASE:                                                                                         \
+#define GET(CASE, NAMESPACE)                                                                                   \
+    case CASE:                                                                                                 \
         *size = reinterpret_cast<op::paged_attention_prefill::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
         return INFINI_STATUS_SUCCESS;
 
@@ -60,14 +60,14 @@ __C infiniStatus_t infiniopPagedAttentionPrefill(
     infiniopPagedAttentionPrefillDescriptor_t desc,
     void *workspace, size_t workspace_size,
     void *out, const void *q, const void *k_cache, const void *v_cache,
-    const void *block_tables, const void *seq_lens, const void *new_lens, 
+    const void *block_tables, const void *seq_lens, const void *new_lens,
     const void *alibi_slopes,
     void *stream) {
 
-#define CALCULATE(CASE, NAMESPACE)                                                              \
-    case CASE:                                                                                  \
+#define CALCULATE(CASE, NAMESPACE)                                                                      \
+    case CASE:                                                                                          \
         return reinterpret_cast<op::paged_attention_prefill::NAMESPACE::Descriptor *>(desc)->calculate( \
-            workspace, workspace_size, out, q, k_cache, v_cache, block_tables,                  \
+            workspace, workspace_size, out, q, k_cache, v_cache, block_tables,                          \
             seq_lens, new_lens, alibi_slopes, stream);
 
     switch (desc->device_type) {

@@ -49,14 +49,11 @@ public:
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
 
-        if (q_desc->ndim() < 3 || k_cache_desc->ndim() < 4 || v_cache_desc->ndim() < 4 || 
-            block_tables_desc->ndim() != 2 || seq_lens_desc->ndim() != 1 || new_lens_desc->ndim() != 1) {
+        if (q_desc->ndim() < 3 || k_cache_desc->ndim() < 4 || v_cache_desc->ndim() < 4 || block_tables_desc->ndim() != 2 || seq_lens_desc->ndim() != 1 || new_lens_desc->ndim() != 1) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
 
-        if (block_tables_desc->dtype() != INFINI_DTYPE_I32 || 
-            seq_lens_desc->dtype() != INFINI_DTYPE_I32 || 
-            new_lens_desc->dtype() != INFINI_DTYPE_I32) {
+        if (block_tables_desc->dtype() != INFINI_DTYPE_I32 || seq_lens_desc->dtype() != INFINI_DTYPE_I32 || new_lens_desc->dtype() != INFINI_DTYPE_I32) {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
 
@@ -66,7 +63,7 @@ public:
         auto k_cache_shape = k_cache_desc->shape();
 
         size_t num_seqs = q_shape[0];
-        size_t max_new_len = q_shape[1]; 
+        size_t max_new_len = q_shape[1];
         size_t num_heads = q_shape[2];
         size_t head_size = q_shape[3];
 

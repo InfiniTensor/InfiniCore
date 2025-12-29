@@ -44,6 +44,7 @@ PROFILE = False
 NUM_PRERUN = 5
 NUM_ITERATIONS = 10
 
+
 # ==============================================================================
 # Helper Classes & Reference Implementation
 # ==============================================================================
@@ -59,17 +60,18 @@ class SimpleCacheManager:
         if request_id not in self.request_to_len:
             self.request_to_len[request_id] = 0
             self.request_to_blocks[request_id] = []
-        
+
         start_pos = self.request_to_len[request_id]
         new_total_len = start_pos + num_new_tokens
         needed_blocks = (new_total_len + self.block_size - 1) // self.block_size
         added_blocks = needed_blocks - len(self.request_to_blocks[request_id])
-        
+
         for _ in range(added_blocks):
             self.request_to_blocks[request_id].append(self.free_blocks.pop(0))
-            
+
         self.request_to_len[request_id] = new_total_len
         return self.request_to_blocks[request_id], new_total_len
+
 
 def ref_paged_attention_multi_turn(
     query_new, k_cache, v_cache, block_tables, seq_lens, new_lens, scale
@@ -78,13 +80,13 @@ def ref_paged_attention_multi_turn(
     num_heads = query_new.shape[2]
     head_size = k_cache.shape[3]
     block_size = k_cache.shape[2]
-    
+
     outputs = []
     for i in range(batch_size):
         total_len = seq_lens[i].item()
         num_new = new_lens[i].item()
         history_len = total_len - num_new
-        
+
         table = block_tables[i]
         keys_all, values_all = [], []
         for j in range(total_len):
@@ -92,26 +94,29 @@ def ref_paged_attention_multi_turn(
             off = j % block_size
             keys_all.append(k_cache[b_id, :, off, :])
             values_all.append(v_cache[b_id, :, off, :])
-        
-        K = torch.stack(keys_all, dim=0) 
+
+        K = torch.stack(keys_all, dim=0)
         V = torch.stack(values_all, dim=0)
-        Q = query_new[i, :num_new, :, :] 
+        Q = query_new[i, :num_new, :, :]
 
         scores = torch.einsum("qhd,khd->hqk", Q, K).float() * scale
-        
+
         mask = torch.full((num_new, total_len), float("-inf"), device=Q.device)
         for q_idx in range(num_new):
             mask[q_idx, : history_len + q_idx + 1] = 0.0
-        
+
         scores = scores + mask.unsqueeze(0)
         attn_weights = torch.softmax(scores, dim=-1).to(Q.dtype)
         out = torch.einsum("hqk,khd->qhd", attn_weights, V)
-        
-        padded_out = torch.zeros(query_new.shape[1], num_heads, head_size, device=Q.device, dtype=Q.dtype)
+
+        padded_out = torch.zeros(
+            query_new.shape[1], num_heads, head_size, device=Q.device, dtype=Q.dtype
+        )
         padded_out[:num_new, :, :] = out
         outputs.append(padded_out)
-        
+
     return torch.stack(outputs, dim=0)
+
 
 # ==============================================================================
 # Test Operator Implementation
@@ -139,16 +144,22 @@ def test(
     num_blocks = 8192
     manager = SimpleCacheManager(num_blocks, block_size)
     scale = head_size**-0.5
-    
-    k_cache = TestTensor((num_blocks, num_kv_heads, block_size, head_size), None, dtype, device)
-    v_cache = TestTensor((num_blocks, num_kv_heads, block_size, head_size), None, dtype, device)
+
+    k_cache = TestTensor(
+        (num_blocks, num_kv_heads, block_size, head_size), None, dtype, device
+    )
+    v_cache = TestTensor(
+        (num_blocks, num_kv_heads, block_size, head_size), None, dtype, device
+    )
 
     # Multi-turn testing loop
     for r in range(num_rounds):
         # Prepare dynamic inputs for this round
-        new_lens_cpu = torch.randint(1, max_step_len + 1, (num_seqs,), dtype=torch.int32)
+        new_lens_cpu = torch.randint(
+            1, max_step_len + 1, (num_seqs,), dtype=torch.int32
+        )
         max_new_len = new_lens_cpu.max().item()
-        
+
         total_lens_list = []
         all_block_tables = []
         q_new_torch = torch.zeros(num_seqs, max_new_len, num_heads, head_size)
@@ -158,13 +169,13 @@ def test(
             table, total_len = manager.allocate_slots(i, cur_new_len)
             total_lens_list.append(total_len)
             all_block_tables.append(table)
-            
+
             # Simulated KV insertion
             k_new = torch.randn(cur_new_len, num_kv_heads, head_size)
             v_new = torch.randn(cur_new_len, num_kv_heads, head_size)
             q_val = torch.randn(cur_new_len, num_heads, head_size)
             q_new_torch[i, :cur_new_len, :, :] = q_val
-            
+
             history_len = total_len - cur_new_len
             for t in range(cur_new_len):
                 logical_pos = history_len + t
@@ -178,60 +189,79 @@ def test(
 
         # 2. Wrap tensors for Infiniop
         q_new = TestTensor.from_torch(q_new_torch, dtype, device)
-        out = TestTensor((num_seqs, max_new_len, num_heads, head_size), None, dtype, device)
+        out = TestTensor(
+            (num_seqs, max_new_len, num_heads, head_size), None, dtype, device
+        )
         out.actual_tensor().zero_()
-        
-        seq_lens = TestTensor.from_torch(torch.tensor(total_lens_list, dtype=torch.int32), InfiniDtype.I32, device)
+
+        seq_lens = TestTensor.from_torch(
+            torch.tensor(total_lens_list, dtype=torch.int32), InfiniDtype.I32, device
+        )
         new_lens = TestTensor.from_torch(new_lens_cpu, InfiniDtype.I32, device)
-        
+
         max_blocks = max(len(t) for t in all_block_tables)
-        padded_tables = [t + [0]*(max_blocks - len(t)) for t in all_block_tables]
-        block_tables = TestTensor.from_torch(torch.tensor(padded_tables, dtype=torch.int32), InfiniDtype.I32, device)
+        padded_tables = [t + [0] * (max_blocks - len(t)) for t in all_block_tables]
+        block_tables = TestTensor.from_torch(
+            torch.tensor(padded_tables, dtype=torch.int32), InfiniDtype.I32, device
+        )
 
         # 3. Reference Calculation
         def torch_paged_attention_multi_turn():
             return ref_paged_attention_multi_turn(
-                q_new.torch_tensor(), k_cache.torch_tensor(), v_cache.torch_tensor(),
-                block_tables.torch_tensor(), seq_lens.torch_tensor(), new_lens_cpu, scale
+                q_new.torch_tensor(),
+                k_cache.torch_tensor(),
+                v_cache.torch_tensor(),
+                block_tables.torch_tensor(),
+                seq_lens.torch_tensor(),
+                new_lens_cpu,
+                scale,
             )
 
         ans = torch_paged_attention_multi_turn()
 
         # 4. Infiniop Operator Execution
         descriptor = infiniopOperatorDescriptor_t()
-        check_error(LIBINFINIOP.infiniopCreatePagedAttentionPrefillDescriptor(
-            handle, 
-            ctypes.byref(descriptor),
-            out.descriptor, 
-            q_new.descriptor,
-            k_cache.descriptor, 
-            v_cache.descriptor,
-            block_tables.descriptor, 
-            seq_lens.descriptor,
-            new_lens.descriptor,
-            None, # alibi_slopes_desc
-            scale
-        ))
+        check_error(
+            LIBINFINIOP.infiniopCreatePagedAttentionPrefillDescriptor(
+                handle,
+                ctypes.byref(descriptor),
+                out.descriptor,
+                q_new.descriptor,
+                k_cache.descriptor,
+                v_cache.descriptor,
+                block_tables.descriptor,
+                seq_lens.descriptor,
+                new_lens.descriptor,
+                None,  # alibi_slopes_desc
+                scale,
+            )
+        )
 
         workspace_size = c_uint64(0)
-        check_error(LIBINFINIOP.infiniopGetPagedAttentionPrefillWorkspaceSize(descriptor, ctypes.byref(workspace_size)))
+        check_error(
+            LIBINFINIOP.infiniopGetPagedAttentionPrefillWorkspaceSize(
+                descriptor, ctypes.byref(workspace_size)
+            )
+        )
         workspace = TestWorkspace(workspace_size.value, device)
 
         def lib_attn():
-            check_error(LIBINFINIOP.infiniopPagedAttentionPrefill(
-                descriptor, 
-                workspace.data(), 
-                workspace_size.value,
-                out.data(), 
-                q_new.data(),
-                k_cache.data(), 
-                v_cache.data(),
-                block_tables.data(), 
-                seq_lens.data(),
-                new_lens.data(),
-                None, # alibi_slopes
-                None  # stream
-            ))
+            check_error(
+                LIBINFINIOP.infiniopPagedAttentionPrefill(
+                    descriptor,
+                    workspace.data(),
+                    workspace_size.value,
+                    out.data(),
+                    q_new.data(),
+                    k_cache.data(),
+                    v_cache.data(),
+                    block_tables.data(),
+                    seq_lens.data(),
+                    new_lens.data(),
+                    None,  # alibi_slopes
+                    None,  # stream
+                )
+            )
 
         lib_attn()
         if sync:
@@ -241,15 +271,26 @@ def test(
         atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
         if DEBUG:
             debug(out.actual_tensor(), ans, atol=atol, rtol=rtol)
-        
+
         assert torch.allclose(out.actual_tensor(), ans, atol=atol, rtol=rtol)
 
         # Profiling
         if PROFILE:
-            profile_operation(f"Torch_R{r}", lambda: torch_paged_attention_multi_turn(), device, NUM_PRERUN, NUM_ITERATIONS)
-            profile_operation(f"  Lib_R{r}", lambda: lib_attn(), device, NUM_PRERUN, NUM_ITERATIONS)
+            profile_operation(
+                f"Torch_R{r}",
+                lambda: torch_paged_attention_multi_turn(),
+                device,
+                NUM_PRERUN,
+                NUM_ITERATIONS,
+            )
+            profile_operation(
+                f"  Lib_R{r}", lambda: lib_attn(), device, NUM_PRERUN, NUM_ITERATIONS
+            )
 
-        check_error(LIBINFINIOP.infiniopDestroyPagedAttentionPrefillDescriptor(descriptor))
+        check_error(
+            LIBINFINIOP.infiniopDestroyPagedAttentionPrefillDescriptor(descriptor)
+        )
+
 
 # ==============================================================================
 # Main Execution
