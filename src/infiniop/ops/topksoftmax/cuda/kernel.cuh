@@ -19,6 +19,15 @@ inline __device__ float exp_func(T x) {
     return __expf(data);
 }
 
+// Warp-level sum reduction for Hygon platform
+template <int warp_threads>
+__inline__ __device__ float WarpSum(float val) {
+    for (int mask = warp_threads / 2; mask > 0; mask /= 2) {
+        val += __shfl_xor_sync(0xffffffff, val, mask);
+    }
+    return val;
+}
+
 template <typename T, int BLOCK_SIZE = 128>
 __global__ void softmax_topk_row_kernel(float *values_topk, // 输出数据, 形状[N, topk]
                                         int *indices_topk,  // 输出索引, 形状[N, topk]
@@ -57,6 +66,9 @@ __global__ void softmax_topk_row_kernel(float *values_topk, // 输出数据, 形
         __shared__ typename BlockReduce::TempStorage temp_storage_max;
 #if CUDART_VERSION >= 12090
         T value_max = BlockReduce(temp_storage_max).Reduce(thread_max, ::cuda::maximum());
+#elif defined(ENABLE_HYGON_API)
+        T value_max = BlockReduce(temp_storage_max).Reduce(
+            thread_max, [](const T &a, const T &b) { return (a > b) ? a : b; }, BLOCK_SIZE);
 #else
         T value_max = BlockReduce(temp_storage_max).Reduce(thread_max, cub::Max());
 #endif
@@ -117,12 +129,19 @@ __global__ void softmax_topk_row_kernel(float *values_topk, // 输出数据, 形
         //           第五步： topk的和                         //
         // ------------------------------------------------ //
         {
+#ifdef ENABLE_HYGON_API
+            float warp_sum = WarpSum<32>(value);
+            if (0 == tid) {
+                shared_sum = warp_sum + 1e-9f;
+            }
+#else
             typedef cub::WarpReduce<float, 32> WarpReduce;
             __shared__ typename WarpReduce::TempStorage temp_storage;
             float warp_sum = WarpReduce(temp_storage).Sum(value);
             if (0 == tid) {
                 shared_sum = warp_sum + 1e-9f;
             }
+#endif
         }
         __syncwarp();
 
