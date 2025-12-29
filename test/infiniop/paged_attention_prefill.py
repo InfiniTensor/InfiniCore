@@ -19,7 +19,33 @@ from libinfiniop import (
 )
 
 # ==============================================================================
-# 模拟上层调度器 (与 PagedCaching 逻辑一致)
+# Configuration (Internal Use Only)
+# ==============================================================================
+_TEST_CASES = [
+    # num_seqs, num_heads, num_kv_heads, head_size, block_size, max_step_len, num_rounds
+    (1, 1, 1, 128, 8, 16, 1),
+    (1, 4, 4, 128, 8, 16, 4),
+    (2, 8, 8, 128, 16, 32, 2),
+    (4, 16, 16, 128, 8, 64, 3),
+    (8, 64, 64, 128, 8, 16, 5),
+    (16, 128, 128, 128, 8, 16, 4),
+]
+
+_TENSOR_DTYPES = [InfiniDtype.F32, InfiniDtype.BF16, InfiniDtype.F16]
+
+_TOLERANCE_MAP = {
+    InfiniDtype.F32: {"atol": 1e-5, "rtol": 1e-5},
+    InfiniDtype.F16: {"atol": 1e-2, "rtol": 1e-2},
+    InfiniDtype.BF16: {"atol": 2e-2, "rtol": 2e-2},
+}
+
+DEBUG = False
+PROFILE = False
+NUM_PRERUN = 5
+NUM_ITERATIONS = 10
+
+# ==============================================================================
+# Helper Classes & Reference Implementation
 # ==============================================================================
 class SimpleCacheManager:
     def __init__(self, num_blocks, block_size):
@@ -45,9 +71,6 @@ class SimpleCacheManager:
         self.request_to_len[request_id] = new_total_len
         return self.request_to_blocks[request_id], new_total_len
 
-# ==============================================================================
-# Reference 实现: 严格基于有效长度计算
-# ==============================================================================
 def ref_paged_attention_multi_turn(
     query_new, k_cache, v_cache, block_tables, seq_lens, new_lens, scale
 ):
@@ -59,10 +82,9 @@ def ref_paged_attention_multi_turn(
     outputs = []
     for i in range(batch_size):
         total_len = seq_lens[i].item()
-        num_new = new_lens[i].item() # 仅取本轮新增的部分
+        num_new = new_lens[i].item()
         history_len = total_len - num_new
         
-        # 1. 提取全量有效 KV
         table = block_tables[i]
         keys_all, values_all = [], []
         for j in range(total_len):
@@ -73,23 +95,18 @@ def ref_paged_attention_multi_turn(
         
         K = torch.stack(keys_all, dim=0) 
         V = torch.stack(values_all, dim=0)
-        # 2. 仅提取有效的 Q (去除 Padding 影响)
         Q = query_new[i, :num_new, :, :] 
 
-        # 3. 计算 Attention
         scores = torch.einsum("qhd,khd->hqk", Q, K).float() * scale
         
-        # 4. 因果掩码 (Causal Mask)
         mask = torch.full((num_new, total_len), float("-inf"), device=Q.device)
         for q_idx in range(num_new):
             mask[q_idx, : history_len + q_idx + 1] = 0.0
         
         scores = scores + mask.unsqueeze(0)
         attn_weights = torch.softmax(scores, dim=-1).to(Q.dtype)
-        
         out = torch.einsum("hqk,khd->qhd", attn_weights, V)
         
-        # 为了与输出张量对齐，如果 Q 被 Padding 了，这里也补回 0
         padded_out = torch.zeros(query_new.shape[1], num_heads, head_size, device=Q.device, dtype=Q.dtype)
         padded_out[:num_new, :, :] = out
         outputs.append(padded_out)
@@ -97,50 +114,55 @@ def ref_paged_attention_multi_turn(
     return torch.stack(outputs, dim=0)
 
 # ==============================================================================
-# Test Operator 实现
+# Test Operator Implementation
 # ==============================================================================
 def test(
-    handle, device, num_seqs, num_heads, num_kv_heads, head_size, 
-    block_size, max_step_len, dtype=InfiniDtype.F16, sync=None,
+    handle,
+    device,
+    num_seqs,
+    num_heads,
+    num_kv_heads,
+    head_size,
+    block_size,
+    max_step_len,
+    num_rounds,
+    dtype=InfiniDtype.F16,
+    sync=None,
 ):
-    print(f"Testing Multi-turn PagedAttention | num_seqs={num_seqs}, dtype={InfiniDtypeNames[dtype]}")
+    print(
+        f"Testing PagedAttentionPrefill on {InfiniDeviceNames[device]} with "
+        f"seqs:{num_seqs}, heads:{num_heads}, head_size:{head_size}, "
+        f"block:{block_size}, max_step_len:{max_step_len}, num_rounds:{num_rounds}, dtype:{InfiniDtypeNames[dtype]}"
+    )
 
+    # 1. Initialize persistent resources
     num_blocks = 8192
     manager = SimpleCacheManager(num_blocks, block_size)
-    scale = head_size ** -0.5
+    scale = head_size**-0.5
     
-    # 初始化持久化物理缓存 (模拟显存池)
     k_cache = TestTensor((num_blocks, num_kv_heads, block_size, head_size), None, dtype, device)
     v_cache = TestTensor((num_blocks, num_kv_heads, block_size, head_size), None, dtype, device)
-    
-    num_rounds = 2
+
+    # Multi-turn testing loop
     for r in range(num_rounds):
-        print(f"--- Round {r+1} ---")
+        # Prepare dynamic inputs for this round
+        new_lens_cpu = torch.randint(1, max_step_len + 1, (num_seqs,), dtype=torch.int32)
+        max_new_len = new_lens_cpu.max().item()
         
-        # 1. 模拟调度与物理写入
-        new_lens_torch = torch.randint(1, max_step_len + 1, (num_seqs,), dtype=torch.int32)
         total_lens_list = []
         all_block_tables = []
-        
-        # 准备本轮输入的 Q (带 Padding 形状以配合 C 接口)
-        max_new_len = new_lens_torch.max().item()
         q_new_torch = torch.zeros(num_seqs, max_new_len, num_heads, head_size)
-        
+
         for i in range(num_seqs):
-            cur_new_len = new_lens_torch[i].item()
+            cur_new_len = new_lens_cpu[i].item()
             table, total_len = manager.allocate_slots(i, cur_new_len)
             total_lens_list.append(total_len)
             all_block_tables.append(table)
             
-            # 生成新 KV 并写入持久化物理缓存 (模拟 PagedCaching 行为)
+            # Simulated KV insertion
             k_new = torch.randn(cur_new_len, num_kv_heads, head_size)
             v_new = torch.randn(cur_new_len, num_kv_heads, head_size)
             q_val = torch.randn(cur_new_len, num_heads, head_size)
-
-            # k_new = torch.ones_like(k_new)
-            # v_new = torch.ones_like(v_new)
-            # q_val = torch.ones_like(q_val)
-
             q_new_torch[i, :cur_new_len, :, :] = q_val
             
             history_len = total_len - cur_new_len
@@ -154,36 +176,29 @@ def test(
         k_cache.actual_tensor().copy_(k_cache._torch_tensor)
         v_cache.actual_tensor().copy_(v_cache._torch_tensor)
 
-        # 2. 准备 Q Tensor
+        # 2. Wrap tensors for Infiniop
         q_new = TestTensor.from_torch(q_new_torch, dtype, device)
-
-        # 3. 准备 out Tensor，并确保初始值为 0
         out = TestTensor((num_seqs, max_new_len, num_heads, head_size), None, dtype, device)
-        out.torch_tensor().zero_() 
         out.actual_tensor().zero_()
-
+        
         seq_lens = TestTensor.from_torch(torch.tensor(total_lens_list, dtype=torch.int32), InfiniDtype.I32, device)
+        new_lens = TestTensor.from_torch(new_lens_cpu, InfiniDtype.I32, device)
         
         max_blocks = max(len(t) for t in all_block_tables)
         padded_tables = [t + [0]*(max_blocks - len(t)) for t in all_block_tables]
         block_tables = TestTensor.from_torch(torch.tensor(padded_tables, dtype=torch.int32), InfiniDtype.I32, device)
 
-        # 3. Reference 计算
-        ans = ref_paged_attention_multi_turn(
-            q_new.torch_tensor(), k_cache.torch_tensor(), v_cache.torch_tensor(),
-            block_tables.torch_tensor(), seq_lens.torch_tensor(), new_lens_torch, scale
-        )
+        # 3. Reference Calculation
+        def torch_paged_attention_multi_turn():
+            return ref_paged_attention_multi_turn(
+                q_new.torch_tensor(), k_cache.torch_tensor(), v_cache.torch_tensor(),
+                block_tables.torch_tensor(), seq_lens.torch_tensor(), new_lens_cpu, scale
+            )
 
-        # ======================================================================
-        # 4. 执行算子 (完善后的 C++ 接口调用)
-        # ======================================================================
-        
-        # 将本轮新增长度 new_lens_torch 转换为 TestTensor 以便传递给 C++
-        new_lens = TestTensor.from_torch(new_lens_torch, InfiniDtype.I32, device)
+        ans = torch_paged_attention_multi_turn()
 
+        # 4. Infiniop Operator Execution
         descriptor = infiniopOperatorDescriptor_t()
-        
-        # 创建描述符：注意参数顺序，增加了 new_lens.descriptor
         check_error(LIBINFINIOP.infiniopCreatePagedAttentionPrefillDescriptor(
             handle, 
             ctypes.byref(descriptor),
@@ -193,71 +208,61 @@ def test(
             v_cache.descriptor,
             block_tables.descriptor, 
             seq_lens.descriptor,
-            new_lens.descriptor,    # <-- 对齐底层实现中的 new_lens_desc
-            None,                   # alibi_slopes_desc (传入空)
+            new_lens.descriptor,
+            None, # alibi_slopes_desc
             scale
         ))
 
-        # 获取并准备 Workspace
         workspace_size = c_uint64(0)
-        check_error(LIBINFINIOP.infiniopGetPagedAttentionPrefillWorkspaceSize(
-            descriptor, 
-            ctypes.byref(workspace_size)
-        ))
+        check_error(LIBINFINIOP.infiniopGetPagedAttentionPrefillWorkspaceSize(descriptor, ctypes.byref(workspace_size)))
         workspace = TestWorkspace(workspace_size.value, device)
 
-        # 执行 Prefill 计算：注意增加了 new_lens.data()
-        check_error(LIBINFINIOP.infiniopPagedAttentionPrefill(
-            descriptor, 
-            workspace.data(), 
-            workspace_size.value,
-            out.data(), 
-            q_new.data(),
-            k_cache.data(), 
-            v_cache.data(),
-            block_tables.data(), 
-            seq_lens.data(),
-            new_lens.data(),        # <-- 对齐底层实现中的 new_lens 指针
-            None,                   # alibi_slopes
-            None                    # stream (通常传入空，由内部自动获取当前流)
-        ))
+        def lib_attn():
+            check_error(LIBINFINIOP.infiniopPagedAttentionPrefill(
+                descriptor, 
+                workspace.data(), 
+                workspace_size.value,
+                out.data(), 
+                q_new.data(),
+                k_cache.data(), 
+                v_cache.data(),
+                block_tables.data(), 
+                seq_lens.data(),
+                new_lens.data(),
+                None, # alibi_slopes
+                None  # stream
+            ))
 
-        if sync: sync()
+        lib_attn()
+        if sync:
+            sync()
 
-        # ======================================================================
-        # 5. 验证
-        # ======================================================================
-
-        # print(f"[debug] ans: {ans[:, 0, 0, :5]}")
-        # print(f"[debug] out: {out.actual_tensor()[:, 0, 0, :5]}")
-
+        # 5. Validation
         atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
-        # compare out.actual_tensor() with reference result ans
-        assert torch.allclose(out.actual_tensor(), ans, atol=atol, rtol=rtol)
+        if DEBUG:
+            debug(out.actual_tensor(), ans, atol=atol, rtol=rtol)
         
-        # 清理
+        assert torch.allclose(out.actual_tensor(), ans, atol=atol, rtol=rtol)
+
+        # Profiling
+        if PROFILE:
+            profile_operation(f"Torch_R{r}", lambda: torch_paged_attention_multi_turn(), device, NUM_PRERUN, NUM_ITERATIONS)
+            profile_operation(f"  Lib_R{r}", lambda: lib_attn(), device, NUM_PRERUN, NUM_ITERATIONS)
+
         check_error(LIBINFINIOP.infiniopDestroyPagedAttentionPrefillDescriptor(descriptor))
-        print(f"Round {r+1} verified. Seq lens: {total_lens_list}")
 
 # ==============================================================================
-# 配置与启动
+# Main Execution
 # ==============================================================================
-_TEST_CASES_ = [
-    # (num_seqs, num_heads, num_kv_heads, head_size, block_size, max_step_len)
-    (2, 8, 8, 128, 16, 32),
-    (4, 16, 16, 128, 8, 64),
-    (16, 1, 1, 128, 8, 16),
-    (1, 1, 1, 128, 8, 16),
-]
-
-_TENSOR_DTYPES = [InfiniDtype.F32]
-
-_TOLERANCE_MAP = {
-    InfiniDtype.F32: {"atol": 1e-3, "rtol": 1e-2},
-}
-
 if __name__ == "__main__":
     args = get_args()
+
+    DEBUG = args.debug
+    PROFILE = args.profile
+    NUM_PRERUN = args.num_prerun
+    NUM_ITERATIONS = args.num_iterations
+
     for device in get_test_devices(args):
-        test_operator(device, test, _TEST_CASES_, _TENSOR_DTYPES)
-    print("\033[92mMulti-turn PagedAttention test passed!\033[0m")
+        test_operator(device, test, _TEST_CASES, _TENSOR_DTYPES)
+
+    print("\033[92mPagedAttention Prefill test passed!\033[0m")
