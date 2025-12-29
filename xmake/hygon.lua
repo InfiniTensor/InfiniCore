@@ -62,18 +62,13 @@ target("infiniop-hygon")
     add_cxflags("-fPIC")
 
     -- 添加海光DCU特定的编译标志
-    add_cuflags("-arch=gfx906", "-arch=gfx926", "-arch=gfx928", "-arch=gfx936")
+    -- 检测实际GPU架构，如果未指定则默认使用gfx906
+    local hygon_arch = os.getenv("HYGON_ARCH") or "gfx906"
+    add_cuflags("-arch=" .. hygon_arch)
+    print("编译海光DCU架构: " .. hygon_arch)
     
     -- 复用NVIDIA的CUDA实现，通过HIP兼容层
-    -- 只编译海光DCU支持的7个算子：rope, gemm, causal_softmax, random_sample, rearrange, rms_norm, swiglu
-    add_files("../src/infiniop/devices/nvidia/*.cu")
-    add_files("../src/infiniop/ops/rope/nvidia/*.cu")
-    add_files("../src/infiniop/ops/gemm/nvidia/*.cu")
-    add_files("../src/infiniop/ops/causal_softmax/nvidia/*.cu")
-    add_files("../src/infiniop/ops/random_sample/nvidia/*.cu")
-    add_files("../src/infiniop/ops/rearrange/nvidia/*.cu")
-    add_files("../src/infiniop/ops/rms_norm/nvidia/*.cu")
-    add_files("../src/infiniop/ops/swiglu/nvidia/*.cu")
+    add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")
 
     if has_config("ninetoothed") then
         add_files("../build/ninetoothed/*.c", {cxflags = {"-Wno-return-type"}})
@@ -107,7 +102,9 @@ target("infinirt-hygon")
     add_cxflags("-fPIC")
 
     -- 添加海光DCU特定的编译标志
-    add_cuflags("-arch=gfx906", "-arch=gfx926", "-arch=gfx928", "-arch=gfx936")
+    -- 检测实际GPU架构，如果未指定则默认使用gfx906
+    local hygon_arch = os.getenv("HYGON_ARCH") or "gfx906"
+    add_cuflags("-arch=" .. hygon_arch)
     
     add_files("../src/infinirt/cuda/*.cu")
 target_end()
@@ -140,7 +137,9 @@ target("infiniccl-hygon")
         add_cxflags("-fPIC")
 
         -- 添加海光DCU特定的编译标志
-        add_cuflags("-arch=gfx906", "-arch=gfx926", "-arch=gfx928", "-arch=gfx936")
+        -- 检测实际GPU架构，如果未指定则默认使用gfx906
+        local hygon_arch = os.getenv("HYGON_ARCH") or "gfx906"
+        add_cuflags("-arch=" .. hygon_arch)
 
         -- 使用NCCL (NVIDIA Collective Communications Library)
         add_links("nccl")

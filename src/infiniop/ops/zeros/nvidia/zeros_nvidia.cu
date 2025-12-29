@@ -79,8 +79,10 @@ infiniStatus_t Descriptor::calculate(
         return _device_info->calculate<256, cuda::ZerosOp, uint32_t>(_info, workspace, output, inputs, stream);
     case INFINI_DTYPE_U64: // 10
         return _device_info->calculate<256, cuda::ZerosOp, uint64_t>(_info, workspace, output, inputs, stream);
+#ifndef ENABLE_HYGON_API
     case INFINI_DTYPE_F8: // 11
         return _device_info->calculate<256, cuda::ZerosOp, cuda_fp8_e4m3>(_info, workspace, output, inputs, stream);
+#endif
     case INFINI_DTYPE_F16: // 12
         return _device_info->calculate<256, cuda::ZerosOp, half>(_info, workspace, output, inputs, stream);
     case INFINI_DTYPE_F32: // 13

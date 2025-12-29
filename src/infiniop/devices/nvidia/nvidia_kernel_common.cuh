@@ -9,7 +9,9 @@
 
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
+#ifndef ENABLE_HYGON_API
 #include <cuda_fp8.h>
+#endif
 
 // Posible maximum number of threads per block for CUDA architectures
 // Used for picking correct kernel launch configuration
