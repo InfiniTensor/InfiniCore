@@ -1,7 +1,6 @@
 import torch
 import ctypes
 from ctypes import c_uint64
-import math
 from libinfiniop import (
     LIBINFINIOP,
     TestTensor,
@@ -152,16 +151,16 @@ def test(
                 k_cache.torch_tensor()[b_id, :, off, :] = k_new[t]
                 v_cache.torch_tensor()[b_id, :, off, :] = v_new[t]
 
-        k_cache._data_tensor.copy_(k_cache._torch_tensor)
-        v_cache._data_tensor.copy_(v_cache._torch_tensor)
+        k_cache.actual_tensor().copy_(k_cache._torch_tensor)
+        v_cache.actual_tensor().copy_(v_cache._torch_tensor)
 
         # 2. 准备 Q Tensor
         q_new = TestTensor.from_torch(q_new_torch, dtype, device)
 
-        # 3. 准备 out Tensor，确保初始值为 0
+        # 3. 准备 out Tensor，并确保初始值为 0
         out = TestTensor((num_seqs, max_new_len, num_heads, head_size), None, dtype, device)
         out.torch_tensor().zero_() 
-        out._data_tensor.zero_()
+        out.actual_tensor().zero_()
 
         seq_lens = TestTensor.from_torch(torch.tensor(total_lens_list, dtype=torch.int32), InfiniDtype.I32, device)
         
