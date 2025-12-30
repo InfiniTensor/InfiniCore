@@ -1,0 +1,145 @@
+#include "diff_nvidia.cuh"
+#include "../cuda/kernel.cuh"
+#include "../../../utils.h"
+#include <cuda_bf16.h>
+#include <cuda_fp16.h>
+#include <algorithm>
+
+namespace op::diff::nvidia {
+
+Descriptor::~Descriptor() = default;
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t y_desc,
+    infiniopTensorDescriptor_t x_desc,
+    int dim,
+    int n) {
+
+    auto dtype = x_desc->dtype();
+    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64, INFINI_DTYPE_BF16);
+
+    if (n <= 0) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    auto x_shape = x_desc->shape();
+    auto y_shape = y_desc->shape();
+    size_t ndim = x_desc->ndim();
+
+    if (dim < 0) {
+        dim += static_cast<int>(ndim);
+    }
+    if (dim < 0 || dim >= static_cast<int>(ndim)) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    if (x_shape[dim] <= static_cast<size_t>(n)) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+
+    std::vector<size_t> expected_output_shape = x_shape;
+    expected_output_shape[dim] -= n;
+
+    if (y_shape != expected_output_shape) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+
+    *desc_ptr = new Descriptor(dtype, ndim, dim, n, x_shape, y_shape,
+                               x_desc->numel(), y_desc->numel(),
+                               handle->device, handle->device_id);
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *y,
+    const void *x,
+    void *stream) const {
+
+    if (workspace_size < this->workspaceSize()) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+
+    auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
+
+    // Calculate sizes before and after the dimension
+    size_t size_before = 1;
+    for (size_t i = 0; i < static_cast<size_t>(_dim); ++i) {
+        size_before *= _input_shape[i];
+    }
+    size_t dim_size = _input_shape[_dim];
+    size_t size_after = 1;
+    for (size_t i = static_cast<size_t>(_dim) + 1; i < _ndim; ++i) {
+        size_after *= _input_shape[i];
+    }
+
+    constexpr int BLOCK_SIZE = 256;
+    size_t total_output = _output_size;
+    int num_blocks = (total_output + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+    // For n-th order diff, we need to apply recursively
+    // Use workspace as temporary buffer
+    void *temp_input = workspace;
+    void *temp_output = y;
+
+    // Copy input to workspace
+    size_t input_bytes = _input_size * infiniopGetDtypeSize(_dtype);
+    CHECK_CUDA(cudaMemcpyAsync(temp_input, x, input_bytes, cudaMemcpyDeviceToDevice, cuda_stream));
+
+    // Apply diff n times
+    for (int order = 0; order < _n; ++order) {
+        size_t current_dim_size = dim_size - order;
+        size_t current_output_size = current_dim_size - 1;
+        size_t current_total_output = size_before * current_output_size * size_after;
+
+        int current_num_blocks = (current_total_output + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+        switch (_dtype) {
+        case INFINI_DTYPE_F16: {
+            cuda::diff_kernel<half><<<current_num_blocks, BLOCK_SIZE, 0, cuda_stream>>>(
+                reinterpret_cast<half *>(temp_output),
+                reinterpret_cast<const half *>(temp_input),
+                size_before, current_dim_size, size_after, 1);
+            break;
+        }
+        case INFINI_DTYPE_BF16: {
+            cuda::diff_kernel<cuda_bfloat16><<<current_num_blocks, BLOCK_SIZE, 0, cuda_stream>>>(
+                reinterpret_cast<cuda_bfloat16 *>(temp_output),
+                reinterpret_cast<const cuda_bfloat16 *>(temp_input),
+                size_before, current_dim_size, size_after, 1);
+            break;
+        }
+        case INFINI_DTYPE_F32: {
+            cuda::diff_kernel<float><<<current_num_blocks, BLOCK_SIZE, 0, cuda_stream>>>(
+                reinterpret_cast<float *>(temp_output),
+                reinterpret_cast<const float *>(temp_input),
+                size_before, current_dim_size, size_after, 1);
+            break;
+        }
+        case INFINI_DTYPE_F64: {
+            cuda::diff_kernel<double><<<current_num_blocks, BLOCK_SIZE, 0, cuda_stream>>>(
+                reinterpret_cast<double *>(temp_output),
+                reinterpret_cast<const double *>(temp_input),
+                size_before, current_dim_size, size_after, 1);
+            break;
+        }
+        default:
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
+
+        if (order < _n - 1) {
+            // Swap buffers for next iteration
+            std::swap(temp_input, temp_output);
+            // Copy result back to workspace for next iteration
+            size_t current_output_bytes = current_total_output * infiniopGetDtypeSize(_dtype);
+            CHECK_CUDA(cudaMemcpyAsync(temp_input, temp_output, current_output_bytes, cudaMemcpyDeviceToDevice, cuda_stream));
+        }
+    }
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace op::diff::nvidia
