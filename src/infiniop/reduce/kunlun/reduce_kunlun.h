@@ -73,6 +73,28 @@ __device__ inline Tdata max(__shared_ptr__ const Tdata *data_ptr, size_t count) 
     return temp_storage;
 }
 
+// Sum(x) in single block
+template <typename Tdata, typename Tcompute>
+__device__ inline Tcompute blockSum(__local__ const Tdata *data_ptr, size_t count) {
+    Tcompute ss = 0;
+    for (size_t i = 0; i < count; i += 1) {
+        Tdata xi = data_ptr[i];
+        ss += Tcompute(xi);
+    }
+    return ss;
+}
+
+// Sum(x^2) in single block
+template <typename Tdata, typename Tcompute>
+__device__ inline Tcompute blockSumSquared(__local__ const Tdata *data_ptr, size_t count) {
+    Tcompute ss = 0;
+    for (size_t i = 0; i < count; i += 1) {
+        Tdata xi = data_ptr[i];
+        ss += Tcompute(xi) * Tcompute(xi);
+    }
+    return ss;
+}
+
 } // namespace op::common_kunlun::reduce_op
 
 #endif
