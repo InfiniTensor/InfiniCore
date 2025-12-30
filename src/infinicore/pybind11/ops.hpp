@@ -3,6 +3,10 @@
 #include <pybind11/pybind11.h>
 
 #include "ops/add.hpp"
+#include "ops/adaptive_avg_pool1d.hpp"
+#include "ops/addbmm.hpp"
+#include "ops/affine_grid.hpp"
+#include "ops/acos.hpp"
 #include "ops/attention.hpp"
 #include "ops/causal_softmax.hpp"
 #include "ops/embedding.hpp"
@@ -17,13 +21,18 @@
 #include "ops/rope.hpp"
 #include "ops/silu.hpp"
 #include "ops/swiglu.hpp"
-
+#include "ops/floor.hpp"
 namespace py = pybind11;
 
 namespace infinicore::ops {
 
 inline void bind(py::module &m) {
-    bind_add(m);
+    bind_add(m); 
+    bind_addbmm(m); 
+    bind_acos(m); 
+    bind_affine_grid(m); 
+    bind_floor(m); 
+    bind_adaptive_avg_pool1d(m);
     bind_attention(m);
     bind_causal_softmax(m);
     bind_random_sample(m);
