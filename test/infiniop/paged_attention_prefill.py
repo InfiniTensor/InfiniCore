@@ -74,14 +74,15 @@ class SimpleCacheManager:
 
 
 def ref_paged_attention_multi_turn(
-    query_new, k_cache, v_cache, block_tables, seq_lens, new_lens, offset, scale
+    query_new, k_cache, v_cache, block_tables, cache_lens, new_lens, offset, scale
 ):
     block_size = k_cache.shape[2]
     outputs = torch.zeros_like(query_new)
-    for i in range(len(offset) - 1):
-        total_len = seq_lens[i].item()
+    num_seqs = len(offset) - 1
+    for i in range(num_seqs):
         num_new = new_lens[i].item()
-        history_len = total_len - num_new
+        cache_len = cache_lens[i].item()
+        total_len = cache_lens[i].item() + num_new
 
         table = block_tables[i]
         keys_all, values_all = [], []
@@ -99,7 +100,7 @@ def ref_paged_attention_multi_turn(
 
         mask = torch.full((num_new, total_len), float("-inf"), device=Q.device)
         for q_idx in range(num_new):
-            mask[q_idx, : history_len + q_idx + 1] = 0.0
+            mask[q_idx, : cache_len + q_idx + 1] = 0.0
 
         scores = scores + mask.unsqueeze(0)
         attn_weights = torch.softmax(scores, dim=-1).to(Q.dtype)
@@ -163,8 +164,9 @@ def test(
             offset_list.append(cur_offset)
 
             cur_new_len = seq_lens_cpu[i].item()
-            table, cache_len = manager.allocate_slots(i, cur_new_len)
-            cache_lens_list.append(cache_len)
+            table, total_len = manager.allocate_slots(i, cur_new_len)
+            cache_lens = total_len - cur_new_len
+            cache_lens_list.append(cache_lens)
             all_block_tables.append(table)
 
             # Simulated KV insertion
@@ -175,9 +177,8 @@ def test(
 
             cur_offset = cur_offset + cur_new_len
 
-            history_len = cache_len - cur_new_len
             for t in range(cur_new_len):
-                logical_pos = history_len + t
+                logical_pos = cache_lens + t
                 b_id = table[logical_pos // block_size]
                 off = logical_pos % block_size
                 k_cache.torch_tensor()[b_id, :, off, :] = k_new[t]
