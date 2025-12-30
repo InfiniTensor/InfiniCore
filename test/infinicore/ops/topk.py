@@ -15,7 +15,7 @@ from framework import (
 
 # Test cases format: (shape, input_strides, k, dim, largest, sorted)
 _TEST_CASES_DATA = [
-    ((6, 8), None, 1, 1, True, True),
+    ((6, 8), None, 5, 1, False, True),
     ((8, 4), (16, 1), 2, 0, True, False),
     ((5, 5), None, 3, -1, False, True),
     ((3, 7), (14, 1), 2, 1, True, True),

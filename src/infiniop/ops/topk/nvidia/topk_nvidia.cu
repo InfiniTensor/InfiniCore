@@ -39,10 +39,10 @@ namespace op::topk::nvidia {
     
     namespace {
     
-    template<size_t BLOCK_SIZE, size_t SORT_ITEMS_PER_THREAD, typename Tdata>
+    template<size_t BLOCK_SIZE, int32_t SORT_ITEMS_PER_THREAD, typename Tdata>
     infiniStatus_t launchKernel(
         const TopKInfo &info,
-        Tdata *values_output, size_t *indices_output, const Tdata *input,
+        Tdata *values_output, int32_t *indices_output, const Tdata *input,
         size_t k, size_t dim, bool largest, bool sorted,
         cudaStream_t stream, void *workspace, size_t workspace_size) {
         // const int rows = (int)info.n_iteration;
@@ -70,39 +70,39 @@ namespace op::topk::nvidia {
         CHECK_CUDA(cudaMemcpyAsync(input_strides_cuda,    info.input_strides.data(),   input_ndim * sizeof(ptrdiff_t),   cudaMemcpyHostToDevice, stream));
         CHECK_CUDA(cudaMemcpyAsync(output_strides_cuda,   info.output_strides.data(),  output_ndim * sizeof(ptrdiff_t),  cudaMemcpyHostToDevice, stream));
     
-        const size_t total = n_iteration * dim_elements;
+        const int32_t total = n_iteration * dim_elements;
 
-        Tdata *cur_vals = nullptr, *ones_vals = nullptr, *zeros_vals = nullptr;
-        size_t *cur_idx = nullptr, *ones_idx = nullptr, *zeros_idx = nullptr;
+        uint32_t *cur_vals = nullptr, *ones_vals = nullptr, *zeros_vals = nullptr;
+        int32_t *cur_idx = nullptr, *ones_idx = nullptr, *zeros_idx = nullptr;
 
-        Tdata *sel_vals = nullptr, *sel_sorted_vals = nullptr;
-        size_t *sel_idx = nullptr, *sel_sorted_idx = nullptr;
+        uint32_t *sel_vals = nullptr, *sel_sorted_vals = nullptr;
+        int32_t *sel_idx = nullptr, *sel_sorted_idx = nullptr;
 
-        size_t *cur_n = nullptr, *rem_k = nullptr, *out_pos = nullptr;
-        size_t *ones_count = nullptr, *zeros_count = nullptr;
+        int32_t *cur_n = nullptr, *rem_k = nullptr, *out_pos = nullptr;
+        int32_t *ones_count = nullptr, *zeros_count = nullptr;
         
 
-        CHECK_CUDA(cudaMalloc(&cur_vals,   total * sizeof(Tdata)));
-        CHECK_CUDA(cudaMalloc(&ones_vals,  total * sizeof(Tdata)));
-        CHECK_CUDA(cudaMalloc(&zeros_vals, total * sizeof(Tdata)));
+        CHECK_CUDA(cudaMalloc(&cur_vals,   total * sizeof(uint32_t)));
+        CHECK_CUDA(cudaMalloc(&ones_vals,  total * sizeof(uint32_t)));
+        CHECK_CUDA(cudaMalloc(&zeros_vals, total * sizeof(uint32_t)));
 
-        CHECK_CUDA(cudaMalloc(&cur_idx,   total * sizeof(size_t)));
-        CHECK_CUDA(cudaMalloc(&ones_idx,  total * sizeof(size_t)));
-        CHECK_CUDA(cudaMalloc(&zeros_idx, total * sizeof(size_t)));
+        CHECK_CUDA(cudaMalloc(&cur_idx,   total * sizeof(int32_t)));
+        CHECK_CUDA(cudaMalloc(&ones_idx,  total * sizeof(int32_t)));
+        CHECK_CUDA(cudaMalloc(&zeros_idx, total * sizeof(int32_t)));
 
-        CHECK_CUDA(cudaMalloc(&sel_vals, n_iteration * k * sizeof(Tdata)));
-        CHECK_CUDA(cudaMalloc(&sel_idx,  n_iteration * k * sizeof(size_t)));
+        CHECK_CUDA(cudaMalloc(&sel_vals, n_iteration * k * sizeof(uint32_t)));
+        CHECK_CUDA(cudaMalloc(&sel_idx,  n_iteration * k * sizeof(int32_t)));
 
         if (sorted) {
-            CHECK_CUDA(cudaMalloc(&sel_sorted_vals, n_iteration * k * sizeof(Tdata)));
-            CHECK_CUDA(cudaMalloc(&sel_sorted_idx,  n_iteration * k * sizeof(size_t)));
+            CHECK_CUDA(cudaMalloc(&sel_sorted_vals, n_iteration * k * sizeof(uint32_t)));
+            CHECK_CUDA(cudaMalloc(&sel_sorted_idx,  n_iteration * k * sizeof(int32_t)));
         }
 
-        CHECK_CUDA(cudaMalloc(&cur_n,      n_iteration * sizeof(size_t)));
-        CHECK_CUDA(cudaMalloc(&rem_k,      n_iteration * sizeof(size_t)));
-        CHECK_CUDA(cudaMalloc(&out_pos,    n_iteration * sizeof(size_t)));
-        CHECK_CUDA(cudaMalloc(&ones_count, n_iteration * sizeof(size_t)));
-        CHECK_CUDA(cudaMalloc(&zeros_count,n_iteration * sizeof(size_t)));
+        CHECK_CUDA(cudaMalloc(&cur_n,      n_iteration * sizeof(int32_t)));
+        CHECK_CUDA(cudaMalloc(&rem_k,      n_iteration * sizeof(int32_t)));
+        CHECK_CUDA(cudaMalloc(&out_pos,    n_iteration * sizeof(int32_t)));
+        CHECK_CUDA(cudaMalloc(&ones_count, n_iteration * sizeof(int32_t)));
+        CHECK_CUDA(cudaMalloc(&zeros_count,n_iteration * sizeof(int32_t)));
         // init
         {
             size_t threads = 256;
@@ -113,7 +113,7 @@ namespace op::topk::nvidia {
         {
             dim3 block(BLOCK_SIZE);
             dim3 grid((dim_elements + BLOCK_SIZE - 1) / BLOCK_SIZE, n_iteration);
-            op::topk::cuda::gather_rowwise<<<grid, block, 0, stream>>>(
+            op::topk::cuda::gather_rowwise<Tdata><<<grid, block, 0, stream>>>(
                 input, cur_vals, cur_idx,
                 n_iteration, dim_elements,
                 input_ndim, dim,
@@ -130,7 +130,7 @@ namespace op::topk::nvidia {
             {
                 dim3 block(BLOCK_SIZE);
                 dim3 grid((dim_elements + BLOCK_SIZE - 1) / BLOCK_SIZE, n_iteration);
-                op::topk::cuda::partition_rowwise<BLOCK_SIZE, Tdata><<<grid, block, 0, stream>>>(
+                op::topk::cuda::partition_rowwise<BLOCK_SIZE><<<grid, block, 0, stream>>>(
                     cur_vals, cur_idx,
                     ones_vals, ones_idx,
                     zeros_vals, zeros_idx,
@@ -140,7 +140,7 @@ namespace op::topk::nvidia {
             }
     
             {
-                op::topk::cuda::decide_and_compact<BLOCK_SIZE, Tdata><<<n_iteration, BLOCK_SIZE, 0, stream>>>(
+                op::topk::cuda::decide_and_compact<BLOCK_SIZE><<<n_iteration, BLOCK_SIZE, 0, stream>>>(
                     cur_vals, cur_idx,
                     ones_vals, ones_idx,
                     zeros_vals, zeros_idx,
@@ -153,41 +153,135 @@ namespace op::topk::nvidia {
 
         // append remaining
 
-        op::topk::cuda::take_remaining<BLOCK_SIZE, Tdata><<<n_iteration, BLOCK_SIZE, 0, stream>>>(
+        op::topk::cuda::take_remaining<BLOCK_SIZE><<<n_iteration, BLOCK_SIZE, 0, stream>>>(
             cur_vals, cur_idx,
             cur_n, rem_k, out_pos,
             sel_vals, sel_idx,
             n_iteration, dim_elements, k);
     
         // optional sort (CUB block radix sort)
-        const Tdata* final_vals = sel_vals;
-        const size_t* final_idx = sel_idx;
+        // const uint32_t* final_vals = sel_vals;
+        const int32_t* final_idx = sel_idx;
     
         if (sorted) {
-            // if(k > BLOCK_SIZE * SORT_ITEMS_PER_THREAD)SORT_ITEMS_PER_THREAD = (k + BLOCK_SIZE - 1) / BLOCK_SIZE;
-            if(k > BLOCK_SIZE * SORT_ITEMS_PER_THREAD) return INFINI_STATUS_BAD_PARAM;
-            op::topk::cuda::sort_sel_rowwise<BLOCK_SIZE, SORT_ITEMS_PER_THREAD, Tdata><<<n_iteration, BLOCK_SIZE, 0, stream>>>(
-                sel_vals, sel_idx,
-                sel_sorted_vals, sel_sorted_idx,
-                n_iteration, k, largest);
-            final_vals = sel_sorted_vals;
+            std::vector<int> h_offsets(n_iteration + 1);
+            for(size_t i = 0; i <= n_iteration; i++){
+                h_offsets[i] = i * k;
+            }
+            int *d_offsets;
+            CHECK_CUDA(cudaMalloc(&d_offsets, (n_iteration + 1) * sizeof(int)));
+            CHECK_CUDA(cudaMemcpy(d_offsets, h_offsets.data(), (n_iteration + 1) * sizeof(int), cudaMemcpyHostToDevice));
+            
+            void* d_temp_storage = nullptr;
+            size_t temp_storage_bytes = 0;
+           
+            // 或者直接给待排序的vals取反
+
+            if (!largest) {
+            
+
+            cub::DeviceSegmentedRadixSort::SortPairs(d_temp_storage, temp_storage_bytes, sel_vals, sel_sorted_vals, sel_idx, sel_sorted_idx, 
+                n_iteration * k, n_iteration, d_offsets, d_offsets + 1, 0, sizeof(uint32_t) * 8, stream);
+
+            cudaMalloc(&d_temp_storage, temp_storage_bytes);
+            
+            cub::DeviceSegmentedRadixSort::SortPairs(d_temp_storage, temp_storage_bytes, sel_vals, sel_sorted_vals, sel_idx, sel_sorted_idx, 
+                n_iteration * k, n_iteration, d_offsets, d_offsets + 1, 0, sizeof(uint32_t) * 8, stream);
+            } else {
+                cub::DeviceSegmentedRadixSort::SortPairsDescending(d_temp_storage, temp_storage_bytes, sel_vals, sel_sorted_vals, sel_idx, sel_sorted_idx, 
+                    n_iteration * k, n_iteration, d_offsets, d_offsets + 1, 0, sizeof(uint32_t) * 8, stream);
+    
+                cudaMalloc(&d_temp_storage, temp_storage_bytes);
+                
+                cub::DeviceSegmentedRadixSort::SortPairsDescending(d_temp_storage, temp_storage_bytes, sel_vals, sel_sorted_vals, sel_idx, sel_sorted_idx, 
+                    n_iteration * k, n_iteration, d_offsets, d_offsets + 1, 0, sizeof(uint32_t) * 8, stream);
+            }
+            CHECK_CUDA(cudaFree(d_offsets));
+            CHECK_CUDA(cudaFree(d_temp_storage));
+            // final_vals = sel_sorted_vals;
             final_idx  = sel_sorted_idx;
         }
+
+        if (sorted &&k > 0 && n_iteration > 0) {
+            // 分配主机内存来复制所有结果
+            size_t total_elements = n_iteration * k;
+            uint32_t *host_vals = new uint32_t[total_elements];
+            int32_t *host_idx = new int32_t[total_elements];
+            uint32_t *sorted_host_vals = new uint32_t[total_elements];
+            int32_t *sorted_host_idx = new int32_t[total_elements];
+            // 从设备复制所有输出结果
+            CHECK_CUDA(cudaMemcpyAsync(sorted_host_vals, sel_sorted_vals, total_elements * sizeof(uint32_t), cudaMemcpyDeviceToHost, stream));
+            CHECK_CUDA(cudaMemcpyAsync(sorted_host_idx, sel_sorted_idx, total_elements * sizeof(int32_t), cudaMemcpyDeviceToHost, stream));
+            CHECK_CUDA(cudaMemcpyAsync(host_vals, sel_vals, total_elements * sizeof(uint32_t), cudaMemcpyDeviceToHost, stream));
+            CHECK_CUDA(cudaMemcpyAsync(host_idx, sel_idx, total_elements * sizeof(int32_t), cudaMemcpyDeviceToHost, stream));
+            
+            // 同步等待复制完成
+            CHECK_CUDA(cudaStreamSynchronize(stream));
+            std::cout << "k: " << k << "  dim: "<< dim << "  input_ndim: "<< input_ndim << "  n_iteration: "<< n_iteration << std::endl;
+            // 打印每个 iteration 的结果
+            for(size_t i = 0; i < n_iteration; i++){
+                std::cout << "Iteration " << i << " (GPU):" << std::endl;
+                std::cout << "  Values: ";
+                for(size_t j = 0; j < k; j++){
+                    size_t idx = i * k + j;
+                        std::cout << host_vals[idx];
+                    if (j < k - 1) std::cout << ", ";
+                }
+                std::cout << std::endl;
+                std::cout << "  Indices: ";
+                for(size_t j = 0; j < k; j++){
+                    size_t idx = i * k + j;
+                    std::cout << host_idx[idx];
+                    if (j < k - 1) std::cout << ", ";
+                }
+                std::cout << std::endl << std::endl;
+
+
+
+                std::cout << "  Sorted Values: ";
+                for(size_t j = 0; j < k; j++){
+                    size_t idx = i * k + j;
+                    // 对于浮点数，需要转换为 float 打印，对于其他类型可以直接打印
+                        std::cout << sorted_host_vals[idx];
+                    if (j < k - 1) std::cout << ", ";
+                }
+                std::cout << std::endl;
+        
+                std::cout << "  Sorted Indices: ";
+                for(size_t j = 0; j < k; j++){
+                    size_t idx = i * k + j;
+                    std::cout << sorted_host_idx[idx];
+                    if (j < k - 1) std::cout << ", ";
+                }
+                std::cout << std::endl << std::endl;
+            }
+            
+            delete[] host_vals;
+            delete[] host_idx;
+            delete[] sorted_host_vals;
+            delete[] sorted_host_idx;
+        }
+        
     
         // scatter to output (strided write)
         {
             dim3 block(BLOCK_SIZE);
             dim3 grid((k + BLOCK_SIZE - 1) / BLOCK_SIZE, n_iteration);
-            op::topk::cuda::scatter_to_output<<<grid, block, 0, stream>>>(
-                final_vals, final_idx,
+            op::topk::cuda::scatter_to_output<Tdata><<<grid, block, 0, stream>>>(
+                input, final_idx,
                 values_output, indices_output,
                 n_iteration, k,
                 input_ndim, dim,
+                input_shape_cuda, input_strides_cuda,
                 output_shape_cuda, output_strides_cuda);
         }
     
         CHECK_CUDA(cudaGetLastError());
     
+
+        // 添加调试打印
+
+
         // free temps
         CHECK_CUDA(cudaFree(cur_vals));
         CHECK_CUDA(cudaFree(ones_vals));
@@ -230,7 +324,7 @@ namespace op::topk::nvidia {
             #define CALCULATE_TOPK(BLOCK_SIZE, Tdata)                                          \
             launchKernel<BLOCK_SIZE, ITEMS, Tdata>(                                            \
                 _info,                                                                         \
-                (Tdata *)values_output,  (size_t *)indices_output,  (const Tdata *)input,      \
+                (Tdata *)values_output,  (int32_t *)indices_output,  (const Tdata *)input,      \
                 k, dim, largest, sorted,                                                       \
                 stream, workspace, workspace_size                                              \
             )

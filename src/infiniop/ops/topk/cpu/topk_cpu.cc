@@ -101,25 +101,25 @@ infiniStatus_t calculateTopK(
                 indices_output[output_start + j * info.output_strides[dim]] = (int32_t)vi_queue[j].second;
             }
             // 添加调试打印
-            std::cout << "Iteration " << i << ":" << std::endl;
-            std::cout << "  Values: ";
-            for(size_t j = 0; j < k; j++){
-                // 对于浮点数，需要转换为 float 打印，对于其他类型可以直接打印
-                if constexpr (std::is_same_v<Tdata, fp16_t> || std::is_same_v<Tdata, bf16_t>) {
-                    std::cout << utils::cast<float>(vi_queue[j].first);
-                } else {
-                    std::cout << vi_queue[j].first;
-                }
-                if (j < k - 1) std::cout << ", ";
-            }
-            std::cout << std::endl;
+            // std::cout << "Iteration " << i << ":" << std::endl;
+            // std::cout << "  Values: ";
+            // for(size_t j = 0; j < k; j++){
+            //     // 对于浮点数，需要转换为 float 打印，对于其他类型可以直接打印
+            //     if constexpr (std::is_same_v<Tdata, fp16_t> || std::is_same_v<Tdata, bf16_t>) {
+            //         std::cout << utils::cast<float>(vi_queue[j].first);
+            //     } else {
+            //         std::cout << vi_queue[j].first;
+            //     }
+            //     if (j < k - 1) std::cout << ", ";
+            // }
+            // std::cout << std::endl;
 
-            std::cout << "  Indices: ";
-            for(size_t j = 0; j < k; j++){
-                std::cout << vi_queue[j].second;
-                if (j < k - 1) std::cout << ", ";
-            }
-            std::cout << std::endl << std::endl;
+            // std::cout << "  Indices: ";
+            // for(size_t j = 0; j < k; j++){
+            //     std::cout << vi_queue[j].second;
+            //     if (j < k - 1) std::cout << ", ";
+            // }
+            // std::cout << std::endl << std::endl;
         }
         return INFINI_STATUS_SUCCESS;
     }

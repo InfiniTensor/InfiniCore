@@ -66,15 +66,14 @@ namespace op::topk::cuda{
     // cur_idx initialized to [0..n-1]
     // -------------------------------------------
     template<typename Tdata>
-    __global__ void gather_rowwise(const Tdata*  input, Tdata* cur_vals, size_t* cur_idx,
+    __global__ void gather_rowwise(const Tdata*  input, uint32_t* cur_vals, int32_t* cur_idx,
                                 size_t rows, size_t n, size_t ndim, size_t dim, const size_t*  shape, const ptrdiff_t*  strides){
         size_t row = blockIdx.y;
         size_t i = threadIdx.x + blockIdx.x * blockDim.x;
         if(row >= rows || i >= n) return;
         size_t base = baseOffsetExcludingDim(row, ndim, shape, strides, dim);
         size_t off = base + i * strides[dim];
-
-        cur_vals[row * n + i] = input[off];
+        cur_vals[row * n + i] = float_to_uint_ordered(to_float<Tdata>(input[off]));
         cur_idx[row * n + i] = i; // 索引初始化为[0..n-1]
     }
     // -------------------------------------------
@@ -83,8 +82,8 @@ namespace op::topk::cuda{
     // rem_k: remaining k to fill
     // out_pos: already appended count into sel
     // -------------------------------------------
-    __global__ void init_row_state(size_t* cur_n, size_t* rem_k, size_t* out_pos, size_t rows, size_t n, size_t k){
-        size_t r = blockIdx.x * blockDim.x + threadIdx.x;
+    __global__ void init_row_state(int32_t* cur_n, int32_t* rem_k, int32_t* out_pos, size_t rows, size_t n, size_t k){
+        int32_t r = blockIdx.x * blockDim.x + threadIdx.x;
         if(r < rows){
             cur_n[r] = n;
             rem_k[r] = k;
@@ -92,7 +91,7 @@ namespace op::topk::cuda{
         }
     }
 
-    __global__ void zero_row_counters(size_t* ones_count, size_t* zeros_count, size_t rows){
+    __global__ void zero_row_counters(int32_t* ones_count, int32_t* zeros_count, size_t rows){
         int r = blockIdx.x * blockDim.x + threadIdx.x;
         if(r < rows){
             ones_count[r] = 0;
@@ -105,42 +104,43 @@ namespace op::topk::cuda{
     // - partition cur into ones/zeros by bit_pos on key(value)
     // - largest: keep bit=1 side as "better"; smallest uses ~key so still keep bit=1
     // -------------------------------------------
-    template<size_t BLOCK_SIZE, typename Tdata>
-    __global__ void partition_rowwise(const Tdata* cur_vals, size_t* cur_idx, Tdata* ones_vals, size_t* ones_idx,
-                                    Tdata* zeros_vals, size_t* zeros_idx, const size_t* cur_n, size_t rows, size_t n,
-                                    size_t bit_pos, bool largest, size_t* ones_count, size_t* zeros_count){
-        size_t row = blockIdx.y;
+    template<size_t BLOCK_SIZE>
+    __global__ void partition_rowwise(const uint32_t* cur_vals, int32_t* cur_idx, uint32_t* ones_vals, int32_t* ones_idx,
+                                    uint32_t* zeros_vals, int32_t* zeros_idx, const int32_t* cur_n, size_t rows, size_t n,
+                                    int32_t bit_pos, bool largest, int32_t* ones_count, int32_t* zeros_count){
+        int32_t row = blockIdx.y;
         if(row >= rows)return;
 
-        __shared__ Tdata sh1_vals[BLOCK_SIZE];
-        __shared__ size_t sh1_idx[BLOCK_SIZE];
-        __shared__ Tdata sh0_vals[BLOCK_SIZE];
-        __shared__ size_t sh0_idx[BLOCK_SIZE];
+        __shared__ uint32_t sh1_vals[BLOCK_SIZE];
+        __shared__ int32_t sh1_idx[BLOCK_SIZE];
+        __shared__ uint32_t sh0_vals[BLOCK_SIZE];
+        __shared__ int32_t sh0_idx[BLOCK_SIZE];
         __shared__ int sh1_n, sh0_n;
-        __shared__ size_t base1, base0;
+        __shared__ int32_t base1, base0;
 
-        size_t tid = threadIdx.x;
+        int32_t tid = threadIdx.x;
         if(tid == 0){sh1_n = 0; sh0_n = 0;}
         __syncthreads();
 
-        size_t i = blockIdx.x * blockDim.x + tid;
-        size_t cn = cur_n[row];
+        int32_t i = blockIdx.x * blockDim.x + tid;
+        int32_t cn = cur_n[row];
         if(i < cn){
-            size_t off = row * n + i;
-            Tdata v = cur_vals[off];
-            size_t idx = cur_idx[off];
-
-            size_t key = float_to_uint_ordered(to_float<Tdata>(v));
-            if(!largest) key = ~key;
-            size_t b = (key >> bit_pos) & 1;
+            int32_t off = row * n + i;
+            int32_t idx = cur_idx[off];
+            // int32_t key = float_to_uint_ordered(to_float<Tdata>(v));
+            uint32_t key = cur_vals[off];
+            uint32_t cmp_key = largest ? key : ~key;
+            int32_t b = (cmp_key >> bit_pos) & 1;
 
             if(b){
-                size_t p = atomicAdd(&sh1_n, 1);
-                sh1_vals[p] = v;
+                int32_t p = atomicAdd(&sh1_n, 1);
+                // sh1_vals[p] = v;
+                sh1_vals[p] = key;
                 sh1_idx[p] = idx;
             } else {
-                size_t p = atomicAdd(&sh0_n, 1);
-                sh0_vals[p] = v;
+                int32_t p = atomicAdd(&sh0_n, 1);
+                // sh0_vals[p] = v;
+                sh0_vals[p] = key;
                 sh0_idx[p] = idx;
             }
         }
@@ -152,13 +152,13 @@ namespace op::topk::cuda{
         }
         __syncthreads();
 
-        for(size_t j = tid; j < sh1_n; j += blockDim.x){
-            size_t o = row * n + base1 + j;
+        for(int32_t j = tid; j < sh1_n; j += blockDim.x){
+            int32_t o = row * n + base1 + j;
             ones_vals[o] = sh1_vals[j];
             ones_idx[o] = sh1_idx[j];
         }
-        for(size_t j = tid; j < sh0_n; j += blockDim.x){
-            size_t o = row * n + base0 + j;
+        for(int32_t j = tid; j < sh0_n; j += blockDim.x){
+            int32_t o = row * n + base0 + j;
             zeros_vals[o] = sh0_vals[j];
             zeros_idx[o] = sh0_idx[j];
         }
@@ -167,24 +167,24 @@ namespace op::topk::cuda{
     // -------------------------------------------
     // decide + append ones + compact next cur
     // -------------------------------------------
-    template<size_t BLOCK_SIZE, typename Tdata>
-    __global__ void decide_and_compact(Tdata* cur_vals, size_t* cur_idx, const Tdata* ones_vals, const size_t* ones_idx, const Tdata* zeros_vals, const size_t* zeros_idx,
-                                        const size_t* ones_count, const size_t*  zeros_count, size_t* cur_n, size_t* rem_k, size_t* out_pos, 
-                                        Tdata* sel_vals, size_t* sel_idx, size_t rows, size_t n, size_t k){
-            size_t row = blockIdx.x;
+    template<size_t BLOCK_SIZE>
+    __global__ void decide_and_compact(uint32_t* cur_vals, int32_t* cur_idx, const uint32_t* ones_vals, const int32_t* ones_idx, const uint32_t* zeros_vals, const int32_t* zeros_idx,
+                                        const int32_t* ones_count, const int32_t*  zeros_count, int32_t* cur_n, int32_t* rem_k, int32_t* out_pos, 
+                                        uint32_t* sel_vals, int32_t* sel_idx, size_t rows, size_t n, size_t k){
+            int32_t row = blockIdx.x;
             if(row >= rows)return;
-            size_t tid = threadIdx.x;
-            size_t rem = rem_k[row];
+            int32_t tid = threadIdx.x;
+            int32_t rem = rem_k[row];
             if(rem <= 0)return;
-            size_t oc = ones_count[row];
-            size_t zc = zeros_count[row];
-            size_t pos = out_pos[row];
+            int32_t oc = ones_count[row];
+            int32_t zc = zeros_count[row];
+            int32_t pos = out_pos[row];
 
             bool keep_ones = (oc >= rem);
             if(!keep_ones){
-                for(size_t j = tid; j < oc; j += blockDim.x){
+                for(int32_t j = tid; j < oc; j += blockDim.x){
                     if(pos + j < k){
-                        size_t o = row * n + j;
+                        int32_t o = row * n + j;
                         sel_vals[row * k + pos + j] = ones_vals[o];
                         sel_idx[row * k + pos + j] = ones_idx[o];
                     }
@@ -201,9 +201,9 @@ namespace op::topk::cuda{
                 }
             }
             __syncthreads();
-            size_t new_n = cur_n[row];
-            for(size_t j = tid; j < new_n; j += blockDim.x){
-                size_t o = row * n + j;
+            int32_t new_n = cur_n[row];
+            for(int32_t j = tid; j < new_n; j += blockDim.x){
+                int32_t o = row * n + j;
                 cur_vals[o] = keep_ones ? ones_vals[o] : zeros_vals[o];
                 cur_idx[o] = keep_ones ? ones_idx[o] : zeros_idx[o];
             }
@@ -212,70 +212,25 @@ namespace op::topk::cuda{
     // -------------------------------------------
     // finalize: append remaining from cur
     // -------------------------------------------
-    template<size_t BLOCK_SIZE, typename Tdata>
-    __global__ void take_remaining(const Tdata* cur_vals, const size_t* cur_idx, const size_t* cur_n, const size_t* rem_k, const size_t* out_pos,
-                                   Tdata* sel_vals, size_t* sel_idx, size_t rows, size_t n, size_t k){
-            size_t row = blockIdx.x;
-            size_t tid = threadIdx.x;
+    template<size_t BLOCK_SIZE>
+    __global__ void take_remaining(const uint32_t* cur_vals, const int32_t* cur_idx, const int32_t* cur_n, const int32_t* rem_k, const int32_t* out_pos,
+                                   uint32_t* sel_vals, int32_t* sel_idx, size_t rows, size_t n, size_t k){
+            int32_t row = blockIdx.x;
+            int32_t tid = threadIdx.x;
             if(row >= rows) return;
-            size_t rem = rem_k[row];
-            size_t pos = out_pos[row];
-            size_t cn = cur_n[row];
+            int32_t rem = rem_k[row];
+            int32_t pos = out_pos[row];
+            int32_t cn = cur_n[row];
 
-            size_t take = rem;
+            int32_t take = rem;
             if(take > cn) take = cn;
-            for(size_t j = tid; j < take; j+=blockDim.x){
+            for(int32_t j = tid; j < take; j+=blockDim.x){
                 if(pos + j < k){
-                    size_t o = row * k + pos + j;
+                    int32_t o = row * k + pos + j;
                     sel_vals[o] = cur_vals[row * n + j];
                     sel_idx[o] = cur_idx[row * n + j];
                 }
             }
-    }
-    // -------------------------------------------
-    // sort: per-row CUB BlockRadixSort on sel[row, k]
-    // - use (key=value_mapped) sort, and use "pos" to gather (value, idx)
-    // - require k <= BLOCK_SIZE * ITEMS_PER_THREAD
-    // -------------------------------------------
-    template<size_t BLOCK_SIZE, size_t ITEMS_PER_THREAD, typename Tdata>
-    __global__ void sort_sel_rowwise(const Tdata* sel_in_vals, const size_t* sel_in_idx, Tdata* sel_out_vals, size_t* sel_out_idx, size_t rows, size_t k, bool largest){
-        size_t row = blockIdx.x;
-        if(row >= rows) return;
-        using BlockSort = cub::BlockRadixSort<uint32_t, BLOCK_SIZE, ITEMS_PER_THREAD, size_t>;
-        __shared__ typename BlockSort::TempStorage temp_storage;
-        uint32_t keys[ITEMS_PER_THREAD];
-        size_t pos[ITEMS_PER_THREAD];
-        #pragma unroll
-        for (size_t it = 0; it < ITEMS_PER_THREAD; ++it) {
-            size_t j = threadIdx.x + it * BLOCK_SIZE;
-            if (j < k) {
-                Tdata v = sel_in_vals[row * k + j];
-                uint32_t key = float_to_uint_ordered(to_float<Tdata>(v));
-                if (!largest) key = ~key;
-                keys[it] = key;
-                pos[it]  = j;
-            } else {
-                // invalid items: set minimal key, pos=0 (will be ignored by valid_items)
-                keys[it] = 0u;
-                pos[it]  = 0;
-            }
-        }
-
-        // 使用 valid_items，让 padding 不参与排序结果
-        const int valid_items = k;
-        BlockSort(temp_storage).SortDescending(keys, pos, valid_items);
-
-        __syncthreads();
-
-        #pragma unroll
-        for (size_t it = 0; it < ITEMS_PER_THREAD; ++it) {
-            size_t out_j = threadIdx.x + it * BLOCK_SIZE;
-            if (out_j < k) {
-                size_t src_j = pos[it];
-                sel_out_vals[row * k + out_j] = sel_in_vals[row * k + src_j];
-                sel_out_idx[row * k + out_j]  = sel_in_idx[row * k + src_j];
-            }
-        }
     }
 
     // -------------------------------------------
@@ -283,18 +238,23 @@ namespace op::topk::cuda{
     // output is contiguous
     // -------------------------------------------
     template <typename Tdata>
-    __global__ void scatter_to_output(const Tdata* sel_vals, const size_t*  sel_idx, Tdata*  values_out, size_t*  indices_out, 
-                                    size_t rows, size_t k, size_t ndim, size_t dim, const size_t*  out_shape, const ptrdiff_t*  out_strides) {
-
-            size_t row = blockIdx.y;
-            size_t j   = blockIdx.x * blockDim.x + threadIdx.x;
-            if (row >= rows || j >= k) return;
-
-            size_t base = baseOffsetExcludingDim(row, ndim, out_shape, out_strides, dim);
-            size_t off  = base + j * out_strides[dim];
-
-            values_out[off]  = sel_vals[row * k + j];
-            indices_out[off] = sel_idx[row * k + j];
+    __global__ void scatter_to_output(const Tdata* input, const int32_t*  sel_idx, Tdata*  values_out, int32_t*  indices_out, 
+                                    size_t rows, size_t k, size_t ndim, size_t dim, const size_t*  input_shape, const ptrdiff_t*  input_strides, 
+                                    const size_t*  output_shape, const ptrdiff_t*  output_strides) {
+        int32_t row = blockIdx.y;
+        int32_t j   = blockIdx.x * blockDim.x + threadIdx.x;
+        if (row >= rows || j >= k) return;
+    
+        // 计算输出位置
+        int32_t output_base = baseOffsetExcludingDim(row, ndim, output_shape, output_strides, dim);
+        int32_t output_off  = output_base + j * output_strides[dim];  // 修复：output_strides
+    
+        // 计算输入位置 - 直接计算偏移，无需indexToOffset
+        int32_t input_base = baseOffsetExcludingDim(row, ndim, input_shape, input_strides, dim);
+        int32_t input_off = input_base + sel_idx[row * k + j] * input_strides[dim];
+    
+        values_out[output_off]  = input[input_off];
+        indices_out[output_off] = sel_idx[row * k + j];
     }
 
 
