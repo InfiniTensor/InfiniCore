@@ -59,6 +59,9 @@ __C __export infiniStatus_t infinirtFreeHost(void *ptr);
 __C __export infiniStatus_t infinirtMemcpy(void *dst, const void *src, size_t size, infinirtMemcpyKind_t kind);
 __C __export infiniStatus_t infinirtMemcpyAsync(void *dst, const void *src, size_t size, infinirtMemcpyKind_t kind, infinirtStream_t stream);
 
+__C __export infiniStatus_t infinirtMemcpyPeer(void *dst, int dst_device, const void *src, int src_device, size_t size);
+__C __export infiniStatus_t infinirtMemcpyPeerAsync(void *dst, int dst_device, const void *src, int src_device, size_t size, infinirtStream_t stream);
+
 // Stream-ordered memory
 __C __export infiniStatus_t infinirtMallocAsync(void **p_ptr, size_t size, infinirtStream_t stream);
 __C __export infiniStatus_t infinirtFreeAsync(void *ptr, infinirtStream_t stream);
