@@ -56,9 +56,32 @@ public:
             return INFINI_STATUS_BAD_PARAM;
         }
 
+        auto k_shape = k_cache_desc->shape();
+        auto v_shape = v_cache_desc->shape();
+        auto block_tables_shape = block_tables_desc->shape();
+        auto cache_lens_shape = cache_lens_desc->shape();
+        auto seq_lens_shape = seq_lens_desc->shape();
+        auto offset_shape = offset_desc->shape();
+
+        if (k_shape.size() != 4 || v_shape.size() != 4) {
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
+
+        if (block_tables_shape.size() != 2) {
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
+
+        if (cache_lens_shape.size() != 1 || offset_shape.size() != 1) {
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
+
+        if ((offset_shape[0] - cache_lens_shape[0]) != 1) {
+            return INFINI_STATUS_BAD_PARAM;
+        }
+
         // Q shape: [total_tokens, heads, dim] (3D)
         auto q_shape = q_desc->shape();
-        if (q_shape.size() < 3) {
+        if (q_shape.size() != 3) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
         size_t total_q_tokens = q_shape[0];

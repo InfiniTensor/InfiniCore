@@ -53,9 +53,8 @@ __global__ void pagedAttentionPrefillKernel(
     Tdata *out_ptr = out_ + global_token_idx * num_heads * head_size + head_idx * head_size;
 
     // --- KV Cache 相关信息
-    const int64_t total_seq_len = cache_lens_[seq_idx];
-    const int64_t history_len = total_seq_len - cur_new_len;
-    const int64_t causal_limit = history_len + q_token_idx;
+    const int64_t cache_len = cache_lens_[seq_idx];
+    const int64_t causal_limit = cache_len + q_token_idx;
 
     const size_t num_queries_per_kv = num_heads / num_kv_heads;
     const size_t kv_head_idx = head_idx / num_queries_per_kv;
