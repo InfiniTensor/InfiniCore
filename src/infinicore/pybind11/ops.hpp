@@ -17,6 +17,7 @@
 #include "ops/swiglu.hpp"
 #include "ops/sum.hpp"
 #include "ops/var_mean.hpp"
+#include "ops/var.hpp"
 namespace py = pybind11;
 
 namespace infinicore::ops {
@@ -37,6 +38,7 @@ inline void bind(py::module &m) {
     bind_embedding(m);
     bind_sum(m);
     bind_var_mean(m);
+    bind_var(m);
 }
 
 } // namespace infinicore::ops

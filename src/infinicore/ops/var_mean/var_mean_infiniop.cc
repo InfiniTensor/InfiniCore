@@ -52,9 +52,9 @@ static bool registered = []() {
     Var_Mean::dispatcher().registerDevice({
             Device::Type::CPU,
             Device::Type::NVIDIA,
-            // Device::Type::METAX,
-            // Device::Type::MOORE,
-            // Device::Type::ILUVATAR
+            Device::Type::METAX,
+            Device::Type::MOORE,
+            Device::Type::ILUVATAR
         }, &calculate, false);
     return true;
 }();
