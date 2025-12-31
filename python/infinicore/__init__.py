@@ -45,6 +45,10 @@ from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.rearrange import rearrange
+from infinicore.ops.floor_divide import floor_divide
+from infinicore.ops.float_power import float_power
+from infinicore.ops.flipud import flipud
+from infinicore.ops.scatter import scatter
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -111,6 +115,10 @@ __all__ = [
     "from_list",
     "from_numpy",
     "from_torch",
+    "floor_divide",
+    "float_power",
+    "flipud",
+    "scatter",
     "ones",
     "strided_empty",
     "strided_from_blob",

@@ -15,7 +15,11 @@
 #include "ops/rope.hpp"
 #include "ops/silu.hpp"
 #include "ops/swiglu.hpp"
-
+#include "ops/floor_divide.hpp"
+#include "ops/float_power.hpp"
+#include "ops/flipud.hpp"
+#include "ops/multi_margin_loss.hpp"
+#include "ops/scatter.hpp"
 namespace py = pybind11;
 
 namespace infinicore::ops {
@@ -33,6 +37,11 @@ inline void bind(py::module &m) {
     bind_silu(m);
     bind_swiglu(m);
     bind_rope(m);
+    bind_floor_divide(m);
+    bind_float_power(m);
+    bind_flipud(m);
+    bind_multi_margin_loss(m);
+    bind_scatter(m);
     bind_embedding(m);
 }
 

@@ -115,7 +115,7 @@ class OpTest(BaseOperatorTest):
 
     def infinicore_operator(self, *args, **kwargs):
         """InfiniCore multi_margin_loss implementation"""
-        return None
+        return infinicore.nn.functional.multi_margin_loss(*args, **kwargs)
 
 
 def main():
