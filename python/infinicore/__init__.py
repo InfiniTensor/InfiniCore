@@ -48,6 +48,7 @@ from infinicore.ops.rearrange import rearrange
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.unsqueeze import unsqueeze
 from infinicore.ops.atanh import atanh
+from infinicore.ops.addcmul import addcmul
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -110,6 +111,7 @@ __all__ = [
     "squeeze",
     "unsqueeze",
     "atanh",
+    "addcmul",
     "rearrange",
     "empty",
     "empty_like",

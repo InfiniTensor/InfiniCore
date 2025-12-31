@@ -11,3 +11,4 @@
 #include "ops/silu.hpp"
 #include "ops/swiglu.hpp"
 #include "ops/atanh.hpp"
+#include "ops/addcmul.hpp"

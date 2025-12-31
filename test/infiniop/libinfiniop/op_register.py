@@ -84,6 +84,41 @@ def add_(lib):
         infiniopOperatorDescriptor_t,
     ]
 
+@OpRegister.operator
+def addcmul_(lib):
+    lib.infiniopCreateAddcmulDescriptor.restype = c_int32
+    lib.infiniopCreateAddcmulDescriptor.argtypes = [
+        infiniopHandle_t,                       # handle
+        POINTER(infiniopOperatorDescriptor_t),  # desc_ptr
+        infiniopTensorDescriptor_t,             # out_desc
+        infiniopTensorDescriptor_t,             # input_desc
+        infiniopTensorDescriptor_t,             # t1_desc
+        infiniopTensorDescriptor_t,             # t2_desc
+        c_float,                                # value (标量系数)
+    ]
+
+    lib.infiniopGetAddcmulWorkspaceSize.restype = c_int32
+    lib.infiniopGetAddcmulWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,           # descriptor
+        POINTER(c_size_t),                      # size_ptr
+    ]
+
+    lib.infiniopAddcmul.restype = c_int32
+    lib.infiniopAddcmul.argtypes = [
+        infiniopOperatorDescriptor_t,           # descriptor
+        c_void_p,                               # workspace
+        c_size_t,                               # workspace_size
+        c_void_p,                               # out_ptr
+        c_void_p,                               # input_ptr
+        c_void_p,                               # t1_ptr
+        c_void_p,                               # t2_ptr
+        c_void_p,                               # stream
+    ]
+
+    lib.infiniopDestroyAddcmulDescriptor.restype = c_int32
+    lib.infiniopDestroyAddcmulDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,           # descriptor
+    ]
 
 @OpRegister.operator
 def attention_(lib):
