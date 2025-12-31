@@ -22,21 +22,25 @@
 __C infiniStatus_t infiniopCreateVarMeanDescriptor(
     infiniopHandle_t handle,
     infiniopVarMeanDescriptor_t *desc_ptr,
-    infiniopTensorDescriptor_t output_desc,
+    infiniopTensorDescriptor_t var_output_desc,
+    infiniopTensorDescriptor_t mean_output_desc,
     infiniopTensorDescriptor_t input_desc,
     size_t *dim, 
     size_t dim_size,
+    bool unbiased,
     bool keepdim) {
 
-#define CREATE(CASE, NAMESPACE)                                            \
-    case CASE:                                                             \
+#define CREATE(CASE, NAMESPACE)                                                 \
+    case CASE:                                                                  \
         return op::var_mean::NAMESPACE::Descriptor::create(                     \
-            handle,                                                        \
+            handle,                                                             \
             reinterpret_cast<op::var_mean::NAMESPACE::Descriptor **>(desc_ptr), \
-            output_desc,                                                   \
-            input_desc,                                                    \
-            dim,                                                           \
-            dim_size,                                                      \
+            var_output_desc,                                                    \
+            mean_output_desc,                                                   \
+            input_desc,                                                         \
+            dim,                                                                \
+            dim_size,                                                           \
+            unbiased,                                                           \
             keepdim)
 
     switch (handle->device) {
@@ -112,17 +116,19 @@ __C infiniStatus_t infiniopVarMean(
     infiniopVarMeanDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
-    void *output,
+    void *var_output,
+    void *mean_output,
     const void *input,
     size_t *dim, 
     size_t dim_size,
+    bool unbiased,
     bool keepdim,
     void *stream) {
 
 #define CALCULATE(CASE, NAMESPACE)                                            \
     case CASE:                                                                \
         return reinterpret_cast<const op::var_mean::NAMESPACE::Descriptor *>(desc) \
-            ->calculate(workspace, workspace_size, output, input, stream)
+            ->calculate(workspace, workspace_size, var_output, mean_output, input, unbiased, keepdim, stream)
 
     switch (desc->device_type) {
 

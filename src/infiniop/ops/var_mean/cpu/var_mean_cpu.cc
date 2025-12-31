@@ -22,35 +22,6 @@ infiniStatus_t Descriptor::create(
     *desc_ptr = new Descriptor(nullptr, result.take(), 0, handle->device, handle->device_id);
     return INFINI_STATUS_SUCCESS;
 }
-/*
-需要处理
->>> torch.var_mean(a, unbiased=False)
-(tensor(0.), tensor(1.))
->>> torch.var_mean(a, unbiased=True)
-(tensor(nan), tensor(1.))
->>> c = torch.tensor([[1.0],[2.0],[3.0]])
->>> torch.var_mean(c, unbiased=True)
-(tensor(1.), tensor(2.))
->>> torch.var_mean(c, dim=1, unbiased=True)
-(tensor([nan, nan, nan]), tensor([1., 2., 3.]))
->>> torch.var_mean(c, dim=1, unbiased=True, keepdim=True)
-(tensor([[nan],
-        [nan],
-        [nan]]), tensor([[1.],
-        [2.],
-        [3.]]))
->>> d = torch.tensor([[],[],[]])
->>> torch.var_mean(d, dim=1, unbiased=True, keepdim=True)
-(tensor([[nan],
-        [nan],
-        [nan]]), tensor([[nan],
-        [nan],
-        [nan]]))
->>> d.numel()
-0
->>> d.size()
-torch.Size([3, 0])
-*/
 
 
 // welford
@@ -62,8 +33,8 @@ bool IsNanOut(const VarMeanInfo &info) {
 template<typename Tdata>
 void computeVarMeanUsingWelfordCpu(const Tdata *input_ptr, float& var_output, float& mean_output, size_t start, size_t end, const VarMeanInfo &info) {
     if (start >= end) {
-        mean = 0.0f;
-        var = 0.0f;
+        // mean = 0.0f;
+        // var = 0.0f;
         return;
     }
     float old_mean = 0.0f;  // previous mean
@@ -75,8 +46,10 @@ void computeVarMeanUsingWelfordCpu(const Tdata *input_ptr, float& var_output, fl
         float value = utils::cast<float>(input_ptr[input_offset]);
         count++;
         old_mean = mean;
-        mean += (static_cast<float>(input_ptr[input_offset]) - mean) / count;
-        M2 += (static_cast<float>(input_ptr[input_offset]) - old_mean) * (static_cast<float>(input_ptr[input_offset]) - mean);
+        mean += (value - mean) / count;
+        // mean += (static_cast<float>(input_ptr[input_offset]) - mean) / count;
+        M2 += (value - old_mean) * (value - mean);
+        // M2 += (static_cast<float>(input_ptr[input_offset]) - old_mean) * (static_cast<float>(input_ptr[input_offset]) - mean);
     }
     mean_output = mean;
     var_output =  M2 / (info.unbiased_var ? (count-1) : count);
@@ -123,6 +96,8 @@ infiniStatus_t Descriptor::calculate(
     void *var_output,
     void *mean_output,
     const void *input,
+    bool unbiased,
+    bool keepdim,
     void *stream) const {
     switch (_info.dtype) {
     case INFINI_DTYPE_F16:

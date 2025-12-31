@@ -5,7 +5,18 @@
 #include <math_constants.h>
 // 规约到标量的情况比较复杂
 
-
+__forceinline__ __device__ __host__ size_t indexToOffset(
+  size_t flat_index,
+  size_t ndim,
+  const size_t *shape,
+  const ptrdiff_t *strides) {
+  size_t res = 0;
+  for (size_t i = ndim; i-- > 0;) {
+      res += (flat_index % shape[i]) * strides[i];
+      flat_index /= shape[i];
+  }
+  return res;
+}
 
 namespace device{
   namespace cuda{
@@ -27,12 +38,12 @@ namespace device{
       return half(CUDART_NAN_F);
     }
     
-    #if CUDA_VERSION >= 11000
+
     template<>
-    __inline__ __device__ nv_bfloat16 Nan<nv_bfloat16>() {
-      return nv_bfloat16(CUDART_NAN_F);
+    __inline__ __device__ nv_bfloat16 Nan<__nv_bfloat16>() {
+      return __nv_bfloat16(CUDART_NAN_F);
     }
-    #endif
+
     #ifdef ENABLE_MOORE_API
     template<>
     __inline__ __device__ __mt_bfloat16 Nan<__mt_bfloat16>() {
@@ -88,18 +99,7 @@ namespace device{
     }
     #endif
 
-    __forceinline__ __device__ __host__ size_t indexToOffset(
-      size_t flat_index,
-      size_t ndim,
-      const size_t *shape,
-      const ptrdiff_t *strides) {
-      size_t res = 0;
-      for (size_t i = ndim; i-- > 0;) {
-          res += (flat_index % shape[i]) * strides[i];
-          flat_index /= shape[i];
-      }
-      return res;
-    }
+    
 
     template<typename Tdata, typename ComputeType>
     inline __device__ void WelfordReduce(const Tdata* input_ptr, ComputeType &mean, ComputeType &m2, ComputeType &count, 
@@ -116,17 +116,6 @@ namespace device{
               * (input_value - old_mean);
       }
     }
-
-    template<typename Tdata>
-    inline __device__ void WelfordCombineLoop(const Tdata* b_mean, const Tdata* b_m2, const Tdata* b_count,
-                                              Tdata &mean, Tdata &m2, Tdata &count, 
-                                              const size_t start, const size_t end, const size_t step) {
-      for (size_t i = start; i < end; i += step) {
-        device::cuda::WelfordCombine(b_mean[i], b_m2[i], b_count[i], mean, m2, count);
-      }
-    }
-
-    __device__ int32_t done_block_count = 0;
 
     template<typename Tdata>
     inline __device__ void WelfordCombine(Tdata val, Tdata &mean, Tdata &m2, Tdata &count) {
@@ -147,6 +136,17 @@ namespace device{
       m2 += b_m2 + delta * delta * count * nb_over_n; // m21 + m22 + n2 * (mean2 - mean1) ^ 2 / (n1 + n2)
       count = new_count;
     }
+
+    template<typename Tdata>
+    inline __device__ void WelfordCombineLoop(const Tdata* b_mean, const Tdata* b_m2, const Tdata* b_count,
+                                              Tdata &mean, Tdata &m2, Tdata &count, 
+                                              const size_t start, const size_t end, const size_t step) {
+      for (size_t i = start; i < end; i += step) {
+        WelfordCombine(b_mean[i], b_m2[i], b_count[i], mean, m2, count);
+      }
+    }
+
+
 
     template<typename Tdata, int thread_group_width = 32>
     __inline__ __device__ void WelfordWarpReduce(Tdata thread_mean, Tdata thread_m2, Tdata thread_count, 
@@ -239,6 +239,7 @@ namespace device{
     
 // }
 
+__device__ int32_t done_block_count = 0;
 
 
 template<typename Tdata, typename ComputeType>
@@ -247,7 +248,7 @@ __global__ void ComputeVarScalarOut(const Tdata *input_ptr, Tdata *var_output_pt
                                    bool unbiased, bool is_nan) {
   // 处理 NaN 情况
   if (is_nan) {
-    if (blockIdx.x == 0 && threadIdx.x == 0) { *var_output_ptr = Nan<Tdata>(); mean_output_ptr[0] = (input_size == 0) ? Nan<Tdata>() : input_ptr[0];}
+    if (blockIdx.x == 0 && threadIdx.x == 0) { *var_output_ptr = device::cuda::Nan<Tdata>(); mean_output_ptr[0] = (input_size == 0) ? device::cuda::Nan<Tdata>() : input_ptr[0];}
     return;
   }
 
@@ -261,7 +262,7 @@ __global__ void ComputeVarScalarOut(const Tdata *input_ptr, Tdata *var_output_pt
   if (elems_per_thread > 0) {
     const size_t block_start = blockIdx.x * elems_per_block;
     const size_t regular_elems = elems_per_block - (elems_per_block % blockDim.x);
-    WelfordReduce<Tdata, ComputeType>(input_ptr, thread_mean, thread_m2, thread_count,
+    device::cuda::WelfordReduce<Tdata, ComputeType>(input_ptr, thread_mean, thread_m2, thread_count,
                                       /*start=*/block_start + threadIdx.x, /*end=*/block_start + regular_elems, /*step=*/blockDim.x,
                                       /*ndim=*/input_ndim, /*shape=*/permuted_input_shape, /*strides=*/permuted_input_strides);
   }
@@ -275,7 +276,7 @@ __global__ void ComputeVarScalarOut(const Tdata *input_ptr, Tdata *var_output_pt
     }
     if (tail_count > 0) {
       const size_t tail_start = blockIdx.x * elems_per_block + blockDim.x * elems_per_thread;
-      WelfordReduce<Tdata, ComputeType>(input_ptr, thread_mean, thread_m2, thread_count,
+      device::cuda::WelfordReduce<Tdata, ComputeType>(input_ptr, thread_mean, thread_m2, thread_count,
                                         /*start=*/tail_start, /*end=*/tail_start + tail_count, /*step=*/1,
                                         /*ndim=*/input_ndim, /*shape=*/permuted_input_shape, /*strides=*/permuted_input_strides);
     }
@@ -322,14 +323,14 @@ __global__ void ComputeVarScalarOut(const Tdata *input_ptr, Tdata *var_output_pt
     const size_t regular_blocks = blocks_per_thread * blockDim.x;
     
     if (blocks_per_thread > 0) {
-      WelfordCombineLoop(tmp_mean_ptr, tmp_m2_ptr, tmp_count_ptr, 
+      device::cuda::WelfordCombineLoop(tmp_mean_ptr, tmp_m2_ptr, tmp_count_ptr, 
                          final_thread_mean, final_thread_m2, final_thread_count, 
                          /*start=*/threadIdx.x, /*end=*/regular_blocks, /*step=*/blockDim.x);
     }
     
     // thread 0 处理尾部 block
     if (threadIdx.x == 0 && regular_blocks < gridDim.x) {
-      WelfordCombineLoop(&tmp_mean_ptr[regular_blocks], &tmp_m2_ptr[regular_blocks], &tmp_count_ptr[regular_blocks], 
+      device::cuda::WelfordCombineLoop(&tmp_mean_ptr[regular_blocks], &tmp_m2_ptr[regular_blocks], &tmp_count_ptr[regular_blocks], 
                          final_thread_mean, final_thread_m2, final_thread_count, 
                          /*start=*/0, /*end=*/gridDim.x - regular_blocks, /*step=*/1);
     }
@@ -395,13 +396,13 @@ __global__ void ComputeVarMeanUsingWelfordWrapper(
     if (is_nan) {
         if(reduce_num == 0){
             CUDA_1D_KERNEL_LOOP(i, output_size) { 
-                var_output_ptr[i] = Nan<Tdata>(); 
-                mean_output_ptr[i] = Nan<Tdata>(); 
+                var_output_ptr[i] = device::cuda::Nan<Tdata>(); 
+                mean_output_ptr[i] = device::cuda::Nan<Tdata>(); 
             }
         } else {
             CUDA_1D_KERNEL_LOOP(i, output_size) { 
                 const size_t input_offset = indexToOffset(i * reduce_num, input_ndim, permuted_input_shape, permuted_input_strides); 
-                var_output_ptr[i] = Nan<Tdata>(); 
+                var_output_ptr[i] = device::cuda::Nan<Tdata>(); 
                 mean_output_ptr[i] = input_ptr[input_offset]; 
             }
         }

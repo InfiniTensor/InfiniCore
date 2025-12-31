@@ -42,6 +42,7 @@ namespace op::var_mean::nvidia {
     infiniStatus_t launchKernel(
         const VarMeanInfo &info,
         Tdata *var_output, Tdata *mean_output, const Tdata *input,
+        bool unbiased, bool keepdim,
         cudaStream_t stream, void *workspace, size_t workspace_size) {
         size_t input_ndim = info.permuted_input_shape.size();
         size_t output_ndim = info.output_shape.size();
@@ -75,14 +76,14 @@ namespace op::var_mean::nvidia {
             CHECK_CUDA(cudaMalloc(&tmp_buffer, grid_size * 3 * sizeof(ComputeType)));
             ComputeVarScalarOut<Tdata, ComputeType><<<grid_size, BLOCK_SIZE, 0, stream>>>(
                 input, var_output, mean_output, tmp_buffer, input_size, input_ndim, 
-                permuted_input_shape_cuda, permuted_input_strides_cuda, info.unbiased, is_nan);
+                permuted_input_shape_cuda, permuted_input_strides_cuda, unbiased, is_nan);
             CHECK_CUDA(cudaFree(tmp_buffer));
         } else {
             size_t grid_size = std::min(256UL, (info.output_size + BLOCK_SIZE - 1) / BLOCK_SIZE);
             grid_size = std::max(1UL, grid_size);
             ComputeVarMeanUsingWelfordWrapper<Tdata, ComputeType><<<grid_size, BLOCK_SIZE, 0, stream>>>(
                 input, var_output, mean_output, input_ndim, output_size, reduce_num, 
-                permuted_input_shape_cuda, permuted_input_strides_cuda, info.unbiased, is_nan);
+                permuted_input_shape_cuda, permuted_input_strides_cuda, unbiased, is_nan);
         }
         // CHECK_CUDA(cudaDeviceSynchronize());
     
@@ -97,6 +98,8 @@ namespace op::var_mean::nvidia {
         void *var_output,
         void *mean_output,
         const void *input,
+        bool unbiased,
+        bool keepdim,
         void *stream_) const {
 
             cudaStream_t stream = (cudaStream_t)stream_;
@@ -105,6 +108,7 @@ namespace op::var_mean::nvidia {
             launchKernel<BLOCK_SIZE, Tdata, ComputeType>(                            \
                 _info,                                                               \
                 (Tdata *)var_output, (Tdata *)mean_output, (const Tdata *)input,     \
+                unbiased,  keepdim,                                                  \
                 stream, workspace, workspace_size                                    \
             )
 

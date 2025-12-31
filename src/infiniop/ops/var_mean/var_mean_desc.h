@@ -47,6 +47,8 @@
             void *var_output,                                    \
             void *mean_output,                                   \
             const void *input,                                   \
+            bool unbiased,                                       \
+            bool keepdim,                                        \
             void *stream) const;                                 \
     };                                                           \
     }
