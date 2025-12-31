@@ -106,9 +106,9 @@ namespace op::all::nvidia {
             #define CALCULATE_ALL_WITH_BLOCK_SIZE(BLOCK_SIZE)           \
             {                                                           \
                 if (_info.dtype == INFINI_DTYPE_BOOL)                   \
-                    return CALCULATE_ALL(BLOCK_SIZE, bool);    \
-                else if(_info.dtype == INFINI_DTYPE_U8)                \
-                    return CALCULATE_ALL(BLOCK_SIZE, uint8_t);             \
+                    return CALCULATE_ALL(BLOCK_SIZE, bool);             \
+                else if(_info.dtype == INFINI_DTYPE_U8)                 \
+                    return CALCULATE_ALL(BLOCK_SIZE, uint8_t);          \
                 else                                                    \
                     return INFINI_STATUS_BAD_TENSOR_DTYPE;              \
             }

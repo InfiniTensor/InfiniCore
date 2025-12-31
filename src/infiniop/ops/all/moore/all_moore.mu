@@ -21,7 +21,7 @@ namespace op::all::moore {
         size_t *dim,
         size_t dim_size,
         bool keepdim) {
-        auto result = SumInfo::create(output_desc, input_desc, dim, dim_size, keepdim);
+        auto result = AllInfo::create(output_desc, input_desc, dim, dim_size, keepdim);
         CHECK_RESULT(result);
         auto info = result.take();
         size_t workspace_size = 0;
@@ -36,10 +36,10 @@ namespace op::all::moore {
     
     namespace {
     
-    template<size_t BLOCK_SIZE, typename T>
+    template<size_t BLOCK_SIZE, typename Tdata>
     infiniStatus_t launchKernel(
-        const SumInfo &info,
-        T *output, const T *input,
+        const AllInfo &info,
+        bool *output, const Tdata *input,
         musaStream_t stream, void *workspace, size_t workspace_size) {
         size_t input_ndim = info.permuted_input_shape.size();
         size_t output_ndim = info.output_shape.size();
@@ -58,36 +58,21 @@ namespace op::all::moore {
     
         CHECK_MOORE(musaMemcpyAsync(permuted_input_shape_musa,   info.permuted_input_shape.data(),   input_ndim * sizeof(size_t),     musaMemcpyHostToDevice, stream));
         CHECK_MOORE(musaMemcpyAsync(output_shape_musa,           info.output_shape.data(),           output_ndim * sizeof(size_t),    musaMemcpyHostToDevice, stream));
-        CHECK_MOORE(musaMemcpyAsync(output_strides_musa,         info.output_strides.data(),         output_ndim * sizeof(ptrdiff_t), musaMemcpyHostToDevice, stream));
         CHECK_MOORE(musaMemcpyAsync(permuted_input_strides_musa, info.permuted_input_strides.data(), input_ndim * sizeof(ptrdiff_t),  musaMemcpyHostToDevice, stream));
+        CHECK_MOORE(musaMemcpyAsync(output_strides_musa,         info.output_strides.data(),         output_ndim * sizeof(ptrdiff_t), musaMemcpyHostToDevice, stream));
     
         if(info.reduce_num == input_size){
-            if constexpr (std::is_same_v<T, __mt_bfloat16>){
-                // 需要解决 moore不支持bf16的atomic add的问题
-                float zero = 0.0f;
-                float* tmp_output;
-                CHECK_MOORE(musaMalloc(&tmp_output, sizeof(float)));
-                CHECK_MOORE(musaMemcpyAsync(tmp_output, &zero, sizeof(float), musaMemcpyHostToDevice, stream));
-                size_t grid_size = (input_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
-                allReduceOneKernel<BLOCK_SIZE, T, float><<<grid_size, BLOCK_SIZE, BLOCK_SIZE*sizeof(float), stream>>>(
-                    tmp_output, input, input_size, input_ndim, permuted_input_shape_musa, permuted_input_strides_musa);
-                // 可以自定义 kernel，将 float -> T，这里直接memcpy了
-                float host_val;
-                CHECK_MOORE(musaMemcpy(&host_val, tmp_output, sizeof(float), musaMemcpyDeviceToHost));
-                T out_val = static_cast<T>(host_val);
-                CHECK_MOORE(musaMemcpyAsync(output, &out_val, sizeof(T), musaMemcpyHostToDevice, stream));
-                CHECK_MOORE(musaFree(tmp_output));
-            } else{
-                T zero = static_cast<T>(0.0f);
-                CHECK_MOORE(musaMemcpyAsync(output, &zero, sizeof(T), musaMemcpyHostToDevice, stream));
-                size_t grid_size = (input_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
-                allReduceOneKernel<BLOCK_SIZE, T, T><<<grid_size, BLOCK_SIZE, BLOCK_SIZE*sizeof(T), stream>>>(
-                    output, input, input_size, input_ndim, permuted_input_shape_musa, permuted_input_strides_musa);
-            }
+            size_t grid_size = (input_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+            bool* temp_output;
+            CHECK_MOORE(musaMalloc(&temp_output, grid_size * sizeof(bool)));
+            allReduceOneKernel<BLOCK_SIZE, Tdata><<<grid_size, BLOCK_SIZE, BLOCK_SIZE*sizeof(Tdata), stream>>>(
+                temp_output, input, input_size, input_ndim, permuted_input_shape_musa, permuted_input_strides_musa);
+                CHECK_CUDA(musaMemcpyAsync(output, temp_output, sizeof(bool), musaMemcpyDeviceToDevice, stream));
+            CHECK_CUDA(musaFree(temp_output));
         } else {
             // todo one block one reduce_num, now one thread one reduce_num
             size_t grid_size = (info.output_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
-            allKernel<BLOCK_SIZE, T><<<grid_size, BLOCK_SIZE, 0, stream>>>(
+            allKernel<BLOCK_SIZE, Tdata><<<grid_size, BLOCK_SIZE, 0, stream>>>(
                 output, input, input_ndim, output_ndim, output_size, reduce_num, 
                 permuted_input_shape_musa, output_shape_musa, permuted_input_strides_musa, output_strides_musa);
         }
@@ -102,33 +87,32 @@ namespace op::all::moore {
         size_t workspace_size,
         void *output,
         const void *input,
+        size_t *dim,
+        size_t dim_size,
+        bool keepdim,
         void *stream_) const {
 
             musaStream_t stream = (musaStream_t)stream_;
             
-            #define CALCULATE_SUM(BLOCK_SIZE, T)                        \
-            launchKernel<BLOCK_SIZE, T>(                                \
+            #define CALCULATE_ALL(BLOCK_SIZE, Tdata)                        \
+            launchKernel<BLOCK_SIZE, Tdata>(                                \
                 _info,                                                  \
-                (T *)output,   (const T *)input,                        \
+                (bool *)output,   (const Tdata *)input,                        \
                 stream, workspace, workspace_size                       \
             )
 
-            #define CALCULATE_SUM_WITH_BLOCK_SIZE(BLOCK_SIZE)           \
+            #define CALCULATE_ALL_WITH_BLOCK_SIZE(BLOCK_SIZE)           \
             {                                                           \
-                if (_info.dtype == INFINI_DTYPE_BF16)                   \
-                    return CALCULATE_SUM(BLOCK_SIZE, __mt_bfloat16);    \
-                else if(_info.dtype == INFINI_DTYPE_F16)                \
-                    return CALCULATE_SUM(BLOCK_SIZE, half);             \
-                else if(_info.dtype == INFINI_DTYPE_F32)                \
-                    return CALCULATE_SUM(BLOCK_SIZE, float);            \
+                if (_info.dtype == INFINI_DTYPE_BOOL)                   \
+                    return CALCULATE_ALL(BLOCK_SIZE, bool);             \
+                else if(_info.dtype == INFINI_DTYPE_U8)                 \
+                    return CALCULATE_ALL(BLOCK_SIZE, uint8_t);          \
                 else                                                    \
                     return INFINI_STATUS_BAD_TENSOR_DTYPE;              \
             }
 
-            if (_opaque->internal->maxThreadsPerBlock() == MOORE_BLOCK_SIZE_1024) {
-                CALCULATE_SUM_WITH_BLOCK_SIZE(MOORE_BLOCK_SIZE_1024)
-            } else if (_opaque->internal->maxThreadsPerBlock() == MOORE_BLOCK_SIZE_512) {
-                CALCULATE_SUM_WITH_BLOCK_SIZE(MOORE_BLOCK_SIZE_512)
+            if (_opaque->internal->maxThreadsPerBlock() >= 256) {
+                CALCULATE_ALL_WITH_BLOCK_SIZE(256)
             } else {
                 return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
             }
