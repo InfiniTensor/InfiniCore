@@ -85,9 +85,8 @@ class OpTest(BaseOperatorTest):
 
         return torch.scatter(inp, dim, idx, src)
 
-    # def infinicore_operator(self, *args, **kwargs):
-    #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.scatter(*args, **kwargs)
+    def infinicore_operator(self, *args, **kwargs):
+         return infinicore.scatter(*args, **kwargs)
 
 
 def main():
