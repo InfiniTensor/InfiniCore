@@ -111,6 +111,10 @@ __all__ = [
     "from_list",
     "from_numpy",
     "from_torch",
+<<<<<<< HEAD
+=======
+  
+>>>>>>> 55247fbc (WIP: save changes before moving to main@726eacf8)
     "ones",
     "strided_empty",
     "strided_from_blob",
