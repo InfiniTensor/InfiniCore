@@ -1,12 +1,12 @@
-#include "../../../devices/nvidia/nvidia_common.cuh"
-#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
-#include "var_nvidia.cuh"
+#include "../../../devices/metax/metax_common.cuh"
+#include "../../../devices/metax/metax_kernel_common.cuh"
+#include "var_metax.cuh"
 #include "../cuda/kernel.cuh"
 
 
-namespace op::var::nvidia {
+namespace op::var::metax {
     struct Descriptor::Opaque {
-        std::shared_ptr<device::nvidia::Handle::Internal> internal;
+        std::shared_ptr<device::metax::Handle::Internal> internal;
     };
     
     Descriptor::~Descriptor() {
@@ -28,7 +28,7 @@ namespace op::var::nvidia {
         size_t workspace_size = 0;
         workspace_size += input_desc->ndim() * (sizeof(size_t) + sizeof(ptrdiff_t)); // permuted_input_shape + permuted_input_strides 
         *desc_ptr = new Descriptor(
-            new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
+            new Opaque{reinterpret_cast<device::metax::Handle *>(handle)->internal()},
             info, workspace_size, handle->device, handle->device_id);
         return INFINI_STATUS_SUCCESS;
     }
@@ -65,8 +65,6 @@ namespace op::var::nvidia {
         // CHECK_METAX(hcMemcpyAsync(output_strides_hc,         info.output_strides.data(),         output_ndim * sizeof(ptrdiff_t), hcMemcpyHostToDevice, stream));
         bool is_nan = IsNanOut(info);
         if(info.reduce_num == input_size){ //scalar output
-            // Tdata zero = static_cast<Tdata>(0.0f);
-            // CHECK_METAX(hcMemcpyAsync(output, &zero, sizeof(T), hcMemcpyHostToDevice, stream));
             ComputeType *tmp_buffer;
             constexpr size_t MAX_GRID_SIZE = 128;
             size_t grid_size = std::min(MAX_GRID_SIZE, 

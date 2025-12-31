@@ -42,6 +42,7 @@ namespace op::var_mean::moore {
     infiniStatus_t launchKernel(
         const VarMeanInfo &info,
         Tdata *var_output, Tdata *mean_output, const Tdata *input,
+        bool unbiased, bool keepdim,
         musaStream_t stream, void *workspace, size_t workspace_size) {
         size_t input_ndim = info.permuted_input_shape.size();
         size_t output_ndim = info.output_shape.size();
@@ -89,6 +90,8 @@ namespace op::var_mean::moore {
         void *var_output,
         void *mean_output,
         const void *input,
+        bool unbiased,
+        bool keepdim,
         void *stream_) const {
 
             musaStream_t stream = (musaStream_t)stream_;

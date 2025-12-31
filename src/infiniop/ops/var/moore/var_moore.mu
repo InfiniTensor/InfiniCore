@@ -1,12 +1,12 @@
-#include "../../../devices/nvidia/nvidia_common.cuh"
-#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
-#include "var_nvidia.cuh"
+#include "../../../devices/moore/moore_common.cuh"
+#include "../../../devices/moore/moore_kernel_common.cuh"
+#include "var_moore.cuh"
 #include "../cuda/kernel.cuh"
 
 
-namespace op::var::nvidia {
+namespace op::var::moore {
     struct Descriptor::Opaque {
-        std::shared_ptr<device::nvidia::Handle::Internal> internal;
+        std::shared_ptr<device::moore::Handle::Internal> internal;
     };
     
     Descriptor::~Descriptor() {
@@ -28,7 +28,7 @@ namespace op::var::nvidia {
         size_t workspace_size = 0;
         workspace_size += input_desc->ndim() * (sizeof(size_t) + sizeof(ptrdiff_t)); // permuted_input_shape + permuted_input_strides 
         *desc_ptr = new Descriptor(
-            new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
+            new Opaque{reinterpret_cast<device::moore::Handle *>(handle)->internal()},
             info, workspace_size, handle->device, handle->device_id);
         return INFINI_STATUS_SUCCESS;
     }

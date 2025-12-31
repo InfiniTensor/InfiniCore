@@ -53,21 +53,15 @@ namespace op::var_mean::nvidia {
         size_t workspace_offset = 0;
 
         size_t *permuted_input_shape_cuda = reinterpret_cast<size_t *>(workspace_ptr + workspace_offset);
-        // size_t *output_shape_cuda = permuted_input_shape_cuda + input_ndim;
         workspace_offset += input_ndim * sizeof(size_t);
     
         ptrdiff_t *permuted_input_strides_cuda = reinterpret_cast<ptrdiff_t *>(workspace_ptr + workspace_offset);
-        // ptrdiff_t *output_strides_cuda = permuted_input_strides_cuda + input_ndim;
         workspace_offset += input_ndim * sizeof(ptrdiff_t);
     
         CHECK_CUDA(cudaMemcpyAsync(permuted_input_shape_cuda,   info.permuted_input_shape.data(),   input_ndim * sizeof(size_t),     cudaMemcpyHostToDevice, stream));
-        // CHECK_CUDA(cudaMemcpyAsync(output_shape_cuda,           info.output_shape.data(),           output_ndim * sizeof(size_t),    cudaMemcpyHostToDevice, stream));
         CHECK_CUDA(cudaMemcpyAsync(permuted_input_strides_cuda, info.permuted_input_strides.data(), input_ndim * sizeof(ptrdiff_t),  cudaMemcpyHostToDevice, stream));
-        // CHECK_CUDA(cudaMemcpyAsync(output_strides_cuda,         info.output_strides.data(),         output_ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, stream));
         bool is_nan = IsNanOut(info);
         if(info.reduce_num == input_size){ //scalar output
-            // Tdata zero = static_cast<Tdata>(0.0f);
-            // CHECK_CUDA(cudaMemcpyAsync(output, &zero, sizeof(T), cudaMemcpyHostToDevice, stream));
             ComputeType *tmp_buffer;
             constexpr size_t MAX_GRID_SIZE = 128;
             size_t grid_size = std::min(MAX_GRID_SIZE, 
@@ -85,7 +79,6 @@ namespace op::var_mean::nvidia {
                 input, var_output, mean_output, input_ndim, output_size, reduce_num, 
                 permuted_input_shape_cuda, permuted_input_strides_cuda, unbiased, is_nan);
         }
-        // CHECK_CUDA(cudaDeviceSynchronize());
     
         return INFINI_STATUS_SUCCESS;
     }
