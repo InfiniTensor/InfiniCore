@@ -44,6 +44,9 @@
             void *workspace, size_t workspace_size,              \
             void *output,                                        \
             const void *input,                                   \
+            size_t *dim,                                         \
+            size_t dim_size,                                     \
+            bool keepdim,                                        \
             void *stream) const;                                 \
     };                                                           \
     }

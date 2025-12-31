@@ -34,7 +34,7 @@ infiniStatus_t calculateAll(
             bool result = true;
             for(size_t index = 0; index < info.input_size; index++){
                 size_t input_offset = op::common_cpu::indexToOffset(index, info.ndim, info.permuted_input_shape.data(), info.permuted_input_strides.data());
-                result = result &&input[input_offset];
+                result = result && input[input_offset];
             }
             output[0] = result;
             return INFINI_STATUS_SUCCESS;
@@ -66,9 +66,9 @@ infiniStatus_t Descriptor::calculate(
     void *stream) const {
     switch (_info.dtype) {
     case INFINI_DTYPE_BOOL:
-        return calculateAll<bool>(_info, output, reinterpret_cast<const bool *>(input), dim, dim_size, keepdim);
+        return calculateAll<bool>(_info, reinterpret_cast<bool *>(output), reinterpret_cast<const bool *>(input), dim, dim_size, keepdim);
     case INFINI_DTYPE_U8:
-        return calculateAll<bool>(_info, output, reinterpret_cast<const bool *>(input), dim, dim_size, keepdim);
+        return calculateAll<bool>(_info, reinterpret_cast<bool *>(output), reinterpret_cast<const bool *>(input), dim, dim_size, keepdim);
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }

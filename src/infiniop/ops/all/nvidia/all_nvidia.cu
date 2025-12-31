@@ -39,7 +39,7 @@ namespace op::all::nvidia {
     template<size_t BLOCK_SIZE, typename Tdata>
     infiniStatus_t launchKernel(
         const AllInfo &info,
-        Tdata *output, const Tdata *input,
+        bool *output, const Tdata *input,
         cudaStream_t stream, void *workspace, size_t workspace_size) {
         size_t input_ndim = info.permuted_input_shape.size();
         size_t output_ndim = info.output_shape.size();
@@ -89,6 +89,9 @@ namespace op::all::nvidia {
         size_t workspace_size,
         void *output,
         const void *input,
+        size_t *dim,
+        size_t dim_size,
+        bool keepdim,
         void *stream_) const {
 
             cudaStream_t stream = (cudaStream_t)stream_;
@@ -96,7 +99,7 @@ namespace op::all::nvidia {
             #define CALCULATE_ALL(BLOCK_SIZE, Tdata)                        \
             launchKernel<BLOCK_SIZE, Tdata>(                                \
                 _info,                                                  \
-                (Tdata *)output,   (const Tdata *)input,                        \
+                (bool *)output,   (const Tdata *)input,                        \
                 stream, workspace, workspace_size                       \
             )
 

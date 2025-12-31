@@ -50,18 +50,28 @@ def print_discrepancy(
 
     is_terminal = sys.stdout.isatty()
 
-    actual_isnan = torch.isnan(actual)
-    expected_isnan = torch.isnan(expected)
+    if actual.dtype == torch.bool:
+    # For boolean tensors, just check if they are equal
+        diff_mask = actual != expected
+        actual_isnan = torch.zeros_like(actual, dtype=torch.bool)
+        expected_isnan = torch.zeros_like(expected, dtype=torch.bool)
+        nan_mismatch = torch.zeros_like(actual, dtype=torch.bool)
+        delta = torch.zeros_like(actual, dtype=torch.float32)  # Use float for delta display
+    else:
+        actual_isnan = torch.isnan(actual)
+        expected_isnan = torch.isnan(expected)
 
-    # Calculate difference mask
-    nan_mismatch = (
-        actual_isnan ^ expected_isnan if equal_nan else actual_isnan | expected_isnan
-    )
-    diff_mask = nan_mismatch | (
-        torch.abs(actual - expected) > (atol + rtol * torch.abs(expected))
-    )
+        # Calculate difference mask
+        nan_mismatch = (
+            actual_isnan ^ expected_isnan if equal_nan else actual_isnan | expected_isnan
+        )
+        diff_mask = nan_mismatch | (
+            torch.abs(actual - expected) > (atol + rtol * torch.abs(expected))
+        )
+        diff_indices = torch.nonzero(diff_mask, as_tuple=False)
+        delta = actual - expected
+
     diff_indices = torch.nonzero(diff_mask, as_tuple=False)
-    delta = actual - expected
 
     # Display formatting
     col_width = [18, 20, 20, 20]
