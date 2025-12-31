@@ -65,10 +65,10 @@ namespace op::all::moore {
             size_t grid_size = (input_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
             bool* temp_output;
             CHECK_MOORE(musaMalloc(&temp_output, grid_size * sizeof(bool)));
-            allReduceOneKernel<BLOCK_SIZE, Tdata><<<grid_size, BLOCK_SIZE, BLOCK_SIZE*sizeof(Tdata), stream>>>(
+            allReduceTempKernel<BLOCK_SIZE, Tdata><<<grid_size, BLOCK_SIZE, BLOCK_SIZE*sizeof(bool), stream>>>(
                 temp_output, input, input_size, input_ndim, permuted_input_shape_musa, permuted_input_strides_musa);
-                CHECK_CUDA(musaMemcpyAsync(output, temp_output, sizeof(bool), musaMemcpyDeviceToDevice, stream));
-            CHECK_CUDA(musaFree(temp_output));
+            finalAllReduceKernel<BLOCK_SIZE><<<1, BLOCK_SIZE>>>(output, temp_output, grid_size);
+            CHECK_MOORE(musaFree(temp_output));
         } else {
             // todo one block one reduce_num, now one thread one reduce_num
             size_t grid_size = (info.output_size + BLOCK_SIZE - 1) / BLOCK_SIZE;

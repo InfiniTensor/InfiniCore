@@ -4,7 +4,6 @@
 #include "infinicore/ops/all.hpp"
 #include <infiniop.h>
 
-// todo 实现需要修改calculate函数
 
 namespace infinicore::op::all_impl::infiniop {
 

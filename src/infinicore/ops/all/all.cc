@@ -3,7 +3,7 @@
 #include "../../utils.hpp"
 #include <vector>
 #include <stdexcept>
-
+#include <iostream>
 namespace infinicore::op {
 
 common::OpDispatcher<All::schema> &All::dispatcher() {
@@ -68,6 +68,16 @@ Tensor all(Tensor input, std::vector<size_t> dim, bool keepdim) {
 
 
 void all_(Tensor output, Tensor input, std::vector<size_t> dim, bool keepdim) {
+    // std::cout << "all_ output: " << output->shape() << std::endl;
+    std::cout << "++++++++++++++output++++++++++++++"<< std::endl;
+    for(int i = 0; i < output->ndim(); i++){
+        std::cout << output->shape()[i] << "|shape|";
+    }
+    std::cout << std::endl;
+    for(int i = 0; i < output->ndim(); i++){
+        std::cout << output->strides()[i] << "|strides|";
+    }
+    std::cout << "--------------output---------------"<< std::endl;
     All::execute(output, input, dim, keepdim);
 }
 } // namespace infinicore::op

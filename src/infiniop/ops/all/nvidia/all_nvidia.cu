@@ -66,9 +66,9 @@ namespace op::all::nvidia {
             size_t grid_size = (input_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
             bool* temp_output;
             CHECK_CUDA(cudaMalloc(&temp_output, grid_size * sizeof(bool)));
-            allReduceOneKernel<BLOCK_SIZE, Tdata><<<grid_size, BLOCK_SIZE, BLOCK_SIZE*sizeof(Tdata), stream>>>(
+            allReduceTempKernel<BLOCK_SIZE, Tdata><<<grid_size, BLOCK_SIZE, BLOCK_SIZE*sizeof(bool), stream>>>(
                 temp_output, input, input_size, input_ndim, permuted_input_shape_cuda, permuted_input_strides_cuda);
-                CHECK_CUDA(cudaMemcpyAsync(output, temp_output, sizeof(bool), cudaMemcpyDeviceToDevice, stream));
+            finalAllReduceKernel<BLOCK_SIZE><<<1, BLOCK_SIZE>>>(output, temp_output, grid_size);
             CHECK_CUDA(cudaFree(temp_output));
         } else {
             // todo one block one reduce_num, now one thread one reduce_num
