@@ -45,6 +45,7 @@ from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.rearrange import rearrange
+from infinicore.ops.all import all
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.unsqueeze import unsqueeze
 from infinicore.tensor import (
@@ -119,6 +120,7 @@ __all__ = [
     "strided_empty",
     "strided_from_blob",
     "zeros",
+    "all",
 ]
 
 use_ntops = False

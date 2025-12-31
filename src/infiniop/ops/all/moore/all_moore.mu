@@ -1,10 +1,10 @@
 #include "../../../devices/moore/moore_common.h"
 #include "../../../devices/moore/moore_kernel_common.h"
-#include "sum_moore.h"
+#include "all_moore.h"
 #include "../cuda/kernel.cuh"
 
 
-namespace op::sum::moore {
+namespace op::all::moore {
     struct Descriptor::Opaque {
         std::shared_ptr<device::moore::Handle::Internal> internal;
     };
@@ -69,7 +69,7 @@ namespace op::sum::moore {
                 CHECK_MOORE(musaMalloc(&tmp_output, sizeof(float)));
                 CHECK_MOORE(musaMemcpyAsync(tmp_output, &zero, sizeof(float), musaMemcpyHostToDevice, stream));
                 size_t grid_size = (input_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
-                sumAllKernel<BLOCK_SIZE, T, float><<<grid_size, BLOCK_SIZE, BLOCK_SIZE*sizeof(float), stream>>>(
+                allReduceOneKernel<BLOCK_SIZE, T, float><<<grid_size, BLOCK_SIZE, BLOCK_SIZE*sizeof(float), stream>>>(
                     tmp_output, input, input_size, input_ndim, permuted_input_shape_musa, permuted_input_strides_musa);
                 // 可以自定义 kernel，将 float -> T，这里直接memcpy了
                 float host_val;
@@ -81,13 +81,13 @@ namespace op::sum::moore {
                 T zero = static_cast<T>(0.0f);
                 CHECK_MOORE(musaMemcpyAsync(output, &zero, sizeof(T), musaMemcpyHostToDevice, stream));
                 size_t grid_size = (input_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
-                sumAllKernel<BLOCK_SIZE, T, T><<<grid_size, BLOCK_SIZE, BLOCK_SIZE*sizeof(T), stream>>>(
+                allReduceOneKernel<BLOCK_SIZE, T, T><<<grid_size, BLOCK_SIZE, BLOCK_SIZE*sizeof(T), stream>>>(
                     output, input, input_size, input_ndim, permuted_input_shape_musa, permuted_input_strides_musa);
             }
         } else {
             // todo one block one reduce_num, now one thread one reduce_num
             size_t grid_size = (info.output_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
-            sumKernel<BLOCK_SIZE, T><<<grid_size, BLOCK_SIZE, 0, stream>>>(
+            allKernel<BLOCK_SIZE, T><<<grid_size, BLOCK_SIZE, 0, stream>>>(
                 output, input, input_ndim, output_ndim, output_size, reduce_num, 
                 permuted_input_shape_musa, output_shape_musa, permuted_input_strides_musa, output_strides_musa);
         }

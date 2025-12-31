@@ -1,10 +1,10 @@
 #include "../../../devices/metax/metax_common.h"
 #include "../../../devices/metax/metax_kernel_common.h"
-#include "sum_metax.h"
+#include "all_metax.h"
 #include "../cuda/kernel.cuh"
 
 
-namespace op::sum::metax {
+namespace op::all::metax {
     struct Descriptor::Opaque {
         std::shared_ptr<device::metax::Handle::Internal> internal;
     };
@@ -65,12 +65,12 @@ namespace op::sum::metax {
             T zero = static_cast<T>(0.0f);
             CHECK_METAX(hcMemcpyAsync(output, &zero, sizeof(T), hcMemcpyHostToDevice, stream));
             size_t grid_size = (input_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
-            sumAllKernel<BLOCK_SIZE, T, T><<<grid_size, BLOCK_SIZE, BLOCK_SIZE*sizeof(T), stream>>>(
+            allReduceOneKernel<BLOCK_SIZE, T, T><<<grid_size, BLOCK_SIZE, BLOCK_SIZE*sizeof(T), stream>>>(
                 output, input, input_size, input_ndim, permuted_input_shape_hc, permuted_input_strides_hc);
         } else {
             // todo one block one reduce_num, now one thread one reduce_num
             size_t grid_size = (info.output_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
-            sumKernel<BLOCK_SIZE, T><<<grid_size, BLOCK_SIZE, 0, stream>>>(
+            allKernel<BLOCK_SIZE, T><<<grid_size, BLOCK_SIZE, 0, stream>>>(
                 output, input, input_ndim, output_ndim, output_size, reduce_num, 
                 permuted_input_shape_hc, output_shape_hc, permuted_input_strides_hc, output_strides_hc);
         }
