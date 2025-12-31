@@ -1,14 +1,14 @@
-#include "../../../devices/nvidia/nvidia_common.cuh"
-#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
-#include "topk_nvidia.cuh"
+#include "../../../devices/moore/moore_common.cuh"
+#include "../../../devices/moore/moore_kernel_common.cuh"
+#include "topk_moore.cuh"
 #include "../cuda/kernel.cuh"
 
 #include <cub/block/block_radix_sort.cuh>
 #include <cub/cub.cuh>
 
-namespace op::topk::nvidia {
+namespace op::topk::moore {
     struct Descriptor::Opaque {
-        std::shared_ptr<device::nvidia::Handle::Internal> internal;
+        std::shared_ptr<device::moore::Handle::Internal> internal;
     };
     
     Descriptor::~Descriptor() {
@@ -53,7 +53,7 @@ namespace op::topk::nvidia {
         workspace_size += 5 * n_iteration * sizeof(int32_t);
         
         *desc_ptr = new Descriptor(
-            new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
+            new Opaque{reinterpret_cast<device::moore::Handle *>(handle)->internal()},
             info, workspace_size, handle->device, handle->device_id);
         return INFINI_STATUS_SUCCESS;
     }
@@ -65,7 +65,7 @@ namespace op::topk::nvidia {
         const TopKInfo &info,
         Tdata *values_output, int32_t *indices_output, const Tdata *input,
         size_t k, size_t dim, bool largest, bool sorted,
-        cudaStream_t stream, void *workspace, size_t workspace_size) {
+        musaStream_t stream, void *workspace, size_t workspace_size) {
         // const int rows = (int)info.n_iteration;
         // const int n    = (int)info.dim_elements;
         // const int kk   = (int)k;
@@ -78,18 +78,18 @@ namespace op::topk::nvidia {
         size_t dim_elements = info.dim_elements;
         unsigned char *workspace_ptr = reinterpret_cast<unsigned char *>(workspace);
         size_t workspace_offset = 0;
-        size_t *input_shape_cuda = reinterpret_cast<size_t *>(workspace_ptr + workspace_offset);
-        size_t *output_shape_cuda = input_shape_cuda + input_ndim;
+        size_t *input_shape_musa = reinterpret_cast<size_t *>(workspace_ptr + workspace_offset);
+        size_t *output_shape_musa = input_shape_musa + input_ndim;
         workspace_offset += (input_ndim + output_ndim) * sizeof(size_t);
     
-        ptrdiff_t *input_strides_cuda = reinterpret_cast<ptrdiff_t *>(workspace_ptr + workspace_offset);
-        ptrdiff_t *output_strides_cuda = input_strides_cuda + input_ndim;
+        ptrdiff_t *input_strides_musa = reinterpret_cast<ptrdiff_t *>(workspace_ptr + workspace_offset);
+        ptrdiff_t *output_strides_musa = input_strides_musa + input_ndim;
         workspace_offset += (input_ndim + output_ndim) * sizeof(ptrdiff_t);
     
-        CHECK_CUDA(cudaMemcpyAsync(input_shape_cuda,      info.input_shape.data(),     input_ndim * sizeof(size_t),      cudaMemcpyHostToDevice, stream));
-        CHECK_CUDA(cudaMemcpyAsync(output_shape_cuda,     info.output_shape.data(),    output_ndim * sizeof(size_t),     cudaMemcpyHostToDevice, stream));
-        CHECK_CUDA(cudaMemcpyAsync(input_strides_cuda,    info.input_strides.data(),   input_ndim * sizeof(ptrdiff_t),   cudaMemcpyHostToDevice, stream));
-        CHECK_CUDA(cudaMemcpyAsync(output_strides_cuda,   info.output_strides.data(),  output_ndim * sizeof(ptrdiff_t),  cudaMemcpyHostToDevice, stream));
+        CHECK_MOORE(musaMemcpyAsync(input_shape_musa,      info.input_shape.data(),     input_ndim * sizeof(size_t),      musaMemcpyHostToDevice, stream));
+        CHECK_MOORE(musaMemcpyAsync(output_shape_musa,     info.output_shape.data(),    output_ndim * sizeof(size_t),     musaMemcpyHostToDevice, stream));
+        CHECK_MOORE(musaMemcpyAsync(input_strides_musa,    info.input_strides.data(),   input_ndim * sizeof(ptrdiff_t),   musaMemcpyHostToDevice, stream));
+        CHECK_MOORE(musaMemcpyAsync(output_strides_musa,   info.output_strides.data(),  output_ndim * sizeof(ptrdiff_t),  musaMemcpyHostToDevice, stream));
     
         const int32_t total = n_iteration * dim_elements;
         
@@ -146,7 +146,7 @@ namespace op::topk::nvidia {
                 input, cur_vals, cur_idx,
                 n_iteration, dim_elements,
                 input_ndim, dim,
-                input_shape_cuda, input_strides_cuda);
+                input_shape_musa, input_strides_musa);
         }
         // radix select/filter
         for (int bit = 31; bit >= 0; --bit) {
@@ -198,8 +198,8 @@ namespace op::topk::nvidia {
                 h_offsets[i] = i * k;
             }
             int *d_offsets;
-            CHECK_CUDA(cudaMalloc(&d_offsets, (n_iteration + 1) * sizeof(int)));
-            CHECK_CUDA(cudaMemcpy(d_offsets, h_offsets.data(), (n_iteration + 1) * sizeof(int), cudaMemcpyHostToDevice));
+            CHECK_MOORE(musaMalloc(&d_offsets, (n_iteration + 1) * sizeof(int)));
+            CHECK_MOORE(musaMemcpy(d_offsets, h_offsets.data(), (n_iteration + 1) * sizeof(int), musaMemcpyHostToDevice));
             
             void* d_temp_storage = nullptr;
             size_t temp_storage_bytes = 0;
@@ -212,7 +212,7 @@ namespace op::topk::nvidia {
             cub::DeviceSegmentedRadixSort::SortPairs(d_temp_storage, temp_storage_bytes, sel_vals, sel_sorted_vals, sel_idx, sel_sorted_idx, 
                 n_iteration * k, n_iteration, d_offsets, d_offsets + 1, 0, sizeof(uint32_t) * 8, stream);
 
-            cudaMalloc(&d_temp_storage, temp_storage_bytes);
+            musaMalloc(&d_temp_storage, temp_storage_bytes);
             
             cub::DeviceSegmentedRadixSort::SortPairs(d_temp_storage, temp_storage_bytes, sel_vals, sel_sorted_vals, sel_idx, sel_sorted_idx, 
                 n_iteration * k, n_iteration, d_offsets, d_offsets + 1, 0, sizeof(uint32_t) * 8, stream);
@@ -220,13 +220,13 @@ namespace op::topk::nvidia {
                 cub::DeviceSegmentedRadixSort::SortPairsDescending(d_temp_storage, temp_storage_bytes, sel_vals, sel_sorted_vals, sel_idx, sel_sorted_idx, 
                     n_iteration * k, n_iteration, d_offsets, d_offsets + 1, 0, sizeof(uint32_t) * 8, stream);
     
-                cudaMalloc(&d_temp_storage, temp_storage_bytes);
+                musaMalloc(&d_temp_storage, temp_storage_bytes);
                 
                 cub::DeviceSegmentedRadixSort::SortPairsDescending(d_temp_storage, temp_storage_bytes, sel_vals, sel_sorted_vals, sel_idx, sel_sorted_idx, 
                     n_iteration * k, n_iteration, d_offsets, d_offsets + 1, 0, sizeof(uint32_t) * 8, stream);
             }
-            CHECK_CUDA(cudaFree(d_offsets));
-            CHECK_CUDA(cudaFree(d_temp_storage));
+            CHECK_MOORE(musaFree(d_offsets));
+            CHECK_MOORE(musaFree(d_temp_storage));
             // final_vals = sel_sorted_vals;
             final_idx  = sel_sorted_idx;
         }
@@ -240,16 +240,14 @@ namespace op::topk::nvidia {
                 values_output, indices_output,
                 n_iteration, k,
                 input_ndim, dim,
-                input_shape_cuda, input_strides_cuda,
-                output_shape_cuda, output_strides_cuda);
+                input_shape_musa, input_strides_musa,
+                output_shape_musa, output_strides_musa);
         }
     
-        CHECK_CUDA(cudaGetLastError());
 
     
         return INFINI_STATUS_SUCCESS;
     }
-        // CHECK_CUDA(cudaDeviceSynchronize());
     
 } // namespace
     
@@ -265,7 +263,7 @@ namespace op::topk::nvidia {
         bool sorted,
         void *stream_) const {
 
-            cudaStream_t stream = (cudaStream_t)stream_;
+            musaStream_t stream = (musaStream_t)stream_;
             constexpr int ITEMS = 4;
             #define CALCULATE_TOPK(BLOCK_SIZE, Tdata)                                          \
             launchKernel<BLOCK_SIZE, ITEMS, Tdata>(                                            \
