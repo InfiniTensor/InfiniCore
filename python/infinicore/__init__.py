@@ -49,6 +49,7 @@ from infinicore.ops.squeeze import squeeze
 from infinicore.ops.unsqueeze import unsqueeze
 from infinicore.ops.atanh import atanh
 from infinicore.ops.addcmul import addcmul
+from infinicore.ops.cdist import cdist
 from infinicore.tensor import (
     Tensor,
     empty,

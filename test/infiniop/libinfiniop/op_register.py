@@ -119,6 +119,45 @@ def addcmul_(lib):
     lib.infiniopDestroyAddcmulDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,           # descriptor
     ]
+    
+@OpRegister.operator
+def cdist_(lib):
+    # 1. 创建描述符接口
+    # 接口通常接收 handle, 输出 desc, 两个输入 desc, 以及范数 p
+    lib.infiniopCreateCdistDescriptor.restype = c_int32
+    lib.infiniopCreateCdistDescriptor.argtypes = [
+        infiniopHandle_t,                       # handle
+        POINTER(infiniopOperatorDescriptor_t),  # desc_ptr
+        infiniopTensorDescriptor_t,             # y_desc (输出)
+        infiniopTensorDescriptor_t,             # x1_desc
+        infiniopTensorDescriptor_t,             # x2_desc
+        c_double,                               # p (范数阶数)
+    ]
+
+    # 2. 获取 Workspace 大小接口
+    lib.infiniopGetCdistWorkspaceSize.restype = c_int32
+    lib.infiniopGetCdistWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,           # descriptor
+        POINTER(c_size_t),                      # size_ptr
+    ]
+
+    # 3. 执行算子接口
+    lib.infiniopCdist.restype = c_int32
+    lib.infiniopCdist.argtypes = [
+        infiniopOperatorDescriptor_t,           # descriptor
+        c_void_p,                               # workspace
+        c_size_t,                               # workspace_size
+        c_void_p,                               # y_ptr
+        c_void_p,                               # x1_ptr
+        c_void_p,                               # x2_ptr
+        c_void_p,                               # stream
+    ]
+
+    # 4. 销毁描述符接口
+    lib.infiniopDestroyCdistDescriptor.restype = c_int32
+    lib.infiniopDestroyCdistDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,           # descriptor
+    ]
 
 @OpRegister.operator
 def attention_(lib):

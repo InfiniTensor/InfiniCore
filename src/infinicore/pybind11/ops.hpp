@@ -18,7 +18,7 @@
 
 #include "ops/atanh.hpp"
 #include "ops/addcmul.hpp"
-
+#include "ops/cdist.hpp"
 namespace py = pybind11;
 
 namespace infinicore::ops {
@@ -39,6 +39,7 @@ inline void bind(py::module &m) {
     bind_embedding(m);
     bind_atanh(m);
     bind_addcmul(m);
+    bind_cdist(m);
 }
 
 } // namespace infinicore::ops
