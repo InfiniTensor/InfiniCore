@@ -29,7 +29,11 @@
 #include "infiniop/ops/tanh.h"
 #include "infiniop/ops/topkrouter.h"
 #include "infiniop/ops/topksoftmax.h"
+#include "infiniop/ops/triplet_margin_loss.h"
+#include "infiniop/ops/upsample_bilinear.h"
+#include "infiniop/ops/kthvalue.h"
+#include "infiniop/ops/lerp.h"
+#include "infiniop/ops/ldexp.h"
 #include "infiniop/ops/zeros.h"
 #include "infiniop/tensor_descriptor.h"
-
 #endif // __INFINIOP_API_H__
