@@ -7,6 +7,7 @@
 #include "infiniop/ops/var.h"
 #include "infiniop/ops/topk.h"
 #include "infiniop/ops/add.h"
+#include "infiniop/ops/all.h"
 #include "infiniop/ops/attention.h"
 #include "infiniop/ops/causal_softmax.h"
 #include "infiniop/ops/clip.h"

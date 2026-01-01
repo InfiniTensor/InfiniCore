@@ -15,6 +15,7 @@
 #include "ops/rope.hpp"
 #include "ops/silu.hpp"
 #include "ops/swiglu.hpp"
+#include "ops/all.hpp"
 #include "ops/sum.hpp"
 #include "ops/topk.hpp"
 #include "ops/var_mean.hpp"
@@ -37,6 +38,7 @@ inline void bind(py::module &m) {
     bind_swiglu(m);
     bind_rope(m);
     bind_embedding(m);
+    bind_all(m);
     bind_sum(m);
     bind_topk(m);
     bind_var_mean(m);
