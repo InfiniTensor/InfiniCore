@@ -46,6 +46,7 @@ from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.rearrange import rearrange
 from infinicore.ops.sum import sum
+from infinicore.ops.topk import topk
 from infinicore.ops.var_mean import var_mean
 from infinicore.ops.var import var
 from infinicore.ops.squeeze import squeeze
@@ -123,6 +124,7 @@ __all__ = [
     "strided_from_blob",
     "zeros",
     "sum",
+    "topk",
     "var_mean",
     "var",
 ]
