@@ -42,6 +42,7 @@ infiniStatus_t calculateSum(
             return INFINI_STATUS_SUCCESS;
         } else{
             for (size_t i = 0; i < info->output_size; i++) {
+                // 其实这里的output应该是连续的，所以这里可以优化为直接计算output_offset = i 
                 size_t output_offset = op::common_cpu::indexToOffset(i, info->output_shape.size(), info->output_shape.data(), info->output_strides.data());
                 float tempSum = 0.;
                 for(size_t j = 0; j < info->reduce_num; j++){
