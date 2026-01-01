@@ -18,17 +18,15 @@ thread_local common::OpCache<size_t, infiniopCausalSoftmaxDescriptor_t> caches(
 void calculate(Tensor output, Tensor input) {
     size_t seed = hash_combine(output, input);
 
-    auto device_type = context::getDevice().getType();
-    auto device_index = context::getDevice().getIndex();
-
-    auto &cache = caches.getCache(device_type, device_index);
+    auto device = context::getDevice();
+    auto &cache = caches.getCache(device);
 
     auto desc_opt = cache.get(seed);
     infiniopCausalSoftmaxDescriptor_t desc = nullptr;
 
     if (!desc_opt) {
         INFINICORE_CHECK_ERROR(infiniopCreateCausalSoftmaxDescriptor(
-            context::getInfiniopHandle(output->device()), &desc,
+            context::getInfiniopHandle(device), &desc,
             output->desc(), input->desc()));
         cache.put(seed, desc);
     } else {

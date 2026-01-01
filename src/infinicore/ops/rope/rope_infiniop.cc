@@ -33,16 +33,15 @@ void calculate(Tensor x_out, const Tensor &x, const Tensor &pos, const Tensor &s
     size_t key = hash_combine(x_out, x, pos, sin_cache, cos_cache);
     hash_combine(key, std::hash<int>()(static_cast<int>(infiniop_algo)));
 
-    auto device_type = context::getDevice().getType();
-    auto device_index = context::getDevice().getIndex();
-    auto &cache = caches.getCache(device_type, device_index);
+    auto device = context::getDevice();
+    auto &cache = caches.getCache(device);
 
     auto desc_opt = cache.get(key);
     infiniopRoPEDescriptor_t desc = nullptr;
 
     if (!desc_opt) {
         INFINICORE_CHECK_ERROR(infiniopCreateRoPEDescriptor(
-            context::getInfiniopHandle(x_out->device()), &desc,
+            context::getInfiniopHandle(device), &desc,
             x_out->desc(), x->desc(),
             pos->desc(), sin_cache->desc(), cos_cache->desc(),
             infiniop_algo));

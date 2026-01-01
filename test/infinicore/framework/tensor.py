@@ -3,7 +3,7 @@ import math
 from pathlib import Path
 from .datatypes import to_torch_dtype
 from .devices import torch_device_map
-from .utils import is_integer_dtype, is_complex_dtype
+from .utils.tensor_utils import is_integer_dtype, is_complex_dtype
 
 
 class TensorInitializer:

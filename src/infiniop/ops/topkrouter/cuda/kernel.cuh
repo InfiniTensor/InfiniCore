@@ -1,21 +1,12 @@
 #ifndef _TOPKROUTER_KERNEL_CUH__
 #define _TOPKROUTER_KERNEL_CUH__
-#include <cfloat>
-#include <cub/block/block_load.cuh>
-#include <cub/block/block_radix_sort.cuh>
-#include <cub/block/block_reduce.cuh>
-#include <cub/block/block_store.cuh>
-#include <cub/cub.cuh>
-#include <cuda_bf16.h>
-#include <cuda_fp16.h>
-#include <cuda_runtime.h>
 
 template <typename T>
 inline __device__ float exp_func(T x) {
     float data;
     if constexpr (std::is_same_v<T, float>) {
         data = x;
-    } else if constexpr (std::is_same_v<T, __nv_bfloat16>) {
+    } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
         data = __bfloat162float(x);
     } else if constexpr (std::is_same_v<T, half>) {
         data = __half2float(x);

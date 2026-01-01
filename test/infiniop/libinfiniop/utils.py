@@ -71,17 +71,32 @@ class TestTensor(CTensor):
                 torch_shape.append(shape[i])
         if mode == "random":
             # For integer types, use randint instead of rand
-            if dt in [InfiniDtype.I8, InfiniDtype.I16, InfiniDtype.I32, InfiniDtype.I64,
-                      InfiniDtype.U8, InfiniDtype.U16, InfiniDtype.U32, InfiniDtype.U64,
-                      InfiniDtype.BYTE, InfiniDtype.BOOL]:
+            if dt in [
+                InfiniDtype.I8,
+                InfiniDtype.I16,
+                InfiniDtype.I32,
+                InfiniDtype.I64,
+                InfiniDtype.U8,
+                InfiniDtype.U16,
+                InfiniDtype.U32,
+                InfiniDtype.U64,
+                InfiniDtype.BYTE,
+                InfiniDtype.BOOL,
+            ]:
                 randint_low = -2000000000 if randint_low is None else randint_low
                 randint_high = 2000000000 if randint_high is None else randint_high
                 self._torch_tensor = torch.randint(
-                    randint_low, randint_high, torch_shape, dtype=to_torch_dtype(dt), device=torch_device_map[device]
+                    randint_low,
+                    randint_high,
+                    torch_shape,
+                    dtype=to_torch_dtype(dt),
+                    device=torch_device_map[device],
                 )
             else:
                 self._torch_tensor = torch.rand(
-                    torch_shape, dtype=to_torch_dtype(dt), device=torch_device_map[device]
+                    torch_shape,
+                    dtype=to_torch_dtype(dt),
+                    device=torch_device_map[device],
                 )
         elif mode == "zeros":
             self._torch_tensor = torch.zeros(
@@ -281,7 +296,7 @@ def rearrange_tensor(tensor, new_strides):
     left = 0
     right = 0
     for i in range(len(shape)):
-        if new_strides[i] > 0:
+        if new_strides[i] >= 0:
             new_size[i] = (shape[i] - 1) * new_strides[i] + 1
             right += new_strides[i] * (shape[i] - 1)
         else:  # TODO: Support negative strides in the future
@@ -321,7 +336,7 @@ def rearrange_tensor(tensor, new_strides):
         torch.float32,
         torch.float64,
     ]:
-        new_tensor.view(-1).index_add_(0, new_positions, tensor.view(-1))
+        new_tensor.view(-1).index_add_(0, new_positions, tensor.contiguous().view(-1))
     elif tensor.dtype in [torch.uint16, torch.uint32, torch.uint64]:
         new_tensor_int64 = new_tensor.to(dtype=torch.int64)
         tensor_int64 = tensor.to(dtype=torch.int64)
@@ -431,6 +446,8 @@ def synchronize_device(torch_device):
         torch.npu.synchronize()
     elif torch_device == "mlu":
         torch.mlu.synchronize()
+    elif torch_device == "musa":
+        torch.musa.synchronize()
 
 
 def debug(actual, desired, atol=0, rtol=1e-2, equal_nan=False, verbose=True):
@@ -463,7 +480,14 @@ def debug(actual, desired, atol=0, rtol=1e-2, equal_nan=False, verbose=True):
 
 
 def filter_tensor_dtypes_by_device(device, tensor_dtypes):
-    if device in (InfiniDeviceEnum.CPU, InfiniDeviceEnum.NVIDIA, InfiniDeviceEnum.METAX, InfiniDeviceEnum.ASCEND, InfiniDeviceEnum.ILUVATAR, InfiniDeviceEnum.CAMBRICON):
+    if device in (
+        InfiniDeviceEnum.CPU,
+        InfiniDeviceEnum.NVIDIA,
+        InfiniDeviceEnum.METAX,
+        InfiniDeviceEnum.ASCEND,
+        InfiniDeviceEnum.ILUVATAR,
+        InfiniDeviceEnum.CAMBRICON,
+    ):
         return tensor_dtypes
     else:
         # 过滤掉 torch.bfloat16

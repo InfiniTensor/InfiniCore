@@ -18,16 +18,14 @@ thread_local common::OpCache<size_t, infiniopRearrangeDescriptor_t> caches(
 void calculate(Tensor y, Tensor x) {
     size_t seed = hash_combine(y, x);
 
-    auto device_type = y->device().getType();
-    auto device_index = y->device().getIndex();
-
-    auto &cache = caches.getCache(device_type, device_index);
+    auto device = context::getDevice();
+    auto &cache = caches.getCache(device);
 
     auto desc_opt = cache.get(seed);
     infiniopRearrangeDescriptor_t desc = nullptr;
 
     if (!desc_opt) {
-        INFINICORE_CHECK_ERROR(infiniopCreateRearrangeDescriptor(context::getInfiniopHandle(y->device()), &desc, y->desc(), x->desc()));
+        INFINICORE_CHECK_ERROR(infiniopCreateRearrangeDescriptor(context::getInfiniopHandle(device), &desc, y->desc(), x->desc()));
         cache.put(seed, desc);
     } else {
         desc = *desc_opt;
