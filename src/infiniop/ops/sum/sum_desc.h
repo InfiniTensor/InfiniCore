@@ -9,7 +9,7 @@
 #define DESCRIPTOR(NAMESPACE)                                    \
                                                                  \
     namespace op::sum::NAMESPACE {                               \
-    class Descriptor final: public InfiniopDescriptor {          \
+    class Descriptor final : public InfiniopDescriptor {         \
         struct Opaque;                                           \
         Opaque *_opaque;                                         \
         SumInfo _info;                                           \
@@ -25,7 +25,6 @@
               _opaque(opaque),                                   \
               _info(info),                                       \
               _workspace_size(workspace_size) {}                 \
-                                                                 \
                                                                  \
     public:                                                      \
         ~Descriptor();                                           \
@@ -47,6 +46,5 @@
             void *stream) const;                                 \
     };                                                           \
     }
-
 
 #endif

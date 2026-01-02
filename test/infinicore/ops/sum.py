@@ -3,7 +3,7 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-#import torch
+# import torch
 import infinicore
 import torch
 from framework import (
@@ -21,7 +21,7 @@ _TEST_CASES_DATA = [
     ((8, 8), None, None, None, None),
     ((8, 8), (16, 1), 1, False, None),
     ((2, 3, 4), None, 0, True, None),
-    ((1, 8), None, (0,), False, None), #tuple 导致 infini_list  kwargs dim,[0]
+    ((1, 8), None, (0,), False, None),  # tuple 导致 infini_list  kwargs dim,[0]
     ((16, 64), (128, 1), None, None, None),
     ((4, 5, 6), (60, 12, 2), 2, True, None),
 ]
@@ -79,7 +79,9 @@ class OpTest(BaseOperatorTest):
 
     def infinicore_operator(self, *args, **kwargs):
         """InfiniCore implementation (operator not yet available)."""
-        return infinicore.sum(*args, **kwargs) # todo 找到具体对应的 python/infinicore/ops/sum.py
+        return infinicore.sum(
+            *args, **kwargs
+        )  # todo 找到具体对应的 python/infinicore/ops/sum.py
 
 
 def main():

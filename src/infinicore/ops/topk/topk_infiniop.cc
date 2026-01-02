@@ -16,7 +16,7 @@ thread_local common::OpCache<size_t, infiniopTopKDescriptor_t> caches(
     });
 
 void calculate(Tensor values_output, Tensor indices_output, Tensor input, size_t k, size_t dim, bool largest, bool sorted) {
-    size_t seed = hash_combine(values_output, indices_output, input, k, dim, largest, sorted); 
+    size_t seed = hash_combine(values_output, indices_output, input, k, dim, largest, sorted);
 
     auto device_type = context::getDevice().getType();
     auto device_index = context::getDevice().getIndex();
@@ -45,13 +45,12 @@ void calculate(Tensor values_output, Tensor indices_output, Tensor input, size_t
 }
 
 static bool registered = []() {
-    TopK::dispatcher().registerDevice({
-            Device::Type::CPU,
-            Device::Type::NVIDIA,
-            Device::Type::METAX,
-            Device::Type::MOORE,
-            Device::Type::ILUVATAR
-        }, &calculate, false);
+    TopK::dispatcher().registerDevice({Device::Type::CPU,
+                                       Device::Type::NVIDIA,
+                                       Device::Type::METAX,
+                                       Device::Type::MOORE,
+                                       Device::Type::ILUVATAR},
+                                      &calculate, false);
     return true;
 }();
 

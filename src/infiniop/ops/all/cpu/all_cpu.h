@@ -5,5 +5,4 @@
 
 DESCRIPTOR(cpu);
 
-
 #endif // __INFINIOP_ALL_CPU_H__

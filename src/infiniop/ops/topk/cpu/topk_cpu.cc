@@ -1,6 +1,6 @@
 #include "topk_cpu.h"
-#include "../../../devices/cpu/common_cpu.h"
 #include "../../../../utils.h"
+#include "../../../devices/cpu/common_cpu.h"
 #include <algorithm>
 #include <vector>
 namespace op::topk::cpu {
@@ -13,18 +13,18 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t indices_output_desc,
     infiniopTensorDescriptor_t input_desc,
     size_t k,
-    size_t dim, 
+    size_t dim,
     bool largest,
     bool sorted) {
     auto result = TopKInfo::create(values_output_desc, indices_output_desc, input_desc, k, dim, largest, sorted);
     CHECK_RESULT(result);
-    
+
     *desc_ptr = new Descriptor(nullptr, result.take(), 0, handle->device, handle->device_id);
     return INFINI_STATUS_SUCCESS;
 }
 
-namespace{
-template<typename Tdata>
+namespace {
+template <typename Tdata>
 infiniStatus_t calculateTopK(
     const TopKInfo &info,
     Tdata *values_output,
@@ -33,73 +33,75 @@ infiniStatus_t calculateTopK(
     size_t k,
     size_t dim,
     bool largest,
-    bool sorted){
-        if (k == 0) {
-            return INFINI_STATUS_SUCCESS;
-        }
-        for(size_t i = 0; i < info.n_iteration; i++){
-            size_t index = i;
-            size_t input_start = 0;
-            size_t output_start = 0;
-            for(int j = info.ndim - 1; j >= 0; j--){
-                if(j == (int)dim){continue;}
-                input_start += (index % info.input_shape[j]) * info.input_strides[j];
-                output_start += (index % info.output_shape[j]) * info.output_strides[j];
-                index /= info.input_shape[j];
-            }
-            using elem_t = std::pair<Tdata, size_t>;
-            std::vector<elem_t> vi_queue(info.dim_elements);
-            for(size_t j = 0; j < info.dim_elements; j++){
-                vi_queue[j].first = input[input_start + j * info.input_strides[dim]];
-                vi_queue[j].second = j;
-            }
-            bool use_partial_sort = static_cast<size_t>(k) * 64 <= info.dim_elements;
-
-            if (use_partial_sort) {
-                if(largest){
-                    std::partial_sort(vi_queue.begin(), vi_queue.begin() + k, vi_queue.end(), 
-                                    [](const elem_t &a, const elem_t &b) -> bool {
-                                        return utils::cast<float>(a.first) > utils::cast<float>(b.first);
-                                    });
-                } else {
-                    std::partial_sort(vi_queue.begin(), vi_queue.begin() + k, vi_queue.end(), 
-                                    [](const elem_t &a, const elem_t &b) -> bool {
-                                        return utils::cast<float>(a.first) < utils::cast<float>(b.first);
-                                    });
-                }
-            } else {
-                if(largest){
-                    std::nth_element(vi_queue.begin(), vi_queue.begin() + k - 1, vi_queue.end(), 
-                                    [](const elem_t &a, const elem_t &b) -> bool {
-                                        return utils::cast<float>(a.first) > utils::cast<float>(b.first);
-                                    });
-                    if (sorted) {
-                        std::sort(vi_queue.begin(), vi_queue.begin() + k,  // 注意：PyTorch 这里是 k，不是 k-1
-                                [](const elem_t &a, const elem_t &b) -> bool {
-                                    return utils::cast<float>(a.first) > utils::cast<float>(b.first);
-                                });
-                    }
-                } else {
-                    std::nth_element(vi_queue.begin(), vi_queue.begin() + k - 1, vi_queue.end(), 
-                                    [](const elem_t &a, const elem_t &b) -> bool {
-                                        return utils::cast<float>(a.first) < utils::cast<float>(b.first);
-                                    });
-                    if (sorted) {
-                        std::sort(vi_queue.begin(), vi_queue.begin() + k,  // 注意：PyTorch 这里是 k，不是 k-1
-                                [](const elem_t &a, const elem_t &b) -> bool {
-                                    return utils::cast<float>(a.first) < utils::cast<float>(b.first);
-                                });
-                    }
-                }
-            }
-            for(size_t j = 0; j < k; j++){
-                values_output[output_start + j * info.output_strides[dim]] = vi_queue[j].first;
-                indices_output[output_start + j * info.output_strides[dim]] = (int32_t)vi_queue[j].second;
-            }
-        }
+    bool sorted) {
+    if (k == 0) {
         return INFINI_STATUS_SUCCESS;
     }
+    for (size_t i = 0; i < info.n_iteration; i++) {
+        size_t index = i;
+        size_t input_start = 0;
+        size_t output_start = 0;
+        for (int j = info.ndim - 1; j >= 0; j--) {
+            if (j == (int)dim) {
+                continue;
+            }
+            input_start += (index % info.input_shape[j]) * info.input_strides[j];
+            output_start += (index % info.output_shape[j]) * info.output_strides[j];
+            index /= info.input_shape[j];
+        }
+        using elem_t = std::pair<Tdata, size_t>;
+        std::vector<elem_t> vi_queue(info.dim_elements);
+        for (size_t j = 0; j < info.dim_elements; j++) {
+            vi_queue[j].first = input[input_start + j * info.input_strides[dim]];
+            vi_queue[j].second = j;
+        }
+        bool use_partial_sort = static_cast<size_t>(k) * 64 <= info.dim_elements;
+
+        if (use_partial_sort) {
+            if (largest) {
+                std::partial_sort(vi_queue.begin(), vi_queue.begin() + k, vi_queue.end(),
+                                  [](const elem_t &a, const elem_t &b) -> bool {
+                                      return utils::cast<float>(a.first) > utils::cast<float>(b.first);
+                                  });
+            } else {
+                std::partial_sort(vi_queue.begin(), vi_queue.begin() + k, vi_queue.end(),
+                                  [](const elem_t &a, const elem_t &b) -> bool {
+                                      return utils::cast<float>(a.first) < utils::cast<float>(b.first);
+                                  });
+            }
+        } else {
+            if (largest) {
+                std::nth_element(vi_queue.begin(), vi_queue.begin() + k - 1, vi_queue.end(),
+                                 [](const elem_t &a, const elem_t &b) -> bool {
+                                     return utils::cast<float>(a.first) > utils::cast<float>(b.first);
+                                 });
+                if (sorted) {
+                    std::sort(vi_queue.begin(), vi_queue.begin() + k, // 注意：PyTorch 这里是 k，不是 k-1
+                              [](const elem_t &a, const elem_t &b) -> bool {
+                                  return utils::cast<float>(a.first) > utils::cast<float>(b.first);
+                              });
+                }
+            } else {
+                std::nth_element(vi_queue.begin(), vi_queue.begin() + k - 1, vi_queue.end(),
+                                 [](const elem_t &a, const elem_t &b) -> bool {
+                                     return utils::cast<float>(a.first) < utils::cast<float>(b.first);
+                                 });
+                if (sorted) {
+                    std::sort(vi_queue.begin(), vi_queue.begin() + k, // 注意：PyTorch 这里是 k，不是 k-1
+                              [](const elem_t &a, const elem_t &b) -> bool {
+                                  return utils::cast<float>(a.first) < utils::cast<float>(b.first);
+                              });
+                }
+            }
+        }
+        for (size_t j = 0; j < k; j++) {
+            values_output[output_start + j * info.output_strides[dim]] = vi_queue[j].first;
+            indices_output[output_start + j * info.output_strides[dim]] = (int32_t)vi_queue[j].second;
+        }
+    }
+    return INFINI_STATUS_SUCCESS;
 }
+} // namespace
 
 infiniStatus_t Descriptor::calculate(
     void *workspace,

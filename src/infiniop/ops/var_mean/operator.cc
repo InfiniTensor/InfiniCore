@@ -25,7 +25,7 @@ __C infiniStatus_t infiniopCreateVarMeanDescriptor(
     infiniopTensorDescriptor_t var_output_desc,
     infiniopTensorDescriptor_t mean_output_desc,
     infiniopTensorDescriptor_t input_desc,
-    size_t *dim, 
+    size_t *dim,
     size_t dim_size,
     bool unbiased,
     bool keepdim) {
@@ -119,14 +119,14 @@ __C infiniStatus_t infiniopVarMean(
     void *var_output,
     void *mean_output,
     const void *input,
-    size_t *dim, 
+    size_t *dim,
     size_t dim_size,
     bool unbiased,
     bool keepdim,
     void *stream) {
 
-#define CALCULATE(CASE, NAMESPACE)                                            \
-    case CASE:                                                                \
+#define CALCULATE(CASE, NAMESPACE)                                                 \
+    case CASE:                                                                     \
         return reinterpret_cast<const op::var_mean::NAMESPACE::Descriptor *>(desc) \
             ->calculate(workspace, workspace_size, var_output, mean_output, input, unbiased, keepdim, stream)
 

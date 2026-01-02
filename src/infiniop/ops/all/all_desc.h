@@ -9,7 +9,7 @@
 #define DESCRIPTOR(NAMESPACE)                                    \
                                                                  \
     namespace op::all::NAMESPACE {                               \
-    class Descriptor final: public InfiniopDescriptor {          \
+    class Descriptor final : public InfiniopDescriptor {         \
         struct Opaque;                                           \
         Opaque *_opaque;                                         \
         AllInfo _info;                                           \
@@ -25,7 +25,6 @@
               _opaque(opaque),                                   \
               _info(info),                                       \
               _workspace_size(workspace_size) {}                 \
-                                                                 \
                                                                  \
     public:                                                      \
         ~Descriptor();                                           \
@@ -50,6 +49,5 @@
             void *stream) const;                                 \
     };                                                           \
     }
-
 
 #endif

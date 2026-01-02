@@ -7,28 +7,28 @@
 typedef struct InfiniopDescriptor *infiniopVarMeanDescriptor_t;
 
 __C __export infiniStatus_t infiniopCreateVarMeanDescriptor(infiniopHandle_t handle,
-                                                        infiniopVarMeanDescriptor_t *desc_ptr,
-                                                        infiniopTensorDescriptor_t var_output_desc,
-                                                        infiniopTensorDescriptor_t mean_output_desc,
-                                                        infiniopTensorDescriptor_t input_desc,
-                                                        size_t *dim,
-                                                        size_t dim_size,
-                                                        bool unbiased,
-                                                        bool keepdim);
+                                                            infiniopVarMeanDescriptor_t *desc_ptr,
+                                                            infiniopTensorDescriptor_t var_output_desc,
+                                                            infiniopTensorDescriptor_t mean_output_desc,
+                                                            infiniopTensorDescriptor_t input_desc,
+                                                            size_t *dim,
+                                                            size_t dim_size,
+                                                            bool unbiased,
+                                                            bool keepdim);
 
 __C __export infiniStatus_t infiniopGetVarMeanWorkspaceSize(infiniopVarMeanDescriptor_t desc, size_t *size);
 
 __C __export infiniStatus_t infiniopVarMean(infiniopVarMeanDescriptor_t desc,
-                                        void *workspace,
-                                        size_t workspace_size,
-                                        void *var_output,
-                                        void *mean_output,
-                                        const void *input,
-                                        size_t *dim,
-                                        size_t dim_size,
-                                        bool unbiased,
-                                        bool keepdim,
-                                        void *stream);
+                                            void *workspace,
+                                            size_t workspace_size,
+                                            void *var_output,
+                                            void *mean_output,
+                                            const void *input,
+                                            size_t *dim,
+                                            size_t dim_size,
+                                            bool unbiased,
+                                            bool keepdim,
+                                            void *stream);
 
 __C __export infiniStatus_t infiniopDestroyVarMeanDescriptor(infiniopVarMeanDescriptor_t desc);
 

@@ -1,8 +1,8 @@
 #include "infinicore/ops/var_mean.hpp"
 
 #include "../../utils.hpp"
-#include <vector>
 #include <stdexcept>
+#include <vector>
 
 namespace infinicore::op {
 
@@ -24,7 +24,6 @@ void Var_Mean::execute(Tensor var_output, Tensor mean_output, Tensor input, std:
     func(var_output, mean_output, input, dim, unbiased, keepdim);
 }
 
-
 std::pair<Tensor, Tensor> var_mean(Tensor input, std::vector<size_t> dim, bool unbiased, bool keepdim) {
     auto in_shape = input->shape();
     std::vector<size_t> out_shape;
@@ -37,10 +36,10 @@ std::pair<Tensor, Tensor> var_mean(Tensor input, std::vector<size_t> dim, bool u
     if (dim.size() == in_shape.size() && !keepdim) {
         out_shape = {};
     } else {
-        if(keepdim){
+        if (keepdim) {
             size_t j = 0;
-            for(size_t i = 0; i < in_shape.size(); i++){
-                if(j < dim.size() && dim[j] == i){
+            for (size_t i = 0; i < in_shape.size(); i++) {
+                if (j < dim.size() && dim[j] == i) {
                     out_shape.push_back(1);
                     j++;
                 } else {
@@ -49,8 +48,8 @@ std::pair<Tensor, Tensor> var_mean(Tensor input, std::vector<size_t> dim, bool u
             }
         } else {
             size_t j = 0;
-            for(size_t i = 0; i < in_shape.size(); i++){
-                if(j < dim.size() && dim[j] == i){
+            for (size_t i = 0; i < in_shape.size(); i++) {
+                if (j < dim.size() && dim[j] == i) {
                     j++;
                 } else {
                     out_shape.push_back(in_shape[i]);
@@ -60,13 +59,11 @@ std::pair<Tensor, Tensor> var_mean(Tensor input, std::vector<size_t> dim, bool u
     }
     auto var_output = Tensor::empty(out_shape, input->dtype(), input->device());
     auto mean_output = Tensor::empty(out_shape, input->dtype(), input->device());
-    var_mean_(var_output, mean_output, input, dim, unbiased, keepdim); 
+    var_mean_(var_output, mean_output, input, dim, unbiased, keepdim);
     return {var_output, mean_output};
 }
 
-
-
-void var_mean_(Tensor var_output, Tensor mean_output,Tensor input, std::vector<size_t> dim, bool unbiased, bool keepdim) {
+void var_mean_(Tensor var_output, Tensor mean_output, Tensor input, std::vector<size_t> dim, bool unbiased, bool keepdim) {
     Var_Mean::execute(var_output, mean_output, input, dim, unbiased, keepdim);
 }
 } // namespace infinicore::op

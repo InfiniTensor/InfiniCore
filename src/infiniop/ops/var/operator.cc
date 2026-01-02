@@ -24,21 +24,21 @@ __C infiniStatus_t infiniopCreateVarDescriptor(
     infiniopVarDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t var_output_desc,
     infiniopTensorDescriptor_t input_desc,
-    size_t *dim, 
+    size_t *dim,
     size_t dim_size,
     bool unbiased,
     bool keepdim) {
 
-#define CREATE(CASE, NAMESPACE)                                                 \
-    case CASE:                                                                  \
-        return op::var::NAMESPACE::Descriptor::create(                          \
-            handle,                                                             \
-            reinterpret_cast<op::var::NAMESPACE::Descriptor **>(desc_ptr),      \
-            var_output_desc,                                                    \
-            input_desc,                                                         \
-            dim,                                                                \
-            dim_size,                                                           \
-            unbiased,                                                           \
+#define CREATE(CASE, NAMESPACE)                                            \
+    case CASE:                                                             \
+        return op::var::NAMESPACE::Descriptor::create(                     \
+            handle,                                                        \
+            reinterpret_cast<op::var::NAMESPACE::Descriptor **>(desc_ptr), \
+            var_output_desc,                                               \
+            input_desc,                                                    \
+            dim,                                                           \
+            dim_size,                                                      \
+            unbiased,                                                      \
             keepdim)
 
     switch (handle->device) {
@@ -116,7 +116,7 @@ __C infiniStatus_t infiniopVar(
     size_t workspace_size,
     void *var_output,
     const void *input,
-    size_t *dim, 
+    size_t *dim,
     size_t dim_size,
     bool unbiased,
     bool keepdim,

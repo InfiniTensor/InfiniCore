@@ -1,8 +1,8 @@
 #include "infinicore/ops/var.hpp"
 
 #include "../../utils.hpp"
-#include <vector>
 #include <stdexcept>
+#include <vector>
 
 namespace infinicore::op {
 
@@ -34,12 +34,12 @@ Tensor var(Tensor input, std::vector<size_t> dim, bool unbiased, bool keepdim) {
     }
     std::sort(dim.begin(), dim.end());
     if (dim.size() == in_shape.size() && !keepdim) {
-        out_shape = {}; 
+        out_shape = {};
     } else {
-        if(keepdim){
+        if (keepdim) {
             size_t j = 0;
-            for(size_t i = 0; i < in_shape.size(); i++){
-                if(j < dim.size() && dim[j] == i){
+            for (size_t i = 0; i < in_shape.size(); i++) {
+                if (j < dim.size() && dim[j] == i) {
                     out_shape.push_back(1);
                     j++;
                 } else {
@@ -48,8 +48,8 @@ Tensor var(Tensor input, std::vector<size_t> dim, bool unbiased, bool keepdim) {
             }
         } else {
             size_t j = 0;
-            for(size_t i = 0; i < in_shape.size(); i++){
-                if(j < dim.size() && dim[j] == i){
+            for (size_t i = 0; i < in_shape.size(); i++) {
+                if (j < dim.size() && dim[j] == i) {
                     j++;
                 } else {
                     out_shape.push_back(in_shape[i]);
@@ -58,13 +58,11 @@ Tensor var(Tensor input, std::vector<size_t> dim, bool unbiased, bool keepdim) {
         }
     }
     auto var_output = Tensor::empty(out_shape, input->dtype(), input->device());
-    var_(var_output, input, dim, unbiased, keepdim); 
+    var_(var_output, input, dim, unbiased, keepdim);
     return var_output;
 }
 
-
-
-void var_(Tensor var_output,Tensor input, std::vector<size_t> dim, bool unbiased, bool keepdim) {
+void var_(Tensor var_output, Tensor input, std::vector<size_t> dim, bool unbiased, bool keepdim) {
     Var::execute(var_output, input, dim, unbiased, keepdim);
 }
 } // namespace infinicore::op

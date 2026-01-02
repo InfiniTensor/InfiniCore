@@ -110,19 +110,23 @@ class OpTest(BaseOperatorTest):
     def torch_operator(self, *args, **kwargs):
         """PyTorch implementation with tensor printing"""
         print("=== PyTorch Operator ===")
-        
+
         # Handle input tensor
         input_tensor = args[0]
         print(f"Input tensor shape: {input_tensor.shape}")
         print(f"Input tensor strides: {input_tensor.stride()}")
         print(f"Input tensor dtype: {input_tensor.dtype}")
         print(f"Input tensor:\n{input_tensor}")
-        
+
         # Handle out parameter
-        if 'out' in kwargs:
-            out_tensor = kwargs['out']
-            
-            result = torch.all(input_tensor, **{k: v for k, v in kwargs.items() if k != 'out'}, out=out_tensor)
+        if "out" in kwargs:
+            out_tensor = kwargs["out"]
+
+            result = torch.all(
+                input_tensor,
+                **{k: v for k, v in kwargs.items() if k != "out"},
+                out=out_tensor,
+            )
             print(f"Output tensor (torch) shape: {out_tensor.shape}")
             print(f"Output tensor (torch) strides: {out_tensor.stride()}")
             print(f"Output tensor (torch):\n{out_tensor}")
@@ -132,30 +136,38 @@ class OpTest(BaseOperatorTest):
             print(f"Output torchtensor strides: {result.stride()}")
             print(f"Output torch tensor dtype: {result.dtype}")
             print(f"Output torch tensor:\n{result}")
-        
+
         print("=== End PyTorch Operator ===")
         return result
 
     def infinicore_operator(self, *args, **kwargs):
         """InfiniCore implementation with tensor printing"""
         print("=== InfiniCore Operator ===")
-        
+
         # Handle input tensor
         input_tensor = args[0]
         # Handle out parameter
-        if 'out' in kwargs:
-            out_tensor = kwargs['out']
-            result = infinicore.all(input_tensor, **{k: v for k, v in kwargs.items() if k != 'out'}, out=out_tensor)
+        if "out" in kwargs:
+            out_tensor = kwargs["out"]
+            result = infinicore.all(
+                input_tensor,
+                **{k: v for k, v in kwargs.items() if k != "out"},
+                out=out_tensor,
+            )
             print(f"Output tensor (infinicore) shape: {out_tensor.shape}")
-            print(f"Output tensor (infinicore) strides: {getattr(out_tensor, 'stride', lambda: 'N/A')()}")
+            print(
+                f"Output tensor (infinicore) strides: {getattr(out_tensor, 'stride', lambda: 'N/A')()}"
+            )
             print(f"Output tensor (infinicore):\n{out_tensor}")
         else:
             result = infinicore.all(input_tensor, **kwargs)
             print(f"Output infinicore tensor shape: {result.shape}")
-            print(f"Output infinicore tensor strides: {getattr(result, 'stride', lambda: 'N/A')()}")
+            print(
+                f"Output infinicore tensor strides: {getattr(result, 'stride', lambda: 'N/A')()}"
+            )
             print(f"Output infinicore tensor dtype: {result.dtype}")
             print(f"Output infinicore tensor:\n{result}")
-        
+
         print("=== End InfiniCore Operator ===")
         return result
 

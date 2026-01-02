@@ -9,7 +9,7 @@
 #define DESCRIPTOR(NAMESPACE)                                    \
                                                                  \
     namespace op::topk::NAMESPACE {                              \
-    class Descriptor final: public InfiniopDescriptor {          \
+    class Descriptor final : public InfiniopDescriptor {         \
         struct Opaque;                                           \
         Opaque *_opaque;                                         \
         TopKInfo _info;                                          \
@@ -25,7 +25,6 @@
               _opaque(opaque),                                   \
               _info(info),                                       \
               _workspace_size(workspace_size) {}                 \
-                                                                 \
                                                                  \
     public:                                                      \
         ~Descriptor();                                           \
@@ -54,6 +53,5 @@
             void *stream) const;                                 \
     };                                                           \
     }
-
 
 #endif

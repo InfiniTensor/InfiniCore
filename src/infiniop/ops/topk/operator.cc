@@ -30,17 +30,17 @@ __C infiniStatus_t infiniopCreateTopKDescriptor(
     bool largest,
     bool sorted) {
 
-#define CREATE(CASE, NAMESPACE)                                              \
-    case CASE:                                                               \
-        return op::topk::NAMESPACE::Descriptor::create(                      \
-            handle,                                                          \
-            reinterpret_cast<op::topk::NAMESPACE::Descriptor **>(desc_ptr),  \
-            values_output_desc,                                              \
-            indices_output_desc,                                             \
-            input_desc,                                                      \
-            k,                                                               \
-            dim,                                                             \
-            largest,                                                         \
+#define CREATE(CASE, NAMESPACE)                                             \
+    case CASE:                                                              \
+        return op::topk::NAMESPACE::Descriptor::create(                     \
+            handle,                                                         \
+            reinterpret_cast<op::topk::NAMESPACE::Descriptor **>(desc_ptr), \
+            values_output_desc,                                             \
+            indices_output_desc,                                            \
+            input_desc,                                                     \
+            k,                                                              \
+            dim,                                                            \
+            largest,                                                        \
             sorted)
 
     switch (handle->device) {
@@ -76,8 +76,8 @@ __C infiniStatus_t infiniopCreateTopKDescriptor(
 
 __C infiniStatus_t infiniopGetTopKWorkspaceSize(infiniopTopKDescriptor_t desc, size_t *size) {
 
-#define GET(CASE, NAMESPACE)                                                               \
-    case CASE:                                                                             \
+#define GET(CASE, NAMESPACE)                                                                \
+    case CASE:                                                                              \
         *size = reinterpret_cast<op::topk::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
         return INFINI_STATUS_SUCCESS
 
@@ -125,10 +125,10 @@ __C infiniStatus_t infiniopTopK(
     bool sorted,
     void *stream) {
 
-#define CALCULATE(CASE, NAMESPACE)                                               \
-    case CASE:                                                                   \
-        return reinterpret_cast<const op::topk::NAMESPACE::Descriptor *>(desc)   \
-            ->calculate(workspace, workspace_size, values_output, indices_output, input, k, dim ,largest, sorted, stream)
+#define CALCULATE(CASE, NAMESPACE)                                             \
+    case CASE:                                                                 \
+        return reinterpret_cast<const op::topk::NAMESPACE::Descriptor *>(desc) \
+            ->calculate(workspace, workspace_size, values_output, indices_output, input, k, dim, largest, sorted, stream)
 
     switch (desc->device_type) {
 
@@ -164,8 +164,8 @@ __C infiniStatus_t infiniopTopK(
 __C infiniStatus_t
 infiniopDestroyTopKDescriptor(infiniopTopKDescriptor_t desc) {
 
-#define DELETE(CASE, NAMESPACE)                                                \
-    case CASE:                                                                 \
+#define DELETE(CASE, NAMESPACE)                                                 \
+    case CASE:                                                                  \
         delete reinterpret_cast<const op::topk::NAMESPACE::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS;
 

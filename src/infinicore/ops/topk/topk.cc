@@ -1,8 +1,8 @@
 #include "infinicore/ops/topk.hpp"
 
 #include "../../utils.hpp"
-#include <vector>
 #include <stdexcept>
+#include <vector>
 
 namespace infinicore::op {
 
@@ -23,19 +23,16 @@ void TopK::execute(Tensor values_output, Tensor indices_output, Tensor input, si
     func(values_output, indices_output, input, k, dim, largest, sorted);
 }
 
-
-std::pair<Tensor, Tensor>  topk(Tensor input, size_t k, size_t dim, bool largest, bool sorted) {
+std::pair<Tensor, Tensor> topk(Tensor input, size_t k, size_t dim, bool largest, bool sorted) {
     auto in_shape = input->shape();
     std::vector<size_t> out_shape = in_shape;
     out_shape[dim] = k;
-    
+
     auto values_output = Tensor::empty(out_shape, input->dtype(), input->device());
     auto indices_output = Tensor::empty(out_shape, DataType::I32, input->device());
     topk_(values_output, indices_output, input, k, dim, largest, sorted);
     return {values_output, indices_output};
 }
-
-
 
 void topk_(Tensor values_output, Tensor indices_output, Tensor input, size_t k, size_t dim, bool largest, bool sorted) {
     TopK::execute(values_output, indices_output, input, k, dim, largest, sorted);

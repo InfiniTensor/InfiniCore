@@ -24,7 +24,7 @@ __C infiniStatus_t infiniopCreateSumDescriptor(
     infiniopSumDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t output_desc,
     infiniopTensorDescriptor_t input_desc,
-    size_t *dim, 
+    size_t *dim,
     size_t dim_size,
     bool keepdim) {
 
@@ -114,7 +114,7 @@ __C infiniStatus_t infiniopSum(
     size_t workspace_size,
     void *output,
     const void *input,
-    size_t *dim, 
+    size_t *dim,
     size_t dim_size,
     bool keepdim,
     void *stream) {

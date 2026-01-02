@@ -7,28 +7,28 @@
 typedef struct InfiniopDescriptor *infiniopTopKDescriptor_t;
 
 __C __export infiniStatus_t infiniopCreateTopKDescriptor(infiniopHandle_t handle,
-                                                        infiniopTopKDescriptor_t *desc_ptr,
-                                                        infiniopTensorDescriptor_t values_output_desc,
-                                                        infiniopTensorDescriptor_t indices_output_desc,
-                                                        infiniopTensorDescriptor_t input_desc,
-                                                        size_t k,
-                                                        size_t dim,
-                                                        bool largest,
-                                                        bool sorted);
+                                                         infiniopTopKDescriptor_t *desc_ptr,
+                                                         infiniopTensorDescriptor_t values_output_desc,
+                                                         infiniopTensorDescriptor_t indices_output_desc,
+                                                         infiniopTensorDescriptor_t input_desc,
+                                                         size_t k,
+                                                         size_t dim,
+                                                         bool largest,
+                                                         bool sorted);
 
 __C __export infiniStatus_t infiniopGetTopKWorkspaceSize(infiniopTopKDescriptor_t desc, size_t *size);
 
 __C __export infiniStatus_t infiniopTopK(infiniopTopKDescriptor_t desc,
-                                        void *workspace,
-                                        size_t workspace_size,
-                                        void *values_output,
-                                        void *indices_output,
-                                        const void *input,
-                                        size_t k,
-                                        size_t dim,
-                                        bool largest,
-                                        bool sorted,
-                                        void *stream);
+                                         void *workspace,
+                                         size_t workspace_size,
+                                         void *values_output,
+                                         void *indices_output,
+                                         const void *input,
+                                         size_t k,
+                                         size_t dim,
+                                         bool largest,
+                                         bool sorted,
+                                         void *stream);
 
 __C __export infiniStatus_t infiniopDestroyTopKDescriptor(infiniopTopKDescriptor_t desc);
 

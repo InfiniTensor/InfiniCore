@@ -18,7 +18,7 @@ thread_local common::OpCache<size_t, infiniopVarMeanDescriptor_t> caches(
     });
 
 void calculate(Tensor var_output, Tensor mean_output, Tensor input, std::vector<size_t> dim, bool unbiased, bool keepdim) {
-    size_t seed = hash_combine(var_output, mean_output, input, dim.size(), unbiased, keepdim); 
+    size_t seed = hash_combine(var_output, mean_output, input, dim.size(), unbiased, keepdim);
 
     auto device_type = context::getDevice().getType();
     auto device_index = context::getDevice().getIndex();
@@ -46,16 +46,13 @@ void calculate(Tensor var_output, Tensor mean_output, Tensor input, std::vector<
         var_output->data(), mean_output->data(), input->data(), dim.data(), dim.size(), unbiased, keepdim, context::getStream()));
 }
 
-
-
 static bool registered = []() {
-    Var_Mean::dispatcher().registerDevice({
-            Device::Type::CPU,
-            Device::Type::NVIDIA,
-            Device::Type::METAX,
-            Device::Type::MOORE,
-            Device::Type::ILUVATAR
-        }, &calculate, false);
+    Var_Mean::dispatcher().registerDevice({Device::Type::CPU,
+                                           Device::Type::NVIDIA,
+                                           Device::Type::METAX,
+                                           Device::Type::MOORE,
+                                           Device::Type::ILUVATAR},
+                                          &calculate, false);
     return true;
 }();
 

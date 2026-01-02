@@ -2,10 +2,6 @@
 #define __INFINIOP_API_H__
 
 #include "infiniop/handle.h"
-#include "infiniop/ops/sum.h"
-#include "infiniop/ops/var_mean.h"
-#include "infiniop/ops/var.h"
-#include "infiniop/ops/topk.h"
 #include "infiniop/ops/add.h"
 #include "infiniop/ops/all.h"
 #include "infiniop/ops/attention.h"
@@ -33,10 +29,14 @@
 #include "infiniop/ops/softmax.h"
 #include "infiniop/ops/softplus.h"
 #include "infiniop/ops/sub.h"
+#include "infiniop/ops/sum.h"
 #include "infiniop/ops/swiglu.h"
 #include "infiniop/ops/tanh.h"
+#include "infiniop/ops/topk.h"
 #include "infiniop/ops/topkrouter.h"
 #include "infiniop/ops/topksoftmax.h"
+#include "infiniop/ops/var.h"
+#include "infiniop/ops/var_mean.h"
 #include "infiniop/ops/zeros.h"
 #include "infiniop/tensor_descriptor.h"
 

@@ -1,9 +1,8 @@
 #include "../../utils.hpp"
 #include "infinicore/common/hash.hpp"
-#include "infinicore/ops/common/cache.hpp"
 #include "infinicore/ops/all.hpp"
+#include "infinicore/ops/common/cache.hpp"
 #include <infiniop.h>
-
 
 namespace infinicore::op::all_impl::infiniop {
 
@@ -30,7 +29,7 @@ void calculate(Tensor output, Tensor input, std::vector<size_t> dim, bool keepdi
     if (!desc_opt) {
         INFINICORE_CHECK_ERROR(infiniopCreateAllDescriptor(
             context::getInfiniopHandle(output->device()), &desc,
-            output->desc(), input->desc(), dim.data(), dim.size(),keepdim));
+            output->desc(), input->desc(), dim.data(), dim.size(), keepdim));
         cache.put(seed, desc);
     } else {
         desc = *desc_opt;
@@ -46,13 +45,12 @@ void calculate(Tensor output, Tensor input, std::vector<size_t> dim, bool keepdi
 }
 
 static bool registered = []() {
-    All::dispatcher().registerDevice({
-            Device::Type::CPU,
-            Device::Type::NVIDIA,
-            Device::Type::METAX,
-            Device::Type::MOORE,
-            Device::Type::ILUVATAR
-        }, &calculate, false);
+    All::dispatcher().registerDevice({Device::Type::CPU,
+                                      Device::Type::NVIDIA,
+                                      Device::Type::METAX,
+                                      Device::Type::MOORE,
+                                      Device::Type::ILUVATAR},
+                                     &calculate, false);
     return true;
 }();
 
