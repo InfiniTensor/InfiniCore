@@ -356,7 +356,7 @@ __global__ void ComputeVarUsingWelfordWrapper(
             }
         } else {
             CUDA_1D_KERNEL_LOOP(i, output_size) { 
-                const size_t input_offset = indexToOffset(i * reduce_num, input_ndim, permuted_input_shape, permuted_input_strides); 
+                // const size_t input_offset = indexToOffset(i * reduce_num, input_ndim, permuted_input_shape, permuted_input_strides); 
                 var_output_ptr[i] = device::cuda::Nan<Tdata>(); 
             }
         }
