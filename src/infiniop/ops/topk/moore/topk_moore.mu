@@ -1,6 +1,6 @@
-#include "../../../devices/moore/moore_common.cuh"
-#include "../../../devices/moore/moore_kernel_common.cuh"
-#include "topk_moore.cuh"
+#include "../../../devices/moore/moore_common.h"
+#include "../../../devices/moore/moore_kernel_common.h"
+#include "topk_moore.h"
 #include "../cuda/kernel.cuh"
 
 #include <cub/block/block_radix_sort.cuh>

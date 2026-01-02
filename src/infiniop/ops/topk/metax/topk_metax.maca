@@ -1,6 +1,6 @@
-#include "../../../devices/metax/metax_common.cuh"
-#include "../../../devices/metax/metax_kernel_common.cuh"
-#include "topk_metax.cuh"
+#include "../../../devices/metax/metax_common.h"
+#include "../../../devices/metax/metax_kernel_common.h"
+#include "topk_metax.h"
 #include "../cuda/kernel.cuh"
 
 #include <cub/block/block_radix_sort.cuh>
