@@ -1,10 +1,7 @@
 #ifndef __TOPK_CUDA_KERNEL_CUH__
 #define __TOPK_CUDA_KERNEL_CUH__
 
-#include <cuda_runtime.h>
 #include <math_constants.h>
-#include <cuda_fp16.h>
-#include <cuda_bf16.h>
 #include <cub/block/block_radix_sort.cuh>
 #include <stdint.h>
 
@@ -46,12 +43,28 @@ namespace op::topk::cuda{
     template<>
     __device__ __forceinline__ float to_float<half>(half v) { return __half2float(v);}
     
-    template<>
-    __device__ __forceinline__ float to_float<__nv_bfloat16>(__nv_bfloat16 v) { return __bfloat162float(v);}
 
-    #ifdef ENABLE_MOORE_API
+    #if defined(ENABLE_MOORE_API)
+
     template<>
-    __device__ __forceinline__ float to_float<__mt_bfloat16>(__mt_bfloat16 v) { return __bfloat162float(v);}
+    __device__ __forceinline__ float to_float<__mt_bfloat16>(__mt_bfloat16 v) {
+        return __bfloat162float(v);
+    }
+    
+    #elif defined(ENABLE_METAX_API)
+    
+    template<>
+    __device__ __forceinline__ float to_float<__hpcc_bfloat16>(__hpcc_bfloat16 v) {
+        return __bfloat162float(v);
+    }
+    
+    #else  // CUDA / NVIDIA
+    
+    template<>
+    __device__ __forceinline__ float to_float<__nv_bfloat16>(__nv_bfloat16 v) {
+        return __bfloat162float(v);
+    }
+    
     #endif
 
     // float -> ordered uint32

@@ -1,7 +1,6 @@
 #ifndef __VAR_MEAN_CUDA_H__
 #define __VAR_MEAN_CUDA_H__
 
-#include <cuda_runtime.h>
 #include <math_constants.h>
 // 规约到标量的情况比较复杂
 

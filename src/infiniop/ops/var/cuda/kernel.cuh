@@ -1,7 +1,6 @@
 #ifndef __VAR_CUDA_H__
 #define __VAR_CUDA_H__
 
-#include <cuda_runtime.h>
 #include <math_constants.h>
 
 __forceinline__ __device__ __host__ size_t indexToOffset(
