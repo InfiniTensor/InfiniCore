@@ -32,10 +32,3 @@ cache/
 *.gz
 *.zip
 *.tar
-config.local.json
-src/infiniop/ops/var_mean/cuda/ref_CudaWelford.txt
-src/infiniop/ops/var_mean/cuda/ref_CudaWelford_basic.txt
-src/infiniop/ops/var_mean/cuda/ref_oneflow.txt
-src/infiniop/ops/topk/cuda/ref_kernel.cuh
-src/infiniop/ops/topk/cuda/ref_kernel2.cuh
-src/infiniop/ops/topk/cuda/ref_kernel3.cuh
