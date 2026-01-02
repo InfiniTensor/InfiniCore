@@ -107,7 +107,7 @@ namespace op::var_mean::metax {
             #define CALCULATE_VAR_MEAN_WITH_BLOCK_SIZE(BLOCK_SIZE)                   \
             {                                                                        \
                 if (_info.dtype == INFINI_DTYPE_BF16)                                \
-                    return CALCULATE_VAR_MEAN(BLOCK_SIZE, __nv_bfloat16, double);    \
+                    return CALCULATE_VAR_MEAN(BLOCK_SIZE, __hpcc_bfloat16, double);    \
                 else if(_info.dtype == INFINI_DTYPE_F16)                             \
                     return CALCULATE_VAR_MEAN(BLOCK_SIZE, half, double);             \
                 else if(_info.dtype == INFINI_DTYPE_F32)                             \

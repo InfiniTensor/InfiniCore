@@ -257,7 +257,7 @@ namespace op::topk::metax {
             #define CALCULATE_TOPK_WITH_BLOCK_SIZE(BLOCK_SIZE)           \
             {                                                            \
                 if (_info.dtype == INFINI_DTYPE_BF16)                    \
-                    return CALCULATE_TOPK(BLOCK_SIZE, __nv_bfloat16);    \
+                    return CALCULATE_TOPK(BLOCK_SIZE, __hpcc_bfloat16);    \
                 else if(_info.dtype == INFINI_DTYPE_F16)                 \
                     return CALCULATE_TOPK(BLOCK_SIZE, half);             \
                 else if(_info.dtype == INFINI_DTYPE_F32)                 \
