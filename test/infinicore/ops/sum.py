@@ -62,10 +62,6 @@ def parse_test_cases():
                     description="Sum - OUT_OF_PLACE",
                 )
             )
-            """
-            infini_kwargs[key] = infini_list
-            or infini_kwargs[key] = value
-            """
     return test_cases
 
 
@@ -79,12 +75,10 @@ class OpTest(BaseOperatorTest):
         return parse_test_cases()
 
     def torch_operator(self, *args, **kwargs):
-        print("torch.sum = ", torch.sum(*args, **kwargs))
         return torch.sum(*args, **kwargs)
 
     def infinicore_operator(self, *args, **kwargs):
         """InfiniCore implementation (operator not yet available)."""
-        print("infinicore.sum = ",infinicore.sum(*args, **kwargs))
         return infinicore.sum(*args, **kwargs) # todo 找到具体对应的 python/infinicore/ops/sum.py
 
 

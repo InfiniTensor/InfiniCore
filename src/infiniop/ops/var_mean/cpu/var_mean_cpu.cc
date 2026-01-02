@@ -4,7 +4,6 @@
 namespace op::var_mean::cpu {
 
 Descriptor::~Descriptor() {}
-//  一个descriptor的create 一个varmeaninfo 的create
 infiniStatus_t Descriptor::create(
     infiniopHandle_t handle,
     Descriptor **desc_ptr,
@@ -15,7 +14,6 @@ infiniStatus_t Descriptor::create(
     size_t dim_size, 
     bool unbiased,
     bool keepdim) {
-    // auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
     auto result = VarMeanInfo::create(var_output_desc, input_desc, dim, dim_size, unbiased, keepdim);
     CHECK_RESULT(result);
     
@@ -33,8 +31,6 @@ bool IsNanOut(const VarMeanInfo &info) {
 template<typename Tdata>
 void computeVarMeanUsingWelfordCpu(const Tdata *input_ptr, float& var_output, float& mean_output, size_t start, size_t end, const VarMeanInfo &info) {
     if (start >= end) {
-        // mean = 0.0f;
-        // var = 0.0f;
         return;
     }
     float old_mean = 0.0f;  // previous mean
@@ -47,15 +43,12 @@ void computeVarMeanUsingWelfordCpu(const Tdata *input_ptr, float& var_output, fl
         count++;
         old_mean = mean;
         mean += (value - mean) / count;
-        // mean += (static_cast<float>(input_ptr[input_offset]) - mean) / count;
         M2 += (value - old_mean) * (value - mean);
-        // M2 += (static_cast<float>(input_ptr[input_offset]) - old_mean) * (static_cast<float>(input_ptr[input_offset]) - mean);
     }
     mean_output = mean;
     var_output =  M2 / (info.unbiased_var ? (count-1) : count);
 }
 
-// 优化了相关判断逻辑，后续要修改之前sum的代码逻辑
 template<typename Tdata>
 infiniStatus_t calculateVarMean(
     const VarMeanInfo &info,
@@ -85,7 +78,6 @@ infiniStatus_t calculateVarMean(
                 mean_output[output_offset] = utils::cast<Tdata>(mean);
             }
         }
-        // return IsNanOut(info) ? INFINI_STATUS_NAN : INFINI_STATUS_SUCCESS;
         return INFINI_STATUS_SUCCESS;
     }
 }

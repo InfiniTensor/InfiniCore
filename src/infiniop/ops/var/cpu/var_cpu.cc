@@ -4,7 +4,6 @@
 namespace op::var::cpu {
 
 Descriptor::~Descriptor() {}
-//  一个descriptor的create 一个varmeaninfo 的create
 infiniStatus_t Descriptor::create(
     infiniopHandle_t handle,
     Descriptor **desc_ptr,
@@ -14,7 +13,6 @@ infiniStatus_t Descriptor::create(
     size_t dim_size, 
     bool unbiased,
     bool keepdim) {
-    // auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
     auto result = VarInfo::create(var_output_desc, input_desc, dim, dim_size, unbiased, keepdim);
     CHECK_RESULT(result);
     
@@ -32,8 +30,6 @@ bool IsNanOut(const VarInfo &info) {
 template<typename Tdata>
 void computeVarUsingWelfordCpu(const Tdata *input_ptr, float& var_output, size_t start, size_t end, const VarInfo &info) {
     if (start >= end) {
-        // mean = 0.0f;
-        // var = 0.0f;
         return;
     }
     float old_mean = 0.0f;  // previous mean
@@ -46,14 +42,11 @@ void computeVarUsingWelfordCpu(const Tdata *input_ptr, float& var_output, size_t
         count++;
         old_mean = mean;
         mean += (value - mean) / count;
-        // mean += (static_cast<float>(input_ptr[input_offset]) - mean) / count;
         M2 += (value - old_mean) * (value - mean);
-        // M2 += (static_cast<float>(input_ptr[input_offset]) - old_mean) * (static_cast<float>(input_ptr[input_offset]) - mean);
     }
     var_output =  M2 / (info.unbiased_var ? (count-1) : count);
 }
 
-// 优化了相关判断逻辑，后续要修改之前sum的代码逻辑
 template<typename Tdata>
 infiniStatus_t calculateVar(
     const VarInfo &info,
@@ -61,7 +54,6 @@ infiniStatus_t calculateVar(
     const Tdata *input){
         Tdata nan_value = utils::cast<Tdata>(NAN);
         bool is_scalar = (info.reduce_dim_size == info.permuted_input_shape.size());
-        // #pragma omp parallel for
         for (size_t i = 0; i < info.output_size; ++i) {
             size_t output_offset = op::common_cpu::indexToOffset(i, info.output_shape.size(), info.output_shape.data(), info.output_strides.data());
             if (IsNanOut(info)) {
@@ -74,7 +66,6 @@ infiniStatus_t calculateVar(
                 var_output[output_offset] = utils::cast<Tdata>(var);
             }
         }
-        // return IsNanOut(info) ? INFINI_STATUS_NAN : INFINI_STATUS_SUCCESS;
         return INFINI_STATUS_SUCCESS;
     }
 }

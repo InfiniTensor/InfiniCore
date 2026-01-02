@@ -9,7 +9,6 @@ namespace py = pybind11;
 
 namespace infinicore::ops {
 
-//torch.topk(input, k, dim=None, largest=True, sorted=True, *, out=None)
 
 std::pair<Tensor, Tensor> py_topk(Tensor input, size_t k, int dim, bool largest, bool sorted){
       if(dim == -1){
@@ -20,17 +19,6 @@ std::pair<Tensor, Tensor> py_topk(Tensor input, size_t k, int dim, bool largest,
             throw std::invalid_argument("invalid argument: dim");
       }
 }
-// py::tuple py_topk(Tensor input, size_t k, py::object dim, bool largest, bool sorted) {
-//       Tensor values, indices;
-//       if (dim.is_none()) {
-//           std::tie(values, indices) = op::topk(input, k, input->ndim() - 1, largest, sorted);
-//       } else if (py::isinstance<py::int_>(dim)) {
-//           std::tie(values, indices) = op::topk(input, k, dim.cast<size_t>(), largest, sorted);
-//       } else {
-//           throw std::invalid_argument("invalid argument: dim");
-//       }
-//       return py::make_tuple(values, indices);
-//   }
 
   
 void py_topk_(Tensor values_output, Tensor indices_output, Tensor input, size_t k, int dim, bool largest, bool sorted){
@@ -43,10 +31,8 @@ void py_topk_(Tensor values_output, Tensor indices_output, Tensor input, size_t 
       }
 }
 
-// todo 修改参数
 inline void bind_topk(py::module &m) {
     m.def("topk",
-      //     &op::topk,
           &py_topk,
           py::arg("input"),
           py::arg("k"),
@@ -56,7 +42,6 @@ inline void bind_topk(py::module &m) {
           R"doc(topk of input tensor along the given dimensions.)doc");
 
     m.def("topk_",
-      //     &op::topk_,
           &py_topk_,
           py::arg("values_output"),
           py::arg("indices_output"),

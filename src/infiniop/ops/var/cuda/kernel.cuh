@@ -270,7 +270,6 @@ __global__ void ComputeVarScalarOut(const Tdata *input_ptr, Tdata *var_output_pt
     if (threadIdx.x == 0) {
       ComputeType divisor = unbiased ? block_count - 1 : block_count;
       var_output_ptr[0] = device::cuda::Div(block_m2, divisor);
-      // mean_output_ptr[0] = static_cast<Tdata>(block_mean);
     }
     return;
   }
@@ -320,7 +319,6 @@ __global__ void ComputeVarScalarOut(const Tdata *input_ptr, Tdata *var_output_pt
     if (threadIdx.x == 0) {
       ComputeType divisor = unbiased ? final_count - 1 : final_count;
       var_output_ptr[0] = device::cuda::Div(final_m2, divisor);
-      // mean_output_ptr[0] = static_cast<Tdata>(final_mean);
       done_block_counts = 0;  // 重置计数器
     }
   }
@@ -332,13 +330,11 @@ __global__ void ComputeVarScalarOut(const Tdata *input_ptr, Tdata *var_output_pt
   for (size_t i = blockIdx.x * blockDim.x + threadIdx.x, step = blockDim.x * gridDim.x; i < (n); \
        i += step)
 
-// 规约到非标量的情况, 假设output是[output_size, reduce_num]这种结构，暂时一个thread负责一个[1, reduce_num]的块 后续可以考虑进一步的优化为
 template<typename Tdata, typename ComputeType>
 __forceinline__ __device__ __host__ void ComputeVarUsingWelford(
     const Tdata *input_ptr,
     size_t offset,
     Tdata &var_output,
-    // Tdata &mean_output,
     size_t reduce_num,
     size_t input_ndim,
     size_t *permuted_input_shape,
@@ -356,13 +352,12 @@ __forceinline__ __device__ __host__ void ComputeVarUsingWelford(
           m2 += (static_cast<ComputeType>(input_ptr[input_offset]) - old_mean) * (static_cast<ComputeType>(input_ptr[input_offset]) - mean);
       }
       var_output = static_cast<Tdata>(m2 / (unbiased ? count - 1 : count));
-      // mean_output = static_cast<Tdata>(mean);
     }
 
 
 template<typename Tdata, typename ComputeType>
 __global__ void ComputeVarUsingWelfordWrapper(
-    const Tdata* input_ptr, Tdata* var_output_ptr,// Tdata* mean_output_ptr,
+    const Tdata* input_ptr, Tdata* var_output_ptr,
     size_t input_ndim,   
     size_t output_size,
     size_t reduce_num,
@@ -370,29 +365,23 @@ __global__ void ComputeVarUsingWelfordWrapper(
     ptrdiff_t *permuted_input_strides,
     bool unbiased,
     bool is_nan) {
-    // todo 避免branch divergence，这里需要优化
     if (is_nan) {
         if(reduce_num == 0){
             CUDA_1D_KERNEL_LOOP(i, output_size) { 
                 var_output_ptr[i] = device::cuda::Nan<Tdata>(); 
-                // mean_output_ptr[i] = device::cuda::Nan<Tdata>(); 
             }
         } else {
             CUDA_1D_KERNEL_LOOP(i, output_size) { 
                 const size_t input_offset = indexToOffset(i * reduce_num, input_ndim, permuted_input_shape, permuted_input_strides); 
                 var_output_ptr[i] = device::cuda::Nan<Tdata>(); 
-                // mean_output_ptr[i] = input_ptr[input_offset]; 
             }
         }
     } else {
         CUDA_1D_KERNEL_LOOP(i, output_size) {
-            // i * reduce_num 是input的offset
-            // const size_t input_offset = indexToOffset(i * reduce_num, input_ndim, permuted_input_shape,  permuted_input_strides);
             ComputeVarUsingWelford<Tdata, ComputeType>(
                 input_ptr,
                 i * reduce_num, 
                 var_output_ptr[i], 
-                // mean_output_ptr[i], 
                 reduce_num, 
                 input_ndim, 
                 permuted_input_shape, 

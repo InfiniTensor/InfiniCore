@@ -31,9 +31,9 @@ __C infiniStatus_t infiniopCreateVarDescriptor(
 
 #define CREATE(CASE, NAMESPACE)                                                 \
     case CASE:                                                                  \
-        return op::var::NAMESPACE::Descriptor::create(                     \
+        return op::var::NAMESPACE::Descriptor::create(                          \
             handle,                                                             \
-            reinterpret_cast<op::var::NAMESPACE::Descriptor **>(desc_ptr), \
+            reinterpret_cast<op::var::NAMESPACE::Descriptor **>(desc_ptr),      \
             var_output_desc,                                                    \
             input_desc,                                                         \
             dim,                                                                \

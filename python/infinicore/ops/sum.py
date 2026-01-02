@@ -2,7 +2,6 @@ from infinicore.lib import _infinicore
 from infinicore.tensor import Tensor
 
 
-# todo 输入 和 out的type的确定，确实，应该要指定sum的维度
 def sum(input, dim=None, keepdim=False, out=None):
     """
     Sum the elements of the input tensor along the given dimensions.

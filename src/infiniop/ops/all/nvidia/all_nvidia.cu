@@ -25,8 +25,6 @@ namespace op::all::nvidia {
         CHECK_RESULT(result);
         auto info = result.take();
         size_t workspace_size = 0;
-        // workspace_size += (info.permuted_input_shape.size() + info.output_shape.size()) * sizeof(size_t);
-        // workspace_size += (info.permuted_input_strides.size() + info.output_strides.size()) * sizeof(ptrdiff_t);
         workspace_size += (input_desc->ndim() + output_desc->ndim()) * (sizeof(size_t) + sizeof(ptrdiff_t));
         *desc_ptr = new Descriptor(
             new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
@@ -62,7 +60,6 @@ namespace op::all::nvidia {
         CHECK_CUDA(cudaMemcpyAsync(output_strides_cuda,         info.output_strides.data(),         output_ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, stream));
     
         if(info.reduce_num == input_size){
-            // CHECK_CUDA(cudaMemcpyAsync(output, &zero, sizeof(T), cudaMemcpyHostToDevice, stream));
             size_t grid_size = (input_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
             bool* temp_output;
             CHECK_CUDA(cudaMalloc(&temp_output, grid_size * sizeof(bool)));
@@ -71,13 +68,11 @@ namespace op::all::nvidia {
             finalAllReduceKernel<BLOCK_SIZE><<<1, BLOCK_SIZE>>>(output, temp_output, grid_size);
             CHECK_CUDA(cudaFree(temp_output));
         } else {
-            // todo one block one reduce_num, now one thread one reduce_num
             size_t grid_size = (info.output_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
             allKernel<BLOCK_SIZE, Tdata><<<grid_size, BLOCK_SIZE, 0, stream>>>(
                 output, input, input_ndim, output_ndim, output_size, reduce_num, 
                 permuted_input_shape_cuda, output_shape_cuda, permuted_input_strides_cuda, output_strides_cuda);
         }
-        // CHECK_CUDA(cudaDeviceSynchronize());
     
         return INFINI_STATUS_SUCCESS;
     }
@@ -96,10 +91,10 @@ namespace op::all::nvidia {
 
             cudaStream_t stream = (cudaStream_t)stream_;
             
-            #define CALCULATE_ALL(BLOCK_SIZE, Tdata)                        \
-            launchKernel<BLOCK_SIZE, Tdata>(                                \
+            #define CALCULATE_ALL(BLOCK_SIZE, Tdata)                    \
+            launchKernel<BLOCK_SIZE, Tdata>(                            \
                 _info,                                                  \
-                (bool *)output,   (const Tdata *)input,                        \
+                (bool *)output,   (const Tdata *)input,                 \
                 stream, workspace, workspace_size                       \
             )
 

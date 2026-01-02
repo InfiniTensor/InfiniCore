@@ -39,17 +39,12 @@ namespace op::topk::nvidia {
         }
         size_t total = n_iteration * dim_elements;
 
-        // cur_vals, ones_vals, zeros_vals: 3 * total * sizeof(uint32_t)
         workspace_size += 3 * total * sizeof(uint32_t);
-        // cur_idx, ones_idx, zeros_idx: 3 * total * sizeof(int32_t)  
         workspace_size += 3 * total * sizeof(int32_t);
-        // sel_vals, sel_idx: n_iteration * k * (sizeof(uint32_t) + sizeof(int32_t))
         workspace_size += n_iteration * k * (sizeof(uint32_t) + sizeof(int32_t));
-        // 条件性排序空间
         if(sorted){
             workspace_size += n_iteration * k * (sizeof(uint32_t) + sizeof(int32_t));
         }
-        // 辅助计数器: 5 * n_iteration * sizeof(int32_t)
         workspace_size += 5 * n_iteration * sizeof(int32_t);
         
         *desc_ptr = new Descriptor(
@@ -66,9 +61,6 @@ namespace op::topk::nvidia {
         Tdata *values_output, int32_t *indices_output, const Tdata *input,
         size_t k, size_t dim, bool largest, bool sorted,
         cudaStream_t stream, void *workspace, size_t workspace_size) {
-        // const int rows = (int)info.n_iteration;
-        // const int n    = (int)info.dim_elements;
-        // const int kk   = (int)k;
         if (dim >= info.ndim) return INFINI_STATUS_BAD_PARAM;
         if (k == 0) return INFINI_STATUS_SUCCESS;
         if (k > info.dim_elements) return INFINI_STATUS_BAD_PARAM;
@@ -94,7 +86,6 @@ namespace op::topk::nvidia {
         const int32_t total = n_iteration * dim_elements;
         
 
-        // 从workspace分配临时变量
         uint32_t *cur_vals = reinterpret_cast<uint32_t *>(workspace_ptr + workspace_offset);
         workspace_offset += total * sizeof(uint32_t);
         uint32_t *ones_vals = reinterpret_cast<uint32_t *>(workspace_ptr + workspace_offset);
@@ -188,8 +179,7 @@ namespace op::topk::nvidia {
             sel_vals, sel_idx,
             n_iteration, dim_elements, k);
     
-        // optional sort (CUB block radix sort)
-        // const uint32_t* final_vals = sel_vals;
+        // sort (CUB block radix sort)
         const int32_t* final_idx = sel_idx;
     
         if (sorted) {
@@ -204,30 +194,21 @@ namespace op::topk::nvidia {
             void* d_temp_storage = nullptr;
             size_t temp_storage_bytes = 0;
            
-            // 或者直接给待排序的vals取反
-
             if (!largest) {
-            
-
-            cub::DeviceSegmentedRadixSort::SortPairs(d_temp_storage, temp_storage_bytes, sel_vals, sel_sorted_vals, sel_idx, sel_sorted_idx, 
-                n_iteration * k, n_iteration, d_offsets, d_offsets + 1, 0, sizeof(uint32_t) * 8, stream);
-
-            cudaMalloc(&d_temp_storage, temp_storage_bytes);
-            
-            cub::DeviceSegmentedRadixSort::SortPairs(d_temp_storage, temp_storage_bytes, sel_vals, sel_sorted_vals, sel_idx, sel_sorted_idx, 
-                n_iteration * k, n_iteration, d_offsets, d_offsets + 1, 0, sizeof(uint32_t) * 8, stream);
+                cub::DeviceSegmentedRadixSort::SortPairs(d_temp_storage, temp_storage_bytes, sel_vals, sel_sorted_vals, sel_idx, sel_sorted_idx, 
+                    n_iteration * k, n_iteration, d_offsets, d_offsets + 1, 0, sizeof(uint32_t) * 8, stream);
+                cudaMalloc(&d_temp_storage, temp_storage_bytes);
+                cub::DeviceSegmentedRadixSort::SortPairs(d_temp_storage, temp_storage_bytes, sel_vals, sel_sorted_vals, sel_idx, sel_sorted_idx, 
+                    n_iteration * k, n_iteration, d_offsets, d_offsets + 1, 0, sizeof(uint32_t) * 8, stream);
             } else {
                 cub::DeviceSegmentedRadixSort::SortPairsDescending(d_temp_storage, temp_storage_bytes, sel_vals, sel_sorted_vals, sel_idx, sel_sorted_idx, 
                     n_iteration * k, n_iteration, d_offsets, d_offsets + 1, 0, sizeof(uint32_t) * 8, stream);
-    
                 cudaMalloc(&d_temp_storage, temp_storage_bytes);
-                
                 cub::DeviceSegmentedRadixSort::SortPairsDescending(d_temp_storage, temp_storage_bytes, sel_vals, sel_sorted_vals, sel_idx, sel_sorted_idx, 
                     n_iteration * k, n_iteration, d_offsets, d_offsets + 1, 0, sizeof(uint32_t) * 8, stream);
             }
             CHECK_CUDA(cudaFree(d_offsets));
             CHECK_CUDA(cudaFree(d_temp_storage));
-            // final_vals = sel_sorted_vals;
             final_idx  = sel_sorted_idx;
         }
     
@@ -249,7 +230,6 @@ namespace op::topk::nvidia {
     
         return INFINI_STATUS_SUCCESS;
     }
-        // CHECK_CUDA(cudaDeviceSynchronize());
     
 } // namespace
     

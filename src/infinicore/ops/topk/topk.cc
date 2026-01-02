@@ -10,7 +10,6 @@ common::OpDispatcher<TopK::schema> &TopK::dispatcher() {
     static common::OpDispatcher<TopK::schema> dispatcher_;
     return dispatcher_;
 };
-// todo 12.8 完成这里的代码
 void TopK::execute(Tensor values_output, Tensor indices_output, Tensor input, size_t k, size_t dim, bool largest, bool sorted) {
     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(values_output, input);
     infinicore::context::setDevice(input->device());
@@ -32,7 +31,6 @@ std::pair<Tensor, Tensor>  topk(Tensor input, size_t k, size_t dim, bool largest
     
     auto values_output = Tensor::empty(out_shape, input->dtype(), input->device());
     auto indices_output = Tensor::empty(out_shape, DataType::I32, input->device());
-    // auto indices_output = Tensor::empty(out_shape, DataType::U64, input->device());
     topk_(values_output, indices_output, input, k, dim, largest, sorted);
     return {values_output, indices_output};
 }

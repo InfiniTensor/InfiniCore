@@ -5,4 +5,4 @@
 
 DESCRIPTOR(metax);
 
-#endif // __VAR_MEAN_METAX_H__
+#endif // __VAR_METAX_H__

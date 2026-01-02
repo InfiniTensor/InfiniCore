@@ -76,8 +76,8 @@ __C infiniStatus_t infiniopCreateVarMeanDescriptor(
 
 __C infiniStatus_t infiniopGetVarMeanWorkspaceSize(infiniopVarMeanDescriptor_t desc, size_t *size) {
 
-#define GET(CASE, NAMESPACE)                                                               \
-    case CASE:                                                                             \
+#define GET(CASE, NAMESPACE)                                                                    \
+    case CASE:                                                                                  \
         *size = reinterpret_cast<op::var_mean::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
         return INFINI_STATUS_SUCCESS
 
@@ -164,8 +164,8 @@ __C infiniStatus_t infiniopVarMean(
 __C infiniStatus_t
 infiniopDestroyVarMeanDescriptor(infiniopVarMeanDescriptor_t desc) {
 
-#define DELETE(CASE, NAMESPACE)                                                \
-    case CASE:                                                                 \
+#define DELETE(CASE, NAMESPACE)                                                     \
+    case CASE:                                                                      \
         delete reinterpret_cast<const op::var_mean::NAMESPACE::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS;
 

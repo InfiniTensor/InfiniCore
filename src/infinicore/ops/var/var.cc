@@ -28,14 +28,13 @@ Tensor var(Tensor input, std::vector<size_t> dim, bool unbiased, bool keepdim) {
     auto in_shape = input->shape();
     std::vector<size_t> out_shape;
     if (dim.empty()) {
-        // dim 为空时，对所有维度求var
         for (size_t i = 0; i < in_shape.size(); i++) {
             dim.push_back(i);
         }
     }
     std::sort(dim.begin(), dim.end());
     if (dim.size() == in_shape.size() && !keepdim) {
-        out_shape = {};  // 标量，0维tensor
+        out_shape = {}; 
     } else {
         if(keepdim){
             size_t j = 0;

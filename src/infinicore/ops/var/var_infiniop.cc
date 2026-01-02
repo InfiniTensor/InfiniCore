@@ -4,8 +4,6 @@
 #include "infinicore/ops/var.hpp"
 #include <infiniop.h>
 
-// todo 实现需要修改calculate函数
-
 namespace infinicore::op::var_impl::infiniop {
 
 thread_local common::OpCache<size_t, infiniopVarDescriptor_t> caches(
@@ -18,7 +16,7 @@ thread_local common::OpCache<size_t, infiniopVarDescriptor_t> caches(
     });
 
 void calculate(Tensor var_output, Tensor input, std::vector<size_t> dim, bool unbiased, bool keepdim) {
-    size_t seed = hash_combine(var_output, input, dim.size(), unbiased, keepdim);  // 只能处理简单类型传入vector会报错
+    size_t seed = hash_combine(var_output, input, dim.size(), unbiased, keepdim);
 
     auto device_type = context::getDevice().getType();
     auto device_index = context::getDevice().getIndex();

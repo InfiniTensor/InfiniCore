@@ -5,7 +5,6 @@
 namespace infinicore::op {
 class TopK {
 public:
-                            // values_output, indices_output, input, k, dim, largest, sorted
     using schema = void (*)(Tensor, Tensor, Tensor, size_t, size_t, bool, bool);
     static void execute(Tensor values_output, Tensor indices_output, Tensor input, size_t k, size_t dim, bool largest=true, bool sorted=true);
     static common::OpDispatcher<schema> &dispatcher();

@@ -8,17 +8,15 @@
 
 
 
-// 类似sum的实现，但是需要计算var和mean
-// var 和 mean的output shape一致， output strides一致， output size一致
-// 在info这里做permute就行了！
+
 namespace op::var_mean{
     class VarMeanInfo{
     VarMeanInfo() = default;
     public:
         infiniDtype_t dtype;
-        std::vector<size_t> permuted_input_shape; // need to permute shape for reduce tensor (other1, other2, other3...reduce_dim1, reduce_dim2, reduce_dim3...)
+        std::vector<size_t> permuted_input_shape; // need to permute 
         std::vector<size_t> output_shape;
-        std::vector<ptrdiff_t> permuted_input_strides; // need to permute strides for reduce tensor (other1, other2, other3...reduce_dim1, reduce_dim2, reduce_dim3...)
+        std::vector<ptrdiff_t> permuted_input_strides; // need to permute 
         std::vector<ptrdiff_t> output_strides;
         size_t reduce_dim_size; // reduce dim size
         size_t reduce_num; // number of elements to reduce for each output element
@@ -27,7 +25,6 @@ namespace op::var_mean{
         bool unbiased_var;
         static utils::Result<VarMeanInfo> create(
             infiniopTensorDescriptor_t var_output_desc,
-            // infiniopTensorDescriptor_t mean_output_desc, mean_output_desc和var_output_desc一致
             infiniopTensorDescriptor_t input_desc,
             size_t *dim, 
             size_t dim_size,

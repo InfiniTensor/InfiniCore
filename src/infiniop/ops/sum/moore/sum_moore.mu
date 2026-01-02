@@ -25,8 +25,6 @@ namespace op::sum::moore {
         CHECK_RESULT(result);
         auto info = result.take();
         size_t workspace_size = 0;
-        // workspace_size += (info.permuted_input_shape.size() + info.output_shape.size()) * sizeof(size_t);
-        // workspace_size += (info.permuted_input_strides.size() + info.output_strides.size()) * sizeof(ptrdiff_t);
         workspace_size += (input_desc->ndim() + output_desc->ndim()) * (sizeof(size_t) + sizeof(ptrdiff_t));
         *desc_ptr = new Descriptor(
             new Opaque{reinterpret_cast<device::moore::Handle *>(handle)->internal()},
@@ -85,7 +83,6 @@ namespace op::sum::moore {
                     output, input, input_size, input_ndim, permuted_input_shape_musa, permuted_input_strides_musa);
             }
         } else {
-            // todo one block one reduce_num, now one thread one reduce_num
             size_t grid_size = (info.output_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
             sumKernel<BLOCK_SIZE, T><<<grid_size, BLOCK_SIZE, 0, stream>>>(
                 output, input, input_ndim, output_ndim, output_size, reduce_num, 

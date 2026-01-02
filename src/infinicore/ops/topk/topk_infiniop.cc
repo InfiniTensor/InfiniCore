@@ -4,8 +4,6 @@
 #include "infinicore/ops/topk.hpp"
 #include <infiniop.h>
 
-// todo 实现需要修改calculate函数
-
 namespace infinicore::op::topk_impl::infiniop {
 
 thread_local common::OpCache<size_t, infiniopTopKDescriptor_t> caches(

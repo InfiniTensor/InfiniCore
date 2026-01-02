@@ -16,7 +16,6 @@ infiniStatus_t Descriptor::create(
     size_t dim, 
     bool largest,
     bool sorted) {
-    // auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
     auto result = TopKInfo::create(values_output_desc, indices_output_desc, input_desc, k, dim, largest, sorted);
     CHECK_RESULT(result);
     
@@ -54,11 +53,9 @@ infiniStatus_t calculateTopK(
                 vi_queue[j].first = input[input_start + j * info.input_strides[dim]];
                 vi_queue[j].second = j;
             }
-            // 需增加isnan的判断
             bool use_partial_sort = static_cast<size_t>(k) * 64 <= info.dim_elements;
 
             if (use_partial_sort) {
-                // 使用 partial_sort
                 if(largest){
                     std::partial_sort(vi_queue.begin(), vi_queue.begin() + k, vi_queue.end(), 
                                     [](const elem_t &a, const elem_t &b) -> bool {
@@ -71,7 +68,6 @@ infiniStatus_t calculateTopK(
                                     });
                 }
             } else {
-                // 使用 nth_element + sort (当 sorted=true 时)
                 if(largest){
                     std::nth_element(vi_queue.begin(), vi_queue.begin() + k - 1, vi_queue.end(), 
                                     [](const elem_t &a, const elem_t &b) -> bool {
@@ -100,26 +96,6 @@ infiniStatus_t calculateTopK(
                 values_output[output_start + j * info.output_strides[dim]] = vi_queue[j].first;
                 indices_output[output_start + j * info.output_strides[dim]] = (int32_t)vi_queue[j].second;
             }
-            // 添加调试打印
-            // std::cout << "Iteration " << i << ":" << std::endl;
-            // std::cout << "  Values: ";
-            // for(size_t j = 0; j < k; j++){
-            //     // 对于浮点数，需要转换为 float 打印，对于其他类型可以直接打印
-            //     if constexpr (std::is_same_v<Tdata, fp16_t> || std::is_same_v<Tdata, bf16_t>) {
-            //         std::cout << utils::cast<float>(vi_queue[j].first);
-            //     } else {
-            //         std::cout << vi_queue[j].first;
-            //     }
-            //     if (j < k - 1) std::cout << ", ";
-            // }
-            // std::cout << std::endl;
-
-            // std::cout << "  Indices: ";
-            // for(size_t j = 0; j < k; j++){
-            //     std::cout << vi_queue[j].second;
-            //     if (j < k - 1) std::cout << ", ";
-            // }
-            // std::cout << std::endl << std::endl;
         }
         return INFINI_STATUS_SUCCESS;
     }

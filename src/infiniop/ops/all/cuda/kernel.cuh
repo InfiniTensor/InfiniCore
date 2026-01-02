@@ -1,10 +1,6 @@
 #ifndef __ALL_CUDA_H__
 #define __ALL_CUDA_H__
 
-// todo把具体的include 的相关代码放到对应的平台下的文件夹中
-
-// 规约到标量的情况
-
 __forceinline__ __device__ __host__ size_t
 indexToOffset(
     size_t flat_index,
@@ -18,9 +14,7 @@ indexToOffset(
     }
     return res;
 }
-// output size = grids_size = gridDim.x
 
-//  需要拆成两个kernel，因为__syncthreads()不能跨block使用!!!output[blockIdx.x] = s_data[0];不能确保跨block的有效性
 
 template<size_t BLOCK_SIZE, typename Tdata>
 __global__ void allReduceTempKernel(
@@ -61,11 +55,9 @@ __global__ void finalAllReduceKernel(
     bool thread_val = true;
     for(size_t i = tid; i < num_blocks; i+=blockDim.x){
         thread_val = thread_val && block_results[i];
-        // printf("%d thread_val  = %s\n", i, thread_val ? "true" : "false");
     }
     s_data[tid] = thread_val;
     __syncthreads();
-    // if(tid < num_blocks) printf("s_data[%d] =  %s\n", tid, s_data[tid] ? "true" : "false");
     for (size_t s = BLOCK_SIZE / 2; s > 0; s >>= 1) {
         if (tid < s) {
             s_data[tid] = s_data[tid] && s_data[tid + s];
@@ -73,16 +65,11 @@ __global__ void finalAllReduceKernel(
         __syncthreads();
     }
 
-    // thread 0 writes final answer
     if (tid == 0) {
         *output = s_data[0];
     }
 }
 
-
-// 
-
-// 规约到非标量的情况, 假设output是[output_size, reduce_num]这种结构，暂时一个thread负责一个[1, reduce_num]的块 后续可以优化为一个block负责一个[1, reduce_num]的块
 template<size_t BLOCK_SIZE, typename Tdata>
 __global__ void allKernel(
     bool *output,

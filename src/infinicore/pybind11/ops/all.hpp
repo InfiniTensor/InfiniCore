@@ -41,18 +41,15 @@ void py_all_(Tensor output, Tensor input, py::object dim, bool keepdim){
       }
 }
 
-// todo 修改参数
 inline void bind_all(py::module &m) {
     m.def("all",
-      //     &op::all,
           &py_all,
           py::arg("input"),
-          py::arg("dim"), // = py::none()
-          py::arg("keepdim"), // = false  todo 搞清楚这两个参数有没有默认值的区别
+          py::arg("dim"),
+          py::arg("keepdim"), 
           R"doc(All of input tensor along the given dimensions.)doc");
 
     m.def("all_",
-      //     &op::all_,
           &py_all_,
           py::arg("output"),
           py::arg("input"),

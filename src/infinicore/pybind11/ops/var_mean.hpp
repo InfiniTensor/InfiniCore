@@ -41,14 +41,13 @@ void py_var_mean_(Tensor var_output, Tensor mean_output, Tensor input, py::objec
       }
 }
 
-// todo 修改参数
 inline void bind_var_mean(py::module &m) {
     m.def("var_mean",
           &py_var_mean,
           py::arg("input"),
-          py::arg("dim"), // = py::none()
-          py::arg("unbiased"), // = true
-          py::arg("keepdim"), // = false  
+          py::arg("dim"), 
+          py::arg("unbiased"), 
+          py::arg("keepdim"), 
           R"doc(Var & Mean of input tensor along the given dimensions.)doc");
 
     m.def("var_mean_",

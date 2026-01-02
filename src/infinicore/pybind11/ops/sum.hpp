@@ -41,18 +41,15 @@ void py_sum_(Tensor output, Tensor input, py::object dim, bool keepdim){
       }
 }
 
-// todo 修改参数
 inline void bind_sum(py::module &m) {
     m.def("sum",
-      //     &op::sum,
           &py_sum,
           py::arg("input"),
-          py::arg("dim"), // = py::none()
-          py::arg("keepdim"), // = false  todo 搞清楚这两个参数有没有默认值的区别
+          py::arg("dim"), 
+          py::arg("keepdim"), 
           R"doc(Sum of input tensor along the given dimensions.)doc");
 
     m.def("sum_",
-      //     &op::sum_,
           &py_sum_,
           py::arg("output"),
           py::arg("input"),

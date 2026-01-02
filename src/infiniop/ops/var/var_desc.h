@@ -8,16 +8,16 @@
 
 #define DESCRIPTOR(NAMESPACE)                                    \
                                                                  \
-    namespace op::var::NAMESPACE {                          \
+    namespace op::var::NAMESPACE {                               \
     class Descriptor final: public InfiniopDescriptor {          \
         struct Opaque;                                           \
         Opaque *_opaque;                                         \
-        VarInfo _info;                                       \
+        VarInfo _info;                                           \
         size_t _workspace_size;                                  \
                                                                  \
         Descriptor(                                              \
             Opaque *opaque,                                      \
-            VarInfo info,                                    \
+            VarInfo info,                                        \
             size_t workspace_size,                               \
             infiniDevice_t device_type,                          \
             int device_id)                                       \

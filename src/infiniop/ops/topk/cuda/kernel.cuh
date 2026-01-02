@@ -61,10 +61,7 @@ namespace op::topk::cuda{
         return bits ^ mask;
     }
 
-    // -------------------------------------------
-    // gather: input(strided) -> cur(row-major)
-    // cur_idx initialized to [0..n-1]
-    // -------------------------------------------
+
     template<typename Tdata>
     __global__ void gather_rowwise(const Tdata*  input, uint32_t* cur_vals, int32_t* cur_idx,
                                 size_t rows, size_t n, size_t ndim, size_t dim, const size_t*  shape, const ptrdiff_t*  strides){
@@ -74,14 +71,9 @@ namespace op::topk::cuda{
         size_t base = baseOffsetExcludingDim(row, ndim, shape, strides, dim);
         size_t off = base + i * strides[dim];
         cur_vals[row * n + i] = float_to_uint_ordered(to_float<Tdata>(input[off]));
-        cur_idx[row * n + i] = i; // 索引初始化为[0..n-1]
+        cur_idx[row * n + i] = i; 
     }
-    // -------------------------------------------
-    // per-row state
-    // cur_n: current candidate count in cur (<= n)
-    // rem_k: remaining k to fill
-    // out_pos: already appended count into sel
-    // -------------------------------------------
+
     __global__ void init_row_state(int32_t* cur_n, int32_t* rem_k, int32_t* out_pos, size_t rows, size_t n, size_t k){
         int32_t r = blockIdx.x * blockDim.x + threadIdx.x;
         if(r < rows){
@@ -99,11 +91,6 @@ namespace op::topk::cuda{
         }
     }
 
-    // -------------------------------------------
-    // radix partition (rowwise)
-    // - partition cur into ones/zeros by bit_pos on key(value)
-    // - largest: keep bit=1 side as "better"; smallest uses ~key so still keep bit=1
-    // -------------------------------------------
     template<size_t BLOCK_SIZE>
     __global__ void partition_rowwise(const uint32_t* cur_vals, int32_t* cur_idx, uint32_t* ones_vals, int32_t* ones_idx,
                                     uint32_t* zeros_vals, int32_t* zeros_idx, const int32_t* cur_n, size_t rows, size_t n,
@@ -127,19 +114,16 @@ namespace op::topk::cuda{
         if(i < cn){
             int32_t off = row * n + i;
             int32_t idx = cur_idx[off];
-            // int32_t key = float_to_uint_ordered(to_float<Tdata>(v));
             uint32_t key = cur_vals[off];
             uint32_t cmp_key = largest ? key : ~key;
             int32_t b = (cmp_key >> bit_pos) & 1;
 
             if(b){
                 int32_t p = atomicAdd(&sh1_n, 1);
-                // sh1_vals[p] = v;
                 sh1_vals[p] = key;
                 sh1_idx[p] = idx;
             } else {
                 int32_t p = atomicAdd(&sh0_n, 1);
-                // sh0_vals[p] = v;
                 sh0_vals[p] = key;
                 sh0_idx[p] = idx;
             }
@@ -164,9 +148,7 @@ namespace op::topk::cuda{
         }
     }
 
-    // -------------------------------------------
-    // decide + append ones + compact next cur
-    // -------------------------------------------
+
     template<size_t BLOCK_SIZE>
     __global__ void decide_and_compact(uint32_t* cur_vals, int32_t* cur_idx, const uint32_t* ones_vals, const int32_t* ones_idx, const uint32_t* zeros_vals, const int32_t* zeros_idx,
                                         const int32_t* ones_count, const int32_t*  zeros_count, int32_t* cur_n, int32_t* rem_k, int32_t* out_pos, 
@@ -209,9 +191,7 @@ namespace op::topk::cuda{
             }
     }
 
-    // -------------------------------------------
-    // finalize: append remaining from cur
-    // -------------------------------------------
+
     template<size_t BLOCK_SIZE>
     __global__ void take_remaining(const uint32_t* cur_vals, const int32_t* cur_idx, const int32_t* cur_n, const int32_t* rem_k, const int32_t* out_pos,
                                    uint32_t* sel_vals, int32_t* sel_idx, size_t rows, size_t n, size_t k){
@@ -233,10 +213,7 @@ namespace op::topk::cuda{
             }
     }
 
-    // -------------------------------------------
-    // scatter: sel[row,k] -> output(strided)
-    // output is contiguous
-    // -------------------------------------------
+
     template <typename Tdata>
     __global__ void scatter_to_output(const Tdata* input, const int32_t*  sel_idx, Tdata*  values_out, int32_t*  indices_out, 
                                     size_t rows, size_t k, size_t ndim, size_t dim, const size_t*  input_shape, const ptrdiff_t*  input_strides, 
@@ -245,11 +222,8 @@ namespace op::topk::cuda{
         int32_t j   = blockIdx.x * blockDim.x + threadIdx.x;
         if (row >= rows || j >= k) return;
     
-        // 计算输出位置
         int32_t output_base = baseOffsetExcludingDim(row, ndim, output_shape, output_strides, dim);
-        int32_t output_off  = output_base + j * output_strides[dim];  // 修复：output_strides
-    
-        // 计算输入位置 - 直接计算偏移，无需indexToOffset
+        int32_t output_off  = output_base + j * output_strides[dim];  
         int32_t input_base = baseOffsetExcludingDim(row, ndim, input_shape, input_strides, dim);
         int32_t input_off = input_base + sel_idx[row * k + j] * input_strides[dim];
     
@@ -259,6 +233,5 @@ namespace op::topk::cuda{
 
 
 }// namespace op::topk::cuda
-// 后续可结合bitonic sort在kernel中进行排序
 
 #endif // __TOPK_CUDA_KERNEL_H__

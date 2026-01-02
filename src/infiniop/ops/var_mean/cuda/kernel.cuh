@@ -217,28 +217,6 @@ namespace device{
 
 
 
-// BLOCK_SIZE = 256, GRID_SIZE = (input_size + BLOCK_SIZE - 1) / BLOCK_SIZE
-// template<typename Tdata, typename ComputeType>
-// __global__ void ComputeVarMeanScalarOut(
-//     const Tdata *input_ptr,
-//     Tdata *var_output_ptr,
-//     Tdata *mean_output_ptr,
-//     size_t input_size,
-//     size_t input_ndim,
-//     size_t *permuted_input_shape,
-//     ptrdiff_t *permuted_input_strides,
-//     bool unbiased,
-//     bool is_nan){
-//         if(is_nan){
-//             var_output_ptr[0] = Nan<Tdata>();
-//             mean_output_ptr[0] = (reduce_num == 0) ? Nan<Tdata>() : input_ptr[0];
-//             return;
-//         }
-//         __shared__ ComputeType s_data[blockdim.x];
-
-    
-// }
-
 __device__ int32_t done_block_count = 0;
 
 
@@ -354,7 +332,6 @@ __global__ void ComputeVarScalarOut(const Tdata *input_ptr, Tdata *var_output_pt
   for (size_t i = blockIdx.x * blockDim.x + threadIdx.x, step = blockDim.x * gridDim.x; i < (n); \
        i += step)
 
-// 规约到非标量的情况, 假设output是[output_size, reduce_num]这种结构，暂时一个thread负责一个[1, reduce_num]的块 后续可以考虑进一步的优化为
 template<typename Tdata, typename ComputeType>
 __forceinline__ __device__ __host__ void ComputeVarMeanUsingWelford(
     const Tdata *input_ptr,
@@ -392,7 +369,6 @@ __global__ void ComputeVarMeanUsingWelfordWrapper(
     ptrdiff_t *permuted_input_strides,
     bool unbiased,
     bool is_nan) {
-    // todo 避免branch divergence，这里需要优化
     if (is_nan) {
         if(reduce_num == 0){
             CUDA_1D_KERNEL_LOOP(i, output_size) { 
@@ -408,8 +384,6 @@ __global__ void ComputeVarMeanUsingWelfordWrapper(
         }
     } else {
         CUDA_1D_KERNEL_LOOP(i, output_size) {
-            // i * reduce_num 是input的offset
-            // const size_t input_offset = indexToOffset(i * reduce_num, input_ndim, permuted_input_shape,  permuted_input_strides);
             ComputeVarMeanUsingWelford<Tdata, ComputeType>(
                 input_ptr,
                 i * reduce_num, 

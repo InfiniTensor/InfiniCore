@@ -17,7 +17,7 @@ thread_local common::OpCache<size_t, infiniopAllDescriptor_t> caches(
     });
 
 void calculate(Tensor output, Tensor input, std::vector<size_t> dim, bool keepdim) {
-    size_t seed = hash_combine(output, input, dim.size(), keepdim);  // 只能处理简单类型传入vector会报错
+    size_t seed = hash_combine(output, input, dim.size(), keepdim);
 
     auto device_type = context::getDevice().getType();
     auto device_index = context::getDevice().getIndex();

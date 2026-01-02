@@ -52,17 +52,13 @@ namespace op::var::metax {
         size_t workspace_offset = 0;
 
         size_t *permuted_input_shape_hc = reinterpret_cast<size_t *>(workspace_ptr + workspace_offset);
-        // size_t *output_shape_hc = permuted_input_shape_hc + input_ndim;
         workspace_offset += input_ndim * sizeof(size_t);
     
         ptrdiff_t *permuted_input_strides_hc = reinterpret_cast<ptrdiff_t *>(workspace_ptr + workspace_offset);
-        // ptrdiff_t *output_strides_hc = permuted_input_strides_hc + input_ndim;
         workspace_offset += input_ndim * sizeof(ptrdiff_t);
     
         CHECK_METAX(hcMemcpyAsync(permuted_input_shape_hc,   info.permuted_input_shape.data(),   input_ndim * sizeof(size_t),     hcMemcpyHostToDevice, stream));
-        // CHECK_METAX(hcMemcpyAsync(output_shape_hc,           info.output_shape.data(),           output_ndim * sizeof(size_t),    hcMemcpyHostToDevice, stream));
         CHECK_METAX(hcMemcpyAsync(permuted_input_strides_hc, info.permuted_input_strides.data(), input_ndim * sizeof(ptrdiff_t),  hcMemcpyHostToDevice, stream));
-        // CHECK_METAX(hcMemcpyAsync(output_strides_hc,         info.output_strides.data(),         output_ndim * sizeof(ptrdiff_t), hcMemcpyHostToDevice, stream));
         bool is_nan = IsNanOut(info);
         if(info.reduce_num == input_size){ //scalar output
             ComputeType *tmp_buffer;
@@ -99,7 +95,7 @@ namespace op::var::metax {
 
             hcStream_t stream = (hcStream_t)stream_;
             
-            #define CALCULATE_VAR(BLOCK_SIZE, Tdata, ComputeType)               \
+            #define CALCULATE_VAR(BLOCK_SIZE, Tdata, ComputeType)                    \
             launchKernel<BLOCK_SIZE, Tdata, ComputeType>(                            \
                 _info,                                                               \
                 (Tdata *)var_output, (const Tdata *)input,                           \
@@ -107,14 +103,14 @@ namespace op::var::metax {
                 stream, workspace, workspace_size                                    \
             )
 
-            #define CALCULATE_VAR_WITH_BLOCK_SIZE(BLOCK_SIZE)                   \
+            #define CALCULATE_VAR_WITH_BLOCK_SIZE(BLOCK_SIZE)                        \
             {                                                                        \
                 if (_info.dtype == INFINI_DTYPE_BF16)                                \
-                    return CALCULATE_VAR(BLOCK_SIZE, __nv_bfloat16, double);    \
+                    return CALCULATE_VAR(BLOCK_SIZE, __nv_bfloat16, double);         \
                 else if(_info.dtype == INFINI_DTYPE_F16)                             \
-                    return CALCULATE_VAR(BLOCK_SIZE, half, double);             \
+                    return CALCULATE_VAR(BLOCK_SIZE, half, double);                  \
                 else if(_info.dtype == INFINI_DTYPE_F32)                             \
-                    return CALCULATE_VAR(BLOCK_SIZE, float, double);            \
+                    return CALCULATE_VAR(BLOCK_SIZE, float, double);                 \
                 else                                                                 \
                     return INFINI_STATUS_BAD_TENSOR_DTYPE;                           \
             }

@@ -52,21 +52,15 @@ namespace op::var::moore {
         size_t workspace_offset = 0;
 
         size_t *permuted_input_shape_musa = reinterpret_cast<size_t *>(workspace_ptr + workspace_offset);
-        // size_t *output_shape_musa = permuted_input_shape_musa + input_ndim;
         workspace_offset += input_ndim * sizeof(size_t);
     
         ptrdiff_t *permuted_input_strides_musa = reinterpret_cast<ptrdiff_t *>(workspace_ptr + workspace_offset);
-        // ptrdiff_t *output_strides_musa = permuted_input_strides_musa + input_ndim;
         workspace_offset += input_ndim * sizeof(ptrdiff_t);
     
         CHECK_MOORE(musaMemcpyAsync(permuted_input_shape_musa,   info.permuted_input_shape.data(),   input_ndim * sizeof(size_t),     musaMemcpyHostToDevice, stream));
-        // CHECK_MOORE(musaMemcpyAsync(output_shape_musa,           info.output_shape.data(),           output_ndim * sizeof(size_t),    musaMemcpyHostToDevice, stream));
         CHECK_MOORE(musaMemcpyAsync(permuted_input_strides_musa, info.permuted_input_strides.data(), input_ndim * sizeof(ptrdiff_t),  musaMemcpyHostToDevice, stream));
-        // CHECK_MOORE(musaMemcpyAsync(output_strides_musa,         info.output_strides.data(),         output_ndim * sizeof(ptrdiff_t), musaMemcpyHostToDevice, stream));
         bool is_nan = IsNanOut(info);
         if(info.reduce_num == input_size){ //scalar output
-            // Tdata zero = static_cast<Tdata>(0.0f);
-            // CHECK_MOORE(musaMemcpyAsync(output, &zero, sizeof(T), musaMemcpyHostToDevice, stream));
             ComputeType *tmp_buffer;
             constexpr size_t MAX_GRID_SIZE = 128;
             size_t grid_size = std::min(MAX_GRID_SIZE, 
@@ -101,7 +95,7 @@ namespace op::var::moore {
 
             musaStream_t stream = (musaStream_t)stream_;
             
-            #define CALCULATE_VAR(BLOCK_SIZE, Tdata, ComputeType)               \
+            #define CALCULATE_VAR(BLOCK_SIZE, Tdata, ComputeType)                    \
             launchKernel<BLOCK_SIZE, Tdata, ComputeType>(                            \
                 _info,                                                               \
                 (Tdata *)var_output, (const Tdata *)input,                           \
@@ -109,14 +103,14 @@ namespace op::var::moore {
                 stream, workspace, workspace_size                                    \
             )
 
-            #define CALCULATE_VAR_WITH_BLOCK_SIZE(BLOCK_SIZE)                   \
+            #define CALCULATE_VAR_WITH_BLOCK_SIZE(BLOCK_SIZE)                        \
             {                                                                        \
                 if (_info.dtype == INFINI_DTYPE_BF16)                                \
-                    return CALCULATE_VAR(BLOCK_SIZE, __nv_bfloat16, double);    \
+                    return CALCULATE_VAR(BLOCK_SIZE, __nv_bfloat16, double);         \
                 else if(_info.dtype == INFINI_DTYPE_F16)                             \
-                    return CALCULATE_VAR(BLOCK_SIZE, half, double);             \
+                    return CALCULATE_VAR(BLOCK_SIZE, half, double);                  \
                 else if(_info.dtype == INFINI_DTYPE_F32)                             \
-                    return CALCULATE_VAR(BLOCK_SIZE, float, double);            \
+                    return CALCULATE_VAR(BLOCK_SIZE, float, double);                 \
                 else                                                                 \
                     return INFINI_STATUS_BAD_TENSOR_DTYPE;                           \
             }

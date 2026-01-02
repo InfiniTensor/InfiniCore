@@ -40,14 +40,13 @@ void py_var_(Tensor var_output, Tensor input, py::object dim, bool unbiased, boo
       }
 }
 
-// todo 修改参数
 inline void bind_var(py::module &m) {
     m.def("var",
           &py_var,
           py::arg("input"),
-          py::arg("dim"), // = py::none()
-          py::arg("unbiased"), // = true
-          py::arg("keepdim"), // = false  
+          py::arg("dim"),
+          py::arg("unbiased"),
+          py::arg("keepdim"), 
           R"doc(Var of input tensor along the given dimensions.)doc");
 
     m.def("var_",

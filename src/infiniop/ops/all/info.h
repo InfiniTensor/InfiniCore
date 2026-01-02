@@ -11,9 +11,9 @@ namespace op::all{
     AllInfo() = default;
     public:
         infiniDtype_t dtype;
-        std::vector<size_t> permuted_input_shape; // need to permute shape for reduce tensor (other1, other2, other3...reduce_dim1, reduce_dim2, reduce_dim3...)
+        std::vector<size_t> permuted_input_shape; // need to permute 
         std::vector<size_t> output_shape;
-        std::vector<ptrdiff_t> permuted_input_strides; // need to permute strides for reduce tensor (other1, other2, other3...reduce_dim1, reduce_dim2, reduce_dim3...)
+        std::vector<ptrdiff_t> permuted_input_strides; // need to permute
         std::vector<ptrdiff_t> output_strides;
         size_t reduce_dim_size; // reduce dim size
         size_t reduce_num; // number of elements to reduce for each output element
@@ -26,8 +26,6 @@ namespace op::all{
             size_t *dim, 
             size_t dim_size,
             bool keepdim){
-                // CHECK_OR_RETURN(output_desc != nullptr && input_desc != nullptr, INFINI_STATUS_NULL_POINTER); 
-                // CHECK_OR_RETURN(output_desc->dtype() == input_desc->dtype(), INFINI_STATUS_BAD_TENSOR_DTYPE);
                 auto input_shape = input_desc->shape();
                 auto input_strides = input_desc->strides();
                 size_t input_ndim = input_desc->ndim();
@@ -44,7 +42,6 @@ namespace op::all{
                 for(size_t i = 0; i < dim_size; i++){
                     permute_order.push_back(dim[i]);
                 }
-                // CHECK_OR_RETURN(input_ndim == permute_order.size(), INFINI_STATUS_BAD_PARAM);
                 std::vector<size_t> permuted_input_shape;
                 std::vector<ptrdiff_t> permuted_input_strides;
                 for(size_t i = 0; i < permute_order.size(); i++){

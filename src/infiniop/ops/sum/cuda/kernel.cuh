@@ -1,11 +1,6 @@
 #ifndef __SUM_CUDA_H__
 #define __SUM_CUDA_H__
 
-// todo把具体的include 的相关代码放到对应的平台下的文件夹中
-
-// const SumInfo *info,
-// 规约到标量的情况
-
 __forceinline__ __device__ __host__ size_t
 indexToOffset(
     size_t flat_index,
@@ -19,9 +14,7 @@ indexToOffset(
     }
     return res;
 }
-// todo 去除 indexToOffset 和 common 中 device::nvidia::indexToOffset 重名的影响
 
-// BLOCK_SIZE = 256, GRID_SIZE = (input_size + BLOCK_SIZE - 1) / BLOCK_SIZE
 template<size_t BLOCK_SIZE, typename Tdata, typename Tcompute>
 __global__ void sumAllKernel(
     Tcompute *output,
@@ -37,33 +30,27 @@ __global__ void sumAllKernel(
         size_t input_offset = indexToOffset(idx, permuted_input_shape_size, permuted_input_shape, permuted_input_strides);
         s_data[tid] = static_cast<Tcompute>(input[input_offset]);
     } else {
-        // s_data[tid] = T(0);
         s_data[tid] = static_cast<Tcompute>(0.f);
     }
     __syncthreads();
     for(size_t s = blockDim.x / 2; s > 0; s >>=1){
         if(tid < s){
-            // error: no viable overloaded '+='
             s_data[tid] += s_data[tid + s];
         }
         __syncthreads();
     }
 
     if(tid == 0){
-        // atomicAdd(output, static_cast<T>(s_data[0]));  src/infiniop/ops/sum/moore/sum_moore.mu:4: src/infiniop/ops/sum/moore/../cuda/kernel.cuh:53:9: error: no matching function for call to 'atomicAdd'
         atomicAdd(output, s_data[0]);
     }
 }
 
-// 规约到非标量的情况, 假设output是[output_size, reduce_num]这种结构，暂时一个thread负责一个[1, reduce_num]的块 后续可以优化为一个block负责一个[1, reduce_num]的块
 template<size_t BLOCK_SIZE, typename T>
 __global__ void sumKernel(
     T *output,
     const T *input,
-    // size_t reduce_dim_size,
     size_t permuted_input_shape_size,
     size_t output_shape_size,
-    // size_t input_size,
     size_t output_size,
     size_t reduce_num,
     size_t *permuted_input_shape,
@@ -74,7 +61,6 @@ __global__ void sumKernel(
     size_t idx = tid + blockIdx.x * blockDim.x;
     if(idx >= output_size) return;
     size_t output_index = indexToOffset(idx, output_shape_size, output_shape, output_strides);
-    // T tempSum = T(0);
     float tempSum = static_cast<float>(0.f);
     for(size_t i = 0; i < reduce_num; i++){
         size_t input_offset = indexToOffset(i + idx * reduce_num, permuted_input_shape_size, permuted_input_shape, permuted_input_strides);

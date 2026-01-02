@@ -4,7 +4,6 @@
 namespace op::sum::cpu {
 
 Descriptor::~Descriptor() {}
-//  一个descriptor的create 一个suminfo 的create
 infiniStatus_t Descriptor::create(
     infiniopHandle_t handle,
     Descriptor **desc_ptr,
@@ -13,7 +12,6 @@ infiniStatus_t Descriptor::create(
     size_t *dim, 
     size_t dim_size, 
     bool keepdim) {
-    // auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
     auto result = SumInfo::create(output_desc, input_desc, dim, dim_size, keepdim);
     CHECK_RESULT(result);
     
@@ -27,11 +25,6 @@ infiniStatus_t calculateSum(
     const SumInfo *info,
     T *output,
     const T *input){
-        // using AccumType = std::conditional_t<
-        //     std::is_same_v<T, fp16_t> || std::is_same_v<T, bf16_t>,
-        //     float,
-        //     T
-        // >;
         if (info->reduce_dim_size == info->permuted_input_shape.size()){ // 规约到标量
             float tempSum = 0.;
             for(size_t index = 0; index < info->input_size; index++){
@@ -42,7 +35,6 @@ infiniStatus_t calculateSum(
             return INFINI_STATUS_SUCCESS;
         } else{
             for (size_t i = 0; i < info->output_size; i++) {
-                // 其实这里的output应该是连续的，所以这里可以优化为直接计算output_offset = i 
                 size_t output_offset = op::common_cpu::indexToOffset(i, info->output_shape.size(), info->output_shape.data(), info->output_strides.data());
                 float tempSum = 0.;
                 for(size_t j = 0; j < info->reduce_num; j++){
@@ -56,9 +48,6 @@ infiniStatus_t calculateSum(
     }
 }
 
-// src/infiniop/ops/sum/cpu/sum_cpu.cc: In instantiation of ‘infiniStatus_t op::sum::cpu::{anonymous}::calculateSum(const op::sum::SumInfo*, T*, const T*) [with T = CustomBFloat16]’:
-// src/infiniop/ops/sum/cpu/sum_cpu.cc:72:36:   required from here
-// src/infiniop/ops/sum/cpu/sum_cpu.cc:36:25: error: conversion from ‘double’ to non-scalar type ‘CustomBFloat16’ requested
 infiniStatus_t Descriptor::calculate(
     void *workspace,
     size_t workspace_size,
@@ -70,8 +59,6 @@ infiniStatus_t Descriptor::calculate(
         return calculateSum<fp16_t>(&_info, (fp16_t *)output, reinterpret_cast<const fp16_t *>(input));
     case INFINI_DTYPE_F32:
         return calculateSum<float>(&_info, (float *)output, reinterpret_cast<const float *>(input));
-    // case INFINI_DTYPE_F64:
-    //     return calculateSum<double>(&_info, (double *)output, reinterpret_cast<const double *>(input));
     case INFINI_DTYPE_BF16:
         return calculateSum<bf16_t>(&_info, (bf16_t *)output, reinterpret_cast<const bf16_t *>(input));
     default:

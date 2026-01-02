@@ -18,7 +18,7 @@ thread_local common::OpCache<size_t, infiniopVarMeanDescriptor_t> caches(
     });
 
 void calculate(Tensor var_output, Tensor mean_output, Tensor input, std::vector<size_t> dim, bool unbiased, bool keepdim) {
-    size_t seed = hash_combine(var_output, mean_output, input, dim.size(), unbiased, keepdim);  // 只能处理简单类型传入vector会报错
+    size_t seed = hash_combine(var_output, mean_output, input, dim.size(), unbiased, keepdim); 
 
     auto device_type = context::getDevice().getType();
     auto device_index = context::getDevice().getIndex();

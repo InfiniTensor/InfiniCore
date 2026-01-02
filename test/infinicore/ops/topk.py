@@ -76,11 +76,6 @@ class OpTest(BaseOperatorTest):
         return parse_test_cases()
 
     def torch_operator(self, *args, **kwargs):
-        print("args = ", args)
-        a, b = torch.topk(*args, **kwargs)
-        print("torch returned:")
-        print("values = ", a)
-        print("indices = ", b)
         return torch.topk(*args, **kwargs)
 
     def infinicore_operator(self, *args, **kwargs):

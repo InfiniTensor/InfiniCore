@@ -52,21 +52,15 @@ namespace op::var::nvidia {
         size_t workspace_offset = 0;
 
         size_t *permuted_input_shape_cuda = reinterpret_cast<size_t *>(workspace_ptr + workspace_offset);
-        // size_t *output_shape_cuda = permuted_input_shape_cuda + input_ndim;
         workspace_offset += input_ndim * sizeof(size_t);
     
         ptrdiff_t *permuted_input_strides_cuda = reinterpret_cast<ptrdiff_t *>(workspace_ptr + workspace_offset);
-        // ptrdiff_t *output_strides_cuda = permuted_input_strides_cuda + input_ndim;
         workspace_offset += input_ndim * sizeof(ptrdiff_t);
     
         CHECK_CUDA(cudaMemcpyAsync(permuted_input_shape_cuda,   info.permuted_input_shape.data(),   input_ndim * sizeof(size_t),     cudaMemcpyHostToDevice, stream));
-        // CHECK_CUDA(cudaMemcpyAsync(output_shape_cuda,           info.output_shape.data(),           output_ndim * sizeof(size_t),    cudaMemcpyHostToDevice, stream));
         CHECK_CUDA(cudaMemcpyAsync(permuted_input_strides_cuda, info.permuted_input_strides.data(), input_ndim * sizeof(ptrdiff_t),  cudaMemcpyHostToDevice, stream));
-        // CHECK_CUDA(cudaMemcpyAsync(output_strides_cuda,         info.output_strides.data(),         output_ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, stream));
         bool is_nan = IsNanOut(info);
         if(info.reduce_num == input_size){ //scalar output
-            // Tdata zero = static_cast<Tdata>(0.0f);
-            // CHECK_CUDA(cudaMemcpyAsync(output, &zero, sizeof(T), cudaMemcpyHostToDevice, stream));
             ComputeType *tmp_buffer;
             constexpr size_t MAX_GRID_SIZE = 128;
             size_t grid_size = std::min(MAX_GRID_SIZE, 
@@ -84,7 +78,6 @@ namespace op::var::nvidia {
                 input, var_output, input_ndim, output_size, reduce_num, 
                 permuted_input_shape_cuda, permuted_input_strides_cuda, unbiased, is_nan);
         }
-        // CHECK_CUDA(cudaDeviceSynchronize());
     
         return INFINI_STATUS_SUCCESS;
     }
@@ -102,7 +95,7 @@ namespace op::var::nvidia {
 
             cudaStream_t stream = (cudaStream_t)stream_;
             
-            #define CALCULATE_VAR(BLOCK_SIZE, Tdata, ComputeType)               \
+            #define CALCULATE_VAR(BLOCK_SIZE, Tdata, ComputeType)                    \
             launchKernel<BLOCK_SIZE, Tdata, ComputeType>(                            \
                 _info,                                                               \
                 (Tdata *)var_output, (const Tdata *)input,                           \
@@ -110,14 +103,14 @@ namespace op::var::nvidia {
                 stream, workspace, workspace_size                                    \
             )
 
-            #define CALCULATE_VAR_WITH_BLOCK_SIZE(BLOCK_SIZE)                   \
+            #define CALCULATE_VAR_WITH_BLOCK_SIZE(BLOCK_SIZE)                        \
             {                                                                        \
                 if (_info.dtype == INFINI_DTYPE_BF16)                                \
-                    return CALCULATE_VAR(BLOCK_SIZE, __nv_bfloat16, double);    \
+                    return CALCULATE_VAR(BLOCK_SIZE, __nv_bfloat16, double);         \
                 else if(_info.dtype == INFINI_DTYPE_F16)                             \
-                    return CALCULATE_VAR(BLOCK_SIZE, half, double);             \
+                    return CALCULATE_VAR(BLOCK_SIZE, half, double);                  \
                 else if(_info.dtype == INFINI_DTYPE_F32)                             \
-                    return CALCULATE_VAR(BLOCK_SIZE, float, double);            \
+                    return CALCULATE_VAR(BLOCK_SIZE, float, double);                 \
                 else                                                                 \
                     return INFINI_STATUS_BAD_TENSOR_DTYPE;                           \
             }
