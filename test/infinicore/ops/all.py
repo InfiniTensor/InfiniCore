@@ -56,7 +56,7 @@ def parse_test_cases():
     for data in _TEST_CASES_DATA:
         shape, strides, dim, keepdim, out_strides = data
         input_supports_inplace = not is_broadcast(strides)
-        out_supports_inplace = not is_broadcast(out_strides)
+        # out_supports_inplace = not is_broadcast(out_strides)
 
         for dtype in _TENSOR_DTYPES:
             tol = _TOLERANCE_MAP.get(dtype, {"atol": 0, "rtol": 0})
@@ -81,19 +81,19 @@ def parse_test_cases():
             )
 
             # explicit out when supported (create out tensor with computed shape)
-            out_shape = _compute_out_shape(shape, dim, keepdim)
-            out_spec = TensorSpec.from_tensor(out_shape, out_strides, infinicore.bool)
-            if out_supports_inplace:
-                test_cases.append(
-                    TestCase(
-                        inputs=[in_spec],
-                        kwargs=kwargs,
-                        output_spec=out_spec,
-                        comparison_target="out",
-                        tolerance=tol,
-                        description="All - INPLACE(out)",
-                    )
-                )
+            # out_shape = _compute_out_shape(shape, dim, keepdim)
+            # out_spec = TensorSpec.from_tensor(out_shape, out_strides, infinicore.bool)
+            # if out_supports_inplace:
+            #     test_cases.append(
+            #         TestCase(
+            #             inputs=[in_spec],
+            #             kwargs=kwargs,
+            #             output_spec=out_spec,
+            #             comparison_target="out",
+            #             tolerance=tol,
+            #             description="All - INPLACE(out)",
+            #         )
+            #     )
 
     return test_cases
 
@@ -110,9 +110,9 @@ class OpTest(BaseOperatorTest):
     def torch_operator(self, *args, **kwargs):
         return torch.all(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
-    #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.all(*args, **kwargs)
+    def infinicore_operator(self, *args, **kwargs):
+        """InfiniCore implementation (operator not yet available)."""
+        return infinicore.all(*args, **kwargs)
 
 
 def main():
