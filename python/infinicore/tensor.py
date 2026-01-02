@@ -42,6 +42,11 @@ class Tensor:
                     getattr(self._underlying, name)
                 ),
             )
+        else:
+            raise AttributeError(
+                "{!r} object has no attribute {!r}".format(__name__, name)
+            )
+
         return getattr(self, name)
 
     @property

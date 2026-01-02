@@ -7,21 +7,6 @@ from typing import List, Dict, Any, Optional, Tuple
 from .tensor import TensorSpec
 
 
-@dataclass
-class TestResult:
-    """Test result data structure"""
-
-    success: bool
-    return_code: int  # 0: success, -1: failure, -2: skipped, -3: partial
-    torch_host_time: float = 0.0
-    torch_device_time: float = 0.0
-    infini_host_time: float = 0.0
-    infini_device_time: float = 0.0
-    error_message: str = ""
-    test_case: Any = None
-    device: Any = None
-
-
 class TestCase:
     """Test case with all configuration included"""
 

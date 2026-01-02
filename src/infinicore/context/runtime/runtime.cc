@@ -2,9 +2,10 @@
 
 #include "../../utils.hpp"
 
-#include "../allocators/device_caching_allocator.hpp"
 #include "../allocators/device_pinned_allocator.hpp"
 #include "../allocators/host_allocator.hpp"
+#include "../allocators/pinnable_block_allocator.hpp"
+#include "../allocators/stream_ordered_allocator.hpp"
 
 namespace infinicore {
 Runtime::Runtime(Device device) : device_(device) {
@@ -14,7 +15,7 @@ Runtime::Runtime(Device device) : device_(device) {
     if (device_.getType() == Device::Type::CPU) {
         device_memory_allocator_ = std::make_unique<HostAllocator>();
     } else {
-        device_memory_allocator_ = std::make_unique<DeviceCachingAllocator>(device);
+        device_memory_allocator_ = std::make_unique<PinnableBlockAllocator>(device);
         pinned_host_memory_allocator_ = std::make_unique<DevicePinnedHostAllocator>(device);
     }
 }

@@ -7,7 +7,7 @@ import os
 import inspect
 import re
 from . import TestConfig, TestRunner, get_args, get_test_devices
-from .reporter import TestReporter
+from .results import TestSummary
 
 
 class GenericTestRunner:
@@ -89,7 +89,8 @@ class GenericTestRunner:
             op_paths = {"torch": t_path, "infinicore": i_path}
 
             # 2. Generate Report Entries
-            entries = TestReporter.prepare_report_entry(
+            test_summary = TestSummary()
+            entries = test_summary.collect_report_entry(
                 op_name=self.operator_test.operator_name,
                 test_cases=self.operator_test.test_cases,
                 args=self.args,
@@ -98,7 +99,7 @@ class GenericTestRunner:
             )
 
             # 4. Save to File
-            TestReporter.save_all_results(self.args.save, entries)
+            test_summary.save_report(self.args.save)
 
         except Exception as e:
             import traceback

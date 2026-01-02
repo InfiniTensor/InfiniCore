@@ -336,7 +336,7 @@ def rearrange_tensor(tensor, new_strides):
         torch.float32,
         torch.float64,
     ]:
-        new_tensor.view(-1).index_add_(0, new_positions, tensor.view(-1))
+        new_tensor.view(-1).index_add_(0, new_positions, tensor.contiguous().view(-1))
     elif tensor.dtype in [torch.uint16, torch.uint32, torch.uint64]:
         new_tensor_int64 = new_tensor.to(dtype=torch.int64)
         tensor_int64 = tensor.to(dtype=torch.int64)

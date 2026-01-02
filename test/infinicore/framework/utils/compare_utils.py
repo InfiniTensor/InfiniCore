@@ -1,7 +1,6 @@
 import torch
-import time
-import infinicore
 import numpy as np
+<<<<<<< HEAD:test/infinicore/framework/utils.py
 from .datatypes import to_infinicore_dtype, to_torch_dtype
 
 
@@ -179,6 +178,15 @@ def convert_infinicore_to_torch(infini_result):
     temp_tensor = infinicore_tensor_from_torch(torch_result_from_infini)
     temp_tensor.copy_(infini_result)
     return torch_result_from_infini
+=======
+import sys
+from ..datatypes import to_torch_dtype
+from .tensor_utils import (
+    convert_infinicore_to_torch,
+    is_integer_dtype,
+    is_complex_dtype,
+)
+>>>>>>> upstream/main:test/infinicore/framework/utils/compare_utils.py
 
 
 def compare_results(
@@ -361,89 +369,104 @@ def create_test_comparator(config, atol, rtol, mode_name="", equal_nan=False):
     return compare_test_results
 
 
-def rearrange_tensor(tensor, new_strides):
+def get_tolerance(tolerance_map, tensor_dtype, default_atol=0, default_rtol=1e-3):
     """
-    Given a PyTorch tensor and a list of new strides, return a new PyTorch tensor with the given strides.
+    Get tolerance settings based on data type
     """
-    import torch
+    tolerance = tolerance_map.get(
+        tensor_dtype, {"atol": default_atol, "rtol": default_rtol}
+    )
+    return tolerance["atol"], tolerance["rtol"]
 
-    shape = tensor.shape
 
-    new_size = [0] * len(shape)
-    left = 0
-    right = 0
-    for i in range(len(shape)):
-        if new_strides[i] >= 0:
-            new_size[i] = (shape[i] - 1) * new_strides[i] + 1
-            right += new_strides[i] * (shape[i] - 1)
-        else:  # TODO: Support negative strides in the future
-            # new_size[i] = (shape[i] - 1) * (-new_strides[i]) + 1
-            # left += new_strides[i] * (shape[i] - 1)
-            raise ValueError("Negative strides are not supported yet")
+def debug(actual, desired, atol=0, rtol=1e-2, equal_nan=False, verbose=True):
+    """
+    Debug function to compare two tensors and print differences
+    """
+    # Handle complex types by converting to real representation for comparison
+    if actual.is_complex() or desired.is_complex():
+        actual = torch.view_as_real(actual)
+        desired = torch.view_as_real(desired)
+    elif actual.dtype == torch.bfloat16 or desired.dtype == torch.bfloat16:
+        actual = actual.to(torch.float32)
+        desired = desired.to(torch.float32)
 
-    # Create a new tensor with zeros
-    new_tensor = torch.zeros(
-        (right - left + 1,), dtype=tensor.dtype, device=tensor.device
+    print_discrepancy(actual, desired, atol, rtol, equal_nan, verbose)
+
+    import numpy as np
+
+    np.testing.assert_allclose(
+        actual.cpu(), desired.cpu(), rtol, atol, equal_nan, verbose=True
     )
 
-    # Generate indices for original tensor based on original strides
-    indices = [torch.arange(s) for s in shape]
-    mesh = torch.meshgrid(*indices, indexing="ij")
 
-    # Flatten indices for linear indexing
-    linear_indices = [m.flatten() for m in mesh]
+def print_discrepancy(
+    actual, expected, atol=0, rtol=1e-3, equal_nan=True, verbose=True
+):
+    """Print detailed tensor differences"""
+    if actual.shape != expected.shape:
+        raise ValueError("Tensors must have the same shape to compare.")
 
-    # Calculate new positions based on new strides
-    new_positions = sum(
-        linear_indices[i] * new_strides[i] for i in range(len(shape))
-    ).to(tensor.device)
-    offset = -left
-    new_positions += offset
+    import torch
+    import sys
 
-    # Copy the original data to the new tensor
-    new_tensor.reshape(-1).index_add_(0, new_positions, tensor.reshape(-1))
-    new_tensor.set_(new_tensor.untyped_storage(), offset, shape, tuple(new_strides))
+    is_terminal = sys.stdout.isatty()
+    actual_isnan = torch.isnan(actual)
+    expected_isnan = torch.isnan(expected)
 
-    return new_tensor
+    # Calculate difference mask
+    nan_mismatch = (
+        actual_isnan ^ expected_isnan if equal_nan else actual_isnan | expected_isnan
+    )
+    diff_mask = nan_mismatch | (
+        torch.abs(actual - expected) > (atol + rtol * torch.abs(expected))
+    )
+    diff_indices = torch.nonzero(diff_mask, as_tuple=False)
+    delta = actual - expected
 
+    # Display formatting
+    col_width = [18, 20, 20, 20]
+    decimal_places = [0, 12, 12, 12]
+    total_width = sum(col_width) + sum(decimal_places)
 
-def is_broadcast(strides):
-    """
-    Check if strides indicate a broadcasted tensor
+    def add_color(text, color_code):
+        if is_terminal:
+            return f"\033[{color_code}m{text}\033[0m"
+        else:
+            return text
 
-    Args:
-        strides: Tensor strides or None
+    if verbose:
+        for idx in diff_indices:
+            index_tuple = tuple(idx.tolist())
+            actual_str = f"{actual[index_tuple]:<{col_width[1]}.{decimal_places[1]}f}"
+            expected_str = (
+                f"{expected[index_tuple]:<{col_width[2]}.{decimal_places[2]}f}"
+            )
+            delta_str = f"{delta[index_tuple]:<{col_width[3]}.{decimal_places[3]}f}"
+            print(
+                f" > Index: {str(index_tuple):<{col_width[0]}}"
+                f"actual: {add_color(actual_str, 31)}"
+                f"expect: {add_color(expected_str, 32)}"
+                f"delta: {add_color(delta_str, 33)}"
+            )
 
-    Returns:
-        bool: True if the tensor is broadcasted (has zero strides)
-    """
-    if strides is None:
-        return False
-    return any(s == 0 for s in strides)
+        print(f"  - Actual dtype: {actual.dtype}")
+        print(f"  - Desired dtype: {expected.dtype}")
+        print(f"  - Atol: {atol}")
+        print(f"  - Rtol: {rtol}")
+        print(f"  - Equal NaN: {equal_nan}")
+        print(
+            f"  - Mismatched elements: {len(diff_indices)} / {actual.numel()} ({len(diff_indices) / actual.numel() * 100}%)"
+        )
+        print(
+            f"  - Min(actual) : {torch.min(actual):<{col_width[1]}} | Max(actual) : {torch.max(actual):<{col_width[2]}}"
+        )
+        print(
+            f"  - Min(desired): {torch.min(expected):<{col_width[1]}} | Max(desired): {torch.max(expected):<{col_width[2]}}"
+        )
+        print(
+            f"  - Min(delta)  : {torch.min(delta):<{col_width[1]}} | Max(delta)  : {torch.max(delta):<{col_width[2]}}"
+        )
+        print("-" * total_width)
 
-
-def is_integer_dtype(dtype):
-    """Check if dtype is integer type"""
-    return dtype in [
-        torch.int8,
-        torch.int16,
-        torch.int32,
-        torch.int64,
-        torch.uint8,
-        torch.bool,
-    ]
-
-
-def is_complex_dtype(dtype):
-    """Check if dtype is complex type"""
-    return dtype in [torch.complex64, torch.complex128]
-
-
-def is_floating_dtype(dtype):
-    """Check if dtype is floating-point type"""
-    return dtype in [
-        torch.float16,
-        torch.float32,
-        torch.float64,
-        torch.bfloat16,
-    ]
+    return diff_indices
