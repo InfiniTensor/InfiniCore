@@ -69,14 +69,14 @@ namespace op::var_mean::moore {
             CHECK_MOORE(musaMalloc(&tmp_buffer, grid_size * 3 * sizeof(ComputeType)));
             ComputeVarScalarOut<Tdata, ComputeType><<<grid_size, BLOCK_SIZE, 0, stream>>>(
                 input, var_output, mean_output, tmp_buffer, input_size, input_ndim, 
-                permuted_input_shape_musa, permuted_input_strides_musa, info.unbiased, is_nan);
+                permuted_input_shape_musa, permuted_input_strides_musa, unbiased, is_nan);
             CHECK_MOORE(musaFree(tmp_buffer));            
         } else {
             size_t grid_size = std::min(256UL, (info.output_size + BLOCK_SIZE - 1) / BLOCK_SIZE);
             grid_size = std::max(1UL, grid_size);
             ComputeVarMeanUsingWelfordWrapper<Tdata, ComputeType><<<grid_size, BLOCK_SIZE, 0, stream>>>(
                 input, var_output, mean_output, input_ndim, output_size, reduce_num, 
-                permuted_input_shape_musa, permuted_input_strides_musa, info.unbiased, is_nan);
+                permuted_input_shape_musa, permuted_input_strides_musa, unbiased, is_nan);
         }
     
         return INFINI_STATUS_SUCCESS;
@@ -100,6 +100,7 @@ namespace op::var_mean::moore {
             launchKernel<BLOCK_SIZE, Tdata, ComputeType>(                            \
                 _info,                                                               \
                 (Tdata *)var_output, (Tdata *)mean_output, (const Tdata *)input,     \
+                unbiased,  keepdim,                                                  \
                 stream, workspace, workspace_size                                    \
             )
 
