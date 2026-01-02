@@ -1,7 +1,7 @@
 #ifndef __VAR_CUDA_H__
 #define __VAR_CUDA_H__
 
-#include <math_constants.h>
+#include <cmath>          // NAN
 
 __forceinline__ __device__ __host__ size_t indexToOffset(
   size_t flat_index,
@@ -20,82 +20,67 @@ namespace device{
   namespace cuda{
     template<typename Tdata>
     __inline__ __device__ Tdata Nan();
-    
     template<>
     __inline__ __device__ float Nan<float>() {
-      return CUDART_NAN_F;
+        return NAN;
     }
-    
     template<>
     __inline__ __device__ double Nan<double>() {
-      return CUDART_NAN;
+        return NAN;
     }
-    
     template<>
     __inline__ __device__ half Nan<half>() {
-      return half(CUDART_NAN_F);
-    }
-    
-
-    template<>
-    __inline__ __device__ nv_bfloat16 Nan<__nv_bfloat16>() {
-      return __nv_bfloat16(CUDART_NAN_F);
+        return __float2half(NAN);
     }
 
-    #ifdef ENABLE_MOORE_API
-    template<>
-    __inline__ __device__ __mt_bfloat16 Nan<__mt_bfloat16>() {
-      return __float2bfloat16_rn(CUDART_NAN_F);
-    }
+    #if defined(ENABLE_MOORE_API)
+    using bf16_t = __mt_bfloat16;
+    #elif defined(ENABLE_METAX_API)
+    using bf16_t = __hpcc_bfloat16;
+    #else
+    using bf16_t = __nv_bfloat16;
     #endif
 
+    /* bf16 */
+    template<>
+    __inline__ __device__ bf16_t Nan<bf16_t>() {
+        return __float2bfloat16_rn(NAN);
+    }
 
     template<typename Tdata>
     __inline__ __device__ Tdata Div(Tdata a, Tdata b);
-
     template<>
     __inline__ __device__ float Div<float>(float a, float b) {
     #ifdef OF_LAYER_NORM_USE_FAST_MATH
-    return __fdividef(a, b);
+        return __fdividef(a, b);
     #else
-    return a / b;
+        return a / b;
     #endif
     }
-
     template<>
     __inline__ __device__ double Div<double>(double a, double b) {
-    return a / b;
+        return a / b;
     }
-
-    // 添加 half 支持
     template<>
     __inline__ __device__ half Div<half>(half a, half b) {
-    #if __CUDA_ARCH__ >= 530
-        return __hdiv(a, b);  // 硬件除法（SM 5.3+）
+    #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 530)
+        return __hdiv(a, b);
     #else
         return __float2half(__half2float(a) / __half2float(b));
     #endif
     }
-
-    // 添加 CUDA bfloat16 支持
-    #if CUDA_VERSION >= 11000
     template<>
-    __inline__ __device__ nv_bfloat16 Div<nv_bfloat16>(nv_bfloat16 a, nv_bfloat16 b) {
-    #if __CUDA_ARCH__ >= 800
-        return __hdiv(a, b);  // 硬件除法（SM 8.0+）
+    __inline__ __device__ bf16_t Div<bf16_t>(bf16_t a, bf16_t b) {
+
+    #if defined(ENABLE_NVIDIA_API) && defined(__CUDA_ARCH__) && (__CUDA_ARCH__ >= 800)
+        return __hdiv(a, b);
     #else
-        return __float2bfloat16(__bfloat162float(a) / __bfloat162float(b));
-    #endif
-    }
+        return __float2bfloat16_rn(
+            __bfloat162float(a) / __bfloat162float(b)
+        );
     #endif
 
-    // 添加 Moore bfloat16 支持
-    #ifdef ENABLE_MOORE_API
-    template<>
-    __inline__ __device__ __mt_bfloat16 Div<__mt_bfloat16>(__mt_bfloat16 a, __mt_bfloat16 b) {
-        return __float2bfloat16_rn(__bfloat162float(a) / __bfloat162float(b));
     }
-    #endif
 
     
 
