@@ -18,17 +18,15 @@ thread_local common::OpCache<size_t, infiniopRMSNormDescriptor_t> caches(
 void calculate(Tensor y, Tensor x, Tensor weight, float epsilon) {
     size_t seed = hash_combine(y, x, weight, epsilon);
 
-    auto device_type = context::getDevice().getType();
-    auto device_index = context::getDevice().getIndex();
-
-    auto &cache = caches.getCache(device_type, device_index);
+    auto device = context::getDevice();
+    auto &cache = caches.getCache(device);
 
     auto desc_opt = cache.get(seed);
     infiniopRMSNormDescriptor_t desc = nullptr;
 
     if (!desc_opt) {
         INFINICORE_CHECK_ERROR(infiniopCreateRMSNormDescriptor(
-            context::getInfiniopHandle(y->device()), &desc,
+            context::getInfiniopHandle(device), &desc,
             y->desc(), x->desc(), weight->desc(), epsilon));
         cache.put(seed, desc);
     } else {

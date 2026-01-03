@@ -36,6 +36,10 @@ public:
         return cache_vector[device_index];
     }
 
+    BaseCache &getCache(Device device) {
+        return getCache(device.getType(), device.getIndex());
+    }
+
     void setCapacity(size_t capacity) {
         capacity_ = capacity;
         for (auto &vec : caches_) {
