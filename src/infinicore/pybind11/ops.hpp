@@ -17,7 +17,11 @@
 #include "ops/rope.hpp"
 #include "ops/silu.hpp"
 #include "ops/swiglu.hpp"
-
+#include "ops/triplet_margin_loss.h"
+#include "ops/upsample_bilinear.h"
+#include "ops/kthvalue.h"
+#include "ops/lerp.h"
+#include "ops/ldexp.h"
 namespace py = pybind11;
 
 namespace infinicore::ops {
@@ -38,6 +42,11 @@ inline void bind(py::module &m) {
     bind_swiglu(m);
     bind_rope(m);
     bind_embedding(m);
+    bind_upsample_bilinear(m);
+    bind_kthvalue(m);
+    bind_ldexp(m);
+    bind_lerp(m);
+    bind_triplet_margin_loss(m);
 }
 
 } // namespace infinicore::ops

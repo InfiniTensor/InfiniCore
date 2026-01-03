@@ -44,6 +44,9 @@ from infinicore.ops.attention import attention
 from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
+from infinicore.ops.ldexp import ldexp
+from infinicore.ops.lerp import lerp
+from infinicore.ops.kthvalue import kthvalue
 from infinicore.ops.paged_attention import paged_attention
 from infinicore.ops.paged_attention_prefill import paged_attention_prefill
 from infinicore.ops.paged_caching import paged_caching
@@ -109,6 +112,9 @@ __all__ = [
     "matmul",
     "mul",
     "narrow",
+    "ldexp",    
+    "lerp",      
+    "kthvalue",  
     "squeeze",
     "unsqueeze",
     "rearrange",
