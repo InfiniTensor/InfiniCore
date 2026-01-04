@@ -160,6 +160,48 @@ def cdist_(lib):
     ]
 
 @OpRegister.operator
+def binary_cross_entropy_with_logits_(lib):
+    # 1. 创建描述符 (Descriptor Creation)
+    lib.infiniopCreateBCEWithLogitsDescriptor.restype = c_int32
+    lib.infiniopCreateBCEWithLogitsDescriptor.argtypes = [
+        infiniopHandle_t,                        # handle
+        POINTER(infiniopOperatorDescriptor_t),   # desc_ptr
+        infiniopTensorDescriptor_t,              # out_desc
+        infiniopTensorDescriptor_t,              # input_desc (logits)
+        infiniopTensorDescriptor_t,              # target_desc
+        infiniopTensorDescriptor_t,              # weight_desc (可选，不可用则传 NULL)
+        infiniopTensorDescriptor_t,              # pos_weight_desc (可选，不可用则传 NULL)
+        c_int32                                  # reduction (0:none, 1:mean, 2:sum)
+    ]
+
+    # 2. 获取工作空间大小 (Workspace Size)
+    lib.infiniopGetBCEWithLogitsWorkspaceSize.restype = c_int32
+    lib.infiniopGetBCEWithLogitsWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,            # descriptor
+        POINTER(c_size_t),                       # size_ptr
+    ]
+
+    # 3. 执行算子 (Execution)
+    lib.infiniopBCEWithLogits.restype = c_int32
+    lib.infiniopBCEWithLogits.argtypes = [
+        infiniopOperatorDescriptor_t,            # descriptor
+        c_void_p,                                # workspace
+        c_size_t,                                # workspace_size
+        c_void_p,                                # out_ptr
+        c_void_p,                                # input_ptr (logits)
+        c_void_p,                                # target_ptr
+        c_void_p,                                # weight_ptr (可选)
+        c_void_p,                                # pos_weight_ptr (可选)
+        c_void_p,                                # stream
+    ]
+
+    # 4. 销毁描述符 (Destruction)
+    lib.infiniopDestroyBCEWithLogitsDescriptor.restype = c_int32
+    lib.infiniopDestroyBCEWithLogitsDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,            # descriptor
+    ]
+
+@OpRegister.operator
 def attention_(lib):
     lib.infiniopCreateAttentionDescriptor.restype = c_int32
     lib.infiniopCreateAttentionDescriptor.argtypes = [

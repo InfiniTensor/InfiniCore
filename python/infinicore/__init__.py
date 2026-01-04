@@ -50,6 +50,7 @@ from infinicore.ops.unsqueeze import unsqueeze
 from infinicore.ops.atanh import atanh
 from infinicore.ops.addcmul import addcmul
 from infinicore.ops.cdist import cdist
+from infinicore.ops.binary_cross_entropy_with_logits import binary_cross_entropy_with_logits
 from infinicore.tensor import (
     Tensor,
     empty,
