@@ -101,7 +101,9 @@ struct Algo {
             pairs[i].val = pairs[i - 1].val + std::exp((pairs[i].val - max_val) / temperature);
         }
         // topk & topp & limit
-        auto const pk = pairs[std::min(static_cast<size_t>(topk), n) - 1].val,
+        // If topk == 0, treat it as "no limit" (use full vocabulary size n)
+        size_t effective_topk = (topk == 0) ? n : std::min(static_cast<size_t>(topk), n);
+        auto const pk = pairs[effective_topk - 1].val,
                    pp = pairs[n - 1].val * topp,
                    plimit = random_val * std::min(pk, pp);
         // sample

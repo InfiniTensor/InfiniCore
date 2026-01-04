@@ -1,0 +1,176 @@
+#include "../../../devices/metax/metax_common.h"
+#include "../../../devices/metax/metax_handle.h"
+#include "../info.h"
+#include "repetition_penalty_kernel.h"
+#include "repetition_penalty_metax.h"
+
+namespace op::repetition_penalty::metax {
+
+struct Descriptor::Opaque {
+    std::shared_ptr<device::metax::Handle::Internal> internal;
+};
+
+Descriptor::~Descriptor() {
+    delete _opaque;
+}
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t logits_desc,
+    infiniopTensorDescriptor_t mask_desc) {
+    auto handle = reinterpret_cast<device::metax::Handle *>(handle_);
+
+    auto result = RepetitionPenaltyInfo::create(logits_desc, mask_desc);
+    CHECK_RESULT(result);
+
+    auto info = result.take();
+
+    // No workspace needed - repetition_penalties must be a device pointer
+    // for CUDA graph compatibility (caller manages device memory)
+
+    *desc_ptr = new Descriptor(
+        info,
+        0,  // No workspace needed
+        new Opaque{handle->internal()},
+        handle->device, handle->device_id);
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *logits,
+    const void *mask,
+    const float *repetition_penalties,
+    void *stream_) const {
+
+    hcStream_t stream = (hcStream_t)stream_;
+    int max_threads = _opaque->internal->maxThreadsPerBlock();
+
+    // repetition_penalties must be a device pointer for CUDA graph compatibility
+    // The caller is responsible for copying penalties to device before calling this function
+    const float *d_penalties = repetition_penalties;
+
+    // Dispatch based on dtype and block size
+    switch (_info.dt_logits) {
+        case INFINI_DTYPE_F16: {
+            if (max_threads >= METAX_BLOCK_SIZE_1024) {
+                launchKernel<METAX_BLOCK_SIZE_1024, half>(
+                    reinterpret_cast<half *>(logits),
+                    reinterpret_cast<const bool *>(mask),
+                    d_penalties,
+                    _info.num_seqs,
+                    _info.vocab_size,
+                    stream);
+            } else if (max_threads >= METAX_BLOCK_SIZE_512) {
+                launchKernel<METAX_BLOCK_SIZE_512, half>(
+                    reinterpret_cast<half *>(logits),
+                    reinterpret_cast<const bool *>(mask),
+                    d_penalties,
+                    _info.num_seqs,
+                    _info.vocab_size,
+                    stream);
+            } else {
+                launchKernel<256, half>(
+                    reinterpret_cast<half *>(logits),
+                    reinterpret_cast<const bool *>(mask),
+                    d_penalties,
+                    _info.num_seqs,
+                    _info.vocab_size,
+                    stream);
+            }
+            break;
+        }
+        case INFINI_DTYPE_BF16: {
+            if (max_threads >= METAX_BLOCK_SIZE_1024) {
+                launchKernel<METAX_BLOCK_SIZE_1024, __hpcc_bfloat16>(
+                    reinterpret_cast<__hpcc_bfloat16 *>(logits),
+                    reinterpret_cast<const bool *>(mask),
+                    d_penalties,
+                    _info.num_seqs,
+                    _info.vocab_size,
+                    stream);
+            } else if (max_threads >= METAX_BLOCK_SIZE_512) {
+                launchKernel<METAX_BLOCK_SIZE_512, __hpcc_bfloat16>(
+                    reinterpret_cast<__hpcc_bfloat16 *>(logits),
+                    reinterpret_cast<const bool *>(mask),
+                    d_penalties,
+                    _info.num_seqs,
+                    _info.vocab_size,
+                    stream);
+            } else {
+                launchKernel<256, __hpcc_bfloat16>(
+                    reinterpret_cast<__hpcc_bfloat16 *>(logits),
+                    reinterpret_cast<const bool *>(mask),
+                    d_penalties,
+                    _info.num_seqs,
+                    _info.vocab_size,
+                    stream);
+            }
+            break;
+        }
+        case INFINI_DTYPE_F32: {
+            if (max_threads >= METAX_BLOCK_SIZE_1024) {
+                launchKernel<METAX_BLOCK_SIZE_1024, float>(
+                    reinterpret_cast<float *>(logits),
+                    reinterpret_cast<const bool *>(mask),
+                    d_penalties,
+                    _info.num_seqs,
+                    _info.vocab_size,
+                    stream);
+            } else if (max_threads >= METAX_BLOCK_SIZE_512) {
+                launchKernel<METAX_BLOCK_SIZE_512, float>(
+                    reinterpret_cast<float *>(logits),
+                    reinterpret_cast<const bool *>(mask),
+                    d_penalties,
+                    _info.num_seqs,
+                    _info.vocab_size,
+                    stream);
+            } else {
+                launchKernel<256, float>(
+                    reinterpret_cast<float *>(logits),
+                    reinterpret_cast<const bool *>(mask),
+                    d_penalties,
+                    _info.num_seqs,
+                    _info.vocab_size,
+                    stream);
+            }
+            break;
+        }
+        case INFINI_DTYPE_F64: {
+            if (max_threads >= METAX_BLOCK_SIZE_1024) {
+                launchKernel<METAX_BLOCK_SIZE_1024, double>(
+                    reinterpret_cast<double *>(logits),
+                    reinterpret_cast<const bool *>(mask),
+                    d_penalties,
+                    _info.num_seqs,
+                    _info.vocab_size,
+                    stream);
+            } else if (max_threads >= METAX_BLOCK_SIZE_512) {
+                launchKernel<METAX_BLOCK_SIZE_512, double>(
+                    reinterpret_cast<double *>(logits),
+                    reinterpret_cast<const bool *>(mask),
+                    d_penalties,
+                    _info.num_seqs,
+                    _info.vocab_size,
+                    stream);
+            } else {
+                launchKernel<256, double>(
+                    reinterpret_cast<double *>(logits),
+                    reinterpret_cast<const bool *>(mask),
+                    d_penalties,
+                    _info.num_seqs,
+                    _info.vocab_size,
+                    stream);
+            }
+            break;
+        }
+        default:
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace op::repetition_penalty::metax

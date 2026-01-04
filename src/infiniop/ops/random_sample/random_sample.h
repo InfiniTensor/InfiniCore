@@ -65,6 +65,8 @@ class Calculate {
 
     template <class Tidx, class Tval, class Algo>
     static void switch_f(Algo algo, size_t n, CalculateArgs args) {
+        // topk == 0 means "no limit" (use full vocabulary), so it should use random sampling
+        // topk == 1 means "greedy" (argmax), so it should use argmax
         if (args.random_val == 0 || args.topp == 0 || args.topk == 1 || args.temperature == 0) {
             algo.template argmax<Tidx, Tval>(
                 args.workspace, args.workspace_size,

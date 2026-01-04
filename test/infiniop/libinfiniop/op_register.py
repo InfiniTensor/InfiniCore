@@ -733,3 +733,36 @@ def softplus_(lib):
     ]
     lib.infiniopDestroySoftplusDescriptor.restype = c_int32
     lib.infiniopDestroySoftplusDescriptor.argtypes = [infiniopOperatorDescriptor_t]
+
+
+@OpRegister.operator
+def repetition_penalty_(lib):
+    lib.infiniopCreateRepetitionPenaltyDescriptor.restype = c_int32
+    lib.infiniopCreateRepetitionPenaltyDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetRepetitionPenaltyWorkspaceSize.restype = c_int32
+    lib.infiniopGetRepetitionPenaltyWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopApplyRepetitionPenalty.restype = c_int32
+    lib.infiniopApplyRepetitionPenalty.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        POINTER(c_float),
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyRepetitionPenaltyDescriptor.restype = c_int32
+    lib.infiniopDestroyRepetitionPenaltyDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]

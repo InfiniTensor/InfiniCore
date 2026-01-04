@@ -161,6 +161,7 @@ static __global__ void randomSampleKernel(
     const Tidx *__restrict__ indices_out,
     size_t n,
     float random, float topp, size_t topk) {
+    // topk is already converted to size_t in host code (0 -> n, otherwise clamped to n)
     topk = cub::Min()(topk, n);
     auto p = (Tval)(random * cub::Min()(topp * (float)sorted[n - 1], (float)sorted[topk - 1]));
     for (size_t i = 0;; ++i) {
@@ -248,10 +249,12 @@ struct Algo {
             sorted, n,
             stream));
         // sample
+        // If topk == 0, treat it as "no limit" (use full vocabulary size n)
+        size_t effective_topk = (topk == 0) ? n : static_cast<size_t>(topk);
         randomSampleKernel<<<1, 1, 0, stream>>>(
             result,
             sorted, indices_out, n,
-            random_val, topp, topk);
+            random_val, topp, effective_topk);
         return INFINI_STATUS_SUCCESS;
     }
 };
