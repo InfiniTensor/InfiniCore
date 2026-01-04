@@ -138,6 +138,7 @@ class TestManager:
 
             self.summary.print_header(display_location, len(test_files))
 
+            saved_files = []
             for f, run_args in zip(test_files, test_configs):
 
                 # Inject prepared args (whether from JSON or Local global) into Executor
@@ -145,6 +146,10 @@ class TestManager:
 
                 self.results.append(result)
                 self.summary.print_live_result(result)
+
+                # Collect saved report files
+                if hasattr(result, "saved_file") and result.saved_file:
+                    saved_files.append(result.saved_file)
 
                 if result.success:
                     self._accumulate_timing(result.timing)
@@ -160,7 +165,8 @@ class TestManager:
                 ops_dir=display_location,
                 total_expected=len(test_files),
             )
-            return all_passed
+
+            return all_passed, saved_files
 
     def _accumulate_timing(self, timing):
         self.cumulative_timing.torch_host += timing.torch_host

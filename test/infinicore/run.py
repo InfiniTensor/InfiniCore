@@ -130,12 +130,12 @@ def load_and_override_cases(load_paths, args):
 
     for f_path in files_to_read:
         try:
-            with open(f_path, 'r', encoding='utf-8') as f:
+            with open(f_path, "r", encoding="utf-8") as f:
                 data = json.load(f)
-                
+
                 # Unify as a list to handle both single dict and list of dicts
                 current_batch = data if isinstance(data, list) else [data]
-                
+
                 valid_batch = []
                 for item in current_batch:
                     # We only require the 'operator' field to identify the test case.
@@ -143,11 +143,11 @@ def load_and_override_cases(load_paths, args):
                         valid_batch.append(item)
                     else:
                         skipped_count += 1
-                
+
                 if valid_batch:
                     cases.extend(valid_batch)
                     loaded_count += 1
-                
+
         except Exception as e:
             # Log warning only; do not crash the program on bad files to ensure flow continuity.
             print(f"❌ Error loading {f_path.name}: {e}")
@@ -173,7 +173,7 @@ def load_and_override_cases(load_paths, args):
             cli_active_devices.append(device_name)
 
     print(f"\n[Config Processing]")
-    
+
     for case in cases:
         if "args" not in case or case["args"] is None:
             case["args"] = {}
@@ -283,9 +283,11 @@ def main():
             print(f"Benchmark mode: {args.bench.upper()} timing")
 
         # 3. Initialize and Execute
-        test_manager = TestManager(ops_dir=args.ops_dir, verbose=verbose, bench_mode=bench)
+        test_manager = TestManager(
+            ops_dir=args.ops_dir, verbose=verbose, bench_mode=bench
+        )
 
-        success = test_manager.test(json_cases_list=json_cases)
+        success, _ = test_manager.test(json_cases_list=json_cases)
 
     # ==========================================================================
     # Branch 2: Local Scan Mode
@@ -330,7 +332,7 @@ def main():
             ops_dir=args.ops_dir, verbose=args.verbose, bench_mode=args.bench
         )
 
-        success = test_manager.test(
+        success, _ = test_manager.test(
             target_ops=target_ops, global_exec_args=global_exec_args
         )
     sys.exit(0 if success else 1)

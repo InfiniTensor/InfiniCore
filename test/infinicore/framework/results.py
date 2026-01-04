@@ -43,6 +43,7 @@ class OperatorResult:
     stdout: str = ""
     stderr: str = ""
     timing: TestTiming = field(default_factory=TestTiming)
+    saved_file: str = ""  # Path to the saved report file
 
     @property
     def status_icon(self):
@@ -262,11 +263,12 @@ class TestSummary:
     def save_report(self, save_path):
         """
         Delegates the actual writing to save_json_report.
+        Returns the actual file path that was saved (with timestamp).
         """
         if not self.report_entries:
-            return
-        # Call the external utility
-        save_json_report(save_path, self.report_entries)
+            return None
+        # Call the external utility and get the actual saved path
+        return save_json_report(save_path, self.report_entries)
 
     def _prepare_entry_logic(self, op_name, test_cases, args, op_paths, results_list):
         """

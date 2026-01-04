@@ -59,6 +59,9 @@ class TestExecutor:
             test_summary = TestSummary()
             test_summary.process_operator_result(result, test_results)
 
+            # Store saved report file if available
+            result.saved_file = runner.saved_file
+
         except Exception as e:
             result.success = False
             result.error_message = str(e)

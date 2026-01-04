@@ -20,6 +20,7 @@ class GenericTestRunner:
         """
         self.operator_test = operator_test_class()
         self.args = args or get_args()
+        self.saved_file = None  # Store the path of saved report
 
     def run(self):
         """Execute the complete test suite
@@ -56,7 +57,7 @@ class GenericTestRunner:
         summary_passed = runner.print_summary()
 
         if getattr(self.args, "save", None):
-            self._save_report(runner)
+            self.saved_file = self._save_report(runner)
 
         # Both conditions must be True for overall success
         # - has_no_failures: no test failures during execution
@@ -98,14 +99,15 @@ class GenericTestRunner:
                 results_list=runner.test_results,
             )
 
-            # 4. Save to File
-            test_summary.save_report(self.args.save)
+            # 3. Save to File and return the file name
+            return test_summary.save_report(self.args.save)
 
         except Exception as e:
             import traceback
 
             traceback.print_exc()
             print(f"⚠️ Failed to save report: {e}")
+            return None
 
     def _infer_op_path(self, method, lib_prefix):
         """
