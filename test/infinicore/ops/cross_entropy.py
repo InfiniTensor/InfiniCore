@@ -11,6 +11,8 @@ from framework.tensor import TensorInitializer
 # Test cases format: (input_shape_logits_N_C, target_shape_N, input_strides_or_None, weight_present_bool, ignore_index_or_None)
 # infinicore.nn.functional.cross_entropy(input, target, weight=None, ignore_index=-100, reduction='mean')
 
+# CrossEntropy kernel当前只支持逐元素loss且不带class weight/ignore_index。
+# 仍然保留原始配置，后续实现这些特性时只需放开过滤条件即可。
 _TEST_CASES_DATA = [
     ((4, 5), (4,), None, False, None),
     ((8, 10), (8,), None, True, -1),
@@ -19,6 +21,9 @@ _TEST_CASES_DATA = [
     ((3, 7), (3,), None, False, None),
     ((2, 2), (2,), None, True, -100),
 ]
+
+_SUPPORT_WEIGHT = False
+_SUPPORT_IGNORE_INDEX = False
 
 _TOLERANCE_MAP = {
     infinicore.float16: {"atol": 1e-3, "rtol": 1e-2},
@@ -40,6 +45,11 @@ def parse_test_cases():
     ) in _TEST_CASES_DATA:
         for dtype in _TENSOR_DTYPES:
             tol = _TOLERANCE_MAP.get(dtype, {"atol": 1e-5, "rtol": 1e-4})
+            if weight_present and not _SUPPORT_WEIGHT:
+                continue
+            if ignore_index is not None and not _SUPPORT_IGNORE_INDEX:
+                continue
+
             logits = TensorSpec.from_tensor(logits_shape, logits_strides, dtype)
             target = TensorSpec.from_tensor(
                 target_shape,
@@ -51,7 +61,7 @@ def parse_test_cases():
             )
 
             inputs = [logits, target]
-            kwargs = {}
+            kwargs = {"reduction": "none"}
             if weight_present:
                 weight_spec = TensorSpec.from_tensor((logits_shape[1],), None, dtype)
                 inputs.append(weight_spec)
@@ -84,9 +94,10 @@ class OpTest(BaseOperatorTest):
     def torch_operator(self, *args, **kwargs):
         return torch.nn.functional.cross_entropy(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
-    #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.nn.functional.cross_entropy(*args, **kwargs)
+    def infinicore_operator(self, *args, **kwargs):
+        """InfiniCore implementation."""
+        out = kwargs.pop("out", None)
+        return infinicore.cross_entropy(*args, out=out, **kwargs)
 
 
 def main():

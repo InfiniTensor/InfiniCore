@@ -6,6 +6,7 @@
 #include "ops/attention.hpp"
 #include "ops/causal_softmax.hpp"
 #include "ops/embedding.hpp"
+#include "ops/cross_entropy.hpp"
 #include "ops/linear.hpp"
 #include "ops/matmul.hpp"
 #include "ops/mul.hpp"
@@ -32,6 +33,7 @@ inline void bind(py::module &m) {
     bind_mul(m);
     bind_paged_attention(m);
     bind_paged_caching(m);
+    bind_cross_entropy(m);
     bind_rearrange(m);
     bind_rms_norm(m);
     bind_silu(m);

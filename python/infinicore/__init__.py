@@ -48,6 +48,7 @@ from infinicore.ops.paged_attention import paged_attention
 from infinicore.ops.paged_attention_prefill import paged_attention_prefill
 from infinicore.ops.paged_caching import paged_caching
 from infinicore.ops.rearrange import rearrange
+from infinicore.ops.cross_entropy import cross_entropy
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.unsqueeze import unsqueeze
 from infinicore.tensor import (
@@ -112,6 +113,7 @@ __all__ = [
     "squeeze",
     "unsqueeze",
     "rearrange",
+    "cross_entropy",
     "empty",
     "empty_like",
     "from_blob",
