@@ -78,6 +78,7 @@ def per_token_quant_int8_torch(x, symmetric):
 
         return w_packed, w_scale, w_zero
 
+
 def test(
     handle,
     device,
@@ -86,12 +87,12 @@ def test(
     dtype=InfiniDtype.F16,
     sync=None,
 ):
-    
+
     print(
         f"Testing Per Channel Quant Int8 on {InfiniDeviceNames[device]} with x_shape:{x_shape}, symmetric:{symmetric} , dtype:{InfiniDtypeNames[dtype]}"
     )
     M, K = x_shape
-   
+
     x = TestTensor(x_shape, None, dtype, device)
     x_p, x_s, x_z = per_token_quant_int8_torch(x.torch_tensor(), symmetric)
     x_packed = TestTensor(x_shape, None, InfiniDtype.I8, device, mode="zeros")
@@ -129,7 +130,7 @@ def test(
         )
     )
     workspace = TestWorkspace(workspace_size.value, x.device)
-    
+
     def lib_per_channel_quant_int8():
         check_error(
             LIBINFINIOP.infiniopPerChannelQuantI8(
@@ -145,7 +146,7 @@ def test(
         )
 
     lib_per_channel_quant_int8()
-    
+
     if sync is not None:
         sync()
 
@@ -155,14 +156,17 @@ def test(
         debug(x_scale.actual_tensor(), x_s, atol=atol, rtol=rtol)
         if symmetric == False:
             debug(x_zero.actual_tensor(), x_z, atol=atol, rtol=rtol)
-    
+
     if symmetric:
-        assert (torch.allclose(x_packed.actual_tensor(), x_p, atol=2, rtol=2) and 
-                torch.allclose(x_scale.actual_tensor(), x_s, atol=atol, rtol=rtol))
+        assert torch.allclose(
+            x_packed.actual_tensor(), x_p, atol=2, rtol=2
+        ) and torch.allclose(x_scale.actual_tensor(), x_s, atol=atol, rtol=rtol)
     else:
-        assert (torch.allclose(x_packed.actual_tensor(), x_p, atol=2, rtol=2) and 
-                torch.allclose(x_scale.actual_tensor(), x_s, atol=atol, rtol=rtol) and
-                torch.allclose(x_zero.actual_tensor(), x_z, atol=atol, rtol=rtol))
+        assert (
+            torch.allclose(x_packed.actual_tensor(), x_p, atol=2, rtol=2)
+            and torch.allclose(x_scale.actual_tensor(), x_s, atol=atol, rtol=rtol)
+            and torch.allclose(x_zero.actual_tensor(), x_z, atol=atol, rtol=rtol)
+        )
 
     # Profiling workflow
     if PROFILE:
@@ -185,5 +189,5 @@ if __name__ == "__main__":
 
     for device in get_test_devices(args):
         test_operator(device, test, _TEST_CASES, _TENSOR_DTYPES)
-    
+
     print("\033[92mTest passed!\033[0m")

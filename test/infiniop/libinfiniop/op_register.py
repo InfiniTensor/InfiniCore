@@ -721,6 +721,7 @@ def per_channel_quant_int8_(lib):
         infiniopOperatorDescriptor_t,
     ]
 
+
 @OpRegister.operator
 def softplus_(lib):
     lib.infiniopCreateSoftplusDescriptor.restype = c_int32
@@ -973,6 +974,7 @@ def tanh_(lib):
     lib.infiniopDestroyTanhDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
+
 
 @OpRegister.operator
 def scaled_mm_int8_(lib):
