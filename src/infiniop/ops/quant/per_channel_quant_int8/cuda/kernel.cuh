@@ -41,7 +41,6 @@ __device__ void blockPerChannelQuantI8Kernel(
     }
     __syncthreads();
 
-    // ---- 3. 使用 float（匹配 python）计算 scale/zero ----
     float global_max = global_max_f;
     float global_min = global_min_f;
 
@@ -53,11 +52,9 @@ __device__ void blockPerChannelQuantI8Kernel(
     float inv_scale = 1.0f / scale;
     float zero = -global_min * inv_scale - 128.0f;
 
-    // 写回 scale, zero
     x_scale[row] = (Tdata)scale;
     x_zero[row] = (Tdata)zero;
 
-    // ---- 4. 使用 float + half-away-from-zero（与 Python 完全一致）----
     for (int ind = threadIdx.x; ind < K; ind += BLOCK_SIZE) {
 
         float v = (float)x[tid + ind];
@@ -99,7 +96,6 @@ __device__ void blockPerChannelQuantI8SymKernel(
     }
     __syncthreads();
 
-    // ---- 3. 使用 float（匹配 python）计算 scale/zero ----
     float global_max = global_max_f;
 
     float scale = global_max / 127.0f;
@@ -109,10 +105,8 @@ __device__ void blockPerChannelQuantI8SymKernel(
 
     float inv_scale = 1.0f / scale;
 
-    // 写回 scale, zero
     x_scale[row] = (Tdata)scale;
 
-    // ---- 4. 使用 float + half-away-from-zero（与 Python 完全一致）----
     for (int ind = threadIdx.x; ind < K; ind += BLOCK_SIZE) {
 
         float v = (float)x[tid + ind];
@@ -183,7 +177,6 @@ __device__ void warpPerChannelQuantI8Kernel(
         }
         __syncthreads();
 
-        // ---- float scale/zero（与 Python float32 匹配）----
         float max_f = max_total[threadIdx.y];
         float min_f = min_total[threadIdx.y];
 
@@ -198,7 +191,6 @@ __device__ void warpPerChannelQuantI8Kernel(
         x_scale[otherIdx] = scale;
         x_zero[otherIdx] = zero;
 
-        // ---- float + half-away-from-zero 量化 ----
         for (int ind = threadIdx.x; ind < K; ind += BLOCK_SIZE_x) {
             float v = (float)x[tid + ind];
             float qf = v * inv_scale + zero;
@@ -243,7 +235,6 @@ __device__ void warpPerChannelQuantI8SymKernel(
         }
         __syncthreads();
 
-        // ---- float scale/zero（与 Python float32 匹配）----
         float max_f = max_total[threadIdx.y];
 
         float scale = max_f / 127.0f;
@@ -255,7 +246,6 @@ __device__ void warpPerChannelQuantI8SymKernel(
 
         x_scale[otherIdx] = scale;
 
-        // ---- float + half-away-from-zero 量化 ----
         for (int ind = threadIdx.x; ind < K; ind += BLOCK_SIZE_x) {
             float v = (float)x[tid + ind];
             float qf = v * inv_scale;
