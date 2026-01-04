@@ -65,20 +65,15 @@ def per_token_quant_int8_torch(x, symmetric):
         w_min = w.min(dim=-1, keepdim=True)[0]
         w_max = w.max(dim=-1, keepdim=True)[0]
 
-        # 避免除以零
         w_scale = (w_max - w_min) / 255.0
         w_scale = torch.clamp(w_scale, min=1e-8)
 
-        # 计算zero point
         w_zero = -w_min / w_scale - 128.0
 
-        # 计算量化值
         w_q = torch.round(w / w_scale + w_zero)
 
-        # 限制范围[-128, 127]
         w_q = torch.clamp(w_q, -128, 127)
 
-        # 转为int8
         w_packed = w_q.to(torch.int8)
 
         return w_packed, w_scale, w_zero
