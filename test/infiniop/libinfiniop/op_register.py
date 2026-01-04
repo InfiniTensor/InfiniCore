@@ -163,6 +163,40 @@ def clip_(lib):
 
 
 @OpRegister.operator
+def cross_entropy_(lib):
+    lib.infiniopCreateCrossEntropyDescriptor.restype = c_int32
+    lib.infiniopCreateCrossEntropyDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetCrossEntropyWorkspaceSize.restype = c_int32
+    lib.infiniopGetCrossEntropyWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopCrossEntropy.restype = c_int32
+    lib.infiniopCrossEntropy.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyCrossEntropyDescriptor.restype = c_int32
+    lib.infiniopDestroyCrossEntropyDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def logsoftmax_(lib):
     lib.infiniopCreateLogSoftmaxDescriptor.restype = c_int32
     lib.infiniopCreateLogSoftmaxDescriptor.argtypes = [
