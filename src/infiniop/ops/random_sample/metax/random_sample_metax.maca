@@ -83,9 +83,6 @@ infiniStatus_t Descriptor::calculate(
     float topp,
     int topk,
     float temperature,
-    float repetition_penalty,
-    const uint32_t *previous_tokens,
-    size_t previous_tokens_len,
     void *stream) const {
 
     if (workspace_size < _min_workspace_size) {
@@ -97,8 +94,7 @@ infiniStatus_t Descriptor::calculate(
     Calculate::calculate<Algo>(
         Algo{block_size}, _info, workspace, workspace_size,
         result, probs,
-        random_val, topp, topk, temperature, repetition_penalty,
-        previous_tokens, previous_tokens_len,
+        random_val, topp, topk, temperature,
         stream);
 
     return INFINI_STATUS_SUCCESS;

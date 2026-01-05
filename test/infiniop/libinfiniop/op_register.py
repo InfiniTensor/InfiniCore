@@ -4,7 +4,7 @@ from .structs import (
     infiniopOperatorDescriptor_t,
 )
 
-from ctypes import c_int32, c_uint32, c_void_p, c_size_t, POINTER, c_float
+from ctypes import c_int32, c_void_p, c_size_t, POINTER, c_float
 
 
 class OpRegister:
@@ -357,6 +357,39 @@ def paged_caching_(lib):
 
 
 @OpRegister.operator
+def repetition_penalty_(lib):
+    lib.infiniopCreateRepetitionPenaltyDescriptor.restype = c_int32
+    lib.infiniopCreateRepetitionPenaltyDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetRepetitionPenaltyWorkspaceSize.restype = c_int32
+    lib.infiniopGetRepetitionPenaltyWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopApplyRepetitionPenalty.restype = c_int32
+    lib.infiniopApplyRepetitionPenalty.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        POINTER(c_float),
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyRepetitionPenaltyDescriptor.restype = c_int32
+    lib.infiniopDestroyRepetitionPenaltyDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def random_sample_(lib):
     lib.infiniopCreateRandomSampleDescriptor.restype = c_int32
     lib.infiniopCreateRandomSampleDescriptor.argtypes = [
@@ -376,15 +409,13 @@ def random_sample_(lib):
         infiniopOperatorDescriptor_t,
         c_void_p,
         c_size_t,
+        c_size_t,
         c_void_p,
         c_void_p,
         c_float,
         c_float,
         c_int32,
         c_float,
-        c_float,
-        POINTER(c_uint32),  # previous_tokens array (uint32_t*)
-        c_size_t,          # previous_tokens_len
         c_void_p,
     ]
 

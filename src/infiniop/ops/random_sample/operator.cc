@@ -134,9 +134,6 @@ __C infiniStatus_t infiniopRandomSample(
     float topp,
     int topk,
     float temperature,
-    float repetition_penalty,
-    const uint32_t *previous_tokens,
-    size_t previous_tokens_len,
     void *stream) {
 
 #define CALCULATE(CASE, NAMESPACE)                                                      \
@@ -145,8 +142,7 @@ __C infiniStatus_t infiniopRandomSample(
             ->calculate(workspace, workspace_size,                                      \
                         result, probs,                                                  \
                         random_val,                                                     \
-                        topp, topk, temperature, repetition_penalty,                   \
-                        previous_tokens, previous_tokens_len,                         \
+                        topp, topk, temperature,                                        \
                         stream)
 
     switch (desc->device_type) {
