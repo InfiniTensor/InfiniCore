@@ -16,6 +16,7 @@
 #include "ops/rearrange.hpp"
 #include "ops/rms_norm.hpp"
 #include "ops/rope.hpp"
+#include "ops/hardswish.hpp"
 #include "ops/silu.hpp"
 #include "ops/swiglu.hpp"
 
@@ -31,6 +32,7 @@ inline void bind(py::module &m) {
     bind_linear(m);
     bind_matmul(m);
     bind_mul(m);
+    bind_hardswish(m);
     bind_paged_attention(m);
     bind_paged_caching(m);
     bind_cross_entropy(m);
