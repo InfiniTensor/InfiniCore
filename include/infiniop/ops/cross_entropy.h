@@ -7,7 +7,6 @@
 typedef struct InfiniopDescriptor *infiniopCrossEntropyDescriptor_t;
 
 // 1. 创建描述符
-// 相比 Softmax，这里多了一个 target_desc，用于描述标签（Label）的 Shape 和 Dtype
 __C __export infiniStatus_t infiniopCreateCrossEntropyDescriptor(
     infiniopHandle_t handle,
     infiniopCrossEntropyDescriptor_t *desc_ptr,

@@ -871,6 +871,38 @@ def silu_(lib):
 
 
 @OpRegister.operator
+def hardswish_(lib):
+    lib.infiniopCreateHardSwishDescriptor.restype = c_int32
+    lib.infiniopCreateHardSwishDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetHardSwishWorkspaceSize.restype = c_int32
+    lib.infiniopGetHardSwishWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopHardSwish.restype = c_int32
+    lib.infiniopHardSwish.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyHardSwishDescriptor.restype = c_int32
+    lib.infiniopDestroyHardSwishDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def layer_norm_(lib):
     lib.infiniopCreateLayerNormDescriptor.restype = c_int32
     lib.infiniopCreateLayerNormDescriptor.argtypes = [
