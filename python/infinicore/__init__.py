@@ -48,6 +48,11 @@ from infinicore.ops.paged_attention import paged_attention
 from infinicore.ops.paged_attention_prefill import paged_attention_prefill
 from infinicore.ops.paged_caching import paged_caching
 from infinicore.ops.rearrange import rearrange
+from infinicore.ops.sum import sum
+from infinicore.ops.var_mean import var_mean
+from infinicore.ops.var import var
+from infinicore.ops.topk import topk
+from infinicore.ops.all import all
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.unsqueeze import unsqueeze
 from infinicore.tensor import (
@@ -125,6 +130,11 @@ __all__ = [
     "strided_empty",
     "strided_from_blob",
     "zeros",
+    "sum",
+    "var_mean",
+    "var",
+    "topk",
+    "all",
 ]
 
 use_ntops = False
