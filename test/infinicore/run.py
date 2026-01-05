@@ -13,18 +13,16 @@ from framework import (
 from framework.test_manager import TestCollector, TestManager
 
 
-def generate_help_epilog(ops_dir=None):
+def find_ops_directory(location=None):
     """
-    Generate dynamic help epilog containing available operators and hardware platforms.
-    Maintains the original output format for backward compatibility.
+    Locate the ops directory by checking the default ./ops folder or a custom hint.
     """
-    # === Adapter: Use TestCollector to get operator list ===
-    # Temporarily instantiate a Collector just to fetch the list
-    collector = TestCollector(ops_dir)
-    operators = collector.get_available_operators()
+    if location is None:
+        candidate = Path(__file__).parent / "ops"
+    else:
+        candidate = Path(location)
 
-    # Build epilog text (fully replicating original logic)
-    ops_dir = location.resolve()
+    ops_dir = candidate.resolve()
     if ops_dir.exists() and any(ops_dir.glob("*.py")):
         return ops_dir
 
@@ -551,7 +549,7 @@ def list_available_tests(ops_dir=None):
             print(f"Available Python files: {[f.name for f in test_files]}")
 
 
-def generate_help_epilog(ops_dir):
+def generate_help_epilog(ops_dir=None):
     """
     Generate dynamic help epilog with available operators and hardware platforms.
 
@@ -561,6 +559,11 @@ def generate_help_epilog(ops_dir):
     Returns:
         str: Formatted help text
     """
+    if ops_dir is None:
+        ops_dir = find_ops_directory()
+    elif not isinstance(ops_dir, Path):
+        ops_dir = Path(ops_dir)
+
     # Get available operators
     operators = get_available_operators(ops_dir)
 
@@ -626,6 +629,13 @@ def generate_help_epilog(ops_dir):
     epilog_parts.append(
         "  - --verbose mode stops execution on first error and shows full traceback"
     )
+    epilog_parts.append("")
+
+    # Hardware flag summary
+    device_flags = ", ".join(
+        sorted(device_name.lower() for device_name in InfiniDeviceNames.values())
+    )
+    epilog_parts.append(f"Available hardware flags: {device_flags}")
 
     return "\n".join(epilog_parts)
 
