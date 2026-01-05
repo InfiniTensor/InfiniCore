@@ -3,7 +3,49 @@
 #include "../cuda/kernel.cuh"
 #include "hardswish_nvidia.cuh"
 
+#include <cuda_runtime.h>
+
 namespace op::hardswish::nvidia {
+namespace {
+
+inline bool can_use_contiguous_fast_path(const op::elementwise::ElementwiseInfo &info) {
+    return info.isOutputContiguous() && info.getInputSize() == 1 &&
+           info.getInputContiguous()[0] && !info.getInputBroadcasted()[0];
+}
+
+template <typename T>
+__global__ void hardswish_contiguous_kernel(size_t numel, T *out, const T *in) {
+    const auto op = op::hardswish::cuda::HardSwishOp{};
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    while (idx < numel) {
+        out[idx] = op(in[idx]);
+        idx += blockDim.x * gridDim.x;
+    }
+}
+
+template <typename T>
+infiniStatus_t launch_fast_path(size_t numel,
+                                void *output,
+                                const std::vector<const void *> &inputs,
+                                void *stream) {
+    if (numel == 0) {
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    constexpr int BLOCK_SIZE = 256;
+    int grid = static_cast<int>((numel + BLOCK_SIZE - 1) / BLOCK_SIZE);
+    grid = std::min(grid, 65535);
+
+    auto *out_ptr = reinterpret_cast<T *>(output);
+    auto *in_ptr = reinterpret_cast<const T *>(inputs[0]);
+    auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
+
+    hardswish_contiguous_kernel<<<grid, BLOCK_SIZE, 0, cuda_stream>>>(numel, out_ptr, in_ptr);
+    cudaError_t err = cudaGetLastError();
+    return err == cudaSuccess ? INFINI_STATUS_SUCCESS : INFINI_STATUS_INTERNAL_ERROR;
+}
+
+} // namespace
 
 Descriptor::~Descriptor() = default;
 
@@ -37,6 +79,22 @@ infiniStatus_t Descriptor::calculate(
     void *output,
     std::vector<const void *> inputs,
     void *stream) const {
+
+    const bool fast_path = can_use_contiguous_fast_path(_info);
+    if (fast_path) {
+        switch (_dtype) {
+        case INFINI_DTYPE_BF16:
+            return launch_fast_path<cuda_bfloat16>(_info.getOutputSize(), output, inputs, stream);
+        case INFINI_DTYPE_F16:
+            return launch_fast_path<half>(_info.getOutputSize(), output, inputs, stream);
+        case INFINI_DTYPE_F32:
+            return launch_fast_path<float>(_info.getOutputSize(), output, inputs, stream);
+        case INFINI_DTYPE_F64:
+            return launch_fast_path<double>(_info.getOutputSize(), output, inputs, stream);
+        default:
+            break;
+        }
+    }
 
     if (workspace_size < _workspace_size) {
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;

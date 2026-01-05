@@ -20,15 +20,28 @@ public:
 
     template <typename T>
     T operator()(const T &x) const {
+        const float x_f = utils::cast<float>(x);
+        const float clamped = std::min(std::max(x_f + 3.0f, 0.0f), 6.0f);
+        const float result = x_f * clamped * (1.0f / 6.0f);
+        return utils::cast<T>(result);
+    }
+} HardSwishOp;
+
+typedef struct HardSwishContiguousOp {
+public:
+    static constexpr size_t num_inputs = 1;
+
+    template <typename T>
+    T operator()(const T &x) const {
         // HardSwish 公式: x * ReLU6(x + 3) / 6
         // 展开: x * min(max(x + 3, 0), 6) / 6
-        
+
         // 定义常量，确保类型转换正确
         T three = static_cast<T>(3);
         T zero = static_cast<T>(0);
         T six = static_cast<T>(6);
         // 使用乘法代替除法以提高性能 (1/6)
-        T scale = static_cast<T>(0.16666667f); 
+        T scale = static_cast<T>(0.16666667f);
 
         // 1. 计算 x + 3
         T val = x + three;
@@ -41,7 +54,7 @@ public:
         // 3. 最终乘积
         return x * val * scale;
     }
-} HardSwishOp;
+} HardSwishContiguousOp;
 
 } // namespace op::hardswish::cpu
 
