@@ -61,16 +61,49 @@ void calculate_bce(
     const Tdata* pw_ptr = reinterpret_cast<const Tdata*>(pos_weight);
     Tdata* o_ptr = reinterpret_cast<Tdata*>(out);
 
-    // 
+    auto &logits_info = info.logits;
+    auto &target_info = info.target;
+    auto &weight_info = info.weight;
+    auto &out_info = info.out;
 
 #pragma omp parallel for reduction(+:total_loss)
     for (ptrdiff_t i = 0; i < (ptrdiff_t)n; ++i) {
-        float x = utils::cast<float>(l_ptr[i]);
-        float y = utils::cast<float>(t_ptr[i]);
-        
-        // 处理 pos_weight 广播 (假设 logits 形状 [..., C], pos_weight 为 [C])
-        float pw = pw_ptr ? utils::cast<float>(pw_ptr[i % info.pos_weight.total_elements]) : 1.0f;
-        float w = w_ptr ? utils::cast<float>(w_ptr[i]) : 1.0f;
+        size_t idx = static_cast<size_t>(i);
+
+        // 使用 stride 计算实际内存偏移，支持任意内存布局
+        size_t logits_offset = op::common_cpu::indexToOffset(
+            idx,
+            logits_info.ndim,
+            logits_info.dims.data(),
+            logits_info.stride.data());
+        size_t target_offset = op::common_cpu::indexToOffset(
+            idx,
+            target_info.ndim,
+            target_info.dims.data(),
+            target_info.stride.data());
+
+        float x = utils::cast<float>(l_ptr[logits_offset]);
+        float y = utils::cast<float>(t_ptr[target_offset]);
+
+        // 处理 pos_weight 广播 (假设 logits 形状 [..., C], pos_weight 为 [C] 且连续)
+        float pw = 1.0f;
+        if (pw_ptr && info.pos_weight.total_elements > 0) {
+            size_t c = idx % info.pos_weight.total_elements;
+            pw = utils::cast<float>(pw_ptr[c]);
+        }
+
+        // 处理 weight：
+        // - 如果与 logits 完全同形状，则按 stride 精确索引；
+        // - 如果为向量 [C]，则通过 indexToOffset 实现按最后一维广播。
+        float w = 1.0f;
+        if (w_ptr && weight_info.ndim > 0) {
+            size_t weight_offset = op::common_cpu::indexToOffset(
+                idx,
+                weight_info.ndim,
+                weight_info.dims.data(),
+                weight_info.stride.data());
+            w = utils::cast<float>(w_ptr[weight_offset]);
+        }
 
         // 数值稳定的 BCE 计算
         float loss = (std::max(x, 0.0f) - x * y * pw + 
@@ -79,7 +112,13 @@ void calculate_bce(
         loss *= w;
 
         if (info.reduction == INFINIOP_REDUCTION_NONE) {
-            o_ptr[i] = utils::cast<Tdata>(loss);
+            // 逐元素写回时同样遵循 out 的 stride
+            size_t out_offset = op::common_cpu::indexToOffset(
+                idx,
+                out_info.ndim,
+                out_info.dims.data(),
+                out_info.stride.data());
+            o_ptr[out_offset] = utils::cast<Tdata>(loss);
         } else {
             total_loss += loss;
         }
