@@ -13,4 +13,5 @@
 #include "ops/atanh.hpp"
 #include "ops/addcmul.hpp"
 #include "ops/cdist.hpp"
+#include "ops/reciprocal.hpp"
 #include "ops/binary_cross_entropy_with_logits.hpp"

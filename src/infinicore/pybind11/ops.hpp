@@ -20,6 +20,7 @@
 #include "ops/addcmul.hpp"
 #include "ops/cdist.hpp"
 #include "ops/binary_cross_entropy_with_logits.hpp"
+#include "ops/reciprocal.hpp"
 namespace py = pybind11;
 
 namespace infinicore::ops {
@@ -42,6 +43,7 @@ inline void bind(py::module &m) {
     bind_addcmul(m);
     bind_cdist(m);
     bind_binary_cross_entropy_with_logits(m);
+    bind_reciprocal(m);
 }
 
 } // namespace infinicore::ops

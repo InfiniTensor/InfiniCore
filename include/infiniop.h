@@ -34,6 +34,7 @@
 #include "infiniop/ops/addcmul.h"
 #include "infiniop/ops/cdist.h"
 #include "infiniop/ops/binary_cross_entropy_with_logits.h"
+#include "infiniop/ops/reciprocal.h"
 #include "infiniop/tensor_descriptor.h"
 
 #endif // __INFINIOP_API_H__

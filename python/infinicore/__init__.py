@@ -51,6 +51,7 @@ from infinicore.ops.atanh import atanh
 from infinicore.ops.addcmul import addcmul
 from infinicore.ops.cdist import cdist
 from infinicore.ops.binary_cross_entropy_with_logits import binary_cross_entropy_with_logits
+from infinicore.ops.reciprocal import reciprocal
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -114,6 +115,9 @@ __all__ = [
     "unsqueeze",
     "atanh",
     "addcmul",
+    "cdist",
+    "binary_cross_entropy_with_logits",
+    "reciprocal",
     "rearrange",
     "empty",
     "empty_like",

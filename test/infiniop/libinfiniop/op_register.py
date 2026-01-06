@@ -202,6 +202,40 @@ def binary_cross_entropy_with_logits_(lib):
     ]
 
 @OpRegister.operator
+def reciprocal_(lib):
+    lib.infiniopCreateReciprocalDescriptor.restype = c_int32
+    lib.infiniopCreateReciprocalDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t, # Output descriptor
+        infiniopTensorDescriptor_t, # Input descriptor
+    ]
+
+    # 获取工作空间大小接口
+    lib.infiniopGetReciprocalWorkspaceSize.restype = c_int32
+    lib.infiniopGetReciprocalWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    # 最后的 c_void_p 通常对应 stream 或其他异步句柄，保持一致即可
+    lib.infiniopReciprocal.restype = c_int32
+    lib.infiniopReciprocal.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p, # Workspace pointer
+        c_size_t, # Workspace size
+        c_void_p, # Output data pointer
+        c_void_p, # Input data pointer
+        c_void_p, # Stream pointer (optional)
+    ]
+
+    # 销毁描述符接口
+    lib.infiniopDestroyReciprocalDescriptor.restype = c_int32
+    lib.infiniopDestroyReciprocalDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+@OpRegister.operator
 def attention_(lib):
     lib.infiniopCreateAttentionDescriptor.restype = c_int32
     lib.infiniopCreateAttentionDescriptor.argtypes = [
