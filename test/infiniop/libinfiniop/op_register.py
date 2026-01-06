@@ -917,6 +917,42 @@ def silu_(lib):
         infiniopOperatorDescriptor_t,
     ]
 
+@OpRegister.operator
+def hardtanh_(lib):
+    # 1. Create Descriptor - 注意增加了两个 c_float 参数
+    lib.infiniopCreateHardTanhDescriptor.restype = c_int32
+    lib.infiniopCreateHardTanhDescriptor.argtypes = [
+        infiniopHandle_t,               # handle
+        POINTER(infiniopOperatorDescriptor_t), # desc_ptr
+        infiniopTensorDescriptor_t,     # output
+        infiniopTensorDescriptor_t,     # input
+        c_float,                        # min_val
+        c_float,                        # max_val
+    ]
+
+    # 2. Get Workspace Size
+    lib.infiniopGetHardTanhWorkspaceSize.restype = c_int32
+    lib.infiniopGetHardTanhWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,   # desc
+        POINTER(c_size_t),              # size
+    ]
+
+    # 3. Execute Operator
+    lib.infiniopHardTanh.restype = c_int32
+    lib.infiniopHardTanh.argtypes = [
+        infiniopOperatorDescriptor_t,   # desc
+        c_void_p,                       # workspace
+        c_size_t,                       # workspace_size
+        c_void_p,                       # output
+        c_void_p,                       # input
+        c_void_p,                       # stream
+    ]
+
+    # 4. Destroy Descriptor
+    lib.infiniopDestroyHardTanhDescriptor.restype = c_int32
+    lib.infiniopDestroyHardTanhDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,   # desc
+    ]
 
 @OpRegister.operator
 def hardswish_(lib):
