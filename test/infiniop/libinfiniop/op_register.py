@@ -54,6 +54,54 @@ def add_(lib):
         infiniopOperatorDescriptor_t,
     ]
 
+@OpRegister.operator
+def equal_(lib):
+    # =========================================================
+    # 1. 注册 Create 函数
+    # C函数签名: (handle, &desc, output_desc, input_a_desc, input_b_desc)
+    # =========================================================
+    lib.infiniopCreateEqualDescriptor.restype = c_int32
+    lib.infiniopCreateEqualDescriptor.argtypes = [
+        infiniopHandle_t,                     # handle
+        POINTER(infiniopOperatorDescriptor_t),# desc_ptr (输出)
+        infiniopTensorDescriptor_t,           # output (c)
+        infiniopTensorDescriptor_t,           # input_a
+        infiniopTensorDescriptor_t,           # input_b
+    ]
+
+    # =========================================================
+    # 2. 注册 GetWorkspaceSize 函数
+    # C函数签名: (desc, &size)
+    # =========================================================
+    lib.infiniopGetEqualWorkspaceSize.restype = c_int32
+    lib.infiniopGetEqualWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    # =========================================================
+    # 3. 注册 Execute (计算) 函数
+    # C函数签名: (desc, workspace, size, output_data, input_a_data, input_b_data, stream)
+    # =========================================================
+    lib.infiniopEqual.restype = c_int32
+    lib.infiniopEqual.argtypes = [
+        infiniopOperatorDescriptor_t, # desc
+        c_void_p,                     # workspace ptr
+        c_size_t,                     # workspace size
+        c_void_p,                     # output data ptr
+        c_void_p,                     # input a data ptr
+        c_void_p,                     # input b data ptr
+        c_void_p,                     # stream
+    ]
+
+    # =========================================================
+    # 4. 注册 Destroy 函数
+    # C函数签名: (desc)
+    # =========================================================
+    lib.infiniopDestroyEqualDescriptor.restype = c_int32
+    lib.infiniopDestroyEqualDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
 
 @OpRegister.operator
 def attention_(lib):

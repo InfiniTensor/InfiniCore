@@ -73,15 +73,18 @@ private:
     size_t _input_size;
     size_t _ndim;
     bool _output_contiguous;
+    infiniDtype_t _output_dtype;
 
     ElementwiseInfo(std::vector<size_t> meta,
                     size_t output_size,
                     size_t input_size,
                     size_t ndim,
-                    bool output_contiguous)
+                    bool output_contiguous,
+                    infiniDtype_t output_dtype)
         : _meta(std::move(meta)), _output_size(output_size),
           _input_size(input_size), _ndim(ndim),
-          _output_contiguous(output_contiguous) {}
+          _output_contiguous(output_contiguous),
+          _output_dtype(output_dtype) {}
 
 public:
     // Get the Memory size of the meta data in bytes
@@ -133,6 +136,9 @@ public:
     inline const bool *getInputBroadcasted() const {
         return reinterpret_cast<const bool *>(getInputContiguous() + _input_size);
     }
+    inline infiniDtype_t getOutputDtype() const {
+        return _output_dtype;
+    }
 
     using ResultType = utils::Result<ElementwiseInfo>;
 
@@ -160,6 +166,7 @@ public:
         auto ndim = output_desc->ndim();
         auto output_size = output_desc->numel();
         auto output_contiguous = output_desc->isContiguous();
+        auto output_dtype = output_desc->dtype();
 
         // Allocate memory for meta
         auto shape_unit = output_desc->dim(0);
@@ -197,7 +204,7 @@ public:
             input_broadcasted[i] = !input_contiguous[i] && (desc->ndim() != ndim || desc->hasBroadcastDim());
         }
 
-        ElementwiseInfo info(std::move(meta), output_size, input_size, ndim, output_contiguous);
+        ElementwiseInfo info(std::move(meta), output_size, input_size, ndim, output_contiguous, output_dtype);
         return ResultType(std::move(info));
     }
 };

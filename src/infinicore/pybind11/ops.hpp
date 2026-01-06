@@ -20,6 +20,7 @@
 #include "ops/avg_pool1d.hpp"
 #include "ops/silu.hpp"
 #include "ops/swiglu.hpp"
+#include "ops/equal.hpp"
 
 namespace py = pybind11;
 
@@ -44,6 +45,7 @@ inline void bind(py::module &m) {
     bind_swiglu(m);
     bind_rope(m);
     bind_embedding(m);
+    bind_equal(m);
 }
 
 } // namespace infinicore::ops

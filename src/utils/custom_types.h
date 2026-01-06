@@ -13,6 +13,22 @@ struct CustomBFloat16 {
 };
 typedef struct CustomBFloat16 bf16_t;
 
+inline bool operator==(const CustomFloat16 &lhs, const CustomFloat16 &rhs) {
+    return lhs._v == rhs._v;
+}
+
+inline bool operator!=(const CustomFloat16 &lhs, const CustomFloat16 &rhs) {
+    return !(lhs == rhs);
+}
+
+inline bool operator==(const CustomBFloat16 &lhs, const CustomBFloat16 &rhs) {
+    return lhs._v == rhs._v;
+}
+
+inline bool operator!=(const CustomBFloat16 &lhs, const CustomBFloat16 &rhs) {
+    return !(lhs == rhs);
+}
+
 float _f16_to_f32(fp16_t val);
 fp16_t _f32_to_f16(float val);
 
