@@ -13,5 +13,6 @@
 #include "ops/rms_norm.hpp"
 #include "ops/rope.hpp"
 #include "ops/hardswish.hpp"
+#include "ops/avg_pool1d.hpp"
 #include "ops/silu.hpp"
 #include "ops/swiglu.hpp"

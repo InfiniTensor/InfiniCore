@@ -39,5 +39,7 @@
 
 #include "infiniop/ops/hardswish.h"
 
+#include "infiniop/ops/avg_pool1d.h"
+
 
 #endif // __INFINIOP_API_H__

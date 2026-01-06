@@ -901,6 +901,44 @@ def hardswish_(lib):
         infiniopOperatorDescriptor_t,
     ]
 
+@OpRegister.operator
+def avg_pool1d_(lib):
+    # 1. Create 函数
+    # C签名: (handle, *desc, y, x, kernel_size, stride, padding)
+    lib.infiniopCreateAvgPool1dDescriptor.restype = c_int32
+    lib.infiniopCreateAvgPool1dDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,  # y_desc (Output)
+        infiniopTensorDescriptor_t,  # x_desc (Input)
+        c_size_t,                    # kernel_size
+        c_size_t,                    # stride
+        c_size_t,                    # padding
+    ]
+
+    # 2. GetWorkspaceSize 函数
+    lib.infiniopGetAvgPool1dWorkspaceSize.restype = c_int32
+    lib.infiniopGetAvgPool1dWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    # 3. Execute 函数
+    lib.infiniopAvgPool1d.restype = c_int32
+    lib.infiniopAvgPool1d.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,  # workspace
+        c_size_t,  # workspace_size
+        c_void_p,  # y (output pointer)
+        c_void_p,  # x (input pointer)
+        c_void_p,  # stream
+    ]
+
+    # 4. Destroy 函数
+    lib.infiniopDestroyAvgPool1dDescriptor.restype = c_int32
+    lib.infiniopDestroyAvgPool1dDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
 
 @OpRegister.operator
 def layer_norm_(lib):

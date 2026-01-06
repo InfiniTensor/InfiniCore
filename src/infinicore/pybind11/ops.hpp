@@ -17,6 +17,7 @@
 #include "ops/rms_norm.hpp"
 #include "ops/rope.hpp"
 #include "ops/hardswish.hpp"
+#include "ops/avg_pool1d.hpp"
 #include "ops/silu.hpp"
 #include "ops/swiglu.hpp"
 
@@ -38,6 +39,7 @@ inline void bind(py::module &m) {
     bind_cross_entropy(m);
     bind_rearrange(m);
     bind_rms_norm(m);
+    bind_avg_pool1d(m);
     bind_silu(m);
     bind_swiglu(m);
     bind_rope(m);

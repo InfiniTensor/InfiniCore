@@ -7,6 +7,7 @@ from .rope import RopeAlgo, rope
 from .silu import silu
 from .swiglu import swiglu
 from .hardswish import hardswish
+from .avg_pool1d import avg_pool1d
 
 __all__ = [
     "causal_softmax",
@@ -14,6 +15,7 @@ __all__ = [
     "rms_norm",
     "silu",
     "hardswish",
+    "avg_pool1d",
     "swiglu",
     "linear",
     "embedding",
