@@ -2,7 +2,11 @@
 #define __INFINIOP_API_H__
 
 #include "infiniop/handle.h"
+#include "infiniop/ops/acos.h"
 #include "infiniop/ops/add.h"
+#include "infiniop/ops/adaptive_avg_pool1d.h"
+#include "infiniop/ops/addbmm.h"
+#include "infiniop/ops/affine_grid.h"
 #include "infiniop/ops/attention.h"
 #include "infiniop/ops/causal_softmax.h"
 #include "infiniop/ops/clip.h"

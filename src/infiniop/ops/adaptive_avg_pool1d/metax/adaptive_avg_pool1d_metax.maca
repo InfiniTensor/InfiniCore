@@ -1,0 +1,191 @@
+#include "adaptive_avg_pool1d_metax.h"
+#include "../../../devices/metax/metax_common.h"
+#include "../../../devices/metax/metax_handle.h"
+#include <mcr/mc_runtime.h>
+#include <mcdnn/mcdnn.h>
+#include <common/mc_library_types.h>
+
+namespace op::adaptive_avg_pool1d::metax {
+
+struct Descriptor::Opaque {
+    std::shared_ptr<device::metax::Handle::Internal> internal;
+};
+
+Descriptor::~Descriptor() {
+    delete _opaque;
+}
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t out_desc,
+    infiniopTensorDescriptor_t in_desc) {
+    
+    auto handle = reinterpret_cast<device::metax::Handle *>(handle_);
+    
+    // 检查数据类型
+    auto dtype = out_desc->dtype();
+    if (dtype != INFINI_DTYPE_F16 && dtype != INFINI_DTYPE_F32) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
+    // 调用 Info::create (只传两个参数)
+    auto result = AdaptiveAvgPool1dInfo::create(out_desc, in_desc);
+    
+    // 简单的错误检查，Info::create 返回 Result 类型
+    if (!result) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    *desc_ptr = new Descriptor(
+        new Opaque{handle->internal()},
+        result.take(),
+        0,
+        handle->device,
+        handle->device_id);
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *output,
+    const void *input,
+    void *stream) const {
+
+    // 准备 MCDNN 参数
+    mcdnnDataType_t data_type;
+    mcdnnPoolingMode_t pooling_mode = MCDNN_POOLING_AVERAGE_COUNT_INCLUDE_PADDING;
+    mcdnnTensorFormat_t tensor_format = MCDNN_TENSOR_NCHW;
+
+    float alpha = 1.0f;
+    float beta = 0.0f;
+
+    switch (_info.dtype()) {
+    case INFINI_DTYPE_F16:
+        data_type = MCDNN_DATA_HALF;
+        break;
+    case INFINI_DTYPE_F32:
+        data_type = MCDNN_DATA_FLOAT;
+        break;
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
+    // 维度映射:
+    // Info 类已经将 N 和 C 展平为 num_channels。
+    // 为了适配 mcdnn (NCHW)，我们将 num_channels 视为 N (Batch)，C=1, H=1, W=Length。
+    // 这样做对于 1D Pooling 是数学上等价且高效的。
+    int n = static_cast<int>(_info.num_channels());
+    int c = 1;
+    int h_in = 1;
+    int w_in = static_cast<int>(_info.input_size());
+    
+    int h_out = 1;
+    int w_out = static_cast<int>(_info.output_size());
+
+    // 动态计算 Kernel 和 Stride (Adaptive -> Fixed转换)
+    // 1. Stride = Input / Output
+    // 2. Kernel = Input - (Output - 1) * Stride
+    // 注意: 如果 Input 不能被 Output 整除，这种固定 Stride/Kernel 的方式只是近似，
+    // 但在使用标准 Pooling API 实现 Adaptive Pooling 时是常用做法。
+    int stride_w = w_in / w_out;
+    int kernel_w = w_in - (w_out - 1) * stride_w;
+    int pad_w = 0;
+
+    int windowHeight = 1;
+    int windowWidth = kernel_w;
+    int verticalPadding = 0;
+    int horizontalPadding = pad_w;
+    int verticalStride = 1;
+    int horizontalStride = stride_w;
+
+    return _opaque->internal->useMcdnn(
+        (hcStream_t)stream,
+        [&](auto raw_handle) { 
+            mcdnnHandle_t handle = reinterpret_cast<mcdnnHandle_t>(raw_handle);
+            mcdnnStatus_t status;
+
+            // 1. 输入张量描述符
+            mcdnnTensorDescriptor_t input_desc;
+            status = mcdnnCreateTensorDescriptor(&input_desc);
+            if (status != MCDNN_STATUS_SUCCESS) return INFINI_STATUS_INTERNAL_ERROR;
+
+            status = mcdnnSetTensor4dDescriptor(
+                input_desc,
+                tensor_format,
+                data_type,
+                n, c, h_in, w_in);
+            if (status != MCDNN_STATUS_SUCCESS) {
+                mcdnnDestroyTensorDescriptor(input_desc);
+                return INFINI_STATUS_INTERNAL_ERROR;
+            }
+
+            // 2. 输出张量描述符
+            mcdnnTensorDescriptor_t output_desc;
+            status = mcdnnCreateTensorDescriptor(&output_desc);
+            if (status != MCDNN_STATUS_SUCCESS) {
+                mcdnnDestroyTensorDescriptor(input_desc);
+                return INFINI_STATUS_INTERNAL_ERROR;
+            }
+
+            status = mcdnnSetTensor4dDescriptor(
+                output_desc,
+                tensor_format,
+                data_type,
+                n, c, h_out, w_out);
+            if (status != MCDNN_STATUS_SUCCESS) {
+                mcdnnDestroyTensorDescriptor(input_desc);
+                mcdnnDestroyTensorDescriptor(output_desc);
+                return INFINI_STATUS_INTERNAL_ERROR;
+            }
+
+            // 3. Pooling 描述符
+            mcdnnPoolingDescriptor_t pool_desc;
+            status = mcdnnCreatePoolingDescriptor(&pool_desc);
+            if (status != MCDNN_STATUS_SUCCESS) {
+                mcdnnDestroyTensorDescriptor(input_desc);
+                mcdnnDestroyTensorDescriptor(output_desc);
+                return INFINI_STATUS_INTERNAL_ERROR;
+            }
+
+            status = mcdnnSetPooling2dDescriptor(
+                pool_desc,
+                pooling_mode,
+                MCDNN_NOT_PROPAGATE_NAN,
+                windowHeight, windowWidth,
+                verticalPadding, horizontalPadding,
+                verticalStride, horizontalStride);
+            
+            if (status != MCDNN_STATUS_SUCCESS) {
+                mcdnnDestroyTensorDescriptor(input_desc);
+                mcdnnDestroyTensorDescriptor(output_desc);
+                mcdnnDestroyPoolingDescriptor(pool_desc);
+                return INFINI_STATUS_INTERNAL_ERROR;
+            }
+
+            // 4. 执行
+            status = mcdnnPoolingForward(
+                handle,
+                pool_desc,
+                &alpha,
+                input_desc,
+                input,
+                &beta,
+                output_desc,
+                output);
+
+            // 清理
+            mcdnnDestroyTensorDescriptor(input_desc);
+            mcdnnDestroyTensorDescriptor(output_desc);
+            mcdnnDestroyPoolingDescriptor(pool_desc);
+
+            if (status != MCDNN_STATUS_SUCCESS) {
+                return INFINI_STATUS_INTERNAL_ERROR;
+            }
+
+            return INFINI_STATUS_SUCCESS;
+        });
+}
+
+} // namespace op::adaptive_avg_pool1d::metax

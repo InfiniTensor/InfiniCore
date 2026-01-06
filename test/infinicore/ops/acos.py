@@ -97,9 +97,8 @@ class OpTest(BaseOperatorTest):
     def torch_operator(self, *args, **kwargs):
         return torch.acos(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
-    #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.acos(*args, **kwargs)
+    def infinicore_operator(self, *args, **kwargs):
+        return infinicore.acos(*args, **kwargs)
 
 
 def main():

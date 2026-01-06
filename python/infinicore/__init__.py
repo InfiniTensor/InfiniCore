@@ -40,6 +40,9 @@ from infinicore.dtype import (
     uint8,
 )
 from infinicore.ops.add import add
+from infinicore.ops.acos import acos
+from infinicore.ops.floor import floor
+from infinicore.ops.addbmm import addbmm
 from infinicore.ops.attention import attention
 from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
@@ -105,6 +108,9 @@ __all__ = [
     "uint8",
     # Operations.
     "add",
+    "acos",
+    "addbmm",
+    "floor",
     "attention",
     "matmul",
     "mul",
