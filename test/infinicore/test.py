@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from infinicore.lib import _infinicore
 
 import infinicore
@@ -265,10 +266,130 @@ def func6_initialize_device_relationship():
         z_infini.debug()
 
 
+def test7_infinicore_tensor_function():
+    """
+    测试 infinicore.tensor 函数，能够传入 list, tuple, NumPy, scalar，得到一个InfiniCore.Tensor的对象
+    """
+    print("\n" + "=" * 60)
+    print("测试 infinicore.tensor 函数")
+    print("=" * 60)
+
+    # 1. 测试从 list 创建 tensor
+    print("\n1. 测试从 list 创建 tensor:")
+    print("-" * 40)
+    list_data = [[1.0, 2.0, 3.0, 4.0]]
+    tensor_from_list = infinicore.tensor(list_data)
+    print(f"  输入: {list_data}")
+    print(f"  输出: shape={tensor_from_list.shape}, dtype={tensor_from_list.dtype}, device={tensor_from_list.device}")
+    assert tensor_from_list.shape == [1,4], f"期望shape [1,4], 实际 {tensor_from_list.shape}"
+    print("  ✓ list 测试通过")
+
+    # 2. 测试从 tuple 创建 tensor
+    print("\n2. 测试从 tuple 创建 tensor:")
+    print("-" * 40)
+    tuple_data = (1.0, 2.0, 3.0, 4.0)
+    tensor_from_tuple = infinicore.tensor(tuple_data)
+    print(f"  输入: {tuple_data}")
+    print(f"  输出: shape={tensor_from_tuple.shape}, dtype={tensor_from_tuple.dtype}, device={tensor_from_tuple.device}")
+    assert tensor_from_tuple.shape == [4], f"期望shape [4], 实际 {tensor_from_tuple.shape}"
+    print("  ✓ tuple 测试通过")
+
+    # 3. 测试从 NumPy array 创建 tensor
+    print("\n3. 测试从 NumPy array 创建 tensor:")
+    print("-" * 40)
+    np_data = np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32)
+    tensor_from_numpy = infinicore.tensor(np_data)
+    print(f"  输入: shape={np_data.shape}, dtype={np_data.dtype}")
+    print(f"  输出: shape={tensor_from_numpy.shape}, dtype={tensor_from_numpy.dtype}, device={tensor_from_numpy.device}")
+    assert tensor_from_numpy.shape == [2, 2], f"期望shape [2, 2], 实际 {tensor_from_numpy.shape}"
+    print("  ✓ NumPy array 测试通过")
+
+    # 4. 测试从 scalar (int) 创建 tensor
+    print("\n4. 测试从 scalar (int) 创建 tensor:")
+    print("-" * 40)
+    int_scalar = 42
+    tensor_from_int = infinicore.tensor(int_scalar)
+    print(f"  输入: {int_scalar} (int)")
+    print(f"  输出: shape={tensor_from_int.shape}, dtype={tensor_from_int.dtype}, device={tensor_from_int.device}")
+    assert tensor_from_int.shape == [1], f"期望shape [1], 实际 {tensor_from_int.shape}"
+    print("  ✓ scalar (int) 测试通过")
+
+    # 5. 测试从 scalar (float) 创建 tensor
+    print("\n5. 测试从 scalar (float) 创建 tensor:")
+    print("-" * 40)
+    float_scalar = 3.14
+    tensor_from_float = infinicore.tensor(float_scalar)
+    print(f"  输入: {float_scalar} (float)")
+    print(f"  输出: shape={tensor_from_float.shape}, dtype={tensor_from_float.dtype}, device={tensor_from_float.device}")
+    assert tensor_from_float.shape == [1], f"期望shape [1], 实际 {tensor_from_float.shape}"
+    print("  ✓ scalar (float) 测试通过")
+
+    # 6. 测试指定 dtype
+    print("\n6. 测试指定 dtype:")
+    print("-" * 40)
+    list_data_f32 = [1, 2, 3]
+    tensor_f32 = infinicore.tensor(list_data_f32, dtype=infinicore.float32)
+    tensor_f64 = infinicore.tensor(list_data_f32, dtype=infinicore.float64)
+    print(f"  输入: {list_data_f32}")
+    print(f"  float32: dtype={tensor_f32.dtype}")
+    print(f"  float64: dtype={tensor_f64.dtype}")
+    assert tensor_f32.dtype == infinicore.float32, f"期望 float32, 实际 {tensor_f32.dtype}"
+    assert tensor_f64.dtype == infinicore.float64, f"期望 float64, 实际 {tensor_f64.dtype}"
+    print("  ✓ dtype 指定测试通过")
+
+    # 7. 测试指定 device
+    print("\n7. 测试指定 device:")
+    print("-" * 40)
+    list_data_device = [1.0, 2.0, 3.0]
+    tensor_cpu = infinicore.tensor(list_data_device, device=infinicore.device("cuda", 0))
+    print(f"  输入: {list_data_device}")
+    print(f"  CPU: device={tensor_cpu.device}")
+    assert tensor_cpu.device.type == "cuda", f"期望 CPU, 实际 {tensor_cpu.device.type}"
+    print("  ✓ device 指定测试通过 (cuda)")
+
+    # 8. 测试多维 list
+    print("\n8. 测试多维 list:")
+    print("-" * 40)
+    nested_list = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]
+    tensor_nested = infinicore.tensor(nested_list)
+    print(f"  输入: {nested_list}")
+    print(f"  输出: shape={tensor_nested.shape}, dtype={tensor_nested.dtype}")
+    assert tensor_nested.shape == [3, 2], f"期望shape [3, 2], 实际 {tensor_nested.shape}"
+    print("  ✓ 多维 list 测试通过")
+
+    # 9. 测试数据正确性验证（与 NumPy 对比）
+    print("\n9. 测试数据正确性验证（与 NumPy 对比）:")
+    print("-" * 40)
+    test_data = [[1.5, 2.5], [3.5, 4.5]]
+    np_ref = np.array(test_data, dtype=np.float32)
+    infini_tensor = infinicore.tensor(test_data, dtype=infinicore.float32)
+    
+    # 转换为 torch tensor 进行验证
+    torch_ref = torch.tensor(test_data, dtype=torch.float32)
+    torch_result = torch.zeros(infini_tensor.shape, dtype=torch.float32)
+    infini_blob = infinicore.from_blob(
+        torch_result.data_ptr(),
+        infini_tensor.shape,
+        dtype=infinicore.float32,
+        device=infinicore.device("cpu", 0),
+    )
+    infini_blob.copy_(infini_tensor)
+    
+    max_error = torch.abs(torch_ref - torch_result).max().item()
+    print(f"  最大误差: {max_error}")
+    assert max_error < 1e-6, f"数据不匹配，最大误差: {max_error}"
+    print("  ✓ 数据正确性验证通过")
+
+    print("\n" + "=" * 60)
+    print("所有 infinicore.tensor 测试通过！")
+    print("=" * 60 + "\n")
+
+
 if __name__ == "__main__":
-    test()
-    test2()
-    test3()
-    test4_to()
-    test5_bf16()
-    func6_initialize_device_relationship()
+    # test()
+    # test2()
+    # test3()
+    # test4_to()
+    # test5_bf16()
+    # func6_initialize_device_relationship()
+    test7_infinicore_tensor_function()
