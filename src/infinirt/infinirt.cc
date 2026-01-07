@@ -7,6 +7,7 @@
 #include "kunlun/infinirt_kunlun.h"
 #include "metax/infinirt_metax.h"
 #include "moore/infinirt_moore.h"
+#include "opencl/infinirt_opencl.h"
 
 thread_local infiniDevice_t CURRENT_DEVICE_TYPE = INFINI_DEVICE_CPU;
 thread_local int CURRENT_DEVICE_ID = 0;
@@ -14,8 +15,10 @@ thread_local infiniDevice_t PREVIOUS_NON_CPU_DEVICE_TYPE = INFINI_DEVICE_TYPE_CO
 thread_local int PREVIOUS_NON_CPU_DEVICE_ID = 0;
 
 __C infiniStatus_t infinirtInit() {
-#ifdef ENABLE_ASCEND_API
+#if defined(ENABLE_ASCEND_API)
     CHECK_STATUS(infinirt::ascend::init());
+#elif defined(ENABLE_OPENCL_API)
+    CHECK_STATUS(infinirt::opencl::init());
 #endif
     return INFINI_STATUS_SUCCESS;
 }
@@ -80,6 +83,9 @@ __C infiniStatus_t infinirtGetDevice(infiniDevice_t *device_ptr, int *device_id_
             break;                                                     \
         case INFINI_DEVICE_HYGON:                                      \
             _status = infinirt::hygon::API PARAMS;                     \
+            break;                                                     \
+        case INFINI_DEVICE_OPENCL:                                     \
+            _status = infinirt::opencl::API PARAMS;                    \
             break;                                                     \
         default:                                                       \
             _status = INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;         \
