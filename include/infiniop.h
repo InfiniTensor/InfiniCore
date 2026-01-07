@@ -95,6 +95,7 @@
 #include "infiniop/ops/quant/per_tensor_quant_int8.h"
 #include "infiniop/ops/quickgelu.h"
 #include "infiniop/ops/random_sample.h"
+#include "infiniop/ops/reciprocal.h"
 #include "infiniop/ops/rearrange.h"
 #include "infiniop/ops/reciprocal.h"
 #include "infiniop/ops/relu.h"

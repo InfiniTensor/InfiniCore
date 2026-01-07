@@ -1,33 +1,32 @@
-#pragma once
+#ifndef __ERF_CUDA_H__
+#define __ERF_CUDA_H__
+
 #include <cmath>
-#include <type_traits>
+#include <cuda_fp16.h>
 
-namespace op::cuda {
-
-struct ErfOp {
+namespace op::erf::cuda {
+typedef struct ErfOp {
+public:
     static constexpr size_t num_inputs = 1;
-
     template <typename T>
-    __device__ __forceinline__ T operator()(T x) const {
-        if constexpr (std::is_same_v<T, float>) {
+    __device__ __forceinline__ T operator()(const T &x) const {
+        if constexpr (std::is_same_v<T, half2>) {
+            return __floats2half2_rn(erff(__half2float(__low2half(x))), erff(__half2float(__high2half(x))));
+        } else if constexpr (std::is_same_v<T, half>) {
+            return __float2half(erff(__half2float(x)));
+        } else if constexpr (std::is_same_v<T, cuda_bfloat162>) {
+            float x0 = __bfloat162float(__low2bfloat16(x));
+            float x1 = __bfloat162float(__high2bfloat16(x));
+            return __floats2bfloat162_rn(erff(x0), erff(x1));
+        } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
+            return __float2bfloat16_rn(erff(__bfloat162float(x)));
+        } else if constexpr (std::is_same_v<T, float>) {
             return erff(x);
-        } else if constexpr (std::is_same_v<T, double>) {
-            return ::erf(x);
         } else {
-            // For F16/BF16: promote to float, compute, then cast back
-            float xf;
-            if constexpr (std::is_same_v<T, half>) {
-                xf = __half2float(x);
-                return __float2half_rn(erff(xf));
-            } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
-                xf = __bfloat162float(x);
-                return __float2bfloat16_rn(erff(xf));
-            } else {
-                xf = static_cast<float>(x);
-                return static_cast<T>(erff(xf));
-            }
+            return std::erf(x);
         }
     }
-};
+} ErfOp;
+} // namespace op::erf::cuda
 
-} // namespace op::cuda
+#endif // __ERF_CUDA_H__
