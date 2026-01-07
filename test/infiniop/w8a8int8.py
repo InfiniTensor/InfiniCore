@@ -27,7 +27,7 @@ _TEST_CASES_ = [
     ((128, 512), (512, 1024), True, (128, 1024)),
     ((5000, 5120), (5120, 8192), True, (5000, 8192)),
     ((2000, 5120), (5120, 8192), True, (2000, 8192)),
-    ((1000, 5120), (5120, 8192), True, (1000, 8192)), 
+    ((1000, 5120), (5120, 8192), True, (1000, 8192)),
     ((2048, 4096), (4096, 2048), True, (2048, 2048)),
     ((4096, 4096), (4096, 4096), True, (4096, 4096)),
     ((2560, 10240), (10240, 20480), True, (2560, 20480)),
@@ -65,14 +65,21 @@ PROFILE = False
 NUM_PRERUN = 10
 NUM_ITERATIONS = 1000
 
+
 def mm(x, w, bias, out_dtype):
-    return (torch.matmul(x, w + bias)).to(out_dtype)
-        
+    return torch.matmul(x, w).to(out_dtype) + bias
+
+
 def scaled_mm(x, w_p, w_s, bias, out_dtype):
-    return (torch.matmul(x.to(torch.float32), w_p.to(torch.float32)) * w_s.view(1, -1) + bias).to(out_dtype)
+    return (
+        torch.matmul(x.to(torch.float32), w_p.to(torch.float32)) * w_s.view(1, -1)
+        + bias
+    ).to(out_dtype)
+
 
 def to_int8(tensor: torch.Tensor) -> torch.Tensor:
     return torch.round(tensor.clamp(min=-128, max=127)).to(dtype=torch.int8)
+
 
 def torch_scaled_mm(a, b, scale_a, scale_b, out_dtype, bias):
     o = torch.matmul(a.to(torch.float32), b.to(torch.float32))
@@ -81,6 +88,7 @@ def torch_scaled_mm(a, b, scale_a, scale_b, out_dtype, bias):
     else:
         o = o.to(torch.float32) * scale_a.view(-1, 1) * scale_b.view(1, -1)
     return o.to(out_dtype)
+
 
 def per_token_quant_int8_torch(x):
     x = x.float()
@@ -91,6 +99,7 @@ def per_token_quant_int8_torch(x):
     x_q = torch.round(x_q).to(torch.int8)
 
     return x_q, scale_x
+
 
 def test(
     handle,
@@ -110,30 +119,52 @@ def test(
     )
     M, K = x_shape
     N = w_shape[1]
-    
-    weights_packed = to_int8(torch.randn((N, K), device="cuda").t() * 5)
-    weights_scale = torch.randn((N,), device="cuda", dtype=torch.float32)
-    bias = torch.randn((N,), device="cuda", dtype=torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16) * 10
+    # print(torch.randn((N, K), device="cuda").stride(), flush=True)
+    weights_packed = to_int8(torch.randn((N, K), device="cuda").t())
+
+    weights_scale = torch.randn((N, 1), device="cuda", dtype=torch.float32)
+    bias = torch.randn(
+        (N),
+        device="cuda",
+        dtype=torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16,
+    )
 
     x = TestTensor(x_shape, None, dtype, device)
+
     x_packed = TestTensor(x_shape, None, InfiniDtype.I8, device, mode="zeros")
-    x_scale = TestTensor((M,1), None, InfiniDtype.F32, device)
-    
+    x_scale = TestTensor((M, 1), None, InfiniDtype.F32, device)
+    # print(weights_packed.shape)
+    # print(weights_packed.stride(), flush=True)
     weights_packed = TestTensor(
-        (K, N), weights_packed.stride(), InfiniDtype.I8, device, mode="manual", set_tensor=weights_packed
+        (K, N),
+        weights_packed.stride(),
+        InfiniDtype.I8,
+        device,
+        mode="manual",
+        set_tensor=weights_packed,
     )
     weights_scale = TestTensor(
-        (N,), weights_scale.stride(), InfiniDtype.F32, device, mode="manual", set_tensor=weights_scale
+        (N, 1),
+        weights_scale.stride(),
+        InfiniDtype.F32,
+        device,
+        mode="manual",
+        set_tensor=weights_scale,
     )
-
+    print(weights_scale.torch_tensor().shape, flush=True)
+    print(weights_packed.torch_tensor().shape, flush=True)
     weights = weights_packed.torch_tensor() * weights_scale.torch_tensor().view(1, -1)
 
     y = TestTensor(y_shape, None, dtype, device)
-    bias = TestTensor((N,), bias.stride(), dtype, device, mode="manual", set_tensor=bias)
-    
-    x_mm = x.torch_tensor().to(torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16)
+    bias = TestTensor(
+        (N,), bias.stride(), dtype, device, mode="manual", set_tensor=bias
+    )
+
+    x_mm = x.torch_tensor().to(
+        torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16
+    )
     w_mm = weights.to(torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16)
-        
+
     quant_descriptor = infiniopOperatorDescriptor_t()
     check_error(
         LIBINFINIOP.infiniopCreatePerChannelQuantI8Descriptor(
@@ -145,7 +176,7 @@ def test(
             x.descriptor,
         )
     )
-    
+
     quant_workspace_size = c_uint64(0)
     check_error(
         LIBINFINIOP.infiniopGetPerChannelQuantI8WorkspaceSize(
@@ -204,20 +235,38 @@ def test(
                 weights_scale.data(),
                 None,
             )
-        ) 
-    
+        )
+
     def lib_w8a8int8_linearFunction():
         lib_per_channel_quant_int8()
         lib_linear()
-        
+
     def lib_torch_mm():
-        mm(x_mm, w_mm, bias.torch_tensor(), out_dtype=torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16)
-        
+        mm(
+            x_mm,
+            w_mm,
+            bias.torch_tensor(),
+            out_dtype=torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16,
+        )
+
     x_p, x_s = per_token_quant_int8_torch(x.torch_tensor())
     lib_w8a8int8_linearFunction()
-    
-    scaled_mm_torch = torch_scaled_mm(x_p, weights_packed.torch_tensor(), x_s, weights_scale.torch_tensor(), torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16, bias=bias.torch_tensor())
-    mm_torch = scaled_mm(x.torch_tensor(), weights_packed.torch_tensor(), weights_scale.torch_tensor(), bias.torch_tensor(), out_dtype=torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16)
+
+    scaled_mm_torch = torch_scaled_mm(
+        x_p,
+        weights_packed.torch_tensor(),
+        x_s,
+        weights_scale.torch_tensor(),
+        torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16,
+        bias=bias.torch_tensor(),
+    )
+    mm_torch = scaled_mm(
+        x.torch_tensor(),
+        weights_packed.torch_tensor(),
+        weights_scale.torch_tensor(),
+        bias.torch_tensor(),
+        out_dtype=torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16,
+    )
 
     if sync is not None:
         sync()
@@ -225,8 +274,12 @@ def test(
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:
         debug(y.actual_tensor(), mm_torch, atol=atol, rtol=rtol)
-    
-    # The quantization test did not normalize the test data, leading to large errors; the error check has been temporarily removed. 
+
+    # The quantization test did not normalize the test data,
+    # leading to large errors; the error check has been temporarily removed.
+
+    print(y.actual_tensor())
+    print(mm_torch)
 
     def profile_operation(name, func, device, num_prerun, num_iterations):
         # Warm up
@@ -250,14 +303,39 @@ def test(
 
     # Profiling workflow
     if PROFILE:
-        profile_operation("PyTorch mm       ", lambda: lib_torch_mm(), device, NUM_PRERUN, NUM_ITERATIONS)
-        profile_operation("lib total        ", lambda: lib_w8a8int8_linearFunction(), device, NUM_PRERUN, NUM_ITERATIONS)
-        profile_operation("lib quant        ", lambda: lib_per_channel_quant_int8(), device, NUM_PRERUN, NUM_ITERATIONS)
-        profile_operation("lib scaled mm    ", lambda: lib_linear(), device, NUM_PRERUN, NUM_ITERATIONS)
+        profile_operation(
+            "PyTorch mm       ",
+            lambda: lib_torch_mm(),
+            device,
+            NUM_PRERUN,
+            NUM_ITERATIONS,
+        )
+        profile_operation(
+            "lib total        ",
+            lambda: lib_w8a8int8_linearFunction(),
+            device,
+            NUM_PRERUN,
+            NUM_ITERATIONS,
+        )
+        profile_operation(
+            "lib quant        ",
+            lambda: lib_per_channel_quant_int8(),
+            device,
+            NUM_PRERUN,
+            NUM_ITERATIONS,
+        )
+        profile_operation(
+            "lib scaled mm    ",
+            lambda: lib_linear(),
+            device,
+            NUM_PRERUN,
+            NUM_ITERATIONS,
+        )
 
     check_error(LIBINFINIOP.infiniopDestroyI8GemmDescriptor(scaled_mm_descriptor))
-    check_error(LIBINFINIOP.infiniopDestroyPerChannelQuantI8Descriptor(quant_descriptor))
-
+    check_error(
+        LIBINFINIOP.infiniopDestroyPerChannelQuantI8Descriptor(quant_descriptor)
+    )
 
 
 if __name__ == "__main__":
