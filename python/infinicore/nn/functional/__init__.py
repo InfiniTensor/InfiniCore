@@ -8,6 +8,7 @@ from .silu import silu
 from .swiglu import swiglu
 from .hardswish import hardswish
 from .avg_pool1d import avg_pool1d
+from .hardtanh import hardtanh
 
 __all__ = [
     "causal_softmax",
@@ -15,6 +16,7 @@ __all__ = [
     "rms_norm",
     "silu",
     "hardswish",
+    "hardtanh",
     "avg_pool1d",
     "swiglu",
     "linear",

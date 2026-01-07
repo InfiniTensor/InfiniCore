@@ -17,6 +17,7 @@
 #include "ops/rms_norm.hpp"
 #include "ops/rope.hpp"
 #include "ops/hardswish.hpp"
+#include "ops/hardtanh.hpp"
 #include "ops/avg_pool1d.hpp"
 #include "ops/silu.hpp"
 #include "ops/swiglu.hpp"
@@ -35,6 +36,7 @@ inline void bind(py::module &m) {
     bind_matmul(m);
     bind_mul(m);
     bind_hardswish(m);
+    bind_hardtanh(m);
     bind_paged_attention(m);
     bind_paged_caching(m);
     bind_cross_entropy(m);
