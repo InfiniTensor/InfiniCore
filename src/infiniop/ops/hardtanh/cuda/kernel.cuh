@@ -3,22 +3,16 @@
 
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
+#include <type_traits>
 
 namespace op::hardtanh::cuda {
 
 typedef struct HardTanhOp {
 public:
     static constexpr size_t num_inputs = 1;
-    
-    float min_val;
-    float max_val;
-
-    // 构造函数，由 Descriptor 传入参数
-    __device__ __forceinline__ HardTanhOp(float min_v, float max_v) 
-        : min_val(min_v), max_val(max_v) {}
 
     template <typename T>
-    __device__ __forceinline__ T operator()(const T &x) const {
+    __device__ __forceinline__ T operator()(const T &x, float min_val, float max_val) const {
         if constexpr (std::is_same_v<T, half2>) {
             // half2 向量化优化：一次处理两个 FP16
             float2 x_f2 = __half22float2(x);

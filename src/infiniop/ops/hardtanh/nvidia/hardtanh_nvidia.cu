@@ -5,6 +5,22 @@
 
 namespace op::hardtanh::nvidia {
 
+Descriptor::Descriptor(infiniDtype_t dtype,
+                       op::elementwise::ElementwiseInfo info,
+                       op::elementwise::nvidia::DeviceImpl *device_info,
+                       size_t workspace_size,
+                       infiniDevice_t device_type,
+                       int device_id,
+                       float min_val,
+                       float max_val)
+    : InfiniopDescriptor{device_type, device_id},
+      _dtype(dtype),
+      _info(std::move(info)),
+      _device_info(device_info),
+      _workspace_size(workspace_size),
+      _min_val(min_val),
+      _max_val(max_val) {}
+
 Descriptor::~Descriptor() = default;
 
 infiniStatus_t Descriptor::create(
@@ -25,13 +41,23 @@ infiniStatus_t Descriptor::create(
     CHECK_DTYPE(dtype, INFINI_DTYPE_BF16, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64);
     CHECK_SAME_SHAPE(output_shape, input_shape);
 
-    // 调用宏创建 CUDA 逐元素描述符
-    CREATE_ELEMENTWISE_CUDA_DESCRIPTOR(handle, dtype, out_desc, input_desc_vec)
+    auto info_result = op::elementwise::ElementwiseInfo::create(out_desc, input_desc_vec);
+    CHECK_RESULT(info_result);
+    auto info = info_result.take();
+    auto workspace_size = info.getMetaMemSize() + info.getInputSize() * sizeof(void *);
 
-    // 将 HardTanh 特有的参数存入 Descriptor 实例
-    auto desc = *desc_ptr;
-    desc->min_val = min_val;
-    desc->max_val = max_val;
+    auto device_impl_result = op::elementwise::nvidia::DeviceImpl::create(handle->internal());
+    CHECK_RESULT(device_impl_result);
+
+    *desc_ptr = new Descriptor(
+        dtype,
+        std::move(info),
+        device_impl_result.take(),
+        workspace_size,
+        handle->device,
+        handle->device_id,
+        min_val,
+        max_val);
 
     return INFINI_STATUS_SUCCESS;
 }
@@ -47,19 +73,15 @@ infiniStatus_t Descriptor::calculate(
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
 
-    // 构造带参数的 CUDA Op 实例
-    // 注意：这里的 Op 实例会被拷贝到 GPU 常量区或通过参数传递给 Kernel
-    cuda::HardTanhOp op(this->min_val, this->max_val);
-
     switch (_dtype) {
     case INFINI_DTYPE_BF16:
-        return _device_info->calculate<256, cuda::HardTanhOp, cuda_bfloat16>(_info, workspace, output, inputs, stream, op);
+        return _device_info->calculate<256, cuda::HardTanhOp, cuda_bfloat16>(_info, workspace, output, inputs, stream, _min_val, _max_val);
     case INFINI_DTYPE_F16:
-        return _device_info->calculate<256, cuda::HardTanhOp, half>(_info, workspace, output, inputs, stream, op);
+        return _device_info->calculate<256, cuda::HardTanhOp, half>(_info, workspace, output, inputs, stream, _min_val, _max_val);
     case INFINI_DTYPE_F32:
-        return _device_info->calculate<256, cuda::HardTanhOp, float>(_info, workspace, output, inputs, stream, op);
+        return _device_info->calculate<256, cuda::HardTanhOp, float>(_info, workspace, output, inputs, stream, _min_val, _max_val);
     case INFINI_DTYPE_F64:
-        return _device_info->calculate<256, cuda::HardTanhOp, double>(_info, workspace, output, inputs, stream, op);
+        return _device_info->calculate<256, cuda::HardTanhOp, double>(_info, workspace, output, inputs, stream, _min_val, _max_val);
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }

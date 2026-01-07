@@ -4,28 +4,57 @@
 #include "../../../elementwise/cpu/elementwise_cpu.h"
 #include <algorithm> // 用于 std::max 和 std::min
 
-// 注册算子描述符
-ELEMENTWISE_DESCRIPTOR(hardtanh, cpu)
-
 namespace op::hardtanh::cpu {
+
+class Descriptor final : public InfiniopDescriptor {
+    infiniDtype_t _dtype;
+    op::elementwise::ElementwiseInfo _info;
+    size_t _workspace_size;
+    float _min_val;
+    float _max_val;
+
+    Descriptor(infiniDtype_t dtype,
+               op::elementwise::ElementwiseInfo info,
+               size_t workspace_size,
+               infiniDevice_t device_type,
+               int device_id,
+               float min_val,
+               float max_val);
+
+public:
+    ~Descriptor();
+
+    size_t workspaceSize() const { return _workspace_size; }
+
+    static infiniStatus_t create(
+        infiniopHandle_t handle,
+        Descriptor **desc_ptr,
+        infiniopTensorDescriptor_t out_desc,
+        std::vector<infiniopTensorDescriptor_t> input_desc_vec,
+        float min_val,
+        float max_val);
+
+    infiniStatus_t calculate(
+        void *workspace,
+        size_t workspace_size,
+        void *output,
+        std::vector<const void *> inputs,
+        void *stream) const;
+
+    float minVal() const { return _min_val; }
+    float maxVal() const { return _max_val; }
+};
 
 typedef struct HardTanhOp {
 public:
     static constexpr size_t num_inputs = 1;
 
-    // 存储算子状态（截断范围）
-    float min_val;
-    float max_val;
-
-    // 构造函数，用于从 Descriptor 中初始化参数
-    HardTanhOp(float min_v = -1.0f, float max_v = 1.0f) 
-        : min_val(min_v), max_val(max_v) {}
-
     template <typename T>
-    T operator()(const T &x) const {
-        // 使用标准库的 clamp 逻辑
-        T val = x < static_cast<T>(min_val) ? static_cast<T>(min_val) : x;
-        return val > static_cast<T>(max_val) ? static_cast<T>(max_val) : val;
+    T operator()(const T &x, float min_val, float max_val) const {
+        T low = static_cast<T>(min_val);
+        T high = static_cast<T>(max_val);
+        T val = x < low ? low : x;
+        return val > high ? high : val;
     }
 } HardTanhOp;
 
