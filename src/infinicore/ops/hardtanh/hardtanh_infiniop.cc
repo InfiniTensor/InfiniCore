@@ -39,11 +39,16 @@ void calculate(Tensor output, Tensor input, float min_val, float max_val) {
 
     size_t workspace_size = 0;
     INFINICORE_CHECK_ERROR(infiniopGetHardTanhWorkspaceSize(desc, &workspace_size));
-    std::shared_ptr<Memory> workspace = context::allocateMemory(workspace_size);
+    std::shared_ptr<Memory> workspace;
+    void *workspace_ptr = nullptr;
+    if (workspace_size != 0) {
+        workspace = context::allocateMemory(workspace_size);
+        workspace_ptr = workspace->data();
+    }
 
     INFINICORE_CHECK_ERROR(infiniopHardTanh(
         desc,
-        workspace->data(),
+        workspace_ptr,
         workspace_size,
         output->data(),
         input->data(),
@@ -55,4 +60,4 @@ static bool registered = []() {
     return true;
 }();
 
-} // namespace infinicore::op::hardtanh_impl::infiniop
+} 

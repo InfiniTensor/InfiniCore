@@ -2,19 +2,19 @@
 #include "../../handle.h"
 #include "infiniop/ops/cross_entropy.h"
 
-// 引入 CPU 后端
+
 #ifdef ENABLE_CPU_API
 #include "cpu/cross_entropy_cpu.h"
 #endif
 
-// 引入 NVIDIA 后端 (包含兼容的国产 GPU)
+
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/cross_entropy_nvidia.cuh"
 #endif
 
-// ==================================================================
-// 1. Create 函数
-// ==================================================================
+
+
+
 __C infiniStatus_t infiniopCreateCrossEntropyDescriptor(
     infiniopHandle_t handle,
     infiniopCrossEntropyDescriptor_t *desc_ptr,
@@ -22,7 +22,7 @@ __C infiniStatus_t infiniopCreateCrossEntropyDescriptor(
     infiniopTensorDescriptor_t x_desc,
     infiniopTensorDescriptor_t target_desc) {
 
-    // 宏定义：包含分号，与 causal_softmax 保持一致
+    
 #define CREATE(CASE, NAMESPACE)                                                  \
     case CASE:                                                                   \
         return op::cross_entropy::NAMESPACE::Descriptor::create(                 \
@@ -52,9 +52,9 @@ __C infiniStatus_t infiniopCreateCrossEntropyDescriptor(
 #undef CREATE
 }
 
-// ==================================================================
-// 2. GetWorkspaceSize 函数
-// ==================================================================
+
+
+
 __C infiniStatus_t infiniopGetCrossEntropyWorkspaceSize(
     infiniopCrossEntropyDescriptor_t desc, size_t *size) {
 
@@ -85,9 +85,9 @@ __C infiniStatus_t infiniopGetCrossEntropyWorkspaceSize(
 #undef GET
 }
 
-// ==================================================================
-// 3. Calculate 函数
-// ==================================================================
+
+
+
 __C infiniStatus_t infiniopCrossEntropy(
     infiniopCrossEntropyDescriptor_t desc,
     void *workspace,
@@ -124,9 +124,9 @@ __C infiniStatus_t infiniopCrossEntropy(
 #undef CALCULATE
 }
 
-// ==================================================================
-// 4. Destroy 函数
-// ==================================================================
+
+
+
 __C infiniStatus_t infiniopDestroyCrossEntropyDescriptor(
     infiniopCrossEntropyDescriptor_t desc) {
 

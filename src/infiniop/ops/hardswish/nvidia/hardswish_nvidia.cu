@@ -45,7 +45,7 @@ infiniStatus_t launch_fast_path(size_t numel,
     return err == cudaSuccess ? INFINI_STATUS_SUCCESS : INFINI_STATUS_INTERNAL_ERROR;
 }
 
-} // namespace
+} 
 
 Descriptor::~Descriptor() = default;
 
@@ -66,8 +66,8 @@ infiniStatus_t Descriptor::create(
 
     CHECK_SAME_SHAPE(output_shape, input_shape);
 
-    // create CUDA elementwise descriptor
-    // 这里的宏会帮我们 new 一个 Descriptor 对象
+    
+    
     CREATE_ELEMENTWISE_CUDA_DESCRIPTOR(handle, dtype, out_desc, input_desc_vec)
 
     return INFINI_STATUS_SUCCESS;
@@ -100,7 +100,7 @@ infiniStatus_t Descriptor::calculate(
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
 
-    // 分发到 elementwise 模板
+    
     switch (_dtype) {
     case INFINI_DTYPE_BF16:
         return _device_info->calculate<256, cuda::HardSwishOp, cuda_bfloat16>(_info, workspace, output, inputs, stream);
@@ -116,4 +116,4 @@ infiniStatus_t Descriptor::calculate(
 
     return INFINI_STATUS_SUCCESS;
 }
-} // namespace op::hardswish::nvidia
+} 

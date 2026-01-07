@@ -47,7 +47,7 @@ infiniStatus_t launch_fast_path(size_t numel,
     return err == cudaSuccess ? INFINI_STATUS_SUCCESS : INFINI_STATUS_INTERNAL_ERROR;
 }
 
-} // namespace
+} 
 
 Descriptor::Descriptor(infiniDtype_t dtype,
                        op::elementwise::ElementwiseInfo info,
@@ -72,8 +72,8 @@ infiniStatus_t Descriptor::create(
     Descriptor **desc_ptr,
     infiniopTensorDescriptor_t out_desc,
     std::vector<infiniopTensorDescriptor_t> input_desc_vec,
-    float min_val,   // 新增参数
-    float max_val) { // 新增参数
+    float min_val,   
+    float max_val) { 
 
     auto handle = reinterpret_cast<device::nvidia::Handle *>(handle_);
     auto dtype = out_desc->dtype();
@@ -148,4 +148,4 @@ infiniStatus_t Descriptor::calculate(
 
     return INFINI_STATUS_SUCCESS;
 }
-} // namespace op::hardtanh::nvidia
+} 

@@ -25,7 +25,7 @@ infiniStatus_t launch_contiguous_cpu(const op::elementwise::ElementwiseInfo &inf
     return INFINI_STATUS_SUCCESS;
 }
 
-} // namespace
+} 
 
 Descriptor::~Descriptor() = default;
 
@@ -38,19 +38,19 @@ infiniStatus_t Descriptor::create(
     auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
     auto dtype = out_desc->dtype();
 
-    // 校验输入是否存在
+    
     const auto &input_desc = input_desc_vec.at(0);
     const auto &output_shape = out_desc->shape();
     const auto &input_shape = input_desc->shape();
 
-    // HardSwish 支持的数据类型与 SiLU 一致
+    
     CHECK_DTYPE(dtype, INFINI_DTYPE_BF16, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64);
 
-    // 校验输入输出形状必须一致
+    
     CHECK_SAME_SHAPE(output_shape, input_shape);
 
-    // 使用 CPU Elementwise 通用宏创建描述符
-    // 注意：这里直接复用 Elementwise 的逻辑
+    
+    
     CREATE_ELEMENTWISE_CPU_DESCRIPTOR(handle, dtype, out_desc, input_desc_vec);
 
     return INFINI_STATUS_SUCCESS;
@@ -79,8 +79,8 @@ infiniStatus_t Descriptor::calculate(
         }
     }
 
-    // 根据数据类型分发计算
-    // 关键点：将 SiluOp 替换为 HardSwishOp
+    
+    
     switch (_dtype) {
     case INFINI_DTYPE_BF16:
         return _device_info->calculate<HardSwishOp, bf16_t>(_info, output, inputs, stream);
@@ -96,4 +96,4 @@ infiniStatus_t Descriptor::calculate(
 
     return INFINI_STATUS_SUCCESS;
 }
-} // namespace op::hardswish::cpu
+} 

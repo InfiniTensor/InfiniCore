@@ -28,4 +28,4 @@ void equal_(Tensor out, Tensor a, Tensor b) {
     Equal::execute(out, a, b);
 }
 
-} // namespace infinicore::op
+} 

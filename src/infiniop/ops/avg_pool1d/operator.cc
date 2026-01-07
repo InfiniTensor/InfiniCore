@@ -2,7 +2,7 @@
 #include "../../handle.h"
 #include "infiniop/ops/avg_pool1d.h"
 
-// 引入各后端头文件
+
 #ifdef ENABLE_CPU_API
 #include "cpu/avg_pool1d_cpu.h"
 #endif
@@ -25,9 +25,9 @@
 #include "moore/avg_pool1d_moore.h"
 #endif
 
-// =======================================================================
-// 1. Create 函数实现
-// =======================================================================
+
+
+
 __C infiniStatus_t infiniopCreateAvgPool1dDescriptor(
     infiniopHandle_t handle,
     infiniopAvgPool1dDescriptor_t *desc_ptr,
@@ -86,9 +86,9 @@ __C infiniStatus_t infiniopCreateAvgPool1dDescriptor(
 #undef CREATE
 }
 
-// =======================================================================
-// 2. GetWorkspaceSize 函数实现
-// =======================================================================
+
+
+
 __C infiniStatus_t infiniopGetAvgPool1dWorkspaceSize(infiniopAvgPool1dDescriptor_t desc,
                                                 size_t *size) {
 #define GET(CASE, NAMESPACE)                                                                   \
@@ -134,9 +134,9 @@ __C infiniStatus_t infiniopGetAvgPool1dWorkspaceSize(infiniopAvgPool1dDescriptor
 #undef GET
 }
 
-// =======================================================================
-// 3. Execute (Calculate) 函数实现
-// =======================================================================
+
+
+
 __C infiniStatus_t infiniopAvgPool1d(
     infiniopAvgPool1dDescriptor_t desc,
     void *workspace,
@@ -188,9 +188,9 @@ __C infiniStatus_t infiniopAvgPool1d(
 #undef CALCULATE
 }
 
-// =======================================================================
-// 4. Destroy 函数实现
-// =======================================================================
+
+
+
 __C infiniStatus_t
 infiniopDestroyAvgPool1dDescriptor(infiniopAvgPool1dDescriptor_t desc) {
 

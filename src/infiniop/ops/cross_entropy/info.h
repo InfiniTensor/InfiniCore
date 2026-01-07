@@ -4,14 +4,14 @@
 #include "../../tensor.h"
 #include <vector>
 
-// #include "../../operator_descriptor.h"
+
 #include <cstddef>
 
 struct CrossEntropyInfo {
-    int dtype;         // logits dtype
-    int target_dtype;  // label dtype
-    size_t outer_size; // batch * seq
-    size_t vocab_size; // logits 最后一维
+    int dtype;         
+    int target_dtype;  
+    size_t outer_size; 
+    size_t vocab_size; 
     ptrdiff_t x_stride;
 };
 

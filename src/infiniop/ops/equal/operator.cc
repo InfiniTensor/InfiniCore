@@ -2,7 +2,7 @@
 #include "../../handle.h"
 #include "infiniop/ops/equal.h"
 
-// 引入各后端头文件
+
 #ifdef ENABLE_CPU_API
 #include "cpu/equal_cpu.h"
 #endif
@@ -22,15 +22,15 @@
 #include "moore/equal_moore.h"
 #endif
 
-// =======================================================================
-// 1. Create 函数实现
-// =======================================================================
+
+
+
 __C infiniStatus_t infiniopCreateEqualDescriptor(
     infiniopHandle_t handle,
     infiniopEqualDescriptor_t *desc_ptr,
-    infiniopTensorDescriptor_t c_desc, // Output
-    infiniopTensorDescriptor_t a_desc, // Input A
-    infiniopTensorDescriptor_t b_desc) // Input B
+    infiniopTensorDescriptor_t c_desc, 
+    infiniopTensorDescriptor_t a_desc, 
+    infiniopTensorDescriptor_t b_desc) 
 {
 
 #define CREATE(CASE, NAMESPACE)                                                       \
@@ -39,7 +39,7 @@ __C infiniStatus_t infiniopCreateEqualDescriptor(
             handle,                                                                   \
             reinterpret_cast<op::equal::NAMESPACE::Descriptor **>(desc_ptr),          \
             c_desc,                                                                   \
-            {a_desc, b_desc}) /* 注意：这里将两个输入打包成 vector 传入 */
+            {a_desc, b_desc}) 
 
     switch (handle->device) {
 
@@ -75,9 +75,9 @@ __C infiniStatus_t infiniopCreateEqualDescriptor(
 #undef CREATE
 }
 
-// =======================================================================
-// 2. GetWorkspaceSize 函数实现
-// =======================================================================
+
+
+
 __C infiniStatus_t infiniopGetEqualWorkspaceSize(infiniopEqualDescriptor_t desc, size_t *size) {
 
 #define GET(CASE, NAMESPACE)                                                                   \
@@ -118,16 +118,16 @@ __C infiniStatus_t infiniopGetEqualWorkspaceSize(infiniopEqualDescriptor_t desc,
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
-// =======================================================================
-// 3. Execute (Calculate) 函数实现
-// =======================================================================
+
+
+
 __C infiniStatus_t infiniopEqual(
     infiniopEqualDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
-    void *c,           // Output data
-    const void *a,     // Input A data
-    const void *b,     // Input B data
+    void *c,           
+    const void *a,     
+    const void *b,     
     void *stream) {
 
 #define CALCULATE(CASE, NAMESPACE)                                                    \
@@ -169,9 +169,9 @@ __C infiniStatus_t infiniopEqual(
 #undef CALCULATE
 }
 
-// =======================================================================
-// 4. Destroy 函数实现
-// =======================================================================
+
+
+
 __C infiniStatus_t
 infiniopDestroyEqualDescriptor(infiniopEqualDescriptor_t desc) {
 

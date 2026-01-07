@@ -36,4 +36,4 @@ void hardtanh_(Tensor output, Tensor input, float min_val, float max_val) {
     HardTanh::execute(output, input, min_val, max_val);
 }
 
-} // namespace infinicore::op
+} 

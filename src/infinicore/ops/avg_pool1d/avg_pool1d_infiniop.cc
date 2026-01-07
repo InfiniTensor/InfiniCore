@@ -66,4 +66,4 @@ static bool registered = []() {
     return true;
 }();
 
-} // namespace infinicore::op::avg_pool1d_impl::infiniop
+} 

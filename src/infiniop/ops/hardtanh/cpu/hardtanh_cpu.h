@@ -2,7 +2,7 @@
 #define __HARDTANH_CPU_H__
 
 #include "../../../elementwise/cpu/elementwise_cpu.h"
-#include <algorithm> // 用于 std::max 和 std::min
+#include <algorithm> 
 
 namespace op::hardtanh::cpu {
 
@@ -58,6 +58,6 @@ public:
     }
 } HardTanhOp;
 
-} // namespace op::hardtanh::cpu
+} 
 
-#endif // __HARDTANH_CPU_H__
+#endif 

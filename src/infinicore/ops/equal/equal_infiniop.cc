@@ -32,11 +32,16 @@ void calculate(Tensor out, Tensor a, Tensor b) {
 
     size_t workspace_size = 0;
     INFINICORE_CHECK_ERROR(infiniopGetEqualWorkspaceSize(desc, &workspace_size));
-    auto workspace = context::allocateMemory(workspace_size);
+    std::shared_ptr<Memory> workspace;
+    void *workspace_ptr = nullptr;
+    if (workspace_size != 0) {
+        workspace = context::allocateMemory(workspace_size);
+        workspace_ptr = workspace->data();
+    }
 
     INFINICORE_CHECK_ERROR(infiniopEqual(
         desc,
-        workspace->data(),
+        workspace_ptr,
         workspace_size,
         out->data(),
         a->data(),
@@ -49,4 +54,4 @@ static bool registered = []() {
     return true;
 }();
 
-} // namespace infinicore::op::equal_impl::infiniop
+} 

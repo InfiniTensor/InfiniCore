@@ -15,22 +15,22 @@ infiniStatus_t Descriptor::create(
 
     auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
     
-    // Equal 算子输出是 Bool/U8，我们需要知道输入是 Float 还是 Int 才能正确读取数据进行比较。
+    
     const auto &a_desc = input_desc_vec.at(0);
     const auto &b_desc = input_desc_vec.at(1);
     auto compute_dtype = a_desc->dtype(); 
     auto out_dtype = out_desc->dtype();
 
-    // 1. 校验两个输入类型必须一致 (例如 float vs float)
+    
     if (compute_dtype != b_desc->dtype()) {
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
 
-    // 2. 校验输出类型 (必须是布尔或整型)
-    // 根据底层支持，通常是 BOOL, U8, I8
+    
+    
     CHECK_DTYPE(out_dtype, INFINI_DTYPE_BOOL, INFINI_DTYPE_U8, INFINI_DTYPE_I8, INFINI_DTYPE_I32);
 
-    // 3. 校验输入类型 (支持常见的数值类型)
+    
     CHECK_DTYPE(compute_dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64, 
                 INFINI_DTYPE_BF16, INFINI_DTYPE_I32, INFINI_DTYPE_I64);
 
@@ -38,10 +38,10 @@ infiniStatus_t Descriptor::create(
     const auto &a_shape = a_desc->shape();
     const auto &b_shape = b_desc->shape();
 
-    // 4. 形状校验 (假设 Elementwise 框架要求形状一致或由框架处理广播)
+    
     CHECK_SAME_SHAPE(c_shape, a_shape, b_shape);
 
-    // 这样 _dtype 成员变量存的就是输入类型，方便在 calculate 中分发
+    
     CREATE_ELEMENTWISE_CPU_DESCRIPTOR(handle, compute_dtype, out_desc, input_desc_vec);
 
     return INFINI_STATUS_SUCCESS;
@@ -89,4 +89,4 @@ infiniStatus_t Descriptor::calculate(
 
     return INFINI_STATUS_SUCCESS;
 }
-} // namespace op::equal::cpu
+} 

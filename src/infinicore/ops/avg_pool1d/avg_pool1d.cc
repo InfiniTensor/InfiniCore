@@ -66,4 +66,4 @@ void avg_pool1d_(Tensor output, Tensor input, size_t kernel_size, size_t stride,
     AvgPool1d::execute(output, input, kernel_size, stride, padding);
 }
 
-} // namespace infinicore::op
+} 

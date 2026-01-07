@@ -23,7 +23,7 @@ __C infiniStatus_t infiniopCreateHardTanhDescriptor(
     float min_val,
     float max_val) {
 
-// 注意：这里的 CREATE 宏增加了 min_val 和 max_val 的传递
+
 #define CREATE(CASE, NAMESPACE)                                                 \
     case CASE:                                                                  \
         return op::hardtanh::NAMESPACE::Descriptor::create(                     \

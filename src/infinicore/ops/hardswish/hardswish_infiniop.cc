@@ -37,11 +37,16 @@ void calculate(Tensor output, Tensor input) {
 
     size_t workspace_size = 0;
     INFINICORE_CHECK_ERROR(infiniopGetHardSwishWorkspaceSize(desc, &workspace_size));
-    std::shared_ptr<Memory> workspace = context::allocateMemory(workspace_size);
+    std::shared_ptr<Memory> workspace;
+    void *workspace_ptr = nullptr;
+    if (workspace_size != 0) {
+        workspace = context::allocateMemory(workspace_size);
+        workspace_ptr = workspace->data();
+    }
 
     INFINICORE_CHECK_ERROR(infiniopHardSwish(
         desc,
-        workspace->data(),
+        workspace_ptr,
         workspace_size,
         output->data(),
         input->data(),
@@ -53,4 +58,4 @@ static bool registered = []() {
     return true;
 }();
 
-} // namespace infinicore::op::hardswish_impl::infiniop
+} 

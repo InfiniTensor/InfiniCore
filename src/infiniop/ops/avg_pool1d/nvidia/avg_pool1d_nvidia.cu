@@ -3,8 +3,8 @@
 #include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 #include "../cuda/kernel.cuh"
 
-// 1. 定义 Global Kernel 入口
-// 这层包装是为了把 device 函数暴露给 host 调用
+
+
 template <typename T>
 __global__ void avgPool1dGlobalKernel(
     T *y,
@@ -23,7 +23,7 @@ __global__ void avgPool1dGlobalKernel(
     ptrdiff_t x_stride_channel,
     ptrdiff_t x_stride_width) {
     
-    // 调用 kernel.cuh 中的 device 逻辑
+    
     avgPool1dKernel<T>(
         y, x, 
         batch, channels, in_width, out_width, 
@@ -35,7 +35,7 @@ __global__ void avgPool1dGlobalKernel(
 
 namespace op::avg_pool1d::nvidia {
 
-// 2. 定义 Opaque 结构 (持有 NVIDIA Handle)
+
 struct Descriptor::Opaque {
     std::shared_ptr<device::nvidia::Handle::Internal> internal;
 };
@@ -44,7 +44,7 @@ Descriptor::~Descriptor() {
     delete _opaque;
 }
 
-// 3. 实现 Create 函数
+
 infiniStatus_t Descriptor::create(
     infiniopHandle_t handle_,
     Descriptor **desc_ptr,
@@ -56,14 +56,14 @@ infiniStatus_t Descriptor::create(
 
     auto handle = reinterpret_cast<device::nvidia::Handle *>(handle_);
 
-    // 使用 Info 类进行参数校验和预计算
+    
     auto info = AvgPool1dInfo::createAvgPool1dInfo(y_desc, x_desc, kernel_size, stride, padding);
     CHECK_RESULT(info);
 
-    // 创建 Descriptor
+    
     *desc_ptr = new Descriptor(
         info.take(),
-        0, // workspace size
+        0, 
         new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
         handle->device,
         handle->device_id);
@@ -71,7 +71,7 @@ infiniStatus_t Descriptor::create(
     return INFINI_STATUS_SUCCESS;
 }
 
-// 4. 实现计算辅助函数
+
 template <typename T>
 infiniStatus_t calculateAvgPool1d(
     const AvgPool1dInfo &info,
@@ -80,17 +80,17 @@ infiniStatus_t calculateAvgPool1d(
     const T *x,
     cudaStream_t stream) {
 
-    // 计算总任务量: Batch * Channel * OutWidth 
+    
     size_t total_elements = info.batch * info.channels * info.out_width;
     
-    // 确定 Block 和 Grid 大小
+    
     int block_size = 256; 
     if (max_threads_per_block > 0 && max_threads_per_block < 256) {
         block_size = max_threads_per_block;
     }
     
-    // 简单的 1D Grid 策略，配合 kernel.cuh 里的 Grid-Stride Loop
-    // 限制 grid 大小以防过大，通常 65535 或根据 SM 数量调整即可
+    
+    
     size_t grid_size = (total_elements + block_size - 1) / block_size;
     if (grid_size > 65535) grid_size = 65535; 
 
@@ -105,7 +105,7 @@ infiniStatus_t calculateAvgPool1d(
     return INFINI_STATUS_SUCCESS;
 }
 
-// 5. 宏定义与类型分发
+
 #define CALCULATE(TDATA) \
     calculateAvgPool1d(_info, \
                        _opaque->internal->maxThreadsPerBlock(), \
@@ -136,4 +136,4 @@ infiniStatus_t Descriptor::calculate(
 
 #undef CALCULATE
 
-} // namespace op::avg_pool1d::nvidia
+} 
