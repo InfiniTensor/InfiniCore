@@ -7,6 +7,7 @@ from .rms_norm import rms_norm
 from .rope import RopeAlgo, rope
 from .silu import silu
 from .swiglu import swiglu
+from .linear_w8a8i8 import linear_w8a8i8
 
 __all__ = [
     "causal_softmax",
@@ -19,4 +20,5 @@ __all__ = [
     "rope",
     "silu",
     "swiglu",
+    "linear_w8a8i8",
 ]

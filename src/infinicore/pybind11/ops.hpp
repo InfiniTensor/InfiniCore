@@ -10,6 +10,7 @@
 #include "ops/flash_attention.hpp"
 #include "ops/kv_caching.hpp"
 #include "ops/linear.hpp"
+#include "ops/linear_w8a8i8.hpp"
 #include "ops/matmul.hpp"
 #include "ops/mul.hpp"
 #include "ops/paged_attention.hpp"
@@ -46,6 +47,7 @@ inline void bind(py::module &m) {
     bind_swiglu(m);
     bind_rope(m);
     bind_embedding(m);
+    bind_linear_w8a8i8(m);
 }
 
 } // namespace infinicore::ops
