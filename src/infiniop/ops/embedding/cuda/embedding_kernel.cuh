@@ -1,12 +1,7 @@
 #ifndef __EMBEDDING_CUDA_KERNEL_CUH__
 #define __EMBEDDING_CUDA_KERNEL_CUH__
 
-#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
-#include <cuda_fp16.h>
-#include <cuda_runtime.h>
 #include <type_traits>
-
-namespace op::embedding::nvidia {
 
 // Helper function to check memory alignment
 __forceinline__ __device__ bool is_aligned(const void *ptr, size_t alignment) {
@@ -117,62 +112,5 @@ __forceinline__ __device__ void copyScalar(
         dst[i] = __ldg(&src[i]);
     }
 }
-
-template <typename T, typename IndexType>
-INFINIOP_CUDA_KERNEL embeddingKernel(
-    T *__restrict__ output,
-    const IndexType *__restrict__ indices,
-    const T *__restrict__ weight,
-    size_t num_indices,
-    size_t embedding_dim,
-    size_t vocab_size) {
-    // Calculate global thread index
-    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-
-    if (idx < num_indices) {
-        // Get the index value
-        IndexType index_val = __ldg(&indices[idx]);
-
-        // Bounds check - handle negative indices gracefully
-        if (index_val >= 0 && static_cast<size_t>(index_val) < vocab_size) {
-            // Copy embedding vector from weight to output
-            const T *src = weight + static_cast<size_t>(index_val) * embedding_dim;
-            T *dst = output + idx * embedding_dim;
-
-            // Choose optimal copy strategy based on type and alignment
-            if constexpr (std::is_same_v<T, float>) {
-                // Check alignment for float4 (16 bytes)
-                bool aligned_16 = is_aligned(src, 16) && is_aligned(dst, 16);
-                if (aligned_16 && embedding_dim >= 4 && embedding_dim % 4 == 0) {
-                    copyVectorizedFloat4<IndexType>(dst, src, embedding_dim);
-                } else if (embedding_dim >= 2 && embedding_dim % 2 == 0) {
-                    // Try float2 if not aligned to 16 bytes
-                    copyVectorizedFloat2<IndexType>(dst, src, embedding_dim);
-                } else {
-                    copyScalar<T, IndexType>(dst, src, embedding_dim);
-                }
-            } else if constexpr (std::is_same_v<T, half>) {
-                // Use half2 for vectorized access
-                if (embedding_dim >= 2 && embedding_dim % 2 == 0) {
-                    copyVectorizedHalf2<IndexType>(dst, src, embedding_dim);
-                } else {
-                    copyScalar<T, IndexType>(dst, src, embedding_dim);
-                }
-            } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
-                // Use bfloat162 for vectorized access
-                if (embedding_dim >= 2 && embedding_dim % 2 == 0) {
-                    copyVectorizedBFloat162<IndexType>(dst, src, embedding_dim);
-                } else {
-                    copyScalar<T, IndexType>(dst, src, embedding_dim);
-                }
-            } else {
-                // Fallback to scalar copy with __ldg
-                copyScalar<T, IndexType>(dst, src, embedding_dim);
-            }
-        }
-    }
-}
-
-} // namespace op::embedding::nvidia
 
 #endif // __EMBEDDING_CUDA_KERNEL_CUH__

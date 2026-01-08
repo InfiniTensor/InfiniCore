@@ -1,13 +1,13 @@
 #include "../../../../utils.h"
-#include "../../../devices/nvidia/nvidia_common.cuh"
-#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
+#include "../../../devices/moore/moore_common.h"
+#include "../../../devices/moore/moore_kernel_common.h"
 #include "../../../tensor.h"
-#include "../cuda/embedding_kernel.cuh"
-#include "embedding_nvidia.cuh"
-#include <cuda_runtime.h>
+#include "embedding_moore_kernel.h"
+#include "embedding_moore.h"
+#include <musa_runtime.h>
 
 template <typename T, typename IndexType>
-INFINIOP_CUDA_KERNEL embeddingKernel(
+INFINIOP_MOORE_KERNEL embeddingKernel(
     T *__restrict__ output,
     const IndexType *__restrict__ indices,
     const T *__restrict__ weight,
@@ -18,8 +18,8 @@ INFINIOP_CUDA_KERNEL embeddingKernel(
     size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
 
     if (idx < num_indices) {
-        // Get the index value
-        IndexType index_val = __ldg(&indices[idx]);
+        // Get the index value with Moore-optimized memory access
+        IndexType index_val = indices[idx];
 
         // Bounds check - handle negative indices gracefully
         if (index_val >= 0 && static_cast<size_t>(index_val) < vocab_size) {
@@ -46,25 +46,25 @@ INFINIOP_CUDA_KERNEL embeddingKernel(
                 } else {
                     copyScalar<T, IndexType>(dst, src, embedding_dim);
                 }
-            } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
-                // Use bfloat162 for vectorized access
+            } else if constexpr (std::is_same_v<T, __mt_bfloat16>) {
+                // Use mt_bfloat162 for vectorized access (Moore-specific type)
                 if (embedding_dim >= 2 && embedding_dim % 2 == 0) {
                     copyVectorizedBFloat162<IndexType>(dst, src, embedding_dim);
                 } else {
                     copyScalar<T, IndexType>(dst, src, embedding_dim);
                 }
             } else {
-                // Fallback to scalar copy with __ldg
+                // Fallback to scalar copy with Moore-optimized memory access
                 copyScalar<T, IndexType>(dst, src, embedding_dim);
             }
         }
     }
 }
 
-namespace op::embedding::nvidia {
+namespace op::embedding::moore {
 
 struct Descriptor::Opaque {
-    std::shared_ptr<device::nvidia::Handle::Internal> internal;
+    std::shared_ptr<device::moore::Handle::Internal> internal;
 };
 
 Descriptor::~Descriptor() {
@@ -116,7 +116,7 @@ infiniStatus_t Descriptor::create(
         vocab_size,
         input_dtype,
         weight_dtype,
-        new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
+        new Opaque{reinterpret_cast<device::moore::Handle *>(handle)->internal()},
         handle->device,
         handle->device_id);
 
@@ -133,26 +133,28 @@ infiniStatus_t Descriptor::calculate(
         return INFINI_STATUS_SUCCESS;
     }
 
-    auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
+    auto musa_stream = reinterpret_cast<musaStream_t>(stream);
 
     // Dynamic block size optimization based on embedding_dim
-    // Smaller embedding_dim benefits from larger block size (better occupancy)
-    // Larger embedding_dim benefits from smaller block size (more registers per thread)
-    size_t block_size = 256; // Default
+    // Moore platform typically has different performance characteristics
+    size_t block_size = 256; // Default for Moore
     if (_embedding_dim <= 64) {
         block_size = 512; // Small embedding_dim: use larger block for better occupancy
     } else if (_embedding_dim >= 1024) {
         block_size = 128; // Large embedding_dim: use smaller block to reduce register pressure
+    } else if (_embedding_dim <= 256) {
+        block_size = 384; // Medium embedding_dim: balanced configuration
     }
 
     size_t grid_size = (_num_indices + block_size - 1) / block_size;
 
     // Launch kernel based on dtypes
+    // Note: Moore uses __mt_bfloat16 instead of __nv_bfloat16
     if (_input_dtype == INFINI_DTYPE_I32) {
         const int32_t *indices_ptr = reinterpret_cast<const int32_t *>(input);
 
         if (_weight_dtype == INFINI_DTYPE_F32) {
-            embeddingKernel<float, int32_t><<<grid_size, block_size, 0, cuda_stream>>>(
+            embeddingKernel<float, int32_t><<<grid_size, block_size, 0, musa_stream>>>(
                 reinterpret_cast<float *>(output),
                 indices_ptr,
                 reinterpret_cast<const float *>(weight),
@@ -160,7 +162,7 @@ infiniStatus_t Descriptor::calculate(
                 _embedding_dim,
                 _vocab_size);
         } else if (_weight_dtype == INFINI_DTYPE_F16) {
-            embeddingKernel<half, int32_t><<<grid_size, block_size, 0, cuda_stream>>>(
+            embeddingKernel<half, int32_t><<<grid_size, block_size, 0, musa_stream>>>(
                 reinterpret_cast<half *>(output),
                 indices_ptr,
                 reinterpret_cast<const half *>(weight),
@@ -168,10 +170,11 @@ infiniStatus_t Descriptor::calculate(
                 _embedding_dim,
                 _vocab_size);
         } else if (_weight_dtype == INFINI_DTYPE_BF16) {
-            embeddingKernel<cuda_bfloat16, int32_t><<<grid_size, block_size, 0, cuda_stream>>>(
-                reinterpret_cast<cuda_bfloat16 *>(output),
+            // Use Moore's bfloat16 type
+            embeddingKernel<__mt_bfloat16, int32_t><<<grid_size, block_size, 0, musa_stream>>>(
+                reinterpret_cast<__mt_bfloat16 *>(output),
                 indices_ptr,
-                reinterpret_cast<const cuda_bfloat16 *>(weight),
+                reinterpret_cast<const __mt_bfloat16 *>(weight),
                 _num_indices,
                 _embedding_dim,
                 _vocab_size);
@@ -182,7 +185,7 @@ infiniStatus_t Descriptor::calculate(
         const int64_t *indices_ptr = reinterpret_cast<const int64_t *>(input);
 
         if (_weight_dtype == INFINI_DTYPE_F32) {
-            embeddingKernel<float, int64_t><<<grid_size, block_size, 0, cuda_stream>>>(
+            embeddingKernel<float, int64_t><<<grid_size, block_size, 0, musa_stream>>>(
                 reinterpret_cast<float *>(output),
                 indices_ptr,
                 reinterpret_cast<const float *>(weight),
@@ -190,7 +193,7 @@ infiniStatus_t Descriptor::calculate(
                 _embedding_dim,
                 _vocab_size);
         } else if (_weight_dtype == INFINI_DTYPE_F16) {
-            embeddingKernel<half, int64_t><<<grid_size, block_size, 0, cuda_stream>>>(
+            embeddingKernel<half, int64_t><<<grid_size, block_size, 0, musa_stream>>>(
                 reinterpret_cast<half *>(output),
                 indices_ptr,
                 reinterpret_cast<const half *>(weight),
@@ -198,10 +201,10 @@ infiniStatus_t Descriptor::calculate(
                 _embedding_dim,
                 _vocab_size);
         } else if (_weight_dtype == INFINI_DTYPE_BF16) {
-            embeddingKernel<cuda_bfloat16, int64_t><<<grid_size, block_size, 0, cuda_stream>>>(
-                reinterpret_cast<cuda_bfloat16 *>(output),
+            embeddingKernel<__mt_bfloat16, int64_t><<<grid_size, block_size, 0, musa_stream>>>(
+                reinterpret_cast<__mt_bfloat16 *>(output),
                 indices_ptr,
-                reinterpret_cast<const cuda_bfloat16 *>(weight),
+                reinterpret_cast<const __mt_bfloat16 *>(weight),
                 _num_indices,
                 _embedding_dim,
                 _vocab_size);
@@ -213,12 +216,12 @@ infiniStatus_t Descriptor::calculate(
     }
 
     // Check for kernel launch errors
-    cudaError_t err = cudaGetLastError();
-    if (err != cudaSuccess) {
+    musaError_t err = musaGetLastError();
+    if (err != musaSuccess) {
         return INFINI_STATUS_INTERNAL_ERROR;
     }
 
     return INFINI_STATUS_SUCCESS;
 }
 
-} // namespace op::embedding::nvidia
+} // namespace op::embedding::moore
