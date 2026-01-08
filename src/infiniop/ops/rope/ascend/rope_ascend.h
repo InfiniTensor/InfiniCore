@@ -18,6 +18,7 @@ extern "C" infiniStatus_t rope_kernel_launch(
     ptrdiff_t y_stride_nhead,
     ptrdiff_t x_stride_seqlen,
     ptrdiff_t x_stride_nhead,
+    int32_t algo,
     void *stream);
 
 DESCRIPTOR(ascend)

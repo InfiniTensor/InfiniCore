@@ -1,3 +1,4 @@
+#include "../../../../../include/infiniop/ops/rope.h"
 #include "../../../devices/ascend/ascend_kernel_common.h"
 
 using namespace AscendC;
@@ -21,13 +22,15 @@ public:
                                 ptrdiff_t st_ynt,
                                 ptrdiff_t st_ynh,
                                 ptrdiff_t st_xnt,
-                                ptrdiff_t st_xnh);
+                                ptrdiff_t st_xnh,
+                                infiniopRoPEAlgo_t algo);
     __aicore__ inline void process(size_t seq_len);
 
 private:
     // Copy a tile into UB
     __aicore__ inline void copyIn(size_t i);
-    __aicore__ inline void compute(size_t i);
+    __aicore__ inline void computeGptJ(size_t i);
+    __aicore__ inline void computeNeox(size_t i);
     __aicore__ inline void copyOut(size_t i);
 
 private:
@@ -59,6 +62,8 @@ private:
     // stridex[_st_xnt, _st_xnh, 1]
     ptrdiff_t _st_xnt;
     ptrdiff_t _st_xnh;
+
+    infiniopRoPEAlgo_t _algo;
 };
 
 template <typename T, typename U>
@@ -71,14 +76,17 @@ __aicore__ inline void RoPEKernel<T, U>::init(GM_ADDR y,
                                               ptrdiff_t st_ynt,
                                               ptrdiff_t st_ynh,
                                               ptrdiff_t st_xnt,
-                                              ptrdiff_t st_xnh) {
+                                              ptrdiff_t st_xnh,
+                                              infiniopRoPEAlgo_t algo) {
     this->_tile_len = dh;
     this->_st_ynt = st_ynt;
     this->_st_ynh = st_ynh;
     this->_st_xnt = st_xnt;
     this->_st_xnh = st_xnh;
     _copy_len = alignTileLen<T>(dh, BYTE_ALIGN);
-    _half_copy_len = alignTileLen<T>(dh, BYTE_ALIGN);
+    _half_copy_len = alignTileLen<T>(dh / 2, BYTE_ALIGN);
+
+    _algo = algo;
 
     _block_idx = GetBlockIdx();
 
@@ -122,7 +130,7 @@ __aicore__ inline void RoPEKernel<T, U>::copyIn(size_t i) {
 }
 
 template <typename T, typename U>
-__aicore__ inline void RoPEKernel<T, U>::compute(size_t i) {
+__aicore__ inline void RoPEKernel<T, U>::computeGptJ(size_t i) {
     LocalTensor<T> input_ub = _in_que.DeQue<T>();
     LocalTensor<T> sin_ub = _sin_que.DeQue<T>();
     LocalTensor<T> cos_ub = _cos_que.DeQue<T>();
@@ -174,6 +182,39 @@ __aicore__ inline void RoPEKernel<T, U>::compute(size_t i) {
 }
 
 template <typename T, typename U>
+__aicore__ inline void RoPEKernel<T, U>::computeNeox(size_t i) {
+    LocalTensor<T> input_ub = _in_que.DeQue<T>();
+    LocalTensor<T> sin_ub = _sin_que.DeQue<T>();
+    LocalTensor<T> cos_ub = _cos_que.DeQue<T>();
+    LocalTensor<T> output_ub = _out_que.AllocTensor<T>();
+
+    // split input into two halves
+    LocalTensor<T> tmp_left = _tmp_odd_buf.Get<T>();
+    LocalTensor<T> tmp_right = _tmp_even_buf.Get<T>();
+
+    // compute first half
+    // y_first = x_first * cos - x_second * sin
+    Mul<T>(tmp_left, input_ub[0], cos_ub, _tile_len / 2);
+    Mul<T>(tmp_right, input_ub[_tile_len / 2], sin_ub, _tile_len / 2);
+    PipeBarrier<PIPE_V>();
+    Sub<T>(output_ub[0], tmp_left, tmp_right, _tile_len / 2);
+    PipeBarrier<PIPE_V>();
+
+    // compute second half
+    // y_second = x_first * sin + x_second * cos
+    Mul<T>(tmp_left, input_ub[0], sin_ub, _tile_len / 2);
+    Mul<T>(tmp_right, input_ub[_tile_len / 2], cos_ub, _tile_len / 2);
+    PipeBarrier<PIPE_V>();
+    Add<T>(output_ub[_tile_len / 2], tmp_left, tmp_right, _tile_len / 2);
+    PipeBarrier<PIPE_V>();
+
+    _out_que.EnQue<T>(output_ub);
+    _in_que.FreeTensor(input_ub);
+    _sin_que.FreeTensor(sin_ub);
+    _cos_que.FreeTensor(cos_ub);
+}
+
+template <typename T, typename U>
 __aicore__ inline void RoPEKernel<T, U>::copyOut(size_t i) {
     LocalTensor<T> output_ub = _out_que.DeQue<T>();
     auto idy = i * _st_ynt + _block_idx * _st_ynh;
@@ -184,17 +225,30 @@ __aicore__ inline void RoPEKernel<T, U>::copyOut(size_t i) {
 
 template <typename T, typename U>
 __aicore__ inline void RoPEKernel<T, U>::process(size_t seq_len) {
-
-    for (size_t i = 0; i < seq_len; ++i) {
-        copyIn(i);
-        compute(i);
-        copyOut(i);
+    switch (_algo) {
+    case INFINIOP_ROPE_ALGO_GPT_J:
+        for (size_t i = 0; i < seq_len; ++i) {
+            copyIn(i);
+            computeGptJ(i);
+            copyOut(i);
+        }
+        break;
+    case INFINIOP_ROPE_ALGO_GPT_NEOX:
+        for (size_t i = 0; i < seq_len; ++i) {
+            copyIn(i);
+            computeNeox(i);
+            copyOut(i);
+        }
+        break;
+    default:
+        break;
     }
 }
 
 #define ROPE_KERNEL_INIT_ARGS y, x, pos, sin, cos, dhead,      \
                               y_stride_seqlen, y_stride_nhead, \
-                              x_stride_seqlen, x_stride_nhead
+                              x_stride_seqlen, x_stride_nhead, \
+                              (infiniopRoPEAlgo_t)algo
 
 #define CASE_POSTYPE(POS_TYPE_ENUM, TYPE, POS_T) \
     case POS_TYPE_ENUM: {                        \
@@ -230,7 +284,8 @@ __aicore__ inline void RoPEKernel<T, U>::process(size_t seq_len) {
                                            ptrdiff_t y_stride_nhead,  \
                                            ptrdiff_t x_stride_seqlen, \
                                            ptrdiff_t x_stride_nhead,  \
-                                           int32_t pos_type) {        \
+                                           int32_t pos_type,          \
+                                           int32_t algo) {            \
         ROPE_KERNEL(TYPE, pos_type)                                   \
     }
 
@@ -257,6 +312,7 @@ extern "C" infiniStatus_t rope_kernel_launch(
     ptrdiff_t y_stride_nhead,
     ptrdiff_t x_stride_seqlen,
     ptrdiff_t x_stride_nhead,
+    int32_t algo,
     void *stream) {
 
 #define LAUNCH_ROPE_KERNEL(DTYPE_ENUM, KERNEL_NAME)                  \
@@ -268,7 +324,8 @@ extern "C" infiniStatus_t rope_kernel_launch(
                                                 y_stride_nhead,      \
                                                 x_stride_seqlen,     \
                                                 x_stride_nhead,      \
-                                                pos_type);           \
+                                                pos_type,            \
+                                                algo);               \
         return INFINI_STATUS_SUCCESS;
 
     switch (dtype) {

@@ -18,11 +18,6 @@ infiniStatus_t Descriptor::create(
     auto handle_ascned = reinterpret_cast<device::ascend::Handle *>(handle);
     auto result = RoPEInfo::createRoPEInfo(y_desc, x_desc, pos_desc, sin_desc, cos_desc, algo);
     CHECK_RESULT(result);
-
-    if (algo != INFINIOP_ROPE_ALGO_GPT_J) {
-        return INFINI_STATUS_NOT_IMPLEMENTED;
-    }
-
     size_t workspace_size = 0;
     *desc_ptr = new Descriptor(std::move(result.take()), workspace_size, nullptr, handle_ascned->device, handle_ascned->device_id);
     return INFINI_STATUS_SUCCESS;
@@ -47,9 +42,35 @@ infiniStatus_t Descriptor::calculate(
 
     auto y_stride_seqlen = _info.y_stride_seqlen;
     auto y_stride_nhead = _info.y_stride_nhead;
+    auto y_stride_batch = _info.y_stride_batch;
     auto x_stride_seqlen = _info.x_stride_seqlen;
     auto x_stride_nhead = _info.x_stride_nhead;
+    auto x_stride_batch = _info.x_stride_batch;
 
-    return rope_kernel_launch(y, (void *)x, (void *)pos_ids, (void *)sin_table, (void *)cos_table, seq_len, nhead, dhead, data_type, pos_type, y_stride_seqlen, y_stride_nhead, x_stride_seqlen, x_stride_nhead, stream);
+    for (size_t b = 0; b < _info.batch; ++b) {
+        auto y_offset = b * y_stride_batch;
+        auto x_offset = b * x_stride_batch;
+        infiniStatus_t status = rope_kernel_launch(
+            static_cast<void *>(static_cast<char *>(y) + y_offset * infiniSizeOf(data_type)),
+            (void *)(static_cast<const char *>(x) + x_offset * infiniSizeOf(data_type)),
+            (void *)(static_cast<const char *>(pos_ids) + (_info.pos_has_batch_dim ? b * seq_len * infiniSizeOf(pos_type) : 0)),
+            const_cast<void *>(sin_table),
+            const_cast<void *>(cos_table),
+            seq_len,
+            nhead,
+            dhead,
+            data_type,
+            pos_type,
+            y_stride_seqlen,
+            y_stride_nhead,
+            x_stride_seqlen,
+            x_stride_nhead,
+            _info.algo,
+            stream);
+        if (status != INFINI_STATUS_SUCCESS) {
+            return status;
+        }
+    }
+    return INFINI_STATUS_SUCCESS;
 }
 } // namespace op::rope::ascend

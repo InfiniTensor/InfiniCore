@@ -1,7 +1,6 @@
 #include "gemm_ascend.h"
 #include "../../../devices/ascend/common_ascend.h"
-#include <aclnnop/aclnn_matmul.h>
-#include <aclnnop/level2/aclnn_gemm.h>
+#include <aclnnop/aclnn_baddbmm.h>
 
 #include <cstring>
 #include <unordered_map>
@@ -29,7 +28,7 @@ struct Descriptor::Opaque {
     aclnnTensorDescriptor_t c, a, b;
     // cubeMathType
     // see doc:
-    // https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/80RC3alpha002/apiref/appdevgapi/context/aclnnBatchMatMul.md
+    // https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/800alpha003/apiref/aolapi/context/aclnnBaddbmm&aclnnInplaceBaddbmm.md
     int8_t mt;
     // alpha&beta hashmap
     std::unordered_map<std::pair<float, float>, aclOpExecutor *, FloatPairHash, FloatPairEqual> lookup;
@@ -58,23 +57,33 @@ infiniStatus_t Descriptor::create(
     auto handle = reinterpret_cast<device::ascend::Handle *>(handle_);
     auto dtype = c_desc->dtype();
 
-    if (dtype != INFINI_DTYPE_F16 && dtype != INFINI_DTYPE_F32) {
-        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_BF16);
+
+    // Cast to aclTensor
+    aclnnTensorDescriptor_t c, a, b;
+    if (c_desc->ndim() == 3) {
+        c = new aclnnTensorDescriptor(c_desc);
+        a = new aclnnTensorDescriptor(a_desc);
+        b = new aclnnTensorDescriptor(b_desc);
+    } else if (c_desc->ndim() == 2) {
+        c = new aclnnTensorDescriptor(
+            toAclDataType(c_desc->dtype()),
+            {1, static_cast<int64_t>(c_desc->dim(0)), static_cast<int64_t>(c_desc->dim(1))},
+            {0, static_cast<int64_t>(c_desc->stride(0)), static_cast<int64_t>(c_desc->stride(1))},
+            nullptr);
+        a = new aclnnTensorDescriptor(
+            toAclDataType(a_desc->dtype()),
+            {1, static_cast<int64_t>(a_desc->dim(0)), static_cast<int64_t>(a_desc->dim(1))},
+            {0, static_cast<int64_t>(a_desc->stride(0)), static_cast<int64_t>(a_desc->stride(1))},
+            nullptr);
+        b = new aclnnTensorDescriptor(
+            toAclDataType(b_desc->dtype()),
+            {1, static_cast<int64_t>(b_desc->dim(0)), static_cast<int64_t>(b_desc->dim(1))},
+            {0, static_cast<int64_t>(b_desc->stride(0)), static_cast<int64_t>(b_desc->stride(1))},
+            nullptr);
+    } else {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
     }
-
-    auto result = MatmulInfo::create(c_desc, a_desc, b_desc, MatrixLayout::ROW_MAJOR);
-    CHECK_RESULT(result);
-    auto info = result.take();
-
-    auto c = new aclnnTensorDescriptor(toAclDataType(c_desc->dtype()),
-                                       {static_cast<int64_t>(info.m), static_cast<int64_t>(info.n)},
-                                       {info.c_matrix.row_stride, info.c_matrix.col_stride});
-    auto a = new aclnnTensorDescriptor(toAclDataType(a_desc->dtype()),
-                                       {static_cast<int64_t>(info.a_matrix.rows), static_cast<int64_t>(info.a_matrix.cols)},
-                                       {info.a_matrix.row_stride, info.a_matrix.col_stride});
-    auto b = new aclnnTensorDescriptor(toAclDataType(b_desc->dtype()),
-                                       {static_cast<int64_t>(info.b_matrix.rows), static_cast<int64_t>(info.b_matrix.cols)},
-                                       {info.b_matrix.row_stride, info.b_matrix.col_stride});
 
     auto tc = c->tensor,
          ta = a->tensor,
@@ -84,15 +93,17 @@ infiniStatus_t Descriptor::create(
     aclOpExecutor *executor = nullptr;
     size_t workspace_size = 0;
     int8_t mt = 1;
-    CHECK_ACL(aclnnGemmGetWorkspaceSize(ta, tb, tc, 1., 0., 0, 0, tc, mt, &workspace_size, &executor));
+    float alpha_val = 0.5f;
+    float beta_val = 0.5f;
+    aclScalar *alpha = aclCreateScalar(&alpha_val, aclDataType::ACL_FLOAT);
+    aclScalar *beta = aclCreateScalar(&beta_val, aclDataType::ACL_FLOAT);
+    // CHECK_ACL(aclnnInplaceBaddbmmGetWorkspaceSize(tc, ta, tb, beta, alpha, mt, &workspace_size, &executor));
+    CHECK_ACL(aclnnBaddbmmGetWorkspaceSize(tc, ta, tb, beta, alpha, tc, mt, &workspace_size, &executor));
     CHECK_ACL(aclSetAclOpExecutorRepeatable(executor));
-    lookup[std::make_pair(1.0f, 0.0f)] = executor;
-    CHECK_ACL(aclnnGemmGetWorkspaceSize(ta, tb, tc, 1., 1., 0, 0, tc, mt, &workspace_size, &executor));
-    CHECK_ACL(aclSetAclOpExecutorRepeatable(executor));
-    lookup[std::make_pair(1.0f, 1.0f)] = executor;
+    lookup[std::make_pair(alpha_val, beta_val)] = executor;
 
     *desc_ptr = new Descriptor(
-        dtype, info, workspace_size,
+        dtype, workspace_size,
         new Opaque{
             c,
             a,
@@ -124,9 +135,10 @@ infiniStatus_t Descriptor::calculate(
     if (_opaque->lookup.find(key) != _opaque->lookup.end()) {
         executor = _opaque->lookup[key];
     } else {
-        CHECK_ACL(aclnnGemmGetWorkspaceSize(
-            ta, tb, tc, alpha, beta, 0, 0, tc, _opaque->mt,
-            &workspace_size, &executor));
+        aclScalar *alpha_ = aclCreateScalar(&alpha, aclDataType::ACL_FLOAT);
+        aclScalar *beta_ = aclCreateScalar(&beta, aclDataType::ACL_FLOAT);
+        // CHECK_ACL(aclnnInplaceBaddbmmGetWorkspaceSize(tc, ta, tb, beta_, alpha_, _opaque->mt, &workspace_size, &executor));
+        CHECK_ACL(aclnnBaddbmmGetWorkspaceSize(tc, ta, tb, beta_, alpha_, tc, _opaque->mt, &workspace_size, &executor));
         CHECK_ACL(aclSetAclOpExecutorRepeatable(executor));
         _opaque->lookup[key] = executor;
     }
@@ -135,16 +147,12 @@ infiniStatus_t Descriptor::calculate(
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
 
-    auto unit = infiniSizeOf(_dtype);
-    for (size_t i = 0; i < _info.batch; ++i) {
-        AclSetTensorAddr(executor, 0, ta, ((char *)a) + i * _info.a_matrix.stride * unit);
-        AclSetTensorAddr(executor, 1, tb, ((char *)b) + i * _info.b_matrix.stride * unit);
-        AclSetTensorAddr(executor, 2, tc, ((char *)c) + i * _info.c_matrix.stride * unit);
-        AclSetTensorAddr(executor, 3, tc, ((char *)c) + i * _info.c_matrix.stride * unit);
-        CHECK_ACL(aclnnGemm(workspace, workspace_size, executor, stream));
-    }
+    CHECK_ACL(aclSetTensorAddr(executor, 0, tc, c));
+    CHECK_ACL(aclSetTensorAddr(executor, 1, ta, (void *)a));
+    CHECK_ACL(aclSetTensorAddr(executor, 2, tb, (void *)b));
+    CHECK_ACL(aclSetTensorAddr(executor, 3, tc, (void *)c));
+    CHECK_ACL(aclnnBaddbmm(workspace, workspace_size, executor, stream));
 
     return INFINI_STATUS_SUCCESS;
 }
-
 } // namespace op::gemm::ascend
