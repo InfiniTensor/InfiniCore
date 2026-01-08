@@ -22,7 +22,7 @@
 #include "kunlun/avg_pool1d_kunlun.h"
 #endif
 #ifdef ENABLE_MOORE_API
-// #include "moore/avg_pool1d_moore.h"
+#include "moore/avg_pool1d_moore.h"
 #endif
 
 
@@ -65,7 +65,7 @@ __C infiniStatus_t infiniopCreateAvgPool1dDescriptor(
         CREATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
 #ifdef ENABLE_MOORE_API
-        // CREATE(INFINI_DEVICE_MOORE, moore);
+        CREATE(INFINI_DEVICE_MOORE, moore);
 #endif
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, metax);
@@ -113,7 +113,7 @@ __C infiniStatus_t infiniopGetAvgPool1dWorkspaceSize(infiniopAvgPool1dDescriptor
         GET(INFINI_DEVICE_HYGON, nvidia);
 #endif
 #ifdef ENABLE_MOORE_API
-        // GET(INFINI_DEVICE_MOORE, moore);
+        GET(INFINI_DEVICE_MOORE, moore);
 #endif
 #ifdef ENABLE_METAX_API
         GET(INFINI_DEVICE_METAX, metax);
@@ -167,7 +167,7 @@ __C infiniStatus_t infiniopAvgPool1d(
         CALCULATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
 #ifdef ENABLE_MOORE_API
-        // CALCULATE(INFINI_DEVICE_MOORE, moore);
+        CALCULATE(INFINI_DEVICE_MOORE, moore);
 #endif
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, metax);
@@ -216,7 +216,7 @@ infiniopDestroyAvgPool1dDescriptor(infiniopAvgPool1dDescriptor_t desc) {
         DELETE(INFINI_DEVICE_HYGON, nvidia);
 #endif
 #ifdef ENABLE_MOORE_API
-        // DELETE(INFINI_DEVICE_MOORE, moore);
+        DELETE(INFINI_DEVICE_MOORE, moore);
 #endif
 #ifdef ENABLE_METAX_API
         DELETE(INFINI_DEVICE_METAX, metax);

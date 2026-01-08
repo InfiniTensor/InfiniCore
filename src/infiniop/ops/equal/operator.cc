@@ -19,7 +19,7 @@
 #include "bang/equal_bang.h"
 #endif
 #ifdef ENABLE_MOORE_API
-// #include "moore/equal_moore.h"
+#include "moore/equal_moore.h"
 #endif
 
 
@@ -65,7 +65,7 @@ __C infiniStatus_t infiniopCreateEqualDescriptor(
         CREATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
 #ifdef ENABLE_MOORE_API
-        // CREATE(INFINI_DEVICE_MOORE, moore);
+        CREATE(INFINI_DEVICE_MOORE, moore);
 #endif
 
     default:
@@ -108,7 +108,7 @@ __C infiniStatus_t infiniopGetEqualWorkspaceSize(infiniopEqualDescriptor_t desc,
         GET(INFINI_DEVICE_CAMBRICON, bang);
 #endif
 #ifdef ENABLE_MOORE_API
-        // GET(INFINI_DEVICE_MOORE, moore);
+        GET(INFINI_DEVICE_MOORE, moore);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -159,7 +159,7 @@ __C infiniStatus_t infiniopEqual(
         CALCULATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
 #ifdef ENABLE_MOORE_API
-        // CALCULATE(INFINI_DEVICE_MOORE, moore);
+        CALCULATE(INFINI_DEVICE_MOORE, moore);
 #endif
 
     default:
@@ -204,7 +204,7 @@ infiniopDestroyEqualDescriptor(infiniopEqualDescriptor_t desc) {
         DELETE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
 #ifdef ENABLE_MOORE_API
-        // DELETE(INFINI_DEVICE_MOORE, moore);
+        DELETE(INFINI_DEVICE_MOORE, moore);
 #endif
 
     default:
