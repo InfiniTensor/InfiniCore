@@ -8,6 +8,12 @@
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/embedding_nvidia.cuh"
 #endif
+#ifdef ENABLE_METAX_API
+#include "metax/embedding_metax.cuh"
+#endif
+#ifdef ENABLE_MOORE_API
+#include "moore/embedding_moore.h"
+#endif
 
 __C infiniStatus_t infiniopCreateEmbeddingDescriptor(
     infiniopHandle_t handle,
@@ -30,17 +36,23 @@ __C infiniStatus_t infiniopCreateEmbeddingDescriptor(
 #ifdef ENABLE_CPU_API
         CREATE(INFINI_DEVICE_CPU, cpu);
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
+#ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
-#if defined(ENABLE_ILUVATAR_API)
+#ifdef ENABLE_ILUVATAR_API
         CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
-#if defined(ENABLE_QY_API)
+#ifdef ENABLE_QY_API
         CREATE(INFINI_DEVICE_QY, nvidia);
 #endif
-#if defined(ENABLE_HYGON_API)
+#ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore);
 #endif
 
     default:
@@ -67,17 +79,23 @@ __C infiniStatus_t infiniopEmbedding(
 #ifdef ENABLE_CPU_API
         CALCULATE(INFINI_DEVICE_CPU, cpu);
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
+#ifdef ENABLE_NVIDIA_API
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
-#if defined(ENABLE_ILUVATAR_API)
+#ifdef ENABLE_ILUVATAR_API
         CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
-#if defined(ENABLE_QY_API)
+#ifdef ENABLE_QY_API
         CALCULATE(INFINI_DEVICE_QY, nvidia);
 #endif
-#if defined(ENABLE_HYGON_API)
+#ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore);
 #endif
 
     default:
@@ -89,30 +107,39 @@ __C infiniStatus_t infiniopEmbedding(
 
 __C infiniStatus_t infiniopDestroyEmbeddingDescriptor(infiniopEmbeddingDescriptor_t desc) {
 
-#define DELETE(CASE, NAMESPACE)                                                      \
+#define DESTROY(CASE, NAMESPACE)                                                     \
     case CASE:                                                                       \
         delete reinterpret_cast<const op::embedding::NAMESPACE::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS;
 
     switch (desc->device_type) {
 #ifdef ENABLE_CPU_API
-        DELETE(INFINI_DEVICE_CPU, cpu);
+        DESTROY(INFINI_DEVICE_CPU, cpu);
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
-        DELETE(INFINI_DEVICE_NVIDIA, nvidia);
+#ifdef ENABLE_NVIDIA_API
+        DESTROY(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
-#if defined(ENABLE_ILUVATAR_API)
-        DELETE(INFINI_DEVICE_ILUVATAR, nvidia);
+#ifdef ENABLE_ILUVATAR_API
+        DESTROY(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
-#if defined(ENABLE_QY_API)
-        DELETE(INFINI_DEVICE_QY, nvidia);
+#ifdef ENABLE_QY_API
+        DESTROY(INFINI_DEVICE_QY, nvidia);
 #endif
-#if defined(ENABLE_HYGON_API)
-        DELETE(INFINI_DEVICE_HYGON, nvidia);
+#ifdef ENABLE_HYGON_API
+        DESTROY(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        DESTROY(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MOORE_API
+        DESTROY(INFINI_DEVICE_MOORE, moore);
+#endif
+
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
 
-#undef DELETE
+#undef DESTROY
 
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
