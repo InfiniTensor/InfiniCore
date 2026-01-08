@@ -1,13 +1,12 @@
 #include "../../../../utils.h"
-#include "../../../devices/nvidia/nvidia_common.cuh"
-#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
+#include "../../../devices/metax/metax_common.h"
+#include "../../../devices/metax/metax_kernel_common.h"
 #include "../../../tensor.h"
 #include "../cuda/embedding_kernel.cuh"
-#include "embedding_nvidia.cuh"
-#include <cuda_runtime.h>
+#include "embedding_metax.cuh"
 
 template <typename T, typename IndexType>
-INFINIOP_CUDA_KERNEL embeddingKernel(
+INFINIOP_METAX_KERNEL embeddingKernel(
     T *__restrict__ output,
     const IndexType *__restrict__ indices,
     const T *__restrict__ weight,
@@ -61,10 +60,10 @@ INFINIOP_CUDA_KERNEL embeddingKernel(
     }
 }
 
-namespace op::embedding::nvidia {
+namespace op::embedding::metax {
 
 struct Descriptor::Opaque {
-    std::shared_ptr<device::nvidia::Handle::Internal> internal;
+    std::shared_ptr<device::metax::Handle::Internal> internal;
 };
 
 Descriptor::~Descriptor() {
@@ -99,7 +98,8 @@ infiniStatus_t Descriptor::create(
     auto weight_dtype = weight_desc->dtype();
     CHECK_OR_RETURN(input_dtype == INFINI_DTYPE_I32 || input_dtype == INFINI_DTYPE_I64,
                     INFINI_STATUS_BAD_TENSOR_DTYPE);
-    CHECK_OR_RETURN(weight_dtype == INFINI_DTYPE_F32 || weight_dtype == INFINI_DTYPE_F16 || weight_dtype == INFINI_DTYPE_BF16, INFINI_STATUS_BAD_TENSOR_DTYPE);
+    CHECK_OR_RETURN(weight_dtype == INFINI_DTYPE_F32 || weight_dtype == INFINI_DTYPE_F16 || 
+                    weight_dtype == INFINI_DTYPE_BF16, INFINI_STATUS_BAD_TENSOR_DTYPE);
     CHECK_OR_RETURN(output_desc->dtype() == weight_dtype, INFINI_STATUS_BAD_TENSOR_DTYPE);
 
     // Calculate number of indices (supporting batch dimension)
@@ -116,7 +116,7 @@ infiniStatus_t Descriptor::create(
         vocab_size,
         input_dtype,
         weight_dtype,
-        new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
+        new Opaque{reinterpret_cast<device::metax::Handle *>(handle)->internal()},
         handle->device,
         handle->device_id);
 
@@ -133,12 +133,10 @@ infiniStatus_t Descriptor::calculate(
         return INFINI_STATUS_SUCCESS;
     }
 
-    auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
+    auto hc_stream = reinterpret_cast<hcStream_t>(stream);
 
-    // Dynamic block size optimization based on embedding_dim
-    // Smaller embedding_dim benefits from larger block size (better occupancy)
-    // Larger embedding_dim benefits from smaller block size (more registers per thread)
-    size_t block_size = 256; // Default
+    // Dynamic block size optimization based on embedding_dim for Metax platform
+    size_t block_size = 256; // Default block size for Metax
     if (_embedding_dim <= 64) {
         block_size = 512; // Small embedding_dim: use larger block for better occupancy
     } else if (_embedding_dim >= 1024) {
@@ -147,12 +145,12 @@ infiniStatus_t Descriptor::calculate(
 
     size_t grid_size = (_num_indices + block_size - 1) / block_size;
 
-    // Launch kernel based on dtypes
+    // Launch kernel based on dtypes for Metax platform
     if (_input_dtype == INFINI_DTYPE_I32) {
         const int32_t *indices_ptr = reinterpret_cast<const int32_t *>(input);
 
         if (_weight_dtype == INFINI_DTYPE_F32) {
-            embeddingKernel<float, int32_t><<<grid_size, block_size, 0, cuda_stream>>>(
+            embeddingKernel<float, int32_t><<<grid_size, block_size, 0, hc_stream>>>(
                 reinterpret_cast<float *>(output),
                 indices_ptr,
                 reinterpret_cast<const float *>(weight),
@@ -160,7 +158,7 @@ infiniStatus_t Descriptor::calculate(
                 _embedding_dim,
                 _vocab_size);
         } else if (_weight_dtype == INFINI_DTYPE_F16) {
-            embeddingKernel<half, int32_t><<<grid_size, block_size, 0, cuda_stream>>>(
+            embeddingKernel<half, int32_t><<<grid_size, block_size, 0, hc_stream>>>(
                 reinterpret_cast<half *>(output),
                 indices_ptr,
                 reinterpret_cast<const half *>(weight),
@@ -168,10 +166,11 @@ infiniStatus_t Descriptor::calculate(
                 _embedding_dim,
                 _vocab_size);
         } else if (_weight_dtype == INFINI_DTYPE_BF16) {
-            embeddingKernel<cuda_bfloat16, int32_t><<<grid_size, block_size, 0, cuda_stream>>>(
-                reinterpret_cast<cuda_bfloat16 *>(output),
+            // Use Metax's bfloat16 type
+            embeddingKernel<__hpcc_bfloat16, int32_t><<<grid_size, block_size, 0, hc_stream>>>(
+                reinterpret_cast<__hpcc_bfloat16 *>(output),
                 indices_ptr,
-                reinterpret_cast<const cuda_bfloat16 *>(weight),
+                reinterpret_cast<const __hpcc_bfloat16 *>(weight),
                 _num_indices,
                 _embedding_dim,
                 _vocab_size);
@@ -182,7 +181,7 @@ infiniStatus_t Descriptor::calculate(
         const int64_t *indices_ptr = reinterpret_cast<const int64_t *>(input);
 
         if (_weight_dtype == INFINI_DTYPE_F32) {
-            embeddingKernel<float, int64_t><<<grid_size, block_size, 0, cuda_stream>>>(
+            embeddingKernel<float, int64_t><<<grid_size, block_size, 0, hc_stream>>>(
                 reinterpret_cast<float *>(output),
                 indices_ptr,
                 reinterpret_cast<const float *>(weight),
@@ -190,7 +189,7 @@ infiniStatus_t Descriptor::calculate(
                 _embedding_dim,
                 _vocab_size);
         } else if (_weight_dtype == INFINI_DTYPE_F16) {
-            embeddingKernel<half, int64_t><<<grid_size, block_size, 0, cuda_stream>>>(
+            embeddingKernel<half, int64_t><<<grid_size, block_size, 0, hc_stream>>>(
                 reinterpret_cast<half *>(output),
                 indices_ptr,
                 reinterpret_cast<const half *>(weight),
@@ -198,10 +197,10 @@ infiniStatus_t Descriptor::calculate(
                 _embedding_dim,
                 _vocab_size);
         } else if (_weight_dtype == INFINI_DTYPE_BF16) {
-            embeddingKernel<cuda_bfloat16, int64_t><<<grid_size, block_size, 0, cuda_stream>>>(
-                reinterpret_cast<cuda_bfloat16 *>(output),
+            embeddingKernel<__hpcc_bfloat16, int64_t><<<grid_size, block_size, 0, hc_stream>>>(
+                reinterpret_cast<__hpcc_bfloat16 *>(output),
                 indices_ptr,
-                reinterpret_cast<const cuda_bfloat16 *>(weight),
+                reinterpret_cast<const __hpcc_bfloat16 *>(weight),
                 _num_indices,
                 _embedding_dim,
                 _vocab_size);
@@ -212,13 +211,7 @@ infiniStatus_t Descriptor::calculate(
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
 
-    // Check for kernel launch errors
-    cudaError_t err = cudaGetLastError();
-    if (err != cudaSuccess) {
-        return INFINI_STATUS_INTERNAL_ERROR;
-    }
-
     return INFINI_STATUS_SUCCESS;
 }
 
-} // namespace op::embedding::nvidia
+} // namespace op::embedding::metax
