@@ -42,6 +42,8 @@ from infinicore.dtype import (
 from infinicore.ops.add import add
 from infinicore.ops.add_rms_norm import add_rms_norm, add_rms_norm_
 from infinicore.ops.attention import attention
+from infinicore.ops.logaddexp2 import logaddexp2
+from infinicore.ops.logaddexp import logaddexp
 from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
@@ -109,6 +111,8 @@ __all__ = [
     "add_rms_norm",
     "add_rms_norm_",
     "attention",
+    "logaddexp",
+    "logaddexp2",
     "matmul",
     "mul",
     "narrow",

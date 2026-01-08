@@ -70,9 +70,8 @@ class OpTest(BaseOperatorTest):
     def torch_operator(self, *args, **kwargs):
         return torch.nn.functional.triplet_margin_with_distance_loss(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
-    #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.nn.functional.triplet_margin_with_distance_loss(*args, **kwargs)
+    def infinicore_operator(self, *args, **kwargs):
+         return infinicore.nn.functional.triplet_margin_with_distance_loss(*args, **kwargs)
 
 
 def main():
