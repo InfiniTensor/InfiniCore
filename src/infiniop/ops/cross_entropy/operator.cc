@@ -12,7 +12,9 @@
 #include "nvidia/cross_entropy_nvidia.cuh"
 #endif
 
-
+#ifdef ENABLE_MOORE_API
+#include "moore/cross_entropy_moore.h"
+#endif
 
 
 __C infiniStatus_t infiniopCreateCrossEntropyDescriptor(
@@ -46,6 +48,9 @@ __C infiniStatus_t infiniopCreateCrossEntropyDescriptor(
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia)
 #endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore)
+#endif
         default:
             return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -78,6 +83,9 @@ __C infiniStatus_t infiniopGetCrossEntropyWorkspaceSize(
 #endif
 #ifdef ENABLE_HYGON_API
         GET(INFINI_DEVICE_HYGON, nvidia)
+#endif
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, moore)
 #endif
         default:
             return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -118,6 +126,9 @@ __C infiniStatus_t infiniopCrossEntropy(
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia)
 #endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore)
+#endif
         default:
             return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -150,6 +161,9 @@ __C infiniStatus_t infiniopDestroyCrossEntropyDescriptor(
 #endif
 #ifdef ENABLE_HYGON_API
         DESTROY(INFINI_DEVICE_HYGON, nvidia)
+#endif
+#ifdef ENABLE_MOORE_API
+        DESTROY(INFINI_DEVICE_MOORE, moore)
 #endif
         default:
             return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

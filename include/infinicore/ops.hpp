@@ -3,6 +3,7 @@
 #include "ops/add.hpp"
 #include "ops/attention.hpp"
 #include "ops/causal_softmax.hpp"
+#include "ops/cross_entropy.hpp"
 #include "ops/matmul.hpp"
 #include "ops/ones.hpp"
 #include "ops/paged_attention.hpp"
