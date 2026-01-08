@@ -13,6 +13,8 @@
 namespace device::kunlun::kernel {
 
 #define SM_SIZE 40960
+#define MAX_CLUSTERS 255 // P800
+#define MAX_BLOCK_SIZE 64
 
 /**
  * @brief Define ptrdiff_t and size_t for kunlun xpu
