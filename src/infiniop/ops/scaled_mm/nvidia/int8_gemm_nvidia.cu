@@ -1,3 +1,4 @@
+#ifdef ENABLE_CUTLASS_API
 #include "../../../devices/nvidia/nvidia_handle.cuh"
 #include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 #include "int8_gemm_kernel.cuh"
@@ -113,3 +114,4 @@ infiniStatus_t Descriptor::calculate(
     return INFINI_STATUS_SUCCESS;
 }
 } // namespace op::i8gemm::nvidia
+#endif

@@ -43,6 +43,7 @@ class OperatorResult:
     stdout: str = ""
     stderr: str = ""
     timing: TestTiming = field(default_factory=TestTiming)
+    saved_file: str = ""  # Path to the saved report file
 
     @property
     def status_icon(self):
@@ -119,9 +120,9 @@ class TestSummary:
     #  Part 2: Console Output (View)
     # =========================================================
 
-    def list_tests(self, discoverer):
-        ops_dir = discoverer.ops_dir
-        operators = discoverer.get_available_operators()
+    def list_tests(self, collector):
+        ops_dir = collector.ops_dir
+        operators = collector.get_available_operators()
 
         if operators:
             print(f"Available operator test files in {ops_dir}:")
@@ -130,7 +131,7 @@ class TestSummary:
             print(f"\nTotal: {len(operators)} operators")
         else:
             print(f"No valid operator tests found in {ops_dir}")
-            raw_files = discoverer.get_raw_python_files()
+            raw_files = collector.get_raw_python_files()
             if raw_files:
                 print(
                     f"\n💡 Debug Hint: Found Python files but they are not valid tests:"
@@ -262,11 +263,12 @@ class TestSummary:
     def save_report(self, save_path):
         """
         Delegates the actual writing to save_json_report.
+        Returns the actual file path that was saved (with timestamp).
         """
         if not self.report_entries:
-            return
-        # Call the external utility
-        save_json_report(save_path, self.report_entries)
+            return None
+        # Call the external utility and get the actual saved path
+        return save_json_report(save_path, self.report_entries)
 
     def _prepare_entry_logic(self, op_name, test_cases, args, op_paths, results_list):
         """

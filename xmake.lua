@@ -66,6 +66,16 @@ if has_config("cudnn") then
     add_defines("ENABLE_CUDNN_API")
 end
 
+option("cutlass")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Whether to compile cutlass for Nvidia GPU")
+option_end()
+
+if has_config("cutlass") then 
+    add_defines("ENABLE_CUTLASS_API")
+end
+
 option("cuda_arch")
     set_showmenu(true)
     set_description("Set CUDA GPU architecture (e.g. sm_90)")

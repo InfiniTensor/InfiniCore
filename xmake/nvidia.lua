@@ -55,7 +55,7 @@ target("infiniop-nvidia")
         end
     end
 
-    add_cuflags("-Xcompiler=-Wno-error=deprecated-declarations")
+    add_cuflags("-Xcompiler=-Wno-error=deprecated-declarations", "-Xcompiler=-Wno-error=unused-function")
 
     local arch_opt = get_config("cuda_arch")
     if arch_opt and type(arch_opt) == "string" then

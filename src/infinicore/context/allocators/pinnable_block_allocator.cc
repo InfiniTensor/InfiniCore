@@ -19,11 +19,16 @@ inline size_t align_up(size_t size, size_t alignment) {
 PinnableBlockAllocator::PinnableBlockAllocator(Device device)
     : device_(device) {
     size_classes_ = {
+        {32 * 1024, {}},         // 32 KB
         {256 * 1024, {}},        // 256 KB
         {1 * 1024 * 1024, {}},   // 1 MB
+        {2 * 1024 * 1024, {}},   // 2 MB
         {4 * 1024 * 1024, {}},   // 4 MB
+        {8 * 1024 * 1024, {}},   // 8 MB
         {16 * 1024 * 1024, {}},  // 16 MB
+        {32 * 1024 * 1024, {}},  // 32 MB
         {64 * 1024 * 1024, {}},  // 64 MB
+        {128 * 1024 * 1024, {}}, // 128 MB
         {256 * 1024 * 1024, {}}, // 256 MB
     };
 }

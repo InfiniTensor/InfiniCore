@@ -18,7 +18,13 @@ def capture_output():
 
 
 class TestExecutor:
-    def execute(self, file_path) -> OperatorResult:
+    def execute(self, file_path, test_args) -> OperatorResult:
+        """
+        Execute a test file dynamically.
+        Args:
+            file_path (Path): Path to the python test file.
+            test_args (argparse.Namespace): Arguments to pass to the runner. Must be provided.
+        """
         result = OperatorResult(name=file_path.stem)
 
         try:
@@ -36,7 +42,7 @@ class TestExecutor:
 
             test_instance = test_class()
             runner_class = module.GenericTestRunner
-            runner = runner_class(test_instance.__class__)
+            runner = runner_class(test_instance.__class__, args=test_args)
 
             # 4. Execute and capture output
             with capture_output() as (out, err):
@@ -52,6 +58,9 @@ class TestExecutor:
 
             test_summary = TestSummary()
             test_summary.process_operator_result(result, test_results)
+
+            # Store saved report file if available
+            result.saved_file = runner.saved_file
 
         except Exception as e:
             result.success = False

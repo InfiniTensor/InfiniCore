@@ -7,6 +7,9 @@ def save_json_report(save_path, total_results):
     """
     Saves the report list to a JSON file with specific custom formatting
     (Compact for short lines, Expanded for long lines).
+
+    Returns:
+        str: The actual file path that was saved (with timestamp), or None if failed.
     """
     directory, filename = os.path.split(save_path)
     name, ext = os.path.splitext(filename)
@@ -85,11 +88,13 @@ def save_json_report(save_path, total_results):
                 f.write(f"{I4}{close_entry}\n")
             f.write("]\n")
         print(f"   ✅ Saved.")
+        return final_path
     except Exception as e:
         import traceback
 
         traceback.print_exc()
         print(f"   ❌ Save failed: {e}")
+        return None
 
 
 def _write_field(f, key, value, indent, sub_indent, close_comma=""):
