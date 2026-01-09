@@ -22,15 +22,15 @@ from libinfiniop import (
 # ==============================================================================
 #  Reference Implementation
 # ==============================================================================
-def ref_paged_caching(key, value, key_cache_pool, value_cache_pool, slot_mapping):
+def ref_paged_caching(key_cache_pool, value_cache_pool, key, value, slot_mapping):
     """
     Reference implementation for paged_caching operator.
 
     Args:
-        key (torch.Tensor): Keys, shape [ntok, nkvh, dh]
-        value (torch.Tensor): Values, shape [ntok, nkvh, dh]
         key_cache_pool (torch.Tensor): K cache pool, shape [num_blocks, nkvh, block_size, dh]
         value_cache_pool (torch.Tensor): V cache pool, shape [num_blocks, nkvh, block_size, dh]
+        key (torch.Tensor): Keys, shape [ntok, nkvh, dh]
+        value (torch.Tensor): Values, shape [ntok, nkvh, dh]
         slot_mapping (torch.Tensor): Slot mapping, shape [ntok]
     """
     ntok = key.shape[0]
@@ -71,9 +71,9 @@ _TENSOR_DTYPES = [InfiniDtype.BF16, InfiniDtype.F16, InfiniDtype.F32]
 
 # Tolerance map for different data types
 _TOLERANCE_MAP = {
-    InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-2},
-    InfiniDtype.BF16: {"atol": 5e-3, "rtol": 5e-2},
-    InfiniDtype.F32: {"atol": 1e-5, "rtol": 1e-5},
+    InfiniDtype.F16: {"atol": 0, "rtol": 1e-5},
+    InfiniDtype.BF16: {"atol": 0, "rtol": 1e-5},
+    InfiniDtype.F32: {"atol": 0, "rtol": 1e-5},
 }
 
 # Global flags for controlling test behavior
@@ -123,9 +123,9 @@ def test(
         current_slot += length.item()
 
     # Ensure we don't exceed the total number of slots in the cache
-    assert (
-        current_slot <= num_blocks * block_size
-    ), "Not enough blocks in the cache pool for this test case"
+    assert current_slot <= num_blocks * block_size, (
+        "Not enough blocks in the cache pool for this test case"
+    )
 
     slot_mapping_torch = torch.tensor(slot_mapping_list, dtype=torch.int64)
 
@@ -144,10 +144,10 @@ def test(
 
     # Run reference implementation
     k_cache_ref, v_cache_ref = ref_paged_caching(
-        k.torch_tensor(),
-        v.torch_tensor(),
         k_cache_pool.torch_tensor(),
         v_cache_pool.torch_tensor(),
+        k.torch_tensor(),
+        v.torch_tensor(),
         slot_mapping.torch_tensor(),
     )
 
@@ -160,10 +160,10 @@ def test(
         LIBINFINIOP.infiniopCreatePagedCachingDescriptor(
             handle,
             ctypes.byref(descriptor),
-            k.descriptor,
-            v.descriptor,
             k_cache_pool.descriptor,
             v_cache_pool.descriptor,
+            k.descriptor,
+            v.descriptor,
             slot_mapping.descriptor,
         )
     )
@@ -191,10 +191,10 @@ def test(
                 descriptor,
                 workspace.data(),
                 workspace_size.value,
-                k.data(),
-                v.data(),
                 k_cache_pool.data(),
                 v_cache_pool.data(),
+                k.data(),
+                v.data(),
                 slot_mapping.data(),
                 None,
             )

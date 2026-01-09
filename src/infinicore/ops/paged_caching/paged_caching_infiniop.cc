@@ -15,8 +15,8 @@ thread_local common::OpCache<size_t, infiniopPagedCachingDescriptor_t> caches(
         }
     });
 
-void calculate(Tensor k, Tensor v, Tensor k_cache, Tensor v_cache, Tensor slot_mapping) {
-    size_t seed = hash_combine(k, v, k_cache, v_cache, slot_mapping);
+void calculate(Tensor k_cache, Tensor v_cache, Tensor k, Tensor v, Tensor slot_mapping) {
+    size_t seed = hash_combine(k_cache, v_cache, k, v, slot_mapping);
 
     auto device = context::getDevice();
     auto &cache = caches.getCache(device);
@@ -27,7 +27,7 @@ void calculate(Tensor k, Tensor v, Tensor k_cache, Tensor v_cache, Tensor slot_m
     if (!desc_opt) {
         INFINICORE_CHECK_ERROR(infiniopCreatePagedCachingDescriptor(
             context::getInfiniopHandle(device), &desc,
-            k->desc(), v->desc(), k_cache->desc(), v_cache->desc(), slot_mapping->desc()));
+            k_cache->desc(), v_cache->desc(), k->desc(), v->desc(), slot_mapping->desc()));
         cache.put(seed, desc);
     } else {
         desc = *desc_opt;
@@ -39,7 +39,7 @@ void calculate(Tensor k, Tensor v, Tensor k_cache, Tensor v_cache, Tensor slot_m
 
     INFINICORE_CHECK_ERROR(infiniopPagedCaching(
         desc, workspace->data(), workspace_size,
-        k->data(), v->data(), k_cache->data(), v_cache->data(), slot_mapping->data(), context::getStream()));
+        k_cache->data(), v_cache->data(), k->data(), v->data(), slot_mapping->data(), context::getStream()));
 }
 
 static bool registered = []() {

@@ -25,6 +25,7 @@ _TEST_CASES_DATA = [
     (4, 40, 40, 128, 16, 1024, False),
     (6, 40, 40, 128, 16, 1024, False),
     (3, 8, 8, 128, 16, 1024, False),
+    (3, 8, 8, 64, 16, 1024, False),
     (8, 64, 8, 128, 16, 2048, False),
 ]
 
@@ -67,8 +68,6 @@ def parse_test_cases():
         block_tables = torch.arange(
             0, num_seqs * max_blocks_per_seq, dtype=torch.int64
         ).view(num_seqs, max_blocks_per_seq)
-
-        print("block_tables.shape", block_tables.shape, block_tables)
 
         q_shape = (num_seqs, num_heads, head_size)
         k_cache_shape = (num_blocks, num_kv_heads, block_size, head_size)

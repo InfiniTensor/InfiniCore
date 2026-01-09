@@ -80,7 +80,7 @@ class SimpleCacheManager:
         return torch.tensor(slots, dtype=torch.int32)
 
 
-def ref_paged_caching(k_new, v_new, k_pool, v_pool, slots, block_size):
+def ref_paged_caching(k_pool, v_pool, k_new, v_new, slots, block_size):
     """Reference implementation for incremental caching."""
     for i in range(k_new.shape[0]):
         slot = slots[i].item()
@@ -152,10 +152,10 @@ def test(
         def torch_caching():
             nonlocal k_pool_ref, v_pool_ref
             return ref_paged_caching(
-                k_in.torch_tensor(),
-                v_in.torch_tensor(),
                 k_pool_ref,
                 v_pool_ref,
+                k_in.torch_tensor(),
+                v_in.torch_tensor(),
                 slots_torch,
                 block_size,
             )
@@ -168,10 +168,10 @@ def test(
             LIBINFINIOP.infiniopCreatePagedCachingDescriptor(
                 handle,
                 ctypes.byref(descriptor),
-                k_in.descriptor,
-                v_in.descriptor,
                 k_cache_pool.descriptor,
                 v_cache_pool.descriptor,
+                k_in.descriptor,
+                v_in.descriptor,
                 slot_mapping.descriptor,
             )
         )
@@ -190,10 +190,10 @@ def test(
                     descriptor,
                     workspace.data(),
                     workspace_size.value,
-                    k_in.data(),
-                    v_in.data(),
                     k_cache_pool.data(),
                     v_cache_pool.data(),
+                    k_in.data(),
+                    v_in.data(),
                     slot_mapping.data(),
                     None,
                 )

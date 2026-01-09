@@ -28,9 +28,9 @@ _TEST_CASES_DATA = [
 
 # Tolerance configuration
 _TOLERANCE_MAP = {
-    infinicore.float16: {"atol": 0, "rtol": 1e-2},
-    infinicore.float32: {"atol": 1e-4, "rtol": 1e-3},
-    infinicore.bfloat16: {"atol": 0, "rtol": 5e-2},
+    infinicore.float16: {"atol": 0, "rtol": 1e-5},
+    infinicore.float32: {"atol": 0, "rtol": 1e-5},
+    infinicore.bfloat16: {"atol": 0, "rtol": 1e-5},
 }
 
 # Data types to test
@@ -40,15 +40,15 @@ _TENSOR_DTYPES = [infinicore.float16, infinicore.bfloat16, infinicore.float32]
 # ==============================================================================
 #  Reference Implementation
 # ==============================================================================
-def ref_paged_caching(key, value, key_cache_pool, value_cache_pool, slot_mapping):
+def ref_paged_caching(key_cache_pool, value_cache_pool, key, value, slot_mapping):
     """
     Reference implementation for paged_caching operator.
 
     Args:
-        key (torch.Tensor): Keys, shape [ntok, nkvh, dh]
-        value (torch.Tensor): Values, shape [ntok, nkvh, dh]
         key_cache_pool (torch.Tensor): K cache pool, shape [num_blocks, nkvh, block_size, dh]
         value_cache_pool (torch.Tensor): V cache pool, shape [num_blocks, nkvh, block_size, dh]
+        key (torch.Tensor): Keys, shape [ntok, nkvh, dh]
+        value (torch.Tensor): Values, shape [ntok, nkvh, dh]
         slot_mapping (torch.Tensor): Slot mapping, shape [ntok]
     """
     ntok = key.shape[0]
@@ -56,8 +56,8 @@ def ref_paged_caching(key, value, key_cache_pool, value_cache_pool, slot_mapping
 
     # This reference implementation operates on a cloned cache to avoid modifying the original input tensor,
     # mimicking the behavior where the custom operator writes to its output tensor.
-    k_cache_ref = key_cache_pool.clone()
-    v_cache_ref = value_cache_pool.clone()
+    k_cache_ref = key_cache_pool
+    v_cache_ref = value_cache_pool
 
     for i in range(ntok):
         slot = slot_mapping[i].item()
@@ -98,9 +98,9 @@ def parse_test_cases():
             current_slot += length.item()
 
         # Ensure we don't exceed the total number of slots in the cache
-        assert (
-            current_slot <= num_blocks * block_size
-        ), "Not enough blocks in the cache pool for this test case"
+        assert current_slot <= num_blocks * block_size, (
+            "Not enough blocks in the cache pool for this test case"
+        )
 
         slot_mapping = torch.tensor(slot_mapping_list, dtype=torch.int64)
 
@@ -119,8 +119,12 @@ def parse_test_cases():
             # Create typed tensor specs
             k_spec = TensorSpec.from_tensor(k_shape, None, dtype)
             v_spec = TensorSpec.from_tensor(v_shape, None, dtype)
-            k_cache_spec = TensorSpec.from_tensor(k_cache_shape, None, dtype)
-            v_cache_spec = TensorSpec.from_tensor(v_cache_shape, None, dtype)
+            k_cache_spec = TensorSpec.from_tensor(
+                k_cache_shape, None, dtype, init_mode=TensorInitializer.ZEROS
+            )
+            v_cache_spec = TensorSpec.from_tensor(
+                v_cache_shape, None, dtype, init_mode=TensorInitializer.ZEROS
+            )
             slot_mapping_spec = TensorSpec.from_tensor(
                 slot_mapping_shape,
                 init_mode=TensorInitializer.MANUAL,
@@ -132,10 +136,10 @@ def parse_test_cases():
             test_cases.append(
                 TestCase(
                     inputs=[
-                        k_spec,
-                        v_spec,
                         k_cache_spec,
                         v_cache_spec,
+                        k_spec,
+                        v_spec,
                         slot_mapping_spec,
                     ],
                     kwargs=None,

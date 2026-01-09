@@ -28,10 +28,10 @@ public:
     ptrdiff_t v_cache_block_stride;
 
     static utils::Result<PagedCachingInfo> create(
-        infiniopTensorDescriptor_t k_desc,
-        infiniopTensorDescriptor_t v_desc,
         infiniopTensorDescriptor_t k_cache_desc,
         infiniopTensorDescriptor_t v_cache_desc,
+        infiniopTensorDescriptor_t k_desc,
+        infiniopTensorDescriptor_t v_desc,
         infiniopTensorDescriptor_t slot_mapping_desc) {
 
         auto dtype = k_desc->dtype();

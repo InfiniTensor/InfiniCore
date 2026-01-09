@@ -1066,10 +1066,10 @@ def paged_caching_(lib):
     lib.infiniopCreatePagedCachingDescriptor.argtypes = [
         infiniopHandle_t,
         POINTER(infiniopOperatorDescriptor_t),
-        infiniopTensorDescriptor_t,  # k_desc
-        infiniopTensorDescriptor_t,  # v_desc
         infiniopTensorDescriptor_t,  # k_cache_desc
         infiniopTensorDescriptor_t,  # v_cache_desc
+        infiniopTensorDescriptor_t,  # k_desc
+        infiniopTensorDescriptor_t,  # v_desc
         infiniopTensorDescriptor_t,  # slot_mapping_desc
     ]
 
@@ -1086,10 +1086,10 @@ def paged_caching_(lib):
         infiniopOperatorDescriptor_t,
         c_void_p,  # workspace
         c_size_t,  # workspace_size
-        c_void_p,  # k
-        c_void_p,  # v
         c_void_p,  # k_cache
         c_void_p,  # v_cache
+        c_void_p,  # k
+        c_void_p,  # v
         c_void_p,  # slot_mapping
         c_void_p,  # stream
     ]
