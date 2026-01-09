@@ -2,8 +2,13 @@
 #define __HARDSWISH_CUDA_H__
 
 #include <cmath>
+#if defined(__MACACC__)
+#include <maca_fp16.h>
+#include <maca_bfloat16.h>
+#else
 #include <cuda_fp16.h>
 #include <cuda_bf16.h>
+#endif
 
 namespace op::hardswish::cuda {
 
