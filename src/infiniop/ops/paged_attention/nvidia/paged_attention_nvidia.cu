@@ -98,36 +98,48 @@ infiniStatus_t Descriptor::calculate(
     const void *block_tables, const void *seq_lens, const void *alibi_slopes,
     void *stream_) const {
     cudaStream_t stream = (cudaStream_t)stream_;
+
+#define LAUNCH_HEADSIZE_BLOCKSIZE(__H_SIZE, __B_SIZE)                                    \
+    launchKernel<__H_SIZE, __B_SIZE>(                                                    \
+        out, q, k_cache, v_cache, _info.dtype, block_tables, seq_lens, alibi_slopes,     \
+        _info.num_heads, _info.num_seqs,                                                 \
+        _info.num_kv_heads, _info.scale, _info.max_num_blocks_per_seq, _info.block_size, \
+        _info.q_stride, _info.kv_block_stride, _info.kv_head_stride, _info.o_stride,     \
+        stream);
+
+#define SWITCH_HEAD_SIZE(__B_SIZE)               \
+    switch (_info.head_size) {                   \
+    case 16:                                     \
+        LAUNCH_HEADSIZE_BLOCKSIZE(16, __B_SIZE)  \
+        break;                                   \
+    case 32:                                     \
+        LAUNCH_HEADSIZE_BLOCKSIZE(32, __B_SIZE)  \
+        break;                                   \
+    case 64:                                     \
+        LAUNCH_HEADSIZE_BLOCKSIZE(64, __B_SIZE)  \
+        break;                                   \
+    case 128:                                    \
+        LAUNCH_HEADSIZE_BLOCKSIZE(128, __B_SIZE) \
+        break;                                   \
+    case 256:                                    \
+        LAUNCH_HEADSIZE_BLOCKSIZE(256, __B_SIZE) \
+        break;                                   \
+    default:                                     \
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;   \
+    }
+
     if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_1024) {
-        if (_info.head_size == 128) {
-            launchKernel<128, CUDA_BLOCK_SIZE_1024>(
-                out, q, k_cache, v_cache, _info.dtype, block_tables, seq_lens, alibi_slopes,
-                _info.num_heads, _info.num_seqs,
-                _info.num_kv_heads, _info.scale, _info.max_num_blocks_per_seq, _info.block_size,
-                _info.q_stride, _info.kv_block_stride, _info.kv_head_stride, _info.o_stride,
-                stream);
-        }
+        SWITCH_HEAD_SIZE(CUDA_BLOCK_SIZE_1024)
     } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_512) {
-        if (_info.head_size == 128) {
-            launchKernel<128, CUDA_BLOCK_SIZE_512>(
-                out, q, k_cache, v_cache, _info.dtype, block_tables, seq_lens, alibi_slopes,
-                _info.num_heads, _info.num_seqs,
-                _info.num_kv_heads, _info.scale, _info.max_num_blocks_per_seq, _info.block_size,
-                _info.q_stride, _info.kv_block_stride, _info.kv_head_stride, _info.o_stride,
-                stream);
-        }
+        SWITCH_HEAD_SIZE(CUDA_BLOCK_SIZE_512)
     } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_4096) {
-        if (_info.head_size == 128) {
-            launchKernel<128, CUDA_BLOCK_SIZE_4096>(
-                out, q, k_cache, v_cache, _info.dtype, block_tables, seq_lens, alibi_slopes,
-                _info.num_heads, _info.num_seqs,
-                _info.num_kv_heads, _info.scale, _info.max_num_blocks_per_seq, _info.block_size,
-                _info.q_stride, _info.kv_block_stride, _info.kv_head_stride, _info.o_stride,
-                stream);
-        }
+        SWITCH_HEAD_SIZE(CUDA_BLOCK_SIZE_4096)
     } else {
         return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
     }
+
+#undef LAUNCH_HEADSIZE_BLOCKSIZE
+#undef SWITCH_HEAD_SIZE
 
     return INFINI_STATUS_SUCCESS;
 }

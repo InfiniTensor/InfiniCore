@@ -32,16 +32,16 @@
         static infiniStatus_t create(                            \
             infiniopHandle_t handle,                             \
             Descriptor **desc_ptr,                               \
-            infiniopTensorDescriptor_t k_desc,                   \
-            infiniopTensorDescriptor_t v_desc,                   \
             infiniopTensorDescriptor_t k_cache_desc,             \
             infiniopTensorDescriptor_t v_cache_desc,             \
+            infiniopTensorDescriptor_t k_desc,                   \
+            infiniopTensorDescriptor_t v_desc,                   \
             infiniopTensorDescriptor_t slot_mapping_desc);       \
                                                                  \
         infiniStatus_t calculate(                                \
             void *workspace, size_t workspace_size,              \
-            const void *k, const void *v,                        \
             void *k_cache, void *v_cache,                        \
+            const void *k, const void *v,                        \
             const void *slot_mapping,                            \
             void *stream) const;                                 \
     };                                                           \

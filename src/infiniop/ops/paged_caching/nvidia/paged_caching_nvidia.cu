@@ -31,13 +31,13 @@ Descriptor::~Descriptor() {
 infiniStatus_t Descriptor::create(
     infiniopHandle_t handle,
     Descriptor **desc_ptr,
-    infiniopTensorDescriptor_t k_desc,
-    infiniopTensorDescriptor_t v_desc,
     infiniopTensorDescriptor_t k_cache_desc,
     infiniopTensorDescriptor_t v_cache_desc,
+    infiniopTensorDescriptor_t k_desc,
+    infiniopTensorDescriptor_t v_desc,
     infiniopTensorDescriptor_t slot_mapping_desc) {
 
-    auto info = PagedCachingInfo::create(k_desc, v_desc, k_cache_desc, v_cache_desc, slot_mapping_desc);
+    auto info = PagedCachingInfo::create(k_cache_desc, v_cache_desc, k_desc, v_desc, slot_mapping_desc);
     CHECK_RESULT(info);
 
     // Create and return the Descriptor instance.
@@ -121,8 +121,8 @@ infiniStatus_t launchKernel(const PagedCachingInfo &info,
 // Execution method implementation
 infiniStatus_t Descriptor::calculate(
     void *workspace, size_t workspace_size,
-    const void *k, const void *v,
     void *k_cache, void *v_cache,
+    const void *k, const void *v,
     const void *slot_mapping,
     void *stream_) const {
 

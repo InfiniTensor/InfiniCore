@@ -5,17 +5,17 @@
 #ifdef ENABLE_NVIDIA_API
 #include "nvidia/paged_caching_nvidia.cuh"
 #endif
-#ifdef ENABLE_METAX_API
-#include "metax/paged_caching_metax.h"
-#endif
+// #ifdef ENABLE_METAX_API
+// #include "metax/paged_caching_metax.h"
+// #endif
 
 __C infiniStatus_t infiniopCreatePagedCachingDescriptor(
     infiniopHandle_t handle,
     infiniopPagedCachingDescriptor_t *desc_ptr,
-    infiniopTensorDescriptor_t k_desc,
-    infiniopTensorDescriptor_t v_desc,
     infiniopTensorDescriptor_t k_cache_desc,
     infiniopTensorDescriptor_t v_cache_desc,
+    infiniopTensorDescriptor_t k_desc,
+    infiniopTensorDescriptor_t v_desc,
     infiniopTensorDescriptor_t slot_mapping_desc) {
 
 #define CREATE(CASE, NAMESPACE)                                                      \
@@ -23,17 +23,18 @@ __C infiniStatus_t infiniopCreatePagedCachingDescriptor(
         return op::paged_caching::NAMESPACE::Descriptor::create(                     \
             handle,                                                                  \
             reinterpret_cast<op::paged_caching::NAMESPACE::Descriptor **>(desc_ptr), \
-            k_desc, v_desc, k_cache_desc, v_cache_desc, slot_mapping_desc);
+            k_cache_desc, v_cache_desc, k_desc, v_desc, slot_mapping_desc);
 
     switch (handle->device) {
 #ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-#ifdef ENABLE_METAX_API
-        CREATE(INFINI_DEVICE_METAX, metax)
-#endif
+    // #ifdef ENABLE_METAX_API
+    //         CREATE(INFINI_DEVICE_METAX, metax)
+    // #endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
 __C infiniStatus_t infiniopGetPagedCachingWorkspaceSize(
@@ -49,35 +50,37 @@ __C infiniStatus_t infiniopGetPagedCachingWorkspaceSize(
 #ifdef ENABLE_NVIDIA_API
         GET(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-#ifdef ENABLE_METAX_API
-        GET(INFINI_DEVICE_METAX, metax)
-#endif
+    // #ifdef ENABLE_METAX_API
+    //         GET(INFINI_DEVICE_METAX, metax)
+    // #endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
 __C infiniStatus_t infiniopPagedCaching(
     infiniopPagedCachingDescriptor_t desc,
     void *workspace, size_t workspace_size,
-    const void *k, const void *v,
     void *k_cache, void *v_cache,
+    const void *k, const void *v,
     const void *slot_mapping,
     void *stream) {
 
 #define CALCULATE(CASE, NAMESPACE)                                                            \
     case CASE:                                                                                \
         return reinterpret_cast<op::paged_caching::NAMESPACE::Descriptor *>(desc)->calculate( \
-            workspace, workspace_size, k, v, k_cache, v_cache, slot_mapping, stream);
+            workspace, workspace_size, k_cache, v_cache, k, v, slot_mapping, stream);
 
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-#ifdef ENABLE_METAX_API
-        CALCULATE(INFINI_DEVICE_METAX, metax)
-#endif
+    // #ifdef ENABLE_METAX_API
+    //         CALCULATE(INFINI_DEVICE_METAX, metax)
+    // #endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
 __C infiniStatus_t infiniopDestroyPagedCachingDescriptor(
@@ -92,9 +95,10 @@ __C infiniStatus_t infiniopDestroyPagedCachingDescriptor(
 #ifdef ENABLE_NVIDIA_API
         DESTROY(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-#ifdef ENABLE_METAX_API
-        DESTROY(INFINI_DEVICE_METAX, metax)
-#endif
+    // #ifdef ENABLE_METAX_API
+    //         DESTROY(INFINI_DEVICE_METAX, metax)
+    // #endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }

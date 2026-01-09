@@ -14,20 +14,20 @@ typedef struct InfiniopDescriptor *infiniopPagedCachingDescriptor_t;
  *
  * @param handle The handle to the InfiniOP library context.
  * @param desc_ptr A pointer to store the created descriptor.
- * @param k_desc Descriptor for the source key tensor.
- * @param v_desc Descriptor for the source value tensor.
  * @param k_cache_desc Descriptor for the key cache pool tensor.
  * @param v_cache_desc Descriptor for the value cache pool tensor.
+ * @param k_desc Descriptor for the source key tensor.
+ * @param v_desc Descriptor for the source value tensor.
  * @param slot_mapping_desc Descriptor for the slot mapping tensor.
  * @return infiniStatus_t Status code of the operation.
  */
 __C __export infiniStatus_t infiniopCreatePagedCachingDescriptor(
     infiniopHandle_t handle,
     infiniopPagedCachingDescriptor_t *desc_ptr,
-    infiniopTensorDescriptor_t k_desc,
-    infiniopTensorDescriptor_t v_desc,
     infiniopTensorDescriptor_t k_cache_desc,
     infiniopTensorDescriptor_t v_cache_desc,
+    infiniopTensorDescriptor_t k_desc,
+    infiniopTensorDescriptor_t v_desc,
     infiniopTensorDescriptor_t slot_mapping_desc);
 
 /**
@@ -46,10 +46,10 @@ __C __export infiniStatus_t infiniopGetPagedCachingWorkspaceSize(
  * @param desc The Paged Caching descriptor.
  * @param workspace Pointer to the workspace memory.
  * @param workspace_size The size of the workspace.
- * @param k Pointer to the source key tensor data.
- * @param v Pointer to the source value tensor data.
  * @param k_cache Pointer to the key cache pool data.
  * @param v_cache Pointer to the value cache pool data.
+ * @param k Pointer to the source key tensor data.
+ * @param v Pointer to the source value tensor data.
  * @param slot_mapping Pointer to the slot mapping data.
  * @param stream The CUDA stream for the operation. Can be NULL.
  * @return infiniStatus_t Status code of the operation.
@@ -58,10 +58,10 @@ __C __export infiniStatus_t infiniopPagedCaching(
     infiniopPagedCachingDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
-    const void *k,
-    const void *v,
     void *k_cache,
     void *v_cache,
+    const void *k,
+    const void *v,
     const void *slot_mapping,
     void *stream);
 

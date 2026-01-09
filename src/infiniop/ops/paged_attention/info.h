@@ -67,11 +67,9 @@ public:
         size_t num_heads = q_shape[1];
         size_t head_size = q_shape[2];
 
-        if (head_size != 128) {
-            // 输出具体的错误原因和当前的参数值
-            std::cerr << "[Error] Now only supports head_size = 128, but got "
+        if (head_size != 16 && head_size != 32 && head_size != 64 && head_size != 128 && head_size != 256) {
+            std::cerr << "[Error] Now only supports head_size = 16/32/64/128/256, but got "
                       << head_size << "." << std::endl;
-            // 建议返回 SHAPE 相关的错误码
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
 
