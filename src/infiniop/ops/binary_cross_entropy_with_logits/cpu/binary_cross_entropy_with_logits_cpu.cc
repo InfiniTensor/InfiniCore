@@ -105,10 +105,15 @@ void calculate_bce(
             w = utils::cast<float>(w_ptr[weight_offset]);
         }
 
-        // 数值稳定的 BCE 计算
-        float loss = (std::max(x, 0.0f) - x * y * pw + 
-                     (1.0f + (pw - 1.0f) * y) * std::log(1.0f + std::exp(-std::abs(x))));
-        
+        // 数值稳定的 BCEWithLogits 计算（对齐 PyTorch 实现）：
+        // max_val = max(-x, 0)
+        // log_weight = 1 + (pos_weight - 1) * y
+        // loss = (1 - y) * x + log_weight * (log(1 + exp(-|x|)) + max_val)
+        float max_val = std::max(-x, 0.0f);
+        float log_weight = 1.0f + (pw - 1.0f) * y;
+        float loss = (1.0f - y) * x +
+                 log_weight * (std::log1p(std::exp(-std::abs(x))) + max_val);
+
         loss *= w;
 
         if (info.reduction == INFINIOP_REDUCTION_NONE) {
