@@ -4,7 +4,7 @@ from .structs import (
     infiniopOperatorDescriptor_t,
 )
 
-from ctypes import c_int32, c_void_p, c_size_t, POINTER, c_float
+from ctypes import c_int32, c_void_p, c_size_t, POINTER, c_float, c_uint32
 
 
 class OpRegister:
@@ -363,7 +363,6 @@ def repetition_penalty_(lib):
         infiniopHandle_t,
         POINTER(infiniopOperatorDescriptor_t),
         infiniopTensorDescriptor_t,
-        infiniopTensorDescriptor_t,
     ]
 
     lib.infiniopGetRepetitionPenaltyWorkspaceSize.restype = c_int32
@@ -378,8 +377,10 @@ def repetition_penalty_(lib):
         c_void_p,
         c_size_t,
         c_void_p,
-        c_void_p,
         POINTER(c_float),
+        POINTER(c_uint32),
+        POINTER(c_size_t),
+        c_size_t,  # total_indices
         c_void_p,
     ]
 

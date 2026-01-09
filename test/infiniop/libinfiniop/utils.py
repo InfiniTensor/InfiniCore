@@ -149,6 +149,8 @@ def to_torch_dtype(dt: InfiniDtype, compatability_mode=False):
         return torch.int64
     elif dt == InfiniDtype.U8:
         return torch.uint8
+    elif dt == InfiniDtype.BOOL:
+        return torch.bool
     elif dt == InfiniDtype.F16:
         return torch.float16
     elif dt == InfiniDtype.BF16:
@@ -186,6 +188,8 @@ def to_numpy_dtype(dt: InfiniDtype, compatability_mode=False):
         return np.uint32 if not compatability_mode else np.int32
     elif dt == InfiniDtype.U64:
         return np.uint64 if not compatability_mode else np.int64
+    elif dt == InfiniDtype.BOOL:
+        return np.bool_
     elif dt == InfiniDtype.F16:
         return np.float16
     elif dt == InfiniDtype.BF16:

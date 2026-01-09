@@ -3,6 +3,7 @@
 
 #include "../../operator.h"
 #include "info.h"
+#include <stdint.h>
 
 #define DESCRIPTOR(NAMESPACE)                                     \
                                                                     \
@@ -31,8 +32,7 @@
         static infiniStatus_t create(                               \
             infiniopHandle_t handle,                                \
             Descriptor **desc_ptr,                                  \
-            infiniopTensorDescriptor_t logits_desc,                \
-            infiniopTensorDescriptor_t mask_desc);                  \
+            infiniopTensorDescriptor_t logits_desc);                \
                                                                     \
         size_t minWorkspaceSize() const;                            \
                                                                     \
@@ -40,8 +40,10 @@
             void *workspace,                                        \
             size_t workspace_size,                                  \
             void *logits,                                           \
-            const void *mask,                                       \
             const float *repetition_penalties,                      \
+            const uint32_t *token_indices,                          \
+            const size_t *token_offsets,                            \
+            size_t total_indices,                                   \
             void *stream) const;                                    \
     };                                                              \
     }

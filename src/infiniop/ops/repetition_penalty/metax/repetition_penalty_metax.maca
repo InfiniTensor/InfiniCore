@@ -1,4 +1,3 @@
-#include "../../../devices/metax/metax_common.h"
 #include "../../../devices/metax/metax_handle.h"
 #include "../info.h"
 #include "repetition_penalty_kernel.h"
@@ -17,11 +16,10 @@ Descriptor::~Descriptor() {
 infiniStatus_t Descriptor::create(
     infiniopHandle_t handle_,
     Descriptor **desc_ptr,
-    infiniopTensorDescriptor_t logits_desc,
-    infiniopTensorDescriptor_t mask_desc) {
+    infiniopTensorDescriptor_t logits_desc) {
     auto handle = reinterpret_cast<device::metax::Handle *>(handle_);
 
-    auto result = RepetitionPenaltyInfo::create(logits_desc, mask_desc);
+    auto result = RepetitionPenaltyInfo::create(logits_desc);
     CHECK_RESULT(result);
 
     auto info = result.take();
@@ -42,29 +40,38 @@ size_t Descriptor::minWorkspaceSize() const {
 template <unsigned int BLOCK_SIZE, typename T>
 void launchKernel(
     T *logits,
-    const bool *mask,
     const float *repetition_penalties,
+    const uint32_t *token_indices,
+    const size_t *token_offsets,
     size_t num_seqs,
     size_t vocab_size,
+    size_t total_indices,
     hcStream_t stream) {
 
-    size_t total_elements = num_seqs * vocab_size;
-    size_t grid_size = (total_elements + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    size_t grid_size = (total_indices + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
     applyRepetitionPenaltyKernel<<<grid_size, BLOCK_SIZE, 0, stream>>>(
-        logits, mask, repetition_penalties, num_seqs, vocab_size);
+        logits, repetition_penalties,
+        token_indices, token_offsets,
+        num_seqs, vocab_size, total_indices);
 }
 
 infiniStatus_t Descriptor::calculate(
     void *workspace,
     size_t workspace_size,
     void *logits,
-    const void *mask,
     const float *repetition_penalties,
+    const uint32_t *token_indices,
+    const size_t *token_offsets,
+    size_t total_indices,
     void *stream) const {
 
     if (workspace_size < _min_workspace_size) {
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+
+    if (total_indices == 0) {
+        return INFINI_STATUS_SUCCESS;
     }
 
     auto stream_ = (hcStream_t)stream;
@@ -78,56 +85,68 @@ infiniStatus_t Descriptor::calculate(
     case INFINI_DTYPE_F16: {
         half *logits_half = reinterpret_cast<half *>(logits);
         if (max_threads >= 1024) {
-            launchKernel<1024, half>(logits_half, reinterpret_cast<const bool *>(mask),
-                                     repetition_penalties, _info.num_seqs, _info.vocab_size, stream_);
+            launchKernel<1024, half>(logits_half,
+                                     repetition_penalties, token_indices, token_offsets,
+                                     _info.num_seqs, _info.vocab_size, total_indices, stream_);
         } else if (max_threads >= 512) {
-            launchKernel<512, half>(logits_half, reinterpret_cast<const bool *>(mask),
-                                    repetition_penalties, _info.num_seqs, _info.vocab_size, stream_);
+            launchKernel<512, half>(logits_half,
+                                    repetition_penalties, token_indices, token_offsets,
+                                    _info.num_seqs, _info.vocab_size, total_indices, stream_);
         } else {
-            launchKernel<256, half>(logits_half, reinterpret_cast<const bool *>(mask),
-                                    repetition_penalties, _info.num_seqs, _info.vocab_size, stream_);
+            launchKernel<256, half>(logits_half,
+                                    repetition_penalties, token_indices, token_offsets,
+                                    _info.num_seqs, _info.vocab_size, total_indices, stream_);
         }
         break;
     }
     case INFINI_DTYPE_BF16: {
         __hpcc_bfloat16 *logits_bf16 = reinterpret_cast<__hpcc_bfloat16 *>(logits);
         if (max_threads >= 1024) {
-            launchKernel<1024, __hpcc_bfloat16>(logits_bf16, reinterpret_cast<const bool *>(mask),
-                                                repetition_penalties, _info.num_seqs, _info.vocab_size, stream_);
+            launchKernel<1024, __hpcc_bfloat16>(logits_bf16,
+                                                repetition_penalties, token_indices, token_offsets,
+                                                _info.num_seqs, _info.vocab_size, total_indices, stream_);
         } else if (max_threads >= 512) {
-            launchKernel<512, __hpcc_bfloat16>(logits_bf16, reinterpret_cast<const bool *>(mask),
-                                               repetition_penalties, _info.num_seqs, _info.vocab_size, stream_);
+            launchKernel<512, __hpcc_bfloat16>(logits_bf16,
+                                               repetition_penalties, token_indices, token_offsets,
+                                               _info.num_seqs, _info.vocab_size, total_indices, stream_);
         } else {
-            launchKernel<256, __hpcc_bfloat16>(logits_bf16, reinterpret_cast<const bool *>(mask),
-                                               repetition_penalties, _info.num_seqs, _info.vocab_size, stream_);
+            launchKernel<256, __hpcc_bfloat16>(logits_bf16,
+                                               repetition_penalties, token_indices, token_offsets,
+                                               _info.num_seqs, _info.vocab_size, total_indices, stream_);
         }
         break;
     }
     case INFINI_DTYPE_F32: {
         float *logits_float = reinterpret_cast<float *>(logits);
         if (max_threads >= 1024) {
-            launchKernel<1024, float>(logits_float, reinterpret_cast<const bool *>(mask),
-                                      repetition_penalties, _info.num_seqs, _info.vocab_size, stream_);
+            launchKernel<1024, float>(logits_float,
+                                      repetition_penalties, token_indices, token_offsets,
+                                      _info.num_seqs, _info.vocab_size, total_indices, stream_);
         } else if (max_threads >= 512) {
-            launchKernel<512, float>(logits_float, reinterpret_cast<const bool *>(mask),
-                                     repetition_penalties, _info.num_seqs, _info.vocab_size, stream_);
+            launchKernel<512, float>(logits_float,
+                                     repetition_penalties, token_indices, token_offsets,
+                                     _info.num_seqs, _info.vocab_size, total_indices, stream_);
         } else {
-            launchKernel<256, float>(logits_float, reinterpret_cast<const bool *>(mask),
-                                     repetition_penalties, _info.num_seqs, _info.vocab_size, stream_);
+            launchKernel<256, float>(logits_float,
+                                     repetition_penalties, token_indices, token_offsets,
+                                     _info.num_seqs, _info.vocab_size, total_indices, stream_);
         }
         break;
     }
     case INFINI_DTYPE_F64: {
         double *logits_double = reinterpret_cast<double *>(logits);
         if (max_threads >= 1024) {
-            launchKernel<1024, double>(logits_double, reinterpret_cast<const bool *>(mask),
-                                       repetition_penalties, _info.num_seqs, _info.vocab_size, stream_);
+            launchKernel<1024, double>(logits_double,
+                                       repetition_penalties, token_indices, token_offsets,
+                                       _info.num_seqs, _info.vocab_size, total_indices, stream_);
         } else if (max_threads >= 512) {
-            launchKernel<512, double>(logits_double, reinterpret_cast<const bool *>(mask),
-                                      repetition_penalties, _info.num_seqs, _info.vocab_size, stream_);
+            launchKernel<512, double>(logits_double,
+                                      repetition_penalties, token_indices, token_offsets,
+                                      _info.num_seqs, _info.vocab_size, total_indices, stream_);
         } else {
-            launchKernel<256, double>(logits_double, reinterpret_cast<const bool *>(mask),
-                                      repetition_penalties, _info.num_seqs, _info.vocab_size, stream_);
+            launchKernel<256, double>(logits_double,
+                                      repetition_penalties, token_indices, token_offsets,
+                                      _info.num_seqs, _info.vocab_size, total_indices, stream_);
         }
         break;
     }

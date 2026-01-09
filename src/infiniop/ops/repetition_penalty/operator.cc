@@ -12,16 +12,14 @@
 __C infiniStatus_t infiniopCreateRepetitionPenaltyDescriptor(
     infiniopHandle_t handle,
     infiniopRepetitionPenaltyDescriptor_t *desc_ptr,
-    infiniopTensorDescriptor_t logits_desc,
-    infiniopTensorDescriptor_t mask_desc) {
+    infiniopTensorDescriptor_t logits_desc) {
 
 #define CREATE(CASE, NAMESPACE)                                                      \
     case CASE:                                                                       \
         return op::repetition_penalty::NAMESPACE::Descriptor::create(                \
             handle,                                                                  \
             reinterpret_cast<op::repetition_penalty::NAMESPACE::Descriptor **>(desc_ptr), \
-            logits_desc,                                                            \
-            mask_desc)
+            logits_desc)
 
     switch (handle->device) {
 
@@ -71,15 +69,19 @@ __C infiniStatus_t infiniopApplyRepetitionPenalty(
     void *workspace,
     size_t workspace_size,
     void *logits,
-    const void *mask,
     const float *repetition_penalties,
+    const uint32_t *token_indices,
+    const size_t *token_offsets,
+    size_t total_indices,
     void *stream) {
 
 #define CALCULATE(CASE, NAMESPACE)                                                   \
     case CASE:                                                                       \
         return reinterpret_cast<const op::repetition_penalty::NAMESPACE::Descriptor *>(desc) \
             ->calculate(workspace, workspace_size,                                   \
-                        logits, mask, repetition_penalties,                         \
+                        logits, repetition_penalties,                                \
+                        token_indices, token_offsets,                                \
+                        total_indices,                                               \
                         stream)
 
     switch (desc->device_type) {
