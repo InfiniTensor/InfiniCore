@@ -16,8 +16,8 @@ PYBIND11_MODULE(_infinicore, m) {
     device::bind(m);
     device_event::bind(m);
     dtype::bind(m);
-    ops::bind(m);
     tensor::bind(m);
+    ops::bind(m);
 }
 
 } // namespace infinicore

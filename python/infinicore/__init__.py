@@ -51,6 +51,11 @@ from infinicore.ops.paged_caching import paged_caching
 from infinicore.ops.rearrange import rearrange
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.unsqueeze import unsqueeze
+from infinicore.ops.atanh import atanh
+from infinicore.ops.addcmul import addcmul
+from infinicore.ops.cdist import cdist
+from infinicore.ops.binary_cross_entropy_with_logits import binary_cross_entropy_with_logits
+from infinicore.ops.reciprocal import reciprocal
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -114,6 +119,11 @@ __all__ = [
     "narrow",
     "squeeze",
     "unsqueeze",
+    "atanh",
+    "addcmul",
+    "cdist",
+    "binary_cross_entropy_with_logits",
+    "reciprocal",
     "rearrange",
     "empty",
     "empty_like",

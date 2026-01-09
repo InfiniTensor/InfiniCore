@@ -15,3 +15,8 @@
 #include "ops/rope.hpp"
 #include "ops/silu.hpp"
 #include "ops/swiglu.hpp"
+#include "ops/atanh.hpp"
+#include "ops/addcmul.hpp"
+#include "ops/cdist.hpp"
+#include "ops/reciprocal.hpp"
+#include "ops/binary_cross_entropy_with_logits.hpp"
