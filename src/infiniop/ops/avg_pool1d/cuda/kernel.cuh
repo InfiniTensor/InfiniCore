@@ -58,7 +58,12 @@ __device__ void avgPool1dKernel(
 
         
         
+#if defined(ENABLE_ILUVATAR_API)
+        // Iluvatar __half doesn't accept size_t directly.
+        y[y_offset] = sum / static_cast<T>(static_cast<double>(kernel_size));
+#else
         y[y_offset] = sum / static_cast<T>(kernel_size);
+#endif
     }
 }
 

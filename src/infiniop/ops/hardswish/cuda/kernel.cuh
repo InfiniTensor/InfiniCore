@@ -21,14 +21,21 @@ public:
         if constexpr (std::is_same_v<T, half2>) {
             
             const half2 three = __float2half2_rn(3.0f);
-            const half2 zero = __float2half2_rn(0.0f);
-            const half2 six = __float2half2_rn(6.0f);
             const half2 scale = __float2half2_rn(0.16666667f); 
 
             
             half2 val = __hadd2(x, three);
             
+#if defined(ENABLE_ILUVATAR_API)
             
+            float2 val_f = __half22float2(val);
+            val_f.x = fminf(fmaxf(val_f.x, 0.0f), 6.0f);
+            val_f.y = fminf(fmaxf(val_f.y, 0.0f), 6.0f);
+            val = __floats2half2_rn(val_f.x, val_f.y);
+#else
+            
+            const half2 zero = __float2half2_rn(0.0f);
+            const half2 six = __float2half2_rn(6.0f);
             
 #if __CUDA_ARCH__ >= 800
              
@@ -37,6 +44,7 @@ public:
             
             val = __hmax2(val, zero);
             val = __hmin2(val, six);
+#endif
 #endif
             
             return __hmul2(__hmul2(x, val), scale);
