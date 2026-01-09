@@ -5,27 +5,19 @@
 #include <stdexcept>
 
 namespace infinicore::op {
+INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(Embedding);
 
-common::OpDispatcher<Embedding::schema> &Embedding::dispatcher() {
-    static common::OpDispatcher<Embedding::schema> dispatcher_;
-    return dispatcher_;
-}
-
-void Embedding::execute(Tensor out, Tensor input, Tensor weight) {
-    // Check that all tensors are on the same device
-    // This is critical: if input is on CPU while out/weight are on GPU,
-    // passing CPU pointer to CUDA kernel will cause memory access errors
+Embedding::Embedding(Tensor out, const Tensor &input, const Tensor &weight) {
     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(out, input, weight);
-
-    // Set device context
-    infinicore::context::setDevice(out->device());
-
-    // Use dispatcher to lookup kernel (infiniop implementation)
-    dispatcher().lookup(out->device().getType())(out, input, weight);
+    INFINICORE_GRAPH_OP_DISPATCH(out->device().getType(), out, input, weight);
 }
 
-Tensor embedding(Tensor input, // LongTensor of arbitrary shape containing the indices to extract
-                 Tensor weight // Weight: Embedding matrix of floating point type with shape (V, embedding_dim), where V = maximum index + 1
+void Embedding::execute(Tensor out, const Tensor &input, const Tensor &weight) {
+    INFINICORE_GRAPH_OP_RECORD_OR_RUN(Embedding, out, input, weight);
+}
+
+Tensor embedding(const Tensor &input, // LongTensor of arbitrary shape containing the indices to extract
+                 const Tensor &weight // Weight: Embedding matrix of floating point type with shape (V, embedding_dim), where V = maximum index + 1
 ) {
     auto input_shape = input->shape();
     auto weight_shape = weight->shape();
@@ -40,7 +32,7 @@ Tensor embedding(Tensor input, // LongTensor of arbitrary shape containing the i
     return inputs_embeds;
 }
 
-void embedding_(Tensor out, Tensor input, Tensor weight) {
+void embedding_(Tensor out, const Tensor &input, const Tensor &weight) {
     Embedding::execute(out, input, weight);
 }
 
