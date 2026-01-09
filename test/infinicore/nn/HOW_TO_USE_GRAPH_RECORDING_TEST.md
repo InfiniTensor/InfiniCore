@@ -5,7 +5,7 @@
 ### 运行测试
 
 ```bash
-cd /home/zhuyue/codes/InfiniCore
+cd <path_to>/InfiniCore
 python test/infinicore/nn/test_embedding_graph_recording.py
 ```
 
@@ -259,7 +259,7 @@ python test/infinicore/nn/test_embedding_graph_recording.py
 #!/bin/bash
 # quick_check.sh
 
-cd /home/zhuyue/codes/InfiniCore
+cd <path_to>/InfiniCore
 
 echo "=== 1. 代码检查 ==="
 if grep -q "to(cpu_device)" src/infinicore/nn/embedding.cc; then
