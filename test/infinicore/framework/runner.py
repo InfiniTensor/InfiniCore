@@ -7,7 +7,7 @@ import os
 import inspect
 import re
 from . import TestConfig, TestRunner, get_args, get_test_devices
-from .reporter import TestReporter
+from .results import TestSummary
 
 
 class GenericTestRunner:
@@ -20,6 +20,7 @@ class GenericTestRunner:
         """
         self.operator_test = operator_test_class()
         self.args = args or get_args()
+        self.saved_file = None  # Store the path of saved report
 
     def run(self):
         """Execute the complete test suite
@@ -56,7 +57,7 @@ class GenericTestRunner:
         summary_passed = runner.print_summary()
 
         if getattr(self.args, "save", None):
-            self._save_report(runner)
+            self.saved_file = self._save_report(runner)
 
         # Both conditions must be True for overall success
         # - has_no_failures: no test failures during execution
@@ -89,7 +90,8 @@ class GenericTestRunner:
             op_paths = {"torch": t_path, "infinicore": i_path}
 
             # 2. Generate Report Entries
-            entries = TestReporter.prepare_report_entry(
+            test_summary = TestSummary()
+            entries = test_summary.collect_report_entry(
                 op_name=self.operator_test.operator_name,
                 test_cases=self.operator_test.test_cases,
                 args=self.args,
@@ -97,14 +99,15 @@ class GenericTestRunner:
                 results_list=runner.test_results,
             )
 
-            # 4. Save to File
-            TestReporter.save_all_results(self.args.save, entries)
+            # 3. Save to File and return the file name
+            return test_summary.save_report(self.args.save)
 
         except Exception as e:
             import traceback
 
             traceback.print_exc()
             print(f"⚠️ Failed to save report: {e}")
+            return None
 
     def _infer_op_path(self, method, lib_prefix):
         """

@@ -42,10 +42,14 @@ from infinicore.dtype import (
 from infinicore.ops.add import add
 from infinicore.ops.addr import addr
 from infinicore.ops.asin import asin
+from infinicore.ops.add_rms_norm import add_rms_norm, add_rms_norm_
 from infinicore.ops.attention import attention
 from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
+from infinicore.ops.paged_attention import paged_attention
+from infinicore.ops.paged_attention_prefill import paged_attention_prefill
+from infinicore.ops.paged_caching import paged_caching
 from infinicore.ops.rearrange import rearrange
 from infinicore.ops.argwhere import argwhere
 from infinicore.ops.fmin import fmin
@@ -108,8 +112,10 @@ __all__ = [
     # Operations.
     "add",
     "addr",
-    "asin",
+    "add_rms_norm",
+    "add_rms_norm_",
     "argwhere",
+    "asin",
     "attention",
     "matmul",
     "mul",
@@ -124,6 +130,9 @@ __all__ = [
     "from_numpy",
     "from_torch",
     "fmin",
+    "paged_caching",
+    "paged_attention",
+    "paged_attention_prefill",
     "ones",
     "strided_empty",
     "strided_from_blob",

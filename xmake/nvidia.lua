@@ -4,11 +4,9 @@ if CUDNN_ROOT ~= nil then
 end
 
 local CUTLASS_ROOT = os.getenv("CUTLASS_ROOT") or os.getenv("CUTLASS_HOME") or os.getenv("CUTLASS_PATH")
-local CUTE_ROOT = os.getenv("CUTE_ROOT") or os.getenv("CUTE_HOME") or os.getenv("CUTE_PATH")
 
 if CUTLASS_ROOT ~= nil then
     add_includedirs(CUTLASS_ROOT)
-    add_includedirs(CUTE_ROOT)
 end
 
 target("infiniop-nvidia")
@@ -22,7 +20,6 @@ target("infiniop-nvidia")
     if has_config("cudnn") then
         add_links("cudnn")
     end
-    add_cugencodes("native")
 
     on_load(function (target)
         import("lib.detect.find_tool")
@@ -36,11 +33,6 @@ target("infiniop-nvidia")
 
             target:add("linkdirs", path.directory(path.directory(nvcc_path)) .. "/lib64/stubs")
             target:add("links", "cuda")
-
-            local cuda_arch = get_config("cuda_arch")
-            if cuda_arch ~= nil then
-                target:add("cu-cxxflags", "-arch=", cuda_arch)
-            end
         end
     end)
 
@@ -63,7 +55,18 @@ target("infiniop-nvidia")
         end
     end
 
-    add_cuflags("-Xcompiler=-Wno-error=deprecated-declarations")
+    add_cuflags("-Xcompiler=-Wno-error=deprecated-declarations", "-Xcompiler=-Wno-error=unused-function")
+
+    local arch_opt = get_config("cuda_arch")
+    if arch_opt and type(arch_opt) == "string" then
+        for _, arch in ipairs(arch_opt:split(",")) do
+            arch = arch:trim()
+            local compute = arch:gsub("sm_", "compute_")
+            add_cuflags("-gencode=arch=" .. compute .. ",code=" .. arch)
+        end
+    else
+        add_cugencodes("native")
+    end
 
     set_languages("cxx17")
     add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")

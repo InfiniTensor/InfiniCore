@@ -7,6 +7,7 @@
 #include "ops/addr.hpp"
 #include "ops/argwhere.hpp"
 #include "ops/asin.hpp"
+#include "ops/add_rms_norm.hpp"
 #include "ops/attention.hpp"
 #include "ops/causal_softmax.hpp"
 #include "ops/embedding.hpp"
@@ -14,6 +15,8 @@
 #include "ops/linear.hpp"
 #include "ops/matmul.hpp"
 #include "ops/mul.hpp"
+#include "ops/paged_attention.hpp"
+#include "ops/paged_caching.hpp"
 #include "ops/random_sample.hpp"
 #include "ops/rearrange.hpp"
 #include "ops/rms_norm.hpp"
@@ -31,6 +34,7 @@ inline void bind(py::module &m) {
     bind_argwhere(m);
     bind_addr(m);
     bind_asin(m);
+    bind_add_rms_norm(m);
     bind_attention(m);
     bind_causal_softmax(m);
     bind_fmin(m);
@@ -38,6 +42,8 @@ inline void bind(py::module &m) {
     bind_linear(m);
     bind_matmul(m);
     bind_mul(m);
+    bind_paged_attention(m);
+    bind_paged_caching(m);
     bind_rearrange(m);
     bind_rms_norm(m);
     bind_silu(m);
