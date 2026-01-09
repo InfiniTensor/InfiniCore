@@ -1,49 +1,44 @@
-#include "../../utils.hpp"
-#include "infinicore/common/hash.hpp"
-#include "infinicore/ops/common/cache.hpp"
+#include "../infiniop_impl.hpp"
 #include "infinicore/ops/embedding.hpp"
-#include <infiniop.h>
 
 namespace infinicore::op::embedding_impl::infiniop {
 
-thread_local common::OpCache<size_t, infiniopEmbeddingDescriptor_t> caches(
-    100, // capacity
-    [](infiniopEmbeddingDescriptor_t &desc) {
-        if (desc != nullptr) {
-            INFINICORE_CHECK_ERROR(infiniopDestroyEmbeddingDescriptor(desc));
-            desc = nullptr;
-        }
-    });
+INFINIOP_CACHABLE_DESCRIPTOR(Descriptor, Embedding, 100);
 
-void calculate(Tensor out, Tensor input, Tensor weight) {
+struct PlannedMeta {
+    std::shared_ptr<Descriptor> descriptor;
+    graph::GraphTensor out, input, weight;
+};
+
+void *plan(Tensor out, const Tensor &input, const Tensor &weight) {
     size_t seed = hash_combine(out, input, weight);
 
-    auto device = context::getDevice();
-    auto &cache = caches.getCache(device);
+    INFINIOP_CACHABLE_DESCRIPTOR_GET_OR_CREATE(
+        Descriptor, descriptor, Embedding,
+        seed, out->desc(), input->desc(), weight->desc());
 
-    auto desc_opt = cache.get(seed);
-    infiniopEmbeddingDescriptor_t desc = nullptr;
+    auto planned = new PlannedMeta{
+        descriptor,
+        graph::GraphTensor(out),
+        graph::GraphTensor(input),
+        graph::GraphTensor(weight)};
 
-    if (!desc_opt) {
-        INFINICORE_CHECK_ERROR(infiniopCreateEmbeddingDescriptor(
-            context::getInfiniopHandle(device), &desc,
-            out->desc(), input->desc(), weight->desc()));
-        cache.put(seed, desc);
-    } else {
-        desc = *desc_opt;
-    }
-
-    INFINICORE_CHECK_ERROR(infiniopEmbedding(
-        desc,
-        out->data(),
-        input->data(),
-        weight->data(),
-        context::getStream()));
+    return planned;
 }
 
-static bool registered = []() {
-    Embedding::dispatcher().registerAll(&calculate, false);
-    return true;
-}();
+void run(void *planned_meta) {
+    auto planned = reinterpret_cast<PlannedMeta *>(planned_meta);
+
+    INFINICORE_CHECK_ERROR(infiniopEmbedding(
+        planned->descriptor->desc,
+        planned->out->data(), planned->input->data(), planned->weight->data(), context::getStream()));
+}
+
+void cleanup(void **planned_meta_ptr) {
+    delete *reinterpret_cast<PlannedMeta **>(planned_meta_ptr);
+    *planned_meta_ptr = nullptr;
+}
+
+INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(Embedding, &plan, &run, cleanup);
 
 } // namespace infinicore::op::embedding_impl::infiniop
