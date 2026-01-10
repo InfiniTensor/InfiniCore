@@ -64,9 +64,8 @@ class OpTest(BaseOperatorTest):
     def torch_operator(self, *args, **kwargs):
         return torch.broadcast_to(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
-    #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.broadcast_to(*args, **kwargs)
+    def infinicore_operator(self, *args, **kwargs):
+         return infinicore.broadcast_to(*args, **kwargs)
 
 
 def main():

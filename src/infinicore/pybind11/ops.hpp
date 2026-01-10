@@ -7,7 +7,6 @@
 #include "ops/attention.hpp"
 #include "ops/causal_softmax.hpp"
 #include "ops/embedding.hpp"
-#include "ops/linear.hpp"
 #include "ops/matmul.hpp"
 #include "ops/mul.hpp"
 #include "ops/paged_attention.hpp"
@@ -18,7 +17,11 @@
 #include "ops/rope.hpp"
 #include "ops/silu.hpp"
 #include "ops/swiglu.hpp"
-
+#include "ops/softsign.hpp"
+#include "ops/softplus.hpp"
+#include "ops/broadcast_to.hpp"
+#include "ops/linear.hpp"
+#include "ops/huber_loss.hpp"
 namespace py = pybind11;
 
 namespace infinicore::ops {
@@ -29,7 +32,6 @@ inline void bind(py::module &m) {
     bind_attention(m);
     bind_causal_softmax(m);
     bind_random_sample(m);
-    bind_linear(m);
     bind_matmul(m);
     bind_mul(m);
     bind_paged_attention(m);
@@ -39,6 +41,11 @@ inline void bind(py::module &m) {
     bind_silu(m);
     bind_swiglu(m);
     bind_rope(m);
+    bind_broadcast_to(m);
+    bind_softplus(m);
+    bind_softsign(m);
+    bind_linear(m);
+    bind_huber_loss(m);
     bind_embedding(m);
 }
 
