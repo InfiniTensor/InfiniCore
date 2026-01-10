@@ -9,6 +9,7 @@
 #include "ops/embedding.hpp"
 #include "ops/linear.hpp"
 #include "ops/matmul.hpp"
+#include "ops/maximum.hpp"
 #include "ops/mul.hpp"
 #include "ops/paged_attention.hpp"
 #include "ops/paged_attention_prefill.hpp"
@@ -32,6 +33,7 @@ inline void bind(py::module &m) {
     bind_random_sample(m);
     bind_linear(m);
     bind_matmul(m);
+    bind_maximum(m);
     bind_mul(m);
     bind_paged_attention(m);
     bind_paged_attention_prefill(m);

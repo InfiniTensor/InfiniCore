@@ -5,6 +5,7 @@
 #include "ops/attention.hpp"
 #include "ops/causal_softmax.hpp"
 #include "ops/matmul.hpp"
+#include "ops/maximum.hpp"
 #include "ops/ones.hpp"
 #include "ops/paged_attention.hpp"
 #include "ops/paged_attention_prefill.hpp"

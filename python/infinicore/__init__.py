@@ -43,6 +43,7 @@ from infinicore.ops.add import add
 from infinicore.ops.add_rms_norm import add_rms_norm, add_rms_norm_
 from infinicore.ops.attention import attention
 from infinicore.ops.matmul import matmul
+from infinicore.ops.maximum import maximum
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.paged_attention import paged_attention
@@ -110,6 +111,7 @@ __all__ = [
     "add_rms_norm_",
     "attention",
     "matmul",
+    "maximum",
     "mul",
     "narrow",
     "squeeze",
