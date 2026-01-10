@@ -265,6 +265,44 @@ def func6_initialize_device_relationship():
         z_infini.debug()
 
 
+def test7_p2p():
+    print("测试P2P功能")
+    if infinicore.get_device_count("cuda") < 2:
+        print("跳过p2p测试，原因：当前cuda设备小于2个")
+        return
+
+    dev0 = infinicore.device("cuda", 0)
+    dev1 = infinicore.device("cuda", 1)
+
+    shape = [1024, 1024]
+    dtype = infinicore.float16
+
+    torch_0 = torch.ones(shape, dtype=torch.float16, device="cuda:0")
+    torch_1 = torch.zeros(shape, dtype=torch.float16, device="cuda:1")
+    torch_1_ref = torch.ones(shape, dtype=torch.float16, device="cuda:1")
+
+    infinicore_0 = infinicore.from_blob(
+        torch_0.data_ptr(),
+        shape,
+        dtype=dtype,
+        device=dev0,
+    )
+
+    infinicore_1 = infinicore.from_blob(
+        torch_1.data_ptr(),
+        shape,
+        dtype=dtype,
+        device=dev1,
+    )
+
+    assert not torch.allclose(torch_1, torch_1_ref)
+
+    infinicore_1.copy_(infinicore_0)
+
+    assert torch.allclose(torch_1, torch_1_ref)
+    print("P2P test passed!")
+
+
 if __name__ == "__main__":
     test()
     test2()
@@ -272,3 +310,4 @@ if __name__ == "__main__":
     test4_to()
     test5_bf16()
     func6_initialize_device_relationship()
+    test7_p2p()

@@ -108,6 +108,14 @@ infiniStatus_t memcpyAsync(void *dst, const void *src, size_t size, infinirtMemc
     return memcpy(dst, src, size, kind);
 }
 
+infiniStatus_t memcpyPeer(void *dst, int dst_device, const void *src, int src_device, size_t size) {
+    return INFINI_STATUS_INTERNAL_ERROR;
+}
+
+infiniStatus_t memcpyPeerAsync(void *dst, int dst_device, const void *src, int src_device, size_t size, infinirtStream_t stream) {
+    return INFINI_STATUS_INTERNAL_ERROR;
+}
+
 infiniStatus_t mallocAsync(void **p_ptr, size_t size, infinirtStream_t stream) {
     return mallocDevice(p_ptr, size);
 }

@@ -51,7 +51,21 @@ infiniStatus_t eventCreate(infinirtEvent_t *event_ptr) {
 }
 
 infiniStatus_t eventCreateWithFlags(infinirtEvent_t *event_ptr, uint32_t flags) {
-    return INFINI_STATUS_NOT_IMPLEMENTED;
+    musaEvent_t event;
+    unsigned int musa_flags = musaEventDefault;
+
+    // 映射 InfiniCore 的 flags 到 HC Runtime flags
+    if (flags & INFINIRT_EVENT_DISABLE_TIMING) {
+        musa_flags |= musaEventDisableTiming;
+    }
+    if (flags & INFINIRT_EVENT_BLOCKING_SYNC) {
+        musa_flags |= musaEventBlockingSync;
+    }
+
+    CHECK_MUSART(musaEventCreateWithFlags(&event, musa_flags));
+
+    *event_ptr = event;
+    return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t eventRecord(infinirtEvent_t event, infinirtStream_t stream) {
@@ -128,6 +142,16 @@ infiniStatus_t memcpy(void *dst, const void *src, size_t size, infinirtMemcpyKin
 
 infiniStatus_t memcpyAsync(void *dst, const void *src, size_t size, infinirtMemcpyKind_t kind, infinirtStream_t stream) {
     CHECK_MUSART(musaMemcpyAsync(dst, src, size, toMusaMemcpyKind(kind), (musaStream_t)stream));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t memcpyPeer(void *dst, int dst_device, const void *src, int src_device, size_t size) {
+    CHECK_MUSART(musaMemcpyPeer(dst, dst_device, src, src_device, size));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t memcpyPeerAsync(void *dst, int dst_device, const void *src, int src_device, size_t size, infinirtStream_t stream) {
+    CHECK_MUSART(musaMemcpyPeerAsync(dst, dst_device, src, src_device, size, (musaStream_t)stream));
     return INFINI_STATUS_SUCCESS;
 }
 

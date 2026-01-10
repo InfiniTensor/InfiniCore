@@ -3,33 +3,36 @@
 #include "infinirt.h"
 #include <stdint.h>
 
-#define INFINIRT_DEVICE_API(INLINE, IMPL, COUNT)                                                                                         \
-    INLINE infiniStatus_t getDeviceCount(int *count) COUNT;                                                                              \
-    INLINE infiniStatus_t setDevice(int device_id) IMPL;                                                                                 \
-    INLINE infiniStatus_t deviceSynchronize() IMPL;                                                                                      \
-                                                                                                                                         \
-    INLINE infiniStatus_t streamCreate(infinirtStream_t *stream_ptr) IMPL;                                                               \
-    INLINE infiniStatus_t streamDestroy(infinirtStream_t stream) IMPL;                                                                   \
-    INLINE infiniStatus_t streamSynchronize(infinirtStream_t stream) IMPL;                                                               \
-    INLINE infiniStatus_t streamWaitEvent(infinirtStream_t stream, infinirtEvent_t event) IMPL;                                          \
-                                                                                                                                         \
-    INLINE infiniStatus_t eventCreate(infinirtEvent_t *event_ptr) IMPL;                                                                  \
-    INLINE infiniStatus_t eventCreateWithFlags(infinirtEvent_t *event_ptr, uint32_t flags) IMPL;                                         \
-    INLINE infiniStatus_t eventRecord(infinirtEvent_t event, infinirtStream_t stream) IMPL;                                              \
-    INLINE infiniStatus_t eventQuery(infinirtEvent_t event, infinirtEventStatus_t *status_ptr) IMPL;                                     \
-    INLINE infiniStatus_t eventSynchronize(infinirtEvent_t event) IMPL;                                                                  \
-    INLINE infiniStatus_t eventDestroy(infinirtEvent_t event) IMPL;                                                                      \
-    INLINE infiniStatus_t eventElapsedTime(float *ms_ptr, infinirtEvent_t start, infinirtEvent_t end) IMPL;                              \
-                                                                                                                                         \
-    INLINE infiniStatus_t mallocDevice(void **p_ptr, size_t size) IMPL;                                                                  \
-    INLINE infiniStatus_t mallocHost(void **p_ptr, size_t size) IMPL;                                                                    \
-    INLINE infiniStatus_t freeDevice(void *ptr) IMPL;                                                                                    \
-    INLINE infiniStatus_t freeHost(void *ptr) IMPL;                                                                                      \
-                                                                                                                                         \
-    INLINE infiniStatus_t memcpy(void *dst, const void *src, size_t size, infinirtMemcpyKind_t kind) IMPL;                               \
-    INLINE infiniStatus_t memcpyAsync(void *dst, const void *src, size_t size, infinirtMemcpyKind_t kind, infinirtStream_t stream) IMPL; \
-                                                                                                                                         \
-    INLINE infiniStatus_t mallocAsync(void **p_ptr, size_t size, infinirtStream_t stream) IMPL;                                          \
+#define INFINIRT_DEVICE_API(INLINE, IMPL, COUNT)                                                                                                  \
+    INLINE infiniStatus_t getDeviceCount(int *count) COUNT;                                                                                       \
+    INLINE infiniStatus_t setDevice(int device_id) IMPL;                                                                                          \
+    INLINE infiniStatus_t deviceSynchronize() IMPL;                                                                                               \
+                                                                                                                                                  \
+    INLINE infiniStatus_t streamCreate(infinirtStream_t *stream_ptr) IMPL;                                                                        \
+    INLINE infiniStatus_t streamDestroy(infinirtStream_t stream) IMPL;                                                                            \
+    INLINE infiniStatus_t streamSynchronize(infinirtStream_t stream) IMPL;                                                                        \
+    INLINE infiniStatus_t streamWaitEvent(infinirtStream_t stream, infinirtEvent_t event) IMPL;                                                   \
+                                                                                                                                                  \
+    INLINE infiniStatus_t eventCreate(infinirtEvent_t *event_ptr) IMPL;                                                                           \
+    INLINE infiniStatus_t eventCreateWithFlags(infinirtEvent_t *event_ptr, uint32_t flags) IMPL;                                                  \
+    INLINE infiniStatus_t eventRecord(infinirtEvent_t event, infinirtStream_t stream) IMPL;                                                       \
+    INLINE infiniStatus_t eventQuery(infinirtEvent_t event, infinirtEventStatus_t *status_ptr) IMPL;                                              \
+    INLINE infiniStatus_t eventSynchronize(infinirtEvent_t event) IMPL;                                                                           \
+    INLINE infiniStatus_t eventDestroy(infinirtEvent_t event) IMPL;                                                                               \
+    INLINE infiniStatus_t eventElapsedTime(float *ms_ptr, infinirtEvent_t start, infinirtEvent_t end) IMPL;                                       \
+                                                                                                                                                  \
+    INLINE infiniStatus_t mallocDevice(void **p_ptr, size_t size) IMPL;                                                                           \
+    INLINE infiniStatus_t mallocHost(void **p_ptr, size_t size) IMPL;                                                                             \
+    INLINE infiniStatus_t freeDevice(void *ptr) IMPL;                                                                                             \
+    INLINE infiniStatus_t freeHost(void *ptr) IMPL;                                                                                               \
+                                                                                                                                                  \
+    INLINE infiniStatus_t memcpy(void *dst, const void *src, size_t size, infinirtMemcpyKind_t kind) IMPL;                                        \
+    INLINE infiniStatus_t memcpyAsync(void *dst, const void *src, size_t size, infinirtMemcpyKind_t kind, infinirtStream_t stream) IMPL;          \
+                                                                                                                                                  \
+    INLINE infiniStatus_t memcpyPeer(void *dst, int dst_device, const void *src, int src_device, size_t size) IMPL;                               \
+    INLINE infiniStatus_t memcpyPeerAsync(void *dst, int dst_device, const void *src, int src_device, size_t size, infinirtStream_t stream) IMPL; \
+                                                                                                                                                  \
+    INLINE infiniStatus_t mallocAsync(void **p_ptr, size_t size, infinirtStream_t stream) IMPL;                                                   \
     INLINE infiniStatus_t freeAsync(void *ptr, infinirtStream_t stream) IMPL;
 
 #define INFINIRT_DEVICE_API_IMPL INFINIRT_DEVICE_API(, , )

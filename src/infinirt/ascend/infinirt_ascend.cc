@@ -96,6 +96,9 @@ infiniStatus_t eventDestroy(infinirtEvent_t event) {
 
 infiniStatus_t eventElapsedTime(float *ms_ptr, infinirtEvent_t start, infinirtEvent_t end) {
     return INFINI_STATUS_NOT_IMPLEMENTED;
+    // Commented before validation
+    // CHECK_ACLRT(aclrtEventElapsedTime(ms_ptr, (aclrtEvent)start, (aclrtEvent)end));
+    // return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t mallocDevice(void **p_ptr, size_t size) {
@@ -141,6 +144,30 @@ infiniStatus_t memcpy(void *dst, const void *src, size_t size, infinirtMemcpyKin
 infiniStatus_t memcpyAsync(void *dst, const void *src, size_t size, infinirtMemcpyKind_t kind, infinirtStream_t stream) {
     CHECK_ACLRT(aclrtMemcpyAsync(dst, size, src, size, toAclrtMemcpyKind(kind), (aclrtStream)stream));
     return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t memcpyPeer(void *dst, int dst_device, const void *src, int src_device, size_t size) {
+    return INFINI_STATUS_NOT_IMPLEMENTED;
+    // Commented before validation
+    // int32_t can_access_peer = 0;
+    // CHECK_ACLRT(aclrtDeviceCanAccessPeer(&can_access_peer, dst_device, src_device));
+    // if (!can_access_peer) {
+    //     CHECK_ACLRT(aclrtDeviceEnablePeerAccess(src_device, 0));
+    // }
+    // CHECK_ACLRT(aclrtMemcpy(dst, size, src, size, ACL_MEMCPY_DEVICE_TO_DEVICE));
+    // return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t memcpyPeerAsync(void *dst, int dst_device, const void *src, int src_device, size_t size, infinirtStream_t stream) {
+    return INFINI_STATUS_NOT_IMPLEMENTED;
+    // Commented before validation
+    // int32_t can_access_peer = 0;
+    // CHECK_ACLRT(aclrtDeviceCanAccessPeer(&can_access_peer, dst_device, src_device));
+    // if (!can_access_peer) {
+    //     CHECK_ACLRT(aclrtDeviceEnablePeerAccess(src_device, 0));
+    // }
+    // CHECK_ACLRT(aclrtMemcpyAsync(dst, size, src, size, ACL_MEMCPY_DEVICE_TO_DEVICE, (aclrtStream)stream));
+    // return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t mallocAsync(void **p_ptr, size_t size, infinirtStream_t stream) {
