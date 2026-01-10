@@ -6,7 +6,7 @@
 #include "nvidia/paged_caching_nvidia.cuh"
 #endif
 #ifdef ENABLE_METAX_API
-#include "metax/paged_caching_metax.h"
+// #include "metax/paged_caching_metax.h" // TEMP: missing metax header
 #endif
 
 __C infiniStatus_t infiniopCreatePagedCachingDescriptor(
@@ -30,7 +30,7 @@ __C infiniStatus_t infiniopCreatePagedCachingDescriptor(
         CREATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
 #ifdef ENABLE_METAX_API
-        CREATE(INFINI_DEVICE_METAX, metax)
+//        CREATE(INFINI_DEVICE_METAX, metax)
 #endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -50,7 +50,7 @@ __C infiniStatus_t infiniopGetPagedCachingWorkspaceSize(
         GET(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
 #ifdef ENABLE_METAX_API
-        GET(INFINI_DEVICE_METAX, metax)
+//        GET(INFINI_DEVICE_METAX, metax)
 #endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -74,7 +74,7 @@ __C infiniStatus_t infiniopPagedCaching(
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
 #ifdef ENABLE_METAX_API
-        CALCULATE(INFINI_DEVICE_METAX, metax)
+//        CALCULATE(INFINI_DEVICE_METAX, metax)
 #endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -93,7 +93,7 @@ __C infiniStatus_t infiniopDestroyPagedCachingDescriptor(
         DESTROY(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
 #ifdef ENABLE_METAX_API
-        DESTROY(INFINI_DEVICE_METAX, metax)
+//        DESTROY(INFINI_DEVICE_METAX, metax)
 #endif
     }
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

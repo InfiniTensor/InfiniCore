@@ -36,4 +36,10 @@
 #include "infiniop/ops/zeros.h"
 #include "infiniop/tensor_descriptor.h"
 
+#include "infiniop/ops/cross_entropy.h"
+#include "infiniop/ops/hardswish.h"
+#include "infiniop/ops/avg_pool1d.h"
+#include "infiniop/ops/equal.h"
+#include "infiniop/ops/hardtanh.h"
+
 #endif // __INFINIOP_API_H__

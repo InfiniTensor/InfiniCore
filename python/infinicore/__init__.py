@@ -45,6 +45,7 @@ from infinicore.dtype import (
 from infinicore.ops.add import add
 from infinicore.ops.add_rms_norm import add_rms_norm, add_rms_norm_
 from infinicore.ops.attention import attention
+from infinicore.ops.equal import equal
 from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
@@ -52,6 +53,7 @@ from infinicore.ops.paged_attention import paged_attention
 from infinicore.ops.paged_attention_prefill import paged_attention_prefill
 from infinicore.ops.paged_caching import paged_caching
 from infinicore.ops.rearrange import rearrange
+from infinicore.ops.cross_entropy import cross_entropy
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.unsqueeze import unsqueeze
 from infinicore.tensor import (
@@ -116,11 +118,13 @@ __all__ = [
     "add_rms_norm_",
     "attention",
     "matmul",
+    "equal",
     "mul",
     "narrow",
     "squeeze",
     "unsqueeze",
     "rearrange",
+    "cross_entropy",
     "empty",
     "empty_like",
     "from_blob",
