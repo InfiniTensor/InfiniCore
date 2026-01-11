@@ -14,12 +14,25 @@
 #ifdef ENABLE_KUNLUN_API
 #include "kunlun/softplus_kunlun.h"
 #endif
+// 新增 Moore 头文件引用
+#ifdef ENABLE_MOORE_API
+#include "moore/softplus_moore.h"
+#endif
+
+// =======================================================================
+// [关键修复] 定义结构体
+// 必须在这里定义 InfiniopSoftplusDescriptor 并继承 InfiniopDescriptor，
+// 这样编译器才能识别 desc->device_type。
+// =======================================================================
+struct InfiniopSoftplusDescriptor : public InfiniopDescriptor {};
 
 __C infiniStatus_t infiniopCreateSoftplusDescriptor(
     infiniopHandle_t handle,
     infiniopSoftplusDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t y_desc,
-    infiniopTensorDescriptor_t x_desc) {
+    infiniopTensorDescriptor_t x_desc,
+    float beta,
+    float threshold) {
 
 #define CREATE(CASE, NAMESPACE)                                                 \
     case CASE:                                                                  \
@@ -27,7 +40,9 @@ __C infiniStatus_t infiniopCreateSoftplusDescriptor(
             handle,                                                             \
             reinterpret_cast<op::softplus::NAMESPACE::Descriptor **>(desc_ptr), \
             y_desc,                                                             \
-            {x_desc})
+            {x_desc},                                                           \
+            beta,                                                               \
+            threshold)
 
     switch (handle->device) {
 
@@ -48,6 +63,10 @@ __C infiniStatus_t infiniopCreateSoftplusDescriptor(
 #endif
 #ifdef ENABLE_KUNLUN_API
         CREATE(INFINI_DEVICE_KUNLUN, kunlun);
+#endif
+// 新增 Moore 分支
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -82,6 +101,10 @@ __C infiniStatus_t infiniopGetSoftplusWorkspaceSize(infiniopSoftplusDescriptor_t
 #ifdef ENABLE_KUNLUN_API
         GET(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
+// 新增 Moore 分支
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, moore);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -98,8 +121,8 @@ __C infiniStatus_t infiniopSoftplus(
     const void *x,
     void *stream) {
 
-#define CALCULATE(CASE, NAMESPACE)                                                 \
-    case CASE:                                                                     \
+#define CALCULATE(CASE, NAMESPACE)                                         \
+    case CASE:                                                             \
         return reinterpret_cast<const op::softplus::NAMESPACE::Descriptor *>(desc) \
             ->calculate(workspace, workspace_size, y, {x}, stream)
 
@@ -122,6 +145,10 @@ __C infiniStatus_t infiniopSoftplus(
 #endif
 #ifdef ENABLE_KUNLUN_API
         CALCULATE(INFINI_DEVICE_KUNLUN, kunlun);
+#endif
+// 新增 Moore 分支
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -157,6 +184,10 @@ infiniopDestroySoftplusDescriptor(infiniopSoftplusDescriptor_t desc) {
 #endif
 #ifdef ENABLE_KUNLUN_API
         DELETE(INFINI_DEVICE_KUNLUN, kunlun);
+#endif
+// 新增 Moore 分支
+#ifdef ENABLE_MOORE_API
+        DELETE(INFINI_DEVICE_MOORE, moore);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

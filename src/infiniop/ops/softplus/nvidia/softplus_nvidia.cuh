@@ -1,8 +1,8 @@
-#ifndef __SOFTPLUS_CUDA_API_H__
-#define __SOFTPLUS_CUDA_API_H__
+#ifndef __SOFTPLUS_NVIDIA_CUH__
+#define __SOFTPLUS_NVIDIA_CUH__
 
-#include "../../../elementwise/nvidia/elementwise_nvidia_api.cuh"
+#include "../softplus.h"
 
-ELEMENTWISE_DESCRIPTOR(softplus, nvidia)
+DESCRIPTOR(nvidia)
 
-#endif // __SOFTPLUS_CUDA_API_H__
+#endif // __SOFTPLUS_NVIDIA_CUH__
