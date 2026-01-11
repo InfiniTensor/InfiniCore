@@ -52,6 +52,10 @@ from infinicore.ops.paged_attention import paged_attention
 from infinicore.ops.paged_attention_prefill import paged_attention_prefill
 from infinicore.ops.paged_caching import paged_caching
 from infinicore.ops.rearrange import rearrange
+from infinicore.ops.floor_divide import floor_divide
+from infinicore.ops.float_power import float_power
+from infinicore.ops.flipud import flipud
+from infinicore.ops.scatter import scatter
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.unsqueeze import unsqueeze
 from infinicore.tensor import (
@@ -127,6 +131,10 @@ __all__ = [
     "from_list",
     "from_numpy",
     "from_torch",
+    "floor_divide",
+    "float_power",
+    "flipud",
+    "scatter",
     "paged_caching",
     "paged_attention",
     "paged_attention_prefill",
