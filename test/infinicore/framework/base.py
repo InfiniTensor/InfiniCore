@@ -8,15 +8,15 @@ import infinicore
 import traceback
 from abc import ABC, abstractmethod
 
-from .test_case import TestCase, TestResult
+from .results import CaseResult
 from .datatypes import to_torch_dtype, to_infinicore_dtype
 from .devices import InfiniDeviceNames, torch_device_map
 from .tensor import TensorSpec, TensorInitializer
-from .utils import (
+from .utils.tensor_utils import (
     clone_torch_tensor,
-    create_test_comparator,
     infinicore_tensor_from_torch,
 )
+from .utils.compare_utils import create_test_comparator
 from .benchmark import BenchmarkUtils
 
 
@@ -84,7 +84,7 @@ class TestRunner:
                 try:
                     print(f"{test_case}")
 
-                    # Execute test and get TestResult object
+                    # Execute test and get CaseResult object
                     test_result = test_func(device, test_case, self.config)
                     self.test_results.append(test_result)
 
@@ -118,8 +118,8 @@ class TestRunner:
                     print(f"\033[91m✗\033[0m {error_msg}")
                     self.failed_tests.append(error_msg)
 
-                    # Create a failed TestResult
-                    failed_result = TestResult(
+                    # Create a failed CaseResult
+                    failed_result = CaseResult(
                         success=False,
                         return_code=-1,
                         error_message=str(e),
@@ -355,7 +355,11 @@ class BaseOperatorTest(ABC):
                     inp, comparison_target == i
                 )
                 infini_inputs.append(infini_list)
-                cloned_tensors.append(cloned_list)
+                # assuming no input lists are operated inplace
+                if len(cloned_list) > 0:
+                    raise Exception(
+                        "Unconsidered case: inplace operation on input list"
+                    )
             else:
                 infini_inputs.append(inp)
 
@@ -376,7 +380,10 @@ class BaseOperatorTest(ABC):
                 infini_list, cloned_list = self.prepare_infinicore_list(
                     value, key == "out"
                 )
-                cloned_tensors.append(cloned_list)
+                if key == "out" and len(cloned_list) > 0:
+                    # not expected to reach here until an operator supports inplace on list output
+                    # torch.broadcast_tensors returns a list of tensors but doesn't require an out kwarg.
+                    cloned_tensors.append(cloned_list)
                 infini_kwargs[key] = infini_list
             else:
                 infini_kwargs[key] = value
@@ -393,12 +400,12 @@ class BaseOperatorTest(ABC):
             config: Test configuration
 
         Returns:
-            TestResult: Test result object containing status and timing information
+            CaseResult: Test case result object containing status and timing information
         """
         device_str = torch_device_map[device]
 
-        # Initialize test result
-        test_result = TestResult(
+        # Initialize test case result
+        test_result = CaseResult(
             success=False,
             return_code=-1,  # Default to failure
             test_case=test_case,

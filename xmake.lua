@@ -66,6 +66,23 @@ if has_config("cudnn") then
     add_defines("ENABLE_CUDNN_API")
 end
 
+option("cutlass")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Whether to compile cutlass for Nvidia GPU")
+option_end()
+
+if has_config("cutlass") then 
+    add_defines("ENABLE_CUTLASS_API")
+end
+
+option("cuda_arch")
+    set_showmenu(true)
+    set_description("Set CUDA GPU architecture (e.g. sm_90)")
+    set_values("sm_50", "sm_60", "sm_70", "sm_75", "sm_80", "sm_86", "sm_89", "sm_90", "sm_90a")
+    set_category("option")
+option_end()
+
 -- 寒武纪
 option("cambricon-mlu")
     set_default(false)
@@ -251,6 +268,9 @@ target("infinirt")
         add_deps("infinirt-hygon")
     end
     set_languages("cxx17")
+    if not is_plat("windows") then
+        add_cxflags("-fPIC")
+    end
     set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
     add_files("src/infinirt/*.cc")
     add_installfiles("include/infinirt.h", {prefixdir = "include"})
@@ -373,6 +393,7 @@ target("infinicore_cpp_api")
     add_files("src/infinicore/context/*.cc")
     add_files("src/infinicore/context/*/*.cc")
     add_files("src/infinicore/tensor/*.cc")
+    add_files("src/infinicore/graph/*.cc")
     add_files("src/infinicore/nn/*.cc")
     add_files("src/infinicore/ops/*/*.cc")
     add_files("src/utils/*.cc")
@@ -401,6 +422,8 @@ target("_infinicore")
     add_packages("pybind11")
     set_languages("cxx17")
 
+    add_deps("infinicore_cpp_api")
+
     set_kind("shared")
     local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
     add_includedirs(INFINI_ROOT.."/include", { public = true })
@@ -408,14 +431,7 @@ target("_infinicore")
     add_linkdirs(INFINI_ROOT.."/lib")
     add_links("infiniop", "infinirt", "infiniccl")
 
-    add_files("src/infinicore/*.cc")
-    add_files("src/infinicore/context/*.cc")
-    add_files("src/infinicore/context/*/*.cc")
-    add_files("src/infinicore/tensor/*.cc")
-    add_files("src/infinicore/nn/*.cc")
-    add_files("src/infinicore/ops/*/*.cc")
     add_files("src/infinicore/pybind11/**.cc")
-    add_files("src/utils/*.cc")
 
     set_installdir("python/infinicore")
 target_end()

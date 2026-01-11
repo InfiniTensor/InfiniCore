@@ -33,14 +33,14 @@ Runtime *ContextImpl::getCpuRuntime() {
     return runtime_table_[int(Device::Type::CPU)][0].get();
 }
 
-void ContextImpl::setDevice(Device device, bool force_cpu) {
+void ContextImpl::setDevice(Device device) {
     if (device == getCurrentRuntime()->device()) {
         // Do nothing if the device is already set.
         return;
     }
-    if (device == Device(Device::Type::CPU, 0) && !force_cpu) {
-        // if not forced, no need to switch to CPU device runtime
-        return;
+
+    if (getCurrentRuntime()->isGraphRecording()) {
+        spdlog::warn("Switching device runtime during graph recording may break the graph!");
     }
 
     if (runtime_table_[int(device.getType())][device.getIndex()] == nullptr) {
@@ -87,8 +87,8 @@ ContextImpl::ContextImpl() {
 
 namespace context {
 
-void setDevice(Device device, bool force_cpu) {
-    ContextImpl::singleton().setDevice(device, force_cpu);
+void setDevice(Device device) {
+    ContextImpl::singleton().setDevice(device);
 }
 
 Device getDevice() {
@@ -182,6 +182,21 @@ void streamWaitEvent(infinirtStream_t stream, infinirtEvent_t event) {
     ContextImpl::singleton().getCurrentRuntime()->streamWaitEvent(stream, event);
 }
 
+bool isGraphRecording() {
+    return ContextImpl::singleton().getCurrentRuntime()->isGraphRecording();
+}
+
+void startGraphRecording() {
+    ContextImpl::singleton().getCurrentRuntime()->startGraphRecording();
+}
+
+void addGraphOperator(std::shared_ptr<graph::GraphOperator> op) {
+    ContextImpl::singleton().getCurrentRuntime()->addGraphOperator(op);
+}
+
+std::shared_ptr<graph::Graph> stopGraphRecording() {
+    return ContextImpl::singleton().getCurrentRuntime()->stopGraphRecording();
+}
 } // namespace context
 
 } // namespace infinicore

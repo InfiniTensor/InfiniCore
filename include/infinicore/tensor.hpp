@@ -133,6 +133,8 @@ public:
 
     void debug() const;
 
+    Tensor to_blob() const;
+
     ///
     /// Data Transfer APIs
     ///
@@ -167,6 +169,19 @@ public:
     ///
     /// View APIs
     ///
+
+    /**
+     * Returns a new tensor with a dimension of size one removed at the specified position.
+     * Throws runtime_error if the dimension to be removed is not of size 1.
+     *
+     * @param dim The dimension index to remove
+     * @return A new tensor with the removed dimension
+     *
+     * Example:
+     *   // For a 3D tensor with shape [1, 3, 4], squeeze at dim 0 results in shape [3, 4]
+     *   tensor->squeeze(0);
+     */
+    Tensor squeeze(size_t dim) const;
 
     /**
      * Returns a new tensor with a dimension of size one inserted at the specified position.
@@ -281,7 +296,7 @@ protected:
 
     friend class Tensor;
 
-private:
+protected:
     TensorMetaData meta_;
     TensorData data_;
 };

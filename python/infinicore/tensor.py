@@ -42,6 +42,11 @@ class Tensor:
                     getattr(self._underlying, name)
                 ),
             )
+        else:
+            raise AttributeError(
+                "{!r} object has no attribute {!r}".format(__name__, name)
+            )
+
         return getattr(self, name)
 
     @property
@@ -91,6 +96,12 @@ class Tensor:
 
     def view(self, shape):
         return Tensor(self._underlying.view(shape))
+
+    def squeeze(self, dim):
+        return infinicore.squeeze(self, dim)
+
+    def unsqueeze(self, dim):
+        return infinicore.unsqueeze(self, dim)
 
     def debug(self, filename=None):
         """Print tensor data or save to file for debugging

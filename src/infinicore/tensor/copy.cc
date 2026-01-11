@@ -31,6 +31,7 @@ void TensorImpl::copy_from(Tensor src) {
         // Use nbytes() to get the actual tensor size, not the full memory size
         size_t copy_size = std::min(this->nbytes(), src->nbytes());
         if (this->device().getType() == Device::Type::CPU) {
+            context::setDevice(src->device());
             if (this->is_contiguous()) {
                 context::memcpyD2H(this->data(), src->data(), copy_size);
             } else {
@@ -39,7 +40,7 @@ void TensorImpl::copy_from(Tensor src) {
                 op::rearrange_(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()), local_src);
             }
         } else if (src->device().getType() == Device::Type::CPU) {
-
+            context::setDevice(this->device());
             if (this->is_contiguous()) {
                 context::memcpyH2D(this->data(), src->data(), copy_size);
             } else {

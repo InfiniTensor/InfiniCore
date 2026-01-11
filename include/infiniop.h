@@ -3,6 +3,7 @@
 
 #include "infiniop/handle.h"
 #include "infiniop/ops/add.h"
+#include "infiniop/ops/add_rms_norm.h"
 #include "infiniop/ops/attention.h"
 #include "infiniop/ops/causal_softmax.h"
 #include "infiniop/ops/clip.h"
@@ -15,6 +16,9 @@
 #include "infiniop/ops/lp_norm.h"
 #include "infiniop/ops/mul.h"
 #include "infiniop/ops/ones.h"
+#include "infiniop/ops/paged_attention.h"
+#include "infiniop/ops/paged_attention_prefill.h"
+#include "infiniop/ops/paged_caching.h"
 #include "infiniop/ops/random_sample.h"
 #include "infiniop/ops/rearrange.h"
 #include "infiniop/ops/relu.h"

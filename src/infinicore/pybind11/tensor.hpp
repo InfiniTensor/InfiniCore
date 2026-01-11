@@ -16,25 +16,27 @@ inline void bind(py::module &m) {
         .def_property_readonly("ndim", [](const Tensor &tensor) { return tensor->ndim(); })
         .def_property_readonly("dtype", [](const Tensor &tensor) { return tensor->dtype(); })
         .def_property_readonly("device", [](const Tensor &tensor) { return tensor->device(); })
-
         .def("data_ptr", [](const Tensor &tensor) { return reinterpret_cast<std::uintptr_t>(tensor->data()); })
         .def("size", [](const Tensor &tensor, std::size_t dim) { return tensor->size(dim); })
         .def("stride", [](const Tensor &tensor, std::size_t dim) { return tensor->stride(dim); })
         .def("numel", [](const Tensor &tensor) { return tensor->numel(); })
-
         .def("is_contiguous", [](const Tensor &tensor) { return tensor->is_contiguous(); })
         .def("is_pinned", [](const Tensor &tensor) { return tensor->is_pinned(); })
         .def("info", [](const Tensor &tensor) { return tensor->info(); })
+
         .def("debug", [](const Tensor &tensor) { return tensor->debug(); })
         .def("debug", [](const Tensor &tensor, const std::string &filename) { return tensor->debug(filename); })
 
         .def("copy_", [](Tensor &tensor, const Tensor &other) { tensor->copy_from(other); })
         .def("to", [](const Tensor &tensor, const Device &device) { return tensor->to(device); })
-        .def("as_strided", [](const Tensor &tensor, const Shape &shape, const Strides &strides) { return tensor->as_strided(shape, strides); })
         .def("contiguous", [](const Tensor &tensor) { return tensor->contiguous(); })
+
+        .def("as_strided", [](const Tensor &tensor, const Shape &shape, const Strides &strides) { return tensor->as_strided(shape, strides); })
         .def("narrow", [](const Tensor &tensor, std::size_t dim, std::size_t start, std::size_t length) { return tensor->narrow({{dim, start, length}}); })
         .def("permute", [](const Tensor &tensor, const Shape &dims) { return tensor->permute(dims); })
-        .def("view", [](const Tensor &tensor, const Shape &shape) { return tensor->view(shape); });
+        .def("view", [](const Tensor &tensor, const Shape &shape) { return tensor->view(shape); })
+        .def("unsqueeze", [](const Tensor &tensor, std::size_t dim) { return tensor->unsqueeze(dim); })
+        .def("squeeze", [](const Tensor &tensor, std::size_t dim) { return tensor->squeeze(dim); });
 
     m.def("empty", &Tensor::empty,
           py::arg("shape"),
