@@ -2,11 +2,16 @@
 
 #include <pybind11/pybind11.h>
 
+#include "ops/adaptive_avg_pool3d.hpp"
 #include "ops/add.hpp"
+#include "ops/addr.hpp"
+#include "ops/argwhere.hpp"
+#include "ops/asin.hpp"
 #include "ops/add_rms_norm.hpp"
 #include "ops/attention.hpp"
 #include "ops/causal_softmax.hpp"
 #include "ops/embedding.hpp"
+#include "ops/fmin.hpp"
 #include "ops/linear.hpp"
 #include "ops/matmul.hpp"
 #include "ops/mul.hpp"
@@ -26,9 +31,14 @@ namespace infinicore::ops {
 
 inline void bind(py::module &m) {
     bind_add(m);
+    bind_adaptive_avg_pool3d(m);
+    bind_argwhere(m);
+    bind_addr(m);
+    bind_asin(m);
     bind_add_rms_norm(m);
     bind_attention(m);
     bind_causal_softmax(m);
+    bind_fmin(m);
     bind_random_sample(m);
     bind_linear(m);
     bind_matmul(m);
