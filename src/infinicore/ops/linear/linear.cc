@@ -1,6 +1,6 @@
 #include "infinicore/ops/linear.hpp"
-#include "infinicore/ops/add.hpp"
-#include "infinicore/ops/matmul.hpp"
+#include "infinicore/ops/gemm.hpp"
+#include "infinicore/ops/rearrange.hpp"
 
 namespace infinicore::op {
 
@@ -42,16 +42,18 @@ void linear_(Tensor out,
 
     // linear transformation
     Tensor out_view = out->view({N, out_features});
-    matmul_(out_view,
-            input->view({N, in_features}),
-            weight->permute({1, 0}));
-
     // Add bias
+    float alpha = 1.0f;
+    float beta = 0.0f;
     if (bias.has_value()) {
-        add_(out_view,
-             out_view,
-             bias.value()->as_strided({N, out_features}, {0, 1}));
+        rearrange_(out_view,
+                   bias.value()->as_strided({N, out_features}, {0, 1}));
+        beta = 1.0f;
     }
+
+    gemm_(out_view,
+          input->view({N, in_features}),
+          weight->permute({1, 0}), alpha, beta);
 }
 
 } // namespace infinicore::op

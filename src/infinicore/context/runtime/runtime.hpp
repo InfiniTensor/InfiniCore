@@ -1,7 +1,10 @@
 #pragma once
 
-#include "../allocators/memory_allocator.hpp"
+#include "../allocators/pinnable_block_allocator.hpp"
+
 #include "infinicore/context/context.hpp"
+
+#include "../../graph/graph_manager.hpp"
 
 #include <infiniop.h>
 #include <infinirt.h>
@@ -13,8 +16,9 @@ private:
     Device device_;
     infinirtStream_t stream_;
     infiniopHandle_t infiniop_handle_;
-    std::unique_ptr<MemoryAllocator> device_memory_allocator_;
+    std::unique_ptr<PinnableBlockAllocator> device_memory_allocator_;
     std::unique_ptr<MemoryAllocator> pinned_host_memory_allocator_;
+    std::unique_ptr<graph::GraphManager> graph_manager_;
 
 protected:
     Runtime(Device device);
@@ -47,6 +51,12 @@ public:
     void destroyEvent(infinirtEvent_t event);
     float elapsedTime(infinirtEvent_t start, infinirtEvent_t end);
     void streamWaitEvent(infinirtStream_t stream, infinirtEvent_t event);
+
+    // Graph
+    bool isGraphRecording() const;
+    void startGraphRecording();
+    void addGraphOperator(std::shared_ptr<graph::GraphOperator> op);
+    std::shared_ptr<graph::Graph> stopGraphRecording();
 
     std::string toString() const;
 

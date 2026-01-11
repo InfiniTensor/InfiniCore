@@ -3,16 +3,15 @@
 #include "../../utils.hpp"
 
 namespace infinicore::op {
+INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(Gemm);
 
-common::OpDispatcher<Gemm::schema> &Gemm::dispatcher() {
-    static common::OpDispatcher<Gemm::schema> dispatcher_;
-    return dispatcher_;
-};
+Gemm::Gemm(Tensor c, Tensor a, Tensor b, float alpha, float beta) {
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(c, a, b);
+    INFINICORE_GRAPH_OP_DISPATCH(c->device().getType(), c, a, b, alpha, beta);
+}
 
 void Gemm::execute(Tensor c, Tensor a, Tensor b, float alpha, float beta) {
-    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(c, a, b);
-    infinicore::context::setDevice(c->device());
-    dispatcher().lookup(c->device().getType())(c, a, b, alpha, beta);
+    INFINICORE_GRAPH_OP_RECORD_OR_RUN(Gemm, c, a, b, alpha, beta);
 }
 
 Tensor gemm(Tensor a, Tensor b, float alpha, float beta) {

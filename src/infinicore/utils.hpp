@@ -47,3 +47,14 @@ inline struct SpdlogInitializer {
             }                                                                     \
         }                                                                         \
     } while (0)
+
+#define INFINICORE_ASSERT(CONDITION__)                                                                                                         \
+    do {                                                                                                                                       \
+        if (!(CONDITION__)) {                                                                                                                  \
+            SPDLOG_ERROR(                                                                                                                      \
+                "Assertion `{}` failed from {} at {}:{}",                                                                                      \
+                #CONDITION__, __func__, __FILE__, __LINE__);                                                                                   \
+            throw std::runtime_error(                                                                                                          \
+                std::string("Assertion `") + #CONDITION__ + "` failed from " + __func__ + " at " + __FILE__ + ":" + std::to_string(__LINE__)); \
+        }                                                                                                                                      \
+    } while (0)

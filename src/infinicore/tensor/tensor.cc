@@ -275,4 +275,12 @@ std::shared_ptr<TensorImpl> TensorImpl::strided_from_blob(
     return t;
 }
 
+Tensor TensorImpl::to_blob() const {
+    auto t = std::shared_ptr<TensorImpl>(new TensorImpl(shape(), strides(), dtype()));
+    t->data_.offset = this->data_.offset;
+    t->data_.memory = std::make_shared<Memory>(this->data_.memory->data(), this->data_.memory->size(), this->data_.memory->device(), nullptr);
+
+    return Tensor{t};
+}
+
 } // namespace infinicore
