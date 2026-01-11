@@ -3,11 +3,11 @@
 #include "dequantize_w42f16_moore.h"
 #include "dequantize_w42f16_kernel.h"
 
-#include "../dequantize_awq.h"
+#include "../dequantize_gptq.h"
 #include <musa_fp16.h>
 
 __global__ void __launch_bounds__(64)
-    dequantize_weights_awq(int *__restrict__ B, half *__restrict__ scaling_factors,
+    dequantize_weights_gptq(int *__restrict__ B, half *__restrict__ scaling_factors,
                        int *__restrict__ zeros, half *__restrict__ C, int G) {
     // static constexpr uint32_t ZERO = 0x0;
     half B_shared[32 * (128 + 8)];
@@ -29,11 +29,11 @@ __global__ void __launch_bounds__(64)
     half *scaling_factors_ptr2 = scaling_factors + index4;
 
     uint32_t zeros_loaded = *(uint32_t *)(zeros_ptr2);
-    uint4 B_loaded_zero = dequantize_s4_to_fp16x2_awq(zeros_loaded);
+    uint4 B_loaded_zero = dequantize_s4_to_fp16x2_gptq(zeros_loaded);
     uint4 B_loaded_scale = *(uint4 *)(scaling_factors_ptr2);
 
     uint32_t B_loaded = *(uint32_t *)B_ptr2;
-    uint4 B_loaded_fp16 = dequantize_s4_to_fp16x2_awq(B_loaded);
+    uint4 B_loaded_fp16 = dequantize_s4_to_fp16x2_gptq(B_loaded);
 
     // Reinterpret uint4 components as __half2
     __half2 *B_loaded_fp16_h2 = reinterpret_cast<__half2 *>(&B_loaded_fp16);
@@ -60,7 +60,7 @@ __global__ void __launch_bounds__(64)
     }
 }
 
-namespace op::dequantize_awq::moore {
+namespace op::dequantize_gptq::moore {
 
 struct Descriptor::Opaque {
     std::shared_ptr<device::moore::Handle::Internal> internal;
@@ -79,7 +79,7 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t zeros_desc) {
 
     auto handle = reinterpret_cast<device::moore::Handle *>(handle_);
-    auto result = DequantizeAWQInfo::create(out_desc, qweight_desc, scales_desc, zeros_desc);
+    auto result = DequantizeGPTQInfo::create(out_desc, qweight_desc, scales_desc, zeros_desc);
 
     *desc_ptr = new Descriptor(
         0,
@@ -119,9 +119,9 @@ Descriptor::calculate(
     half *scales_ = const_cast<half *>(reinterpret_cast<const half *>(scales));
     int *zeros_ = const_cast<int *>(reinterpret_cast<const int *>(zeros));
 
-    dequantize_weights_awq<<<num_blocks, threads_per_block, 0, reinterpret_cast<musaStream_t>(stream)>>>(
+    dequantize_weights_gptq<<<num_blocks, threads_per_block, 0, reinterpret_cast<musaStream_t>(stream)>>>(
         qweight_, scales_, zeros_, out_, group_size);
     return INFINI_STATUS_SUCCESS;
 }
 
-} // namespace op::dequantize_awq::moore
+} // namespace op::dequantize_gptq::moore
