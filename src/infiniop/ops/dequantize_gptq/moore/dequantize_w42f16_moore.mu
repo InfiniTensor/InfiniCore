@@ -1,62 +1,58 @@
 #include "../../../devices/moore/moore_handle.h"
 #include "../../../devices/moore/moore_kernel_common.h"
 #include "dequantize_w42f16_moore.h"
-#include "dequantize_w42f16_kernel.h"
+// #include "dequantize_w42f16_kernel.h"  // 不再需要（保留也无妨）
 
 #include "../dequantize_gptq.h"
 #include <musa_fp16.h>
+#include <cstdint>
 
-__global__ void __launch_bounds__(64)
-    dequantize_weights_gptq(int *__restrict__ B, half *__restrict__ scaling_factors,
-                       int *__restrict__ zeros, half *__restrict__ C, int G) {
-    // static constexpr uint32_t ZERO = 0x0;
-    half B_shared[32 * (128 + 8)];
+// 对齐 nvidia 版：支持 g_idx
+// qweight: [in_packed, out_features]，每个 uint32 打包 8 个输入通道的 4-bit
+// zeros:   [num_groups, out_packed]，每个 uint32 打包 8 个输出通道的 4-bit
+// scales:  [num_groups, out_features]
+// g_idx:   [in_features]
+__global__ void __launch_bounds__(128)
+dequantize_weights_gptq(const uint32_t *__restrict__ qweight,
+                        const half     *__restrict__ scales,
+                        const uint32_t *__restrict__ zeros,
+                        const int      *__restrict__ g_idx,
+                        half           *__restrict__ out,
+                        int in_features,
+                        int out_features,
+                        int out_packed,   // ceil(out_features / 8)
+                        int num_groups) {
+    const int col_pack = blockIdx.x * blockDim.x + threadIdx.x; // packed output column
+    const int row      = blockIdx.y * blockDim.y + threadIdx.y; // real input row
+    if (col_pack >= out_packed || row >= in_features) return;
 
-    half *B_shared_ptr2 = B_shared;
+    // clamp gid to [0, num_groups)
+    const int gid_raw = g_idx ? g_idx[row] : 0;
+    const int gid = ((gid_raw % num_groups) + num_groups) % num_groups;
 
-    int N = blockDim.x * gridDim.x; // 2
-    int col = (blockIdx.x * blockDim.x + threadIdx.x);
-    int row = (blockIdx.y * blockDim.y + threadIdx.y);
-    int index1 = 8 * col + 8 * row * N;
-    half *C_ptr2 = C + index1;
+    const int pack_row = row >> 3;          // packed input row (8 rows per pack)
+    const int q_shift  = (row & 7) * 4;     // nibble shift within uint32
 
-    int index2 = col + row * N;
-    int *B_ptr2 = B + index2;
+    const int zero_idx = gid * out_packed + col_pack;
+    const uint32_t zeros_loaded = zeros[zero_idx];
 
-    int index3 = col + (int)(row / G) * N;
-    int *zeros_ptr2 = zeros + index3;
-    int index4 = 8 * col + (int)(row / G) * N * 8;
-    half *scaling_factors_ptr2 = scaling_factors + index4;
+    const int col_base   = col_pack << 3;  // 8 real cols per pack
+    const int scale_base = gid * out_features + col_base;
 
-    uint32_t zeros_loaded = *(uint32_t *)(zeros_ptr2);
-    uint4 B_loaded_zero = dequantize_s4_to_fp16x2_gptq(zeros_loaded);
-    uint4 B_loaded_scale = *(uint4 *)(scaling_factors_ptr2);
+    #pragma unroll
+    for (int j = 0; j < 8; ++j) {
+        const int col = col_base + j;
+        if (col >= out_features) break;
 
-    uint32_t B_loaded = *(uint32_t *)B_ptr2;
-    uint4 B_loaded_fp16 = dequantize_s4_to_fp16x2_gptq(B_loaded);
+        const uint32_t q_loaded = qweight[pack_row * out_features + col];
+        const int q_nib = (q_loaded >> q_shift) & 0xF;
 
-    // Reinterpret uint4 components as __half2
-    __half2 *B_loaded_fp16_h2 = reinterpret_cast<__half2 *>(&B_loaded_fp16);
-    __half2 *B_loaded_zero_h2 = reinterpret_cast<__half2 *>(&B_loaded_zero);
-    __half2 *B_loaded_scale_h2 = reinterpret_cast<__half2 *>(&B_loaded_scale);
+        const int z_nib = (zeros_loaded >> (j * 4)) & 0xF;
+        const half scale = scales[scale_base + j];
 
-    // Replace PTX sub.f16x2 with __hsub2 for each component
-    B_loaded_fp16_h2[0] = __hsub2(B_loaded_fp16_h2[0], B_loaded_zero_h2[0]);
-    B_loaded_fp16_h2[1] = __hsub2(B_loaded_fp16_h2[1], B_loaded_zero_h2[1]);
-    B_loaded_fp16_h2[2] = __hsub2(B_loaded_fp16_h2[2], B_loaded_zero_h2[2]);
-    B_loaded_fp16_h2[3] = __hsub2(B_loaded_fp16_h2[3], B_loaded_zero_h2[3]);
-
-    // Replace PTX fma.rn.f16x2 with __hfma2 for each component
-    B_loaded_fp16_h2[0] = __hfma2(B_loaded_fp16_h2[0], B_loaded_scale_h2[0], __float2half2_rn(0.0f));
-    B_loaded_fp16_h2[1] = __hfma2(B_loaded_fp16_h2[1], B_loaded_scale_h2[1], __float2half2_rn(0.0f));
-    B_loaded_fp16_h2[2] = __hfma2(B_loaded_fp16_h2[2], B_loaded_scale_h2[2], __float2half2_rn(0.0f));
-    B_loaded_fp16_h2[3] = __hfma2(B_loaded_fp16_h2[3], B_loaded_scale_h2[3], __float2half2_rn(0.0f));
-
-    // Store back to shared memory
-    *(uint4 *)B_shared_ptr2 = B_loaded_fp16;
-
-    for (int i = 0; i < 8; ++i) {
-        *(C_ptr2 + i) = B_shared[i];
+        // 与 nvidia 版一致： (q - (z + 1)) * s
+        const float v = float(q_nib - (z_nib + 1)) * __half2float(scale);
+        out[row * out_features + col] = __float2half(v);
     }
 }
 
@@ -76,10 +72,11 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t out_desc,
     infiniopTensorDescriptor_t qweight_desc,
     infiniopTensorDescriptor_t scales_desc,
-    infiniopTensorDescriptor_t zeros_desc) {
+    infiniopTensorDescriptor_t zeros_desc,
+    infiniopTensorDescriptor_t g_idx_desc) {
 
     auto handle = reinterpret_cast<device::moore::Handle *>(handle_);
-    auto result = DequantizeGPTQInfo::create(out_desc, qweight_desc, scales_desc, zeros_desc);
+    auto result = DequantizeGPTQInfo::create(out_desc, qweight_desc, scales_desc, zeros_desc, g_idx_desc);
 
     *desc_ptr = new Descriptor(
         0,
@@ -89,38 +86,39 @@ infiniStatus_t Descriptor::create(
     return INFINI_STATUS_SUCCESS;
 }
 
-infiniStatus_t
-Descriptor::calculate(
+infiniStatus_t Descriptor::calculate(
     void *workspace,
     size_t workspace_size,
     void *out,
     const void *qweight,
     const void *scales,
     const void *zeros,
+    const void *g_idx,
     void *stream) const {
-    int in_features = _info.in_features();
-    int out_features = _info.out_features();
-    int group_size = in_features / _info.num_groups();
 
-    // ==================== 默认配置, 固定为 8 ====================
-    constexpr int BLOCK_X = 8;
-    constexpr int BLOCK_Y = 8;
+    const int in_features  = _info.in_features();
+    const int out_features = _info.out_features();
+    const int out_packed   = _info.out_packed();
+    const int in_packed    = _info.in_packed();
+    const int num_groups   = _info.num_groups();
 
-    int x_blocks = (out_features + BLOCK_X - 1) / BLOCK_X;
-    int y_blocks = (in_features + BLOCK_Y - 1) / BLOCK_Y;
+    if (num_groups <= 0 || in_features <= 0 || out_features <= 0 || out_packed <= 0 || in_packed <= 0)
+        return INFINI_STATUS_BAD_PARAM;
 
-    dim3 num_blocks(x_blocks, y_blocks);
-    dim3 threads_per_block(BLOCK_X, BLOCK_Y);
-    // =====================================================
+    constexpr int BLOCK_X = 16; // packed columns
+    constexpr int BLOCK_Y = 4;  // rows
+    dim3 threads(BLOCK_X, BLOCK_Y);
+    dim3 blocks((out_packed + BLOCK_X - 1) / BLOCK_X,
+                (in_features + BLOCK_Y - 1) / BLOCK_Y);
 
-    half *out_ = reinterpret_cast<half *>(out);
+    dequantize_weights_gptq<<<blocks, threads, 0, reinterpret_cast<musaStream_t>(stream)>>>(
+        reinterpret_cast<const uint32_t*>(qweight),
+        reinterpret_cast<const half*>(scales),
+        reinterpret_cast<const uint32_t*>(zeros),
+        reinterpret_cast<const int*>(g_idx),
+        reinterpret_cast<half*>(out),
+        in_features, out_features, out_packed, num_groups);
 
-    int *qweight_ = const_cast<int *>(reinterpret_cast<const int *>(qweight));
-    half *scales_ = const_cast<half *>(reinterpret_cast<const half *>(scales));
-    int *zeros_ = const_cast<int *>(reinterpret_cast<const int *>(zeros));
-
-    dequantize_weights_gptq<<<num_blocks, threads_per_block, 0, reinterpret_cast<musaStream_t>(stream)>>>(
-        qweight_, scales_, zeros_, out_, group_size);
     return INFINI_STATUS_SUCCESS;
 }
 
