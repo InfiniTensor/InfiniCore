@@ -35,7 +35,7 @@ public:
 
         const infiniDtype_t dtype = d_desc->dtype();
         const infiniDtype_t packed_type = x_desc->dtype();
-        CHECK_OR_RETURN(dtype == c_desc->dtype() && dtype == x_scale_desc->dtype() && dtype == weights_scale_desc->dtype(),
+        CHECK_OR_RETURN(dtype == c_desc->dtype(),
                         INFINI_STATUS_BAD_TENSOR_DTYPE);
         CHECK_OR_RETURN(packed_type == weights_desc->dtype(),
                         INFINI_STATUS_BAD_TENSOR_DTYPE);

@@ -60,23 +60,23 @@ void int8Gemm(
 
 template <typename Tdata>
 INFINIOP_CUDA_KERNEL post(
-    Tdata *y, int32_t *y_packed, const Tdata *c, const Tdata *bias, const int8_t *x_packed, const Tdata *x_scale, const Tdata *x_zero, const int8_t *w_packed, const Tdata *w_scale, const Tdata *w_zero, int M, int K, int N, float alpha, float beta) {
+    Tdata *y, int32_t *y_packed, const Tdata *c, const Tdata *bias, const int8_t *x_packed, const float *x_scale, const float *x_zero, const int8_t *w_packed, const float *w_scale, const float *w_zero, int M, int K, int N, float alpha, float beta) {
     postKernel<Tdata>(y, y_packed, c, bias, x_packed, x_scale, x_zero, w_packed, w_scale, w_zero, M, K, N, alpha, beta);
 }
 template <typename Tdata>
 INFINIOP_CUDA_KERNEL post(
-    Tdata *y, int32_t *y_packed, const Tdata *c, const int8_t *x_packed, const Tdata *x_scale, const Tdata *x_zero, const int8_t *w_packed, const Tdata *w_scale, const Tdata *w_zero, int M, int K, int N, float alpha, float beta) {
+    Tdata *y, int32_t *y_packed, const Tdata *c, const int8_t *x_packed, const float *x_scale, const float *x_zero, const int8_t *w_packed, const float *w_scale, const float *w_zero, int M, int K, int N, float alpha, float beta) {
     postKernel<Tdata>(y, y_packed, c, x_packed, x_scale, x_zero, w_packed, w_scale, w_zero, M, K, N, alpha, beta);
 }
 
 template <typename Tdata>
 INFINIOP_CUDA_KERNEL postSym(
-    Tdata *y, int32_t *y_packed, const Tdata *c, const Tdata *bias, const int8_t *x_packed, const Tdata *x_scale, const int8_t *w_packed, const Tdata *w_scale, int M, int K, int N, float alpha, float beta) {
+    Tdata *y, int32_t *y_packed, const Tdata *c, const Tdata *bias, const int8_t *x_packed, const float *x_scale, const int8_t *w_packed, const float *w_scale, int M, int K, int N, float alpha, float beta) {
     postSymKernel<Tdata>(y, y_packed, c, bias, x_packed, x_scale, w_packed, w_scale, M, K, N, alpha, beta);
 }
 template <typename Tdata>
 INFINIOP_CUDA_KERNEL postSym(
-    Tdata *y, int32_t *y_packed, const Tdata *c, const int8_t *x_packed, const Tdata *x_scale, const int8_t *w_packed, const Tdata *w_scale, int M, int K, int N, float alpha, float beta) {
+    Tdata *y, int32_t *y_packed, const Tdata *c, const int8_t *x_packed, const float *x_scale, const int8_t *w_packed, const float *w_scale, int M, int K, int N, float alpha, float beta) {
     postSymKernel<Tdata>(y, y_packed, c, x_packed, x_scale, w_packed, w_scale, M, K, N, alpha, beta);
 }
 
@@ -114,7 +114,7 @@ infiniStatus_t Descriptor::create(
 }
 
 template <unsigned int BLOCK_SIZE, typename Tdata>
-infiniStatus_t Descriptor::launchKernel(const LinearInfo &info, Tdata *y, const Tdata *c, const Tdata *bias, const int8_t *x_packed, const Tdata *x_scale, const Tdata *x_zero, const int8_t *w_packed, const Tdata *w_scale, const Tdata *w_zero, void *stream_, void *workspace) const {
+infiniStatus_t Descriptor::launchKernel(const LinearInfo &info, Tdata *y, const Tdata *c, const Tdata *bias, const int8_t *x_packed, const float *x_scale, const float *x_zero, const int8_t *w_packed, const float *w_scale, const float *w_zero, void *stream_, void *workspace) const {
     cudaStream_t stream = (cudaStream_t)stream_;
     int M = (int)info.M;
     int K = (int)info.K;
@@ -184,7 +184,7 @@ infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size,
                                      const void *weights_zero,
                                      void *stream) const {
 #define CALCULATE_LINEAR(BLOCK_SIZE, TDATA) \
-    launchKernel<BLOCK_SIZE, TDATA>(_info, (TDATA *)d, (const TDATA *)c, (const TDATA *)bias, (const int8_t *)x, (const TDATA *)x_scale, (const TDATA *)x_zero, (const int8_t *)weights, (const TDATA *)weights_scale, (const TDATA *)weights_zero, stream, workspace)
+    launchKernel<BLOCK_SIZE, TDATA>(_info, (TDATA *)d, (const TDATA *)c, (const TDATA *)bias, (const int8_t *)x, (const float *)x_scale, (const float *)x_zero, (const int8_t *)weights, (const float *)weights_scale, (const float *)weights_zero, stream, workspace)
 #define CALCULATE_LINEAR_WITH_BLOCK_SIZE(BLOCK_SIZE)            \
     {                                                           \
         if (_info.dtype == INFINI_DTYPE_F16)                    \

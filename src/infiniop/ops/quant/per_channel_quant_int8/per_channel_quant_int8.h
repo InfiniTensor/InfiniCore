@@ -1,19 +1,19 @@
 #ifndef __QUANT_H__
 #define __QUANT_H__
 
-#include "../../operator.h"
+#include "../../../operator.h"
 #include "info.h"
 
 #define DESCRIPTOR(NAMESPACE)                                                                \
                                                                                              \
-    namespace op::quant::NAMESPACE {                                                         \
+    namespace op::per_channel_quant_int8::NAMESPACE {                                        \
     class Descriptor final : public InfiniopDescriptor {                                     \
         struct Opaque;                                                                       \
         Opaque *_opaque;                                                                     \
-        QuantInfo _info;                                                                     \
+        PerChannelQuantI8Info _info;                                                         \
         size_t _workspace_size;                                                              \
                                                                                              \
-        Descriptor(Opaque *opaque, QuantInfo info,                                           \
+        Descriptor(Opaque *opaque, PerChannelQuantI8Info info,                               \
                    size_t workspace_size,                                                    \
                    infiniDevice_t device_type, int device_id)                                \
             : InfiniopDescriptor{device_type, device_id},                                    \

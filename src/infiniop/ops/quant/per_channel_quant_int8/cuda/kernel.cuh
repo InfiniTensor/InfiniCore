@@ -1,16 +1,56 @@
-#ifndef __QUANT_KERNEL_CUH__
-#define __QUANT_KERNEL_CUH__
+#ifndef __PERCHANNEL_QUANTINT8_KERNEL_CUH__
+#define __PERCHANNEL_QUANTINT8_KERNEL_CUH__
 
 #include <cub/block/block_reduce.cuh>
+/**
+ * Rounds a floating-point value to the nearest integer using
+ * the "half away from zero" tie-breaking rule.
+ *
+ * This rounding mode rounds to the nearest whole number, with ties
+ * (values exactly halfway between integers) rounded away from zero.
+ * For positive numbers: 1.5 rounds to 2, 2.5 rounds to 3
+ * For negative numbers: -1.5 rounds to -2, -2.5 rounds to -3
+ * This differs from standard "round to nearest, ties to even" banking rounding.
+ *
+ * @param x The floating-point value to round.
+ * @return The rounded integer value as an int.
+ *
+ * @note This is a CUDA device function designed to execute on GPU hardware.
+ * @note Uses floorf() and fabsf() from the CUDA math library.
+ */
 __device__ inline int round_half_away_from_zero(float x) {
     float ax = fabsf(x);
     float r = floorf(ax + 0.5f);
     return (x >= 0.0f) ? (int)r : -(int)r;
 }
 
+/**
+ * Performs per-channel asymmetric quantization to int8 precision for large matrices.
+ *
+ * This kernel quantizes input matrix x (M x K) to int8 using channel-wise (column-wise)
+ * quantization parameters, optimized for cases where K >= 1024. Each channel (column)
+ * has independently computed scale and zero point to minimize quantization error.
+ *
+ * The quantization follows: x_quantized = round((x - zero) / scale)
+ * where zero points shift the range and scales normalize to int8 range [-128, 127].
+ *
+ * @tparam Tdata Input data type (typically float or half)
+ * @tparam BLOCK_SIZE CUDA block size for thread cooperation
+ *
+ * @param x_packed Output buffer for packed int8 quantized values
+ * @param x_scale Output buffer for per-channel scale factors
+ * @param x_zero Output buffer for per-channel zero points
+ * @param x Input matrix in row-major layout (M rows, K columns)
+ * @param M Number of rows in input matrix
+ * @param K Number of columns in input matrix (channels)
+ *
+ * @note This is a CUDA device function optimized for GPU execution
+ * @note Designed for large channel dimensions (K >= 1024) to maximize parallelization
+ * @note Uses block-level reductions for efficient min/max computation per channel
+ */
 template <typename Tdata, unsigned int BLOCK_SIZE>
-__device__ void blockQuantKernel(
-    int8_t *x_packed, Tdata *x_scale, Tdata *x_zero, const Tdata *x,
+__device__ void blockPerChannelQuantI8Kernel(
+    int8_t *x_packed, float *x_scale, float *x_zero, const Tdata *x,
     int M, int K) {
     int row = blockIdx.x;
     int tid = row * K;
@@ -41,7 +81,6 @@ __device__ void blockQuantKernel(
     }
     __syncthreads();
 
-    // ---- 3. 使用 float（匹配 python）计算 scale/zero ----
     float global_max = global_max_f;
     float global_min = global_min_f;
 
@@ -53,11 +92,9 @@ __device__ void blockQuantKernel(
     float inv_scale = 1.0f / scale;
     float zero = -global_min * inv_scale - 128.0f;
 
-    // 写回 scale, zero
     x_scale[row] = (Tdata)scale;
     x_zero[row] = (Tdata)zero;
 
-    // ---- 4. 使用 float + half-away-from-zero（与 Python 完全一致）----
     for (int ind = threadIdx.x; ind < K; ind += BLOCK_SIZE) {
 
         float v = (float)x[tid + ind];
@@ -75,10 +112,13 @@ __device__ void blockQuantKernel(
         x_packed[tid + ind] = (int8_t)q;
     }
 }
-
+/**
+ * Performs per-channel symmetric quantization to int8 for large matrices (K >= 1024).
+ * Uses zero-centered scaling only, no zero point, and packs quantized data.
+ */
 template <typename Tdata, unsigned int BLOCK_SIZE>
-__device__ void blockQuantSymKernel(
-    int8_t *x_packed, Tdata *x_scale, const Tdata *x,
+__device__ void blockPerChannelQuantI8SymKernel(
+    int8_t *x_packed, float *x_scale, const Tdata *x,
     int M, int K) {
     int row = blockIdx.x;
     int tid = row * K;
@@ -99,7 +139,6 @@ __device__ void blockQuantSymKernel(
     }
     __syncthreads();
 
-    // ---- 3. 使用 float（匹配 python）计算 scale/zero ----
     float global_max = global_max_f;
 
     float scale = global_max / 127.0f;
@@ -109,10 +148,8 @@ __device__ void blockQuantSymKernel(
 
     float inv_scale = 1.0f / scale;
 
-    // 写回 scale, zero
     x_scale[row] = (Tdata)scale;
 
-    // ---- 4. 使用 float + half-away-from-zero（与 Python 完全一致）----
     for (int ind = threadIdx.x; ind < K; ind += BLOCK_SIZE) {
 
         float v = (float)x[tid + ind];
@@ -123,8 +160,8 @@ __device__ void blockQuantSymKernel(
         if (q > 127) {
             q = 127;
         }
-        if (q < -128) {
-            q = -128;
+        if (q < -127) {
+            q = -127;
         }
 
         x_packed[tid + ind] = (int8_t)q;
@@ -151,10 +188,13 @@ __inline__ __device__ T WarpAllReduce(T val) {
     }
     return val;
 }
-
+/**
+ * Performs per-channel asymmetric quantization to int8 for large matrices (K < 1024).
+ * Computes scale/zero point per channel (column) and packs quantized data.
+ */
 template <typename Tdata, unsigned int BLOCK_SIZE_x, unsigned int BLOCK_SIZE_y>
-__device__ void warpQuantKernel(
-    int8_t *x_packed, Tdata *x_scale, Tdata *x_zero, const Tdata *x,
+__device__ void warpPerChannelQuantI8Kernel(
+    int8_t *x_packed, float *x_scale, float *x_zero, const Tdata *x,
     int M, int K) {
     int otherIdx = blockIdx.x * blockDim.y + threadIdx.y;
     int tid = otherIdx * K;
@@ -183,7 +223,6 @@ __device__ void warpQuantKernel(
         }
         __syncthreads();
 
-        // ---- float scale/zero（与 Python float32 匹配）----
         float max_f = max_total[threadIdx.y];
         float min_f = min_total[threadIdx.y];
 
@@ -195,10 +234,9 @@ __device__ void warpQuantKernel(
         float inv_scale = 1.0f / scale;
         float zero = -min_f * inv_scale - 128.0f;
 
-        x_scale[otherIdx] = (Tdata)scale;
-        x_zero[otherIdx] = (Tdata)zero;
+        x_scale[otherIdx] = scale;
+        x_zero[otherIdx] = zero;
 
-        // ---- float + half-away-from-zero 量化 ----
         for (int ind = threadIdx.x; ind < K; ind += BLOCK_SIZE_x) {
             float v = (float)x[tid + ind];
             float qf = v * inv_scale + zero;
@@ -216,10 +254,13 @@ __device__ void warpQuantKernel(
         }
     }
 }
-
+/**
+ * Performs per-channel symmetric quantization to int8 for large matrices (K < 1024).
+ * Uses zero-centered scaling only, no zero point, and packs quantized data.
+ */
 template <typename Tdata, unsigned int BLOCK_SIZE_x, unsigned int BLOCK_SIZE_y>
-__device__ void warpQuantSymKernel(
-    int8_t *x_packed, Tdata *x_scale, const Tdata *x,
+__device__ void warpPerChannelQuantI8SymKernel(
+    int8_t *x_packed, float *x_scale, const Tdata *x,
     int M, int K) {
     int otherIdx = blockIdx.x * blockDim.y + threadIdx.y;
     int tid = otherIdx * K;
@@ -243,7 +284,6 @@ __device__ void warpQuantSymKernel(
         }
         __syncthreads();
 
-        // ---- float scale/zero（与 Python float32 匹配）----
         float max_f = max_total[threadIdx.y];
 
         float scale = max_f / 127.0f;
@@ -253,9 +293,8 @@ __device__ void warpQuantSymKernel(
 
         float inv_scale = 1.0f / scale;
 
-        x_scale[otherIdx] = (Tdata)scale;
+        x_scale[otherIdx] = scale;
 
-        // ---- float + half-away-from-zero 量化 ----
         for (int ind = threadIdx.x; ind < K; ind += BLOCK_SIZE_x) {
             float v = (float)x[tid + ind];
             float qf = v * inv_scale;
@@ -265,8 +304,8 @@ __device__ void warpQuantSymKernel(
             if (q > 127) {
                 q = 127;
             }
-            if (q < -128) {
-                q = -128;
+            if (q < -127) {
+                q = -127;
             }
 
             x_packed[tid + ind] = (int8_t)q;
@@ -274,4 +313,4 @@ __device__ void warpQuantSymKernel(
     }
 }
 
-#endif // __QUANT_KERNEL_CUH__
+#endif // __PERCHANNEL_QUANTINT8_KERNEL_CUH__

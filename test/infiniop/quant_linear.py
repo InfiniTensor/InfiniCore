@@ -81,7 +81,7 @@ def linearFunction(c, bias, x, w, alpha, beta):
         )
     return ans
 
-def computeQuant(
+def computePerChannelQuantI8(
         handle,
         device,
         x, 
@@ -93,17 +93,17 @@ def computeQuant(
     M, K = x_shape
 
     x_packed = TestTensor(x_shape, None, InfiniDtype.I8, device, mode="zeros")
-    x_scale = TestTensor((M, 1), None, dtype, device)
+    x_scale = TestTensor((M, 1), None, InfiniDtype.F32, device)
     if symmetric:
         x_zero = None
     else:
-        x_zero = TestTensor((M, 1), None, dtype, device)
+        x_zero = TestTensor((M, 1), None, InfiniDtype.F32, device)
     if sync is not None:
         sync()
 
     descriptor = infiniopOperatorDescriptor_t()
     check_error(
-        LIBINFINIOP.infiniopCreateQuantDescriptor(
+        LIBINFINIOP.infiniopCreatePerChannelQuantI8Descriptor(
             handle,
             ctypes.byref(descriptor),
             x_packed.descriptor,
@@ -122,7 +122,7 @@ def computeQuant(
 
     workspace_size = c_uint64(0)
     check_error(
-        LIBINFINIOP.infiniopGetQuantWorkspaceSize(
+        LIBINFINIOP.infiniopGetPerChannelQuantI8WorkspaceSize(
             descriptor, ctypes.byref(workspace_size)
         )
     )
@@ -130,7 +130,7 @@ def computeQuant(
     
     def lib_quant():
         check_error(
-            LIBINFINIOP.infiniopQuant(
+            LIBINFINIOP.infiniopPerChannelQuantI8(
                 descriptor,
                 workspace.data(),
                 workspace_size.value,
@@ -146,7 +146,7 @@ def computeQuant(
     
     if sync is not None:
         sync()
-    check_error(LIBINFINIOP.infiniopDestroyQuantDescriptor(descriptor))
+    check_error(LIBINFINIOP.infiniopDestroyPerChannelQuantI8Descriptor(descriptor))
     if symmetric:
         return x_packed.actual_tensor(), x_scale.actual_tensor(), None
     else:
@@ -167,7 +167,7 @@ def test(
     sync=None,
 ):
     print(
-        f"Testing Quant Linear on {InfiniDeviceNames[device]} with x_shape:{x_shape}, w_shape:{w_shape}, symmetric:{symmetric}, bias:{bias_exit} ,alpha:{alpha}, beta:{beta}, inplace:{inplace} dtype:{InfiniDtypeNames[dtype]}"
+        f"Testing PerChannelQuantI8 Linear on {InfiniDeviceNames[device]} with x_shape:{x_shape}, w_shape:{w_shape}, symmetric:{symmetric}, bias:{bias_exit} ,alpha:{alpha}, beta:{beta}, inplace:{inplace} dtype:{InfiniDtypeNames[dtype]}"
     )
     M, K = x_shape
     N = w_shape[1]
@@ -193,7 +193,7 @@ def test(
     w_data_t = w.actual_tensor().clone().t().contiguous()
     w_t = TestTensor((N, K), w_data_t.stride(), dtype, device, mode="manual", set_tensor=w_data_t)
     
-    w_packed, w_scale, w_zero = computeQuant(
+    w_packed, w_scale, w_zero = computePerChannelQuantI8(
         handle,
         device,
         w_t, 
@@ -204,16 +204,16 @@ def test(
         w_shape, w_packed.t().contiguous().stride(), InfiniDtype.I8, device, mode="manual", set_tensor=w_packed.t().contiguous()
     )
     weights_scale = TestTensor(
-        (1, N), w_scale.t().contiguous().stride(), dtype, device, mode="manual", set_tensor=w_scale.t().contiguous()
+        (1, N), w_scale.t().contiguous().stride(), InfiniDtype.F32, device, mode="manual", set_tensor=w_scale.t().contiguous()
     )
     if symmetric:
         weights_zero = None
     else:
         weights_zero = TestTensor(
-            (1, N), w_zero.t().contiguous().stride(), dtype, device, mode="manual", set_tensor=w_zero.t().contiguous()
+            (1, N), w_zero.t().contiguous().stride(), InfiniDtype.F32, device, mode="manual", set_tensor=w_zero.t().contiguous()
         )
     
-    x_p, x_s, x_z = computeQuant(
+    x_p, x_s, x_z = computePerChannelQuantI8(
         handle,
         device,
         x, 
@@ -223,11 +223,11 @@ def test(
     x_packed = TestTensor(
         x_shape, x_p.stride(), InfiniDtype.I8, device, mode="manual", set_tensor=x_p
     )
-    x_scale = TestTensor((M, 1), x_s.stride(), dtype, device, mode="manual", set_tensor=x_s)
+    x_scale = TestTensor((M, 1), x_s.stride(), InfiniDtype.F32, device, mode="manual", set_tensor=x_s)
     if symmetric:
         x_zero = None
     else:
-        x_zero = TestTensor((M, 1), x_z.stride(), dtype, device, mode="manual", set_tensor=x_z)
+        x_zero = TestTensor((M, 1), x_z.stride(), InfiniDtype.F32, device, mode="manual", set_tensor=x_z)
     
     
     
@@ -350,7 +350,7 @@ def compare(
     if bias_exit or inplace == Inplace.INPLACE:
         return
     print(
-        f"Compare Quant Linear with gemm on {InfiniDeviceNames[device]} with x_shape:{x_shape}, w_shape:{w_shape}, symmetric:{symmetric}, alpha:{alpha}, beta:{beta} dtype:{InfiniDtypeNames[dtype]}"
+        f"Compare PerChannelQuantI8 Linear with gemm on {InfiniDeviceNames[device]} with x_shape:{x_shape}, w_shape:{w_shape}, symmetric:{symmetric}, alpha:{alpha}, beta:{beta} dtype:{InfiniDtypeNames[dtype]}"
     )
     M, K = x_shape
     N = w_shape[1]
@@ -368,7 +368,7 @@ def compare(
     w_data_t = w.actual_tensor().clone().t().contiguous()
     w_t = TestTensor((N, K), w_data_t.stride(), dtype, device, mode="manual", set_tensor=w_data_t)
     
-    w_packed, w_scale, w_zero = computeQuant(
+    w_packed, w_scale, w_zero = computePerChannelQuantI8(
         handle,
         device,
         w_t, 
@@ -379,16 +379,16 @@ def compare(
         w_shape, w_packed.t().contiguous().stride(), InfiniDtype.I8, device, mode="manual", set_tensor=w_packed.t().contiguous()
     )
     weights_scale = TestTensor(
-        (1, N), w_scale.t().contiguous().stride(), dtype, device, mode="manual", set_tensor=w_scale.t().contiguous()
+        (1, N), w_scale.t().contiguous().stride(), InfiniDtype.F32, device, mode="manual", set_tensor=w_scale.t().contiguous()
     )
     if symmetric:
         weights_zero = None
     else:
         weights_zero = TestTensor(
-            (1, N), w_zero.t().contiguous().stride(), dtype, device, mode="manual", set_tensor=w_zero.t().contiguous()
+            (1, N), w_zero.t().contiguous().stride(), InfiniDtype.F32, device, mode="manual", set_tensor=w_zero.t().contiguous()
         )
     
-    x_p, x_s, x_z = computeQuant(
+    x_p, x_s, x_z = computePerChannelQuantI8(
         handle,
         device,
         x, 
@@ -398,11 +398,11 @@ def compare(
     x_packed = TestTensor(
         x_shape, x_p.stride(), InfiniDtype.I8, device, mode="manual", set_tensor=x_p
     )
-    x_scale = TestTensor((M, 1), x_s.stride(), dtype, device, mode="manual", set_tensor=x_s)
+    x_scale = TestTensor((M, 1), x_s.stride(), InfiniDtype.F32, device, mode="manual", set_tensor=x_s)
     if symmetric:
         x_zero = None
     else:
-        x_zero = TestTensor((M, 1), x_z.stride(), dtype, device, mode="manual", set_tensor=x_z)
+        x_zero = TestTensor((M, 1), x_z.stride(), InfiniDtype.F32, device, mode="manual", set_tensor=x_z)
     
     if sync is not None:
         sync()

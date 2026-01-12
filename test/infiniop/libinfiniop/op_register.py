@@ -994,9 +994,9 @@ def linear_(lib):
 
 
 @OpRegister.operator
-def quant_(lib):
-    lib.infiniopCreateQuantDescriptor.restype = c_int32
-    lib.infiniopCreateQuantDescriptor.argtypes = [
+def per_channel_quant_int8_(lib):
+    lib.infiniopCreatePerChannelQuantI8Descriptor.restype = c_int32
+    lib.infiniopCreatePerChannelQuantI8Descriptor.argtypes = [
         infiniopHandle_t,
         POINTER(infiniopOperatorDescriptor_t),
         infiniopTensorDescriptor_t,
@@ -1005,14 +1005,14 @@ def quant_(lib):
         infiniopTensorDescriptor_t,
     ]
 
-    lib.infiniopGetQuantWorkspaceSize.restype = c_int32
-    lib.infiniopGetQuantWorkspaceSize.argtypes = [
+    lib.infiniopGetPerChannelQuantI8WorkspaceSize.restype = c_int32
+    lib.infiniopGetPerChannelQuantI8WorkspaceSize.argtypes = [
         infiniopOperatorDescriptor_t,
         POINTER(c_size_t),
     ]
 
-    lib.infiniopQuant.restype = c_int32
-    lib.infiniopQuant.argtypes = [
+    lib.infiniopPerChannelQuantI8.restype = c_int32
+    lib.infiniopPerChannelQuantI8.argtypes = [
         infiniopOperatorDescriptor_t,
         c_void_p,
         c_size_t,
@@ -1023,8 +1023,8 @@ def quant_(lib):
         c_void_p,
     ]
 
-    lib.infiniopDestroyQuantDescriptor.restype = c_int32
-    lib.infiniopDestroyQuantDescriptor.argtypes = [
+    lib.infiniopDestroyPerChannelQuantI8Descriptor.restype = c_int32
+    lib.infiniopDestroyPerChannelQuantI8Descriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
 

@@ -1,35 +1,35 @@
-#include "../../../devices/nvidia/nvidia_common.cuh"
-#include "quant_nvidia.cuh"
+#include "../../../../devices/nvidia/nvidia_common.cuh"
+#include "per_channel_quant_int8_nvidia.cuh"
 
-#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
-#include "../../../reduce/cuda/reduce.cuh"
+#include "../../../../devices/nvidia/nvidia_kernel_common.cuh"
+#include "../../../../reduce/cuda/reduce.cuh"
 #include <cub/block/block_reduce.cuh>
 
 #include "../cuda/kernel.cuh"
 
 template <typename Tdata, unsigned int BLOCK_SIZE>
-INFINIOP_CUDA_KERNEL blockQuant(
-    int8_t *x_packed, Tdata *x_scale, Tdata *x_zero, const Tdata *x, int M, int K) {
-    blockQuantKernel<Tdata, BLOCK_SIZE>(x_packed, x_scale, x_zero, x, M, K);
+INFINIOP_CUDA_KERNEL blockPerChannelQuantI8(
+    int8_t *x_packed, float *x_scale, float *x_zero, const Tdata *x, int M, int K) {
+    blockPerChannelQuantI8Kernel<Tdata, BLOCK_SIZE>(x_packed, x_scale, x_zero, x, M, K);
 }
 template <typename Tdata, unsigned int BLOCK_SIZE>
-INFINIOP_CUDA_KERNEL blockQuantSym(
-    int8_t *x_packed, Tdata *x_scale, const Tdata *x, int M, int K) {
-    blockQuantSymKernel<Tdata, BLOCK_SIZE>(x_packed, x_scale, x, M, K);
+INFINIOP_CUDA_KERNEL blockPerChannelQuantI8Sym(
+    int8_t *x_packed, float *x_scale, const Tdata *x, int M, int K) {
+    blockPerChannelQuantI8SymKernel<Tdata, BLOCK_SIZE>(x_packed, x_scale, x, M, K);
 }
 
 template <typename Tdata, unsigned int BLOCK_SIZE_x, unsigned int BLOCK_SIZE_y>
-INFINIOP_CUDA_KERNEL warpQuant(
-    int8_t *x_packed, Tdata *x_scale, Tdata *x_zero, const Tdata *x, int M, int K) {
-    warpQuantKernel<Tdata, BLOCK_SIZE_x, BLOCK_SIZE_y>(x_packed, x_scale, x_zero, x, M, K);
+INFINIOP_CUDA_KERNEL warpPerChannelQuantI8(
+    int8_t *x_packed, float *x_scale, float *x_zero, const Tdata *x, int M, int K) {
+    warpPerChannelQuantI8Kernel<Tdata, BLOCK_SIZE_x, BLOCK_SIZE_y>(x_packed, x_scale, x_zero, x, M, K);
 }
 template <typename Tdata, unsigned int BLOCK_SIZE_x, unsigned int BLOCK_SIZE_y>
-INFINIOP_CUDA_KERNEL warpQuantSym(
-    int8_t *x_packed, Tdata *x_scale, const Tdata *x, int M, int K) {
-    warpQuantSymKernel<Tdata, BLOCK_SIZE_x, BLOCK_SIZE_y>(x_packed, x_scale, x, M, K);
+INFINIOP_CUDA_KERNEL warpPerChannelQuantI8Sym(
+    int8_t *x_packed, float *x_scale, const Tdata *x, int M, int K) {
+    warpPerChannelQuantI8SymKernel<Tdata, BLOCK_SIZE_x, BLOCK_SIZE_y>(x_packed, x_scale, x, M, K);
 }
 
-namespace op::quant::nvidia {
+namespace op::per_channel_quant_int8::nvidia {
 
 struct Descriptor::Opaque {
     std::shared_ptr<device::nvidia::Handle::Internal> internal;
@@ -45,7 +45,7 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t x_scale_desc,
     infiniopTensorDescriptor_t x_zero_desc,
     infiniopTensorDescriptor_t x_desc) {
-    auto info = QuantInfo::createQuantInfo(x_packed_desc, x_scale_desc, x_zero_desc, x_desc);
+    auto info = PerChannelQuantI8Info::createPerChannelQuantI8Info(x_packed_desc, x_scale_desc, x_zero_desc, x_desc);
     CHECK_RESULT(info);
 
     *desc_ptr = new Descriptor(
@@ -55,16 +55,16 @@ infiniStatus_t Descriptor::create(
 }
 
 template <unsigned int BLOCK_SIZE, typename Tdata>
-infiniStatus_t quantKernel(const QuantInfo &info, int8_t *x_packed, Tdata *x_scale, Tdata *x_zero, const Tdata *x, cudaStream_t stream) {
+infiniStatus_t per_channel_quant_int8Kernel(const PerChannelQuantI8Info &info, int8_t *x_packed, float *x_scale, float *x_zero, const Tdata *x, cudaStream_t stream) {
     int M = (int)info.M;
     int K = (int)info.K;
 
     if (K >= 1024) {
         if (x_zero == nullptr) {
-            blockQuantSym<Tdata, BLOCK_SIZE>
+            blockPerChannelQuantI8Sym<Tdata, BLOCK_SIZE>
                 <<<M, BLOCK_SIZE, 0, stream>>>(x_packed, x_scale, x, M, K);
         } else {
-            blockQuant<Tdata, BLOCK_SIZE>
+            blockPerChannelQuantI8<Tdata, BLOCK_SIZE>
                 <<<M, BLOCK_SIZE, 0, stream>>>(x_packed, x_scale, x_zero, x, M, K);
         }
 
@@ -75,10 +75,10 @@ infiniStatus_t quantKernel(const QuantInfo &info, int8_t *x_packed, Tdata *x_sca
         dim3 block_dim(BLOCK_SIZE_x, BLOCK_SIZE_y, 1);
         dim3 grid_dim(num_block_x, 1, 1);
         if (x_zero == nullptr) {
-            warpQuantSym<Tdata, BLOCK_SIZE_x, BLOCK_SIZE_y>
+            warpPerChannelQuantI8Sym<Tdata, BLOCK_SIZE_x, BLOCK_SIZE_y>
                 <<<grid_dim, block_dim, 0, stream>>>(x_packed, x_scale, x, M, K);
         } else {
-            warpQuant<Tdata, BLOCK_SIZE_x, BLOCK_SIZE_y>
+            warpPerChannelQuantI8<Tdata, BLOCK_SIZE_x, BLOCK_SIZE_y>
                 <<<grid_dim, block_dim, 0, stream>>>(x_packed, x_scale, x_zero, x, M, K);
         }
     }
@@ -91,7 +91,7 @@ infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size,
                                      void *stream_) const {
     cudaStream_t stream = (cudaStream_t)stream_;
 #define QUANT(BLOCK_SIZE, TDATA) \
-    quantKernel<BLOCK_SIZE, TDATA>(_info, (int8_t *)x_packed, (TDATA *)x_scale, (TDATA *)x_zero, (const TDATA *)x, stream)
+    per_channel_quant_int8Kernel<BLOCK_SIZE, TDATA>(_info, (int8_t *)x_packed, (float *)x_scale, (float *)x_zero, (const TDATA *)x, stream)
 #define QUANT_WITH_BLOCK_SIZE(BLOCK_SIZE)            \
     {                                                \
         if (_info.dtype == INFINI_DTYPE_F16)         \
@@ -115,4 +115,4 @@ infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size,
     return INFINI_STATUS_SUCCESS;
 }
 
-} // namespace op::quant::nvidia
+} // namespace op::per_channel_quant_int8::nvidia

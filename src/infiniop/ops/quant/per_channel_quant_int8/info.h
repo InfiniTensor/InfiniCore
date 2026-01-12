@@ -1,21 +1,21 @@
-#ifndef __QUANT_INFO_H__
-#define __QUANT_INFO_H__
+#ifndef __PER_CHANNEL_QUANT_INT8_INFO_H__
+#define __PER_CHANNEL_QUANT_INT8_INFO_H__
 
-#include "../../../utils.h"
-#include "../../operator.h"
-#include "../../tensor.h"
+#include "../../../../utils.h"
+#include "../../../operator.h"
+#include "../../../tensor.h"
 
-namespace op::quant {
+namespace op::per_channel_quant_int8 {
 
-class QuantInfo {
+class PerChannelQuantI8Info {
 private:
-    QuantInfo() = default;
+    PerChannelQuantI8Info() = default;
 
 public:
     infiniDtype_t dtype, packed_type;
     size_t M, K;
 
-    static utils::Result<QuantInfo> createQuantInfo(
+    static utils::Result<PerChannelQuantI8Info> createPerChannelQuantI8Info(
         infiniopTensorDescriptor_t x_packed_desc,
         infiniopTensorDescriptor_t x_scale_desc,
         infiniopTensorDescriptor_t x_zero_desc,
@@ -27,8 +27,7 @@ public:
 
         const infiniDtype_t dtype = x_desc->dtype();
         const infiniDtype_t packed_type = x_packed_desc->dtype();
-        CHECK_OR_RETURN(dtype == x_scale_desc->dtype(),
-                        INFINI_STATUS_BAD_TENSOR_DTYPE);
+
         CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_BF16, INFINI_DTYPE_F32);
         CHECK_DTYPE(packed_type, INFINI_DTYPE_I8);
 
@@ -46,7 +45,7 @@ public:
                             || 1 == x_scale_desc->dim(1),
                         INFINI_STATUS_BAD_TENSOR_SHAPE);
 
-        return utils::Result<QuantInfo>(QuantInfo{
+        return utils::Result<PerChannelQuantI8Info>(PerChannelQuantI8Info{
             dtype,
             packed_type,
             M,
@@ -55,6 +54,6 @@ public:
     }
 };
 
-} // namespace op::quant
+} // namespace op::per_channel_quant_int8
 
-#endif //  __QUANT_INFO_H__
+#endif //  __PER_CHANNEL_QUANT_INT8_INFO_H__
