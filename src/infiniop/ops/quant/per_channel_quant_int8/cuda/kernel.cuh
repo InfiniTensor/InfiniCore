@@ -92,8 +92,8 @@ __device__ void blockPerChannelQuantI8Kernel(
     float inv_scale = 1.0f / scale;
     float zero = -global_min * inv_scale - 128.0f;
 
-    x_scale[row] = (Tdata)scale;
-    x_zero[row] = (Tdata)zero;
+    x_scale[row] = scale;
+    x_zero[row] = zero;
 
     for (int ind = threadIdx.x; ind < K; ind += BLOCK_SIZE) {
 
@@ -148,7 +148,7 @@ __device__ void blockPerChannelQuantI8SymKernel(
 
     float inv_scale = 1.0f / scale;
 
-    x_scale[row] = (Tdata)scale;
+    x_scale[row] = scale;
 
     for (int ind = threadIdx.x; ind < K; ind += BLOCK_SIZE) {
 
