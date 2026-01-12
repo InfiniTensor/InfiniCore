@@ -108,14 +108,12 @@ def test(
     w_shape,
     symmetric,
     y_shape,
-    alpha,
-    beta,
     inplace=Inplace.OUT_OF_PLACE,
     dtype=InfiniDtype.BF16,
     sync=None,
 ):
     print(
-        f"Testing Linear on {InfiniDeviceNames[device]} with x_shape:{x_shape}, w_shape:{w_shape}, symmetric:{symmetric}, alpha:{alpha}, beta:{beta}, inplace:{inplace} dtype:{InfiniDtypeNames[dtype]}"
+        f"Testing Linear on {InfiniDeviceNames[device]} with x_shape:{x_shape}, w_shape:{w_shape}, symmetric:{symmetric}, inplace:{inplace} dtype:{InfiniDtypeNames[dtype]}"
     )
     M, K = x_shape
     N = w_shape[1]
