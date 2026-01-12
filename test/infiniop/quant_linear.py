@@ -305,7 +305,25 @@ def test(
         debug(d.actual_tensor(), ans, atol=atol, rtol=rtol)
     
     assert torch.allclose(d.actual_tensor(), ans, atol=atol, rtol=rtol)
+    def profile_operation(name, func, device, num_prerun, num_iterations):
+        # Warm up
+        for _ in range(num_prerun):
+            func()
 
+        torch.cuda.synchronize()
+        start = torch.cuda.Event(enable_timing=True)
+        end = torch.cuda.Event(enable_timing=True)
+
+        start.record()
+        for _ in range(num_iterations):
+            func()
+        end.record()
+
+        torch.cuda.synchronize()
+        elapsed = start.elapsed_time(end)
+        print(
+            f"{name} took {elapsed / num_iterations:.6f} ms over {num_iterations} iterations"
+        )
     # Profiling workflow
     if PROFILE:
         # fmt: off
@@ -452,6 +470,25 @@ def compare(
         )
 
     lib_linear()
+    def profile_operation(name, func, device, num_prerun, num_iterations):
+        # Warm up
+        for _ in range(num_prerun):
+            func()
+
+        torch.cuda.synchronize()
+        start = torch.cuda.Event(enable_timing=True)
+        end = torch.cuda.Event(enable_timing=True)
+
+        start.record()
+        for _ in range(num_iterations):
+            func()
+        end.record()
+
+        torch.cuda.synchronize()
+        elapsed = start.elapsed_time(end)
+        print(
+            f"{name} took {elapsed / num_iterations:.6f} ms over {num_iterations} iterations"
+        )
     if PROFILE:
         # fmt: off
         profile_operation("quant_linear", lambda: lib_linear(), device, NUM_PRERUN, NUM_ITERATIONS)
