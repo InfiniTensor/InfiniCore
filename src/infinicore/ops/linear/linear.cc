@@ -42,6 +42,7 @@ void linear_(Tensor out,
 
     // linear transformation
     Tensor out_view = out->view({N, out_features});
+    printf("In linear_\n");
     matmul_(out_view,
             input->view({N, in_features}),
             weight->permute({1, 0}));

@@ -25,6 +25,7 @@ Tensor gemm(Tensor a, Tensor b, float alpha, float beta) {
 }
 
 void gemm_(Tensor c, Tensor a, Tensor b, float alpha, float beta) {
+    printf("In gemm_\n");
     Gemm::execute(c, a, b, alpha, beta);
 }
 

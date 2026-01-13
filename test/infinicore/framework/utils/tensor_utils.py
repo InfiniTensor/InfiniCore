@@ -71,6 +71,7 @@ def convert_infinicore_to_torch(infini_result):
         )
     temp_tensor = infinicore_tensor_from_torch(torch_result_from_infini)
     temp_tensor.copy_(infini_result)
+    # BUG: Ascend result also zero after copy_, need further investigation
     return torch_result_from_infini
 
 

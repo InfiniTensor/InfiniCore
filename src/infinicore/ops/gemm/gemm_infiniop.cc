@@ -25,6 +25,7 @@ void calculate(Tensor c, Tensor a, Tensor b, float alpha, float beta) {
     infiniopGemmDescriptor_t desc = nullptr;
 
     if (!desc_opt) {
+        printf("Creating new Gemm Descriptor\n");
         INFINICORE_CHECK_ERROR(infiniopCreateGemmDescriptor(
             context::getInfiniopHandle(device), &desc,
             c->desc(), a->desc(), b->desc()));

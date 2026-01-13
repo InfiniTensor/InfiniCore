@@ -28,16 +28,18 @@ Tensor BaseLinear::compute_linear(Tensor &input) const {
     // Parameter inherits from Tensor, so we cast to Tensor explicitly
     Tensor weight_tensor = static_cast<const Tensor &>(weight_);
     std::optional<Tensor> bias_opt = has_bias_ ? std::make_optional<Tensor>(static_cast<const Tensor &>(bias_)) : std::nullopt;
-
+    printf("in compute_linear\n");
     auto output = infinicore::op::linear(input_contiguous->contiguous(), weight_tensor->contiguous(), bias_opt);
     return output;
 }
 
 Tensor BaseLinear::forward(Tensor &input) const {
+    printf("in BaseLinear forward\n");
     return compute_linear(input);
 }
 
 Tensor BaseLinear::forward(Tensor &input, Tensor &residual) const {
+    printf("in BaseLinear forward with residual\n");
     auto output = compute_linear(input);
 
     // Add residual: output = output + residual
@@ -71,6 +73,7 @@ Linear::Linear(size_t in_features, size_t out_features, bool bias,
 }
 
 Tensor Linear::forward(Tensor &input) const {
+    printf("in Linear forward\n");
     return BaseLinear::forward(input);
 }
 
@@ -108,6 +111,7 @@ ColumnParallelLinear::ColumnParallelLinear(size_t in_features, size_t out_featur
 }
 
 Tensor ColumnParallelLinear::forward(Tensor &input) const {
+    printf("In ColumnParallelLinear forward\n");
     return BaseLinear::forward(input);
 }
 
@@ -144,6 +148,7 @@ RowParallelLinear::RowParallelLinear(size_t in_features, size_t out_features, bo
 }
 
 Tensor RowParallelLinear::forward(Tensor &input) const {
+    printf("In RowParallelLinear forward\n");
     auto output = BaseLinear::forward(input);
 
     if ((tp_size_ > 1) && (communicator_ != nullptr)) {

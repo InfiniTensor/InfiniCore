@@ -8,6 +8,7 @@ Tensor matmul(Tensor a, Tensor b, float alpha) {
 }
 
 void matmul_(Tensor c, Tensor a, Tensor b, float alpha) {
+    printf("In matmul_\n");
     Gemm::execute(c, a, b, alpha, 0.0f);
 }
 } // namespace infinicore::op

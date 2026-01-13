@@ -1,6 +1,7 @@
 #include "gemm_ascend.h"
 #include "../../../devices/ascend/common_ascend.h"
 #include <aclnnop/aclnn_baddbmm.h>
+#include <aclnnop/aclnn_batch_matmul.h>
 
 #include <cstring>
 #include <unordered_map>
@@ -39,6 +40,7 @@ struct Descriptor::Opaque {
         delete b;
         for (auto &item : lookup) {
             aclDestroyAclOpExecutor(item.second);
+            GetRecentErrMsg();
         }
         lookup.clear();
     }
@@ -93,14 +95,25 @@ infiniStatus_t Descriptor::create(
     aclOpExecutor *executor = nullptr;
     size_t workspace_size = 0;
     int8_t mt = 1;
-    float alpha_val = 0.5f;
-    float beta_val = 0.5f;
-    aclScalar *alpha = aclCreateScalar(&alpha_val, aclDataType::ACL_FLOAT);
-    aclScalar *beta = aclCreateScalar(&beta_val, aclDataType::ACL_FLOAT);
+    // float alpha_val = 0.5f;
+    // float beta_val = 0.5f;
+    // aclScalar *alpha = aclCreateScalar(&alpha_val, aclDataType::ACL_FLOAT);
+    // aclScalar *beta = aclCreateScalar(&beta_val, aclDataType::ACL_FLOAT);
+    std::cout << c->toString() << std::endl;
+    std::cout << a->toString() << std::endl;
+    std::cout << b->toString() << std::endl;
+    // printf("alpha: %f, beta: %f\n", alpha_val, beta_val);
     // CHECK_ACL(aclnnInplaceBaddbmmGetWorkspaceSize(tc, ta, tb, beta, alpha, mt, &workspace_size, &executor));
-    CHECK_ACL(aclnnBaddbmmGetWorkspaceSize(tc, ta, tb, beta, alpha, tc, mt, &workspace_size, &executor));
-    CHECK_ACL(aclSetAclOpExecutorRepeatable(executor));
-    lookup[std::make_pair(alpha_val, beta_val)] = executor;
+    // CHECK_ACL(aclnnBaddbmmGetWorkspaceSize(tc, ta, tb, beta, alpha, tc, mt, &workspace_size, &executor));
+    CHECK_ACL(aclnnBatchMatMulGetWorkspaceSize(ta, tb, tc, mt, &workspace_size, &executor));
+    printf("Workspace size in Gemm op kernel: %zu\n", workspace_size);
+    // GetRecentErrMsg();
+    // CHECK_ACL(aclDestroyAclOpExecutor(executor));
+    // GetRecentErrMsg();
+    // GetRecentErrMsg();
+    // CHECK_ACL(aclSetAclOpExecutorRepeatable(executor));
+    // GetRecentErrMsg();
+    // lookup[std::make_pair(alpha_val, beta_val)] = executor;
 
     *desc_ptr = new Descriptor(
         dtype, workspace_size,
@@ -135,11 +148,14 @@ infiniStatus_t Descriptor::calculate(
     if (_opaque->lookup.find(key) != _opaque->lookup.end()) {
         executor = _opaque->lookup[key];
     } else {
-        aclScalar *alpha_ = aclCreateScalar(&alpha, aclDataType::ACL_FLOAT);
-        aclScalar *beta_ = aclCreateScalar(&beta, aclDataType::ACL_FLOAT);
+        // aclScalar *alpha_ = aclCreateScalar(&alpha, aclDataType::ACL_FLOAT);
+        // aclScalar *beta_ = aclCreateScalar(&beta, aclDataType::ACL_FLOAT);
         // CHECK_ACL(aclnnInplaceBaddbmmGetWorkspaceSize(tc, ta, tb, beta_, alpha_, _opaque->mt, &workspace_size, &executor));
-        CHECK_ACL(aclnnBaddbmmGetWorkspaceSize(tc, ta, tb, beta_, alpha_, tc, _opaque->mt, &workspace_size, &executor));
+        // CHECK_ACL(aclnnBaddbmmGetWorkspaceSize(tc, ta, tb, beta_, alpha_, tc, _opaque->mt, &workspace_size, &executor));
+        CHECK_ACL(aclnnBatchMatMulGetWorkspaceSize(ta, tb, tc, _opaque->mt, &workspace_size, &executor));
+        GetRecentErrMsg();
         CHECK_ACL(aclSetAclOpExecutorRepeatable(executor));
+        GetRecentErrMsg();
         _opaque->lookup[key] = executor;
     }
 
@@ -147,12 +163,17 @@ infiniStatus_t Descriptor::calculate(
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
 
-    CHECK_ACL(aclSetTensorAddr(executor, 0, tc, c));
-    CHECK_ACL(aclSetTensorAddr(executor, 1, ta, (void *)a));
-    CHECK_ACL(aclSetTensorAddr(executor, 2, tb, (void *)b));
-    CHECK_ACL(aclSetTensorAddr(executor, 3, tc, (void *)c));
-    CHECK_ACL(aclnnBaddbmm(workspace, workspace_size, executor, stream));
-
+    // CHECK_ACL(aclSetTensorAddr(executor, 0, tc, c));
+    // CHECK_ACL(aclSetTensorAddr(executor, 1, ta, (void *)a));
+    // CHECK_ACL(aclSetTensorAddr(executor, 2, tb, (void *)b));
+    // CHECK_ACL(aclSetTensorAddr(executor, 3, tc, (void *)c));
+    CHECK_ACL(aclSetTensorAddr(executor, 0, ta, (void *)a));
+    CHECK_ACL(aclSetTensorAddr(executor, 1, tb, (void *)b));
+    CHECK_ACL(aclSetTensorAddr(executor, 2, tc, (void *)c));
+    GetRecentErrMsg();
+    // CHECK_ACL(aclnnBaddbmm(workspace, workspace_size, executor, stream));
+    CHECK_ACL(aclnnBatchMatMul(workspace, workspace_size, executor, stream));
+    GetRecentErrMsg();
     return INFINI_STATUS_SUCCESS;
 }
 } // namespace op::gemm::ascend
