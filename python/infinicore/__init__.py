@@ -65,6 +65,7 @@ from infinicore.tensor import (
     ones,
     strided_empty,
     strided_from_blob,
+    tensor,
     zeros,
 )
 
@@ -133,6 +134,7 @@ __all__ = [
     "ones",
     "strided_empty",
     "strided_from_blob",
+    "tensor",
     "zeros",
 ]
 
