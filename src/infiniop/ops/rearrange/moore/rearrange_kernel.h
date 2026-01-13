@@ -31,7 +31,7 @@ struct Constraint {
 
 // 定义宏生成内核函数
 #define DEFINE_REARRANGE_KERNEL(Tmem_type, constraint_num, block_array_size, grid_array_size)                                                                                    \
-    extern "C" __global__ void rearrange_unit_##Tmem_type##_block_##block_array_size##_grid_##grid_array_size##_constrain_##constraint_num(                                      \
+    extern "C" INFINIOP_MOORE_KERNEL rearrange_unit_##Tmem_type##_block_##block_array_size##_grid_##grid_array_size##_constrain_##constraint_num(                                 \
         void *__restrict__ dst,                                                                                                                                                  \
         const void *__restrict__ src,                                                                                                                                            \
         const size_t block_dim,                                                                                                                                                  \
@@ -64,13 +64,13 @@ struct Constraint {
                 size_t remaining                                                                                                                                                 \
                     = blockIdx.x;                                                                                                                                                \
                                                                                                                                                                                  \
-                for (ssize_t i = grid_array_size - 1; i >= 0; i--) {                                                                                                             \
+                for (ptrdiff_t i = grid_array_size - 1; i >= 0; i--) {                                                                                                           \
                     size_t idx = remaining % grid_len.a[i];                                                                                                                      \
                     remaining /= grid_len.a[i];                                                                                                                                  \
                     src_offset += idx * src_grid_stride.a[i];                                                                                                                    \
                     dst_offset += idx * dst_grid_stride.a[i];                                                                                                                    \
                     if (constraint_num > 0) {                                                                                                                                    \
-                        for (ssize_t j = 0; j < constraint_num; j++) {                                                                                                           \
+                        for (ptrdiff_t j = 0; j < constraint_num; j++) {                                                                                                         \
                             if (i == constraints.a[j].grid_idx) {                                                                                                                \
                                 constraints_grid_idx_multiple[j] = idx * constraints.a[j].grid_div_block;                                                                        \
                             }                                                                                                                                                    \
@@ -81,7 +81,7 @@ struct Constraint {
                 /* 将结果存入共享内存 */                                                                                                                                \
                 shared_src_offset = src_offset;                                                                                                                                  \
                 shared_dst_offset = dst_offset;                                                                                                                                  \
-                for (ssize_t j = 0; j < constraint_num; j++) {                                                                                                                   \
+                for (ptrdiff_t j = 0; j < constraint_num; j++) {                                                                                                                 \
                     shared_constraints_grid_idx_multiple[j] = constraints_grid_idx_multiple[j];                                                                                  \
                 }                                                                                                                                                                \
             }                                                                                                                                                                    \
@@ -93,18 +93,18 @@ struct Constraint {
             ptrdiff_t src_offset = shared_src_offset;                                                                                                                            \
             ptrdiff_t dst_offset = shared_dst_offset;                                                                                                                            \
             ARRAY_TYPE_SIZE constraints_grid_idx_multiple[constraint_num > 0 ? constraint_num : 1];                                                                              \
-            for (ssize_t j = 0; j < constraint_num; j++) {                                                                                                                       \
+            for (ptrdiff_t j = 0; j < constraint_num; j++) {                                                                                                                     \
                 constraints_grid_idx_multiple[j] = shared_constraints_grid_idx_multiple[j];                                                                                      \
             }                                                                                                                                                                    \
                                                                                                                                                                                  \
-            for (ssize_t i = block_array_size - 1; i >= 0; i--) {                                                                                                                \
+            for (ptrdiff_t i = block_array_size - 1; i >= 0; i--) {                                                                                                              \
                 size_t idx = remaining % block_len.a[i];                                                                                                                         \
                 remaining /= block_len.a[i];                                                                                                                                     \
                 /* 计算偏移量 */                                                                                                                                            \
                 src_offset += idx * src_block_stride.a[i];                                                                                                                       \
                 dst_offset += idx * dst_block_stride.a[i];                                                                                                                       \
                 if (constraint_num > 0) {                                                                                                                                        \
-                    for (ssize_t j = 0; j < constraint_num; j++) {                                                                                                               \
+                    for (ptrdiff_t j = 0; j < constraint_num; j++) {                                                                                                             \
                         if (i == constraints.a[j].block_idx) {                                                                                                                   \
                             if (constraints_grid_idx_multiple[j] + idx >= constraints.a[j].total_len) {                                                                          \
                                 return;                                                                                                                                          \
@@ -116,7 +116,7 @@ struct Constraint {
                                                                                                                                                                                  \
             src_offset += remaining * src_block_stride.a[0];                                                                                                                     \
             dst_offset += remaining * dst_block_stride.a[0];                                                                                                                     \
-            for (ssize_t j = 0; j < constraint_num; j++) {                                                                                                                       \
+            for (ptrdiff_t j = 0; j < constraint_num; j++) {                                                                                                                     \
                 if (0 == constraints.a[j].block_idx) {                                                                                                                           \
                     if (constraints_grid_idx_multiple[j] + remaining >= constraints.a[j].total_len) {                                                                            \
                         return;                                                                                                                                                  \
@@ -134,7 +134,7 @@ struct Constraint {
                 ptrdiff_t dst_offset = 0;                                                                                                                                        \
                 size_t remaining = blockIdx.x;                                                                                                                                   \
                                                                                                                                                                                  \
-                for (ssize_t i = grid_array_size - 1; i >= 0; i--) {                                                                                                             \
+                for (ptrdiff_t i = grid_array_size - 1; i >= 0; i--) {                                                                                                           \
                     size_t idx = remaining % grid_len.a[i];                                                                                                                      \
                     remaining /= grid_len.a[i];                                                                                                                                  \
                     src_offset += idx * src_grid_stride.a[i];                                                                                                                    \
@@ -153,7 +153,7 @@ struct Constraint {
             ptrdiff_t src_offset = shared_src_offset;                                                                                                                            \
             ptrdiff_t dst_offset = shared_dst_offset;                                                                                                                            \
                                                                                                                                                                                  \
-            for (ssize_t i = block_array_size - 1; i > 0; i--) {                                                                                                                 \
+            for (ptrdiff_t i = block_array_size - 1; i > 0; i--) {                                                                                                               \
                 size_t idx = remaining % block_len.a[i];                                                                                                                         \
                 remaining /= block_len.a[i];                                                                                                                                     \
                 /* 计算偏移量 */                                                                                                                                            \
@@ -234,24 +234,7 @@ utils::Result<void *> getRearrangeKernel(const RearrangeParams &params) {
 
     CHECK_OR_RETURN(grid_num <= MAX_GRID_ARRAY_SIZE && grid_num != 0, INFINI_STATUS_BAD_PARAM);
     CHECK_OR_RETURN(block_num <= MAX_BLOCK_ARRAY_SIZE && block_num != 0, INFINI_STATUS_BAD_PARAM);
-
     CHECK_OR_RETURN(constraint_num <= 2, INFINI_STATUS_BAD_PARAM);
-
-    /*
-     * These variables were originally part of the CUDA implementation for this kernel.
-     * They have been commented out because they are not currently used in the MUSA kernel logic.
-     *
-     * This change resolves "unused variable" warnings during compilation, ensuring a clean build.
-     * The original declarations are preserved here for for MUSA/CUDA platform alignment.
-     */
-
-    // auto block_len = params.block_len.data();
-    // auto src_block_stride = params.src_block_stride.data();
-    // auto dst_block_stride = params.dst_block_stride.data();
-    // auto grid_len = params.grid_len.data();
-    // auto src_grid_stride = params.src_grid_stride.data();
-    // auto dst_grid_stride = params.dst_grid_stride.data();
-    // auto constrain = params.constraints.data();
 
     void *kernel_func = nullptr;
 #define GET_REARRANGE_KERNEL(Tmem_type, block_array_size, grid_array_size, constraint_num) \
