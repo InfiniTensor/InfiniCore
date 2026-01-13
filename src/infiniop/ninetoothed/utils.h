@@ -1,3 +1,6 @@
+#ifndef __NINETOOTHED_UTILS__
+#define __NINETOOTHED_UTILS__
+
 #include <initializer_list>
 #include <limits>
 #include <type_traits>
@@ -68,3 +71,5 @@ private:
 };
 
 } // namespace ninetoothed
+
+#endif
