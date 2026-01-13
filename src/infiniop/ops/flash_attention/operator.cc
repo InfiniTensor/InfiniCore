@@ -6,7 +6,11 @@
 // #include "cpu/flash_attention_cpu.h"
 #endif
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
+#if defined(ENABLE_NINETOOTHED) && defined(ENABLE_NVIDIA_API)
+#include "ninetoothed/descriptor.h"
+#else
 // #include "nvidia/flash_attention_nvidia.cuh"
+#endif
 #endif
 
 __C infiniStatus_t infiniopCreateFlashAttentionDescriptor(
@@ -37,7 +41,11 @@ __C infiniStatus_t infiniopCreateFlashAttentionDescriptor(
         // CREATE(INFINI_DEVICE_CPU, cpu);
 #endif
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
+#if defined(ENABLE_NINETOOTHED) && defined(ENABLE_NVIDIA_API)
+        CREATE(INFINI_DEVICE_NVIDIA, ninetoothed);
+#else
         // CREATE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -60,7 +68,11 @@ __C infiniStatus_t infiniopGetFlashAttentionWorkspaceSize(
         // GET_SIZE(INFINI_DEVICE_CPU, cpu);
 #endif
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
+#if defined(ENABLE_NINETOOTHED) && defined(ENABLE_NVIDIA_API)
+        GET_SIZE(INFINI_DEVICE_NVIDIA, ninetoothed);
+#else
         // GET_SIZE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -90,7 +102,11 @@ __C infiniStatus_t infiniopFlashAttention(
         // CALCULATE(INFINI_DEVICE_CPU, cpu);
 #endif
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
+#if defined(ENABLE_NINETOOTHED) && defined(ENABLE_NVIDIA_API)
+        CALCULATE(INFINI_DEVICE_NVIDIA, ninetoothed);
+#else
         // CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -112,7 +128,11 @@ __C infiniStatus_t infiniopDestroyFlashAttentionDescriptor(
         // DESTROY(INFINI_DEVICE_CPU, cpu);
 #endif
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
+#if defined(ENABLE_NINETOOTHED) && defined(ENABLE_NVIDIA_API)
+        DESTROY(INFINI_DEVICE_NVIDIA, ninetoothed);
+#else
         // DESTROY(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
