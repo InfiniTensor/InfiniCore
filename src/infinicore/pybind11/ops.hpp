@@ -7,6 +7,7 @@
 #include "ops/attention.hpp"
 #include "ops/causal_softmax.hpp"
 #include "ops/embedding.hpp"
+#include "ops/flash_attention.hpp"
 #include "ops/linear.hpp"
 #include "ops/matmul.hpp"
 #include "ops/mul.hpp"
@@ -29,6 +30,7 @@ inline void bind(py::module &m) {
     bind_add_rms_norm(m);
     bind_attention(m);
     bind_causal_softmax(m);
+    bind_flash_attention(m);
     bind_random_sample(m);
     bind_linear(m);
     bind_matmul(m);
