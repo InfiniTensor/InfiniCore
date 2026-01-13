@@ -23,15 +23,11 @@ from enum import Enum, auto
 # ==============================================================================
 # These are not meant to be imported from other modules
 _TEST_CASES_ = [
-    # x_shape, w_shape, sym, y_shape
-    ((128, 512), (512, 1024), True, (128, 1024)),
-    ((5000, 5120), (5120, 8192), True, (5000, 8192)),
-    ((2000, 5120), (5120, 8192), True, (2000, 8192)),
-    ((1000, 5120), (5120, 8192), True, (1000, 8192)),
-    ((2048, 4096), (4096, 2048), True, (2048, 2048)),
-    ((4096, 4096), (4096, 4096), True, (4096, 4096)),
-    ((2560, 10240), (10240, 20480), True, (2560, 20480)),
-    ((1024, 2048), (2048, 1024), True, (1024, 1024)),
+    # x_shape = [M,K], w_shape = [N, K], sym, y_shape = [M, N]
+    ((100, 3584), (10752, 3584), True, (100, 10752)),
+    ((1000, 3584), (10752, 3584), True, (1000, 10752)),
+    ((1, 3584), (10752, 3584), True, (1, 10752)),
+    ((2000, 3584), (10752, 3584), True, (2000, 10752)),
 ]
 
 
@@ -118,25 +114,25 @@ def test(
     alpha = 1.0
     beta = 0.0
     M, K = x_shape
-    N = w_shape[1]
-
-    weights_packed = to_int8(torch.randn(w_shape, device="cuda") * 5)
-    weights_scale = torch.randn((N, 1), device="cuda", dtype=torch.float32)
-    bias = (
-        torch.randn(
-            (N,),
-            device="cuda",
-            dtype=torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16,
-        )
-        * 10
-    )
+    N = w_shape[0]
 
     x = TestTensor(x_shape, None, dtype, device)
     x_packed = TestTensor(x_shape, None, InfiniDtype.I8, device, mode="zeros")
     x_scale = TestTensor((M, 1), None, InfiniDtype.F32, device)
-
+    dev = x.torch_tensor().device
+    weights_packed = to_int8(torch.randn(w_shape, device=dev).t() * 5)
+    weights_scale = torch.randn((N, 1), device=dev, dtype=torch.float32)
+    bias = (
+        torch.randn(
+            (N,),
+            device=dev,
+            dtype=torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16,
+        )
+        * 10
+    )
+    
     w_packed = TestTensor(
-        w_shape,
+        (K, N),
         weights_packed.stride(),
         InfiniDtype.I8,
         device,

@@ -15,21 +15,25 @@
 #include "cutlass/layout/matrix.h"
 #include "cutlass/layout/tensor.h"
 void int8Gemm(
-    const int8_t *x_packed, const int8_t *w_packed, int32_t *y_packed,
-    int M, int N, int K, cudaStream_t stream) {
+    const int8_t *x_packed,
+    const int8_t *w_packed,
+    int32_t *y_packed,
+    int M, int N, int K,
+    cudaStream_t stream) {
+
     using ElementA = int8_t;
     using ElementB = int8_t;
     using ElementC = int32_t;
-    using LayoutA = cutlass::layout::RowMajor;
-    using LayoutB = cutlass::layout::RowMajor;
-    using LayoutC = cutlass::layout::RowMajor;
 
-    // Use SIMT opclass to avoid tensor-op interleaved layout requirements
+    using LayoutA = cutlass::layout::RowMajor;    // x: [M, K]
+    using LayoutB = cutlass::layout::ColumnMajor; // w: [K, N]  <-- changed
+    using LayoutC = cutlass::layout::RowMajor;    // y: [M, N]
+
     using Gemm = cutlass::gemm::device::Gemm<
         ElementA, LayoutA,
         ElementB, LayoutB,
         ElementC, LayoutC,
-        ElementC, // accumulator type
+        ElementC, // accumulator
         cutlass::arch::OpClassSimt,
         cutlass::arch::Sm75>;
 
@@ -37,19 +41,25 @@ void int8Gemm(
 
     cutlass::gemm::GemmCoord problem_size(M, N, K);
 
+    int lda = K; // RowMajor A: stride = columns
+    int ldb = K; // ColumnMajor B: stride = rows
+    int ldc = N; // RowMajor C: stride = columns
+
     typename Gemm::Arguments args{
         problem_size,
-        {x_packed, K},
-        {w_packed, N},
-        {y_packed, N},
-        {y_packed, N},
-        {1, 0}};
+        {x_packed, lda}, // A
+        {w_packed, ldb}, // B
+        {y_packed, ldc}, // C
+        {y_packed, ldc}, // D
+        {1, 0}           // alpha = 1, beta = 0
+    };
 
     cutlass::Status status = gemm_op.initialize(args, nullptr, stream);
     if (status != cutlass::Status::kSuccess) {
         printf("[CUTLASS SIMT] initialize failed: %d\n", int(status));
         return;
     }
+
     status = gemm_op();
     if (status != cutlass::Status::kSuccess) {
         printf("[CUTLASS SIMT] run failed: %d\n", int(status));
@@ -128,21 +138,24 @@ infiniStatus_t Descriptor::launchKernel(const LinearInfo &info, Tdata *y, const 
 #elif defined ENABLE_QY_API
     const int32_t alpha_I = 1;
     const int32_t beta_I = 0;
+    int lda = K; // w_packed is column-major [K, N]
+    int ldb = K; // x_packed is row-major [M, K]
+    int ldc = N; // y_packed is row-major [M, N]
     CHECK_STATUS(this->_opaque->internal->useCublas(
         stream,
         [&](cublasHandle_t handle) {
             CHECK_CUBLAS(cublasGemmEx(
                 handle,
-                CUBLAS_OP_N, // A = w_packed, column-major view
-                CUBLAS_OP_N, // B = x_packed, column-major view
-                N,           // m = N
-                M,           // n = M
-                K,           // k = K
+                CUBLAS_OP_T, // A = w_packed^T : [N, K]
+                CUBLAS_OP_N, // B = x_packed^T viewed column-major : [K, M]
+                N,           // m
+                M,           // n
+                K,           // k
                 &alpha_I,
-                w_packed, CUDA_R_8I, N, // lda = m = N
-                x_packed, CUDA_R_8I, K, // ldb = k = K
+                w_packed, CUDA_R_8I, lda,
+                x_packed, CUDA_R_8I, ldb,
                 &beta_I,
-                y_packed, CUDA_R_32I, N, // ldc = m = N
+                y_packed, CUDA_R_32I, ldc,
                 CUBLAS_COMPUTE_32I,
                 CUBLAS_GEMM_DEFAULT));
             return INFINI_STATUS_SUCCESS;
