@@ -2,46 +2,41 @@
 
 #include "../../utils.hpp"
 
-#include <stdexcept>
-
 namespace infinicore::op {
+INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(KVCaching);
 
-common::OpDispatcher<KVCaching::schema> &KVCaching::dispatcher() {
-    static common::OpDispatcher<KVCaching::schema> dispatcher_;
-    return dispatcher_;
-};
+KVCaching::KVCaching(Tensor k_cache,
+                     Tensor v_cache,
+                     const Tensor &k,
+                     const Tensor &v,
+                     const Tensor &past_kv_lengths) {
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(k_cache, v_cache, k, v, past_kv_lengths);
+    INFINICORE_GRAPH_OP_DISPATCH(k_cache->device().getType(),
+                                 k_cache,
+                                 v_cache,
+                                 k,
+                                 v,
+                                 past_kv_lengths);
+}
 
 void KVCaching::execute(Tensor k_cache,
                         Tensor v_cache,
-                        Tensor k,
-                        Tensor v,
-                        Tensor past_kv_lengths) {
-    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(k_cache, v_cache, k, v, past_kv_lengths);
-    infinicore::context::setDevice(k_cache->device());
-    auto device_type = k_cache->device().getType();
-    auto func = dispatcher().lookup(device_type);
-
-    if (func == nullptr) {
-        throw std::runtime_error("No KVCaching implementation found for device type: " + std::to_string(static_cast<int>(device_type)));
-    }
-
-    func(k_cache, v_cache, k, v, past_kv_lengths);
-}
-
-Tensor kv_caching(Tensor k_cache,
-                  Tensor v_cache,
-                  Tensor k,
-                  Tensor v,
-                  Tensor past_kv_lengths) {
-    KVCaching::execute(k_cache, v_cache, k, v, past_kv_lengths);
-    return k_cache; // or v_cache, depending on the intended use
+                        const Tensor &k,
+                        const Tensor &v,
+                        const Tensor &past_kv_lengths) {
+    INFINICORE_GRAPH_OP_RECORD_OR_RUN(KVCaching,
+                                      k_cache,
+                                      v_cache,
+                                      k,
+                                      v,
+                                      past_kv_lengths);
 }
 
 void kv_caching_(Tensor k_cache,
                  Tensor v_cache,
-                 Tensor k,
-                 Tensor v,
-                 Tensor past_kv_lengths) {
+                 const Tensor &k,
+                 const Tensor &v,
+                 const Tensor &past_kv_lengths) {
     KVCaching::execute(k_cache, v_cache, k, v, past_kv_lengths);
 }
 } // namespace infinicore::op
