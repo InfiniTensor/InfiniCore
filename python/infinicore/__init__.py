@@ -44,6 +44,7 @@ from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.rearrange import rearrange
+from infinicore.ops.softmax import softmax
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -103,6 +104,7 @@ __all__ = [
     "mul",
     "narrow",
     "rearrange",
+    "softmax",
     "empty",
     "empty_like",
     "from_blob",
