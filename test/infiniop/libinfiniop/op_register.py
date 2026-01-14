@@ -723,6 +723,42 @@ def dequantize_(lib):
     ]
 
 
+
+@OpRegister.operator
+def dequantize_gptq_(lib):
+    lib.infiniopCreateDequantizeGPTQDescriptor.restype = c_int32
+    lib.infiniopCreateDequantizeGPTQDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+    lib.infiniopGetDequantizeGPTQWorkspaceSize.restype = c_int32
+    lib.infiniopGetDequantizeGPTQWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopDequantizeGPTQ.restype = c_int32
+    lib.infiniopDequantizeGPTQ.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyDequantizeGPTQDescriptor.restype = c_int32
+    lib.infiniopDestroyDequantizeGPTQDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
 @OpRegister.operator
 def softplus_(lib):
     lib.infiniopCreateSoftplusDescriptor.restype = c_int32
