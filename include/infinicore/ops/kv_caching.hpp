@@ -1,4 +1,4 @@
-#pragma
+#pragma once
 
 #include "../device.hpp"
 #include "common/op.hpp"
@@ -15,11 +15,6 @@ public:
     static common::OpDispatcher<schema> &dispatcher();
 };
 
-Tensor kv_caching(Tensor k_cache,
-                  Tensor v_cache,
-                  Tensor k,
-                  Tensor v,
-                  Tensor past_kv_lengths);
 void kv_caching_(Tensor k_cache,
                  Tensor v_cache,
                  Tensor k,

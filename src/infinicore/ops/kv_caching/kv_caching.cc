@@ -28,15 +28,6 @@ void KVCaching::execute(Tensor k_cache,
     func(k_cache, v_cache, k, v, past_kv_lengths);
 }
 
-Tensor kv_caching(Tensor k_cache,
-                  Tensor v_cache,
-                  Tensor k,
-                  Tensor v,
-                  Tensor past_kv_lengths) {
-    KVCaching::execute(k_cache, v_cache, k, v, past_kv_lengths);
-    return k_cache; // or v_cache, depending on the intended use
-}
-
 void kv_caching_(Tensor k_cache,
                  Tensor v_cache,
                  Tensor k,
