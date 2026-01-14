@@ -1,23 +1,16 @@
 #pragma once
 
 #include "../device.hpp"
+#include "../graph/graph.hpp"
 #include "common/op.hpp"
 
 namespace infinicore::op {
-class KVCaching {
-public:
-    using schema = void (*)(Tensor, Tensor, Tensor, Tensor, Tensor);
-    static void execute(Tensor k_cache,
-                        Tensor v_cache,
-                        Tensor k,
-                        Tensor v,
-                        Tensor past_kv_lengths);
-    static common::OpDispatcher<schema> &dispatcher();
-};
+
+INFINICORE_GRAPH_OP_CLASS(KVCaching, Tensor, Tensor, const Tensor &, const Tensor &, const Tensor &);
 
 void kv_caching_(Tensor k_cache,
                  Tensor v_cache,
-                 Tensor k,
-                 Tensor v,
-                 Tensor past_kv_lengths);
+                 const Tensor &k,
+                 const Tensor &v,
+                 const Tensor &past_kv_lengths);
 } // namespace infinicore::op
