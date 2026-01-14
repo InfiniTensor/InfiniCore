@@ -14,6 +14,7 @@ from libinfiniop import (
     InfiniDtype,
     InfiniDtypeNames,
     InfiniDeviceNames,
+    InfiniDeviceEnum,
     infiniopOperatorDescriptor_t,
 )
 from enum import Enum, auto
@@ -194,51 +195,90 @@ def test(
             )
         )
 
-    descriptor = infiniopOperatorDescriptor_t()
-    check_error(
-        LIBINFINIOP.infiniopCreateLinearDescriptor(
-            handle,
-            ctypes.byref(descriptor),
-            y.descriptor,
-            y.descriptor,
-            bias.descriptor ,
-            x_packed.descriptor,
-            x_scale.descriptor,
-            None,
-            w_packed.descriptor,
-            w_scale.descriptor,
-            None,
-            alpha,
-            beta,
-        )
-    )
-
-    workspace_size = c_uint64(0)
-    check_error(
-        LIBINFINIOP.infiniopGetLinearWorkspaceSize(
-            descriptor, ctypes.byref(workspace_size)
-        )
-    )
-    workspace = TestWorkspace(workspace_size.value, x.device)
-
-    def lib_linear():
+    if device == InfiniDeviceEnum.NVIDIA:
+        scaled_mm_descriptor = infiniopOperatorDescriptor_t()
         check_error(
-            LIBINFINIOP.infiniopLinear(
-                descriptor,
-                workspace.data(),
-                workspace_size.value,
-                y.data(),
-                y.data(),
-                bias.data(),
-                x_packed.data(),
-                x_scale.data(),
-                None,
-                w_packed.data(),
-                w_scale.data(),
-                None,
-                None,
+            LIBINFINIOP.infiniopCreateI8GemmDescriptor(
+                handle,
+                ctypes.byref(scaled_mm_descriptor),
+                y.descriptor,
+                bias.descriptor,
+                x_packed.descriptor,
+                x_scale.descriptor,
+                w_packed.descriptor,
+                w_scale.descriptor,
             )
         )
+
+        scaled_mm_workspace_size = c_uint64(0)
+        check_error(
+            LIBINFINIOP.infiniopGetI8GemmWorkspaceSize(
+                scaled_mm_descriptor, ctypes.byref(scaled_mm_workspace_size)
+            )
+        )
+        scaled_mm_workspace = TestWorkspace(scaled_mm_workspace_size.value, x_packed.device)
+
+        def lib_linear():
+            check_error(
+                LIBINFINIOP.infiniopI8Gemm(
+                    scaled_mm_descriptor,
+                    scaled_mm_workspace.data(),
+                    scaled_mm_workspace_size.value,
+                    y.data(),
+                    bias.data(),
+                    x_packed.data(),
+                    x_scale.data(),
+                    w_packed.data(),
+                    w_scale.data(),
+                    None,
+                )
+            )
+    elif device == InfiniDeviceEnum.QY:
+        descriptor = infiniopOperatorDescriptor_t()
+        check_error(
+            LIBINFINIOP.infiniopCreateLinearDescriptor(
+                handle,
+                ctypes.byref(descriptor),
+                y.descriptor,
+                y.descriptor,
+                bias.descriptor ,
+                x_packed.descriptor,
+                x_scale.descriptor,
+                None,
+                w_packed.descriptor,
+                w_scale.descriptor,
+                None,
+                alpha,
+                beta,
+            )
+        )
+
+        workspace_size = c_uint64(0)
+        check_error(
+            LIBINFINIOP.infiniopGetLinearWorkspaceSize(
+                descriptor, ctypes.byref(workspace_size)
+            )
+        )
+        workspace = TestWorkspace(workspace_size.value, x.device)
+
+        def lib_linear():
+            check_error(
+                LIBINFINIOP.infiniopLinear(
+                    descriptor,
+                    workspace.data(),
+                    workspace_size.value,
+                    y.data(),
+                    y.data(),
+                    bias.data(),
+                    x_packed.data(),
+                    x_scale.data(),
+                    None,
+                    w_packed.data(),
+                    w_scale.data(),
+                    None,
+                    None,
+                )
+            )
 
     def lib_w8a8int8_linearFunction():
         lib_per_channel_quant_int8()
@@ -330,8 +370,10 @@ def test(
             NUM_PRERUN,
             NUM_ITERATIONS,
         )
-
-    check_error(LIBINFINIOP.infiniopDestroyLinearDescriptor(descriptor))
+    if device == InfiniDeviceEnum.NVIDIA:
+        check_error(LIBINFINIOP.infiniopDestroyI8GemmDescriptor(scaled_mm_descriptor))
+    elif device == InfiniDeviceEnum.QY:
+        check_error(LIBINFINIOP.infiniopDestroyLinearDescriptor(descriptor))
     check_error(
         LIBINFINIOP.infiniopDestroyPerChannelQuantI8Descriptor(quant_descriptor)
     )
