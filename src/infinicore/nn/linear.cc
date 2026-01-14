@@ -211,7 +211,7 @@ RowParallelLinear::RowParallelLinear(size_t in_features, size_t out_features, bo
         switch (this->get_quant_type()) {
         case infinicore::nn::QuantType::COMPRESSED_TENSOR: {
             INFINICORE_NN_PARAMETER_INIT(weight, ({out_features, in_features}, infinicore::DataType::I8, device, 1, tp_rank_, tp_size_));
-            INFINICORE_NN_PARAMETER_INIT(weight_scale, ({out_features, 1}, infinicore::DataType::F32, device, 0, tp_rank_, tp_size_));
+            INFINICORE_NN_PARAMETER_INIT(weight_scale, ({out_features, 1}, infinicore::DataType::F32, device, 0, 0, 1));
 
             if (bias) {
                 INFINICORE_NN_PARAMETER_INIT(bias, ({out_features}, dtype_, device, 0, tp_rank_, tp_size_));
