@@ -3,36 +3,60 @@
 #include "infinicore/ops.hpp"
 #include "infinicore/ops/distributed/allreduce.hpp"
 #include "infinicore/ops/linear.hpp"
+#include "infinicore/ops/linear_w8a8i8.hpp"
 #include <optional>
 #include <spdlog/spdlog.h>
+
+#include <iostream>
 
 namespace infinicore::nn {
 
 BaseLinear::BaseLinear(size_t in_features, size_t out_features, bool bias,
-                       const DataType &dtype, const Device &device)
+                       const DataType &dtype, const Device &device,
+                       const std::optional<QuantConfig> &quant_config)
     : in_features_(in_features),
       out_features_(out_features),
       has_bias_(bias),
-      dtype_(dtype) {
+      dtype_(dtype),
+      quant_config_(quant_config) {
 
     device_ = device;
 }
 
 Tensor BaseLinear::compute_linear(Tensor &input) const {
+    if (!this->is_quantized()) {
+        // Ensure input is contiguous before creating views (required for matmul)
+        // This prevents hanging when input tensor has non-contiguous memory layout
+        Tensor input_contiguous = input->is_contiguous() ? input : input->contiguous();
 
-    // Ensure input is contiguous before creating views (required for matmul)
-    // This prevents hanging when input tensor has non-contiguous memory layout
-    Tensor input_contiguous = input->is_contiguous() ? input : input->contiguous();
+        // Use ops::linear_ directly to match Python backend's exact code path
+        // This ensures identical computation and numerical results
+        // Parameter inherits from Tensor, so we cast to Tensor explicitly
+        Tensor weight_tensor = static_cast<const Tensor &>(weight_);
+        std::optional<Tensor> bias_opt = has_bias_ ? std::make_optional<Tensor>(static_cast<const Tensor &>(bias_)) : std::nullopt;
 
-    // Use ops::linear_ directly to match Python backend's exact code path
-    // This ensures identical computation and numerical results
-    // Parameter inherits from Tensor, so we cast to Tensor explicitly
-    Tensor weight_tensor = static_cast<const Tensor &>(weight_);
-    std::optional<Tensor> bias_opt = has_bias_ ? std::make_optional<Tensor>(static_cast<const Tensor &>(bias_)) : std::nullopt;
+        auto output = infinicore::op::linear(input_contiguous->contiguous(), weight_tensor->contiguous(), bias_opt);
+        return output;
+    } else {
+        switch (this->get_quant_type()) {
+        case infinicore::nn::QuantType::COMPRESSED_TENSOR: {
+            Tensor input_contiguous = input->is_contiguous() ? input : input->contiguous();
+            // input_contiguous = input_contiguous->view({input_contiguous->shape()[1], input_contiguous->shape()[2]});
+            Tensor weight_packed_tensor = static_cast<const Tensor &>(weight_);
+            Tensor weight_scale_tensor = static_cast<const Tensor &>(weight_scale_);
+            // weight_packed should be transposed and non-contiguous.
+            std::optional<Tensor> bias_opt = has_bias_ ? std::make_optional<Tensor>(static_cast<const Tensor &>(bias_)) : std::nullopt;
 
-    auto output = infinicore::op::linear(input_contiguous->contiguous(), weight_tensor->contiguous(), bias_opt);
-    return output;
-}
+            auto output = infinicore::op::linear_w8a8i8(input_contiguous->contiguous(), weight_packed_tensor, weight_scale_tensor, bias_opt);
+            return output;
+        }
+        default: {
+            // Temp for test
+            return input;
+        }
+        }
+    }
+} // namespace infinicore::nn
 
 Tensor BaseLinear::forward(Tensor &input) const {
     return compute_linear(input);
@@ -52,23 +76,43 @@ Tensor BaseLinear::forward(Tensor &input, Tensor &residual) const {
 namespace infinicore::nn {
 
 Linear::Linear(size_t in_features, size_t out_features, bool bias,
-               const DataType &dtype, const Device &device)
-    : BaseLinear(in_features, out_features, bias, dtype, device_) {
+               const DataType &dtype, const Device &device,
+               const std::optional<QuantConfig> &quant_config)
+    : BaseLinear(in_features, out_features, bias, dtype, device_, quant_config) {
 
     device_ = device;
 
-    // Initialize parameters using macro
-    INFINICORE_NN_PARAMETER_INIT(weight, ({out_features, in_features}, dtype_, device));
+    if (!this->is_quantized()) {
+        // Initialize parameters using macro
+        INFINICORE_NN_PARAMETER_INIT(weight, ({out_features, in_features}, dtype_, device));
 
-    // Register bias parameter if requested
-    if (bias) {
-        INFINICORE_NN_PARAMETER_INIT(bias, ({out_features}, dtype_, device));
+        // Register bias parameter if requested
+        if (bias) {
+            INFINICORE_NN_PARAMETER_INIT(bias, ({out_features}, dtype_, device));
+        } else {
+            bias_ = Parameter(); // Default constructed empty parameter
+        }
+
+        // SPDLOG_DEBUG("Created Linear module: in_features={}, out_features={}, bias={}, dtype={}",
+        //              in_features, out_features, bias, static_cast<int>(dtype_));
     } else {
-        bias_ = Parameter(); // Default constructed empty parameter
-    }
+        switch (this->get_quant_type()) {
+        case infinicore::nn::QuantType::COMPRESSED_TENSOR: {
+            INFINICORE_NN_PARAMETER_INIT(weight, ({out_features, in_features}, infinicore::DataType::I8, device));
+            INFINICORE_NN_PARAMETER_INIT(weight_scale, ({out_features, 1}, infinicore::DataType::F32, device));
 
-    // SPDLOG_DEBUG("Created Linear module: in_features={}, out_features={}, bias={}, dtype={}",
-    //              in_features, out_features, bias, static_cast<int>(dtype_));
+            if (bias) {
+                INFINICORE_NN_PARAMETER_INIT(bias, ({out_features}, dtype_, device));
+            } else {
+                bias_ = Parameter();
+            }
+            break;
+        }
+        default: {
+            break;
+        }
+        }
+    }
 }
 
 Tensor Linear::forward(Tensor &input) const {
@@ -85,23 +129,44 @@ namespace infinicore::nn {
 
 ColumnParallelLinear::ColumnParallelLinear(size_t in_features, size_t out_features, bool bias,
                                            const DataType &dtype, const Device &device,
-                                           Size tp_rank, Size tp_size)
-    : BaseLinear(in_features, out_features, bias, dtype, device_),
+                                           Size tp_rank, Size tp_size,
+                                           const std::optional<QuantConfig> &quant_config)
+    : BaseLinear(in_features, out_features, bias, dtype, device_, quant_config),
       tp_rank_(tp_rank),
       tp_size_(tp_size) {
 
     device_ = device;
 
-    // Initialize parameters using macro
-    INFINICORE_NN_PARAMETER_INIT(weight, ({out_features, in_features}, dtype_, device,
-                                          0, tp_rank_, tp_size_));
+    if (!this->is_quantized()) {
+        // Initialize parameters using macro
+        INFINICORE_NN_PARAMETER_INIT(weight, ({out_features, in_features}, dtype_, device,
+                                              0, tp_rank_, tp_size_));
 
-    // Register bias parameter if requested
-    if (bias) {
-        INFINICORE_NN_PARAMETER_INIT(bias, ({out_features}, dtype_, device,
-                                            0, tp_rank_, tp_size_));
+        // Register bias parameter if requested
+        if (bias) {
+            INFINICORE_NN_PARAMETER_INIT(bias, ({out_features}, dtype_, device,
+                                                0, tp_rank_, tp_size_));
+        } else {
+            bias_ = Parameter(); // Default constructed empty parameter
+        }
     } else {
-        bias_ = Parameter(); // Default constructed empty parameter
+        switch (this->get_quant_type()) {
+        case infinicore::nn::QuantType::COMPRESSED_TENSOR: {
+
+            INFINICORE_NN_PARAMETER_INIT(weight, ({out_features, in_features}, infinicore::DataType::I8, device, 0, tp_rank_, tp_size_));
+            INFINICORE_NN_PARAMETER_INIT(weight_scale, ({out_features, 1}, infinicore::DataType::F32, device, 0, tp_rank_, tp_size_));
+
+            if (bias) {
+                INFINICORE_NN_PARAMETER_INIT(bias, ({out_features}, dtype_, device, 0, 0, 1));
+            } else {
+                bias_ = Parameter();
+            }
+            break;
+        }
+        default: {
+            break;
+        }
+        }
     }
 }
 
@@ -119,22 +184,44 @@ namespace infinicore::nn {
 
 RowParallelLinear::RowParallelLinear(size_t in_features, size_t out_features, bool bias,
                                      const DataType &dtype, const Device &device,
-                                     Size tp_rank, Size tp_size, infinicclComm_t communicator)
-    : BaseLinear(in_features, out_features, bias, dtype, device_),
+                                     Size tp_rank, Size tp_size, infinicclComm_t communicator,
+                                     const std::optional<QuantConfig> &quant_config)
+    : BaseLinear(in_features, out_features, bias, dtype, device_, quant_config),
       tp_rank_(tp_rank),
       tp_size_(tp_size), communicator_(communicator) {
 
     device_ = device;
+    if (!this->is_quantized()) {
+        // Initialize parameters using macro
+        INFINICORE_NN_PARAMETER_INIT(weight, ({out_features, in_features}, dtype_, device,
+                                              1, tp_rank_, tp_size_));
 
-    // Initialize parameters using macro
-    INFINICORE_NN_PARAMETER_INIT(weight, ({out_features, in_features}, dtype_, device,
-                                          1, tp_rank_, tp_size_));
+        // Register bias parameter if requested
+        if (bias && (0 == tp_rank_)) {
+            INFINICORE_NN_PARAMETER_INIT(bias, ({out_features}, dtype_, device, 0, 0, 1));
+        } else {
+            bias_ = Parameter(); // Default constructed empty parameter
+        }
 
-    // Register bias parameter if requested
-    if (bias && (0 == tp_rank_)) {
-        INFINICORE_NN_PARAMETER_INIT(bias, ({out_features}, dtype_, device, 0, 0, 1));
+        // SPDLOG_DEBUG("Created RowParallelLinear module: in_features={}, out_features={}, bias={}, dtype={}",
+        //              in_features, out_features, bias, static_cast<int>(dtype_));
     } else {
-        bias_ = Parameter(); // Default constructed empty parameter
+        switch (this->get_quant_type()) {
+        case infinicore::nn::QuantType::COMPRESSED_TENSOR: {
+            INFINICORE_NN_PARAMETER_INIT(weight, ({out_features, in_features}, infinicore::DataType::I8, device, 1, tp_rank_, tp_size_));
+            INFINICORE_NN_PARAMETER_INIT(weight_scale, ({out_features, 1}, infinicore::DataType::F32, device, 0, tp_rank_, tp_size_));
+
+            if (bias) {
+                INFINICORE_NN_PARAMETER_INIT(bias, ({out_features}, dtype_, device, 0, tp_rank_, tp_size_));
+            } else {
+                bias_ = Parameter();
+            }
+            break;
+        }
+        default: {
+            break;
+        }
+        }
     }
 }
 
