@@ -9,13 +9,13 @@ from .utils.tensor_utils import is_integer_dtype, is_complex_dtype
 class TensorInitializer:
     """Tensor data initializer with multiple modes"""
 
-    RANDOM = "random"
-    ZEROS = "zeros"
-    ONES = "ones"
-    RANDINT = "randint"
-    MANUAL = "manual"
-    BINARY = "binary"
-    FROM_FILE = "from_file"
+    RANDOM = "RANDOM"
+    ZEROS = "ZEROS"
+    ONES = "ONES"
+    RANDINT = "RANDINT"
+    MANUAL = "MANUAL"
+    BINARY = "BINARY"
+    FROM_FILE = "FROM_FILE"
 
     @staticmethod
     def create_tensor(shape, dtype, device, mode=RANDOM, strides=None, **kwargs):
