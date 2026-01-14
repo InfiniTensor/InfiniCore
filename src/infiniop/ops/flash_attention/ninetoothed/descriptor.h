@@ -67,24 +67,26 @@ public:
         constexpr auto block_size_m_{64};
         constexpr auto block_size_n_{64};
 
-        launch_flash_attention(stream,
-                               query,
-                               key,
-                               value,
-                               attn_mask,
-                               is_causal,
-                               scale,
-                               output,
-                               with_attn_mask,
-                               causal_variant,
-                               with_kv_cache_,
-                               emb_dim_,
-                               is_causal_,
-                               with_attn_mask_,
-                               causal_variant_,
-                               dtype_,
-                               block_size_m_,
-                               block_size_n_);
+        if (launch_flash_attention(stream,
+                                   query,
+                                   key,
+                                   value,
+                                   attn_mask,
+                                   is_causal,
+                                   scale,
+                                   output,
+                                   with_attn_mask,
+                                   causal_variant,
+                                   with_kv_cache_,
+                                   emb_dim_,
+                                   is_causal_,
+                                   with_attn_mask_,
+                                   causal_variant_,
+                                   dtype_,
+                                   block_size_m_,
+                                   block_size_n_)) {
+            return INFINI_STATUS_NOT_IMPLEMENTED;
+        }
 
         return INFINI_STATUS_SUCCESS;
     }
