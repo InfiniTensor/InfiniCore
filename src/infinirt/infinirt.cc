@@ -10,6 +10,8 @@
 
 thread_local infiniDevice_t CURRENT_DEVICE_TYPE = INFINI_DEVICE_CPU;
 thread_local int CURRENT_DEVICE_ID = 0;
+thread_local infiniDevice_t PREVIOUS_NON_CPU_DEVICE_TYPE = INFINI_DEVICE_TYPE_COUNT;
+thread_local int PREVIOUS_NON_CPU_DEVICE_ID = 0;
 
 __C infiniStatus_t infinirtInit() {
 #ifdef ENABLE_ASCEND_API
@@ -23,10 +25,6 @@ __C infiniStatus_t infinirtGetAllDeviceCount(int *count_array) {
         return INFINI_STATUS_NULL_POINTER;
     }
     for (size_t i = 0; i < INFINI_DEVICE_TYPE_COUNT; i++) {
-        if (i == INFINI_DEVICE_ILUVATAR || i == INFINI_DEVICE_QY || i == INFINI_DEVICE_KUNLUN || i == INFINI_DEVICE_HYGON) {
-            count_array[i] = 0;
-            continue;
-        }
         auto status = infinirtGetDeviceCount(static_cast<infiniDevice_t>(i), &count_array[i]);
         if (status != INFINI_STATUS_SUCCESS) {
             return status;
@@ -75,13 +73,13 @@ __C infiniStatus_t infinirtGetDevice(infiniDevice_t *device_ptr, int *device_id_
             _status = infinirt::kunlun::API PARAMS;                    \
             break;                                                     \
         case INFINI_DEVICE_ILUVATAR:                                   \
-            _status = infinirt::cuda::API PARAMS;                      \
+            _status = infinirt::iluvatar::API PARAMS;                  \
             break;                                                     \
         case INFINI_DEVICE_QY:                                         \
-            _status = infinirt::cuda::API PARAMS;                      \
+            _status = infinirt::qy::API PARAMS;                        \
             break;                                                     \
         case INFINI_DEVICE_HYGON:                                      \
-            _status = infinirt::cuda::API PARAMS;                      \
+            _status = infinirt::hygon::API PARAMS;                     \
             break;                                                     \
         default:                                                       \
             _status = INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;         \
@@ -100,6 +98,16 @@ __C infiniStatus_t infinirtGetDeviceCount(infiniDevice_t device, int *count) {
 }
 
 __C infiniStatus_t infinirtSetDevice(infiniDevice_t device, int device_id) {
+    bool skip_set = CURRENT_DEVICE_TYPE == INFINI_DEVICE_CPU && device == PREVIOUS_NON_CPU_DEVICE_TYPE && device_id == PREVIOUS_NON_CPU_DEVICE_ID;
+    if (CURRENT_DEVICE_TYPE != INFINI_DEVICE_CPU) {
+        PREVIOUS_NON_CPU_DEVICE_TYPE = CURRENT_DEVICE_TYPE;
+        PREVIOUS_NON_CPU_DEVICE_ID = CURRENT_DEVICE_ID;
+    }
+    if (skip_set) {
+        CURRENT_DEVICE_TYPE = device;
+        CURRENT_DEVICE_ID = device_id;
+        return INFINI_STATUS_SUCCESS;
+    }
     INFINIRT_CALL_DEVICE_API_AND(device, setDevice, (device_id),
                                  { CURRENT_DEVICE_TYPE = device;
                                    CURRENT_DEVICE_ID = device_id; });

@@ -2,15 +2,6 @@
 #include "kernel.h"
 #include "mul_kunlun.h"
 
-namespace op::elementwise::kunlun {
-
-using MulOp = op::mul::kunlun::MulOp;
-
-INSTANTIATE_ELEMENTWISE_KERNEL(MulOp::num_inputs, MulOp, float);
-INSTANTIATE_ELEMENTWISE_KERNEL(MulOp::num_inputs, MulOp, half);
-INSTANTIATE_ELEMENTWISE_KERNEL(MulOp::num_inputs, MulOp, bfloat16_t);
-} // namespace op::elementwise::kunlun
-
 namespace op::mul::kunlun {
 
 Descriptor::~Descriptor() = default;

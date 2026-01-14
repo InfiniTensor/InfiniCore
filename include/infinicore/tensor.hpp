@@ -75,6 +75,7 @@ public:
                                     const DataType &dtype,
                                     const Device &device);
 
+    Tensor() = default;
     Tensor(const Tensor &) = default;
     Tensor(Tensor &&) = default;
     Tensor &operator=(const Tensor &) = default;
@@ -83,8 +84,10 @@ public:
     TensorImpl *operator->();
     const TensorImpl *operator->() const;
 
+    operator bool() const;
+
 protected:
-    explicit Tensor(std::shared_ptr<TensorImpl> impl) : impl_(std::move(impl)) {}
+    Tensor(std::shared_ptr<TensorImpl> impl) : impl_(std::move(impl)) {}
     std::shared_ptr<TensorImpl> impl_;
     friend class TensorImpl;
 };
@@ -130,6 +133,8 @@ public:
 
     void debug() const;
 
+    Tensor to_blob() const;
+
     ///
     /// Data Transfer APIs
     ///
@@ -164,6 +169,34 @@ public:
     ///
     /// View APIs
     ///
+
+    /**
+     * Returns a new tensor with a dimension of size one removed at the specified position.
+     * Throws runtime_error if the dimension to be removed is not of size 1.
+     *
+     * @param dim The dimension index to remove
+     * @return A new tensor with the removed dimension
+     *
+     * Example:
+     *   // For a 3D tensor with shape [1, 3, 4], squeeze at dim 0 results in shape [3, 4]
+     *   tensor->squeeze(0);
+     */
+    Tensor squeeze(size_t dim) const;
+
+    /**
+     * Returns a new tensor with a dimension of size one inserted at the specified position.
+     * The returned tensor shares the same underlying storage with the original tensor.
+     *
+     * @param dim The dimension index at which to insert the new dimension
+     * @return A new tensor with the added dimension
+     *
+     * Example:
+     *   // For a 2D tensor with shape [3, 4], unsqueeze at dim 0 results in shape [1, 3, 4]
+     *   // unsqueeze at dim 1 results in shape [3, 1, 4]
+     *   // unsqueeze at dim 2 results in shape [3, 4, 1]
+     *   tensor->unsqueeze(0);
+     */
+    Tensor unsqueeze(size_t dim) const;
 
     /**
      * Returns a new tensor that is a narrowed version of the current tensor.
@@ -263,7 +296,7 @@ protected:
 
     friend class Tensor;
 
-private:
+protected:
     TensorMetaData meta_;
     TensorData data_;
 };

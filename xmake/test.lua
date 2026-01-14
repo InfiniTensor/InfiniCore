@@ -88,7 +88,6 @@ target("infinicore-test")
     add_files(os.projectdir().."/src/infinicore/ops/*/*.cc")
     add_files(os.projectdir().."/src/infinicore/nn/*.cc")
 
-    add_files(os.projectdir().."/src/infinicore-test/*.cc")
-
+    add_files(os.projectdir().."/src/infinicore-test/**.cc")
     set_installdir(INFINI_ROOT)
 target_end()

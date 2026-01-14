@@ -13,14 +13,14 @@ Runtime *ContextImpl::getCurrentRuntime() {
         // Try to find the first non-CPU device, fallback to CPU
         for (int i = int(Device::Type::COUNT) - 1; i > 0; i--) {
             if (!runtime_table_[i].empty() && runtime_table_[i][0] != nullptr) {
-                current_runtime_ = runtime_table_[i][0].get();
+                current_runtime_ = runtime_table_[i][0].get()->activate();
                 spdlog::debug("Lazy init: Set current_runtime_ to {} (ptr={})", current_runtime_->device().toString(), static_cast<void *>(current_runtime_));
                 return current_runtime_;
             }
         }
         // Fallback to CPU runtime
         if (!runtime_table_[0].empty() && runtime_table_[0][0] != nullptr) {
-            current_runtime_ = runtime_table_[0][0].get();
+            current_runtime_ = runtime_table_[0][0].get()->activate();
             spdlog::debug("Lazy init: Set current_runtime_ to {} (ptr={})", current_runtime_->device().toString(), static_cast<void *>(current_runtime_));
         }
     } else {
@@ -37,6 +37,10 @@ void ContextImpl::setDevice(Device device) {
     if (device == getCurrentRuntime()->device()) {
         // Do nothing if the device is already set.
         return;
+    }
+
+    if (getCurrentRuntime()->isGraphRecording()) {
+        spdlog::warn("Switching device runtime during graph recording may break the graph!");
     }
 
     if (runtime_table_[int(device.getType())][device.getIndex()] == nullptr) {
@@ -122,6 +126,7 @@ std::shared_ptr<Memory> allocateMemory(size_t size) {
 }
 
 std::shared_ptr<Memory> allocateHostMemory(size_t size) {
+    setDevice(Device::cpu());
     return ContextImpl::singleton().getCpuRuntime()->allocateMemory(size);
 }
 
@@ -178,6 +183,21 @@ void streamWaitEvent(infinirtStream_t stream, infinirtEvent_t event) {
     ContextImpl::singleton().getCurrentRuntime()->streamWaitEvent(stream, event);
 }
 
+bool isGraphRecording() {
+    return ContextImpl::singleton().getCurrentRuntime()->isGraphRecording();
+}
+
+void startGraphRecording() {
+    ContextImpl::singleton().getCurrentRuntime()->startGraphRecording();
+}
+
+void addGraphOperator(std::shared_ptr<graph::GraphOperator> op) {
+    ContextImpl::singleton().getCurrentRuntime()->addGraphOperator(op);
+}
+
+std::shared_ptr<graph::Graph> stopGraphRecording() {
+    return ContextImpl::singleton().getCurrentRuntime()->stopGraphRecording();
+}
 } // namespace context
 
 } // namespace infinicore

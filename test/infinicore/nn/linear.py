@@ -4,8 +4,13 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
-from framework.base import BaseOperatorTest, TensorSpec, TestCase
-from framework.runner import GenericTestRunner
+
+from framework import (
+    BaseOperatorTest,
+    GenericTestRunner,
+    TensorSpec,
+    TestCase
+)
 
 import infinicore
 
@@ -21,6 +26,8 @@ _TEST_CASES_DATA = [
     ((4, 10), (2, 10), (2,), False),
     ((1, 1024), (3072, 1024), (3072,), True),
     ((5, 1024), (3072, 1024), (3072,), False),
+    ((2, 5, 1024), (3072, 1024), (3072,), True),
+    ((10, 5, 1024), (3072, 1024), (3072,), False),
 ]
 
 # Tolerance configuration

@@ -60,6 +60,10 @@ Tensor Tensor::strided_from_blob(void *raw_ptr, const Shape &shape, const Stride
     return Tensor{TensorImpl::strided_from_blob(raw_ptr, shape, strides, dtype, device)};
 }
 
+Tensor::operator bool() const {
+    return impl_ != nullptr;
+}
+
 TensorMetaData::TensorMetaData(const Shape &_shape, const Strides &_strides, const DataType &_dtype)
     : shape(_shape), strides(_strides), dtype(_dtype) {
     INFINICORE_CHECK_ERROR(infiniopCreateTensorDescriptor(&desc, shape.size(), shape.data(), strides.data(), (infiniDtype_t)dtype));
@@ -162,6 +166,7 @@ std::string TensorImpl::info() const {
         ss << s << " ";
     }
     ss << "] dtype=" << toString(this->dtype());
+    ss << " device=" << this->device().toString();
 
     return ss.str();
 }
@@ -268,6 +273,14 @@ std::shared_ptr<TensorImpl> TensorImpl::strided_from_blob(
     t->data_.offset = 0;
     t->data_.memory = std::make_shared<Memory>((std::byte *)raw_ptr, t->numel() * dsize(dtype), device, nullptr);
     return t;
+}
+
+Tensor TensorImpl::to_blob() const {
+    auto t = std::shared_ptr<TensorImpl>(new TensorImpl(shape(), strides(), dtype()));
+    t->data_.offset = this->data_.offset;
+    t->data_.memory = std::make_shared<Memory>(this->data_.memory->data(), this->data_.memory->size(), this->data_.memory->device(), nullptr);
+
+    return Tensor{t};
 }
 
 } // namespace infinicore

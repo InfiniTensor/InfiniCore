@@ -1,29 +1,25 @@
-#include "random_sample_kunlun.h"
 #include "../../../devices/kunlun/kunlun_common.h"
 #include "../../../devices/kunlun/kunlun_handle.h"
+#include "random_sample_kunlun.h"
 
 #include "../info.h"
 #include "kernel.h"
 
-#include "xpu/kernel/xtdk_io.h"
-
-
 template <typename Tval, typename Tidx>
-void launchKernel(void *workspace, 
-            void *result,
-            const void *probs,
-            float random_val,
-            float topp,
-            int topk,
-            float temperature,
-            int64_t n,             
-          XPUStream stream) {
+void launchKernel(void *workspace,
+                  void *result,
+                  const void *probs,
+                  float random_val,
+                  float topp,
+                  int topk,
+                  float temperature,
+                  int64_t n,
+                  XPUStream stream) {
     constexpr unsigned int cluster_num = 8;
     constexpr unsigned int core_num = 64;
     char *workspace_value = reinterpret_cast<char *>(workspace);
     int topk_ = topk <= (int)n ? topk : (int)n;
     bool dosample = topk_ > 1 && temperature != 0.0f && topp != 0.0f && random_val != 0.0f;
-    
 
     Tval *values = (Tval *)workspace_value;
     xpu_memcpy(values, (Tval *)probs, n * sizeof(Tval), XPU_DEVICE_TO_DEVICE);
@@ -33,32 +29,33 @@ void launchKernel(void *workspace,
     char *workspace_index = workspace_sum + cluster_num * sizeof(float);
     Tidx *indices = (Tidx *)workspace_index;
     Tidx *indices_global = indices + n;
-    if (dosample){
-        randomSampleKernel<cluster_num, core_num, Tval, float, Tidx><<<cluster_num, core_num, stream>>>((Tidx *)result,
-                                                                                            (Tval *)probs,
-                                                                                            random_val,
-                                                                                            topp,
-                                                                                            n,
-                                                                                            topk_,
-                                                                                            temperature,
-                                                                                            indices,
-                                                                                            values,
-                                                                                            indices_global,
-                                                                                            values_global,
-                                                                                            sum_global);           
+    if (dosample) {
+        randomSampleKernel<cluster_num, core_num, Tval, float, Tidx>
+            <<<cluster_num, core_num, stream>>>((Tidx *)result,
+                                                (Tval *)probs,
+                                                random_val,
+                                                topp,
+                                                n,
+                                                topk_,
+                                                temperature,
+                                                indices,
+                                                values,
+                                                indices_global,
+                                                values_global,
+                                                sum_global);
     }
-    
-    else{
-        argmaxKernel<Tval, Tidx><<<cluster_num, core_num, stream>>>((Tidx *)result, (Tval *)probs, n, 
-                                    indices,
-                                    values,
-                                    indices_global,
-                                    values_global);                           
-    }    
-                                                                           
+
+    else {
+        argmaxKernel<Tval, Tidx>
+            <<<cluster_num, core_num, stream>>>((Tidx *)result, (Tval *)probs, n,
+                                                indices,
+                                                values,
+                                                indices_global,
+                                                values_global);
+    }
 }
 
-#define LAUNCH_KERNEL(Tval, Tidx)                         \
+#define LAUNCH_KERNEL(Tval, Tidx) \
     launchKernel<Tval, Tidx>(workspace, result, probs, random_val, topp, topk, temperature, n, reinterpret_cast<kunlunStream_t>(stream));
 
 namespace op::random_sample::kunlun {
@@ -82,11 +79,11 @@ infiniStatus_t Descriptor::create(
     CHECK_RESULT(result);
 
     auto info = result.take();
-    
+
     int cluster_num = 8;
     int core_num = 64;
     int n = probs_desc->numel();
-    
+
     size_t workspace_size = (n + cluster_num * core_num * n) * (infiniSizeOf(probs_desc->dtype()) + infiniSizeOf(result_desc->dtype())) + cluster_num * sizeof(float);
     *desc_ptr = new Descriptor(
         info,
@@ -116,40 +113,38 @@ Descriptor::calculate(
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
     int n = (int)_info.n;
-    if (_info.dt_i == INFINI_DTYPE_I32){
+    if (_info.dt_i == INFINI_DTYPE_I32) {
         switch (_info.dt_p) {
-            case INFINI_DTYPE_F16:                
-                LAUNCH_KERNEL(half, int32_t);
-                break;
-            case INFINI_DTYPE_BF16:                
-                LAUNCH_KERNEL(bfloat16_t, int32_t);
-                break;
-            case INFINI_DTYPE_F32:                
-                LAUNCH_KERNEL(float, int32_t);
-                break;
-            default:
-                return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        case INFINI_DTYPE_F16:
+            LAUNCH_KERNEL(half, int32_t);
+            break;
+        case INFINI_DTYPE_BF16:
+            LAUNCH_KERNEL(bfloat16_t, int32_t);
+            break;
+        case INFINI_DTYPE_F32:
+            LAUNCH_KERNEL(float, int32_t);
+            break;
+        default:
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
-    } 
-    else if (_info.dt_i == INFINI_DTYPE_I64){
+    } else if (_info.dt_i == INFINI_DTYPE_I64) {
         switch (_info.dt_p) {
-            case INFINI_DTYPE_F16:
-                LAUNCH_KERNEL(half, int64_t);
-                break;
-            case INFINI_DTYPE_BF16:
-                LAUNCH_KERNEL(bfloat16_t, int64_t);
-                break;
-            case INFINI_DTYPE_F32:
-                LAUNCH_KERNEL(float, int64_t);
-                break;
-            default:
-                return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        case INFINI_DTYPE_F16:
+            LAUNCH_KERNEL(half, int64_t);
+            break;
+        case INFINI_DTYPE_BF16:
+            LAUNCH_KERNEL(bfloat16_t, int64_t);
+            break;
+        case INFINI_DTYPE_F32:
+            LAUNCH_KERNEL(float, int64_t);
+            break;
+        default:
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
-    }
-    else {
+    } else {
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
-    
+
     return INFINI_STATUS_SUCCESS;
 }
 

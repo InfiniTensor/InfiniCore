@@ -2,15 +2,6 @@
 #include "kernel.h"
 #include "sub_kunlun.h"
 
-namespace op::elementwise::kunlun {
-
-using SubOp = op::sub::kunlun::SubOp;
-
-INSTANTIATE_ELEMENTWISE_KERNEL(SubOp::num_inputs, SubOp, float);
-INSTANTIATE_ELEMENTWISE_KERNEL(SubOp::num_inputs, SubOp, half);
-INSTANTIATE_ELEMENTWISE_KERNEL(SubOp::num_inputs, SubOp, bfloat16_t);
-} // namespace op::elementwise::kunlun
-
 namespace op::sub::kunlun {
 
 Descriptor::~Descriptor() = default;

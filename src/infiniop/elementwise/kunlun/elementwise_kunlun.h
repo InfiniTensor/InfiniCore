@@ -312,21 +312,6 @@ infiniStatus_t DeviceImpl::calculate(const op::elementwise::ElementwiseInfo &inf
         std::forward<Args>(args)...);
 }
 
-#define INSTANTIATE_ELEMENTWISE_KERNEL(N, Op, Tdata, ...)                    \
-    template __global__ void elementwiseKernel<N, Op, Tdata, ##__VA_ARGS__>( \
-        int output_size,                                                     \
-        int ndim,                                                            \
-        bool output_contiguous,                                              \
-        const bool *input_contiguous_gm,                                     \
-        const bool *input_broadcasted_gm,                                    \
-        const void *output_shape_gm,                                         \
-        const void *input_shapes_gm,                                         \
-        const void *output_strides_gm,                                       \
-        const void *input_strides_gm,                                        \
-        Tdata *output,                                                       \
-        const void *const *inputs,                                           \
-        ##__VA_ARGS__);
-
 } // namespace op::elementwise::kunlun
 
 #endif

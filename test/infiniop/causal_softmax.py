@@ -32,6 +32,9 @@ _TEST_CASES_ = [
     ((32, 20, 512), None, None),
     ((32, 20, 512), (20480, 512, 1), None),
     ((28, 15, 15), None, None),
+    ((28, 1024, 1024), None, None),
+    ((28, 1025, 1025), None, None),
+    ((28, 1031, 1031), None, None),
 ]
 
 # Data types used for testing

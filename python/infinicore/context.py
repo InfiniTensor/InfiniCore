@@ -1,4 +1,5 @@
 import infinicore.device
+from infinicore.graph import Graph
 from infinicore.lib import _infinicore
 
 
@@ -49,3 +50,24 @@ def get_stream():
         stream: The current stream object
     """
     return _infinicore.get_stream()
+
+
+def is_graph_recording():
+    """Check if the current graph is recording.
+
+    Returns:
+        bool: True if the current graph is recording, False otherwise
+    """
+    return _infinicore.is_graph_recording()
+
+
+def start_graph_recording(device=None):
+    """Start recording the current graph."""
+    if device is not None:
+        set_device(device)
+    _infinicore.start_graph_recording()
+
+
+def stop_graph_recording():
+    """Stop recording the current graph."""
+    return Graph(_infinicore.stop_graph_recording())

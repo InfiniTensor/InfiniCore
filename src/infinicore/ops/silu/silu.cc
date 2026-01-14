@@ -1,4 +1,7 @@
 #include "infinicore/ops/silu.hpp"
+
+#include "../../utils.hpp"
+
 #include <stdexcept>
 
 namespace infinicore::op {
@@ -9,7 +12,9 @@ common::OpDispatcher<Silu::schema> &Silu::dispatcher() {
 };
 
 void Silu::execute(Tensor output, Tensor input) {
-    auto device_type = context::getDevice().getType();
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(output, input);
+    infinicore::context::setDevice(output->device());
+    auto device_type = output->device().getType();
     auto func = dispatcher().lookup(device_type);
 
     if (func == nullptr) {

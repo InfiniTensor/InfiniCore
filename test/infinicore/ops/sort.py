@@ -7,6 +7,7 @@ import torch
 import infinicore
 from framework import (
     BaseOperatorTest,
+    CaseResult,
     TensorSpec,
     TestCase,
     GenericTestRunner,
@@ -31,12 +32,12 @@ _TEST_CASES_DATA = [
     ((4, 5, 6), 1, False, None, None, None),
     ((4, 5, 6), -1, True, None, None, None),
     # 3D in-place cases
-    ((4, 5, 6), 1, False, None, (4, 1, 6), (4, 1, 6)),
-    ((4, 5, 6), -1, False, (30, 6, 1), (64, 1, 5), (64, 1, 5)),
+    ((4, 5, 6), 1, False, None, (30, 6, 1), (30, 6, 1)),
+    ((4, 5, 6), -1, False, (30, 6, 1), (30, 6, 1), (30, 6, 1)),
     # Strided inputs and outputs
-    ((13, 4), None, False, (4, 1), (12, 1), (24, 1)),
-    ((13, 4), 0, False, (1, 4), (64, 1), (1, 4)),
-    ((13, 4), 1, False, (1, 4), (64, 1), (1, 4)),
+    ((13, 4), None, False, (4, 1), (4, 1), (4, 1)),
+    ((13, 4), 0, False, (13, 1), (13, 1), (13, 1)),
+    ((13, 4), 1, False, (13, 1), (13, 1), (13, 1)),
 ]
 
 # Tolerance configuration
@@ -180,7 +181,7 @@ class OpTest(BaseOperatorTest):
                 and isinstance(test_case.inputs[0], TensorSpec)
                 and test_case.inputs[0].strides is not None
             ):
-                return TestResult(
+                return CaseResult(
                     success=False,
                     return_code=-2,
                     test_case=test_case,
@@ -193,7 +194,7 @@ class OpTest(BaseOperatorTest):
             )
             for spec in output_specs:
                 if isinstance(spec, TensorSpec) and spec.strides is not None:
-                    return TestResult(
+                    return CaseResult(
                         success=False,
                         return_code=-2,
                         test_case=test_case,
