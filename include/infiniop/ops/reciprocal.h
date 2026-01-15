@@ -1,7 +1,7 @@
 #ifndef __INFINIOP_RECIPROCAL_API_H__
 #define __INFINIOP_RECIPROCAL_API_H__
 
-#include "../operator_descriptor.h"
+#include "unary_op_api.h"
 
 typedef struct InfiniopDescriptor *infiniopReciprocalDescriptor_t;
 

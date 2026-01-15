@@ -1,10 +1,11 @@
 // 【修改点 1】引用 Floor 专用的 CPU 头文件
 #include "floor_cpu.h"
+#include "../../../elementwise/cpu/elementwise_cpu_impl.h"
 
 // 【修改点 2】命名空间必须是 floor，否则 operator.cc 找不到定义
 namespace op::floor::cpu {
 
-Descriptor::~Descriptor() = default;
+ELEMENTWISE_CPU_IMPL_UNARY(floor)
 
 infiniStatus_t Descriptor::create(
     infiniopHandle_t handle_,

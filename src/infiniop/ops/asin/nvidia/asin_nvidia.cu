@@ -1,11 +1,11 @@
-#include "../../../elementwise/nvidia/elementwise_nvidia.cuh"
+#include "../../../elementwise/nvidia/elementwise_nvidia_impl.cuh"
 
 #include "../cuda/kernel.cuh"
 #include "asin_nvidia.cuh"
 
 namespace op::asin::nvidia {
 
-Descriptor::~Descriptor() = default;
+ELEMENTWISE_NVIDIA_IMPL_UNARY(asin)
 
 infiniStatus_t
 Descriptor::create(infiniopHandle_t handle_, Descriptor **desc_ptr,

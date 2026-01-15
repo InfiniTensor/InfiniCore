@@ -1,23 +1,10 @@
 #ifndef __DIV_CUDA_H__
 #define __DIV_CUDA_H__
 
+#include "../../../elementwise/binary.h"
+
 namespace op::div::cuda {
-typedef struct DivOp {
-public:
-    static constexpr size_t num_inputs = 2;
-    template <typename T>
-    __device__ __forceinline__ T operator()(const T &a, const T &b) const {
-        if constexpr (std::is_same_v<T, half2>) {
-            return __h2div(a, b);
-        } else if constexpr (std::is_same_v<T, half> || std::is_same_v<T, cuda_bfloat16>) {
-            return a / b;
-        } else if constexpr (std::is_same_v<T, float>) {
-            return __fdividef(a, b);
-        } else {
-            return a / b;
-        }
-    }
-} DivOp;
+using Op = op::elementwise::binary::cuda::BinaryOp<op::elementwise::binary::BinaryMode::Divide>;
 } // namespace op::div::cuda
 
 #endif // __DIV_CUDA_H__
