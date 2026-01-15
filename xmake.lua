@@ -292,6 +292,7 @@ target("infiniop")
     if has_config("qy-gpu") then
         add_deps("infiniop-qy")
         add_files("build/.objs/infiniop-qy/rules/qy.cuda/src/infiniop/ops/*/nvidia/*.cu.o", {public = true})
+        add_files("build/.objs/infiniop-qy/rules/qy.cuda/src/infiniop/ops/*/*/nvidia/*.cu.o", {public = true})
         add_files("build/.objs/infiniop-qy/rules/qy.cuda/src/infiniop/devices/nvidia/*.cu.o", {public = true})
     end
 
@@ -315,7 +316,7 @@ target("infiniop")
     end
     set_languages("cxx17")
     add_files("src/infiniop/devices/handle.cc")
-    add_files("src/infiniop/ops/*/operator.cc")
+    add_files("src/infiniop/ops/*/operator.cc", "src/infiniop/ops/*/*/operator.cc")
     add_files("src/infiniop/*.cc")
 
     set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
