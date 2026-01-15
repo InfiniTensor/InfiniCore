@@ -23,15 +23,11 @@ from enum import Enum, auto
 # ==============================================================================
 # These are not meant to be imported from other modules
 _TEST_CASES_ = [
-    # x_shape, w_shape, sym, y_shape
-    ((128, 512), (512, 1024), True, (128, 1024)),
-    ((5000, 5120), (5120, 8192), True, (5000, 8192)),
-    ((2000, 5120), (5120, 8192), True, (2000, 8192)),
-    ((1000, 5120), (5120, 8192), True, (1000, 8192)),
-    ((2048, 4096), (4096, 2048), True, (2048, 2048)),
-    ((4096, 4096), (4096, 4096), True, (4096, 4096)),
-    ((2560, 10240), (10240, 20480), True, (2560, 20480)),
-    ((1024, 2048), (2048, 1024), True, (1024, 1024)),
+    # x_shape = [M,K], w_shape = [N, K], sym, y_shape = [M, N]
+    ((100, 3584), (10752, 3584), True, (100, 10752)),
+    ((1000, 3584), (10752, 3584), True, (1000, 10752)),
+    ((1, 3584), (10752, 3584), True, (1, 10752)),
+    ((2000, 3584), (10752, 3584), True, (2000, 10752)),
 ]
 
 
@@ -67,7 +63,7 @@ NUM_ITERATIONS = 1000
 
 
 def mm(x, w, bias, out_dtype):
-    return torch.matmul(x, w).to(out_dtype) + bias
+    return (torch.matmul(x, w + bias)).to(out_dtype)
 
 
 def scaled_mm(x, w_p, w_s, bias, out_dtype):
@@ -108,34 +104,32 @@ def test(
     w_shape,
     symmetric,
     y_shape,
-    alpha,
-    beta,
     inplace=Inplace.OUT_OF_PLACE,
     dtype=InfiniDtype.BF16,
     sync=None,
 ):
     print(
-        f"Testing Linear on {InfiniDeviceNames[device]} with x_shape:{x_shape}, w_shape:{w_shape}, symmetric:{symmetric}, alpha:{alpha}, beta:{beta}, inplace:{inplace} dtype:{InfiniDtypeNames[dtype]}"
+        f"Testing Linear on {InfiniDeviceNames[device]} with x_shape:{x_shape}, w_shape:{w_shape}, symmetric:{symmetric}, inplace:{inplace} dtype:{InfiniDtypeNames[dtype]}"
     )
     M, K = x_shape
-    N = w_shape[1]
-    # print(torch.randn((N, K), device="cuda").stride(), flush=True)
-    weights_packed = to_int8(torch.randn((N, K), device="cuda").t())
-
-    weights_scale = torch.randn((N, 1), device="cuda", dtype=torch.float32)
-    bias = torch.randn(
-        (N),
-        device="cuda",
-        dtype=torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16,
-    )
+    N = w_shape[0]
 
     x = TestTensor(x_shape, None, dtype, device)
-
     x_packed = TestTensor(x_shape, None, InfiniDtype.I8, device, mode="zeros")
     x_scale = TestTensor((M, 1), None, InfiniDtype.F32, device)
-    # print(weights_packed.shape)
-    # print(weights_packed.stride(), flush=True)
-    weights_packed = TestTensor(
+    dev = x.torch_tensor().device
+    weights_packed = to_int8(torch.randn(w_shape, device=dev).t() * 5)
+    weights_scale = torch.randn((N, 1), device=dev, dtype=torch.float32)
+    bias = (
+        torch.randn(
+            (N,),
+            device=dev,
+            dtype=torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16,
+        )
+        * 10
+    )
+    
+    w_packed = TestTensor(
         (K, N),
         weights_packed.stride(),
         InfiniDtype.I8,
@@ -143,7 +137,7 @@ def test(
         mode="manual",
         set_tensor=weights_packed,
     )
-    weights_scale = TestTensor(
+    w_scale = TestTensor(
         (N, 1),
         weights_scale.stride(),
         InfiniDtype.F32,
@@ -151,9 +145,8 @@ def test(
         mode="manual",
         set_tensor=weights_scale,
     )
-    print(weights_scale.torch_tensor().shape, flush=True)
-    print(weights_packed.torch_tensor().shape, flush=True)
-    weights = weights_packed.torch_tensor() * weights_scale.torch_tensor().view(1, -1)
+
+    weights = w_packed.torch_tensor() * w_scale.torch_tensor().view(1, -1)
 
     y = TestTensor(y_shape, None, dtype, device)
     bias = TestTensor(
@@ -199,6 +192,7 @@ def test(
             )
         )
 
+    
     scaled_mm_descriptor = infiniopOperatorDescriptor_t()
     check_error(
         LIBINFINIOP.infiniopCreateI8GemmDescriptor(
@@ -208,8 +202,8 @@ def test(
             bias.descriptor,
             x_packed.descriptor,
             x_scale.descriptor,
-            weights_packed.descriptor,
-            weights_scale.descriptor,
+            w_packed.descriptor,
+            w_scale.descriptor,
         )
     )
 
@@ -231,12 +225,12 @@ def test(
                 bias.data(),
                 x_packed.data(),
                 x_scale.data(),
-                weights_packed.data(),
-                weights_scale.data(),
+                w_packed.data(),
+                w_scale.data(),
                 None,
             )
         )
-
+    
     def lib_w8a8int8_linearFunction():
         lib_per_channel_quant_int8()
         lib_linear()
@@ -254,16 +248,16 @@ def test(
 
     scaled_mm_torch = torch_scaled_mm(
         x_p,
-        weights_packed.torch_tensor(),
+        w_packed.torch_tensor(),
         x_s,
-        weights_scale.torch_tensor(),
+        w_scale.torch_tensor(),
         torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16,
         bias=bias.torch_tensor(),
     )
     mm_torch = scaled_mm(
         x.torch_tensor(),
-        weights_packed.torch_tensor(),
-        weights_scale.torch_tensor(),
+        w_packed.torch_tensor(),
+        w_scale.torch_tensor(),
         bias.torch_tensor(),
         out_dtype=torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16,
     )
@@ -274,12 +268,8 @@ def test(
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:
         debug(y.actual_tensor(), mm_torch, atol=atol, rtol=rtol)
-
-    # The quantization test did not normalize the test data,
-    # leading to large errors; the error check has been temporarily removed.
-
-    print(y.actual_tensor())
-    print(mm_torch)
+    
+    # The quantization test did not normalize the test data, leading to large errors; the error check has been temporarily removed.
 
     def profile_operation(name, func, device, num_prerun, num_iterations):
         # Warm up
@@ -331,8 +321,9 @@ def test(
             NUM_PRERUN,
             NUM_ITERATIONS,
         )
-
+    
     check_error(LIBINFINIOP.infiniopDestroyI8GemmDescriptor(scaled_mm_descriptor))
+    
     check_error(
         LIBINFINIOP.infiniopDestroyPerChannelQuantI8Descriptor(quant_descriptor)
     )
