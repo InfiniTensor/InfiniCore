@@ -40,8 +40,9 @@ infiniStatus_t calculateRoPE(const RoPEInfo &info,
                              const Tdata *sin_table,
                              const Tdata *cos_table,
                              cnrtQueue_t queue) {
-    auto dimx = uint32_t(info.seqlen);
-    auto dimy = uint32_t(info.nhead);
+    auto batch_size = uint32_t(info.batch);
+    auto seqlen = uint32_t(info.seqlen);
+    auto nhead = uint32_t(info.nhead);
     auto table_dim = uint32_t(info.table_dim);
 
     cnrtDim3_t k_dim;
@@ -53,12 +54,12 @@ infiniStatus_t calculateRoPE(const RoPEInfo &info,
     k_dim.z = 1;
     k_type = CNRT_FUNC_TYPE_UNION1;
 
-    // Launch kernel
+    // Launch kernel with batch dimension
     ropeKernel<<<k_dim, k_type, queue>>>(
         y, x, pos_ids, sin_table, cos_table,
-        dimx, dimy, table_dim,
-        info.y_stride_seqlen, info.y_stride_nhead,
-        info.x_stride_seqlen, info.x_stride_nhead,
+        batch_size, seqlen, nhead, table_dim,
+        info.y_stride_batch, info.y_stride_seqlen, info.y_stride_nhead,
+        info.x_stride_batch, info.x_stride_seqlen, info.x_stride_nhead,
         info.algo);
 
     cnrtQueueSync(queue);
