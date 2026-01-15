@@ -1,22 +1,9 @@
 #ifndef __TAN_CPU_H__
 #define __TAN_CPU_H__
 
-#include <cmath>
-
 #include "../../../elementwise/cpu/elementwise_cpu.h"
+#include "../../../elementwise/unary.h"
 
-ELEMENTWISE_DESCRIPTOR(tan, cpu)
-
-namespace op::tan::cpu {
-typedef struct TanOp {
-public:
-    static constexpr size_t num_inputs = 1;
-
-    template <typename T>
-    T operator()(const T &x) const {
-        return std::tan(x);
-    }
-} TanOp;
-} // namespace op::tan::cpu
+UNARY_ELEMENTWISE_DESCRIPTOR(tan, cpu, op::elementwise::unary::UnaryMode::Tan)
 
 #endif // __TAN_CPU_H__
