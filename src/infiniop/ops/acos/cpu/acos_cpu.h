@@ -2,6 +2,7 @@
 #define __ACOS_CPU_H__
 
 #include "../../../elementwise/cpu/elementwise_cpu.h"
+#include "../../../elementwise/unary.h"
 
 // 使用宏声明 Descriptor 类
 ELEMENTWISE_DESCRIPTOR(acos, cpu)

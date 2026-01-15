@@ -1,4 +1,4 @@
-#include "../../../elementwise/nvidia/elementwise_nvidia.cuh"
+#include "../../../elementwise/nvidia/elementwise_nvidia_impl.cuh"
 
 // 引入核心计算 Functor (我们在 src/infiniop/ops/floor/cuda/floor_cuda.h 中定义的)
 #include "../cuda/kernel.cuh"
@@ -6,7 +6,7 @@
 
 namespace op::floor::nvidia {
 
-Descriptor::~Descriptor() = default;
+ELEMENTWISE_NVIDIA_IMPL_UNARY(floor)
 
 infiniStatus_t Descriptor::create(
     infiniopHandle_t handle_,

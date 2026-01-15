@@ -1,5 +1,4 @@
-#include "../../operator.h"
-#include "../../handle.h"
+#include "../../operator_impl.h"
 #include "infiniop/ops/tan.h"
 
 #ifdef ENABLE_CPU_API

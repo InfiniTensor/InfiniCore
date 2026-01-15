@@ -1,5 +1,4 @@
-#include "../../operator.h"
-#include "../../handle.h"
+#include "../../operator_impl.h"
 #include "infiniop/ops/floor.h"
 
 // --- 后端实现头文件 ---

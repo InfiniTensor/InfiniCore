@@ -1,8 +1,9 @@
 #include "atanh_cpu.h"
+#include "../../../elementwise/cpu/elementwise_cpu_impl.h"
 
 namespace op::atanh::cpu {
 
-Descriptor::~Descriptor() = default;
+ELEMENTWISE_CPU_IMPL_UNARY(atanh)
 
 infiniStatus_t Descriptor::create(
     infiniopHandle_t handle_,

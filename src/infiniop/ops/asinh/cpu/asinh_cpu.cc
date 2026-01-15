@@ -1,8 +1,9 @@
 #include "asinh_cpu.h"
+#include "../../../elementwise/cpu/elementwise_cpu_impl.h"
 
 namespace op::asinh::cpu {
 
-Descriptor::~Descriptor() = default;
+ELEMENTWISE_CPU_IMPL_UNARY(asinh)
 
 infiniStatus_t Descriptor::create(
     infiniopHandle_t handle_,
