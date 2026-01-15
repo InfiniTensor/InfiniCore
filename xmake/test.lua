@@ -66,7 +66,7 @@ target_end()
 
 target("infinicore-test")
     set_kind("binary")
-    add_deps("infiniop", "infinirt", "infiniccl")
+    add_deps("infiniop", "infinirt", "infiniccl", "infinicore_cpp_api")
     set_default(false)
 
     set_languages("cxx17")

@@ -1,9 +1,9 @@
 #pragma once
 
+#include "infinicore.hpp"
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-
-#include "infinicore.hpp"
+#include <sstream>
 
 namespace py = pybind11;
 
@@ -36,7 +36,17 @@ inline void bind(py::module &m) {
         .def("permute", [](const Tensor &tensor, const Shape &dims) { return tensor->permute(dims); })
         .def("view", [](const Tensor &tensor, const Shape &shape) { return tensor->view(shape); })
         .def("unsqueeze", [](const Tensor &tensor, std::size_t dim) { return tensor->unsqueeze(dim); })
-        .def("squeeze", [](const Tensor &tensor, std::size_t dim) { return tensor->squeeze(dim); });
+        .def("squeeze", [](const Tensor &tensor, std::size_t dim) { return tensor->squeeze(dim); })
+        .def("__str__", [](const Tensor &tensor) {
+            std::ostringstream oss;
+            oss << tensor;
+            return oss.str();
+        })
+        .def("__repr__", [](const Tensor &tensor) {
+            std::ostringstream oss;
+            oss << tensor;
+            return oss.str();
+        });
 
     m.def("empty", &Tensor::empty,
           py::arg("shape"),
@@ -71,6 +81,21 @@ inline void bind(py::module &m) {
             return Tensor{infinicore::Tensor::strided_from_blob(reinterpret_cast<void *>(raw_ptr), shape, strides, dtype, device)};
         },
         pybind11::arg("raw_ptr"), pybind11::arg("shape"), pybind11::arg("strides"), pybind11::arg("dtype"), pybind11::arg("device"));
+
+    m.def(
+        "set_printoptions", [](int precision, int threshold, int edge_items, int line_width, py::object sci_mode) {
+            infinicore::print_options::set_precision(precision);
+            infinicore::print_options::set_threshold(threshold);
+            infinicore::print_options::set_edge_items(edge_items);
+            infinicore::print_options::set_line_width(line_width);
+
+            // Handle sci_mode: None -> -1 (auto), True -> 1 (enable), False -> 0 (disable)
+            int sci_mode_value = -1; // default: auto
+            if (!sci_mode.is_none()) {
+                sci_mode_value = static_cast<int>(py::cast<bool>(sci_mode)); // True -> 1, False -> 0
+            }
+       
+            infinicore::print_options::set_sci_mode(sci_mode_value); }, pybind11::arg("precision"), pybind11::arg("threshold"), pybind11::arg("edge_items"), pybind11::arg("line_width"), pybind11::arg("sci_mode"));
 }
 
 } // namespace infinicore::tensor

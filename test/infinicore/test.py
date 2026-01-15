@@ -1,5 +1,7 @@
 import torch
 from infinicore.lib import _infinicore
+from infinicore.utils import to_torch_dtype
+import numpy as np
 
 import infinicore
 
@@ -265,6 +267,145 @@ def func6_initialize_device_relationship():
         z_infini.debug()
 
 
+def func7_print_different_data_types():
+    """Test printing for different data types."""
+
+    # Test cases: (dtype_name, dtype_object, test_data)
+    test_cases = [
+        ("BOOL", infinicore.bool, [[True, False], [False, True]]),
+        ("I8", infinicore.int8, [[-128, -64], [32, 127]]),
+        ("I16", infinicore.int16, [[-32768, -16384], [8192, 32767]]),
+        (
+            "I32",
+            infinicore.int32,
+            [[-2147483648, -1073741824], [1073741824, 2147483647]],
+        ),
+        (
+            "I64",
+            infinicore.int64,
+            [
+                [-1000000000000000000, -500000000000000000],
+                [500000000000000000, 1000000000000000000],
+            ],
+        ),
+        ("U8", infinicore.uint8, [[0, 64], [192, 255]]),
+        ("BF16", infinicore.bfloat16, [[1.234, 2.345], [4.567, 5.678]]),
+        ("F16", infinicore.float16, [[1.234, 2.345], [4.567, 5.678]]),
+        ("F32", infinicore.float32, [[1.234, 2.34], [4.569, 5.9]]),
+        ("F64", infinicore.float64, [[1.23456789111, 2.3456789], [4.56789, 5.6789]]),
+    ]
+
+    for dtype_name, dtype_obj, test_data in test_cases:
+        print(f"\n{'=' * 70}")
+        print(f"Testing DataType::{dtype_name}")
+        print(f"{'=' * 70}")
+
+        # Create infinicore tensor
+        t_infini = infinicore.from_list(
+            test_data, dtype=dtype_obj, device=infinicore.device("cpu")
+        )
+        print("\n[Infinicore] Default print options:")
+        print(t_infini)
+
+        # Compare with PyTorch if supported
+        torch_dtype = to_torch_dtype(dtype_obj)
+        if torch_dtype is not None:
+            t_torch = torch.tensor(test_data, dtype=torch_dtype)
+            print("\n[PyTorch] Default print options:")
+            print(t_torch)
+        else:
+            print(f"\n[PyTorch] DataType {dtype_name} not supported by PyTorch")
+
+
+def func8_print_options():
+    """Test global print options: precision, threshold, edgeitems, linewidth, sci_mode"""
+    print(f"\n{'=' * 70}")
+    print("Testing global print options configuration")
+    print(f"{'=' * 70}")
+
+    # Create test tensors of different sizes
+    test_tensors = {
+        "Small (3x3)": infinicore.from_list(
+            [[1.211, 2.389, 3.89], [4.569, 5.689, 6.789], [7.89, 8.9, 9.0]],
+            dtype=infinicore.float64,
+        ),
+        "Medium (8x8)": infinicore.from_list(
+            np.random.randn(8, 8).tolist(), dtype=infinicore.float32
+        ),
+        "Large (15x15)": infinicore.from_list(
+            np.random.randn(15, 15).tolist(), dtype=infinicore.float32
+        ),
+    }
+
+    # Test cases: (name, options_dict)
+    test_cases = [
+        ("Precision: 2", {"precision": 2}),
+        ("Precision: 6", {"precision": 6}),
+        ("Precision: -1 (auto)", {"precision": -1}),
+        ("Threshold: 50, Edgeitems: 2", {"threshold": 50, "edgeitems": 2}),
+        ("Threshold: 200, Edgeitems: 4", {"threshold": 200, "edgeitems": 1}),
+        ("Linewidth: 40", {"linewidth": 40}),
+        ("Sci_mode: True (scientific)", {"sci_mode": True}),
+        ("Sci_mode: False (normal)", {"sci_mode": False}),
+        ("Sci_mode: None (auto)", {"sci_mode": None}),
+        ("Combined: p=1, t=50, e=2", {"precision": 1, "threshold": 50, "edgeitems": 2}),
+        (
+            "Combined: p=6, t=100, e=1, sci=True",
+            {"precision": 6, "threshold": 100, "edgeitems": 1, "sci_mode": True},
+        ),
+    ]
+
+    for case_name, options in test_cases:
+        print(f"\n{'=' * 70}")
+        print(f"Test Case: {case_name}")
+        print(f"  Options: {options}")
+        print(f"{'=' * 70}")
+
+        # Set print options
+        infinicore.set_printoptions(**options)
+
+        # Print all test tensors
+        for tensor_name, tensor in test_tensors.items():
+            print(f"\n[{tensor_name}]:")
+            print(tensor)
+
+    # Reset to defaults
+    infinicore.set_printoptions(
+        precision=-1, threshold=1000, edgeitems=3, linewidth=80, sci_mode=None
+    )
+
+
+def func9_print_temporary_options():
+    """Test that temporary print options work correctly and don't affect global settings."""
+    print(f"\n{'=' * 70}")
+    print("Testing temporary print options (context manager)")
+    print(f"{'=' * 70}")
+
+    # Set initial global print options
+    infinicore.set_printoptions(
+        precision=4, threshold=1000, edgeitems=3, linewidth=80, sci_mode=None
+    )
+
+    # Create test tensor
+    test_data = [[1.211, 2.389, 3.89], [4.569, 5.689, 6.789], [7.89, 8.9, 9.0]]
+    t_small = infinicore.from_list(test_data, dtype=infinicore.float64)
+
+    # Verify initial settings
+    print("Tensor output:")
+    print(t_small)
+
+    # Enter context with temporary settings
+    with infinicore.printoptions(
+        precision=2, threshold=50, edgeitems=2, linewidth=40, sci_mode=True
+    ):
+        print("Tensor output (with temporary settings):")
+        print(t_small)
+
+    # Verify global settings are restored
+    print("Tensor output (should match before context):")
+    print(t_small)
+
+
 if __name__ == "__main__":
     test()
     test2()
@@ -272,3 +413,6 @@ if __name__ == "__main__":
     test4_to()
     test5_bf16()
     func6_initialize_device_relationship()
+    func7_print_different_data_types()
+    func8_print_options()
+    func9_print_temporary_options()
