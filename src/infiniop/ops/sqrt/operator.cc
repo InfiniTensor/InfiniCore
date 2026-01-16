@@ -1,5 +1,5 @@
 #include "../../operator_impl.h"
-#include "infiniop/ops/sqrt.h"
+#include "infiniop/ops/unary_ops_api.h"
 
 #ifdef ENABLE_CPU_API
 #include "cpu/sqrt_cpu.h"
