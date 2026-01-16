@@ -170,7 +170,7 @@ def test5_bf16():
 
 
 def func6_initialize_device_relationship():
-    from infinicore.device import _initialize_device_relationship
+    from infinicore._device import _initialize_device_relationship
 
     all_device_types = [
         _infinicore.Device.Type.CPU,  # 0  "cpu"
