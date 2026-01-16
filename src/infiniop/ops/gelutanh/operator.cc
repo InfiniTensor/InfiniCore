@@ -1,35 +1,29 @@
 #include "../../operator.h"
 #include "../../handle.h"
-#include "infiniop/ops/relu.h"
+#include "infiniop/ops/gelutanh.h"
 
 #ifdef ENABLE_CPU_API
-#include "cpu/relu_cpu.h"
+#include "cpu/gelutanh_cpu.h"
 #endif
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
-#include "nvidia/relu_nvidia.cuh"
-#endif
-#ifdef ENABLE_METAX_API
-#ifdef ENABLE_NINETOOTHED
-#include "metax/relu_metax.h"
-#endif
+#include "nvidia/gelutanh_nvidia.cuh"
 #endif
 
-__C infiniStatus_t infiniopCreateReluDescriptor(
+__C infiniStatus_t infiniopCreateGeluTanhDescriptor(
     infiniopHandle_t handle,
-    infiniopReluDescriptor_t *desc_ptr,
+    infiniopGeluTanhDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t y_desc,
     infiniopTensorDescriptor_t x_desc) {
 
-#define CREATE(CASE, NAMESPACE)                                             \
-    case CASE:                                                              \
-        return op::relu::NAMESPACE::Descriptor::create(                     \
-            handle,                                                         \
-            reinterpret_cast<op::relu::NAMESPACE::Descriptor **>(desc_ptr), \
-            y_desc,                                                         \
+#define CREATE(CASE, NAMESPACE)                                                 \
+    case CASE:                                                                  \
+        return op::gelutanh::NAMESPACE::Descriptor::create(                     \
+            handle,                                                             \
+            reinterpret_cast<op::gelutanh::NAMESPACE::Descriptor **>(desc_ptr), \
+            y_desc,                                                             \
             {x_desc})
 
     switch (handle->device) {
-
 #ifdef ENABLE_CPU_API
         CREATE(INFINI_DEVICE_CPU, cpu);
 #endif
@@ -45,12 +39,6 @@ __C infiniStatus_t infiniopCreateReluDescriptor(
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
-#ifdef ENABLE_METAX_API
-#ifdef ENABLE_NINETOOTHED
-        CREATE(INFINI_DEVICE_METAX, metax);
-#endif
-#endif
-
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -58,11 +46,11 @@ __C infiniStatus_t infiniopCreateReluDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetReluWorkspaceSize(infiniopReluDescriptor_t desc, size_t *size) {
+__C infiniStatus_t infiniopGetGeluTanhWorkspaceSize(infiniopGeluTanhDescriptor_t desc, size_t *size) {
 
-#define GET(CASE, NAMESPACE)                                                                \
-    case CASE:                                                                              \
-        *size = reinterpret_cast<op::relu::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
+#define GET(CASE, NAMESPACE)                                                                    \
+    case CASE:                                                                                  \
+        *size = reinterpret_cast<op::gelutanh::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
         return INFINI_STATUS_SUCCESS;
 
     switch (desc->device_type) {
@@ -81,34 +69,27 @@ __C infiniStatus_t infiniopGetReluWorkspaceSize(infiniopReluDescriptor_t desc, s
 #ifdef ENABLE_HYGON_API
         GET(INFINI_DEVICE_HYGON, nvidia)
 #endif
-#ifdef ENABLE_METAX_API
-#ifdef ENABLE_NINETOOTHED
-        GET(INFINI_DEVICE_METAX, metax)
-#endif
-#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
-#undef GET
 
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+#undef GET
 }
 
-__C infiniStatus_t infiniopRelu(
-    infiniopReluDescriptor_t desc,
+__C infiniStatus_t infiniopGeluTanh(
+    infiniopGeluTanhDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
     void *y,
     const void *x,
     void *stream) {
 
-#define CALCULATE(CASE, NAMESPACE)                                             \
-    case CASE:                                                                 \
-        return reinterpret_cast<const op::relu::NAMESPACE::Descriptor *>(desc) \
+#define CALCULATE(CASE, NAMESPACE)                                                 \
+    case CASE:                                                                     \
+        return reinterpret_cast<const op::gelutanh::NAMESPACE::Descriptor *>(desc) \
             ->calculate(workspace, workspace_size, y, {x}, stream)
 
     switch (desc->device_type) {
-
 #ifdef ENABLE_CPU_API
         CALCULATE(INFINI_DEVICE_CPU, cpu);
 #endif
@@ -124,12 +105,6 @@ __C infiniStatus_t infiniopRelu(
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
-#ifdef ENABLE_METAX_API
-#ifdef ENABLE_NINETOOTHED
-        CALCULATE(INFINI_DEVICE_METAX, metax);
-#endif
-#endif
-
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -137,16 +112,14 @@ __C infiniStatus_t infiniopRelu(
 #undef CALCULATE
 }
 
-__C infiniStatus_t
-infiniopDestroyReluDescriptor(infiniopReluDescriptor_t desc) {
+__C infiniStatus_t infiniopDestroyGeluTanhDescriptor(infiniopGeluTanhDescriptor_t desc) {
 
-#define DELETE(CASE, NAMESPACE)                                                 \
-    case CASE:                                                                  \
-        delete reinterpret_cast<const op::relu::NAMESPACE::Descriptor *>(desc); \
+#define DELETE(CASE, NAMESPACE)                                                      \
+    case CASE:                                                                       \
+        delete reinterpret_cast<const op::gelutanh::NAMESPACE::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS;
 
     switch (desc->device_type) {
-
 #ifdef ENABLE_CPU_API
         DELETE(INFINI_DEVICE_CPU, cpu);
 #endif
@@ -162,15 +135,10 @@ infiniopDestroyReluDescriptor(infiniopReluDescriptor_t desc) {
 #ifdef ENABLE_HYGON_API
         DELETE(INFINI_DEVICE_HYGON, nvidia);
 #endif
-#ifdef ENABLE_METAX_API
-#ifdef ENABLE_NINETOOTHED
-        DELETE(INFINI_DEVICE_METAX, metax);
-#endif
-#endif
-
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
 
 #undef DELETE
 }
+
