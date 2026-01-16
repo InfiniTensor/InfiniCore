@@ -30,6 +30,9 @@ _TEST_CASES = [
     (4, 16, 16, 128, 8, 64, 3),
     (8, 64, 64, 128, 8, 16, 5),
     (16, 128, 128, 128, 8, 16, 4),
+    (2, 8, 2, 128, 16, 32, 2),
+    (4, 16, 4, 128, 8, 64, 3),
+    (1, 64, 16, 128, 8, 16, 2),
 ]
 
 _TENSOR_DTYPES = [InfiniDtype.F32, InfiniDtype.BF16, InfiniDtype.F16]
@@ -78,6 +81,10 @@ def ref_paged_attention_multi_turn(
     query_new, k_cache, v_cache, block_tables, seq_lens, cum_seq_lens_q, scale
 ):
     block_size = k_cache.shape[2]
+    num_heads = query_new.shape[1]
+    num_kv_heads = k_cache.shape[1]
+    num_queries_per_kv = num_heads // num_kv_heads
+
     outputs = torch.zeros_like(query_new)
     num_seqs = len(cum_seq_lens_q) - 1
     for i in range(num_seqs):
@@ -95,6 +102,10 @@ def ref_paged_attention_multi_turn(
 
         K = torch.stack(keys_all, dim=0)
         V = torch.stack(values_all, dim=0)
+
+        if num_queries_per_kv > 1:
+            K = torch.repeat_interleave(K, num_queries_per_kv, dim=1)
+            V = torch.repeat_interleave(V, num_queries_per_kv, dim=1)
         Q = query_new[cum_seq_lens_q[i] : cum_seq_lens_q[i + 1], :, :]
 
         scores = torch.einsum("qhd,khd->hqk", Q, K).float() * scale
