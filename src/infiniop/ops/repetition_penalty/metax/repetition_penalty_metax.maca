@@ -1,0 +1,160 @@
+#include "../../../devices/metax/metax_handle.h"
+#include "../info.h"
+#include "repetition_penalty_kernel.h"
+#include "repetition_penalty_metax.h"
+
+namespace op::repetition_penalty::metax {
+
+struct Descriptor::Opaque {
+    std::shared_ptr<device::metax::Handle::Internal> internal;
+};
+
+Descriptor::~Descriptor() {
+    delete _opaque;
+}
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t logits_desc) {
+    auto handle = reinterpret_cast<device::metax::Handle *>(handle_);
+
+    auto result = RepetitionPenaltyInfo::create(logits_desc);
+    CHECK_RESULT(result);
+
+    auto info = result.take();
+
+    // No workspace needed - all operations are device-only for CUDA graph compatibility
+    *desc_ptr = new Descriptor(
+        info,
+        0,  // No workspace needed
+        new Opaque{handle->internal()},
+        handle->device, handle->device_id);
+    return INFINI_STATUS_SUCCESS;
+}
+
+size_t Descriptor::minWorkspaceSize() const {
+    return _min_workspace_size;
+}
+
+template <unsigned int BLOCK_SIZE, typename T>
+void launchKernel(
+    T *logits,
+    const float *repetition_penalties,
+    const uint32_t *token_indices,
+    const size_t *token_offsets,
+    size_t num_seqs,
+    size_t vocab_size,
+    size_t total_indices,
+    hcStream_t stream) {
+
+    size_t grid_size = (total_indices + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+    applyRepetitionPenaltyKernel<<<grid_size, BLOCK_SIZE, 0, stream>>>(
+        logits, repetition_penalties,
+        token_indices, token_offsets,
+        num_seqs, vocab_size, total_indices);
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *logits,
+    const float *repetition_penalties,
+    const uint32_t *token_indices,
+    const size_t *token_offsets,
+    size_t total_indices,
+    void *stream) const {
+
+    if (workspace_size < _min_workspace_size) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+
+    if (total_indices == 0) {
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    auto stream_ = (hcStream_t)stream;
+
+    // Get device capabilities for block size selection
+    int max_threads = _opaque->internal->maxThreadsPerBlock();
+
+    // Launch kernel based on dtype and device capabilities
+    // CUDA graph compatible: fixed kernel launch configuration
+    switch (_info.dt_logits) {
+    case INFINI_DTYPE_F16: {
+        half *logits_half = reinterpret_cast<half *>(logits);
+        if (max_threads >= 1024) {
+            launchKernel<1024, half>(logits_half,
+                                     repetition_penalties, token_indices, token_offsets,
+                                     _info.num_seqs, _info.vocab_size, total_indices, stream_);
+        } else if (max_threads >= 512) {
+            launchKernel<512, half>(logits_half,
+                                    repetition_penalties, token_indices, token_offsets,
+                                    _info.num_seqs, _info.vocab_size, total_indices, stream_);
+        } else {
+            launchKernel<256, half>(logits_half,
+                                    repetition_penalties, token_indices, token_offsets,
+                                    _info.num_seqs, _info.vocab_size, total_indices, stream_);
+        }
+        break;
+    }
+    case INFINI_DTYPE_BF16: {
+        __hpcc_bfloat16 *logits_bf16 = reinterpret_cast<__hpcc_bfloat16 *>(logits);
+        if (max_threads >= 1024) {
+            launchKernel<1024, __hpcc_bfloat16>(logits_bf16,
+                                                repetition_penalties, token_indices, token_offsets,
+                                                _info.num_seqs, _info.vocab_size, total_indices, stream_);
+        } else if (max_threads >= 512) {
+            launchKernel<512, __hpcc_bfloat16>(logits_bf16,
+                                               repetition_penalties, token_indices, token_offsets,
+                                               _info.num_seqs, _info.vocab_size, total_indices, stream_);
+        } else {
+            launchKernel<256, __hpcc_bfloat16>(logits_bf16,
+                                               repetition_penalties, token_indices, token_offsets,
+                                               _info.num_seqs, _info.vocab_size, total_indices, stream_);
+        }
+        break;
+    }
+    case INFINI_DTYPE_F32: {
+        float *logits_float = reinterpret_cast<float *>(logits);
+        if (max_threads >= 1024) {
+            launchKernel<1024, float>(logits_float,
+                                      repetition_penalties, token_indices, token_offsets,
+                                      _info.num_seqs, _info.vocab_size, total_indices, stream_);
+        } else if (max_threads >= 512) {
+            launchKernel<512, float>(logits_float,
+                                     repetition_penalties, token_indices, token_offsets,
+                                     _info.num_seqs, _info.vocab_size, total_indices, stream_);
+        } else {
+            launchKernel<256, float>(logits_float,
+                                     repetition_penalties, token_indices, token_offsets,
+                                     _info.num_seqs, _info.vocab_size, total_indices, stream_);
+        }
+        break;
+    }
+    case INFINI_DTYPE_F64: {
+        double *logits_double = reinterpret_cast<double *>(logits);
+        if (max_threads >= 1024) {
+            launchKernel<1024, double>(logits_double,
+                                       repetition_penalties, token_indices, token_offsets,
+                                       _info.num_seqs, _info.vocab_size, total_indices, stream_);
+        } else if (max_threads >= 512) {
+            launchKernel<512, double>(logits_double,
+                                      repetition_penalties, token_indices, token_offsets,
+                                      _info.num_seqs, _info.vocab_size, total_indices, stream_);
+        } else {
+            launchKernel<256, double>(logits_double,
+                                      repetition_penalties, token_indices, token_offsets,
+                                      _info.num_seqs, _info.vocab_size, total_indices, stream_);
+        }
+        break;
+    }
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace op::repetition_penalty::metax

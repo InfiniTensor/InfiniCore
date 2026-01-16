@@ -17,7 +17,6 @@ from libinfiniop import (
     InfiniDeviceNames,
     infiniopOperatorDescriptor_t,
 )
-
 # ==============================================================================
 #  Configuration (Internal Use Only)
 # ==============================================================================
@@ -290,7 +289,7 @@ def test_batch(
             atol=atol,
             rtol=rtol,
         )
-    
+
     actual_indices = indices.actual_tensor()
     for i in range(batch_size):
         assert (
@@ -312,7 +311,7 @@ def test_batch(
         profile_operation("PyTorch", lambda: pytorch_batch(), device, NUM_PRERUN, NUM_ITERATIONS)
         profile_operation("    lib", lambda: lib_random_sample_batch(), device, NUM_PRERUN, NUM_ITERATIONS)
         # fmt: on
-    
+
     check_error(LIBINFINIOP.infiniopDestroyRandomSampleDescriptor(descriptor))
 
 
@@ -327,7 +326,7 @@ if __name__ == "__main__":
     # Execute tests
     for device in get_test_devices(args):
         test_operator(device, test, _TEST_CASES, _TENSOR_DTYPES)
-        
+
         print(f"\n\033[93mRunning batch tests on {InfiniDeviceNames[device]}...\033[0m")
         try:
             test_operator(device, test_batch, _BATCH_TEST_CASES, _TENSOR_DTYPES)
