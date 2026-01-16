@@ -2,6 +2,8 @@
 #define __INFINIOP_API_H__
 
 #include "infiniop/handle.h"
+#include "infiniop/ops/2dmrope.h"
+#include "infiniop/ops/3dmrope.h"
 #include "infiniop/ops/add.h"
 #include "infiniop/ops/add_rms_norm.h"
 #include "infiniop/ops/attention.h"

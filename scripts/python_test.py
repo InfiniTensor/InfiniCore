@@ -39,6 +39,8 @@ def run_tests(args):
         "topkrouter.py",
         "topksoftmax.py",
         "zeros.py",
+        "2dmrope.py",
+        "3dmrope.py",
     ]:
         result = subprocess.run(
             f"python {test} {args} --debug", text=True, encoding="utf-8", shell=True
