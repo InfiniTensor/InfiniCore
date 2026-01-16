@@ -52,6 +52,7 @@ from infinicore.ops.paged_attention import paged_attention
 from infinicore.ops.paged_attention_prefill import paged_attention_prefill
 from infinicore.ops.paged_caching import paged_caching
 from infinicore.ops.rearrange import rearrange
+from infinicore.ops.softmax import softmax
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.unsqueeze import unsqueeze
 from infinicore.tensor import (
@@ -121,6 +122,7 @@ __all__ = [
     "squeeze",
     "unsqueeze",
     "rearrange",
+    "softmax",
     "empty",
     "empty_like",
     "from_blob",
