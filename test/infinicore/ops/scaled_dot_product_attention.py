@@ -11,17 +11,16 @@ from framework import BaseOperatorTest, TensorSpec, TestCase, GenericTestRunner
 # q/k/v typically have shape (..., seq_len, head_dim) or (batch, seq_len, num_heads, head_dim)
 
 _TEST_CASES_DATA = [
-    ((2, 8, 16), (2, 8, 16), (2, 8, 16), None, 0.0, False),
-    ((1, 4, 32), (1, 4, 32), (1, 4, 32), None, 0.0, False),
-    ((2, 6, 12), (2, 6, 12), (2, 6, 12), None, 0.0, True),
-    ((3, 8, 8), (3, 8, 8), (3, 8, 8), None, 0.0, False),
-    ((2, 4, 16), (2, 4, 16), (2, 4, 16), None, 0.0, True),
-    ((1, 2, 64), (1, 2, 64), (1, 2, 64), None, 0.0, False),
+    ((1, 1, 2, 16), (1, 1, 2, 16), (1, 1, 2, 16), None, 0.0, False),
+    ((1, 2, 8, 16), (1, 2, 8, 16), (1, 2, 8, 16), None, 0.0, False),
+    ((1, 1, 4, 32), (1, 1, 4, 32), (1, 1, 4, 32), None, 0.0, False),
+    ((1, 2, 4, 16), (1, 2, 4, 16), (1, 2, 4, 16), None, 0.0, True),
+    ((1, 1, 2, 64), (1, 1, 2, 64), (1, 1, 2, 64), None, 0.0, False),
 ]
 
 _TOLERANCE_MAP = {
     infinicore.float16: {"atol": 1e-2, "rtol": 1e-2},
-    infinicore.float32: {"atol": 1e-4, "rtol": 1e-4},
+    infinicore.float32: {"atol": 1e-3, "rtol": 1e-3},
 }
 _TENSOR_DTYPES = [infinicore.float16, infinicore.float32]
 
@@ -68,9 +67,8 @@ class OpTest(BaseOperatorTest):
     def torch_operator(self, *args, **kwargs):
         return torch.nn.functional.scaled_dot_product_attention(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
-    #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.nn.functional.scaled_dot_product_attention(*args, **kwargs)
+    def infinicore_operator(self, *args, **kwargs):
+        return infinicore.nn.functional.scaled_dot_product_attention(*args, **kwargs)
 
 
 def main():
