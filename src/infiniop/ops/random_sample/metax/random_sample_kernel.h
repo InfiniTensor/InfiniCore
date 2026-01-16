@@ -252,6 +252,7 @@ struct Algo {
             result,
             sorted, indices_out, n,
             random_val, topp, topk);
+
         return INFINI_STATUS_SUCCESS;
     }
 };

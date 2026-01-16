@@ -88,6 +88,7 @@ struct Algo {
         };
 
         auto idx = reinterpret_cast<Tidx *>(result);
+
         // build & sort
         std::vector<KVPair> pairs(n);
         for (size_t i = 0; i < n; i++) {

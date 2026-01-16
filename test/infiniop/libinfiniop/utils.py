@@ -120,7 +120,7 @@ class TestTensor(CTensor):
 
     def is_broadcast(self):
         return self.strides is not None and 0 in self.strides
-    
+
     @staticmethod
     def from_binary(binary_file, shape, strides, dt: InfiniDtype, device: InfiniDeviceEnum):
         data = np.fromfile(binary_file, dtype=to_numpy_dtype(dt))
@@ -149,6 +149,8 @@ def to_torch_dtype(dt: InfiniDtype, compatability_mode=False):
         return torch.int64
     elif dt == InfiniDtype.U8:
         return torch.uint8
+    elif dt == InfiniDtype.BOOL:
+        return torch.bool
     elif dt == InfiniDtype.F16:
         return torch.float16
     elif dt == InfiniDtype.BF16:
@@ -186,6 +188,8 @@ def to_numpy_dtype(dt: InfiniDtype, compatability_mode=False):
         return np.uint32 if not compatability_mode else np.int32
     elif dt == InfiniDtype.U64:
         return np.uint64 if not compatability_mode else np.int64
+    elif dt == InfiniDtype.BOOL:
+        return np.bool_
     elif dt == InfiniDtype.F16:
         return np.float16
     elif dt == InfiniDtype.BF16:
@@ -346,6 +350,11 @@ def get_args():
         action="store_true",
         help="Run HYGON DCU test",
     )
+    parser.add_argument(
+        "--torch-only",
+        action="store_true",
+        help="Run only torch reference implementation, skip InfiniCore API calls",
+    )
 
     return parser.parse_args()
 
@@ -476,7 +485,7 @@ def print_discrepancy(
 
     actual = actual.to("cpu")
     expected = expected.to("cpu")
-    
+
     actual_isnan = torch.isnan(actual)
     expected_isnan = torch.isnan(expected)
 

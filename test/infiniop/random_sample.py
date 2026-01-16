@@ -17,7 +17,6 @@ from libinfiniop import (
     InfiniDeviceNames,
     infiniopOperatorDescriptor_t,
 )
-
 # ==============================================================================
 #  Configuration (Internal Use Only)
 # ==============================================================================
@@ -167,10 +166,11 @@ def test(
             atol=atol,
             rtol=rtol,
         )
+
     assert (
         indices.actual_tensor() == ans
         or logits.actual_tensor()[indices.actual_tensor()] == logits.torch_tensor()[ans]
-    )
+    ), f"Mismatch: InfiniCore selected token {indices.actual_tensor()} (logit={logits.actual_tensor()[indices.actual_tensor()]}), reference selected {ans} (logit={logits.torch_tensor()[ans]})")
 
     # Profiling workflow
     if PROFILE:
