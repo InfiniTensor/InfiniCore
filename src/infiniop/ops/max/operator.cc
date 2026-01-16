@@ -1,5 +1,5 @@
 #include "../../operator_impl.h"
-#include "infiniop/ops/max.h"
+#include "infiniop/ops/binary_ops_api.h"
 
 #ifdef ENABLE_CPU_API
 #include "cpu/max_cpu.h"
