@@ -16,9 +16,9 @@ public:
     float epsilon;
     std::vector<size_t> shape;
     std::vector<ptrdiff_t> y_strides;
+    std::vector<ptrdiff_t> residual_out_strides;
     std::vector<ptrdiff_t> a_strides;
     std::vector<ptrdiff_t> b_strides;
-    std::vector<ptrdiff_t> residual_out_strides;
     bool has_residual_out;
 
     size_t ndim() const { return shape.size(); }
@@ -26,11 +26,11 @@ public:
 
     static utils::Result<AddRMSNormInfo> create(
         infiniopTensorDescriptor_t y_desc,
+        infiniopTensorDescriptor_t residual_out_desc,
         infiniopTensorDescriptor_t a_desc,
         infiniopTensorDescriptor_t b_desc,
         infiniopTensorDescriptor_t weight_desc,
-        float epsilon,
-        infiniopTensorDescriptor_t residual_out_desc) {
+        float epsilon) {
 
         auto atype = y_desc->dtype();
         auto wtype = weight_desc->dtype();
