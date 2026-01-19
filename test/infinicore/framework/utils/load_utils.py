@@ -42,11 +42,26 @@ def _parse_dtype(dtype_str):
 def _dict_to_spec(spec_dict):
     """Convert JSON dict to TensorSpec object."""
     if not isinstance(spec_dict, dict): return spec_dict
+
+    # Collect all needed fields into kwargs
+    kwargs = {}
+    if 'name' in spec_dict:
+        kwargs['name'] = spec_dict['name']
+    if 'file_path' in spec_dict:
+        kwargs['file_path'] = spec_dict['file_path']
+
+    # Determine init_mode based on file_path presence
+    from framework.tensor import TensorInitializer
+    init_mode = TensorInitializer.RANDOM
+    if 'file_path' in spec_dict:
+        init_mode = TensorInitializer.FROM_FILE
+
     return TensorSpec(
-        shape=tuple(spec_dict['shape']),
+        shape=tuple(spec_dict['shape']) if 'shape' in spec_dict else None,
         dtype=_parse_dtype(spec_dict['dtype']),
-        name=spec_dict.get('name'),
-        strides=tuple(spec_dict['strides']) if spec_dict.get('strides') else None
+        strides=tuple(spec_dict['strides']) if spec_dict.get('strides') else None,
+        init_mode=init_mode,
+        **kwargs
     )
 
 def parse_test_cases():
