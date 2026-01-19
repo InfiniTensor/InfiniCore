@@ -1,16 +1,14 @@
 #pragma once
 
 #include "../device.hpp"
+#include "../graph/graph.hpp"
 #include "common/op.hpp"
 
 namespace infinicore::op {
-class Rearrange {
-public:
-    using schema = void (*)(Tensor, Tensor);
-    static void execute(Tensor y, Tensor x);
-    static common::OpDispatcher<schema> &dispatcher();
-};
 
-Tensor rearrange(Tensor x);
-void rearrange_(Tensor y, Tensor x);
+INFINICORE_GRAPH_OP_CLASS(Rearrange, Tensor, const Tensor &);
+
+Tensor rearrange(const Tensor &x);
+void rearrange_(Tensor y, const Tensor &x);
+
 } // namespace infinicore::op

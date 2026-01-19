@@ -21,11 +21,11 @@ void GraphTensor::resume() const {
  * GraphOperator
  * ========================= */
 
-void GraphOperator::run() const {
+void DispatchableGraphOperator::run() const {
     runner_(planned_meta_);
 }
 
-GraphOperator::~GraphOperator() {
+DispatchableGraphOperator::~DispatchableGraphOperator() {
     if (deleter_) {
         deleter_(&planned_meta_);
     }

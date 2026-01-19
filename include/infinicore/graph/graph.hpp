@@ -16,10 +16,15 @@ public:
 };
 
 class GraphOperator {
-
 public:
-    void run() const;
-    ~GraphOperator();
+    virtual void run() const = 0;
+    virtual ~GraphOperator() = default;
+};
+
+class DispatchableGraphOperator : public GraphOperator {
+public:
+    void run() const override;
+    ~DispatchableGraphOperator() override;
 
 protected:
     using run_schema = void (*)(void *);
@@ -50,7 +55,7 @@ private:
 } // namespace infinicore::graph
 
 #define INFINICORE_GRAPH_OP_CLASS(__OP_NAME__, ...)                        \
-    class __OP_NAME__ : public graph::GraphOperator {                      \
+    class __OP_NAME__ : public graph::DispatchableGraphOperator {          \
     public:                                                                \
         using schema = void (*)(__VA_ARGS__);                              \
         using plan_schema = void *(*)(__VA_ARGS__);                        \
@@ -80,12 +85,12 @@ private:
     runner_ = run_dispatcher().lookup(__DEVICE_TYPE__);                     \
     deleter_ = cleanup_dispatcher().lookup(__DEVICE_TYPE__);
 
-#define INFINICORE_GRAPH_OP_RECORD_OR_RUN(__OP_NAME__, ...) \
-    auto op = std::make_shared<__OP_NAME__>(__VA_ARGS__);   \
-    if (context::isGraphRecording()) {                      \
-        context::addGraphOperator(op);                      \
-    } else {                                                \
-        op->run();                                          \
+#define INFINICORE_GRAPH_OP_RECORD_OR_RUN(__OP_NAME__, ...)  \
+    auto ___op = std::make_shared<__OP_NAME__>(__VA_ARGS__); \
+    if (context::isGraphRecording()) {                       \
+        context::addGraphOperator(___op);                    \
+    } else {                                                 \
+        ___op->run();                                        \
     }
 
 #define INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(__OP_NAME__, __PLAN_F__, __RUN_F__, __CLEANUP_F__) \
