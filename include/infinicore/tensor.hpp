@@ -90,6 +90,8 @@ protected:
     Tensor(std::shared_ptr<TensorImpl> impl) : impl_(std::move(impl)) {}
     std::shared_ptr<TensorImpl> impl_;
     friend class TensorImpl;
+
+    void resume_from_blob_() const;
 };
 
 class TensorImpl : public std::enable_shared_from_this<TensorImpl> {

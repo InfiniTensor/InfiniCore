@@ -1,4 +1,5 @@
 #include "context_impl.hpp"
+#include "internal.hpp"
 
 #include "../utils.hpp"
 
@@ -194,6 +195,12 @@ void addGraphOperator(std::shared_ptr<graph::GraphOperator> op) {
 std::shared_ptr<graph::Graph> stopGraphRecording() {
     return ContextImpl::singleton().getCurrentRuntime()->stopGraphRecording();
 }
+
+std::shared_ptr<Memory> reinstantiateBlob(std::shared_ptr<Memory> blob) {
+    setDevice(blob->device());
+    return ContextImpl::singleton().getCurrentRuntime()->reinstantiateBlob(blob);
+}
+
 } // namespace context
 
 } // namespace infinicore

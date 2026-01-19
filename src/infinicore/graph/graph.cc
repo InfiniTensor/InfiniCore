@@ -11,6 +11,10 @@ namespace infinicore::graph {
 GraphTensor::GraphTensor(const Tensor &tensor) : Tensor(tensor->to_blob()) {
 }
 
+void GraphTensor::resume() const {
+    resume_from_blob_();
+}
+
 /* =========================
  * GraphOperator
  * ========================= */
