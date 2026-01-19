@@ -114,6 +114,12 @@ option("iluvatar-gpu")
     set_description("Whether to compile implementations for Iluvatar GPU")
 option_end()
 
+option("ivcore-20")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Use ivcore20")
+option_end()
+
 if has_config("iluvatar-gpu") then
     add_defines("ENABLE_ILUVATAR_API")
     includes("xmake/iluvatar.lua")
