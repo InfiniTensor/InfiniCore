@@ -1,4 +1,5 @@
 #include "infinicore/tensor.hpp"
+#include "../context/internal.hpp"
 #include "../utils.hpp"
 #include "infinicore/context/context.hpp"
 #include "infinicore/dtype.hpp"
@@ -62,6 +63,10 @@ Tensor Tensor::strided_from_blob(void *raw_ptr, const Shape &shape, const Stride
 
 Tensor::operator bool() const {
     return impl_ != nullptr;
+}
+
+void Tensor::resume_from_blob_() const {
+    context::reinstantiateBlob(impl_->data_.memory);
 }
 
 TensorMetaData::TensorMetaData(const Shape &_shape, const Strides &_strides, const DataType &_dtype)

@@ -77,6 +77,15 @@ std::shared_ptr<Memory> Runtime::allocatePinnedHostMemory(size_t size) {
         true);
 }
 
+std::shared_ptr<Memory> Runtime::reinstantiateBlob(std::shared_ptr<Memory> blob) {
+    device_memory_allocator_.get()->mark_in_use_(blob->data(), true);
+    return std::make_shared<Memory>(
+        blob->data(), blob->size(), device_,
+        [alloc = device_memory_allocator_.get()](std::byte *p) {
+            alloc->deallocate(p);
+        });
+}
+
 void Runtime::memcpyH2D(void *dst, const void *src, size_t size, bool async) {
     if (async) {
         INFINICORE_CHECK_ERROR(infinirtMemcpyAsync(dst, src, size, INFINIRT_MEMCPY_H2D, stream_));

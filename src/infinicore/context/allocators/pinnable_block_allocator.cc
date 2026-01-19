@@ -125,6 +125,16 @@ void PinnableBlockAllocator::deallocate(std::byte *ptr) {
     }
 }
 
+size_t PinnableBlockAllocator::mark_in_use_(void *ptr, bool in_use) {
+    auto it = all_blocks_.find(reinterpret_cast<void *>(ptr));
+    if (it == all_blocks_.end()) {
+        throw std::runtime_error("Pointer not allocated by this allocator");
+    }
+    std::lock_guard<std::mutex> lock(mutex_);
+    it->second->in_use = in_use;
+    return it->second->size;
+}
+
 // ------------------- trim -------------------
 void PinnableBlockAllocator::trim() {
     std::lock_guard<std::mutex> lock(mutex_);

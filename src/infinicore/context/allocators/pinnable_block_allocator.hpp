@@ -32,6 +32,10 @@ public:
     // Switch pinned/graph mode
     void set_pin_mode(bool pinned) { pinned_mode_ = pinned; }
 
+    // internal use only, force set in_use flag for a mem block
+    // return the size of the block
+    size_t mark_in_use_(void *ptr, bool in_use);
+
     // trim cached blocks back to GPU (not pinned)
     void trim();
 
