@@ -1,8 +1,6 @@
 #include "infinicore/ops/embedding.hpp"
+
 #include "../../utils.hpp"
-#include "infinicore/context/context.hpp"
-#include <cstring>
-#include <stdexcept>
 
 namespace infinicore::op {
 INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(Embedding);
