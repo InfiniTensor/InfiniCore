@@ -1,50 +1,55 @@
-#include "../../utils.hpp"
-#include "infinicore/common/hash.hpp"
-#include "infinicore/ops/common/cache.hpp"
 #include "infinicore/ops/swiglu.hpp"
-#include <infiniop.h>
+
+#include "../infiniop_impl.hpp"
 
 namespace infinicore::op::swiglu_impl::infiniop {
 
-thread_local common::OpCache<size_t, infiniopSwiGLUDescriptor_t> caches(
-    100, // capacity
-    [](infiniopSwiGLUDescriptor_t &desc) {
-        if (desc != nullptr) {
-            INFINICORE_CHECK_ERROR(infiniopDestroySwiGLUDescriptor(desc));
-            desc = nullptr;
-        }
-    });
+INFINIOP_CACHABLE_DESCRIPTOR(Descriptor, SwiGLU, 100);
 
-void calculate(Tensor c, Tensor a, Tensor b) {
-    size_t seed = hash_combine(c, b, a);
+struct PlannedMeta {
+    std::shared_ptr<Descriptor> descriptor;
+    graph::GraphTensor workspace;
+    graph::GraphTensor c;
+    graph::GraphTensor a;
+    graph::GraphTensor b;
+};
 
-    auto device = context::getDevice();
-    auto &cache = caches.getCache(device);
+void *plan(Tensor c, const Tensor &a, const Tensor &b) {
+    size_t key = hash_combine(c, a, b);
 
-    auto desc_opt = cache.get(seed);
-    infiniopSwiGLUDescriptor_t desc = nullptr;
+    INFINIOP_CACHABLE_DESCRIPTOR_GET_OR_CREATE(
+        Descriptor, descriptor, SwiGLU,
+        key, c->desc(), a->desc(), b->desc());
 
-    if (!desc_opt) {
-        INFINICORE_CHECK_ERROR(infiniopCreateSwiGLUDescriptor(
-            context::getInfiniopHandle(device), &desc,
-            c->desc(), a->desc(), b->desc()));
-        cache.put(seed, desc);
-    } else {
-        desc = *desc_opt;
-    }
+    INFINIOP_WORKSPACE_TENSOR(workspace, SwiGLU, descriptor);
 
-    size_t workspace_size = 0;
-    INFINICORE_CHECK_ERROR(infiniopGetSwiGLUWorkspaceSize(desc, &workspace_size));
-    std::shared_ptr<Memory> workspace = context::allocateMemory(workspace_size);
-
-    INFINICORE_CHECK_ERROR(infiniopSwiGLU(
-        desc, workspace->data(), workspace_size,
-        c->data(), a->data(), b->data(), context::getStream()));
+    return new PlannedMeta{
+        descriptor,
+        graph::GraphTensor(workspace),
+        graph::GraphTensor(c),
+        graph::GraphTensor(a),
+        graph::GraphTensor(b)};
 }
 
-static bool registered = []() {
-    SwiGLU::dispatcher().registerAll(&calculate, false);
-    return true;
-}();
+void run(void *planned_meta) {
+    auto *p = reinterpret_cast<PlannedMeta *>(planned_meta);
+
+    INFINICORE_CHECK_ERROR(
+        infiniopSwiGLU(
+            p->descriptor->desc,
+            p->workspace->data(),
+            p->workspace->numel(),
+            p->c->data(),
+            p->a->data(),
+            p->b->data(),
+            context::getStream()));
+}
+
+void cleanup(void **planned_meta_ptr) {
+    delete *reinterpret_cast<PlannedMeta **>(planned_meta_ptr);
+    *planned_meta_ptr = nullptr;
+}
+
+INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(SwiGLU, &plan, &run, &cleanup);
 
 } // namespace infinicore::op::swiglu_impl::infiniop
