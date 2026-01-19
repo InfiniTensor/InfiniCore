@@ -15,11 +15,11 @@ GraphTensor::GraphTensor(const Tensor &tensor) : Tensor(tensor->to_blob()) {
  * GraphOperator
  * ========================= */
 
-void GraphOperator::run() const {
+void DispatchableGraphOperator::run() const {
     runner_(planned_meta_);
 }
 
-GraphOperator::~GraphOperator() {
+DispatchableGraphOperator::~DispatchableGraphOperator() {
     if (deleter_) {
         deleter_(&planned_meta_);
     }
