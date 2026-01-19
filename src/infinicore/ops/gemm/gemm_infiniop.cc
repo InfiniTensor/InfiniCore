@@ -11,7 +11,7 @@ struct PlannedMeta {
     float alpha, beta;
 };
 
-void *plan(Tensor c, Tensor a, Tensor b, float alpha, float beta) {
+void *plan(Tensor c, const Tensor &a, const Tensor &b, float alpha, float beta) {
     size_t seed = hash_combine(c, a, b);
 
     INFINIOP_CACHABLE_DESCRIPTOR_GET_OR_CREATE(

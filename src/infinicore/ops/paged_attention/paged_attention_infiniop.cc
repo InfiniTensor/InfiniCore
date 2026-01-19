@@ -1,54 +1,68 @@
-#include "../../utils.hpp"
-#include "infinicore/common/hash.hpp"
-#include "infinicore/ops/common/cache.hpp"
 #include "infinicore/ops/paged_attention.hpp"
-#include <infiniop.h>
+
+#include "../infiniop_impl.hpp"
 
 namespace infinicore::op::paged_attention_impl::infiniop {
 
-thread_local common::OpCache<size_t, infiniopPagedAttentionDescriptor_t> caches(
-    100, // capacity
-    [](infiniopPagedAttentionDescriptor_t &desc) {
-        if (desc != nullptr) {
-            INFINICORE_CHECK_ERROR(infiniopDestroyPagedAttentionDescriptor(desc));
-            desc = nullptr;
-        }
-    });
+INFINIOP_CACHABLE_DESCRIPTOR(Descriptor, PagedAttention, 100);
 
-void calculate(Tensor out, Tensor q, Tensor k_cache, Tensor v_cache, Tensor block_tables, Tensor kv_lens, std::optional<Tensor> alibi_slopes, float scale) {
-    size_t seed = hash_combine(out, q, k_cache, v_cache, block_tables, kv_lens, alibi_slopes, scale);
+struct PlannedMeta {
+    std::shared_ptr<Descriptor> descriptor;
+    graph::GraphTensor workspace, out, q, k_cache, v_cache, block_tables, cache_lens;
+    std::optional<graph::GraphTensor> alibi_slopes;
+    float scale;
+};
 
-    auto device = context::getDevice();
-    auto &cache = caches.getCache(device);
+void *plan(Tensor out, const Tensor &q, const Tensor &k_cache, const Tensor &v_cache,
+           const Tensor &block_tables, const Tensor &cache_lens,
+           std::optional<Tensor> alibi_slopes, float scale) {
+    size_t seed = hash_combine(out, q, k_cache, v_cache, block_tables, cache_lens, alibi_slopes);
+    INFINIOP_CACHABLE_DESCRIPTOR_GET_OR_CREATE(
+        Descriptor, descriptor, PagedAttention,
+        seed,
+        out->desc(), q->desc(), k_cache->desc(), v_cache->desc(),
+        block_tables->desc(), cache_lens->desc(),
+        alibi_slopes ? alibi_slopes.value()->desc() : nullptr,
+        scale);
 
-    auto desc_opt = cache.get(seed);
-    infiniopPagedAttentionDescriptor_t desc = nullptr;
+    INFINIOP_WORKSPACE_TENSOR(workspace, PagedAttention, descriptor);
 
-    if (!desc_opt) {
-        INFINICORE_CHECK_ERROR(infiniopCreatePagedAttentionDescriptor(
-            context::getInfiniopHandle(device), &desc,
-            out->desc(), q->desc(), k_cache->desc(), v_cache->desc(), block_tables->desc(), kv_lens->desc(),
-            alibi_slopes.has_value() ? alibi_slopes.value()->desc() : nullptr,
-            scale));
-        cache.put(seed, desc);
-    } else {
-        desc = *desc_opt;
-    }
-
-    size_t workspace_size = 0;
-    INFINICORE_CHECK_ERROR(infiniopGetPagedAttentionWorkspaceSize(desc, &workspace_size));
-    std::shared_ptr<Memory> workspace = context::allocateMemory(workspace_size);
-
-    INFINICORE_CHECK_ERROR(infiniopPagedAttention(
-        desc, workspace->data(), workspace_size,
-        out->data(), q->data(), k_cache->data(), v_cache->data(), block_tables->data(), kv_lens->data(),
-        alibi_slopes.has_value() ? alibi_slopes.value()->data() : nullptr,
-        context::getStream()));
+    return new PlannedMeta{
+        descriptor,
+        graph::GraphTensor(workspace),
+        graph::GraphTensor(out),
+        graph::GraphTensor(q),
+        graph::GraphTensor(k_cache),
+        graph::GraphTensor(v_cache),
+        graph::GraphTensor(block_tables),
+        graph::GraphTensor(cache_lens),
+        alibi_slopes ? std::optional<graph::GraphTensor>(graph::GraphTensor(*alibi_slopes)) : std::nullopt,
+        scale};
 }
 
-static bool registered = []() {
-    PagedAttention::dispatcher().registerAll(&calculate, false);
-    return true;
-}();
+void run(void *planned_meta) {
+    auto *p = reinterpret_cast<PlannedMeta *>(planned_meta);
+
+    INFINICORE_CHECK_ERROR(
+        infiniopPagedAttention(
+            p->descriptor->desc,
+            p->workspace->data(),
+            p->workspace->numel(),
+            p->out->data(),
+            p->q->data(),
+            p->k_cache->data(),
+            p->v_cache->data(),
+            p->block_tables->data(),
+            p->cache_lens->data(),
+            p->alibi_slopes.has_value() ? p->alibi_slopes.value()->data() : nullptr,
+            context::getStream()));
+}
+
+void cleanup(void **planned_meta_ptr) {
+    delete *reinterpret_cast<PlannedMeta **>(planned_meta_ptr);
+    *planned_meta_ptr = nullptr;
+}
+
+INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(PagedAttention, &plan, &run, &cleanup);
 
 } // namespace infinicore::op::paged_attention_impl::infiniop
