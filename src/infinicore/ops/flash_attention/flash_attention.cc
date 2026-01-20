@@ -4,16 +4,16 @@
 
 namespace infinicore::op {
 
-common::OpDispatcher<FlashAttention::schema> &FlashAttention::dispatcher() {
-    static common::OpDispatcher<FlashAttention::schema> dispatcher_;
-    return dispatcher_;
-};
+INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(FlashAttention);
+
+FlashAttention::FlashAttention(Tensor out, Tensor q, Tensor k, Tensor v, std::size_t total_kv_len, float scale, bool is_causal) {
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(out, q, k, v);
+    INFINICORE_GRAPH_OP_DISPATCH(out->device().getType(),
+                                 out, q, k, v, total_kv_len, scale, is_causal);
+}
 
 void FlashAttention::execute(Tensor out, Tensor q, Tensor k, Tensor v, std::size_t total_kv_len, float scale, bool is_causal) {
-    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(out, q, k, v);
-    infinicore::context::setDevice(out->device());
-    dispatcher().lookup(out->device().getType())(
-        out, q, k, v, total_kv_len, scale, is_causal);
+    INFINICORE_GRAPH_OP_RECORD_OR_RUN(FlashAttention, out, q, k, v, total_kv_len, scale, is_causal);
 }
 
 Tensor flash_attention(Tensor q, Tensor k, Tensor v, std::size_t total_kv_len, float scale, bool is_causal) {
