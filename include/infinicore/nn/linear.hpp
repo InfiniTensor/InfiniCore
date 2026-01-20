@@ -51,7 +51,7 @@ protected:
     DataType dtype_;
     std::optional<QuantConfig> quant_config_;
     bool is_quantized() const { return quant_config_.has_value(); }
-    QuantType get_quant_type() const { return quant_config_.value().quant_type; }
+    QuantScheme get_quant_scheme() const { return quant_config_.value().quant_scheme; }
 };
 
 } // namespace infinicore::nn
