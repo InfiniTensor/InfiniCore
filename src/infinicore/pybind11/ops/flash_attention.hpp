@@ -14,6 +14,7 @@ inline void bind_flash_attention(py::module &m) {
           py::arg("q"),
           py::arg("k"),
           py::arg("v"),
+          py::arg("total_kv_len"),
           py::arg("scale"),
           py::arg("is_causal"));
 }
