@@ -430,6 +430,50 @@ class TanTest(UnaryTestBase):
     EQUAL_NAN = True
 
 
+class ExpTest(UnaryTestBase):
+    OP_NAME = "Exp"
+    OP_NAME_LOWER = "exp"
+    
+    @staticmethod
+    def torch_op(x):
+        return torch.exp(x).to(x.dtype)
+    
+    @staticmethod
+    def generate_input(shape, dtype, device):
+        return torch.rand(shape, dtype=dtype, device=device) * 2 - 1
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+        InfiniDtype.F32: {"atol": 1e-6, "rtol": 1e-6},
+        InfiniDtype.BF16: {"atol": 1e-2, "rtol": 1e-2},
+    }
+    
+    # Support BF16
+    TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.F32, InfiniDtype.BF16]
+
+
+class HardswishTest(UnaryTestBase):
+    OP_NAME = "Hardswish"
+    OP_NAME_LOWER = "hardswish"
+    
+    @staticmethod
+    def torch_op(x):
+        return (x * torch.clamp(x + 3, min=0, max=6) / 6).to(x.dtype)
+    
+    @staticmethod
+    def generate_input(shape, dtype, device):
+        return torch.rand(shape, dtype=dtype, device=device) * 2 - 1
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+        InfiniDtype.F32: {"atol": 1e-6, "rtol": 1e-6},
+        InfiniDtype.BF16: {"atol": 1e-2, "rtol": 1e-2},
+    }
+    
+    # Support BF16
+    TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.F32, InfiniDtype.BF16]
+
+
 # ==============================================================================
 # 算子注册表
 # ==============================================================================
@@ -456,6 +500,8 @@ UNARY_OP_TESTS = {
     "sinh": SinhTest,
     "sqrt": SqrtTest,
     "tan": TanTest,
+    "exp": ExpTest,
+    "hardswish": HardswishTest,
 }
 
 

@@ -25,8 +25,74 @@
  *   }
  */
 
+// =========================================================================
+//  Internal Helpers (Private Macros to reduce duplication)
+// =========================================================================
+
 /**
- * @brief Macro to generate binary operator implementation.
+ * @brief Common Calculate Switch Cases (F16 & F32)
+ */
+#define _IMPL_CALC_CASES_COMMON \
+    case INFINI_DTYPE_F16: \
+        return _device_info->template calculate<Op, fp16_t>(_info, output, inputs, stream); \
+    case INFINI_DTYPE_F32: \
+        return _device_info->template calculate<Op, float>(_info, output, inputs, stream);
+
+/**
+ * @brief Extended Calculate Switch Cases (Adds F64 & BF16)
+ */
+#define _IMPL_CALC_CASES_EXTENDED \
+    _IMPL_CALC_CASES_COMMON \
+    case INFINI_DTYPE_F64: \
+        return _device_info->template calculate<Op, double>(_info, output, inputs, stream); \
+    case INFINI_DTYPE_BF16: \
+        return _device_info->template calculate<Op, bf16_t>(_info, output, inputs, stream);
+
+/**
+ * @brief Generic Template for the Calculate method
+ * @param CASES_MACRO The macro containing the switch cases to use
+ */
+#define _IMPL_CALCULATE_METHOD(CASES_MACRO) \
+    infiniStatus_t Descriptor::calculate( \
+        void *workspace, \
+        size_t workspace_size, \
+        void *output, \
+        std::vector<const void *> inputs, \
+        void *stream) const { \
+        switch (_dtype) { \
+            CASES_MACRO \
+            default: \
+                return INFINI_STATUS_BAD_TENSOR_DTYPE; \
+        } \
+    }
+
+/**
+ * @brief Generic Template for the Create method
+ * @param SHAPE_CHECK_BLOCK Code block to execute for shape checking
+ * @param ... Variadic arguments for allowed data types in CHECK_DTYPE
+ */
+#define _IMPL_CREATE_METHOD(SHAPE_CHECK_BLOCK, ...) \
+    Descriptor::~Descriptor() = default; \
+    infiniStatus_t Descriptor::create( \
+        infiniopHandle_t handle_, \
+        Descriptor **desc_ptr, \
+        infiniopTensorDescriptor_t out_desc, \
+        std::vector<infiniopTensorDescriptor_t> input_desc_vec) { \
+        auto handle = reinterpret_cast<device::cpu::Handle *>(handle_); \
+        auto dtype = out_desc->dtype(); \
+        const auto &out_shape = out_desc->shape(); \
+        SHAPE_CHECK_BLOCK \
+        CHECK_DTYPE(dtype, __VA_ARGS__); \
+        CREATE_ELEMENTWISE_CPU_DESCRIPTOR(handle, dtype, out_desc, input_desc_vec); \
+        return INFINI_STATUS_SUCCESS; \
+    }
+
+// =========================================================================
+//  Public API Implementation Macros
+// =========================================================================
+
+/**
+ * @brief Implementation for Binary Operators (F16, F32)
  *
  * This macro generates the Descriptor destructor, create, and calculate methods
  * for binary operators, using the generic implementation.
@@ -37,48 +103,19 @@
  *       ELEMENTWISE_CPU_IMPL_BINARY(pow)
  *   }
  */
-#define ELEMENTWISE_CPU_IMPL_BINARY(OP)                                             \
-                                                                                    \
-    Descriptor::~Descriptor() = default;                                            \
-                                                                                    \
-    infiniStatus_t Descriptor::create(                                              \
-        infiniopHandle_t handle_,                                                   \
-        Descriptor **desc_ptr,                                                      \
-        infiniopTensorDescriptor_t out_desc,                                        \
-        std::vector<infiniopTensorDescriptor_t> input_desc_vec) {                   \
-        auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);             \
-        auto dtype = out_desc->dtype();                                             \
-        const auto &a_desc = input_desc_vec.at(0);                                  \
-        const auto &b_desc = input_desc_vec.at(1);                                  \
-        const auto &out_shape = out_desc->shape();                                  \
-        const auto &a_shape = a_desc->shape();                                      \
-        const auto &b_shape = b_desc->shape();                                      \
-        CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32);                     \
-        CHECK_SAME_SHAPE(out_shape, a_shape, b_shape);                              \
-        CREATE_ELEMENTWISE_CPU_DESCRIPTOR(handle, dtype, out_desc, input_desc_vec); \
-        return INFINI_STATUS_SUCCESS;                                               \
-    }                                                                               \
-                                                                                    \
-    infiniStatus_t Descriptor::calculate(                                           \
-        void *workspace,                                                            \
-        size_t workspace_size,                                                      \
-        void *output,                                                               \
-        std::vector<const void *> inputs,                                           \
-        void *stream) const {                                                       \
-        switch (_dtype) {                                                           \
-        case INFINI_DTYPE_F16:                                                      \
-            return _device_info->template calculate<Op, fp16_t>(                    \
-                _info, output, inputs, stream);                                     \
-        case INFINI_DTYPE_F32:                                                      \
-            return _device_info->template calculate<Op, float>(                     \
-                _info, output, inputs, stream);                                     \
-        default:                                                                    \
-            return INFINI_STATUS_BAD_TENSOR_DTYPE;                                  \
-        }                                                                           \
-    }
+#define ELEMENTWISE_CPU_IMPL_BINARY(OP) \
+    _IMPL_CREATE_METHOD( \
+        const auto &a_desc = input_desc_vec.at(0); \
+        const auto &b_desc = input_desc_vec.at(1); \
+        const auto &a_shape = a_desc->shape(); \
+        const auto &b_shape = b_desc->shape(); \
+        CHECK_SAME_SHAPE(out_shape, a_shape, b_shape);, \
+        INFINI_DTYPE_F16, INFINI_DTYPE_F32 \
+    ) \
+    _IMPL_CALCULATE_METHOD(_IMPL_CALC_CASES_COMMON)
 
 /**
- * @brief Macro to generate unary operator implementation.
+ * @brief Implementation for Unary Operators (F16, F32)
  *
  * This macro generates the Descriptor destructor, create, and calculate methods
  * for unary operators, using the generic implementation.
@@ -89,42 +126,34 @@
  *       ELEMENTWISE_CPU_IMPL_UNARY(sqrt)
  *   }
  */
-#define ELEMENTWISE_CPU_IMPL_UNARY(OP)                                              \
-                                                                                    \
-    Descriptor::~Descriptor() = default;                                            \
-                                                                                    \
-    infiniStatus_t Descriptor::create(                                              \
-        infiniopHandle_t handle_,                                                   \
-        Descriptor **desc_ptr,                                                      \
-        infiniopTensorDescriptor_t out_desc,                                        \
-        std::vector<infiniopTensorDescriptor_t> input_desc_vec) {                   \
-        auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);             \
-        auto dtype = out_desc->dtype();                                             \
-        const auto &x_desc = input_desc_vec.at(0);                                  \
-        const auto &y_shape = out_desc->shape();                                    \
-        const auto &x_shape = x_desc->shape();                                      \
-        CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32);                     \
-        CHECK_SAME_SHAPE(y_shape, x_shape);                                         \
-        CREATE_ELEMENTWISE_CPU_DESCRIPTOR(handle, dtype, out_desc, input_desc_vec); \
-        return INFINI_STATUS_SUCCESS;                                               \
-    }                                                                               \
-                                                                                    \
-    infiniStatus_t Descriptor::calculate(                                           \
-        void *workspace,                                                            \
-        size_t workspace_size,                                                      \
-        void *output,                                                               \
-        std::vector<const void *> inputs,                                           \
-        void *stream) const {                                                       \
-        switch (_dtype) {                                                           \
-        case INFINI_DTYPE_F16:                                                      \
-            return _device_info->template calculate<Op, fp16_t>(                    \
-                _info, output, inputs, stream);                                     \
-        case INFINI_DTYPE_F32:                                                      \
-            return _device_info->template calculate<Op, float>(                     \
-                _info, output, inputs, stream);                                     \
-        default:                                                                    \
-            return INFINI_STATUS_BAD_TENSOR_DTYPE;                                  \
-        }                                                                           \
-    }
+#define ELEMENTWISE_CPU_IMPL_UNARY(OP) \
+    _IMPL_CREATE_METHOD( \
+        const auto &x_desc = input_desc_vec.at(0); \
+        const auto &x_shape = x_desc->shape(); \
+        CHECK_SAME_SHAPE(out_shape, x_shape);, \
+        INFINI_DTYPE_F16, INFINI_DTYPE_F32 \
+    ) \
+    _IMPL_CALCULATE_METHOD(_IMPL_CALC_CASES_COMMON)
+
+/**
+ * @brief Implementation for Unary Operators Extended (F16, F32, F64, BF16)
+ *
+ * This macro generates the Descriptor destructor, create, and calculate methods
+ * for unary operators supporting F16, F32, F64, and BF16 data types.
+ *
+ * Usage:
+ *   namespace op::exp::cpu {
+ *       using Op = op::elementwise::unary::UnaryOp<UnaryMode::Exp>;
+ *       ELEMENTWISE_CPU_IMPL_UNARY_EXTENDED(exp)
+ *   }
+ */
+#define ELEMENTWISE_CPU_IMPL_UNARY_EXTENDED(OP) \
+    _IMPL_CREATE_METHOD( \
+        const auto &x_desc = input_desc_vec.at(0); \
+        const auto &x_shape = x_desc->shape(); \
+        CHECK_SAME_SHAPE(out_shape, x_shape);, \
+        INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64, INFINI_DTYPE_BF16 \
+    ) \
+    _IMPL_CALCULATE_METHOD(_IMPL_CALC_CASES_EXTENDED)
 
 #endif // __INFINIOP_ELEMENTWISE_CPU_IMPL_H__

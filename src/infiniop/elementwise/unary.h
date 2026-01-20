@@ -48,6 +48,7 @@ enum class UnaryMode {
     Sigmoid,
     Sign,
     Erf,
+    Hardswish,
 };
 
 /**
@@ -124,6 +125,17 @@ struct UnaryOp {
             return x > T(0) ? T(1) : (x == T(0) ? T(0) : T(-1));
         } else if constexpr (Mode == UnaryMode::Erf) {
             return std::erf(x);
+        } else if constexpr (Mode == UnaryMode::Hardswish) {
+            if constexpr (std::is_integral_v<T>) {
+                return static_cast<T>(0);
+            } else {
+                // x * clamp(x + 3, 0, 6) / 6
+                auto x_val = static_cast<double>(x);
+                double y = x_val + 3.0;
+                y = std::min(std::max(y, 0.0), 6.0);
+                double out = x_val * (y / 6.0);
+                return static_cast<T>(out);
+            }
         } else {
             static_assert(Mode != Mode, "Unsupported unary operation mode");
             return x;
@@ -486,6 +498,41 @@ struct UnaryOp {
                 return erff(x);
             } else {
                 return std::erf(x);
+            }
+        } else if constexpr (Mode == UnaryMode::Hardswish) {
+            // Hardswish: f(x) = x * clamp(x + 3, 0, 6) / 6
+            auto hswish_f32 = [](float x) -> float {
+                float y = x + 3.0f;
+                y = y < 0.0f ? 0.0f : (y > 6.0f ? 6.0f : y);
+                return x * (y * (1.0f / 6.0f));
+            };
+            if constexpr (std::is_same_v<T, half2>) {
+                float2 vf = __half22float2(x);
+                float2 vr = make_float2(
+                    hswish_f32(vf.x),
+                    hswish_f32(vf.y));
+                return __float22half2_rn(vr);
+            } else if constexpr (std::is_same_v<T, half>) {
+                float xf = __half2float(x);
+                float yf = hswish_f32(xf);
+                return __float2half_rn(yf);
+            } else if constexpr (std::is_same_v<T, cuda_bfloat162>) {
+                float f0 = __bfloat162float(__low2bfloat16(x));
+                float f1 = __bfloat162float(__high2bfloat16(x));
+                return __floats2bfloat162_rn(hswish_f32(f0), hswish_f32(f1));
+            } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
+                float xf = __bfloat162float(x);
+                return __float2bfloat16_rz(hswish_f32(xf));
+            } else if constexpr (std::is_same_v<T, float>) {
+                return hswish_f32(x);
+            } else if constexpr (std::is_same_v<T, double>) {
+                double xd = static_cast<double>(x);
+                double yd = xd * (std::fmin(std::fmax(xd + 3.0, 0.0), 6.0) / 6.0);
+                return static_cast<T>(yd);
+            } else {
+                double xd = static_cast<double>(x);
+                double yd = xd * (std::fmin(std::fmax(xd + 3.0, 0.0), 6.0) / 6.0);
+                return static_cast<T>(yd);
             }
         } else {
             static_assert(Mode != Mode, "Unsupported unary operation mode");

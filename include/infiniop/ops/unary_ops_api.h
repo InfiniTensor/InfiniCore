@@ -35,5 +35,7 @@ UNARY_OP_API_DECLARE(erf, Erf)
 UNARY_OP_API_DECLARE(atan, Atan)
 UNARY_OP_API_DECLARE(acos, Acos)
 UNARY_OP_API_DECLARE(ceil, Ceil)
+UNARY_OP_API_DECLARE(exp, Exp)
+UNARY_OP_API_DECLARE(hardswish, Hardswish)
 
 #endif // __INFINIOP_UNARY_OPS_API_H__
