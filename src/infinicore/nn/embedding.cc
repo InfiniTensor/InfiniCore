@@ -43,6 +43,12 @@ Embedding::Embedding(size_t num_embeddings,
 }
 
 Tensor Embedding::forward(const Tensor &indices) const {
+    // TODO: Implement on-device embedding for all devices, then remove the condition and the classic approach
+    if (device_ == Device::Type::NVIDIA || device_ == Device::Type::ILUVATAR || device_ == Device::Type::METAX || device_ == Device::Type::MOORE) {
+        // Use op::embedding which supports device-side input and batch dimension
+        return op::embedding(indices->contiguous()->to(device_), weight_);
+    }
+
     // Get the shape of indices
     auto indices_shape = indices->shape();
 
