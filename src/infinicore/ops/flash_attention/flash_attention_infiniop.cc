@@ -1,4 +1,5 @@
 #include "../../utils.hpp"
+#include "../infiniop_impl.hpp"
 #include "infinicore/common/hash.hpp"
 #include "infinicore/ops/common/cache.hpp"
 #include "infinicore/ops/flash_attention.hpp"
@@ -6,46 +7,50 @@
 
 namespace infinicore::op::flash_attention_impl::infiniop {
 
-thread_local common::OpCache<size_t, infiniopFlashAttentionDescriptor_t> caches(
-    100, // capacity
-    [](infiniopFlashAttentionDescriptor_t &desc) {
-        if (desc != nullptr) {
-            INFINICORE_CHECK_ERROR(infiniopDestroyFlashAttentionDescriptor(desc));
-            desc = nullptr;
-        }
-    });
+INFINIOP_CACHABLE_DESCRIPTOR(Descriptor, FlashAttention, 100);
 
-void calculate(Tensor out, Tensor q, Tensor k, Tensor v, float scale, bool is_causal) {
-    size_t seed = hash_combine(out, q, k, v, scale, is_causal);
+struct PlannedMeta {
+    std::shared_ptr<Descriptor> descriptor;
+    graph::GraphTensor workspace, out, q, k, v;
+    std::size_t total_kv_len;
+    float scale;
+    bool is_causal;
+};
 
-    auto device = context::getDevice();
-    auto &cache = caches.getCache(device);
+void *plan(Tensor out, Tensor q, Tensor k, Tensor v, std::size_t total_kv_len, float scale, bool is_causal) {
+    size_t seed = hash_combine(out, q, k, v, total_kv_len, scale, is_causal);
 
-    auto desc_opt = cache.get(seed);
-    infiniopFlashAttentionDescriptor_t desc = nullptr;
+    INFINIOP_CACHABLE_DESCRIPTOR_GET_OR_CREATE(
+        Descriptor, descriptor, FlashAttention,
+        seed, out->desc(), q->desc(), k->desc(), v->desc(), total_kv_len, scale, is_causal);
 
-    if (!desc_opt) {
-        INFINICORE_CHECK_ERROR(infiniopCreateFlashAttentionDescriptor(
-            context::getInfiniopHandle(device), &desc,
-            out->desc(), q->desc(), k->desc(), v->desc(),
-            scale, static_cast<char>(is_causal)));
-        cache.put(seed, desc);
-    } else {
-        desc = *desc_opt;
-    }
+    INFINIOP_WORKSPACE_TENSOR(workspace, FlashAttention, descriptor);
 
-    size_t workspace_size = 0;
-    INFINICORE_CHECK_ERROR(infiniopGetFlashAttentionWorkspaceSize(desc, &workspace_size));
-    std::shared_ptr<Memory> workspace = context::allocateMemory(workspace_size);
+    auto planned = new PlannedMeta{
+        descriptor,
+        graph::GraphTensor(workspace),
+        graph::GraphTensor(out),
+        graph::GraphTensor(q),
+        graph::GraphTensor(k),
+        graph::GraphTensor(v),
+        total_kv_len, scale, is_causal};
 
-    INFINICORE_CHECK_ERROR(infiniopFlashAttention(
-        desc, workspace->data(), workspace_size,
-        out->data(), q->data(), k->data(), v->data(), context::getStream()));
+    return planned;
 }
 
-static bool registered = []() {
-    FlashAttention::dispatcher().registerAll(&calculate, false);
-    return true;
-}();
+void run(void *planned_meta) {
+    auto planned = reinterpret_cast<PlannedMeta *>(planned_meta);
+
+    INFINICORE_CHECK_ERROR(infiniopFlashAttention(
+        planned->descriptor->desc, planned->workspace->data(), planned->workspace->numel(),
+        planned->out->data(), planned->q->data(), planned->k->data(), planned->v->data(), context::getStream()));
+}
+
+void cleanup(void **planned_meta_ptr) {
+    delete *reinterpret_cast<PlannedMeta **>(planned_meta_ptr);
+    *planned_meta_ptr = nullptr;
+}
+
+INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(FlashAttention, &plan, &run, &cleanup);
 
 } // namespace infinicore::op::flash_attention_impl::infiniop
