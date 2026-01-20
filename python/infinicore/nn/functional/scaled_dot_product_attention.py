@@ -23,6 +23,11 @@ def scaled_dot_product_attention(
 
     return Tensor(
         _infinicore.flash_attention(
-            query._underlying, key._underlying, value._underlying, scale, is_causal
+            query._underlying,
+            key._underlying,
+            value._underlying,
+            key.shape[-2],
+            scale,
+            is_causal,
         )
     )
