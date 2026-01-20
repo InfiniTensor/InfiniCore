@@ -15,8 +15,8 @@ thread_local common::OpCache<size_t, infiniopFlashAttentionDescriptor_t> caches(
         }
     });
 
-void calculate(Tensor out, Tensor q, Tensor k, Tensor v, float scale, bool is_causal) {
-    size_t seed = hash_combine(out, q, k, v, scale, is_causal);
+void calculate(Tensor out, Tensor q, Tensor k, Tensor v, std::size_t total_kv_len, float scale, bool is_causal) {
+    size_t seed = hash_combine(out, q, k, v, total_kv_len, scale, is_causal);
 
     auto device = context::getDevice();
     auto &cache = caches.getCache(device);
@@ -27,7 +27,7 @@ void calculate(Tensor out, Tensor q, Tensor k, Tensor v, float scale, bool is_ca
     if (!desc_opt) {
         INFINICORE_CHECK_ERROR(infiniopCreateFlashAttentionDescriptor(
             context::getInfiniopHandle(device), &desc,
-            out->desc(), q->desc(), k->desc(), v->desc(),
+            out->desc(), q->desc(), k->desc(), v->desc(), total_kv_len,
             scale, static_cast<char>(is_causal)));
         cache.put(seed, desc);
     } else {

@@ -17,6 +17,7 @@ public:
                infiniopTensorDescriptor_t q_desc,
                infiniopTensorDescriptor_t k_desc,
                infiniopTensorDescriptor_t v_desc,
+               std::size_t total_kv_len,
                double scale,
                char is_causal) : InfiniopDescriptor{handle->device, handle->device_id},
                                  _query_shape{q_desc->shape()},
@@ -28,7 +29,10 @@ public:
                                  _output_strides{out_desc->strides()},
                                  _dtype{q_desc->dtype()},
                                  _scale{scale},
-                                 _is_causal{is_causal} {}
+                                 _is_causal{is_causal} {
+        _key_shape[_key_shape.size() - 2] = total_kv_len;
+        _value_shape[_key_shape.size() - 2] = total_kv_len;
+    }
 
     ~Descriptor() = default;
 
@@ -97,9 +101,10 @@ public:
                                  infiniopTensorDescriptor_t q_desc,
                                  infiniopTensorDescriptor_t k_desc,
                                  infiniopTensorDescriptor_t v_desc,
+                                 std::size_t total_kv_len,
                                  double scale,
                                  char is_causal) {
-        *desc = new Descriptor{handle, out_desc, q_desc, k_desc, v_desc, scale, is_causal};
+        *desc = new Descriptor{handle, out_desc, q_desc, k_desc, v_desc, total_kv_len, scale, is_causal};
 
         return INFINI_STATUS_SUCCESS;
     }
