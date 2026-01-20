@@ -37,8 +37,8 @@ Tensor BaseLinear::compute_linear(Tensor &input) const {
         auto output = infinicore::op::linear(input_contiguous->contiguous(), weight_tensor->contiguous(), bias_opt);
         return output;
     } else {
-        switch (this->get_quant_type()) {
-        case infinicore::nn::QuantType::COMPRESSED_TENSOR: {
+        switch (this->get_quant_scheme()) {
+        case infinicore::nn::QuantScheme::COMPRESSED_TENSOR_W8A8I8: {
             Tensor input_contiguous = input->is_contiguous() ? input : input->contiguous();
             // input_contiguous = input_contiguous->view({input_contiguous->shape()[1], input_contiguous->shape()[2]});
             Tensor weight_packed_tensor = static_cast<const Tensor &>(weight_);
@@ -95,8 +95,8 @@ Linear::Linear(size_t in_features, size_t out_features, bool bias,
         // SPDLOG_DEBUG("Created Linear module: in_features={}, out_features={}, bias={}, dtype={}",
         //              in_features, out_features, bias, static_cast<int>(dtype_));
     } else {
-        switch (this->get_quant_type()) {
-        case infinicore::nn::QuantType::COMPRESSED_TENSOR: {
+        switch (this->get_quant_scheme()) {
+        case infinicore::nn::QuantScheme::COMPRESSED_TENSOR_W8A8I8: {
             INFINICORE_NN_PARAMETER_INIT(weight, ({out_features, in_features}, infinicore::DataType::I8, device));
             INFINICORE_NN_PARAMETER_INIT(weight_scale, ({out_features, 1}, infinicore::DataType::F32, device));
 
@@ -149,8 +149,8 @@ ColumnParallelLinear::ColumnParallelLinear(size_t in_features, size_t out_featur
             bias_ = Parameter(); // Default constructed empty parameter
         }
     } else {
-        switch (this->get_quant_type()) {
-        case infinicore::nn::QuantType::COMPRESSED_TENSOR: {
+        switch (this->get_quant_scheme()) {
+        case infinicore::nn::QuantScheme::COMPRESSED_TENSOR_W8A8I8: {
 
             INFINICORE_NN_PARAMETER_INIT(weight, ({out_features, in_features}, infinicore::DataType::I8, device, 0, tp_rank_, tp_size_));
             INFINICORE_NN_PARAMETER_INIT(weight_scale, ({out_features, 1}, infinicore::DataType::F32, device, 0, tp_rank_, tp_size_));
@@ -208,8 +208,8 @@ RowParallelLinear::RowParallelLinear(size_t in_features, size_t out_features, bo
         // SPDLOG_DEBUG("Created RowParallelLinear module: in_features={}, out_features={}, bias={}, dtype={}",
         //              in_features, out_features, bias, static_cast<int>(dtype_));
     } else {
-        switch (this->get_quant_type()) {
-        case infinicore::nn::QuantType::COMPRESSED_TENSOR: {
+        switch (this->get_quant_scheme()) {
+        case infinicore::nn::QuantScheme::COMPRESSED_TENSOR_W8A8I8: {
             INFINICORE_NN_PARAMETER_INIT(weight, ({out_features, in_features}, infinicore::DataType::I8, device, 1, tp_rank_, tp_size_));
             INFINICORE_NN_PARAMETER_INIT(weight_scale, ({out_features, 1}, infinicore::DataType::F32, device, 0, 0, 1));
 
