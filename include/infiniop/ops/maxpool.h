@@ -5,7 +5,7 @@
 
 __C typedef struct InfiniopDescriptor *infiniopMaxPoolDescriptor_t;
 
-__C infiniStatus_t infiniopCreateMaxPoolDescriptor(infiniopHandle_t handle,
+__C __export infiniStatus_t infiniopCreateMaxPoolDescriptor(infiniopHandle_t handle,
                                                    infiniopMaxPoolDescriptor_t *desc_ptr,
                                                    infiniopTensorDescriptor_t output_desc,
                                                    infiniopTensorDescriptor_t input_desc,
@@ -14,16 +14,16 @@ __C infiniStatus_t infiniopCreateMaxPoolDescriptor(infiniopHandle_t handle,
                                                    void *pads,
                                                    bool ceil_mode);
 
-__C infiniStatus_t infiniopGetMaxPoolWorkspaceSize(infiniopMaxPoolDescriptor_t desc,
+__C __export infiniStatus_t infiniopGetMaxPoolWorkspaceSize(infiniopMaxPoolDescriptor_t desc,
                                                    size_t *size);
 
-__C infiniStatus_t infiniopMaxPool(infiniopMaxPoolDescriptor_t desc,
+__C __export infiniStatus_t infiniopMaxPool(infiniopMaxPoolDescriptor_t desc,
                                    void *workspace,
                                    size_t workspace_size,
                                    void *output,
                                    const void *input,
                                    void *stream);
 
-__C infiniStatus_t infiniopDestroyMaxPoolDescriptor(infiniopMaxPoolDescriptor_t desc);
+__C __export infiniStatus_t infiniopDestroyMaxPoolDescriptor(infiniopMaxPoolDescriptor_t desc);
 
 #endif // __INFINIOP_MAX_POOL_H__

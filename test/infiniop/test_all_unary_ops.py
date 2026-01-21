@@ -185,6 +185,28 @@ class CeilTest(UnaryTestBase):
     }
 
 
+class SinTest(UnaryTestBase):
+    OP_NAME = "Sin"
+    OP_NAME_LOWER = "sin"
+    
+    @staticmethod
+    def torch_op(x):
+        return torch.sin(x).to(x.dtype)
+    
+    @staticmethod
+    def generate_input(shape, dtype, device):
+        # Generate test tensors with values in range [-200, -100) for sin operation
+        # sin domain is (-∞, +∞), so we use range [-200, -100)
+        return torch.rand(shape, dtype=dtype, device=device) * 100 - 200
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-4, "rtol": 1e-2},
+        InfiniDtype.F32: {"atol": 1e-4, "rtol": 1e-2},
+    }
+    
+    EQUAL_NAN = True
+
+
 class CosTest(UnaryTestBase):
     OP_NAME = "Cos"
     OP_NAME_LOWER = "cos"
@@ -286,6 +308,77 @@ class LogTest(UnaryTestBase):
     }
     
     EQUAL_NAN = True
+
+
+class Log2Test(UnaryTestBase):
+    OP_NAME = "Log2"
+    OP_NAME_LOWER = "log2"
+    
+    @staticmethod
+    def torch_op(x):
+        return torch.log2(x).to(x.dtype)
+    
+    @staticmethod
+    def generate_input(shape, dtype, device):
+        # log2 domain is (0, +∞), so we use range [0.1, 1.1)
+        return torch.rand(shape, dtype=dtype, device=device) + 0.1
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-7, "rtol": 1e-3},
+        InfiniDtype.F32: {"atol": 1e-7, "rtol": 1e-3},
+        InfiniDtype.BF16: {"atol": 1e-2, "rtol": 1e-2},
+    }
+    
+    # Support BF16
+    TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.F32, InfiniDtype.BF16]
+    
+    EQUAL_NAN = True
+
+
+class Log10Test(UnaryTestBase):
+    OP_NAME = "Log10"
+    OP_NAME_LOWER = "log10"
+    
+    @staticmethod
+    def torch_op(x):
+        return torch.log10(x).to(x.dtype)
+    
+    @staticmethod
+    def generate_input(shape, dtype, device):
+        # log10 domain is (0, +∞), so we use range [0.1, 1.1)
+        return torch.rand(shape, dtype=dtype, device=device) + 0.1
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-7, "rtol": 1e-3},
+        InfiniDtype.F32: {"atol": 1e-7, "rtol": 1e-3},
+        InfiniDtype.BF16: {"atol": 1e-2, "rtol": 1e-2},
+    }
+    
+    # Support BF16
+    TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.F32, InfiniDtype.BF16]
+    
+    EQUAL_NAN = True
+
+
+class Log1pTest(UnaryTestBase):
+    OP_NAME = "Log1p"
+    OP_NAME_LOWER = "log1p"
+    
+    @staticmethod
+    def torch_op(x):
+        return torch.log1p(x).to(x.dtype)
+    
+    @staticmethod
+    def generate_input(shape, dtype, device):
+        # log1p domain is (-1, +∞), so we use range [-0.9, 1.1)
+        # Include values close to zero to test numerical stability
+        x = torch.rand(shape, dtype=dtype, device=device) * 2 - 0.9
+        return x
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+        InfiniDtype.F32: {"atol": 1e-6, "rtol": 1e-6},
+    }
 
 
 class NegTest(UnaryTestBase):
@@ -410,6 +503,47 @@ class SqrtTest(UnaryTestBase):
     EQUAL_NAN = True
 
 
+class SquareTest(UnaryTestBase):
+    OP_NAME = "Square"
+    OP_NAME_LOWER = "square"
+    
+    @staticmethod
+    def torch_op(x):
+        return torch.square(x).to(x.dtype)
+    
+    @staticmethod
+    def generate_input(shape, dtype, device):
+        return torch.rand(shape, dtype=dtype, device=device) * 10 - 5
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+        InfiniDtype.F32: {"atol": 1e-7, "rtol": 1e-7},
+    }
+    
+    EQUAL_NAN = True
+
+
+class RsqrtTest(UnaryTestBase):
+    OP_NAME = "Rsqrt"
+    OP_NAME_LOWER = "rsqrt"
+    
+    @staticmethod
+    def torch_op(x):
+        return torch.rsqrt(x).to(x.dtype)
+    
+    @staticmethod
+    def generate_input(shape, dtype, device):
+        # rsqrt domain is (0, +∞), avoid zero
+        return torch.rand(shape, dtype=dtype, device=device) * 100 + 1e-6
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-3, "rtol": 2e-3},
+        InfiniDtype.F32: {"atol": 0, "rtol": 1e-3},
+    }
+    
+    EQUAL_NAN = True
+
+
 class TanTest(UnaryTestBase):
     OP_NAME = "Tan"
     OP_NAME_LOWER = "tan"
@@ -452,6 +586,29 @@ class ExpTest(UnaryTestBase):
     TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.F32, InfiniDtype.BF16]
 
 
+class Exp2Test(UnaryTestBase):
+    OP_NAME = "Exp2"
+    OP_NAME_LOWER = "exp2"
+    
+    @staticmethod
+    def torch_op(x):
+        return torch.exp2(x).to(x.dtype)
+    
+    @staticmethod
+    def generate_input(shape, dtype, device):
+        # Keep input in reasonable range to avoid overflow
+        return torch.rand(shape, dtype=dtype, device=device) * 4 - 2
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+        InfiniDtype.F32: {"atol": 1e-6, "rtol": 1e-6},
+        InfiniDtype.BF16: {"atol": 1e-2, "rtol": 1e-2},
+    }
+    
+    # Support BF16
+    TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.F32, InfiniDtype.BF16]
+
+
 class HardswishTest(UnaryTestBase):
     OP_NAME = "Hardswish"
     OP_NAME_LOWER = "hardswish"
@@ -474,6 +631,117 @@ class HardswishTest(UnaryTestBase):
     TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.F32, InfiniDtype.BF16]
 
 
+class IsNanTest(UnaryTestBase):
+    OP_NAME = "IsNan"
+    OP_NAME_LOWER = "isnan"
+    
+    @staticmethod
+    def torch_op(x):
+        return torch.isnan(x).to(x.dtype)
+    
+    @staticmethod
+    def generate_input(shape, dtype, device):
+        # Generate a mix of normal values and NaN values
+        x = torch.rand(shape, dtype=dtype, device=device) * 10 - 5
+        # Set some values to NaN
+        nan_mask = torch.rand(shape, device=device) < 0.3
+        x[nan_mask] = float('nan')
+        return x
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 0, "rtol": 0},
+        InfiniDtype.F32: {"atol": 0, "rtol": 0},
+    }
+    
+    EQUAL_NAN = False  # For isnan, we want exact match (0 or 1)
+
+
+class IsInfTest(UnaryTestBase):
+    OP_NAME = "IsInf"
+    OP_NAME_LOWER = "isinf"
+    
+    @staticmethod
+    def torch_op(x):
+        return torch.isinf(x).to(x.dtype)
+    
+    @staticmethod
+    def generate_input(shape, dtype, device):
+        # Generate a mix of normal values and Inf values
+        x = torch.rand(shape, dtype=dtype, device=device) * 10 - 5
+        # Set some values to Inf
+        inf_mask = torch.rand(shape, device=device) < 0.3
+        x[inf_mask] = float('inf')
+        # Set some to -Inf
+        neg_inf_mask = torch.rand(shape, device=device) < 0.15
+        x[neg_inf_mask] = float('-inf')
+        return x
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 0, "rtol": 0},
+        InfiniDtype.F32: {"atol": 0, "rtol": 0},
+    }
+    
+    EQUAL_NAN = False  # For isinf, we want exact match (0 or 1)
+
+
+class IsFiniteTest(UnaryTestBase):
+    OP_NAME = "IsFinite"
+    OP_NAME_LOWER = "isfinite"
+    
+    @staticmethod
+    def torch_op(x):
+        return torch.isfinite(x).to(x.dtype)
+    
+    @staticmethod
+    def generate_input(shape, dtype, device):
+        # Generate a mix of normal values, NaN, and Inf values
+        x = torch.rand(shape, dtype=dtype, device=device) * 10 - 5
+        # Set some values to NaN
+        nan_mask = torch.rand(shape, device=device) < 0.2
+        x[nan_mask] = float('nan')
+        # Set some values to Inf
+        inf_mask = torch.rand(shape, device=device) < 0.2
+        x[inf_mask] = float('inf')
+        return x
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 0, "rtol": 0},
+        InfiniDtype.F32: {"atol": 0, "rtol": 0},
+    }
+    
+    EQUAL_NAN = False  # For isfinite, we want exact match (0 or 1)
+
+
+class SincTest(UnaryTestBase):
+    OP_NAME = "Sinc"
+    OP_NAME_LOWER = "sinc"
+    
+    @staticmethod
+    def torch_op(x):
+        # PyTorch doesn't have sinc, so we implement it manually
+        # sinc(x) = sin(x) / x, sinc(0) = 1
+        result = torch.sin(x) / x
+        result[x == 0] = 1.0
+        return result.to(x.dtype)
+    
+    @staticmethod
+    def generate_input(shape, dtype, device):
+        # Generate values around zero and some larger values
+        # Include zero to test the special case
+        x = torch.rand(shape, dtype=dtype, device=device) * 10 - 5
+        # Set some values to exactly zero
+        zero_mask = torch.rand(shape, device=device) < 0.1
+        x[zero_mask] = 0.0
+        return x
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+        InfiniDtype.F32: {"atol": 1e-4, "rtol": 1e-4},  # sinc can have larger errors near zero
+    }
+    
+    EQUAL_NAN = True
+
+
 # ==============================================================================
 # 算子注册表
 # ==============================================================================
@@ -493,15 +761,26 @@ UNARY_OP_TESTS = {
     "erf": ErfTest,
     "floor": FloorTest,
     "log": LogTest,
+    "log2": Log2Test,
+    "log10": Log10Test,
+    "log1p": Log1pTest,
     "neg": NegTest,
     "reciprocal": ReciprocalTest,
     "round": RoundTest,
     "sign": SignTest,
+    "sin": SinTest,
     "sinh": SinhTest,
     "sqrt": SqrtTest,
+    "square": SquareTest,
+    "rsqrt": RsqrtTest,
     "tan": TanTest,
     "exp": ExpTest,
+    "exp2": Exp2Test,
     "hardswish": HardswishTest,
+    "isnan": IsNanTest,
+    "isinf": IsInfTest,
+    "isfinite": IsFiniteTest,
+    "sinc": SincTest,
 }
 
 

@@ -5,7 +5,7 @@
 
 __C typedef struct InfiniopDescriptor *infiniopAvgPoolDescriptor_t;
 
-__C infiniStatus_t infiniopCreateAvgPoolDescriptor(infiniopHandle_t handle,
+__C __export infiniStatus_t infiniopCreateAvgPoolDescriptor(infiniopHandle_t handle,
                                                    infiniopAvgPoolDescriptor_t *desc_ptr,
                                                    infiniopTensorDescriptor_t output_desc,
                                                    infiniopTensorDescriptor_t input_desc,
@@ -14,16 +14,16 @@ __C infiniStatus_t infiniopCreateAvgPoolDescriptor(infiniopHandle_t handle,
                                                    void *pads,
                                                    bool ceil_mode);
 
-__C infiniStatus_t infiniopGetAvgPoolWorkspaceSize(infiniopAvgPoolDescriptor_t desc,
+__C __export infiniStatus_t infiniopGetAvgPoolWorkspaceSize(infiniopAvgPoolDescriptor_t desc,
                                                    size_t *size);
 
-__C infiniStatus_t infiniopAvgPool(infiniopAvgPoolDescriptor_t desc,
+__C __export infiniStatus_t infiniopAvgPool(infiniopAvgPoolDescriptor_t desc,
                                    void *workspace,
                                    size_t workspace_size,
                                    void *output,
                                    const void *input,
                                    void *stream);
 
-__C infiniStatus_t infiniopDestroyAvgPoolDescriptor(infiniopAvgPoolDescriptor_t desc);
+__C __export infiniStatus_t infiniopDestroyAvgPoolDescriptor(infiniopAvgPoolDescriptor_t desc);
 
 #endif // __INFINIOP_AVERAGEPOOL_H__

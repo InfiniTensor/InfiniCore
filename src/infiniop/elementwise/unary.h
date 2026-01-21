@@ -25,9 +25,15 @@ enum class UnaryMode {
     // Math operations:
     Abs,
     Exp,
+    Exp2, // exp2: 2^x
     Log,
+    Log2,  // log2: log base 2
+    Log10, // log10: log base 10
+    Log1p, // log1p: log(1 + x), numerically stable for values close to zero
     Reciprocal,
     Sqrt,
+    Square,
+    Rsqrt,
     Neg,
     Ceil,
     Floor,
@@ -49,7 +55,15 @@ enum class UnaryMode {
     Sign,
     Erf,
     Hardswish,
+    IsNan,
+    IsInf,
+    IsFinite,
+    Sinc,
 };
+
+// Helper template for static_assert in else branches
+template <UnaryMode M>
+struct always_false : std::false_type {};
 
 /**
  * @brief Generic unary operation template that performs different operations
@@ -75,12 +89,28 @@ struct UnaryOp {
             }
         } else if constexpr (Mode == UnaryMode::Exp) {
             return std::exp(x);
+        } else if constexpr (Mode == UnaryMode::Exp2) {
+            // exp2: 2^x
+            return std::exp2(x);
         } else if constexpr (Mode == UnaryMode::Log) {
             return std::log(x);
+        } else if constexpr (Mode == UnaryMode::Log2) {
+            // log2: log base 2
+            return std::log2(x);
+        } else if constexpr (Mode == UnaryMode::Log10) {
+            // log10: log base 10
+            return std::log10(x);
+        } else if constexpr (Mode == UnaryMode::Log1p) {
+            // log1p: log(1 + x), numerically stable for values close to zero
+            return std::log1p(x);
         } else if constexpr (Mode == UnaryMode::Reciprocal) {
             return T(1) / x;
         } else if constexpr (Mode == UnaryMode::Sqrt) {
             return std::sqrt(x);
+        } else if constexpr (Mode == UnaryMode::Square) {
+            return x * x;
+        } else if constexpr (Mode == UnaryMode::Rsqrt) {
+            return T(1) / std::sqrt(x);
         } else if constexpr (Mode == UnaryMode::Neg) {
             return -x;
         } else if constexpr (Mode == UnaryMode::Ceil) {
@@ -125,19 +155,55 @@ struct UnaryOp {
             return x > T(0) ? T(1) : (x == T(0) ? T(0) : T(-1));
         } else if constexpr (Mode == UnaryMode::Erf) {
             return std::erf(x);
+        } else if constexpr (Mode == UnaryMode::IsNan) {
+            if constexpr (std::is_floating_point_v<T>) {
+                return std::isnan(x) ? T(1) : T(0);
+            } else {
+                // For integral types, NaN doesn't exist, so always return 0
+                return T(0);
+            }
+        } else if constexpr (Mode == UnaryMode::IsInf) {
+            if constexpr (std::is_floating_point_v<T>) {
+                return std::isinf(x) ? T(1) : T(0);
+            } else {
+                // For integral types, Inf doesn't exist, so always return 0
+                return T(0);
+            }
+        } else if constexpr (Mode == UnaryMode::IsFinite) {
+            if constexpr (std::is_floating_point_v<T>) {
+                return std::isfinite(x) ? T(1) : T(0);
+            } else {
+                // For integral types, all values are finite, so always return 1
+                return T(1);
+            }
+        } else if constexpr (Mode == UnaryMode::Sinc) {
+            // sinc(x) = sin(x) / x, sinc(0) = 1
+            // For small values, use Taylor expansion for numerical stability
+            // sinc(x) ≈ 1 - x²/6 + x⁴/120 - x⁶/5040
+            if constexpr (std::is_floating_point_v<T>) {
+                T abs_x = std::abs(x);
+                if (abs_x < T(1e-2)) {
+                    T x2 = x * x;
+                    return T(1) - x2 * (T(1) / T(6) - x2 * (T(1) / T(120) - x2 * (T(1) / T(5040))));
+                } else {
+                    return std::sin(x) / x;
+                }
+            } else {
+                // For integral types, sinc is not well-defined, return 1 for 0, 0 otherwise
+                return x == T(0) ? T(1) : T(0);
+            }
         } else if constexpr (Mode == UnaryMode::Hardswish) {
             if constexpr (std::is_integral_v<T>) {
                 return static_cast<T>(0);
             } else {
                 // x * clamp(x + 3, 0, 6) / 6
-                auto x_val = static_cast<double>(x);
-                double y = x_val + 3.0;
-                y = std::min(std::max(y, 0.0), 6.0);
-                double out = x_val * (y / 6.0);
-                return static_cast<T>(out);
+                // Use template type T directly instead of double for better performance
+                T y = x + T(3);
+                y = std::min(std::max(y, T(0)), T(6));
+                return x * (y / T(6));
             }
         } else {
-            static_assert(Mode != Mode, "Unsupported unary operation mode");
+            static_assert(always_false<Mode>::value, "Unsupported unary operation mode");
             return x;
         }
     }
@@ -186,6 +252,23 @@ struct UnaryOp {
             } else {
                 return std::exp(x);
             }
+        } else if constexpr (Mode == UnaryMode::Exp2) {
+            // exp2: 2^x
+            if constexpr (std::is_same_v<T, half2>) {
+                float2 x_f2 = __half22float2(x);
+                return __float22half2_rn(make_float2(exp2f(x_f2.x), exp2f(x_f2.y)));
+            } else if constexpr (std::is_same_v<T, half>) {
+                return __float2half(exp2f(__half2float(x)));
+            } else if constexpr (std::is_same_v<T, cuda_bfloat162>) {
+                float2 x_f2 = __bfloat1622float2(x);
+                return __floats2bfloat162_rn(exp2f(x_f2.x), exp2f(x_f2.y));
+            } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
+                return __float2bfloat16_rn(exp2f(__bfloat162float(x)));
+            } else if constexpr (std::is_same_v<T, float>) {
+                return exp2f(x);
+            } else {
+                return std::exp2(x);
+            }
         } else if constexpr (Mode == UnaryMode::Log) {
             if constexpr (std::is_same_v<T, half2>) {
                 return h2log(x);
@@ -201,6 +284,62 @@ struct UnaryOp {
                 return __logf(x);
             } else {
                 return std::log(x);
+            }
+        } else if constexpr (Mode == UnaryMode::Log2) {
+            // log2: log base 2
+            if constexpr (std::is_same_v<T, half2>) {
+                float2 x_f2 = __half22float2(x);
+                return __float22half2_rn(make_float2(log2f(x_f2.x), log2f(x_f2.y)));
+            } else if constexpr (std::is_same_v<T, half>) {
+                return __float2half(log2f(__half2float(x)));
+            } else if constexpr (std::is_same_v<T, cuda_bfloat162>) {
+                float x0 = __bfloat162float(__low2bfloat16(x));
+                float x1 = __bfloat162float(__high2bfloat16(x));
+                return __floats2bfloat162_rn(log2f(x0), log2f(x1));
+            } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
+                return __float2bfloat16_rn(log2f(__bfloat162float(x)));
+            } else if constexpr (std::is_same_v<T, float>) {
+                return log2f(x);
+            } else {
+                return std::log2(x);
+            }
+        } else if constexpr (Mode == UnaryMode::Log10) {
+            // log10: log base 10
+            if constexpr (std::is_same_v<T, half2>) {
+                float2 x_f2 = __half22float2(x);
+                return __float22half2_rn(make_float2(log10f(x_f2.x), log10f(x_f2.y)));
+            } else if constexpr (std::is_same_v<T, half>) {
+                return __float2half(log10f(__half2float(x)));
+            } else if constexpr (std::is_same_v<T, cuda_bfloat162>) {
+                float x0 = __bfloat162float(__low2bfloat16(x));
+                float x1 = __bfloat162float(__high2bfloat16(x));
+                return __floats2bfloat162_rn(log10f(x0), log10f(x1));
+            } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
+                return __float2bfloat16_rn(log10f(__bfloat162float(x)));
+            } else if constexpr (std::is_same_v<T, float>) {
+                return log10f(x);
+            } else {
+                return std::log10(x);
+            }
+        } else if constexpr (Mode == UnaryMode::Log1p) {
+            // log1p: log(1 + x), numerically stable for values close to zero
+            if constexpr (std::is_same_v<T, half2>) {
+                float2 x_f2 = __half22float2(x);
+                return __float22half2_rn(make_float2(log1pf(x_f2.x), log1pf(x_f2.y)));
+            } else if constexpr (std::is_same_v<T, half>) {
+                return __float2half(log1pf(__half2float(x)));
+            } else if constexpr (std::is_same_v<T, cuda_bfloat162>) {
+                float x0 = __bfloat162float(__low2bfloat16(x));
+                float x1 = __bfloat162float(__high2bfloat16(x));
+                return __floats2bfloat162_rn(log1pf(x0), log1pf(x1));
+            } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
+                return __float2bfloat16_rn(log1pf(__bfloat162float(x)));
+            } else if constexpr (std::is_same_v<T, float>) {
+                return log1pf(x);
+            } else if constexpr (std::is_same_v<T, double>) {
+                return log1p(x);
+            } else {
+                return std::log1p(x);
             }
         } else if constexpr (Mode == UnaryMode::Reciprocal) {
             if constexpr (std::is_same_v<T, half2>) {
@@ -233,6 +372,25 @@ struct UnaryOp {
                 return __fsqrt_rn(x);
             } else {
                 return std::sqrt(x);
+            }
+        } else if constexpr (Mode == UnaryMode::Square) {
+            return x * x;
+        } else if constexpr (Mode == UnaryMode::Rsqrt) {
+            if constexpr (std::is_same_v<T, half2>) {
+                float2 x_f2 = __half22float2(x);
+                return __float22half2_rn(make_float2(__frsqrt_rn(x_f2.x), __frsqrt_rn(x_f2.y)));
+            } else if constexpr (std::is_same_v<T, half>) {
+                return __float2half(__frsqrt_rn(__half2float(x)));
+            } else if constexpr (std::is_same_v<T, cuda_bfloat162>) {
+                float x0 = __bfloat162float(__low2bfloat16(x));
+                float x1 = __bfloat162float(__high2bfloat16(x));
+                return __floats2bfloat162_rn(__frsqrt_rn(x0), __frsqrt_rn(x1));
+            } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
+                return __float2bfloat16_rn(__frsqrt_rn(__bfloat162float(x)));
+            } else if constexpr (std::is_same_v<T, float>) {
+                return __frsqrt_rn(x);
+            } else {
+                return T(1) / std::sqrt(x);
             }
         } else if constexpr (Mode == UnaryMode::Neg) {
             if constexpr (std::is_same_v<T, half2>) {
@@ -409,6 +567,8 @@ struct UnaryOp {
                 return __float2bfloat16_rn(tanhf(__bfloat162float(x)));
             } else if constexpr (std::is_same_v<T, float>) {
                 return tanhf(x);
+            } else if constexpr (std::is_same_v<T, double>) {
+                return ::tanh(x);
             } else {
                 return std::tanh(x);
             }
@@ -474,8 +634,17 @@ struct UnaryOp {
             } else if constexpr (std::is_same_v<T, half>) {
                 float x_ = __half2float(x);
                 return __float2half(1.0f / (1.0f + __expf(-x_)));
+            } else if constexpr (std::is_same_v<T, cuda_bfloat162>) {
+                float2 x_f2 = __bfloat1622float2(x);
+                float2 exp_neg_x = make_float2(__expf(-x_f2.x), __expf(-x_f2.y));
+                return __floats2bfloat162_rn(1.0f / (1.0f + exp_neg_x.x), 1.0f / (1.0f + exp_neg_x.y));
+            } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
+                float x_ = __bfloat162float(x);
+                return __float2bfloat16_rn(1.0f / (1.0f + __expf(-x_)));
             } else if constexpr (std::is_same_v<T, float>) {
                 return 1.0f / (1.0f + __expf(-x));
+            } else if constexpr (std::is_same_v<T, double>) {
+                return 1.0 / (1.0 + exp(-x));
             } else {
                 return T(1) / (T(1) + std::exp(-x));
             }
@@ -498,6 +667,177 @@ struct UnaryOp {
                 return erff(x);
             } else {
                 return std::erf(x);
+            }
+        } else if constexpr (Mode == UnaryMode::IsNan) {
+            if constexpr (std::is_same_v<T, half2>) {
+                float2 x_f2 = __half22float2(x);
+                return __float22half2_rn(make_float2(
+                    __isnanf(x_f2.x) ? 1.0f : 0.0f,
+                    __isnanf(x_f2.y) ? 1.0f : 0.0f));
+            } else if constexpr (std::is_same_v<T, half>) {
+                float x_ = __half2float(x);
+                return __float2half(__isnanf(x_) ? 1.0f : 0.0f);
+            } else if constexpr (std::is_same_v<T, cuda_bfloat162>) {
+                float x0 = __bfloat162float(__low2bfloat16(x));
+                float x1 = __bfloat162float(__high2bfloat16(x));
+                return __floats2bfloat162_rn(
+                    __isnanf(x0) ? 1.0f : 0.0f,
+                    __isnanf(x1) ? 1.0f : 0.0f);
+            } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
+                float x_ = __bfloat162float(x);
+                return __float2bfloat16_rn(__isnanf(x_) ? 1.0f : 0.0f);
+            } else if constexpr (std::is_same_v<T, float>) {
+                return __isnanf(x) ? 1.0f : 0.0f;
+            } else if constexpr (std::is_same_v<T, double>) {
+                return __isnan(x) ? 1.0 : 0.0;
+            } else if constexpr (std::is_floating_point_v<T>) {
+                return std::isnan(x) ? T(1) : T(0);
+            } else {
+                // For integral types, NaN doesn't exist, so always return 0
+                return T(0);
+            }
+        } else if constexpr (Mode == UnaryMode::IsInf) {
+            if constexpr (std::is_same_v<T, half2>) {
+                float2 x_f2 = __half22float2(x);
+                return __float22half2_rn(make_float2(
+                    __isinff(x_f2.x) ? 1.0f : 0.0f,
+                    __isinff(x_f2.y) ? 1.0f : 0.0f));
+            } else if constexpr (std::is_same_v<T, half>) {
+                float x_ = __half2float(x);
+                return __float2half(__isinff(x_) ? 1.0f : 0.0f);
+            } else if constexpr (std::is_same_v<T, cuda_bfloat162>) {
+                float x0 = __bfloat162float(__low2bfloat16(x));
+                float x1 = __bfloat162float(__high2bfloat16(x));
+                return __floats2bfloat162_rn(
+                    __isinff(x0) ? 1.0f : 0.0f,
+                    __isinff(x1) ? 1.0f : 0.0f);
+            } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
+                float x_ = __bfloat162float(x);
+                return __float2bfloat16_rn(__isinff(x_) ? 1.0f : 0.0f);
+            } else if constexpr (std::is_same_v<T, float>) {
+                return __isinff(x) ? 1.0f : 0.0f;
+            } else if constexpr (std::is_same_v<T, double>) {
+                return __isinf(x) ? 1.0 : 0.0;
+            } else if constexpr (std::is_floating_point_v<T>) {
+                return std::isinf(x) ? T(1) : T(0);
+            } else {
+                // For integral types, Inf doesn't exist, so always return 0
+                return T(0);
+            }
+        } else if constexpr (Mode == UnaryMode::IsFinite) {
+            // isfinite(x) = !isnan(x) && !isinf(x)
+            if constexpr (std::is_same_v<T, half2>) {
+                float2 x_f2 = __half22float2(x);
+                auto isfinite_f32 = [](float val) -> float {
+                    return (!__isnanf(val) && !__isinff(val)) ? 1.0f : 0.0f;
+                };
+                return __float22half2_rn(make_float2(
+                    isfinite_f32(x_f2.x),
+                    isfinite_f32(x_f2.y)));
+            } else if constexpr (std::is_same_v<T, half>) {
+                float x_ = __half2float(x);
+                return __float2half((!__isnanf(x_) && !__isinff(x_)) ? 1.0f : 0.0f);
+            } else if constexpr (std::is_same_v<T, cuda_bfloat162>) {
+                float x0 = __bfloat162float(__low2bfloat16(x));
+                float x1 = __bfloat162float(__high2bfloat16(x));
+                auto isfinite_f32 = [](float val) -> float {
+                    return (!__isnanf(val) && !__isinff(val)) ? 1.0f : 0.0f;
+                };
+                return __floats2bfloat162_rn(
+                    isfinite_f32(x0),
+                    isfinite_f32(x1));
+            } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
+                float x_ = __bfloat162float(x);
+                return __float2bfloat16_rn((!__isnanf(x_) && !__isinff(x_)) ? 1.0f : 0.0f);
+            } else if constexpr (std::is_same_v<T, float>) {
+                return (!__isnanf(x) && !__isinff(x)) ? 1.0f : 0.0f;
+            } else if constexpr (std::is_same_v<T, double>) {
+                return (!__isnan(x) && !__isinf(x)) ? 1.0 : 0.0;
+            } else if constexpr (std::is_floating_point_v<T>) {
+                return std::isfinite(x) ? T(1) : T(0);
+            } else {
+                // For integral types, all values are finite, so always return 1
+                return T(1);
+            }
+        } else if constexpr (Mode == UnaryMode::Sinc) {
+            // sinc(x) = sin(x) / x, sinc(0) = 1
+            // For small values, use Taylor expansion for numerical stability
+            // sinc(x) ≈ 1 - x²/6 + x⁴/120 - x⁶/5040
+            if constexpr (std::is_same_v<T, half2>) {
+                float2 x_f2 = __half22float2(x);
+                auto sinc_f32 = [](float val) -> float {
+                    float abs_val = fabsf(val);
+                    if (abs_val < 1e-2f) {
+                        // Use Taylor expansion for small values: 1 - x²/6 + x⁴/120 - x⁶/5040
+                        float x2 = val * val;
+                        return 1.0f - x2 * (1.0f / 6.0f - x2 * (1.0f / 120.0f - x2 * (1.0f / 5040.0f)));
+                    } else {
+                        return __sinf(val) / val;
+                    }
+                };
+                return __float22half2_rn(make_float2(
+                    sinc_f32(x_f2.x),
+                    sinc_f32(x_f2.y)));
+            } else if constexpr (std::is_same_v<T, half>) {
+                float x_ = __half2float(x);
+                float abs_x = fabsf(x_);
+                if (abs_x < 1e-2f) {
+                    float x2 = x_ * x_;
+                    return __float2half(1.0f - x2 * (1.0f / 6.0f - x2 * (1.0f / 120.0f - x2 * (1.0f / 5040.0f))));
+                } else {
+                    return __float2half(__sinf(x_) / x_);
+                }
+            } else if constexpr (std::is_same_v<T, cuda_bfloat162>) {
+                float x0 = __bfloat162float(__low2bfloat16(x));
+                float x1 = __bfloat162float(__high2bfloat16(x));
+                auto sinc_f32 = [](float val) -> float {
+                    float abs_val = fabsf(val);
+                    if (abs_val < 1e-2f) {
+                        float x2 = val * val;
+                        return 1.0f - x2 * (1.0f / 6.0f - x2 * (1.0f / 120.0f - x2 * (1.0f / 5040.0f)));
+                    } else {
+                        return sinf(val) / val;
+                    }
+                };
+                return __floats2bfloat162_rn(
+                    sinc_f32(x0),
+                    sinc_f32(x1));
+            } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
+                float x_ = __bfloat162float(x);
+                float abs_x = fabsf(x_);
+                if (abs_x < 1e-2f) {
+                    float x2 = x_ * x_;
+                    return __float2bfloat16_rn(1.0f - x2 * (1.0f / 6.0f - x2 * (1.0f / 120.0f - x2 * (1.0f / 5040.0f))));
+                } else {
+                    return __float2bfloat16_rn(sinf(x_) / x_);
+                }
+            } else if constexpr (std::is_same_v<T, float>) {
+                float abs_x = fabsf(x);
+                if (abs_x < 1e-2f) {
+                    float x2 = x * x;
+                    return 1.0f - x2 * (1.0f / 6.0f - x2 * (1.0f / 120.0f - x2 * (1.0f / 5040.0f)));
+                } else {
+                    return __sinf(x) / x;
+                }
+            } else if constexpr (std::is_same_v<T, double>) {
+                double abs_x = std::fabs(x);
+                if (abs_x < 1e-6) {
+                    double x2 = x * x;
+                    return 1.0 - x2 * (1.0 / 6.0 - x2 * (1.0 / 120.0 - x2 * (1.0 / 5040.0)));
+                } else {
+                    return std::sin(x) / x;
+                }
+            } else if constexpr (std::is_floating_point_v<T>) {
+                T abs_x = std::abs(x);
+                if (abs_x < T(1e-2)) {
+                    T x2 = x * x;
+                    return T(1) - x2 * (T(1) / T(6) - x2 * (T(1) / T(120) - x2 * (T(1) / T(5040))));
+                } else {
+                    return std::sin(x) / x;
+                }
+            } else {
+                // For integral types, sinc is not well-defined, return 1 for 0, 0 otherwise
+                return x == T(0) ? T(1) : T(0);
             }
         } else if constexpr (Mode == UnaryMode::Hardswish) {
             // Hardswish: f(x) = x * clamp(x + 3, 0, 6) / 6
@@ -535,7 +875,7 @@ struct UnaryOp {
                 return static_cast<T>(yd);
             }
         } else {
-            static_assert(Mode != Mode, "Unsupported unary operation mode");
+            static_assert(always_false<Mode>::value, "Unsupported unary operation mode");
             return x;
         }
     }

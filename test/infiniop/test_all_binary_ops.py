@@ -50,6 +50,31 @@ class DivTest(BinaryTestBase):
     EQUAL_NAN = True
 
 
+class FloorDivideTest(BinaryTestBase):
+    OP_NAME = "FloorDivide"
+    OP_NAME_LOWER = "floor_divide"
+    
+    @staticmethod
+    def torch_op(c, a, b):
+        torch.floor_divide(a, b, out=c)
+    
+    @staticmethod
+    def generate_input_a(shape, a_stride, dtype, device):
+        return TestTensor(shape, a_stride, dtype, device)
+    
+    @staticmethod
+    def generate_input_b(shape, b_stride, dtype, device):
+        # For division, ensure b doesn't contain zeros
+        return TestTensor(shape, b_stride, dtype, device, scale=2, bias=0.1)
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+        InfiniDtype.F32: {"atol": 1e-6, "rtol": 1e-6},
+    }
+    
+    EQUAL_NAN = True
+
+
 class PowTest(BinaryTestBase):
     OP_NAME = "Pow"
     OP_NAME_LOWER = "pow"
@@ -75,9 +100,109 @@ class PowTest(BinaryTestBase):
     EQUAL_NAN = True
 
 
+class CopySignTest(BinaryTestBase):
+    OP_NAME = "CopySign"
+    OP_NAME_LOWER = "copysign"
+    
+    @staticmethod
+    def torch_op(c, a, b):
+        torch.copysign(a, b, out=c)
+    
+    @staticmethod
+    def generate_input_a(shape, a_stride, dtype, device):
+        # Generate values with various magnitudes
+        return TestTensor(shape, a_stride, dtype, device, mode="random", scale=10.0, bias=-5.0)
+    
+    @staticmethod
+    def generate_input_b(shape, b_stride, dtype, device):
+        # Generate values with various signs
+        return TestTensor(shape, b_stride, dtype, device, mode="random", scale=10.0, bias=-5.0)
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+        InfiniDtype.F32: {"atol": 1e-7, "rtol": 1e-7},
+    }
+    
+    EQUAL_NAN = True
+
+
+class HypotTest(BinaryTestBase):
+    OP_NAME = "Hypot"
+    OP_NAME_LOWER = "hypot"
+    
+    @staticmethod
+    def torch_op(c, a, b):
+        torch.hypot(a, b, out=c)
+    
+    @staticmethod
+    def generate_input_a(shape, a_stride, dtype, device):
+        return TestTensor(shape, a_stride, dtype, device, mode="random", scale=10.0, bias=-5.0)
+    
+    @staticmethod
+    def generate_input_b(shape, b_stride, dtype, device):
+        return TestTensor(shape, b_stride, dtype, device, mode="random", scale=10.0, bias=-5.0)
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+        InfiniDtype.F32: {"atol": 1e-6, "rtol": 1e-6},
+    }
+    
+    EQUAL_NAN = True
+
+
+class Atan2Test(BinaryTestBase):
+    OP_NAME = "Atan2"
+    OP_NAME_LOWER = "atan2"
+    
+    @staticmethod
+    def torch_op(c, a, b):
+        torch.atan2(a, b, out=c)
+    
+    @staticmethod
+    def generate_input_a(shape, a_stride, dtype, device):
+        return TestTensor(shape, a_stride, dtype, device)
+    
+    @staticmethod
+    def generate_input_b(shape, b_stride, dtype, device):
+        # For atan2, avoid zeros in denominator (b)
+        return TestTensor(shape, b_stride, dtype, device, scale=2, bias=0.1)
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+        InfiniDtype.F32: {"atol": 1e-6, "rtol": 1e-6},
+    }
+    
+    EQUAL_NAN = True
+
+
 class ModTest(BinaryTestBase):
     OP_NAME = "Mod"
     OP_NAME_LOWER = "mod"
+    
+    @staticmethod
+    def torch_op(c, a, b):
+        torch.remainder(a, b, out=c)
+    
+    @staticmethod
+    def generate_input_a(shape, a_stride, dtype, device):
+        return TestTensor(shape, a_stride, dtype, device)
+    
+    @staticmethod
+    def generate_input_b(shape, b_stride, dtype, device):
+        # Avoid zeros
+        return TestTensor(shape, b_stride, dtype, device, scale=2, bias=0.1)
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+        InfiniDtype.F32: {"atol": 1e-6, "rtol": 1e-6},
+    }
+    
+    EQUAL_NAN = True
+
+
+class RemainderTest(BinaryTestBase):
+    OP_NAME = "Remainder"
+    OP_NAME_LOWER = "remainder"
     
     @staticmethod
     def torch_op(c, a, b):
@@ -148,6 +273,466 @@ class MinTest(BinaryTestBase):
     EQUAL_NAN = True
 
 
+class FmaxTest(BinaryTestBase):
+    OP_NAME = "Fmax"
+    OP_NAME_LOWER = "fmax"
+    
+    @staticmethod
+    def torch_op(c, a, b):
+        # torch.fmax ignores NaN: if one is NaN, return the other
+        result = torch.fmax(a, b)
+        c.copy_(result)
+    
+    @staticmethod
+    def generate_input_a(shape, a_stride, dtype, device):
+        return TestTensor(shape, a_stride, dtype, device)
+    
+    @staticmethod
+    def generate_input_b(shape, b_stride, dtype, device):
+        return TestTensor(shape, b_stride, dtype, device)
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+        InfiniDtype.F32: {"atol": 1e-6, "rtol": 1e-6},
+    }
+    
+    EQUAL_NAN = True
+
+
+class FminTest(BinaryTestBase):
+    OP_NAME = "Fmin"
+    OP_NAME_LOWER = "fmin"
+    
+    @staticmethod
+    def torch_op(c, a, b):
+        # torch.fmin ignores NaN: if one is NaN, return the other
+        result = torch.fmin(a, b)
+        c.copy_(result)
+    
+    @staticmethod
+    def generate_input_a(shape, a_stride, dtype, device):
+        return TestTensor(shape, a_stride, dtype, device)
+    
+    @staticmethod
+    def generate_input_b(shape, b_stride, dtype, device):
+        return TestTensor(shape, b_stride, dtype, device)
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+        InfiniDtype.F32: {"atol": 1e-6, "rtol": 1e-6},
+    }
+    
+    EQUAL_NAN = True
+
+
+class GtTest(BinaryTestBase):
+    OP_NAME = "Gt"
+    OP_NAME_LOWER = "gt"
+    
+    @staticmethod
+    def torch_op(c, a, b):
+        # torch.gt returns bool, convert to float (1.0 or 0.0) to match our implementation
+        result = torch.gt(a, b)
+        c.copy_(result.float())
+    
+    @staticmethod
+    def generate_input_a(shape, a_stride, dtype, device):
+        return TestTensor(shape, a_stride, dtype, device)
+    
+    @staticmethod
+    def generate_input_b(shape, b_stride, dtype, device):
+        return TestTensor(shape, b_stride, dtype, device)
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+        InfiniDtype.F32: {"atol": 1e-6, "rtol": 1e-6},
+    }
+    
+    EQUAL_NAN = True
+
+
+class LtTest(BinaryTestBase):
+    OP_NAME = "Lt"
+    OP_NAME_LOWER = "lt"
+    
+    @staticmethod
+    def torch_op(c, a, b):
+        # torch.lt returns bool, convert to float (1.0 or 0.0) to match our implementation
+        result = torch.lt(a, b)
+        c.copy_(result.float())
+    
+    @staticmethod
+    def generate_input_a(shape, a_stride, dtype, device):
+        return TestTensor(shape, a_stride, dtype, device)
+    
+    @staticmethod
+    def generate_input_b(shape, b_stride, dtype, device):
+        return TestTensor(shape, b_stride, dtype, device)
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+        InfiniDtype.F32: {"atol": 1e-6, "rtol": 1e-6},
+    }
+    
+    EQUAL_NAN = True
+
+
+class GeTest(BinaryTestBase):
+    OP_NAME = "Ge"
+    OP_NAME_LOWER = "ge"
+    
+    @staticmethod
+    def torch_op(c, a, b):
+        # torch.ge returns bool, convert to float (1.0 or 0.0) to match our implementation
+        result = torch.ge(a, b)
+        c.copy_(result.float())
+    
+    @staticmethod
+    def generate_input_a(shape, a_stride, dtype, device):
+        return TestTensor(shape, a_stride, dtype, device)
+    
+    @staticmethod
+    def generate_input_b(shape, b_stride, dtype, device):
+        return TestTensor(shape, b_stride, dtype, device)
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+        InfiniDtype.F32: {"atol": 1e-6, "rtol": 1e-6},
+    }
+    
+    EQUAL_NAN = True
+
+
+class LeTest(BinaryTestBase):
+    OP_NAME = "Le"
+    OP_NAME_LOWER = "le"
+    
+    @staticmethod
+    def torch_op(c, a, b):
+        # torch.le returns bool, convert to float (1.0 or 0.0) to match our implementation
+        result = torch.le(a, b)
+        c.copy_(result.float())
+    
+    @staticmethod
+    def generate_input_a(shape, a_stride, dtype, device):
+        return TestTensor(shape, a_stride, dtype, device)
+    
+    @staticmethod
+    def generate_input_b(shape, b_stride, dtype, device):
+        return TestTensor(shape, b_stride, dtype, device)
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+        InfiniDtype.F32: {"atol": 1e-6, "rtol": 1e-6},
+    }
+    
+    EQUAL_NAN = True
+
+
+class EqTest(BinaryTestBase):
+    OP_NAME = "Eq"
+    OP_NAME_LOWER = "eq"
+    
+    @staticmethod
+    def torch_op(c, a, b):
+        # torch.eq returns bool, convert to float (1.0 or 0.0) to match our implementation
+        result = torch.eq(a, b)
+        c.copy_(result.float())
+    
+    @staticmethod
+    def generate_input_a(shape, a_stride, dtype, device):
+        return TestTensor(shape, a_stride, dtype, device)
+    
+    @staticmethod
+    def generate_input_b(shape, b_stride, dtype, device):
+        return TestTensor(shape, b_stride, dtype, device)
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+        InfiniDtype.F32: {"atol": 1e-6, "rtol": 1e-6},
+    }
+    
+    EQUAL_NAN = True
+
+
+class NeTest(BinaryTestBase):
+    OP_NAME = "Ne"
+    OP_NAME_LOWER = "ne"
+    
+    @staticmethod
+    def torch_op(c, a, b):
+        # torch.ne returns bool, convert to float (1.0 or 0.0) to match our implementation
+        result = torch.ne(a, b)
+        c.copy_(result.float())
+    
+    @staticmethod
+    def generate_input_a(shape, a_stride, dtype, device):
+        return TestTensor(shape, a_stride, dtype, device)
+    
+    @staticmethod
+    def generate_input_b(shape, b_stride, dtype, device):
+        return TestTensor(shape, b_stride, dtype, device)
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+        InfiniDtype.F32: {"atol": 1e-6, "rtol": 1e-6},
+    }
+    
+    EQUAL_NAN = True
+
+
+class LogicalAndTest(BinaryTestBase):
+    OP_NAME = "LogicalAnd"
+    OP_NAME_LOWER = "logical_and"
+    
+    @staticmethod
+    def torch_op(c, a, b):
+        # torch.logical_and returns bool, convert to float (1.0 or 0.0) to match our implementation
+        result = torch.logical_and(a, b)
+        c.copy_(result.float())
+    
+    @staticmethod
+    def generate_input_a(shape, a_stride, dtype, device):
+        return TestTensor(shape, a_stride, dtype, device)
+    
+    @staticmethod
+    def generate_input_b(shape, b_stride, dtype, device):
+        return TestTensor(shape, b_stride, dtype, device)
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+        InfiniDtype.F32: {"atol": 1e-6, "rtol": 1e-6},
+    }
+    
+    EQUAL_NAN = True
+
+
+class LogicalOrTest(BinaryTestBase):
+    OP_NAME = "LogicalOr"
+    OP_NAME_LOWER = "logical_or"
+    
+    @staticmethod
+    def torch_op(c, a, b):
+        # torch.logical_or returns bool, convert to float (1.0 or 0.0) to match our implementation
+        result = torch.logical_or(a, b)
+        c.copy_(result.float())
+    
+    @staticmethod
+    def generate_input_a(shape, a_stride, dtype, device):
+        return TestTensor(shape, a_stride, dtype, device)
+    
+    @staticmethod
+    def generate_input_b(shape, b_stride, dtype, device):
+        return TestTensor(shape, b_stride, dtype, device)
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+        InfiniDtype.F32: {"atol": 1e-6, "rtol": 1e-6},
+    }
+    
+    EQUAL_NAN = True
+
+
+class LogicalXorTest(BinaryTestBase):
+    OP_NAME = "LogicalXor"
+    OP_NAME_LOWER = "logical_xor"
+    
+    @staticmethod
+    def torch_op(c, a, b):
+        # torch.logical_xor returns bool, convert to float (1.0 or 0.0) to match our implementation
+        result = torch.logical_xor(a, b)
+        c.copy_(result.float())
+    
+    @staticmethod
+    def generate_input_a(shape, a_stride, dtype, device):
+        return TestTensor(shape, a_stride, dtype, device)
+    
+    @staticmethod
+    def generate_input_b(shape, b_stride, dtype, device):
+        return TestTensor(shape, b_stride, dtype, device)
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+        InfiniDtype.F32: {"atol": 1e-6, "rtol": 1e-6},
+    }
+    
+    EQUAL_NAN = True
+
+
+class BitwiseAndTest(BinaryTestBase):
+    OP_NAME = "BitwiseAnd"
+    OP_NAME_LOWER = "bitwise_and"
+    
+    @staticmethod
+    def torch_op(c, a, b):
+        # torch.bitwise_and only supports integral types
+        result = torch.bitwise_and(a, b)
+        c.copy_(result)
+    
+    @staticmethod
+    def generate_input_a(shape, a_stride, dtype, device):
+        # Use default TestTensor (utils.py now handles correct ranges for integral types)
+        return TestTensor(shape, a_stride, dtype, device)
+    
+    @staticmethod
+    def generate_input_b(shape, b_stride, dtype, device):
+        # Use default TestTensor (utils.py now handles correct ranges for integral types)
+        return TestTensor(shape, b_stride, dtype, device)
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.I32: {"atol": 0, "rtol": 0},
+        InfiniDtype.I64: {"atol": 0, "rtol": 0},
+        InfiniDtype.U8: {"atol": 0, "rtol": 0},
+    }
+    
+    # Bitwise operations only support integral types
+    TENSOR_DTYPES = [InfiniDtype.I32, InfiniDtype.I64, InfiniDtype.U8]
+    
+    EQUAL_NAN = True
+
+
+class BitwiseOrTest(BinaryTestBase):
+    OP_NAME = "BitwiseOr"
+    OP_NAME_LOWER = "bitwise_or"
+    
+    @staticmethod
+    def torch_op(c, a, b):
+        # torch.bitwise_or only supports integral types
+        result = torch.bitwise_or(a, b)
+        c.copy_(result)
+    
+    @staticmethod
+    def generate_input_a(shape, a_stride, dtype, device):
+        # Use default TestTensor (utils.py now handles correct ranges for integral types)
+        return TestTensor(shape, a_stride, dtype, device)
+    
+    @staticmethod
+    def generate_input_b(shape, b_stride, dtype, device):
+        # Use default TestTensor (utils.py now handles correct ranges for integral types)
+        return TestTensor(shape, b_stride, dtype, device)
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.I32: {"atol": 0, "rtol": 0},
+        InfiniDtype.I64: {"atol": 0, "rtol": 0},
+        InfiniDtype.U8: {"atol": 0, "rtol": 0},
+    }
+    
+    # Bitwise operations only support integral types
+    TENSOR_DTYPES = [InfiniDtype.I32, InfiniDtype.I64, InfiniDtype.U8]
+    
+    EQUAL_NAN = True
+
+
+class BitwiseXorTest(BinaryTestBase):
+    OP_NAME = "BitwiseXor"
+    OP_NAME_LOWER = "bitwise_xor"
+    
+    @staticmethod
+    def torch_op(c, a, b):
+        # torch.bitwise_xor only supports integral types
+        result = torch.bitwise_xor(a, b)
+        c.copy_(result)
+    
+    @staticmethod
+    def generate_input_a(shape, a_stride, dtype, device):
+        # Use default TestTensor (utils.py now handles correct ranges for integral types)
+        return TestTensor(shape, a_stride, dtype, device)
+    
+    @staticmethod
+    def generate_input_b(shape, b_stride, dtype, device):
+        # Use default TestTensor (utils.py now handles correct ranges for integral types)
+        return TestTensor(shape, b_stride, dtype, device)
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.I32: {"atol": 0, "rtol": 0},
+        InfiniDtype.I64: {"atol": 0, "rtol": 0},
+        InfiniDtype.U8: {"atol": 0, "rtol": 0},
+    }
+    
+    # Bitwise operations only support integral types
+    TENSOR_DTYPES = [InfiniDtype.I32, InfiniDtype.I64, InfiniDtype.U8]
+    
+    EQUAL_NAN = True
+
+
+class BitwiseLeftShiftTest(BinaryTestBase):
+    OP_NAME = "BitwiseLeftShift"
+    OP_NAME_LOWER = "bitwise_left_shift"
+    
+    @staticmethod
+    def torch_op(c, a, b):
+        # torch.bitwise_left_shift only supports integral types
+        result = torch.bitwise_left_shift(a, b)
+        c.copy_(result)
+    
+    @staticmethod
+    def generate_input_a(shape, a_stride, dtype, device):
+        # Use default TestTensor (utils.py now handles correct ranges for integral types)
+        return TestTensor(shape, a_stride, dtype, device)
+    
+    @staticmethod
+    def generate_input_b(shape, b_stride, dtype, device):
+        # For shift operations, b should be non-negative and within reasonable range
+        # Generate shift amounts between 0 and bit_width-1 for each type
+        if dtype == InfiniDtype.U8:
+            return TestTensor(shape, b_stride, dtype, device, randint_low=0, randint_high=8)
+        elif dtype == InfiniDtype.I32:
+            return TestTensor(shape, b_stride, dtype, device, randint_low=0, randint_high=32)
+        elif dtype == InfiniDtype.I64:
+            return TestTensor(shape, b_stride, dtype, device, randint_low=0, randint_high=64)
+        return TestTensor(shape, b_stride, dtype, device)
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.I32: {"atol": 0, "rtol": 0},
+        InfiniDtype.I64: {"atol": 0, "rtol": 0},
+        InfiniDtype.U8: {"atol": 0, "rtol": 0},
+    }
+    
+    # Bitwise operations only support integral types
+    TENSOR_DTYPES = [InfiniDtype.I32, InfiniDtype.I64, InfiniDtype.U8]
+    
+    EQUAL_NAN = True
+
+
+class BitwiseRightShiftTest(BinaryTestBase):
+    OP_NAME = "BitwiseRightShift"
+    OP_NAME_LOWER = "bitwise_right_shift"
+    
+    @staticmethod
+    def torch_op(c, a, b):
+        # torch.bitwise_right_shift only supports integral types
+        result = torch.bitwise_right_shift(a, b)
+        c.copy_(result)
+    
+    @staticmethod
+    def generate_input_a(shape, a_stride, dtype, device):
+        # Use default TestTensor (utils.py now handles correct ranges for integral types)
+        return TestTensor(shape, a_stride, dtype, device)
+    
+    @staticmethod
+    def generate_input_b(shape, b_stride, dtype, device):
+        # For shift operations, b should be non-negative and within reasonable range
+        # Generate shift amounts between 0 and bit_width-1 for each type
+        if dtype == InfiniDtype.U8:
+            return TestTensor(shape, b_stride, dtype, device, randint_low=0, randint_high=8)
+        elif dtype == InfiniDtype.I32:
+            return TestTensor(shape, b_stride, dtype, device, randint_low=0, randint_high=32)
+        elif dtype == InfiniDtype.I64:
+            return TestTensor(shape, b_stride, dtype, device, randint_low=0, randint_high=64)
+        return TestTensor(shape, b_stride, dtype, device)
+    
+    TOLERANCE_MAP = {
+        InfiniDtype.I32: {"atol": 0, "rtol": 0},
+        InfiniDtype.I64: {"atol": 0, "rtol": 0},
+        InfiniDtype.U8: {"atol": 0, "rtol": 0},
+    }
+    
+    # Bitwise operations only support integral types
+    TENSOR_DTYPES = [InfiniDtype.I32, InfiniDtype.I64, InfiniDtype.U8]
+    
+    EQUAL_NAN = True
+
+
 # ==============================================================================
 # 算子注册表
 # ==============================================================================
@@ -155,10 +740,31 @@ class MinTest(BinaryTestBase):
 # 所有 binary 算子的测试类映射
 BINARY_OP_TESTS = {
     "div": DivTest,
+    "floor_divide": FloorDivideTest,
     "pow": PowTest,
+    "copysign": CopySignTest,
+    "hypot": HypotTest,
+    "atan2": Atan2Test,
     "mod": ModTest,
+    "remainder": RemainderTest,
     "max": MaxTest,
     "min": MinTest,
+    "fmax": FmaxTest,
+    "fmin": FminTest,
+    "gt": GtTest,
+    "lt": LtTest,
+    "ge": GeTest,
+    "le": LeTest,
+    "eq": EqTest,
+    "ne": NeTest,
+    "logical_and": LogicalAndTest,
+    "logical_or": LogicalOrTest,
+    "logical_xor": LogicalXorTest,
+    "bitwise_and": BitwiseAndTest,
+    "bitwise_or": BitwiseOrTest,
+    "bitwise_xor": BitwiseXorTest,
+    "bitwise_left_shift": BitwiseLeftShiftTest,
+    "bitwise_right_shift": BitwiseRightShiftTest,
 }
 
 
