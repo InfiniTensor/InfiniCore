@@ -1144,3 +1144,42 @@ def paged_attention_prefill_(lib):
     lib.infiniopDestroyPagedAttentionPrefillDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
+
+@OpRegister.operator
+def silu_and_mul(lib):
+    # 1. 注册创建描述符的接口
+    # 参数: handle, desc_ptr, output_desc, input_desc
+    lib.infiniopCreateSiluAndMulDescriptor.restype = c_int32
+    lib.infiniopCreateSiluAndMulDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    # 2. 注册获取 Workspace 大小的接口
+    # 参数: desc, size_ptr
+    lib.infiniopGetSiluAndMulWorkspaceSize.restype = c_int32
+    lib.infiniopGetSiluAndMulWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    # 3. 注册执行计算的接口
+    # 参数: desc, workspace, workspace_size, output_ptr, input_ptr, stream
+    lib.infiniopSiluAndMul.restype = c_int32
+    lib.infiniopSiluAndMul.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    # 4. 注册销毁描述符的接口
+    # 参数: desc
+    lib.infiniopDestroySiluAndMulDescriptor.restype = c_int32
+    lib.infiniopDestroySiluAndMulDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
