@@ -1,6 +1,6 @@
 import ninetoothed
-from ntops.kernels import scaled_dot_product_attention
-from ntops.kernels.scaled_dot_product_attention import CausalVariant
+from . import flash_attention
+from .flash_attention import CausalVariant
 
 import infiniop.ninetoothed.build
 
@@ -27,7 +27,7 @@ def build():
     }
 
     infiniop.ninetoothed.build.build(
-        scaled_dot_product_attention.premake,
+        flash_attention.premake,
         constexpr_param_grid,
         caller="cuda",
         op_name="flash_attention",
