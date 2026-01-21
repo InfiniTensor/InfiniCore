@@ -135,12 +135,7 @@ class TestCase:
                     kwargs_strs.append(f"{key}={self.inputs[value].name}")
                 elif isinstance(value, (list, tuple)):
                     # Handle tuple/list of TensorSpecs or other values
-                    item_strs = []
-                    for item in value:
-                        if isinstance(item, TensorSpec):
-                            item_strs.append(str(item))
-                        else:
-                            item_strs.append(str(item))
+                    item_strs = [str(item) for item in value]
                     kwargs_strs.append(f"{key}=({', '.join(item_strs)})")
                 else:
                     kwargs_strs.append(f"{key}={value}")

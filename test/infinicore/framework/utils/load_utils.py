@@ -47,14 +47,14 @@ def _dict_to_spec(spec_dict):
     # Collect optional fields
     kwargs = {k: spec_dict[k] for k in ('name', 'file_path') if k in spec_dict}
 
-    # Determine init_mode: explicit spec > file_path inference > default RANDOM
-    init_mode = spec_dict.get('init_mode')
-    if isinstance(init_mode, str):
-        init_mode = TensorInitializer.FROM_FILE if init_mode.upper() == 'FROM_FILE' else TensorInitializer.RANDOM
-    elif init_mode is None and 'file_path' in spec_dict:
+    # Determine init_mode: file_path always uses FROM_FILE, otherwise use specified mode or default RANDOM
+    if 'file_path' in spec_dict:
         init_mode = TensorInitializer.FROM_FILE
     else:
-        init_mode = init_mode or TensorInitializer.RANDOM
+        init_mode = spec_dict.get('init_mode', TensorInitializer.RANDOM)
+        if isinstance(init_mode, str):
+            # Map string to enum, default to RANDOM if unknown
+            init_mode = getattr(TensorInitializer, init_mode.upper(), TensorInitializer.RANDOM)
 
     return TensorSpec(
         shape=tuple(spec_dict['shape']),
