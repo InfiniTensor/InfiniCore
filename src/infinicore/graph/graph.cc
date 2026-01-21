@@ -80,6 +80,12 @@ void Graph::instantiate() {
     // Reset device graph
     device_graph_ = std::make_unique<DeviceGraph>();
 
+    // warmup
+    for (size_t iter = 0; iter < 5; ++iter) {
+        this->run();
+    }
+    infinicore::context::syncStream();
+
     if (infinirtStreamBeginCapture(
             context::getStream(),
             INFINIRT_STREAM_CAPTURE_MODE_GLOBAL)
