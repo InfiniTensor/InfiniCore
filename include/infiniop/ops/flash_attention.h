@@ -12,7 +12,7 @@ __C __export infiniStatus_t infiniopCreateFlashAttentionDescriptor(
     infiniopTensorDescriptor_t q_desc,
     infiniopTensorDescriptor_t k_desc,
     infiniopTensorDescriptor_t v_desc,
-    std::size_t total_kv_len,
+    infiniopTensorDescriptor_t total_kv_len,
     float scale,
     char is_causal);
 
@@ -28,6 +28,7 @@ __C __export infiniStatus_t infiniopFlashAttention(
     const void *q,
     const void *k,
     const void *v,
+    const void *total_kv_len,
     void *stream);
 
 __C __export infiniStatus_t infiniopDestroyFlashAttentionDescriptor(

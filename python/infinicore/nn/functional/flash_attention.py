@@ -4,18 +4,17 @@ from infinicore.lib import _infinicore
 from infinicore.tensor import Tensor
 
 
-def scaled_dot_product_attention(
+def flash_attention(
     query,
     key,
     value,
+    total_kv_len,
     attn_mask=None,
     dropout_p=0,
     is_causal=False,
     scale=None,
     enable_gqa=False,
 ):
-    raise NotImplementedError("Scaled Dot Product Attention is not yet supported.")
-
     assert attn_mask is None and dropout_p == 0 and not enable_gqa
 
     emb_dim = query.shape[-1]
@@ -28,7 +27,7 @@ def scaled_dot_product_attention(
             query._underlying,
             key._underlying,
             value._underlying,
-            key.shape[-2],
+            total_kv_len._underlying,
             scale,
             is_causal,
         )

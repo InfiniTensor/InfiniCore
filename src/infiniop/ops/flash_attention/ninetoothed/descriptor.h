@@ -17,7 +17,7 @@ public:
                infiniopTensorDescriptor_t q_desc,
                infiniopTensorDescriptor_t k_desc,
                infiniopTensorDescriptor_t v_desc,
-               std::size_t total_kv_len,
+               infiniopTensorDescriptor_t total_kv_len,
                double scale,
                char is_causal) : InfiniopDescriptor{handle->device, handle->device_id},
                                  _query_shape{q_desc->shape()},
@@ -26,12 +26,12 @@ public:
                                  _key_strides{k_desc->strides()},
                                  _value_shape{v_desc->shape()},
                                  _value_strides{v_desc->strides()},
+                                 _total_kv_shape{total_kv_len->shape()},
+                                 _total_kv_strides{total_kv_len->strides()},
                                  _output_strides{out_desc->strides()},
                                  _dtype{q_desc->dtype()},
                                  _scale{scale},
                                  _is_causal{is_causal} {
-        _key_shape[_key_shape.size() - 2] = total_kv_len;
-        _value_shape[_key_shape.size() - 2] = total_kv_len;
     }
 
     ~Descriptor() = default;
@@ -46,6 +46,7 @@ public:
                              const void *q,
                              const void *k,
                              const void *v,
+                             const void *total_kv_len,
                              void *stream) const {
         uint64_t empty_shape[4];
         int64_t empty_strides[4];
@@ -53,6 +54,7 @@ public:
         auto query{::ninetoothed::Tensor{q, _query_shape, _query_strides}};
         auto key{::ninetoothed::Tensor{k, _key_shape, _key_strides}};
         auto value{::ninetoothed::Tensor{v, _value_shape, _value_strides}};
+        auto total_kv_length{::ninetoothed::Tensor{total_kv_len, _total_kv_shape, _total_kv_strides}};
 
         NineToothedTensor attn_mask{nullptr, empty_shape, empty_strides};
         NineToothedTensor is_causal;
@@ -75,6 +77,7 @@ public:
                                    query,
                                    key,
                                    value,
+                                   total_kv_length,
                                    attn_mask,
                                    is_causal,
                                    scale,
@@ -101,7 +104,7 @@ public:
                                  infiniopTensorDescriptor_t q_desc,
                                  infiniopTensorDescriptor_t k_desc,
                                  infiniopTensorDescriptor_t v_desc,
-                                 std::size_t total_kv_len,
+                                 infiniopTensorDescriptor_t total_kv_len,
                                  double scale,
                                  char is_causal) {
         *desc = new Descriptor{handle, out_desc, q_desc, k_desc, v_desc, total_kv_len, scale, is_causal};
@@ -125,6 +128,10 @@ private:
     std::vector<Size> _value_shape;
 
     std::vector<Stride> _value_strides;
+
+    std::vector<Size> _total_kv_shape;
+
+    std::vector<Stride> _total_kv_strides;
 
     std::vector<Stride> _output_strides;
 

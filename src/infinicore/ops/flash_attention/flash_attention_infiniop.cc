@@ -11,18 +11,17 @@ INFINIOP_CACHABLE_DESCRIPTOR(Descriptor, FlashAttention, 100);
 
 struct PlannedMeta {
     std::shared_ptr<Descriptor> descriptor;
-    graph::GraphTensor workspace, out, q, k, v;
-    std::size_t total_kv_len;
+    graph::GraphTensor workspace, out, q, k, v, total_kv_len;
     float scale;
     bool is_causal;
 };
 
-void *plan(Tensor out, Tensor q, Tensor k, Tensor v, std::size_t total_kv_len, float scale, bool is_causal) {
+void *plan(Tensor out, const Tensor &q, const Tensor &k, const Tensor &v, const Tensor &total_kv_len, float scale, bool is_causal) {
     size_t seed = hash_combine(out, q, k, v, total_kv_len, scale, is_causal);
 
     INFINIOP_CACHABLE_DESCRIPTOR_GET_OR_CREATE(
         Descriptor, descriptor, FlashAttention,
-        seed, out->desc(), q->desc(), k->desc(), v->desc(), total_kv_len, scale, is_causal);
+        seed, out->desc(), q->desc(), k->desc(), v->desc(), total_kv_len->desc(), scale, is_causal);
 
     INFINIOP_WORKSPACE_TENSOR(workspace, FlashAttention, descriptor);
 
@@ -33,7 +32,7 @@ void *plan(Tensor out, Tensor q, Tensor k, Tensor v, std::size_t total_kv_len, f
         graph::GraphTensor(q),
         graph::GraphTensor(k),
         graph::GraphTensor(v),
-        total_kv_len, scale, is_causal};
+        graph::GraphTensor(total_kv_len), scale, is_causal};
 
     return planned;
 }
@@ -43,7 +42,7 @@ void run(void *planned_meta) {
 
     INFINICORE_CHECK_ERROR(infiniopFlashAttention(
         planned->descriptor->desc, planned->workspace->data(), planned->workspace->numel(),
-        planned->out->data(), planned->q->data(), planned->k->data(), planned->v->data(), context::getStream()));
+        planned->out->data(), planned->q->data(), planned->k->data(), planned->v->data(), planned->total_kv_len->data(), context::getStream()));
 }
 
 void cleanup(void **planned_meta_ptr) {

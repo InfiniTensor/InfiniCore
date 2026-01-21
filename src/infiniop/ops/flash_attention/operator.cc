@@ -5,11 +5,9 @@
 #ifdef ENABLE_CPU_API
 // #include "cpu/flash_attention_cpu.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
-#if defined(ENABLE_NINETOOTHED) && defined(ENABLE_NVIDIA_API)
+#if defined(ENABLE_NINETOOTHED)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_METAX_API)
 #include "ninetoothed/descriptor.h"
-#else
-// #include "nvidia/flash_attention_nvidia.cuh"
 #endif
 #endif
 
@@ -20,7 +18,7 @@ __C infiniStatus_t infiniopCreateFlashAttentionDescriptor(
     infiniopTensorDescriptor_t q_desc,
     infiniopTensorDescriptor_t k_desc,
     infiniopTensorDescriptor_t v_desc,
-    std::size_t total_kv_len,
+    infiniopTensorDescriptor_t total_kv_len,
     float scale,
     char is_causal) {
 
@@ -39,14 +37,9 @@ __C infiniStatus_t infiniopCreateFlashAttentionDescriptor(
 
     switch (handle->device) {
 
-#ifdef ENABLE_CPU_API
-        // CREATE(INFINI_DEVICE_CPU, cpu);
-#endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
-#if defined(ENABLE_NINETOOTHED) && defined(ENABLE_NVIDIA_API)
+#if defined(ENABLE_NINETOOTHED)
+#if defined(ENABLE_NVIDIA_API)
         CREATE(INFINI_DEVICE_NVIDIA, ninetoothed);
-#else
-        // CREATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
 #endif
     default:
@@ -66,14 +59,10 @@ __C infiniStatus_t infiniopGetFlashAttentionWorkspaceSize(
         return INFINI_STATUS_SUCCESS;
 
     switch (desc->device_type) {
-#ifdef ENABLE_CPU_API
-        // GET_SIZE(INFINI_DEVICE_CPU, cpu);
-#endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
-#if defined(ENABLE_NINETOOTHED) && defined(ENABLE_NVIDIA_API)
+
+#if defined(ENABLE_NINETOOTHED)
+#if defined(ENABLE_NVIDIA_API)
         GET_SIZE(INFINI_DEVICE_NVIDIA, ninetoothed);
-#else
-        // GET_SIZE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
 #endif
     default:
@@ -91,23 +80,19 @@ __C infiniStatus_t infiniopFlashAttention(
     const void *q,
     const void *k,
     const void *v,
+    const void *total_kv_len,
     void *stream) {
 
 #define CALCULATE(CASE, NAMESPACE)                                                        \
     case CASE:                                                                            \
         return reinterpret_cast<const op::flash_attention::NAMESPACE::Descriptor *>(desc) \
-            ->calculate(workspace, workspace_size, out, q, k, v, stream);
+            ->calculate(workspace, workspace_size, out, q, k, v, total_kv_len, stream);
 
     switch (desc->device_type) {
 
-#ifdef ENABLE_CPU_API
-        // CALCULATE(INFINI_DEVICE_CPU, cpu);
-#endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
-#if defined(ENABLE_NINETOOTHED) && defined(ENABLE_NVIDIA_API)
+#if defined(ENABLE_NINETOOTHED)
+#if defined(ENABLE_NVIDIA_API)
         CALCULATE(INFINI_DEVICE_NVIDIA, ninetoothed);
-#else
-        // CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
 #endif
     default:
@@ -126,14 +111,10 @@ __C infiniStatus_t infiniopDestroyFlashAttentionDescriptor(
         return INFINI_STATUS_SUCCESS;
 
     switch (desc->device_type) {
-#ifdef ENABLE_CPU_API
-        // DESTROY(INFINI_DEVICE_CPU, cpu);
-#endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
-#if defined(ENABLE_NINETOOTHED) && defined(ENABLE_NVIDIA_API)
+
+#if defined(ENABLE_NINETOOTHED)
+#if defined(ENABLE_NVIDIA_API)
         DESTROY(INFINI_DEVICE_NVIDIA, ninetoothed);
-#else
-        // DESTROY(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
 #endif
     default:
