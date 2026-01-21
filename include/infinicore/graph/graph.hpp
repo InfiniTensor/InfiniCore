@@ -31,17 +31,21 @@ protected:
 
 class Graph {
 public:
-    Graph() = default;
-    ~Graph() = default;
+    Graph();
+    ~Graph();
 
     void run() const;
 
 protected:
     void add_operator(std::shared_ptr<GraphOperator> op);
-
+    void instantiate();
     std::vector<std::shared_ptr<GraphOperator>> op_list_;
 
     friend class GraphManager;
+
+private:
+    struct DeviceGraph;
+    std::unique_ptr<DeviceGraph> device_graph_;
 };
 } // namespace infinicore::graph
 

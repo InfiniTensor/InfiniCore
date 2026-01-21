@@ -138,4 +138,34 @@ infiniStatus_t mallocAsync(void **p_ptr, size_t size, infinirtStream_t stream) {
 infiniStatus_t freeAsync(void *ptr, infinirtStream_t stream) {
     return freeDevice(ptr);
 }
+
+infiniStatus_t streamBeginCapture(infinirtStream_t stream, infinirtStreamCaptureMode_t mode) {
+    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+}
+
+infiniStatus_t streamEndCapture(infinirtStream_t stream, infinirtGraph_t *graph_ptr) {
+    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+}
+
+infiniStatus_t graphDestroy(infinirtGraph_t graph) {
+    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+}
+
+infiniStatus_t graphInstantiate(
+    infinirtGraphExec_t *graph_exec_ptr,
+    infinirtGraph_t graph,
+    infinirtGraphNode_t *node_ptr,
+    char *log_buffer,
+    size_t buffer_size) {
+    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+}
+
+infiniStatus_t graphExecDestroy(infinirtGraphExec_t graph_exec) {
+    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+}
+
+infiniStatus_t graphLuanch(infinirtGraphExec_t graph_exec, infinirtStream_t stream) {
+    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+}
+
 } // namespace infinirt::musa

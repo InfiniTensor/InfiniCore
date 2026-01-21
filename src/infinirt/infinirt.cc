@@ -192,3 +192,32 @@ __C infiniStatus_t infinirtMallocAsync(void **p_ptr, size_t size, infinirtStream
 __C infiniStatus_t infinirtFreeAsync(void *ptr, infinirtStream_t stream) {
     INFINIRT_CALL_DEVICE_API(freeAsync, (ptr, stream));
 }
+
+__C infiniStatus_t infinirtStreamBeginCapture(infinirtStream_t stream, infinirtStreamCaptureMode_t mode) {
+    INFINIRT_CALL_DEVICE_API(streamBeginCapture, (stream, mode));
+}
+
+__C infiniStatus_t infinirtStreamEndCapture(infinirtStream_t stream, infinirtGraph_t *graph_ptr) {
+    INFINIRT_CALL_DEVICE_API(streamEndCapture, (stream, graph_ptr));
+}
+
+__C infiniStatus_t infinirtGraphDestroy(infinirtGraph_t graph) {
+    INFINIRT_CALL_DEVICE_API(graphDestroy, (graph));
+}
+
+__C infiniStatus_t infinirtGraphInstantiate(
+    infinirtGraphExec_t *graph_exec_ptr,
+    infinirtGraph_t graph,
+    infinirtGraphNode_t *node_ptr,
+    char *log_buffer,
+    size_t buffer_size) {
+    INFINIRT_CALL_DEVICE_API(graphInstantiate, (graph_exec_ptr, graph, node_ptr, log_buffer, buffer_size));
+}
+
+__C infiniStatus_t infinirtGraphExecDestroy(infinirtGraphExec_t graph_exec) {
+    INFINIRT_CALL_DEVICE_API(graphExecDestroy, (graph_exec));
+}
+
+__C infiniStatus_t infinirtGraphLuanch(infinirtGraphExec_t graph_exec, infinirtStream_t stream) {
+    INFINIRT_CALL_DEVICE_API(graphLuanch, (graph_exec, stream));
+}

@@ -176,4 +176,53 @@ infiniStatus_t freeAsync(void *ptr, infinirtStream_t stream) {
     RUN_CUDART(cudaFreeAsync(ptr, (cudaStream_t)stream));
     return INFINI_STATUS_SUCCESS;
 }
+
+infiniStatus_t streamBeginCapture(infinirtStream_t stream, infinirtStreamCaptureMode_t mode) {
+    cudaStreamCaptureMode graph_mode;
+    if (mode == INFINIRT_STREAM_CAPTURE_MODE_GLOBAL) {
+        graph_mode = cudaStreamCaptureModeGlobal;
+    } else if (mode == INFINIRT_STREAM_CAPTURE_MODE_THREAD_LOCAL) {
+        graph_mode = cudaStreamCaptureModeThreadLocal;
+    } else if (mode == INFINIRT_STREAM_CAPTURE_MODE_RELAXED) {
+        graph_mode = cudaStreamCaptureModeRelaxed;
+    } else {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    CHECK_CUDART(cudaStreamBeginCapture((cudaStream_t)stream, graph_mode));
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t streamEndCapture(infinirtStream_t stream, infinirtGraph_t *graph_ptr) {
+    cudaGraph_t graph;
+    CHECK_CUDART(cudaStreamEndCapture((cudaStream_t)stream, &graph));
+    *graph_ptr = graph;
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t graphDestroy(infinirtGraph_t graph) {
+    RUN_CUDART(cudaGraphDestroy((cudaGraph_t)graph));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t graphInstantiate(
+    infinirtGraphExec_t *graph_exec_ptr,
+    infinirtGraph_t graph,
+    infinirtGraphNode_t *node_ptr,
+    char *log_buffer,
+    size_t buffer_size) {
+    CHECK_CUDART(cudaGraphInstantiate((cudaGraphExec_t *)graph_exec_ptr, (cudaGraph_t)graph, (cudaGraphNode_t *)node_ptr, log_buffer, buffer_size));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t graphExecDestroy(infinirtGraphExec_t graph_exec) {
+    RUN_CUDART(cudaGraphExecDestroy((cudaGraphExec_t)graph_exec));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t graphLuanch(infinirtGraphExec_t graph_exec, infinirtStream_t stream) {
+    CHECK_CUDART(cudaGraphLaunch((cudaGraphExec_t)graph_exec, (cudaStream_t)stream));
+    return INFINI_STATUS_SUCCESS;
+}
 }
