@@ -155,9 +155,6 @@ class TestSummary:
         if result.error_message:
             print(f"💥 Error: {result.error_message}")
 
-        if result.stdout or result.stderr or self.verbose:
-            print("-" * 40)
-
     def print_summary(self, results, cumulative_timing, ops_dir, total_expected=0):
         print(f"\n{'='*80}\nCUMULATIVE TEST SUMMARY\n{'='*80}")
 
