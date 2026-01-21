@@ -364,12 +364,17 @@ class TestSummary:
         return getattr(obj, "name", None) or default_name
 
     def _spec_to_dict(self, s, name=None):
-        return {
+        spec_dict = {
             "name": name if name else getattr(s, "name", "unknown"),
             "shape": list(s.shape) if s.shape else None,
             "dtype": str(s.dtype).split(".")[-1],
             "strides": list(s.strides) if s.strides else None,
         }
+        # Add file_path if it exists (stored in kwargs for TensorSpec)
+        file_path = getattr(s, "kwargs", {}).get("file_path")
+        if file_path:
+            spec_dict["file_path"] = file_path
+        return spec_dict
 
     def _fmt_result(self, res):
         if not (is_dataclass(res) or hasattr(res, "success")):
