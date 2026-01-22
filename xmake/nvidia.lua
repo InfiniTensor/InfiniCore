@@ -92,7 +92,7 @@ target("infinirt-nvidia")
     else
         add_cuflags("-Xcompiler=-fPIC")
         add_culdflags("-Xcompiler=-fPIC")
-        add_cxflags("-fPIC")
+        add_cxxflags("-fPIC")
     end
 
     set_languages("cxx17")
@@ -111,7 +111,7 @@ target("infiniccl-nvidia")
         if not is_plat("windows") then
             add_cuflags("-Xcompiler=-fPIC")
             add_culdflags("-Xcompiler=-fPIC")
-            add_cxflags("-fPIC")
+            add_cxxflags("-fPIC")
 
             local nccl_root = os.getenv("NCCL_ROOT")
             if nccl_root then

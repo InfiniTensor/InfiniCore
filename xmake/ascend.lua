@@ -43,7 +43,7 @@ target("infiniop-ascend")
     add_deps("infini-utils")
     on_install(function (target) end)
 
-    add_cxflags("-lstdc++ -fPIC")
+    add_cxxflags("-lstdc++ -fPIC")
     set_warnings("all", "error")
 
     set_languages("cxx17")
@@ -61,7 +61,7 @@ target("infinirt-ascend")
     add_deps("infini-utils")
     -- Add files
     add_files("$(projectdir)/src/infinirt/ascend/*.cc")
-    add_cxflags("-lstdc++ -Wall -Werror -fPIC")
+    add_cxxflags("-lstdc++ -Wall -Werror -fPIC")
 target_end()
 
 target("infiniccl-ascend")
@@ -75,6 +75,6 @@ target("infiniccl-ascend")
         add_includedirs(ASCEND_HOME .. "/include/hccl")
         add_links("libhccl.so")
         add_files("../src/infiniccl/ascend/*.cc")
-        add_cxflags("-lstdc++ -fPIC")
+        add_cxxflags("-lstdc++ -fPIC")
     end
 target_end()

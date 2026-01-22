@@ -59,7 +59,7 @@ target("infiniop-hygon")
     add_cuflags("-Wno-return-type", {force = true})  -- 抑制return语句警告
     add_cuflags("-fPIC", "-std=c++17", {force = true})
     add_culdflags("-fPIC")
-    add_cxflags("-fPIC")
+    add_cxxflags("-fPIC")
 
     -- 添加海光DCU特定的编译标志
     add_cuflags("-arch=gfx906", "-arch=gfx926", "-arch=gfx928", "-arch=gfx936")
@@ -76,7 +76,7 @@ target("infiniop-hygon")
     add_files("../src/infiniop/ops/swiglu/nvidia/*.cu")
 
     if has_config("ninetoothed") then
-        add_files("../build/ninetoothed/*.c", {cxflags = {"-Wno-return-type"}})
+        add_files("../build/ninetoothed/*.c", {cxxflags = {"-Wno-return-type"}})
     end
 target_end()
 
@@ -104,7 +104,7 @@ target("infinirt-hygon")
     add_cuflags("-Wno-return-type", {force = true})  -- 抑制return语句警告
     add_cuflags("-fPIC", "-std=c++17", {force = true})
     add_culdflags("-fPIC")
-    add_cxflags("-fPIC")
+    add_cxxflags("-fPIC")
 
     -- 添加海光DCU特定的编译标志
     add_cuflags("-arch=gfx906", "-arch=gfx926", "-arch=gfx928", "-arch=gfx936")
@@ -137,7 +137,7 @@ target("infiniccl-hygon")
         add_cuflags("-Wno-return-type", {force = true})  -- 抑制return语句警告
         add_cuflags("-fPIC", "-std=c++17", {force = true})
         add_culdflags("-fPIC")
-        add_cxflags("-fPIC")
+        add_cxxflags("-fPIC")
 
         -- 添加海光DCU特定的编译标志
         add_cuflags("-arch=gfx906", "-arch=gfx926", "-arch=gfx928", "-arch=gfx936")
