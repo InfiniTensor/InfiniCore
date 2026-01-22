@@ -72,7 +72,7 @@ struct SplitDim {
 /**
  * 根据给定的元数据准备张量重排参数，该函数主要完成以下工作：
  * 1. 根据原始元数据调整单元大小，获取更适合GPU处理的单元大小
- * 2. 将维度分配为块（block）维度和网格（grid）维度：
+ * 2. 将维度分配为 MUSA 块（block）维度和网格（grid）维度：
  *    该步骤是核心，目标是为每个block分配尽可能多的相对连续的数据进行处理，
  *    对无法完整放入块的维度进行分割，并记录分割维度信息，用于防止kernel访问越界，最大化内存访问局部性和计算效率
  */
@@ -81,9 +81,7 @@ utils::Result<RearrangeParams> prepareRearrangeParams(const utils::RearrangeMeta
 
     // 获取更适合GPU处理的单元大小，这里使用2的幂次方
     auto meta_result = original_meta.distributeUnit({32, 16, 8, 4, 2, 1});
-
     CHECK_RESULT(meta_result);
-
     const utils::RearrangeMeta &meta = meta_result.take();
 
     // 获取维度信息
@@ -123,153 +121,102 @@ utils::Result<RearrangeParams> prepareRearrangeParams(const utils::RearrangeMeta
         prev_idx_stride = idx_strides[i];
     }
 
-    // 计算src_strides的降序排序索引，类似于Rust版本中的src_strides_desc_idx
-    std::vector<size_t> src_strides_desc_idx(ndim);
-    for (size_t i = 0; i < ndim; ++i) {
-        src_strides_desc_idx[i] = i;
-    }
-    std::sort(src_strides_desc_idx.begin(), src_strides_desc_idx.end(),
-              [&dims](size_t a, size_t b) {
-                  return std::abs(dims[a].src_stride) > std::abs(dims[b].src_stride);
-              });
-
-    // 根据最大线程数选择block和grid维度
-    const size_t block_size = max_threads;
     std::vector<bool> block_dim_choose(ndim, false);
-
-    // 初始化计数器
-    size_t block_elements = 1;
-    size_t block_src_elements = 1;
-    size_t block_dst_elements = 1;
-    size_t src_choose_idx = ndim;
-    size_t dst_choose_idx = ndim;
-
-    // 用于存储分割维度信息
     std::vector<SplitDim> split_dims;
 
-    // 维度选择循环
-    while (src_choose_idx > 0 && dst_choose_idx > 0) {
-        // 获取当前需要处理的维度索引
-        size_t src_idx = src_strides_desc_idx[src_choose_idx - 1];
-        size_t dst_idx = dst_choose_idx - 1;
+    // // 初始化计数器
+    // size_t block_elements = 1;
 
-        if (src_idx == dst_idx) {
-            // 源和目标维度相同，可以一起处理
-            size_t idx = src_idx;
-            size_t len = shape[idx];
+    std::vector<size_t> dim_order(ndim);
+    for (size_t i = 0; i < ndim; ++i) {
+        dim_order[i] = i;
+    }
 
-            // 检查是否可以将此维度完全添加到block中
-            if (block_elements * len <= block_size) {
-                // 选择此维度
-                block_dim_choose[idx] = true;
-                block_elements *= len;
-                block_src_elements *= len;
-                block_dst_elements *= len;
-                src_choose_idx--;
-                dst_choose_idx--;
-            } else {
-                // 需要分割此维度
-                size_t num_per_block = block_size / block_elements;
+    // 按src_stride升序排序，贪心选择
+    std::sort(dim_order.begin(), dim_order.end(),
+              [&dims](size_t a, size_t b) {
+                  return std::abs(dims[a].src_stride) < std::abs(dims[b].src_stride);
+              });
 
-                // 确保num_per_block > 0且len >= num_per_block
-                if (num_per_block > 0 && len >= num_per_block && num_per_block > 1) {
-                    size_t num_per_grid = (len + num_per_block - 1) / num_per_block; // 向上取整
+    constexpr size_t MAX_BLOCK_DIM = MAX_BLOCK_ARRAY_SIZE;
 
-                    SplitDim split_dim = {
-                        idx,           // choose_idx
-                        num_per_block, // num_per_block
-                        num_per_grid,  // num_per_grid
-                        0,             // array_struct_idx_block (待更新)
-                        0,             // array_struct_idx_grid (待更新)
-                        len            // 原始维度长度
-                    };
-                    split_dims.push_back(split_dim);
-                }
-                break;
+    size_t block_elements = 1;
+    size_t chosen_block_dims = 0;
+
+    for (size_t i = 0; i < ndim; ++i) {
+        size_t dim_idx = dim_order[i];
+        size_t dim_len = shape[dim_idx];
+    
+        // 1️⃣ 尝试完整放入 block
+        if (chosen_block_dims < MAX_BLOCK_DIM &&
+            block_elements * dim_len <= (size_t)max_threads) {
+    
+            block_dim_choose[dim_idx] = true;
+            block_elements *= dim_len;
+            chosen_block_dims++;
+            continue;
+        }
+    
+        // 2️⃣ 尝试 split（⚠️ split 也会消耗 1 个 block dim）
+        if (block_elements > 1 && dim_len > 1) {
+    
+            // ⚠️ 关键：先检查 block_dim 上限
+            if (chosen_block_dims + 1 > MAX_BLOCK_DIM) {
+                break;  // 不能再加 block 维度了
             }
+    
+            size_t num_per_block =
+                std::min(dim_len, (size_t)max_threads / block_elements);
+    
+            if (num_per_block > 0) {
+                size_t num_per_grid =
+                    (dim_len + num_per_block - 1) / num_per_block;
+    
+                split_dims.push_back({
+                    dim_idx,
+                    num_per_block,
+                    num_per_grid,
+                    0,
+                    0,
+                    dim_len
+                });
+    
+                block_elements *= num_per_block;
+                chosen_block_dims++;   // split 占 1 个 block 维度
+            }
+            break;
+        }
+    }
+    
+
+
+    if (block_elements == 1 && ndim > 0) {
+        size_t dim_idx = dim_order[0];
+        size_t dim_len = shape[dim_idx];
+
+        if (dim_len <= (size_t)max_threads) {
+            block_dim_choose[dim_idx] = true;
+            block_elements = dim_len;
         } else {
-            // 源和目标维度不同，需要分别处理
-            // 计算块比例
-            double src_div_dst = static_cast<double>(block_src_elements) / block_dst_elements;
-            double src_num_per_block = std::sqrt(block_size / (double)block_elements / src_div_dst);
-            double dst_num_per_block = src_num_per_block * src_div_dst;
+            // 需要分割
+            size_t num_per_block = std::min(dim_len, (size_t)max_threads);
+            size_t num_per_grid = (dim_len + num_per_block - 1) / num_per_block;
 
-            size_t src_current_dim_len = shape[src_idx];
-            size_t dst_current_dim_len = shape[dst_idx];
-
-            if (static_cast<double>(src_current_dim_len) < src_num_per_block) {
-                // 源维度可以完全添加到block
-                block_dim_choose[src_idx] = true;
-                block_elements *= src_current_dim_len;
-                block_src_elements *= src_current_dim_len;
-                src_choose_idx--;
-            } else if (static_cast<double>(dst_current_dim_len) < dst_num_per_block) {
-                // 目标维度可以完全添加到block
-                block_dim_choose[dst_idx] = true;
-                block_elements *= dst_current_dim_len;
-                block_dst_elements *= dst_current_dim_len;
-                dst_choose_idx--;
-            } else {
-                // 需要分割源和目标维度
-                size_t src_num_per_block_int = static_cast<size_t>(std::floor(src_num_per_block));
-                size_t dst_num_per_block_int = static_cast<size_t>(std::floor(dst_num_per_block));
-
-                // 计算网格尺寸
-                size_t src_num_per_grid = (src_current_dim_len + src_num_per_block_int - 1) / src_num_per_block_int; // 向上取整
-                size_t dst_num_per_grid = (dst_current_dim_len + dst_num_per_block_int - 1) / dst_num_per_block_int; // 向上取整
-
-                // 处理源维度
-                if (src_num_per_block_int > 1) {
-                    if (src_num_per_grid == 1) {
-                        // 可以完全放入块
-                        block_dim_choose[src_idx] = true;
-                        block_elements *= src_current_dim_len;
-                        block_src_elements *= src_current_dim_len;
-                        src_choose_idx--;
-                    } else {
-                        // 需要分割
-                        SplitDim split_dim = {
-                            src_idx,               // choose_idx
-                            src_num_per_block_int, // num_per_block
-                            src_num_per_grid,      // num_per_grid
-                            0,                     // array_struct_idx_block (待更新)
-                            0,                     // array_struct_idx_grid (待更新)
-                            src_current_dim_len    // 原始维度长度
-                        };
-                        split_dims.push_back(split_dim);
-                    }
-                }
-
-                // 处理目标维度
-                if (dst_num_per_block_int > 1) {
-                    if (dst_num_per_grid == 1) {
-                        // 可以完全放入块
-                        block_dim_choose[dst_idx] = true;
-                        block_elements *= dst_current_dim_len;
-                        block_dst_elements *= dst_current_dim_len;
-                        dst_choose_idx--;
-                    } else {
-                        // 需要分割
-                        SplitDim split_dim = {
-                            dst_idx,               // choose_idx
-                            dst_num_per_block_int, // num_per_block
-                            dst_num_per_grid,      // num_per_grid
-                            0,                     // array_struct_idx_block (待更新)
-                            0,                     // array_struct_idx_grid (待更新)
-                            dst_current_dim_len    // 原始维度长度
-                        };
-                        split_dims.push_back(split_dim);
-                    }
-                }
-
-                break;
-            }
+            SplitDim split_dim = {
+                dim_idx,
+                num_per_block,
+                num_per_grid,
+                0,
+                0,
+                dim_len};
+            split_dims.push_back(split_dim);
+            block_elements = num_per_block;
         }
     }
 
     // 准备block维度相关参数
     size_t block_dim = 0;
-    size_t block_len_total = 1;
+    size_t block_len_total = block_elements;
 
     std::vector<ARRAY_TYPE_SIZE> block_len;
     std::vector<ARRAY_TYPE_STRIDE> src_block_stride;
@@ -286,7 +233,6 @@ utils::Result<RearrangeParams> prepareRearrangeParams(const utils::RearrangeMeta
             src_block_stride.push_back(dims[i].src_stride);
             dst_block_stride.push_back(dims[i].dst_stride);
             block_dim += 1;
-            block_len_total *= shape[i];
         }
 
         // 处理分割维度的block部分
@@ -295,9 +241,8 @@ utils::Result<RearrangeParams> prepareRearrangeParams(const utils::RearrangeMeta
                 block_len.push_back(split_dims[j].num_per_block);
                 src_block_stride.push_back(dims[i].src_stride);
                 dst_block_stride.push_back(dims[i].dst_stride);
-                split_dims[j].array_struct_idx_block = block_dim;
+                split_dims[j].array_struct_idx_block = static_cast<int>(block_dim);
                 block_dim += 1;
-                block_len_total *= split_dims[j].num_per_block;
             }
         }
     }
@@ -314,7 +259,8 @@ utils::Result<RearrangeParams> prepareRearrangeParams(const utils::RearrangeMeta
                     grid_len.push_back(split_dims[j].num_per_grid);
                     src_grid_stride.push_back(dims[i].src_stride * split_dims[j].num_per_block);
                     dst_grid_stride.push_back(dims[i].dst_stride * split_dims[j].num_per_block);
-                    split_dims[j].array_struct_idx_grid = grid_len.size() - 1;
+                    split_dims[j].array_struct_idx_grid = static_cast<int>(grid_len.size() - 1);
+                    break;
                 }
             }
 
@@ -348,6 +294,10 @@ utils::Result<RearrangeParams> prepareRearrangeParams(const utils::RearrangeMeta
         constraint.grid_div_block = split_dims[i].num_per_block;
         constraint.total_len = split_dims[i].dim_len;
         constraints.push_back(constraint);
+
+        if (constraints.size() >= 2) {
+            break;
+        }
     }
 
     // 设置参数
@@ -385,13 +335,13 @@ infiniStatus_t launchKernel(
     // 创建非const的临时变量
     size_t block_dim = params.block_dim;
     size_t block_len_total = params.block_len_total;
- 
+
     // 计算对齐后的线程块大小（Block Size）以适配 MUSA 架构的Warp特性
     // - MUSA 架构以 32 线程为基本调度单位（1个 Warp）
     // - 通过向上取整到最近的 32 的倍数，确保线程块包含完整的 Warp
     // - MUSA 似乎不支持非 32 整数倍的计算
     size_t aligned_block_size = ((block_len_total + 31) / 32) * 32;
-    block_len_total = aligned_block_size;
+    // block_len_total = aligned_block_size;
 
     // 确保对齐后的线程块大小不超过硬件/模板限制
     if (aligned_block_size > BLOCK_SIZE) {
@@ -434,7 +384,7 @@ infiniStatus_t launchKernel(
     // - 向上取整，数学等效：ceil(n / 32) * 32
     CHECK_OR_RETURN(musaLaunchKernel(
                         kernel_func,
-                        grid_size, aligned_block_size, 
+                        static_cast<unsigned int>(grid_size), static_cast<unsigned int>(aligned_block_size),
                         args, 0, stream)
                         == musaSuccess,
                     INFINI_STATUS_INTERNAL_ERROR);
@@ -458,11 +408,6 @@ infiniStatus_t Descriptor::calculate(
 
     // 如果没有维度，直接进行内存拷贝
     if (_meta.ndim() == 0) {
-        auto err = musaMemcpyAsync(y, x, _meta.unit(), musaMemcpyDeviceToDevice, musa_stream);
-        if (err != musaSuccess) {
-            return INFINI_STATUS_INTERNAL_ERROR;
-        }
-
         CHECK_OR_RETURN(musaMemcpyAsync(y, x, _meta.unit(), musaMemcpyDeviceToDevice, musa_stream) == musaSuccess,
                         INFINI_STATUS_INTERNAL_ERROR);
         return INFINI_STATUS_SUCCESS;
@@ -497,7 +442,6 @@ infiniStatus_t Descriptor::calculate(
     } else if (block_size <= MOORE_BLOCK_SIZE_1024) {
         status = launchKernel<MOORE_BLOCK_SIZE_1024>(y, x, grid_size, params, _meta.unit(), musa_stream);
     } else {
-        std::cerr << "[ERROR] block_size=" << block_size << " exceeds max supported" << std::endl;
         return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
     }
 
