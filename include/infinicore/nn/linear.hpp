@@ -50,8 +50,6 @@ protected:
     bool has_bias_;
     DataType dtype_;
     const std::optional<QuantScheme> quant_scheme_;
-    // bool is_quantized() const { return quant_config_.has_value(); }
-    // QuantScheme get_quant_scheme() const { return quant_config_.value().quant_scheme; }
 };
 
 } // namespace infinicore::nn
