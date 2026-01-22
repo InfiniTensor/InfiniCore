@@ -24,7 +24,7 @@ target("infiniop-test")
     add_links("infiniop", "infinirt")
 
     if has_config("omp") then
-        add_cxflags("-fopenmp")
+        add_cxxflags("-fopenmp")
         add_ldflags("-fopenmp")
     end
 
