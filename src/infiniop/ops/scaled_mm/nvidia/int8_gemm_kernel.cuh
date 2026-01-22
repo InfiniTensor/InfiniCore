@@ -139,7 +139,7 @@ void cutlass_int8_scaled_mm(
 
     typename Gemm::Arguments args{
         {m, n, k}, {a_ptr, lda}, {b_ptr, ldb}, {b_s_ptr, 0}, {a_s_ptr, 0}, {bias_ptr, ldc}, {o_ptr, ldd}, visitor_args};
-        
+
     check_cutlass_status(gemm_op.can_implement(args));
     auto status = gemm_op(args, nullptr, (cudaStream_t)stream);
     check_cutlass_status(status);
