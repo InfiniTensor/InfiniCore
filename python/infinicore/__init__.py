@@ -44,6 +44,7 @@ from infinicore.dtype import (
 )
 from infinicore.ops.add import add
 from infinicore.ops.add_rms_norm import add_rms_norm, add_rms_norm_
+from infinicore.ops.all import all
 from infinicore.ops.attention import attention
 from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
@@ -53,7 +54,11 @@ from infinicore.ops.paged_attention_prefill import paged_attention_prefill
 from infinicore.ops.paged_caching import paged_caching
 from infinicore.ops.rearrange import rearrange
 from infinicore.ops.squeeze import squeeze
+from infinicore.ops.sum import sum
+from infinicore.ops.topk import topk
 from infinicore.ops.unsqueeze import unsqueeze
+from infinicore.ops.var import var
+from infinicore.ops.var_mean import var_mean
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -134,6 +139,11 @@ __all__ = [
     "strided_empty",
     "strided_from_blob",
     "zeros",
+    "sum",
+    "topk",
+    "var",
+    "var_mean",
+    "all",
 ]
 
 use_ntops = False
