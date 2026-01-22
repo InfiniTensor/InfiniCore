@@ -1146,3 +1146,35 @@ def paged_attention_prefill_(lib):
     lib.infiniopDestroyPagedAttentionPrefillDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
+
+
+@OpRegister.operator
+def silu_and_mul(lib):
+    lib.infiniopCreateSiluAndMulDescriptor.restype = c_int32
+    lib.infiniopCreateSiluAndMulDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetSiluAndMulWorkspaceSize.restype = c_int32
+    lib.infiniopGetSiluAndMulWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopSiluAndMul.restype = c_int32
+    lib.infiniopSiluAndMul.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroySiluAndMulDescriptor.restype = c_int32
+    lib.infiniopDestroySiluAndMulDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
