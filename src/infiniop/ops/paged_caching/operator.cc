@@ -5,6 +5,9 @@
 #ifdef ENABLE_NVIDIA_API
 #include "nvidia/paged_caching_nvidia.cuh"
 #endif
+#ifdef ENABLE_MOORE_API
+#include "moore/paged_caching_moore.h"
+#endif
 // #ifdef ENABLE_METAX_API
 // #include "metax/paged_caching_metax.h"
 // #endif
@@ -29,6 +32,9 @@ __C infiniStatus_t infiniopCreatePagedCachingDescriptor(
 #ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore)
+#endif
     // #ifdef ENABLE_METAX_API
     //         CREATE(INFINI_DEVICE_METAX, metax)
     // #endif
@@ -49,6 +55,9 @@ __C infiniStatus_t infiniopGetPagedCachingWorkspaceSize(
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API
         GET(INFINI_DEVICE_NVIDIA, nvidia)
+#endif
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, moore)
 #endif
     // #ifdef ENABLE_METAX_API
     //         GET(INFINI_DEVICE_METAX, metax)
@@ -75,6 +84,9 @@ __C infiniStatus_t infiniopPagedCaching(
 #ifdef ENABLE_NVIDIA_API
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore)
+#endif
     // #ifdef ENABLE_METAX_API
     //         CALCULATE(INFINI_DEVICE_METAX, metax)
     // #endif
@@ -94,6 +106,9 @@ __C infiniStatus_t infiniopDestroyPagedCachingDescriptor(
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API
         DESTROY(INFINI_DEVICE_NVIDIA, nvidia)
+#endif
+#ifdef ENABLE_MOORE_API
+        DESTROY(INFINI_DEVICE_MOORE, moore)
 #endif
     // #ifdef ENABLE_METAX_API
     //         DESTROY(INFINI_DEVICE_METAX, metax)
