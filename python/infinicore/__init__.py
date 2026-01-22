@@ -54,6 +54,10 @@ from infinicore.ops.paged_caching import paged_caching
 from infinicore.ops.rearrange import rearrange
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.unsqueeze import unsqueeze
+from infinicore.ops.logcumsumexp import logcumsumexp
+from infinicore.ops.logical_and import logical_and
+from infinicore.ops.logical_not import logical_not
+from infinicore.ops.vander import vander
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -127,6 +131,10 @@ __all__ = [
     "from_list",
     "from_numpy",
     "from_torch",
+    "logcumsumexp",
+    "logical_not",
+    "logical_and",
+    "vander",
     "paged_caching",
     "paged_attention",
     "paged_attention_prefill",

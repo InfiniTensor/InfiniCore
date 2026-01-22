@@ -19,7 +19,11 @@
 #include "ops/rope.hpp"
 #include "ops/silu.hpp"
 #include "ops/swiglu.hpp"
-
+#include "ops/vander.hpp"
+#include "ops/unfold.hpp"
+#include "ops/logcumsumexp.hpp"
+#include "ops/logical_and.hpp" 
+#include "ops/logical_not.hpp" 
 namespace py = pybind11;
 
 namespace infinicore::ops {
@@ -40,6 +44,11 @@ inline void bind(py::module &m) {
     bind_rms_norm(m);
     bind_silu(m);
     bind_swiglu(m);
+    bind_logcumsumexp(m);
+    bind_logical_and(m); 
+    bind_logical_not(m);
+    bind_vander(m);
+    bind_unfold(m); 
     bind_rope(m);
     bind_embedding(m);
 }
