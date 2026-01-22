@@ -183,7 +183,7 @@ def application_without_kv_cache(
         lse = ntl.full((query_i.shape[-2],), 1, dtype=ntl.float32)
         max = ntl.full((query_i.shape[-2],), float("-inf"), dtype=ntl.float32)
 
-        for j in range(key.shape[0]):
+        for j in range(-(-actual_kv_len // key.dtype.shape[0])):
 
             qk = ntl.dot(query_i, ntl.trans(key[j]))
 
