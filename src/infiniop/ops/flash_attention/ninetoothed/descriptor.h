@@ -67,10 +67,10 @@ public:
         const auto emb_dim_{_query_shape[3]};
         const auto is_causal_{_is_causal};
         const auto with_attn_mask_{0};
-        const auto causal_variant_{1};
+        const auto causal_variant_{2};
         const auto dtype_{_dtype};
 
-        constexpr auto block_size_m_{64};
+        constexpr auto block_size_m_{256};
         constexpr auto block_size_n_{64};
 
         if (launch_flash_attention(stream,
