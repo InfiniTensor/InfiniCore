@@ -90,8 +90,6 @@ protected:
     Tensor(std::shared_ptr<TensorImpl> impl) : impl_(std::move(impl)) {}
     std::shared_ptr<TensorImpl> impl_;
     friend class TensorImpl;
-
-    void resume_from_blob_() const;
 };
 
 class TensorImpl : public std::enable_shared_from_this<TensorImpl> {
@@ -135,7 +133,18 @@ public:
 
     void debug() const;
 
-    Tensor to_blob() const;
+    /**
+     * Unsafe API that returns a new tensor with the same raw memory untracked by allocator
+     * This API is used for loosely tracking a piece of memory while allowing it to be reused,
+     * typically in a compute graph scenario.
+     */
+    Tensor to_blob_() const;
+
+    /**
+     * Unsafe API that returns a new tensor with the same memory and let allocator retracks the memory.
+     * Should only be used on the tensor returned by to_blob_().
+     */
+    Tensor resume_from_blob_() const;
 
     ///
     /// Data Transfer APIs
@@ -301,6 +310,10 @@ protected:
 protected:
     TensorMetaData meta_;
     TensorData data_;
+
+private:
+    // Mark to indicate if the tensor is created from to_blob_()
+    bool to_blob_mark_ = false;
 };
 
 } // namespace infinicore

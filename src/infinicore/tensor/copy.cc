@@ -38,7 +38,7 @@ void TensorImpl::copy_from(Tensor src) {
             } else {
                 auto local_src = Tensor::empty(this->shape(), this->dtype(), this->device());
                 context::setDevice(src->device());
-                context::memcpyD2H(local_src->data(), src->data(), this->data_.memory->size());
+                context::memcpyD2H(local_src->data(), src->data(), copy_size);
                 op::rearrange_(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()), local_src);
             }
         } else if (src->device().getType() == Device::Type::CPU) {

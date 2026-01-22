@@ -52,9 +52,19 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
         if (size <= cls.block_size) {
             if (!cls.free_blocks.empty()) {
                 block = cls.free_blocks.back();
-                cls.free_blocks.pop_back();
-                block->in_use = true;
-                return reinterpret_cast<std::byte *>(block->ptr);
+                while (block != nullptr && block->in_use) {
+                    cls.free_blocks.pop_back();
+                    if (cls.free_blocks.empty()) {
+                        block = nullptr;
+                        break;
+                    }
+                    block = cls.free_blocks.back();
+                }
+                if (block != nullptr) {
+                    cls.free_blocks.pop_back();
+                    block->in_use = true;
+                    return reinterpret_cast<std::byte *>(block->ptr);
+                }
             }
             // Allocate a new block for this class
             block = std::make_shared<Block>();
