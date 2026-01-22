@@ -7,6 +7,7 @@ from .random_sample import random_sample
 from .rms_norm import rms_norm
 from .rope import RopeAlgo, rope
 from .silu import silu
+from .silu_and_mul import silu_and_mul
 from .swiglu import swiglu
 
 __all__ = [
@@ -21,4 +22,5 @@ __all__ = [
     "silu",
     "swiglu",
     "linear_w8a8i8",
+    "silu_and_mul",
 ]

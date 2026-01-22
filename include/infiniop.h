@@ -31,6 +31,7 @@
 #include "infiniop/ops/rope.h"
 #include "infiniop/ops/sigmoid.h"
 #include "infiniop/ops/silu.h"
+#include "infiniop/ops/silu_and_mul.h"
 #include "infiniop/ops/softmax.h"
 #include "infiniop/ops/softplus.h"
 #include "infiniop/ops/sub.h"

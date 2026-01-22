@@ -17,4 +17,5 @@
 #include "ops/rms_norm.hpp"
 #include "ops/rope.hpp"
 #include "ops/silu.hpp"
+#include "ops/silu_and_mul.hpp"
 #include "ops/swiglu.hpp"
