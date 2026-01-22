@@ -65,10 +65,6 @@ Tensor::operator bool() const {
     return impl_ != nullptr;
 }
 
-void Tensor::resume_from_blob_() const {
-    context::reinstantiateBlob(impl_->data_.memory);
-}
-
 TensorMetaData::TensorMetaData(const Shape &_shape, const Strides &_strides, const DataType &_dtype)
     : shape(_shape), strides(_strides), dtype(_dtype) {
     INFINICORE_CHECK_ERROR(infiniopCreateTensorDescriptor(&desc, shape.size(), shape.data(), strides.data(), (infiniDtype_t)dtype));
@@ -280,10 +276,22 @@ std::shared_ptr<TensorImpl> TensorImpl::strided_from_blob(
     return t;
 }
 
-Tensor TensorImpl::to_blob() const {
+Tensor TensorImpl::to_blob_() const {
     auto t = std::shared_ptr<TensorImpl>(new TensorImpl(shape(), strides(), dtype()));
     t->data_.offset = this->data_.offset;
     t->data_.memory = std::make_shared<Memory>(this->data_.memory->data(), this->data_.memory->size(), this->data_.memory->device(), nullptr);
+    t->to_blob_mark_ = true;
+    return Tensor{t};
+}
+
+Tensor TensorImpl::resume_from_blob_() const {
+    auto t = std::shared_ptr<TensorImpl>(new TensorImpl(shape(), strides(), dtype()));
+    t->data_.offset = this->data_.offset;
+    if (to_blob_mark_) {
+        t->data_.memory = context::reinstantiateBlob(this->data_.memory);
+    } else {
+        t->data_.memory = this->data_.memory;
+    }
 
     return Tensor{t};
 }

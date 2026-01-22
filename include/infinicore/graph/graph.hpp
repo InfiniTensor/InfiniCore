@@ -12,7 +12,6 @@ class GraphManager;
 class GraphTensor : public Tensor {
 public:
     GraphTensor(const Tensor &);
-    void resume() const;
 };
 
 class GraphOperator {
