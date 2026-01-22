@@ -9,6 +9,7 @@ Tensor linear_w8a8i8(Tensor input,
                      Tensor weight_scale,
                      std::optional<Tensor> bias) {
 
+    // Input is of shape [M, K], Weight_packed is of shape [N, K],stirdes is [N, 1]
     Size ndim = input->ndim();
     Size out_features = weight_packed->shape()[0];
 

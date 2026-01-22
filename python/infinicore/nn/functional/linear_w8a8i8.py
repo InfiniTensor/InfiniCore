@@ -4,8 +4,6 @@ from infinicore.tensor import Tensor
 
 def linear_w8a8i8(
     input: Tensor,
-    input_packed: Tensor,
-    input_scale: Tensor,
     weight_packed: Tensor,
     weight_scale: Tensor,
     bias=None,
