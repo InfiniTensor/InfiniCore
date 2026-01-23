@@ -342,7 +342,10 @@ class BaseOperatorTest(ABC):
         for i, inp in enumerate(inputs):
             if isinstance(inp, torch.Tensor):
                 # Clone only if this input will be used for comparison
-                if comparison_target == i:
+                if comparison_target == i or (
+                    isinstance(comparison_target, (list, tuple))
+                    and i in comparison_target
+                ):
                     cloned_inp = clone_torch_tensor(inp)
                     infini_tensor = infinicore_tensor_from_torch(cloned_inp)
                     cloned_tensors.append(cloned_inp)
@@ -508,7 +511,9 @@ class BaseOperatorTest(ABC):
             # Handle multiple outputs comparison
 
             # Determine what to compare based on comparison_target
-            if comparison_target is None:
+            if comparison_target is None or isinstance(
+                comparison_target, (list, tuple)
+            ):
                 # Compare return values (out-of-place multiple outputs)
                 torch_comparison = torch_result
                 infini_comparison = infini_result
@@ -573,7 +578,9 @@ class BaseOperatorTest(ABC):
         # ==========================================================================
         else:
             # Determine comparison targets for single output
-            if comparison_target is None:
+            if comparison_target is None or isinstance(
+                comparison_target, (list, tuple)
+            ):
                 # Compare return values (out-of-place)
                 torch_comparison = torch_result
                 infini_comparison = infini_result

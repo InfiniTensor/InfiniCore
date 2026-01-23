@@ -15,12 +15,6 @@ __C __export infiniStatus_t infiniopGetRandomSampleWorkspaceSize(
     infiniopRandomSampleDescriptor_t desc,
     size_t *size);
 
-__C __export infiniStatus_t infiniopCreateRandomSampleBatchDescriptor(
-    infiniopHandle_t handle,
-    infiniopRandomSampleDescriptor_t *desc_ptr,
-    infiniopTensorDescriptor_t result,
-    infiniopTensorDescriptor_t probs);
-
 __C __export infiniStatus_t infiniopRandomSample(
     infiniopRandomSampleDescriptor_t desc,
     void *workspace,
