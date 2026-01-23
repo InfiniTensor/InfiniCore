@@ -47,13 +47,13 @@ target("infiniop-metax")
     on_install(function (target) end)
     set_languages("cxx17")
     set_warnings("all", "error")
-    add_cxxflags("-lstdc++", "-fPIC", "-Wno-defaulted-function-deleted", "-Wno-strict-aliasing", {force = true})
+    add_cxflags("-lstdc++", "-fPIC", "-Wno-defaulted-function-deleted", "-Wno-strict-aliasing", {force = true})
     add_files("../src/infiniop/devices/metax/*.cc", "../src/infiniop/ops/*/metax/*.cc")
     add_files("../src/infiniop/ops/*/metax/*.maca", {rule = "maca"})
 
     if has_config("ninetoothed") then
         add_includedirs(MACA_ROOT .. "/include/mcr")
-        add_files("../build/ninetoothed/*.c", {cxxflags = {"-include stdlib.h", "-Wno-return-type"}})
+        add_files("../build/ninetoothed/*.c", {cxflags = {"-include stdlib.h", "-Wno-return-type"}})
     end
 target_end()
 
@@ -63,7 +63,7 @@ target("infinirt-metax")
     on_install(function (target) end)
     add_deps("infini-utils")
     set_warnings("all", "error")
-    add_cxxflags("-lstdc++ -fPIC")
+    add_cxflags("-lstdc++ -fPIC")
     add_files("../src/infinirt/metax/*.cc")
 target_end()
 
@@ -73,7 +73,7 @@ target("infiniccl-metax")
     on_install(function (target) end)
     set_warnings("all", "error")
     if not is_plat("windows") then
-        add_cxxflags("-fPIC")
+        add_cxflags("-fPIC")
     end
     if has_config("ccl") then
         if has_config("use-mc") then
