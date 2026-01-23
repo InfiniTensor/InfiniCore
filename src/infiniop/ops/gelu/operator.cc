@@ -11,6 +11,9 @@
 #ifdef ENABLE_METAX_API
 #include "metax/gelu_metax.h"
 #endif
+#ifdef ENABLE_KUNLUN_API
+#include "kunlun/gelu_kunlun.h"
+#endif
 
 __C infiniStatus_t infiniopCreateGeluDescriptor(
     infiniopHandle_t handle,
@@ -43,6 +46,9 @@ __C infiniStatus_t infiniopCreateGeluDescriptor(
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, metax);
 #endif
+#ifdef ENABLE_KUNLUN_API
+        CREATE(INFINI_DEVICE_KUNLUN, kunlun);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -73,6 +79,9 @@ __C infiniStatus_t infiniopGetGeluWorkspaceSize(infiniopGeluDescriptor_t desc, s
 #endif
 #ifdef ENABLE_METAX_API
         GET(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_KUNLUN_API
+        GET(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -112,6 +121,9 @@ __C infiniStatus_t infiniopGelu(
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
+#ifdef ENABLE_KUNLUN_API
+        CALCULATE(INFINI_DEVICE_KUNLUN, kunlun);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -144,6 +156,9 @@ infiniopDestroyGeluDescriptor(infiniopGeluDescriptor_t desc) {
 #endif
 #ifdef ENABLE_METAX_API
         DELETE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_KUNLUN_API
+        DELETE(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
 
     default:

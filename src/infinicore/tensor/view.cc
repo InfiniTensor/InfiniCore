@@ -3,6 +3,7 @@
 #include "infinicore/tensor.hpp"
 
 #include <spdlog/spdlog.h>
+#include <stdexcept>
 
 namespace infinicore {
 Tensor TensorImpl::unsqueeze(size_t dim) const {
@@ -26,8 +27,10 @@ Tensor TensorImpl::narrow(const std::vector<TensorSliceParams> &slices) const {
     size_t offset = data_.offset;
 
     for (const auto &slice : slices) {
-        assert(slice.len > 0);
-        assert(meta_.shape[slice.dim] >= slice.start + slice.len);
+        if (meta_.shape[slice.dim] < slice.start + slice.len) {
+            spdlog::error("Invalid slice [dim={}, start={}, len={}] on {}.", slice.dim, slice.start, slice.len, this->info());
+            throw std::runtime_error("Invalid slice on tensor.");
+        }
         new_shape[slice.dim] = slice.len;
         offset += slice.start * meta_.strides[slice.dim] * dsize(meta_.dtype);
     }
