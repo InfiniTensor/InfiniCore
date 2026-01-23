@@ -44,7 +44,8 @@ Embedding::Embedding(size_t num_embeddings,
 
 Tensor Embedding::forward(const Tensor &indices) const {
     // TODO: Implement on-device embedding for all devices, then remove the condition and the classic approach
-    if (device_ == Device::Type::NVIDIA || device_ == Device::Type::ILUVATAR || device_ == Device::Type::METAX || device_ == Device::Type::MOORE) {
+    auto device_type = device_.getType();
+    if (device_type == Device::Type::NVIDIA || device_type == Device::Type::ILUVATAR || device_type == Device::Type::METAX || device_type == Device::Type::MOORE) {
         // Use op::embedding which supports device-side input and batch dimension
         return op::embedding(indices->contiguous()->to(device_), weight_);
     }
