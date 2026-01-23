@@ -49,12 +49,12 @@ infiniStatus_t Descriptor::create(
     infiniopHandle_t handle,
     Descriptor **desc_ptr,
     infiniopTensorDescriptor_t y_desc,
+    infiniopTensorDescriptor_t residual_out_desc,
     infiniopTensorDescriptor_t a_desc,
     infiniopTensorDescriptor_t b_desc,
     infiniopTensorDescriptor_t weight_desc,
-    float epsilon,
-    infiniopTensorDescriptor_t residual_out_desc) {
-    auto result = AddRMSNormInfo::create(y_desc, a_desc, b_desc, weight_desc, epsilon, residual_out_desc);
+    float epsilon) {
+    auto result = AddRMSNormInfo::create(y_desc, residual_out_desc, a_desc, b_desc, weight_desc, epsilon);
     CHECK_RESULT(result);
     auto info = result.take();
 
@@ -122,8 +122,8 @@ infiniStatus_t launchKernel(
 
 infiniStatus_t Descriptor::calculate(
     void *workspace, size_t workspace_size,
-    void *y, const void *a, const void *b, const void *weight,
-    void *residual_out, void *stream) const {
+    void *y, void *residual_out, const void *a, const void *b, const void *weight,
+    void *stream) const {
 
     if (workspace_size < _workspace_size) {
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
