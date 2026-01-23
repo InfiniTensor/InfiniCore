@@ -1,4 +1,5 @@
 #include "infinicore/nn/module.hpp"
+#include <iostream>
 #include <spdlog/spdlog.h>
 #include <stdexcept>
 
@@ -72,6 +73,7 @@ Tensor Module::register_buffer(const std::string &name, Parameter buffer) {
 
 void Module::load_state_dict_recursively(const std::unordered_map<std::string, Tensor> &_state_dict, const std::string &prefix) {
     // Load direct parameters with the given prefix
+
     for (const auto &[param_name, param] : parameters_) {
         std::string full_name = prefix.empty() ? param_name : prefix + "." + param_name;
         auto it = _state_dict.find(full_name);
