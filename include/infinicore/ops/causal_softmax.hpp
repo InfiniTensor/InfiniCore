@@ -1,16 +1,14 @@
 #pragma once
 
 #include "../device.hpp"
+#include "../graph/graph.hpp"
 #include "common/op.hpp"
 
 namespace infinicore::op {
-class CausalSoftmax {
-public:
-    using schema = void (*)(Tensor, Tensor);
-    static void execute(Tensor output, Tensor input);
-    static common::OpDispatcher<schema> &dispatcher();
-};
 
-Tensor causal_softmax(Tensor input);
-void causal_softmax_(Tensor output, Tensor input);
+INFINICORE_GRAPH_OP_CLASS(CausalSoftmax, Tensor, const Tensor &);
+
+Tensor causal_softmax(const Tensor &input);
+void causal_softmax_(Tensor output, const Tensor &input);
+
 } // namespace infinicore::op
