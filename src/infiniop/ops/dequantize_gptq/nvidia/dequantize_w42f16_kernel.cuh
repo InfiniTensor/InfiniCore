@@ -1,6 +1,6 @@
 #pragma once
 
-__device__ uint4 dequantize_s4_to_fp16x2_awq(uint32_t const &source) {
+__device__ uint4 dequantize_s4_to_fp16x2_gptq(uint32_t const &source) {
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 750
     // 步骤 1: 从一个 32-bit 源数据中解包出 8 个 4-bit 无符号整数。
     // 源数据的内存布局被假定为 [v7, v6, v5, v4, v3, v2, v1, v0]，
@@ -14,19 +14,18 @@ __device__ uint4 dequantize_s4_to_fp16x2_awq(uint32_t const &source) {
     const unsigned int v6 = (source >> 24) & 0x0F;
     const unsigned int v7 = (source >> 28) & 0x0F;
 
-    // 步骤 2: 对于 signed 4-bit (s4)，减去 8 以映射到 [-8, 7] 范围。
-    // 定义偏移量
-    __half offset = __half(8);
-
-    // 计算 signed 值
-    __half hv0 = __half(v0) - offset;
-    __half hv1 = __half(v1) - offset;
-    __half hv2 = __half(v2) - offset;
-    __half hv3 = __half(v3) - offset;
-    __half hv4 = __half(v4) - offset;
-    __half hv5 = __half(v5) - offset;
-    __half hv6 = __half(v6) - offset;
-    __half hv7 = __half(v7) - offset;
+    // 步骤 2: GPTQ 是 (Q - Z) * S。
+    // Q 和 Z 都是无符号数 [0, 15]。
+    // 这里不需要 - offset
+    
+    __half hv0 = __half(v0);
+    __half hv1 = __half(v1);
+    __half hv2 = __half(v2);
+    __half hv3 = __half(v3);
+    __half hv4 = __half(v4);
+    __half hv5 = __half(v5);
+    __half hv6 = __half(v6);
+    __half hv7 = __half(v7);
 
     // 步骤 3: 将 half 值按 PTX 交错顺序打包成 __half2 并存入 result 中。
     // 顺序：result_ptr[0]: low=hv0, high=hv4

@@ -11,7 +11,7 @@
  * @param source 输入的32位无符号整数，它打包了8个4-bit的数据。
  * @return 一个 uint4 变量，其中包含8个反量化后的 half 值。
  */
-__device__ __forceinline__ uint4 dequantize_s4_to_fp16x2(uint32_t const &source) {
+__device__ __forceinline__ uint4 dequantize_s4_to_fp16x2_awq(uint32_t const &source) {
     // 步骤 1: 从一个 32-bit 源数据中解包出 8 个 4-bit 无符号整数。
     // 源数据的内存布局被假定为 [v7, v6, v5, v4, v3, v2, v1, v0]，
     // 其中每个 'v' 都是一个 4-bit 的半字节 (nibble)。

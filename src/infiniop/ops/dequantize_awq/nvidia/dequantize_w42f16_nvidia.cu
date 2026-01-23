@@ -10,33 +10,36 @@
 
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 750)
 __global__ void __launch_bounds__(64)
-    dequantize_weights(int *__restrict__ B, half *__restrict__ scaling_factors,
-                       int *__restrict__ zeros, half *__restrict__ C, int G) {
+    dequantize_weights_awq(int *__restrict__ B, half *__restrict__ scaling_factors,
+                       int *__restrict__ zeros, half *__restrict__ C, int G,
+                       int out_features, int in_features) {
     // static constexpr uint32_t ZERO = 0x0;
-    half B_shared[32 * (128 + 8)];
 
-    half *B_shared_ptr2 = B_shared;
-
-    int N = blockDim.x * gridDim.x; // 2
     int col = (blockIdx.x * blockDim.x + threadIdx.x);
     int row = (blockIdx.y * blockDim.y + threadIdx.y);
-    int index1 = 8 * col + 8 * row * N;
+
+    // 边界检查，防止越界访问
+    if (col >= out_features || row >= in_features) return;
+
+    // 每个元素在输出中的起始地址：行主序，连续 8 个 half
+    int index1 = 8 * col + 8 * row * out_features;
     half *C_ptr2 = C + index1;
 
-    int index2 = col + row * N;
+    int index2 = col + row * out_features;
     int *B_ptr2 = B + index2;
 
-    int index3 = col + (int)(row / G) * N;
+    int index3 = col + (int)(row / G) * out_features;
     int *zeros_ptr2 = zeros + index3;
-    int index4 = 8 * col + (int)(row / G) * N * 8;
+
+    int index4 = 8 * col + (int)(row / G) * out_features * 8;
     half *scaling_factors_ptr2 = scaling_factors + index4;
 
     uint32_t zeros_loaded = *(uint32_t *)(zeros_ptr2);
-    uint4 B_loaded_zero = dequantize_s4_to_fp16x2(zeros_loaded);
+    uint4 B_loaded_zero = dequantize_s4_to_fp16x2_awq(zeros_loaded);
     uint4 B_loaded_scale = *(uint4 *)(scaling_factors_ptr2);
 
     uint32_t B_loaded = *(uint32_t *)B_ptr2;
-    uint4 B_loaded_fp16 = dequantize_s4_to_fp16x2(B_loaded);
+    uint4 B_loaded_fp16 = dequantize_s4_to_fp16x2_awq(B_loaded);
 
     // Reinterpret uint4 components as __half2
     __half2 *B_loaded_fp16_h2 = reinterpret_cast<__half2 *>(&B_loaded_fp16);
@@ -55,42 +58,43 @@ __global__ void __launch_bounds__(64)
     B_loaded_fp16_h2[2] = __hfma2(B_loaded_fp16_h2[2], B_loaded_scale_h2[2], __float2half2_rn(0.0f));
     B_loaded_fp16_h2[3] = __hfma2(B_loaded_fp16_h2[3], B_loaded_scale_h2[3], __float2half2_rn(0.0f));
 
-    // Store back to shared memory
-    *(uint4 *)B_shared_ptr2 = B_loaded_fp16;
-
+    // 直接写回全局内存输出
+    half *out_vec = reinterpret_cast<half *>(&B_loaded_fp16);
+    #pragma unroll
     for (int i = 0; i < 8; ++i) {
-        *(C_ptr2 + i) = B_shared[i];
+        C_ptr2[i] = out_vec[i];
     }
 }
 #else
 __global__ void __launch_bounds__(64)
-    dequantize_weights(int *__restrict__ B, half *__restrict__ scaling_factors,
-                       int *__restrict__ zeros, half *__restrict__ C, int group_size) {
+    dequantize_weights_awq(int *__restrict__ B, half *__restrict__ scaling_factors,
+                       int *__restrict__ zeros, half *__restrict__ C, int group_size,
+                       int out_features, int in_features) {
     static constexpr uint32_t ZERO = 0x0;
-    half B_shared[32 * (128 + 8)];
 
-    half *B_shared_ptr2 = B_shared;
-
-    int N = blockDim.x * gridDim.x; // 2
     int col = (blockIdx.x * blockDim.x + threadIdx.x);
     int row = blockIdx.y * blockDim.y + threadIdx.y;
-    int index1 = 8 * col + 8 * row * N;
+
+    // 边界检查，防止越界访问
+    if (col >= out_features || row >= in_features) return;
+
+    int index1 = 8 * col + 8 * row * out_features;
     half *C_ptr2 = C + index1;
 
-    int index2 = col + row * N;
+    int index2 = col + row * out_features;
     int *B_ptr2 = B + index2;
 
-    int index3 = col + (int)(row / group_size) * N;
+    int index3 = col + (int)(row / group_size) * out_features;
     int *zeros_ptr2 = zeros + index3;
-    int index4 = 8 * col + (int)(row / group_size) * N * 8;
+    int index4 = 8 * col + (int)(row / group_size) * out_features * 8;
     half *scaling_factors_ptr2 = scaling_factors + index4;
 
     uint32_t zeros_loaded = *(uint32_t *)(zeros_ptr2);
-    uint4 B_loaded_zero = dequantize_s4_to_fp16x2(zeros_loaded);
+    uint4 B_loaded_zero = dequantize_s4_to_fp16x2_awq(zeros_loaded);
     uint4 B_loaded_scale = *(uint4 *)(scaling_factors_ptr2);
 
     uint32_t B_loaded = *(uint32_t *)B_ptr2;
-    uint4 B_loaded_fp16 = dequantize_s4_to_fp16x2(B_loaded);
+    uint4 B_loaded_fp16 = dequantize_s4_to_fp16x2_awq(B_loaded);
     asm volatile("sub.f16x2 %0, %1, %2;\n"
                  : "=r"(B_loaded_fp16.x)
                  : "r"(B_loaded_fp16.x), "r"(B_loaded_zero.x));
@@ -116,10 +120,11 @@ __global__ void __launch_bounds__(64)
                  : "=r"(B_loaded_fp16.w)
                  : "r"(B_loaded_fp16.w), "r"(B_loaded_scale.w), "r"(ZERO));
 
-    *(uint4 *)B_shared_ptr2 = B_loaded_fp16;
-
+    // 直接写回全局内存输出
+    half *out_vec = reinterpret_cast<half *>(&B_loaded_fp16);
+    #pragma unroll
     for (int i = 0; i < 8; ++i) {
-        *(C_ptr2 + i) = B_shared[i];
+        C_ptr2[i] = out_vec[i];
     }
 }
 #endif
@@ -183,8 +188,8 @@ Descriptor::calculate(
     half *scales_ = const_cast<half *>(reinterpret_cast<const half *>(scales));
     int *zeros_ = const_cast<int *>(reinterpret_cast<const int *>(zeros));
 
-    dequantize_weights<<<num_blocks, threads_per_block, 0, reinterpret_cast<cudaStream_t>(stream)>>>(
-        qweight_, scales_, zeros_, out_, group_size);
+    dequantize_weights_awq<<<num_blocks, threads_per_block, 0, reinterpret_cast<cudaStream_t>(stream)>>>(
+        qweight_, scales_, zeros_, out_, group_size, out_features, in_features);
 
     return INFINI_STATUS_SUCCESS;
 }
