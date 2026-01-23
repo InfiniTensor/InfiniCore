@@ -1,8 +1,8 @@
+import infinicore.tensor as tensor
 from infinicore.lib import _infinicore
-from infinicore.tensor import Tensor
 
 
-def add_rms_norm(a, b, weight, epsilon=1e-5, *, out=None):
+def add_rms_norm(a, b, weight, epsilon=1e-5, *, out=None, residual=None):
     """
     Fused Add and RMS Normalization.
 
@@ -18,30 +18,17 @@ def add_rms_norm(a, b, weight, epsilon=1e-5, *, out=None):
         The add_result can be used as residual for subsequent layers.
     """
     if out is None:
-        result = _infinicore.add_rms_norm(
-            a._underlying, b._underlying, weight._underlying, epsilon
-        )
-        return (Tensor(result[0]), Tensor(result[1]))
+        out = tensor.empty(a.shape, dtype=a.dtype, device=a.device)
+    if residual is None:
+        residual = tensor.empty(b.shape, dtype=b.dtype, device=b.device)
 
-    y, residual_out = out
     _infinicore.add_rms_norm_(
-        y._underlying,
-        residual_out._underlying,
+        out._underlying,
+        residual._underlying,
         a._underlying,
         b._underlying,
         weight._underlying,
         epsilon,
     )
-    return (y, residual_out)
 
-
-def add_rms_norm_(y, residual_out, a, b, weight, epsilon=1e-5):
-    """In-place Fused Add and RMS Normalization."""
-    _infinicore.add_rms_norm_(
-        y._underlying,
-        residual_out._underlying,
-        a._underlying,
-        b._underlying,
-        weight._underlying,
-        epsilon,
-    )
+    return out, residual

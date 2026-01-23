@@ -43,7 +43,7 @@ from infinicore.dtype import (
     uint8,
 )
 from infinicore.ops.add import add
-from infinicore.ops.add_rms_norm import add_rms_norm, add_rms_norm_
+from infinicore.ops.add_rms_norm import add_rms_norm
 from infinicore.ops.attention import attention
 from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
