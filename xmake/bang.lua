@@ -40,6 +40,7 @@ target("infiniop-cambricon")
     add_deps("infini-utils")
     on_install(function (target) end)
 
+    add_cxflags("-lstdc++ -fPIC")
     add_cxxflags("-lstdc++ -fPIC")
     set_warnings("all", "error")
 
@@ -58,6 +59,7 @@ target("infinirt-cambricon")
     on_install(function (target) end)
     -- Add include dirs
     add_files("../src/infinirt/bang/*.cc")
+    add_cxflags("-lstdc++ -Wall -Werror -fPIC")
     add_cxxflags("-lstdc++ -Wall -Werror -fPIC")
 target_end()
 
@@ -88,6 +90,7 @@ target("infiniccl-cambricon")
             add_runenvs("LD_LIBRARY_PATH", NEUWARE_HOME .. "/lib64")
 
             add_files("../src/infiniccl/cambricon/*.cc")
+            add_cxflags("-fPIC")
             add_cxxflags("-fPIC")
             add_ldflags("-fPIC")
         else

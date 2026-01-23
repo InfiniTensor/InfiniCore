@@ -223,6 +223,7 @@ target("infini-utils")
             add_cxxflags("/openmp")
         end
     else
+        add_cxflags("-fPIC", "-Wno-unknown-pragmas")
         add_cxxflags("-fPIC", "-Wno-unknown-pragmas")
         if has_config("omp") then
             add_cxxflags("-fopenmp")
@@ -269,6 +270,7 @@ target("infinirt")
     end
     set_languages("cxx17")
     if not is_plat("windows") then
+        add_cxflags("-fPIC")
         add_cxxflags("-fPIC")
     end
     set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))

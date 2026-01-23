@@ -88,6 +88,7 @@ target("infiniop-qy")
         add_cuflags("-Xcompiler=-fPIC")
         add_cuflags("--extended-lambda")
         add_culdflags("-Xcompiler=-fPIC")
+        add_cxflags("-fPIC")
         add_cxxflags("-fPIC")
         add_cuflags("--expt-relaxed-constexpr")
         if CUDNN_ROOT ~= nil then
@@ -116,6 +117,7 @@ target("infinirt-qy")
     else
         add_cuflags("-Xcompiler=-fPIC")
         add_culdflags("-Xcompiler=-fPIC")
+        add_cxflags("-fPIC")
         add_cxxflags("-fPIC")
     end
 
@@ -132,6 +134,7 @@ target("infiniccl-qy")
         if not is_plat("windows") then
             add_cuflags("-Xcompiler=-fPIC")
             add_culdflags("-Xcompiler=-fPIC")
+            add_cxflags("-fPIC")
             add_cxxflags("-fPIC")
 
             local nccl_root = os.getenv("NCCL_ROOT")

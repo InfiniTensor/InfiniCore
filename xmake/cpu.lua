@@ -11,6 +11,7 @@ target("infiniop-cpu")
             add_cxxflags("/openmp")
         end
     else
+        add_cxflags("-fPIC", "-Wno-unknown-pragmas")
         add_cxxflags("-fPIC", "-Wno-unknown-pragmas")
         if has_config("omp") then
             add_cxxflags("-fopenmp")
@@ -31,6 +32,7 @@ target("infinirt-cpu")
     set_warnings("all", "error")
 
     if not is_plat("windows") then
+        add_cxflags("-fPIC")
         add_cxxflags("-fPIC")
     end
 
