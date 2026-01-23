@@ -1,0 +1,116 @@
+#include "../../../devices/nvidia/nvidia_common.cuh"
+#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
+#include "../cuda/kernel.cuh"
+#include "swiglu_cuda_nvidia.cuh"
+
+template <typename T, unsigned int BLOCK_SIZE>
+INFINIOP_CUDA_KERNEL SwiGLUCuda(
+    T *c,
+    const T *a,
+    const T *b,
+    int length,
+    const size_t *shape,
+    const ptrdiff_t *c_strides,
+    const ptrdiff_t *a_strides,
+    const ptrdiff_t *b_strides,
+    int ndim) {
+    SwiGLUCudaKernel<T, BLOCK_SIZE>(c, a, b, length, shape, c_strides, a_strides, b_strides, ndim);
+}
+
+namespace op::swiglu_cuda::nvidia {
+
+struct Descriptor::Opaque {
+    std::shared_ptr<device::nvidia::Handle::Internal> internal;
+};
+
+Descriptor::~Descriptor() {
+    delete _opaque;
+}
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t c_desc,
+    infiniopTensorDescriptor_t a_desc,
+    infiniopTensorDescriptor_t b_desc) {
+
+    auto info = SwiGLUCudaInfo::createSwiGLUCudaInfo(c_desc, a_desc, b_desc);
+    CHECK_RESULT(info);
+    size_t WorkSpaceSize = c_desc->ndim() * (sizeof(ptrdiff_t) * 3 + sizeof(size_t));
+    *desc_ptr = new Descriptor(
+        new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
+        info.take(), WorkSpaceSize, handle->device, handle->device_id);
+    return INFINI_STATUS_SUCCESS;
+}
+
+template <unsigned int BLOCK_SIZE, typename T>
+infiniStatus_t calculate_swiglu_cuda(
+    const SwiGLUCudaInfo &info,
+    T *c,
+    const T *a,
+    const T *b,
+    cudaStream_t stream,
+    void *workspace) {
+    int ndim = (int)info.ndim;
+    char *workspace_ptr = reinterpret_cast<char *>(workspace);
+    ptrdiff_t *c_strides_cuda = reinterpret_cast<ptrdiff_t *>(workspace_ptr);
+    ptrdiff_t *a_strides_cuda = c_strides_cuda + ndim;
+    ptrdiff_t *b_strides_cuda = a_strides_cuda + ndim;
+
+    size_t ptrdiff_array_size = 3 * ndim * sizeof(ptrdiff_t);
+    size_t *shape_cuda = reinterpret_cast<size_t *>(workspace_ptr + ptrdiff_array_size);
+
+    CHECK_CUDA(cudaMemcpyAsync(c_strides_cuda, info.c_strides.data(), sizeof(ptrdiff_t) * ndim, cudaMemcpyHostToDevice, stream));
+    CHECK_CUDA(cudaMemcpyAsync(a_strides_cuda, info.a_strides.data(), sizeof(ptrdiff_t) * ndim, cudaMemcpyHostToDevice, stream));
+    CHECK_CUDA(cudaMemcpyAsync(b_strides_cuda, info.b_strides.data(), sizeof(ptrdiff_t) * ndim, cudaMemcpyHostToDevice, stream));
+
+    CHECK_CUDA(cudaMemcpyAsync(shape_cuda, info.shape.data(), sizeof(size_t) * ndim, cudaMemcpyHostToDevice, stream));
+    int length = (int)info.length;
+    int num_blocks = (length + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    SwiGLUCuda<T, BLOCK_SIZE>
+        <<<num_blocks, BLOCK_SIZE, 0, stream>>>(c, a, b, length, shape_cuda, c_strides_cuda, a_strides_cuda, b_strides_cuda, ndim);
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *c,
+    const void *a,
+    const void *b,
+    void *stream_) const {
+
+    if (workspace_size < _workspace_size) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+
+    cudaStream_t stream = (cudaStream_t)stream_;
+
+#define CALCULATE_SWIGLU_CUDA(BLOCK_SIZE, TDATA) \
+    calculate_swiglu_cuda<BLOCK_SIZE, TDATA>(_info, (TDATA *)c, (const TDATA *)a, (const TDATA *)b, stream, workspace)
+#define CALCULATE_SWIGLU_CUDA_WITH_BLOCK_SIZE(BLOCK_SIZE)            \
+    {                                                                \
+        if (_info.dtype == INFINI_DTYPE_F16)                         \
+            return CALCULATE_SWIGLU_CUDA(BLOCK_SIZE, half);          \
+        else if (_info.dtype == INFINI_DTYPE_F32)                    \
+            return CALCULATE_SWIGLU_CUDA(BLOCK_SIZE, float);         \
+        else if (_info.dtype == INFINI_DTYPE_BF16)                   \
+            return CALCULATE_SWIGLU_CUDA(BLOCK_SIZE, __nv_bfloat16); \
+        else                                                         \
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;                   \
+    }
+
+    if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_1024) {
+        CALCULATE_SWIGLU_CUDA_WITH_BLOCK_SIZE(CUDA_BLOCK_SIZE_1024)
+    } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_512) {
+        CALCULATE_SWIGLU_CUDA_WITH_BLOCK_SIZE(CUDA_BLOCK_SIZE_512)
+    } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_4096) {
+        CALCULATE_SWIGLU_CUDA_WITH_BLOCK_SIZE(CUDA_BLOCK_SIZE_4096)
+    } else {
+        return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
+    }
+
+    return INFINI_STATUS_SUCCESS;
+}
+} // namespace op::swiglu_cuda::nvidia
