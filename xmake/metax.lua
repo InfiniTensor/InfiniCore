@@ -52,6 +52,8 @@ target("infiniop-metax")
     add_files("../src/infiniop/ops/*/metax/*.maca", {rule = "maca"})
 
     if has_config("ninetoothed") then
+        add_includedirs(MACA_ROOT .. "/include/mcr")
+        add_includedirs(HPCC_ROOT .. "/include/hcr")
         add_files("../build/ninetoothed/*.c", {cxxflags = {"-include stdlib.h", "-Wno-return-type"}})
     end
 target_end()
