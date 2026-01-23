@@ -2,6 +2,10 @@
 #define __INFINIOP_API_H__
 
 #include "infiniop/handle.h"
+// Unified headers for elementwise operators
+#include "infiniop/ops/unary_ops_api.h"
+#include "infiniop/ops/binary_ops_api.h"
+// Other operators
 #include "infiniop/ops/add.h"
 #include "infiniop/ops/add_rms_norm.h"
 #include "infiniop/ops/attention.h"
