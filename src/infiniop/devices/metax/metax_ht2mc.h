@@ -98,4 +98,7 @@
 #define hcGraphDestroy mcGraphDestroy
 #define hcGraphExecDestroy mcGraphExecDestroy
 #define hcGraphLaunch mcGraphLaunch
+#define hcGetDevice mcGetDevice
+#define hcDeviceAttributeMultiProcessorCount mcDeviceAttributeMultiProcessorCount
+#define hcDeviceGetAttribute mcDeviceGetAttribute
 #endif
