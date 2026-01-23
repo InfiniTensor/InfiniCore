@@ -393,6 +393,7 @@ def add_rms_norm_(lib):
         infiniopTensorDescriptor_t,
         infiniopTensorDescriptor_t,
         infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
         c_float,
     ]
 
@@ -407,6 +408,7 @@ def add_rms_norm_(lib):
         infiniopOperatorDescriptor_t,
         c_void_p,
         c_size_t,
+        c_void_p,
         c_void_p,
         c_void_p,
         c_void_p,

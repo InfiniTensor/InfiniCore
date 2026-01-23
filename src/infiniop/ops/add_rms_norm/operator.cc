@@ -32,12 +32,12 @@
 __C infiniStatus_t infiniopCreateAddRMSNormDescriptor(
     infiniopHandle_t handle,
     infiniopAddRMSNormDescriptor_t *desc_ptr,
+    infiniopTensorDescriptor_t residual_out_desc,
     infiniopTensorDescriptor_t y_desc,
     infiniopTensorDescriptor_t a_desc,
     infiniopTensorDescriptor_t b_desc,
     infiniopTensorDescriptor_t weight_desc,
-    float epsilon,
-    infiniopTensorDescriptor_t residual_out_desc) {
+    float epsilon) {
 
 #define CREATE(CASE, NAMESPACE)                                                     \
     case CASE:                                                                      \
@@ -45,11 +45,11 @@ __C infiniStatus_t infiniopCreateAddRMSNormDescriptor(
             handle,                                                                 \
             reinterpret_cast<op::add_rms_norm::NAMESPACE::Descriptor **>(desc_ptr), \
             y_desc,                                                                 \
+            residual_out_desc,                                                      \
             a_desc,                                                                 \
             b_desc,                                                                 \
             weight_desc,                                                            \
-            epsilon,                                                                \
-            residual_out_desc)
+            epsilon)
 
     switch (handle->device) {
 #ifdef ENABLE_CPU_API
@@ -116,16 +116,16 @@ __C infiniStatus_t infiniopAddRMSNorm(
     void *workspace,
     size_t workspace_size,
     void *y,
+    void *residual_out,
     const void *a,
     const void *b,
     const void *weight,
-    void *residual_out,
     void *stream) {
 
 #define CALCULATE(CASE, NAMESPACE)                                                     \
     case CASE:                                                                         \
         return reinterpret_cast<const op::add_rms_norm::NAMESPACE::Descriptor *>(desc) \
-            ->calculate(workspace, workspace_size, y, a, b, weight, residual_out, stream)
+            ->calculate(workspace, workspace_size, y, residual_out, a, b, weight, stream)
 
     switch (desc->device_type) {
 
