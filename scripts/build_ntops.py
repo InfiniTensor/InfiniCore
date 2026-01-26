@@ -21,9 +21,14 @@ def _find_and_build_ops():
             if not ninetoothed_path.is_dir():
                 continue
 
+            build_file = ninetoothed_path / "build.py"
+            if not build_file.exists():
+                continue
+
             futures.append(executor.submit(_build, ninetoothed_path))
 
-        concurrent.futures.as_completed(futures)
+        for future in concurrent.futures.as_completed(futures):
+            future.result()
 
 
 def _build(ninetoothed_path):
