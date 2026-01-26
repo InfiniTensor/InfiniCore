@@ -1,19 +1,23 @@
-#include <cuda_runtime.h>
+#ifdef ENABLE_METAX_MC_API
+#include <mc_runtime.h>
+#else
+#include <hc_runtime.h>
+#endif
 
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
-#include "../../../devices/nvidia/nvidia_common.cuh"
-#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
+#include "../../../devices/metax/metax_common.h"
+#include "../../../devices/metax/metax_kernel_common.h"
 
 // #include "paged_attention_prefill_fa2.cuh"
-#include "paged_attention_prefill_nvidia.cuh"
+#include "paged_attention_prefill_metax.h"
 
 #include "../cuda/kernel_v2.cuh"
 
-namespace op::paged_attention_prefill::nvidia {
+namespace op::paged_attention_prefill::metax {
 
 namespace {
 constexpr size_t ceilDiv(size_t a, size_t b) {
@@ -36,7 +40,7 @@ inline const char *default_prefill_kernel(const PagedAttentionPrefillInfo &info)
 }
 
 template <typename Tindex, typename Tdata>
-INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd128Warp(
+INFINIOP_METAX_KERNEL PagedAttentionPrefillHd128Warp(
     Tdata *out,
     const Tdata *q,
     const Tdata *k_cache,
@@ -69,7 +73,7 @@ INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd128Warp(
 }
 
 template <typename Tindex, typename Tdata>
-INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd64Warp(
+INFINIOP_METAX_KERNEL PagedAttentionPrefillHd64Warp(
     Tdata *out,
     const Tdata *q,
     const Tdata *k_cache,
@@ -102,7 +106,7 @@ INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd64Warp(
 }
 
 template <typename Tindex, typename Tdata>
-INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd128WarpCta(
+INFINIOP_METAX_KERNEL PagedAttentionPrefillHd128WarpCta(
     Tdata *out,
     const Tdata *q,
     const Tdata *k_cache,
@@ -138,7 +142,7 @@ INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd128WarpCta(
 }
 
 template <typename Tindex, typename Tdata>
-INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd64WarpCta(
+INFINIOP_METAX_KERNEL PagedAttentionPrefillHd64WarpCta(
     Tdata *out,
     const Tdata *q,
     const Tdata *k_cache,
@@ -174,7 +178,7 @@ INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd64WarpCta(
 }
 
 template <typename Tindex, typename Tdata>
-INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd128WarpCta8(
+INFINIOP_METAX_KERNEL PagedAttentionPrefillHd128WarpCta8(
     Tdata *out,
     const Tdata *q,
     const Tdata *k_cache,
@@ -210,7 +214,7 @@ INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd128WarpCta8(
 }
 
 template <typename Tindex, typename Tdata>
-INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd128WarpCta8N128(
+INFINIOP_METAX_KERNEL PagedAttentionPrefillHd128WarpCta8N128(
     Tdata *out,
     const Tdata *q,
     const Tdata *k_cache,
@@ -247,7 +251,7 @@ INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd128WarpCta8N128(
 }
 
 template <typename Tindex, typename Tdata>
-INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd64WarpCta8(
+INFINIOP_METAX_KERNEL PagedAttentionPrefillHd64WarpCta8(
     Tdata *out,
     const Tdata *q,
     const Tdata *k_cache,
@@ -283,7 +287,7 @@ INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd64WarpCta8(
 }
 
 template <typename Tindex, typename Tdata>
-INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd128WarpCta8Pipe(
+INFINIOP_METAX_KERNEL PagedAttentionPrefillHd128WarpCta8Pipe(
     Tdata *out,
     const Tdata *q,
     const Tdata *k_cache,
@@ -319,7 +323,7 @@ INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd128WarpCta8Pipe(
 }
 
 template <typename Tindex>
-INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd128WarpCta8Mma(
+INFINIOP_METAX_KERNEL PagedAttentionPrefillHd128WarpCta8Mma(
     half *out,
     const half *q,
     const half *k_cache,
@@ -354,7 +358,7 @@ INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd128WarpCta8Mma(
 }
 
 template <typename Tindex, typename Tdata>
-INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd64WarpCta8Pipe(
+INFINIOP_METAX_KERNEL PagedAttentionPrefillHd64WarpCta8Pipe(
     Tdata *out,
     const Tdata *q,
     const Tdata *k_cache,
@@ -390,7 +394,7 @@ INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd64WarpCta8Pipe(
 }
 
 template <typename Tindex, typename Tdata>
-INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd128WarpCta8PipeSplitKv(
+INFINIOP_METAX_KERNEL PagedAttentionPrefillHd128WarpCta8PipeSplitKv(
     float *partial_acc,
     float *partial_m,
     float *partial_l,
@@ -433,7 +437,7 @@ INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd128WarpCta8PipeSplitKv(
 }
 
 template <typename Tindex, typename Tdata>
-INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd64WarpCta8PipeSplitKv(
+INFINIOP_METAX_KERNEL PagedAttentionPrefillHd64WarpCta8PipeSplitKv(
     float *partial_acc,
     float *partial_m,
     float *partial_l,
@@ -474,7 +478,7 @@ INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd64WarpCta8PipeSplitKv(
 }
 
 template <typename Tdata>
-INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd128SplitKvCombine(
+INFINIOP_METAX_KERNEL PagedAttentionPrefillHd128SplitKvCombine(
     Tdata *out,
     const float *partial_acc,
     const float *partial_m,
@@ -488,7 +492,7 @@ INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd128SplitKvCombine(
 }
 
 template <typename Tdata>
-INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd64SplitKvCombine(
+INFINIOP_METAX_KERNEL PagedAttentionPrefillHd64SplitKvCombine(
     Tdata *out,
     const float *partial_acc,
     const float *partial_m,
@@ -502,7 +506,7 @@ INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd64SplitKvCombine(
 }
 
 template <typename Tindex, typename Tdata>
-INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd128WarpCta16(
+INFINIOP_METAX_KERNEL PagedAttentionPrefillHd128WarpCta16(
     Tdata *out,
     const Tdata *q,
     const Tdata *k_cache,
@@ -538,7 +542,7 @@ INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd128WarpCta16(
 }
 
 template <typename Tindex, typename Tdata>
-INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd64WarpCta16(
+INFINIOP_METAX_KERNEL PagedAttentionPrefillHd64WarpCta16(
     Tdata *out,
     const Tdata *q,
     const Tdata *k_cache,
@@ -602,7 +606,7 @@ infiniStatus_t launch_prefill_ref(
     ptrdiff_t v_head_stride,
     ptrdiff_t o_stride,
     ptrdiff_t o_head_stride,
-    cudaStream_t stream) {
+    hcStream_t stream) {
 
     const dim3 grid(static_cast<uint32_t>(total_q_tokens), static_cast<uint32_t>(num_heads), 1);
     const dim3 block(static_cast<uint32_t>(head_size), 1, 1);
@@ -663,7 +667,7 @@ infiniStatus_t launch_prefill_warp(
     ptrdiff_t v_head_stride,
     ptrdiff_t o_stride,
     ptrdiff_t o_head_stride,
-    cudaStream_t stream) {
+    hcStream_t stream) {
 
     const dim3 block(32, 1, 1);
     // Global-token launch:
@@ -730,7 +734,7 @@ infiniStatus_t launch_prefill(
     ptrdiff_t v_head_stride,
     ptrdiff_t o_stride,
     ptrdiff_t o_head_stride,
-    cudaStream_t stream) {
+    hcStream_t stream) {
 
     constexpr int kWarps = 4;
     constexpr int kThreads = kWarps * 32;
@@ -796,7 +800,7 @@ infiniStatus_t launch_prefill_warpcta8(
     ptrdiff_t v_head_stride,
     ptrdiff_t o_stride,
     ptrdiff_t o_head_stride,
-    cudaStream_t stream) {
+    hcStream_t stream) {
 
     constexpr int kWarps = 8;
     constexpr int kThreads = kWarps * 32;
@@ -862,7 +866,7 @@ infiniStatus_t launch_prefill_warpcta8pipe(
     ptrdiff_t v_head_stride,
     ptrdiff_t o_stride,
     ptrdiff_t o_head_stride,
-    cudaStream_t stream) {
+    hcStream_t stream) {
 
     constexpr int kWarps = 8;
     constexpr int kThreads = kWarps * 32;
@@ -928,7 +932,7 @@ infiniStatus_t launch_prefill_warpcta8mma(
     ptrdiff_t v_head_stride,
     ptrdiff_t o_stride,
     ptrdiff_t o_head_stride,
-    cudaStream_t stream) {
+    hcStream_t stream) {
 
     // Current WMMA kernel only supports fp16 + head_dim=128.
     if constexpr (!std::is_same_v<Tdata, half>) {
@@ -974,8 +978,8 @@ infiniStatus_t launch_prefill_warpcta8mma(
 
     // WMMA requires SM70+. If not supported (or if we can't query), fall back to the pipelined SIMT kernel.
     int device = 0;
-    cudaDeviceProp prop{};
-    if (cudaGetDevice(&device) == cudaSuccess && cudaGetDeviceProperties(&prop, device) == cudaSuccess) {
+    hcDeviceProp_t prop{};
+    if (hcGetDevice(&device) == hcSuccess && hcGetDeviceProperties(&prop, device) == hcSuccess) {
         if (prop.major < 7) {
             return launch_prefill_warpcta8pipe<Tindex, Tdata>(
                 out, q, k_cache, v_cache, block_tables, total_kv_lens, cu_seqlens_q, alibi_slopes,
@@ -1045,7 +1049,7 @@ infiniStatus_t launch_prefill_warpcta8pipe_splitkv(
     ptrdiff_t v_head_stride,
     ptrdiff_t o_stride,
     ptrdiff_t o_head_stride,
-    cudaStream_t stream) {
+    hcStream_t stream) {
 
     constexpr int kMaxSplits = 8;
     if (num_splits < 1) {
@@ -1140,7 +1144,7 @@ infiniStatus_t launch_prefill_warpcta8n128(
     ptrdiff_t v_head_stride,
     ptrdiff_t o_stride,
     ptrdiff_t o_head_stride,
-    cudaStream_t stream) {
+    hcStream_t stream) {
 
     constexpr int kWarps = 8;
     constexpr int kThreads = kWarps * 32;
@@ -1195,7 +1199,7 @@ infiniStatus_t launch_prefill_warpcta16(
     ptrdiff_t v_head_stride,
     ptrdiff_t o_stride,
     ptrdiff_t o_head_stride,
-    cudaStream_t stream) {
+    hcStream_t stream) {
 
     constexpr int kWarps = 16;
     constexpr int kThreads = kWarps * 32;
@@ -1234,7 +1238,7 @@ infiniStatus_t launch_prefill_warpcta16(
 } // namespace
 
 struct Descriptor::Opaque {
-    std::shared_ptr<device::nvidia::Handle::Internal> internal;
+    std::shared_ptr<device::metax::Handle::Internal> internal;
 };
 
 Descriptor::~Descriptor() {
@@ -1289,7 +1293,7 @@ infiniStatus_t Descriptor::create(
     // const size_t workspace_bytes = splitkv_workspace_bytes + fa2_workspace_bytes;
 
     *desc_ptr = new Descriptor(
-        new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
+        new Opaque{reinterpret_cast<device::metax::Handle *>(handle)->internal()},
         info.take(), workspace_bytes, handle->device, handle->device_id);
 
     return INFINI_STATUS_SUCCESS;
@@ -1303,7 +1307,7 @@ infiniStatus_t Descriptor::calculate(
     const void *cum_seqlens_q,
     const void *alibi_slopes,
     void *stream_) const {
-    auto stream = static_cast<cudaStream_t>(stream_);
+    auto stream = static_cast<hcStream_t>(stream_);
 
     const float *alibi_ptr = (alibi_slopes == nullptr) ? nullptr : static_cast<const float *>(alibi_slopes);
     const auto *total_kv_lens_i64 = static_cast<const int64_t *>(total_kv_lens);

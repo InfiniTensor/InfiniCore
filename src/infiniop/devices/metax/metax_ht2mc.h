@@ -85,4 +85,7 @@
 #define hcclSuccess mcclSuccess
 #define hcclCommDestroy mcclCommDestroy
 #define hcclAllReduce mcclAllReduce
+#define hcGetDevice mcGetDevice
+#define hcDeviceAttributeMultiProcessorCount mcDeviceAttributeMultiProcessorCount
+#define hcDeviceGetAttribute mcDeviceGetAttribute
 #endif

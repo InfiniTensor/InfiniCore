@@ -1,13 +1,17 @@
-#include <cuda_runtime.h>
+#ifdef ENABLE_METAX_MC_API
+#include <mc_runtime.h>
+#else
+#include <hc_runtime.h>
+#endif
 
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 
-#include "../../../devices/nvidia/nvidia_common.cuh"
-#include "paged_attention_nvidia.cuh"
+#include "../../../devices/metax/metax_common.h"
+#include "paged_attention_metax.h"
 
-namespace op::paged_attention::nvidia {
+namespace op::paged_attention::metax {
 
 infiniStatus_t launch_decode_hd64_i64(
     void *workspace, size_t workspace_size,
@@ -16,7 +20,7 @@ infiniStatus_t launch_decode_hd64_i64(
     size_t num_heads, size_t num_seqs, size_t num_kv_heads, float scale, size_t max_num_blocks_per_seq, size_t page_block_size,
     ptrdiff_t q_stride, ptrdiff_t k_batch_stride, ptrdiff_t k_row_stride, ptrdiff_t k_head_stride,
     ptrdiff_t v_batch_stride, ptrdiff_t v_row_stride, ptrdiff_t v_head_stride, ptrdiff_t o_stride,
-    cudaStream_t stream);
+    hcStream_t stream);
 
 infiniStatus_t launch_decode_hd64_i32(
     void *workspace, size_t workspace_size,
@@ -25,7 +29,7 @@ infiniStatus_t launch_decode_hd64_i32(
     size_t num_heads, size_t num_seqs, size_t num_kv_heads, float scale, size_t max_num_blocks_per_seq, size_t page_block_size,
     ptrdiff_t q_stride, ptrdiff_t k_batch_stride, ptrdiff_t k_row_stride, ptrdiff_t k_head_stride,
     ptrdiff_t v_batch_stride, ptrdiff_t v_row_stride, ptrdiff_t v_head_stride, ptrdiff_t o_stride,
-    cudaStream_t stream);
+    hcStream_t stream);
 
 infiniStatus_t launch_decode_hd64_u32(
     void *workspace, size_t workspace_size,
@@ -34,7 +38,7 @@ infiniStatus_t launch_decode_hd64_u32(
     size_t num_heads, size_t num_seqs, size_t num_kv_heads, float scale, size_t max_num_blocks_per_seq, size_t page_block_size,
     ptrdiff_t q_stride, ptrdiff_t k_batch_stride, ptrdiff_t k_row_stride, ptrdiff_t k_head_stride,
     ptrdiff_t v_batch_stride, ptrdiff_t v_row_stride, ptrdiff_t v_head_stride, ptrdiff_t o_stride,
-    cudaStream_t stream);
+    hcStream_t stream);
 
 infiniStatus_t launch_decode_hd128_i64(
     void *workspace, size_t workspace_size,
@@ -43,7 +47,7 @@ infiniStatus_t launch_decode_hd128_i64(
     size_t num_heads, size_t num_seqs, size_t num_kv_heads, float scale, size_t max_num_blocks_per_seq, size_t page_block_size,
     ptrdiff_t q_stride, ptrdiff_t k_batch_stride, ptrdiff_t k_row_stride, ptrdiff_t k_head_stride,
     ptrdiff_t v_batch_stride, ptrdiff_t v_row_stride, ptrdiff_t v_head_stride, ptrdiff_t o_stride,
-    cudaStream_t stream);
+    hcStream_t stream);
 
 infiniStatus_t launch_decode_hd128_i32(
     void *workspace, size_t workspace_size,
@@ -52,7 +56,7 @@ infiniStatus_t launch_decode_hd128_i32(
     size_t num_heads, size_t num_seqs, size_t num_kv_heads, float scale, size_t max_num_blocks_per_seq, size_t page_block_size,
     ptrdiff_t q_stride, ptrdiff_t k_batch_stride, ptrdiff_t k_row_stride, ptrdiff_t k_head_stride,
     ptrdiff_t v_batch_stride, ptrdiff_t v_row_stride, ptrdiff_t v_head_stride, ptrdiff_t o_stride,
-    cudaStream_t stream);
+    hcStream_t stream);
 
 infiniStatus_t launch_decode_hd128_u32(
     void *workspace, size_t workspace_size,
@@ -61,10 +65,10 @@ infiniStatus_t launch_decode_hd128_u32(
     size_t num_heads, size_t num_seqs, size_t num_kv_heads, float scale, size_t max_num_blocks_per_seq, size_t page_block_size,
     ptrdiff_t q_stride, ptrdiff_t k_batch_stride, ptrdiff_t k_row_stride, ptrdiff_t k_head_stride,
     ptrdiff_t v_batch_stride, ptrdiff_t v_row_stride, ptrdiff_t v_head_stride, ptrdiff_t o_stride,
-    cudaStream_t stream);
+    hcStream_t stream);
 
 struct Descriptor::Opaque {
-    std::shared_ptr<device::nvidia::Handle::Internal> internal;
+    std::shared_ptr<device::metax::Handle::Internal> internal;
 };
 
 Descriptor::~Descriptor() {
@@ -93,7 +97,7 @@ infiniStatus_t Descriptor::create(
     const size_t workspace_bytes = kMaxSplits * per_split;
 
     *desc_ptr = new Descriptor(
-        new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
+        new Opaque{reinterpret_cast<device::metax::Handle *>(handle)->internal()},
         info, workspace_bytes, handle->device, handle->device_id);
 
     return INFINI_STATUS_SUCCESS;
@@ -117,7 +121,7 @@ infiniStatus_t Descriptor::calculate(
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
 
-    auto stream = static_cast<cudaStream_t>(stream_);
+    auto stream = static_cast<hcStream_t>(stream_);
 
     const float *alibi_ptr = (alibi_slopes == nullptr) ? nullptr : static_cast<const float *>(alibi_slopes);
 
@@ -211,4 +215,4 @@ infiniStatus_t Descriptor::calculate(
     return INFINI_STATUS_BAD_TENSOR_DTYPE;
 }
 
-} // namespace op::paged_attention::nvidia
+} // namespace op::paged_attention::metax
