@@ -226,6 +226,23 @@ public:
     std::shared_ptr<FileMapping> getFileMapping() const { return _file; }
     void *getGgmlStart() const { return _cursor; }
 
+    // Get tensor data pointer
+    void *getTensorData(const std::string &tensor_name) const;
+    void *getTensorData(const GGUFTensorInfo &tensor_info) const;
+
+    // Get tensor size in bytes
+    size_t getTensorSize(const std::string &tensor_name) const;
+    size_t getTensorSize(const GGUFTensorInfo &tensor_info) const;
+
+    // Check if this is a split file
+    bool isSplitFile() const;
+    uint16_t getSplitNo() const;
+    uint16_t getSplitCount() const;
+
+    // Get metadata value
+    template<typename T>
+    T getMetadataValue(const std::string &key, const T &default_value) const;
+
 private:
     void readHeader();
     void readMetaKVs();
@@ -234,9 +251,13 @@ private:
     template <typename T>
     T read();
 
+    size_t calculateTensorSize(const GGUFTensorInfo &tensor_info) const;
+    size_t getDataOffset() const;
+
     std::shared_ptr<FileMapping> _file;
     void *_data = nullptr;
     uint8_t *_cursor = nullptr;
+    uint8_t *_data_start = nullptr;  // Start of tensor data section
     uint32_t _version;
     int64_t _num_tensors;
     int64_t _num_meta_kvs;
