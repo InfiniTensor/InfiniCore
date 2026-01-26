@@ -19,6 +19,12 @@ using cuda_bfloat16 = hpcc_bfloat16;
 using cuda_bfloat162 = hpcc_bfloat162;
 using cuda_fp8_e4m3 = __hpcc_fp8_e4m3;
 
+#ifdef ENABLE_METAX_MC_API
+using __nv_bfloat16 = __maca_bfloat16;
+#else
+using __nv_bfloat16 = __hpcc_bfloat16;
+#endif
+
 namespace device::metax {
 
 // get the memory offset of the given element in a tensor given its flat index
