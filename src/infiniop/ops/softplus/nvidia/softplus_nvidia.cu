@@ -1,31 +1,152 @@
-#include "../../../elementwise/nvidia/elementwise_nvidia.cuh"
-
-#include "../cuda/kernel.cuh"
 #include "softplus_nvidia.cuh"
-
+#include "../cuda/kernel.cuh"
+#include "../../../handle.h"
+#include <cuda_fp16.h>
+#include <cuda_bf16.h>
+#include "../../../devices/nvidia/nvidia_common.cuh"
 namespace op::softplus::nvidia {
 
-Descriptor::~Descriptor() = default;
+// 最大支持维度，用于 Kernel 参数传递
+static constexpr int MAX_DIMS = 8;
+
+struct TensorMetadata {
+    int ndim;
+    int64_t shape[MAX_DIMS];
+    int64_t strides[MAX_DIMS];
+};
+
+// ==================================================================
+// Kernel 1: 连续内存路径 (Fast Path)
+// ==================================================================
+template <typename T>
+__global__ void softplus_kernel_contiguous(
+    T *output,
+    const T *input,
+    size_t n,
+    float beta,
+    float threshold) {
+    
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    if (idx < n) {
+        op::softplus::cuda::SoftplusOp functor;
+        output[idx] = functor(input[idx], beta, threshold);
+    }
+}
+
+// ==================================================================
+template <typename T>
+__global__ void softplus_kernel_strided(
+    T *output,
+    const T *input,
+    size_t n,
+    float beta,
+    float threshold,
+    TensorMetadata meta) { // 按值传递元数据
+    
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    if (idx < n) {
+        size_t input_offset = 0;
+        size_t temp_idx = idx;
+
+        // 坐标变换：Linear Index -> Coordinate -> Strided Offset
+        #pragma unroll
+        for (int d = meta.ndim - 1; d >= 0; --d) {
+            size_t dim_size = meta.shape[d];
+            size_t coord = temp_idx % dim_size;
+            temp_idx /= dim_size;
+            input_offset += coord * meta.strides[d];
+        }
+
+        op::softplus::cuda::SoftplusOp functor;
+        output[idx] = functor(input[input_offset], beta, threshold);
+    }
+}
+
+// ==================================================================
+// Launch Logic
+// ==================================================================
+template <typename T>
+void launch_kernel(
+    void *output,
+    const void *input,
+    const SoftplusInfo &info,
+    void *stream) {
+
+    size_t n = info.num_elements();
+    auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
+    
+    dim3 block(256);
+    dim3 grid((n + block.x - 1) / block.x);
+    if (info.is_contiguous()) {
+        softplus_kernel_contiguous<T><<<grid, block, 0, cuda_stream>>>(
+            reinterpret_cast<T *>(output),
+            reinterpret_cast<const T *>(input),
+            n,
+            info.beta(),
+            info.threshold()
+        );
+    } 
+    else {
+        // 准备元数据
+        TensorMetadata meta;
+        meta.ndim = info.ndim();
+        
+
+        const auto& shape_vec = info.shape();
+        const auto& stride_vec = info.strides();
+
+        for (int i = 0; i < meta.ndim; ++i) {
+            meta.shape[i] = shape_vec[i];
+            meta.strides[i] = stride_vec[i];
+        }
+
+        softplus_kernel_strided<T><<<grid, block, 0, cuda_stream>>>(
+            reinterpret_cast<T *>(output),
+            reinterpret_cast<const T *>(input),
+            n,
+            info.beta(),
+            info.threshold(),
+            meta
+        );
+    }
+}
+
+// ==================================================================
+// Descriptor Implementation
+// ==================================================================
+struct Descriptor::Opaque {};
+
+Descriptor::~Descriptor() {
+    if (_opaque) {
+        delete _opaque;
+        _opaque = nullptr;
+    }
+}
 
 infiniStatus_t Descriptor::create(
     infiniopHandle_t handle_,
     Descriptor **desc_ptr,
     infiniopTensorDescriptor_t out_desc,
-    std::vector<infiniopTensorDescriptor_t> input_desc_vec) {
+    infiniopTensorDescriptor_t input_desc,
+    float beta,
+    float threshold) {
 
     auto handle = reinterpret_cast<device::nvidia::Handle *>(handle_);
-    auto dtype = out_desc->dtype();
 
-    const auto &x_desc = input_desc_vec.at(0);
-    const auto &y_shape = out_desc->shape();
-    const auto &x_shape = x_desc->shape();
+    auto result = SoftplusInfo::create(out_desc, input_desc, beta, threshold);
+    if (!result) {
+        return result.status();
+    }
 
-    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64, INFINI_DTYPE_BF16);
-
-    CHECK_SAME_SHAPE(y_shape, x_shape);
-
-    // create CUDA elementwise descriptor
-    CREATE_ELEMENTWISE_CUDA_DESCRIPTOR(handle, dtype, out_desc, input_desc_vec)
+    *desc_ptr = new Descriptor(
+        new Opaque(),
+        result.take(),
+        0,
+        handle->device,
+        handle->device_id
+    );
 
     return INFINI_STATUS_SUCCESS;
 }
@@ -34,26 +155,27 @@ infiniStatus_t Descriptor::calculate(
     void *workspace,
     size_t workspace_size,
     void *output,
-    std::vector<const void *> inputs,
+    const void *input,
     void *stream) const {
 
-    if (workspace_size < _workspace_size) {
-        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
-    }
-
-    switch (_dtype) {
+    switch (_info.dtype()) {
     case INFINI_DTYPE_F16:
-        return _device_info->calculate<256, cuda::SoftplusOp, half>(_info, workspace, output, inputs, stream);
+        launch_kernel<half>(output, input, _info, stream);
+        break;
     case INFINI_DTYPE_BF16:
-        return _device_info->calculate<256, cuda::SoftplusOp, cuda_bfloat16>(_info, workspace, output, inputs, stream);
+        launch_kernel<nv_bfloat16>(output, input, _info, stream);
+        break;
     case INFINI_DTYPE_F32:
-        return _device_info->calculate<256, cuda::SoftplusOp, float>(_info, workspace, output, inputs, stream);
+        launch_kernel<float>(output, input, _info, stream);
+        break;
     case INFINI_DTYPE_F64:
-        return _device_info->calculate<256, cuda::SoftplusOp, double>(_info, workspace, output, inputs, stream);
+        launch_kernel<double>(output, input, _info, stream);
+        break;
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
 
     return INFINI_STATUS_SUCCESS;
 }
+
 } // namespace op::softplus::nvidia

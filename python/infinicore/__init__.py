@@ -54,6 +54,7 @@ from infinicore.ops.paged_caching import paged_caching
 from infinicore.ops.rearrange import rearrange
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.unsqueeze import unsqueeze
+from infinicore.ops.broadcast_to import broadcast_to
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -131,6 +132,7 @@ __all__ = [
     "paged_attention",
     "paged_attention_prefill",
     "ones",
+    "broadcast_to",
     "strided_empty",
     "strided_from_blob",
     "zeros",
