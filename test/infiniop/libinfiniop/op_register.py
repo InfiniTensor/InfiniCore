@@ -458,6 +458,82 @@ def rope_(lib):
         infiniopOperatorDescriptor_t,
     ]
 
+@OpRegister.operator
+def mrope2d_(lib):
+    lib.infiniopCreateMRoPE2DDescriptor.restype = c_int32
+    lib.infiniopCreateMRoPE2DDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetMRoPE2DWorkspaceSize.restype = c_int32
+    lib.infiniopGetMRoPE2DWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopMRoPE2D.restype = c_int32
+    lib.infiniopMRoPE2D.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyMRoPE2DDescriptor.restype = c_int32
+    lib.infiniopDestroyMRoPE2DDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+@OpRegister.operator
+def mrope3d_(lib):
+    lib.infiniopCreateMRoPE3DDescriptor.restype = c_int32
+    lib.infiniopCreateMRoPE3DDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetMRoPE3DWorkspaceSize.restype = c_int32
+    lib.infiniopGetMRoPE3DWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopMRoPE3D.restype = c_int32
+    lib.infiniopMRoPE3D.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyMRoPE3DDescriptor.restype = c_int32
+    lib.infiniopDestroyMRoPE3DDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
 
 @OpRegister.operator
 def sub_(lib):
