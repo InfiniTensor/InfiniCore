@@ -58,7 +58,7 @@ target("infiniop-iluvatar")
     add_files("../src/infiniop/ops/dequantize_awq/iluvatar/*.cu")
 
     if has_config("ninetoothed") then
-        add_files("../build/ninetoothed/*.c", {cxxflags = {"-Wno-return-type"}})
+        add_files("../build/ninetoothed/*.c", "../build/ninetoothed/*.cpp", {cxxflags = {"-Wno-return-type"}})
     end
 target_end()
 

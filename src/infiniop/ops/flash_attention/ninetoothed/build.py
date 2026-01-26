@@ -6,16 +6,14 @@ import infiniop.ninetoothed.build
 
 import torch
 
+import os
+
 
 def build():
 
-    if torch.cuda.is_available():
-        device_count = torch.cuda.device_count()
-        for i in range(device_count):
-            device_name = torch.cuda.get_device_name(i).lower()
-
-            if "metax" in device_name:
-                return
+    env_vars_to_check = ["MACA_HOME", "MACA_PATH", "MACA_ROOT"]
+    if any(var in os.environ for var in env_vars_to_check):
+        return
 
     with_kv_cache_values = (0,)
     emb_dim_values = (16, 32, 64, 128, 256)

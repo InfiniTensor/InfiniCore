@@ -54,7 +54,7 @@ target("infiniop-metax")
 
     if has_config("ninetoothed") then
         add_includedirs(MACA_ROOT .. "/include/mcr")
-        add_files("../build/ninetoothed/*.c", {
+        add_files("../build/ninetoothed/*.c", "../build/ninetoothed/*.cpp", {
             cxflags = {
                 "-include stdlib.h", 
                 "-Wno-return-type", 
