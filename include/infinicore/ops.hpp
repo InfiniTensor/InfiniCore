@@ -4,6 +4,7 @@
 #include "ops/add_rms_norm.hpp"
 #include "ops/attention.hpp"
 #include "ops/causal_softmax.hpp"
+#include "ops/flash_attention.hpp"
 #include "ops/matmul.hpp"
 #include "ops/ones.hpp"
 #include "ops/paged_attention.hpp"
