@@ -19,7 +19,7 @@ end
 if is_plat("windows") then
     set_runtimes("MD")
     add_ldflags("/utf-8", {force = true})
-    add_cxflags("/utf-8", {force = true})
+    add_cxxflags("/utf-8", {force = true})
 end
 
 -- CPU
@@ -224,14 +224,15 @@ target("infini-utils")
     set_warnings("all", "error")
 
     if is_plat("windows") then
-        add_cxflags("/wd4068")
+        add_cxxflags("/wd4068")
         if has_config("omp") then
-            add_cxflags("/openmp")
+            add_cxxflags("/openmp")
         end
     else
         add_cxflags("-fPIC", "-Wno-unknown-pragmas")
+        add_cxxflags("-fPIC", "-Wno-unknown-pragmas")
         if has_config("omp") then
-            add_cxflags("-fopenmp")
+            add_cxxflags("-fopenmp")
             add_ldflags("-fopenmp", {force = true})
         end
     end
@@ -276,6 +277,7 @@ target("infinirt")
     set_languages("cxx17")
     if not is_plat("windows") then
         add_cxflags("-fPIC")
+        add_cxxflags("-fPIC")
     end
     set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
     add_files("src/infinirt/*.cc")
