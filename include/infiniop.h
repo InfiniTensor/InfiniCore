@@ -13,6 +13,7 @@
 #include "infiniop/ops/flash_attention.h"
 #include "infiniop/ops/gelu.h"
 #include "infiniop/ops/gemm.h"
+#include "infiniop/ops/kv_caching.h"
 #include "infiniop/ops/layer_norm.h"
 #include "infiniop/ops/logsoftmax.h"
 #include "infiniop/ops/lp_norm.h"

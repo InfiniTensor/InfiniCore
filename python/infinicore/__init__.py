@@ -45,6 +45,7 @@ from infinicore.dtype import (
 from infinicore.ops.add import add
 from infinicore.ops.add_rms_norm import add_rms_norm
 from infinicore.ops.attention import attention
+from infinicore.ops.kv_caching import kv_caching
 from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
@@ -115,6 +116,7 @@ __all__ = [
     "add_rms_norm",
     "add_rms_norm_",
     "attention",
+    "kv_caching",
     "matmul",
     "mul",
     "narrow",
