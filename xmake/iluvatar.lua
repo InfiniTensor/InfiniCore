@@ -44,6 +44,9 @@ target("infiniop-iluvatar")
     set_warnings("all", "error")
     add_cuflags("-Wno-error=unused-private-field")
     add_cuflags("-fPIC", "-x", "ivcore", "-std=c++17", {force = true})
+    if has_config("ivcore-20") then
+        add_cuflags("--cuda-gpu-arch=ivcore20", {force = true})
+    end
     add_culdflags("-fPIC")
     add_cxflags("-fPIC")
 

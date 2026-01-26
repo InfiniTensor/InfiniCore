@@ -6,6 +6,7 @@
 
 // Posible maximum number of threads per block for MUSA architectures
 // Used for picking correct kernel launch configuration
+#define MOORE_BLOCK_SIZE_4096 4096
 #define MOORE_BLOCK_SIZE_2048 2048
 #define MOORE_BLOCK_SIZE_1024 1024
 #define MOORE_BLOCK_SIZE_512 512
