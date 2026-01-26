@@ -36,6 +36,8 @@ __C infiniStatus_t infiniopCreatePagedAttentionPrefillDescriptor(
 #ifdef ENABLE_QY_API
         CREATE(INFINI_DEVICE_QY, nvidia)
 #endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
 }
 
@@ -55,6 +57,8 @@ __C infiniStatus_t infiniopGetPagedAttentionPrefillWorkspaceSize(
 #ifdef ENABLE_QY_API
         GET(INFINI_DEVICE_QY, nvidia)
 #endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
 }
 
@@ -81,6 +85,8 @@ __C infiniStatus_t infiniopPagedAttentionPrefill(
 #ifdef ENABLE_QY_API
         CALCULATE(INFINI_DEVICE_QY, nvidia)
 #endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
 }
 
@@ -99,5 +105,7 @@ __C infiniStatus_t infiniopDestroyPagedAttentionPrefillDescriptor(
 #ifdef ENABLE_QY_API
         DESTROY(INFINI_DEVICE_QY, nvidia)
 #endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
 }
