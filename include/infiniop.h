@@ -9,6 +9,7 @@
 #include "infiniop/ops/clip.h"
 #include "infiniop/ops/conv.h"
 #include "infiniop/ops/dequantize_awq.h"
+#include "infiniop/ops/embedding.h"
 #include "infiniop/ops/gelu.h"
 #include "infiniop/ops/gemm.h"
 #include "infiniop/ops/layer_norm.h"

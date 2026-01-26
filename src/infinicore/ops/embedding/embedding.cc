@@ -1,15 +1,24 @@
 #include "infinicore/ops/embedding.hpp"
-#include "infinicore/context/context.hpp"
-#include <cstring>
+
+#include "../../utils.hpp"
 
 namespace infinicore::op {
+INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(Embedding);
 
-Tensor embedding(Tensor input, // LongTensor of arbitrary shape containing the indices to extract
-                 Tensor weight // Weight: Embedding matrix of floating point type with shape (V, embedding_dim), where V = maximum index + 1
+Embedding::Embedding(Tensor out, const Tensor &input, const Tensor &weight) {
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(out, input, weight);
+    INFINICORE_GRAPH_OP_DISPATCH(out->device().getType(), out, input, weight);
+}
+
+void Embedding::execute(Tensor out, const Tensor &input, const Tensor &weight) {
+    INFINICORE_GRAPH_OP_RECORD_OR_RUN(Embedding, out, input, weight);
+}
+
+Tensor embedding(const Tensor &input, // LongTensor of arbitrary shape containing the indices to extract
+                 const Tensor &weight // Weight: Embedding matrix of floating point type with shape (V, embedding_dim), where V = maximum index + 1
 ) {
     auto input_shape = input->shape();
     auto weight_shape = weight->shape();
-    // auto vocab_size = weight_shape[0];
     auto embedding_dim = weight_shape[1];
 
     // Assign memory to out variables
@@ -21,69 +30,8 @@ Tensor embedding(Tensor input, // LongTensor of arbitrary shape containing the i
     return inputs_embeds;
 }
 
-void embedding_(Tensor out, Tensor input, Tensor weight) {
-    assert(infinicore::DataType::I64 == input->dtype() || (infinicore::DataType::I32 == input->dtype()));
-    assert(infinicore::Device::Type::CPU == input->device().getType());
-
-    auto input_shape = input->shape();
-    auto weight_shape = weight->shape();
-    auto embedding_dim = weight_shape[1];
-
-    // Calculate the number of token
-    Size counts = 1;
-    for (auto &v : input_shape) {
-        counts *= v;
-    }
-
-    // the bytes of one token
-    const Size bytes = dsize(weight->dtype()) * embedding_dim;
-    auto *weight_ptr = weight->data();
-    auto *out_ptr = out->data();
-
-    // copies
-    if (weight->device().getType() == Device::Type::CPU) {
-        if (infinicore::DataType::I64 == input->dtype()) {
-            const int64_t *input_arr = reinterpret_cast<const int64_t *>(input->data());
-            for (Size i = 0; i < counts; ++i) {
-                int64_t idx = input_arr[i];
-                assert((idx >= 0) && (idx < weight_shape[0]));
-                std::memcpy(out_ptr + i * bytes,
-                            weight_ptr + idx * bytes,
-                            bytes);
-            }
-        } else if (infinicore::DataType::I32 == input->dtype()) {
-            const int32_t *input_arr = reinterpret_cast<const int32_t *>(input->data());
-
-            for (Size i = 0; i < counts; ++i) {
-                int32_t idx = input_arr[i];
-                assert((idx >= 0) && (idx < weight_shape[0]));
-                std::memcpy(out_ptr + i * bytes,
-                            weight_ptr + idx * bytes,
-                            bytes);
-            }
-        }
-
-    } else {
-        if (infinicore::DataType::I64 == input->dtype()) {
-            const int64_t *input_arr = reinterpret_cast<const int64_t *>(input->data());
-            for (Size i = 0; i < counts; ++i) {
-                int64_t idx = input_arr[i];
-                assert((idx >= 0) && (idx < weight_shape[0]));
-                context::memcpyD2D(out_ptr + i * bytes,
-                                   weight_ptr + idx * bytes,
-                                   bytes);
-            }
-        } else if (infinicore::DataType::I32 == input->dtype()) {
-            const int32_t *input_arr = reinterpret_cast<const int32_t *>(input->data());
-            for (Size i = 0; i < counts; ++i) {
-                int32_t idx = input_arr[i];
-                assert((idx >= 0) && (idx < weight_shape[0]));
-                context::memcpyD2D(out_ptr + i * bytes,
-                                   weight_ptr + idx * bytes,
-                                   bytes);
-            }
-        }
-    }
+void embedding_(Tensor out, const Tensor &input, const Tensor &weight) {
+    Embedding::execute(out, input, weight);
 }
 
 } // namespace infinicore::op
