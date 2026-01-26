@@ -2,6 +2,7 @@ import contextlib
 
 with contextlib.suppress(ImportError):
     from ._preload import preload
+
     preload()
 
 # import torch
