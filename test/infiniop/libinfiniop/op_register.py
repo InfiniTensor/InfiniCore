@@ -563,6 +563,39 @@ def swiglu_(lib):
 
 
 @OpRegister.operator
+def swiglu_cuda_(lib):
+    lib.infiniopCreateSwiGLUCudaDescriptor.restype = c_int32
+    lib.infiniopCreateSwiGLUCudaDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetSwiGLUCudaWorkspaceSize.restype = c_int32
+    lib.infiniopGetSwiGLUCudaWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopSwiGLUCuda.restype = c_int32
+    lib.infiniopSwiGLUCuda.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroySwiGLUCudaDescriptor.restype = c_int32
+    lib.infiniopDestroySwiGLUCudaDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+@OpRegister.operator
 def conv_(lib):
     lib.infiniopCreateConvDescriptor.restype = c_int32
     lib.infiniopCreateConvDescriptor.argtypes = [
