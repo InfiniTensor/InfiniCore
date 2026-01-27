@@ -2,6 +2,8 @@
 #include "infinicore/dtype.hpp"
 #include "infinicore/tensor.hpp"
 
+#include "../utils.hpp"
+
 #include <spdlog/spdlog.h>
 #include <stdexcept>
 
@@ -62,11 +64,11 @@ Tensor TensorImpl::narrow(const std::vector<TensorSliceParams> &slices) const {
 
 Tensor TensorImpl::permute(const Shape &order) const {
     // Validate input
-    assert(meta_.shape.size() == order.size());
+    INFINICORE_ASSERT(meta_.shape.size() == order.size());
 
     // Check that order contains all indices from 0 to n-1 exactly once
     for (size_t i = 0; i < order.size(); i++) {
-        assert(std::find(order.begin(), order.end(), i) != order.end());
+        INFINICORE_ASSERT(std::find(order.begin(), order.end(), i) != order.end());
     }
 
     // Permute shape and strides
