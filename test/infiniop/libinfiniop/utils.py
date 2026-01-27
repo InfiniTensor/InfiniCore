@@ -433,6 +433,11 @@ def get_args():
         action="store_true",
         help="Run HYGON DCU test",
     )
+    parser.add_argument(
+        "--ali",
+        action="store_true",
+        help="Run ALI PPU test",
+    )
 
     return parser.parse_args()
 
@@ -487,6 +492,7 @@ def filter_tensor_dtypes_by_device(device, tensor_dtypes):
         InfiniDeviceEnum.ASCEND,
         InfiniDeviceEnum.ILUVATAR,
         InfiniDeviceEnum.CAMBRICON,
+        InfiniDeviceEnum.ALI,
     ):
         return tensor_dtypes
     else:
@@ -757,6 +763,10 @@ def get_test_devices(args):
         import torch
 
         devices_to_test.append(InfiniDeviceEnum.HYGON)
+    if args.ali:
+        import torch
+
+        devices_to_test.append(InfiniDeviceEnum.ALI)
     if not devices_to_test:
         devices_to_test = [InfiniDeviceEnum.CPU]
 
