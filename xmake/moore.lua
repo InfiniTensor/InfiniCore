@@ -47,6 +47,8 @@ target("infiniop-moore")
 
     -- Add source files for Moore muBLAS/muDNN GEMM backends.
     add_files("../src/infiniop/ops/gemm/moore/*/*.mu", {rule = "mu"})
+
+    add_files("../src/infiniop/ops/quant/per_channel_quant_int8/moore/*.mu", {rule = "mu"})
 target_end()
 
 target("infinirt-moore")

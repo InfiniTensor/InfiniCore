@@ -103,6 +103,7 @@ def test(
     if sync is not None:
         sync()
 
+    print("Creating Descriptor...")
     descriptor = infiniopOperatorDescriptor_t()
     check_error(
         LIBINFINIOP.infiniopCreatePerChannelQuantI8Descriptor(
@@ -122,6 +123,7 @@ def test(
     if symmetric == False:
         x_zero.destroy_desc()
 
+    print("Getting Workspace Size...")
     workspace_size = c_uint64(0)
     check_error(
         LIBINFINIOP.infiniopGetPerChannelQuantI8WorkspaceSize(
@@ -129,7 +131,7 @@ def test(
         )
     )
     workspace = TestWorkspace(workspace_size.value, x.device)
-    
+    print("Running Kernel...")
     def lib_per_channel_quant_int8():
         check_error(
             LIBINFINIOP.infiniopPerChannelQuantI8(
@@ -145,7 +147,7 @@ def test(
         )
 
     lib_per_channel_quant_int8()
-    
+    print("Kernel Finished.")
     if sync is not None:
         sync()
 
