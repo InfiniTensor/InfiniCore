@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 from infinicore.lib import _infinicore
 
 import infinicore
@@ -265,6 +266,156 @@ def func6_initialize_device_relationship():
         z_infini.debug()
 
 
+def test7_infinicore_tensor_function():
+    """
+    测试 infinicore.tensor 函数，能够传入 list, tuple, NumPy, scalar，得到一个InfiniCore.Tensor的对象
+    """
+    print("\n" + "=" * 60)
+    print("测试 infinicore.tensor 函数")
+    print("=" * 60)
+
+    # 定义测试用例列表
+    case_list = [
+        {
+            "name": "从 list 创建 tensor",
+            "data": [[1.0, 2.0, 3.0, 4.0]],
+            "kwargs": {},
+            "expected_shape": [1, 4],
+            "expected_dtype": None,
+            "expected_device_type": None,
+        },
+        {
+            "name": "从 tuple 创建 tensor",
+            "data": (1.0, 2.0, 3.0, 4.0),
+            "kwargs": {},
+            "expected_shape": [4],
+            "expected_dtype": None,
+            "expected_device_type": None,
+        },
+        {
+            "name": "从 NumPy.ndarray 创建 tensor",
+            "data": np.array([[1.0, 2.0], [3.0, 4.0]], dtype=np.float32),
+            "kwargs": {},
+            "expected_shape": [2, 2],
+            "expected_dtype": None,
+            "expected_device_type": None,
+        },
+        {
+            "name": "从 scalar (int) 创建 tensor",
+            "data": 42,
+            "kwargs": {},
+            "expected_shape": [],
+            "expected_dtype": None,
+            "expected_device_type": None,
+        },
+        {
+            "name": "从 scalar (float) 创建 tensor",
+            "data": 3.14,
+            "kwargs": {},
+            "expected_shape": [],
+            "expected_dtype": None,
+            "expected_device_type": None,
+        },
+        {
+            "name": "多维 list",
+            "data": [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]],
+            "kwargs": {},
+            "expected_shape": [3, 2],
+            "expected_dtype": None,
+            "expected_device_type": None,
+        },
+        {
+            "name": "指定 dtype (float32)",
+            "data": [1, 2, 3],
+            "kwargs": {"dtype": infinicore.float32},
+            "expected_shape": [3],
+            "expected_dtype": infinicore.float32,
+            "expected_device_type": None,
+        },
+        {
+            "name": "指定 dtype (float64)",
+            "data": [1, 2, 3],
+            "kwargs": {"dtype": infinicore.float64},
+            "expected_shape": [3],
+            "expected_dtype": infinicore.float64,
+            "expected_device_type": None,
+        },
+        {
+            "name": "指定 device (cuda)",
+            "data": [1.0, 2.0, 3.0],
+            "kwargs": {"device": infinicore.device("cuda", 0)},
+            "expected_shape": [3],
+            "expected_dtype": None,
+            "expected_device_type": "cuda",
+        },
+    ]
+
+    # 循环测试每个用例
+    for i, case in enumerate(case_list, 1):
+        print(f"\n{i}. 测试{case['name']}:")
+        print("-" * 40)
+
+        # 准备输入数据描述
+        if isinstance(case["data"], np.ndarray):
+            input_desc = f"shape={case['data'].shape}, dtype={case['data'].dtype}"
+        else:
+            input_desc = str(case["data"])
+
+        print(f"  输入: {input_desc}")
+
+        # 创建 tensor
+        tensor = infinicore.tensor(case["data"], **case["kwargs"])
+
+        # 打印输出信息
+        print(
+            f"  输出: shape={tensor.shape}, dtype={tensor.dtype}, device={tensor.device}"
+        )
+
+        # 验证结果
+        if case["expected_shape"] is not None:
+            assert tensor.shape == case["expected_shape"], (
+                f"期望shape {case['expected_shape']}, 实际 {tensor.shape}"
+            )
+
+        if case["expected_dtype"] is not None:
+            assert tensor.dtype == case["expected_dtype"], (
+                f"期望dtype {case['expected_dtype']}, 实际 {tensor.dtype}"
+            )
+
+        if case["expected_device_type"] is not None:
+            assert tensor.device.type == case["expected_device_type"], (
+                f"期望device类型 {case['expected_device_type']}, 实际 {tensor.device.type}"
+            )
+
+        print(f"  ✓ {case['name']} 测试通过")
+
+    # 特殊测试：数据正确性验证（与 NumPy/Torch 对比）
+    print("\n10. 测试数据正确性验证（与 NumPy 对比）:")
+    print("-" * 40)
+    test_data = [[1.5, 2.5], [3.5, 4.5]]
+    infini_tensor = infinicore.tensor(test_data, dtype=infinicore.float32)
+
+    # 转换为 torch tensor 进行验证
+    torch_ref = torch.tensor(test_data, dtype=torch.float32)
+    torch_result = torch.zeros(infini_tensor.shape, dtype=torch.float32)
+    infini_blob = infinicore.from_blob(
+        torch_result.data_ptr(),
+        infini_tensor.shape,
+        dtype=infinicore.float32,
+        device=infinicore.device("cpu", 0),
+    )
+    infini_blob.copy_(infini_tensor)
+
+    max_error = torch.abs(torch_ref - torch_result).max().item()
+    print(f"  最大误差: {max_error}")
+    assert max_error < 1e-6, f"数据不匹配，最大误差: {max_error}"
+    print("  ✓ 数据正确性验证通过")
+
+    print("\n" + "=" * 60)
+    print("所有 infinicore.tensor 测试通过！")
+    print("=" * 60 + "\n")
+
+
 if __name__ == "__main__":
     test()
     test2()
@@ -272,3 +423,4 @@ if __name__ == "__main__":
     test4_to()
     test5_bf16()
     func6_initialize_device_relationship()
+    test7_infinicore_tensor_function()
