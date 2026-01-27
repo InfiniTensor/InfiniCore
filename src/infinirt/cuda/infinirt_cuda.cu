@@ -21,6 +21,8 @@ namespace infinirt::iluvatar {
 namespace infinirt::qy {
 #elif defined(ENABLE_HYGON_API)
 namespace infinirt::hygon {
+#elif defined(ENABLE_ALI_API)
+namespace infinirt::ali {
 #else
 namespace infinirt::cuda { // 默认回退
 #endif

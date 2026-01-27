@@ -43,7 +43,7 @@ infiniStatus_t Descriptor::calculate(
     void *stream) const {
 
     cudaDataType a_type, b_type, c_type;
-#if defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
+#if defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API) || defined(ENABLE_ALI_API)
     cudaDataType compute_type;
 #else
     cublasComputeType_t compute_type;
@@ -52,7 +52,7 @@ infiniStatus_t Descriptor::calculate(
     switch (_dtype) {
     case INFINI_DTYPE_F16:
         a_type = b_type = c_type = CUDA_R_16F;
-#if defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
+#if defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API) || defined(ENABLE_ALI_API)
         compute_type = CUDA_R_32F;
 #else
         compute_type = CUBLAS_COMPUTE_32F;
@@ -60,7 +60,7 @@ infiniStatus_t Descriptor::calculate(
         break;
     case INFINI_DTYPE_BF16:
         a_type = b_type = c_type = CUDA_R_16BF;
-#if defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
+#if defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API) || defined(ENABLE_ALI_API)
         compute_type = CUDA_R_32F;
 #else
         compute_type = CUBLAS_COMPUTE_32F;
@@ -68,7 +68,7 @@ infiniStatus_t Descriptor::calculate(
         break;
     case INFINI_DTYPE_F32:
         a_type = b_type = c_type = CUDA_R_32F;
-#if defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
+#if defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API) || defined(ENABLE_ALI_API)
         compute_type = CUDA_R_32F;
 #else
         compute_type = CUBLAS_COMPUTE_32F_FAST_TF32;

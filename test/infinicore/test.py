@@ -183,6 +183,7 @@ def func6_initialize_device_relationship():
         _infinicore.Device.Type.QY,  # 9  "cuda"
         _infinicore.Device.Type.KUNLUN,  # 7  "cuda"
         _infinicore.Device.Type.HYGON,  # 8  "cuda"
+        _infinicore.Device.Type.ALI,  # 10 "cuda"
     ]
     if True:
         print("\n ---------- 测试 CPU")

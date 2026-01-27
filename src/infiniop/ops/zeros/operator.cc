@@ -5,7 +5,7 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/zeros_cpu.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_ALI_API)
 #include "nvidia/zeros_nvidia.cuh"
 #endif
 #ifdef ENABLE_METAX_API
@@ -36,6 +36,9 @@ __C infiniStatus_t infiniopCreateZerosDescriptor(
 #endif
 #ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ALI_API
+        CREATE(INFINI_DEVICE_ALI, nvidia);
 #endif
 #ifdef ENABLE_ILUVATAR_API
         CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
@@ -72,6 +75,9 @@ __C infiniStatus_t infiniopGetZerosWorkspaceSize(infiniopZerosDescriptor_t desc,
 #endif
 #ifdef ENABLE_ILUVATAR_API
         GET(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_ALI_API
+        GET(INFINI_DEVICE_ALI, nvidia);
 #endif
 #ifdef ENABLE_QY_API
         GET(INFINI_DEVICE_QY, nvidia);
@@ -114,6 +120,9 @@ __C infiniStatus_t infiniopZeros(
 #ifdef ENABLE_ILUVATAR_API
         CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
+#ifdef ENABLE_ALI_API
+        CALCULATE(INFINI_DEVICE_ALI, nvidia);
+#endif
 #ifdef ENABLE_QY_API
         CALCULATE(INFINI_DEVICE_QY, nvidia);
 #endif
@@ -148,6 +157,9 @@ infiniopDestroyZerosDescriptor(infiniopZerosDescriptor_t desc) {
 #endif
 #ifdef ENABLE_ILUVATAR_API
         DELETE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_ALI_API
+        DELETE(INFINI_DEVICE_ALI, nvidia);
 #endif
 #ifdef ENABLE_QY_API
         DELETE(INFINI_DEVICE_QY, nvidia);

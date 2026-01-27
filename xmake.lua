@@ -125,6 +125,18 @@ if has_config("iluvatar-gpu") then
     includes("xmake/iluvatar.lua")
 end
 
+-- ali
+option("ali-ppu")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Whether to compile implementations for Ali PPU")
+option_end()
+
+if has_config("ali-ppu") then
+    add_defines("ENABLE_ALI_API")
+    includes("xmake/alibaba.lua")
+end
+
 -- qy
 option("qy-gpu")
     set_default(false)
@@ -276,6 +288,9 @@ target("infinirt")
     if has_config("iluvatar-gpu") then
         add_deps("infinirt-iluvatar")
     end
+    if has_config("ali-ppu") then
+        add_deps("infinirt-ali")
+    end
     if has_config("qy-gpu") then
         add_deps("infinirt-qy")
         add_files("build/.objs/infinirt-qy/rules/qy.cuda/src/infinirt/cuda/*.cu.o", {public = true})
@@ -308,6 +323,9 @@ target("infiniop")
     end
     if has_config("iluvatar-gpu") then
         add_deps("infiniop-iluvatar")
+    end
+    if has_config("ali-ppu") then
+        add_deps("infiniop-ali")
     end
     if has_config("qy-gpu") then
         add_deps("infiniop-qy")
@@ -363,6 +381,9 @@ target("infiniccl")
     end
     if has_config("iluvatar-gpu") then
         add_deps("infiniccl-iluvatar")
+    end
+    if has_config("ali-ppu") then
+        add_deps("infiniccl-ali")
     end
     if has_config("qy-gpu") then
         add_deps("infiniccl-qy")
