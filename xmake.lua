@@ -205,6 +205,18 @@ if has_config("ninetoothed") then
     add_defines("ENABLE_NINETOOTHED")
 end
 
+-- cuda graph
+option("graph")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Whether to use device graph instantiating feature, such as cuda graph for nvidia")
+option_end()
+
+if has_config("graph") then
+    add_defines("USE_INFINIRT_GRAPH")
+end
+
+
 -- InfiniCCL
 option("ccl")
     set_default(false)

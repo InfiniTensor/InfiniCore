@@ -84,7 +84,7 @@ void Graph::instantiate() {
 
     if (infinirtStreamBeginCapture(
             context::getStream(),
-            INFINIRT_STREAM_CAPTURE_MODE_GLOBAL)
+            INFINIRT_STREAM_CAPTURE_MODE_RELAXED)
         != INFINI_STATUS_SUCCESS) {
         return;
     }
@@ -144,7 +144,9 @@ std::shared_ptr<Graph> GraphManager::stop_recording() {
         return nullptr;
     }
     recording_ = false;
+#ifdef USE_INFINIRT_GRAPH
     graph_->instantiate();
+#endif
     return std::exchange(graph_, nullptr);
 }
 
