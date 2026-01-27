@@ -1,47 +1,46 @@
-#include "../../utils.hpp"
-#include "infinicore/common/hash.hpp"
-#include "infinicore/ops/common/cache.hpp"
 #include "infinicore/ops/rearrange.hpp"
-#include <infiniop.h>
+
+#include "../infiniop_impl.hpp"
 
 namespace infinicore::op::rearrange_impl::infiniop {
 
-thread_local common::OpCache<size_t, infiniopRearrangeDescriptor_t> caches(
-    100, // capacity
-    [](infiniopRearrangeDescriptor_t &desc) {
-        if (desc != nullptr) {
-            INFINICORE_CHECK_ERROR(infiniopDestroyRearrangeDescriptor(desc));
-            desc = nullptr;
-        }
-    });
+INFINIOP_CACHABLE_DESCRIPTOR(Descriptor, Rearrange, 100);
 
-void calculate(Tensor y, Tensor x) {
+struct PlannedMeta {
+    std::shared_ptr<Descriptor> descriptor;
+    graph::GraphTensor y, x;
+};
+
+void *plan(Tensor y, const Tensor &x) {
     size_t seed = hash_combine(y, x);
 
-    auto device = context::getDevice();
-    auto &cache = caches.getCache(device);
+    INFINIOP_CACHABLE_DESCRIPTOR_GET_OR_CREATE(
+        Descriptor, descriptor, Rearrange,
+        seed, y->desc(),
+        x->desc());
 
-    auto desc_opt = cache.get(seed);
-    infiniopRearrangeDescriptor_t desc = nullptr;
+    return new PlannedMeta{
+        descriptor,
+        graph::GraphTensor(y),
+        graph::GraphTensor(x)};
+}
 
-    if (!desc_opt) {
-        INFINICORE_CHECK_ERROR(infiniopCreateRearrangeDescriptor(context::getInfiniopHandle(device), &desc, y->desc(), x->desc()));
-        cache.put(seed, desc);
-    } else {
-        desc = *desc_opt;
-    }
+void run(void *planned_meta) {
+    auto planned = reinterpret_cast<PlannedMeta *>(planned_meta);
 
     INFINICORE_CHECK_ERROR(
         infiniopRearrange(
-            desc,
-            y->data(),
-            x->data(),
+            planned->descriptor->desc,
+            planned->y->data(),
+            planned->x->data(),
             context::getStream()));
 }
 
-static bool registered = []() {
-    Rearrange::dispatcher().registerAll(&calculate, false);
-    return true;
-}();
+void cleanup(void **planned_meta_ptr) {
+    delete *reinterpret_cast<PlannedMeta **>(planned_meta_ptr);
+    *planned_meta_ptr = nullptr;
+}
+
+INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(Rearrange, &plan, &run, &cleanup);
 
 } // namespace infinicore::op::rearrange_impl::infiniop

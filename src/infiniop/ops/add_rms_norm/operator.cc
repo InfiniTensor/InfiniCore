@@ -17,12 +17,10 @@
 // #include "bang/add_rms_norm_bang.h"
 #endif
 #ifdef ENABLE_METAX_API
-// TODO: Add Metax implementation
-// #include "metax/add_rms_norm_metax.cuh"
+#include "metax/add_rms_norm_metax.cuh"
 #endif
 #ifdef ENABLE_MOORE_API
-// TODO: Add Moore implementation
-// #include "moore/add_rms_norm_moore.h"
+#include "moore/add_rms_norm_moore.h"
 #endif
 #ifdef ENABLE_KUNLUN_API
 // TODO: Add Kunlun implementation
@@ -32,12 +30,12 @@
 __C infiniStatus_t infiniopCreateAddRMSNormDescriptor(
     infiniopHandle_t handle,
     infiniopAddRMSNormDescriptor_t *desc_ptr,
+    infiniopTensorDescriptor_t residual_out_desc,
     infiniopTensorDescriptor_t y_desc,
     infiniopTensorDescriptor_t a_desc,
     infiniopTensorDescriptor_t b_desc,
     infiniopTensorDescriptor_t weight_desc,
-    float epsilon,
-    infiniopTensorDescriptor_t residual_out_desc) {
+    float epsilon) {
 
 #define CREATE(CASE, NAMESPACE)                                                     \
     case CASE:                                                                      \
@@ -45,11 +43,11 @@ __C infiniStatus_t infiniopCreateAddRMSNormDescriptor(
             handle,                                                                 \
             reinterpret_cast<op::add_rms_norm::NAMESPACE::Descriptor **>(desc_ptr), \
             y_desc,                                                                 \
+            residual_out_desc,                                                      \
             a_desc,                                                                 \
             b_desc,                                                                 \
             weight_desc,                                                            \
-            epsilon,                                                                \
-            residual_out_desc)
+            epsilon)
 
     switch (handle->device) {
 #ifdef ENABLE_CPU_API
@@ -60,6 +58,12 @@ __C infiniStatus_t infiniopCreateAddRMSNormDescriptor(
 #endif
 #ifdef ENABLE_ILUVATAR_API
         CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_QY_API
         CREATE(INFINI_DEVICE_QY, nvidia);
@@ -94,6 +98,12 @@ __C infiniStatus_t infiniopGetAddRMSNormWorkspaceSize(infiniopAddRMSNormDescript
 #ifdef ENABLE_ILUVATAR_API
         GET(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax);
+#endif
 #ifdef ENABLE_QY_API
         GET(INFINI_DEVICE_QY, nvidia);
 #endif
@@ -116,16 +126,16 @@ __C infiniStatus_t infiniopAddRMSNorm(
     void *workspace,
     size_t workspace_size,
     void *y,
+    void *residual_out,
     const void *a,
     const void *b,
     const void *weight,
-    void *residual_out,
     void *stream) {
 
 #define CALCULATE(CASE, NAMESPACE)                                                     \
     case CASE:                                                                         \
         return reinterpret_cast<const op::add_rms_norm::NAMESPACE::Descriptor *>(desc) \
-            ->calculate(workspace, workspace_size, y, a, b, weight, residual_out, stream)
+            ->calculate(workspace, workspace_size, y, residual_out, a, b, weight, stream)
 
     switch (desc->device_type) {
 
@@ -137,6 +147,12 @@ __C infiniStatus_t infiniopAddRMSNorm(
 #endif
 #ifdef ENABLE_ILUVATAR_API
         CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_QY_API
         CALCULATE(INFINI_DEVICE_QY, nvidia);
@@ -172,6 +188,12 @@ __C infiniStatus_t infiniopDestroyAddRMSNormDescriptor(infiniopAddRMSNormDescrip
 #endif
 #ifdef ENABLE_ILUVATAR_API
         DESTROY(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_MOORE_API
+        DESTROY(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_METAX_API
+        DESTROY(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_QY_API
         DESTROY(INFINI_DEVICE_QY, nvidia);

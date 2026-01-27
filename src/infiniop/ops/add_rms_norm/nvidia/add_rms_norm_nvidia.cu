@@ -49,12 +49,12 @@ infiniStatus_t Descriptor::create(
     infiniopHandle_t handle,
     Descriptor **desc_ptr,
     infiniopTensorDescriptor_t y_desc,
+    infiniopTensorDescriptor_t residual_out_desc,
     infiniopTensorDescriptor_t a_desc,
     infiniopTensorDescriptor_t b_desc,
     infiniopTensorDescriptor_t weight_desc,
-    float epsilon,
-    infiniopTensorDescriptor_t residual_out_desc) {
-    auto result = AddRMSNormInfo::create(y_desc, a_desc, b_desc, weight_desc, epsilon, residual_out_desc);
+    float epsilon) {
+    auto result = AddRMSNormInfo::create(y_desc, residual_out_desc, a_desc, b_desc, weight_desc, epsilon);
     CHECK_RESULT(result);
     auto info = result.take();
 
@@ -122,8 +122,8 @@ infiniStatus_t launchKernel(
 
 infiniStatus_t Descriptor::calculate(
     void *workspace, size_t workspace_size,
-    void *y, const void *a, const void *b, const void *weight,
-    void *residual_out, void *stream) const {
+    void *y, void *residual_out, const void *a, const void *b, const void *weight,
+    void *stream) const {
 
     if (workspace_size < _workspace_size) {
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
@@ -143,7 +143,15 @@ infiniStatus_t Descriptor::calculate(
     auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
 
     // launch kernel with different block sizes
-    if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_1024) {
+    if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_512) {
+        CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_512>(
+            batch_size, nhead, dim,
+            y, _info.atype, stride_y_batch, stride_y_nhead,
+            residual_out, stride_residual_out_batch, stride_residual_out_nhead,
+            a, stride_a_batch, stride_a_nhead,
+            b, stride_b_batch, stride_b_nhead,
+            weight, _info.wtype, _info.epsilon, cuda_stream));
+    } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_1024) {
         CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_1024>(
             batch_size, nhead, dim,
             y, _info.atype, stride_y_batch, stride_y_nhead,
@@ -151,8 +159,8 @@ infiniStatus_t Descriptor::calculate(
             a, stride_a_batch, stride_a_nhead,
             b, stride_b_batch, stride_b_nhead,
             weight, _info.wtype, _info.epsilon, cuda_stream));
-    } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_512) {
-        CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_512>(
+    } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_2048) {
+        CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_2048>(
             batch_size, nhead, dim,
             y, _info.atype, stride_y_batch, stride_y_nhead,
             residual_out, stride_residual_out_batch, stride_residual_out_nhead,

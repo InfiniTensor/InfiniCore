@@ -32,8 +32,24 @@ _TEST_CASES_ = [
     ((16, 2048), (16, 2048), (16, 2048), (2048,), (4096, 1), (4096, 1), (4096, 1)),
     ((15, 3584), (15, 3584), (15, 3584), (3584,), None, None, None),
     ((4, 4, 2048), (4, 4, 2048), (4, 4, 2048), (2048,), None, None, None),
-    ((4, 4, 2048), (4, 4, 2048), (4, 4, 2048), (2048,), (2048, 8192, 1), (2048, 8192, 1), (2048, 8192, 1)),
-    ((4, 4, 2048), (4, 4, 2048), (4, 4, 2048), (2048,), (16384, 4096, 1), (16384, 4096, 1), (16384, 4096, 1)),
+    (
+        (4, 4, 2048),
+        (4, 4, 2048),
+        (4, 4, 2048),
+        (2048,),
+        (2048, 8192, 1),
+        (2048, 8192, 1),
+        (2048, 8192, 1),
+    ),
+    (
+        (4, 4, 2048),
+        (4, 4, 2048),
+        (4, 4, 2048),
+        (2048,),
+        (16384, 4096, 1),
+        (16384, 4096, 1),
+        (16384, 4096, 1),
+    ),
     ((15, 3584), (15, 3584), (15, 3584), (3584,), None, None, None),
     ((15, 8192), (15, 8192), (15, 8192), (8192,), None, None, None),
 ]
@@ -97,7 +113,9 @@ def test(
     w = TestTensor(w_shape, None, w_dtype, device)
 
     eps = 1e-6
-    add_rms_norm(y.torch_tensor(), a.torch_tensor(), b.torch_tensor(), w.torch_tensor(), eps)
+    add_rms_norm(
+        y.torch_tensor(), a.torch_tensor(), b.torch_tensor(), w.torch_tensor(), eps
+    )
 
     if sync is not None:
         sync()
@@ -109,11 +127,11 @@ def test(
             handle,
             ctypes.byref(descriptor),
             y.descriptor,
+            residual_out.descriptor,
             a.descriptor,
             b.descriptor,
             w.descriptor,
             eps,
-            residual_out.descriptor,
         )
     )
 
@@ -136,10 +154,10 @@ def test(
                 workspace.data(),
                 workspace_size.value,
                 y.data(),
+                residual_out.data(),
                 a.data(),
                 b.data(),
                 w.data(),
-                residual_out.data(),
                 None,
             )
         )
@@ -147,18 +165,22 @@ def test(
     lib_add_rms_norm()
 
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
-    
+
     # Verify normalized result (y)
     if DEBUG:
         debug(y.actual_tensor(), y.torch_tensor(), atol=atol, rtol=rtol)
     assert torch.allclose(y.actual_tensor(), y.torch_tensor(), atol=atol, rtol=rtol)
-    
+
     # Verify add result (residual_out) - should be a + b
-    expected_residual = a.torch_tensor().to(torch.float32) + b.torch_tensor().to(torch.float32)
+    expected_residual = a.torch_tensor().to(torch.float32) + b.torch_tensor().to(
+        torch.float32
+    )
     expected_residual = expected_residual.to(a.torch_tensor().dtype)
     if DEBUG:
         debug(residual_out.actual_tensor(), expected_residual, atol=atol, rtol=rtol)
-    assert torch.allclose(residual_out.actual_tensor(), expected_residual, atol=atol, rtol=rtol)
+    assert torch.allclose(
+        residual_out.actual_tensor(), expected_residual, atol=atol, rtol=rtol
+    )
 
     # Profiling workflow
     if PROFILE:

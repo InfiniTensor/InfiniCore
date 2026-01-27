@@ -1,50 +1,51 @@
-#include "../../utils.hpp"
-#include "infinicore/common/hash.hpp"
-#include "infinicore/ops/common/cache.hpp"
 #include "infinicore/ops/mul.hpp"
-#include <infiniop.h>
+
+#include "../infiniop_impl.hpp"
 
 namespace infinicore::op::mul_impl::infiniop {
 
-thread_local common::OpCache<size_t, infiniopMulDescriptor_t> caches(
-    100, // capacity
-    [](infiniopMulDescriptor_t &desc) {
-        if (desc != nullptr) {
-            INFINICORE_CHECK_ERROR(infiniopDestroyMulDescriptor(desc));
-            desc = nullptr;
-        }
-    });
+INFINIOP_CACHABLE_DESCRIPTOR(Descriptor, Mul, 100);
 
-void calculate(Tensor c, Tensor a, Tensor b) {
+struct PlannedMeta {
+    std::shared_ptr<Descriptor> descriptor;
+    graph::GraphTensor workspace, c, a, b;
+};
+
+void *plan(Tensor c, const Tensor &a, const Tensor &b) {
     size_t seed = hash_combine(c, b, a);
 
-    auto device = context::getDevice();
-    auto &cache = caches.getCache(device);
+    INFINIOP_CACHABLE_DESCRIPTOR_GET_OR_CREATE(
+        Descriptor, descriptor, Mul,
+        seed, c->desc(), a->desc(), b->desc());
 
-    auto desc_opt = cache.get(seed);
-    infiniopMulDescriptor_t desc = nullptr;
+    INFINIOP_WORKSPACE_TENSOR(workspace, Mul, descriptor);
 
-    if (!desc_opt) {
-        INFINICORE_CHECK_ERROR(infiniopCreateMulDescriptor(
-            context::getInfiniopHandle(device), &desc,
-            c->desc(), a->desc(), b->desc()));
-        cache.put(seed, desc);
-    } else {
-        desc = *desc_opt;
-    }
-
-    size_t workspace_size = 0;
-    INFINICORE_CHECK_ERROR(infiniopGetMulWorkspaceSize(desc, &workspace_size));
-    std::shared_ptr<Memory> workspace = context::allocateMemory(workspace_size);
-
-    INFINICORE_CHECK_ERROR(infiniopMul(
-        desc, workspace->data(), workspace_size,
-        c->data(), a->data(), b->data(), context::getStream()));
+    return new PlannedMeta{
+        descriptor,
+        graph::GraphTensor(workspace),
+        graph::GraphTensor(c),
+        graph::GraphTensor(a),
+        graph::GraphTensor(b)};
 }
 
-static bool registered = []() {
-    Mul::dispatcher().registerAll(&calculate, false);
-    return true;
-}();
+void run(void *planned_meta) {
+    auto planned = reinterpret_cast<PlannedMeta *>(planned_meta);
+
+    INFINICORE_CHECK_ERROR(infiniopMul(
+        planned->descriptor->desc,
+        planned->workspace->data(),
+        planned->workspace->numel(),
+        planned->c->data(),
+        planned->a->data(),
+        planned->b->data(),
+        context::getStream()));
+}
+
+void cleanup(void **planned_meta_ptr) {
+    delete *reinterpret_cast<PlannedMeta **>(planned_meta_ptr);
+    *planned_meta_ptr = nullptr;
+}
+
+INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(Mul, &plan, &run, &cleanup);
 
 } // namespace infinicore::op::mul_impl::infiniop

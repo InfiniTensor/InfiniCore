@@ -1,50 +1,49 @@
-#include "../../utils.hpp"
-#include "infinicore/common/hash.hpp"
 #include "infinicore/ops/causal_softmax.hpp"
-#include "infinicore/ops/common/cache.hpp"
-#include <infiniop.h>
+
+#include "../infiniop_impl.hpp"
 
 namespace infinicore::op::causal_softmax_impl::infiniop {
 
-thread_local common::OpCache<size_t, infiniopCausalSoftmaxDescriptor_t> caches(
-    100, // capacity
-    [](infiniopCausalSoftmaxDescriptor_t &desc) {
-        if (desc != nullptr) {
-            INFINICORE_CHECK_ERROR(infiniopDestroyCausalSoftmaxDescriptor(desc));
-            desc = nullptr;
-        }
-    });
+INFINIOP_CACHABLE_DESCRIPTOR(Descriptor, CausalSoftmax, 100);
 
-void calculate(Tensor output, Tensor input) {
+struct PlannedMeta {
+    std::shared_ptr<Descriptor> descriptor;
+    graph::GraphTensor workspace, output, input;
+};
+
+void *plan(Tensor output, const Tensor &input) {
     size_t seed = hash_combine(output, input);
 
-    auto device = context::getDevice();
-    auto &cache = caches.getCache(device);
+    INFINIOP_CACHABLE_DESCRIPTOR_GET_OR_CREATE(
+        Descriptor, descriptor, CausalSoftmax,
+        seed, output->desc(), input->desc());
 
-    auto desc_opt = cache.get(seed);
-    infiniopCausalSoftmaxDescriptor_t desc = nullptr;
+    INFINIOP_WORKSPACE_TENSOR(workspace, CausalSoftmax, descriptor);
 
-    if (!desc_opt) {
-        INFINICORE_CHECK_ERROR(infiniopCreateCausalSoftmaxDescriptor(
-            context::getInfiniopHandle(device), &desc,
-            output->desc(), input->desc()));
-        cache.put(seed, desc);
-    } else {
-        desc = *desc_opt;
-    }
-
-    size_t workspace_size = 0;
-    INFINICORE_CHECK_ERROR(infiniopGetCausalSoftmaxWorkspaceSize(desc, &workspace_size));
-    std::shared_ptr<Memory> workspace = context::allocateMemory(workspace_size);
-
-    INFINICORE_CHECK_ERROR(infiniopCausalSoftmax(
-        desc, workspace->data(), workspace_size,
-        output->data(), input->data(), context::getStream()));
+    return new PlannedMeta{
+        descriptor,
+        graph::GraphTensor(workspace),
+        graph::GraphTensor(output),
+        graph::GraphTensor(input)};
 }
 
-static bool registered = []() {
-    CausalSoftmax::dispatcher().registerAll(&calculate, false);
-    return true;
-}();
+void run(void *planned_meta) {
+    auto planned = reinterpret_cast<PlannedMeta *>(planned_meta);
+
+    INFINICORE_CHECK_ERROR(infiniopCausalSoftmax(
+        planned->descriptor->desc,
+        planned->workspace->data(),
+        planned->workspace->numel(),
+        planned->output->data(),
+        planned->input->data(),
+        context::getStream()));
+}
+
+void cleanup(void **planned_meta_ptr) {
+    delete *reinterpret_cast<PlannedMeta **>(planned_meta_ptr);
+    *planned_meta_ptr = nullptr;
+}
+
+INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(CausalSoftmax, &plan, &run, &cleanup);
 
 } // namespace infinicore::op::causal_softmax_impl::infiniop
