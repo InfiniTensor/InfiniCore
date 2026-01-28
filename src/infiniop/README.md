@@ -46,3 +46,211 @@ InfiniOP 是 InfiniCore 下属的统一底层算子框架，为相同算子在�
     一些 CUDA kernel 可以被多个支持 CUDA 的平台公用，可以考虑在头文件中实现，并在多个源文件中使用。 比如 `mul/cuda/kernel.cuh` 中只有 device 测代码，会被多个支持 CUDA 的平台源代码引用。
 
 5. 算子实现可以成功编译安装后，在 `test/infiniop/` 中添加单测脚本，与 PyTorch 实现进行正确性和性能比较。你可以仿照已有的测试脚本进行开发，以使用各种通用的测试功能。测例应覆盖算子常用类型和形状。测试成功之后可以将测例添加至 `scripts/python_test.py` 一键测试脚本中（这样 Github 自动测试也会包含该算子）。
+
+## 添加 Elementwise 算子（Binary/Unary）
+
+对于逐元素算子（Elementwise Operators），由于重构后的统一框架，添加新算子变得非常简单。以下步骤展示了如何添加一个新的 elementwise 算子。
+
+### Binary Elementwise 算子示例（以 `pow` 为例）
+
+#### 步骤 1: 在 `BinaryMode` 枚举中添加算子
+
+在 `src/infiniop/elementwise/binary.h` 的 `BinaryMode` 枚举中添加新算子：
+
+```cpp
+enum class BinaryMode {
+    // ... 其他算子
+    Pow,  // 添加新算子
+    // ...
+};
+```
+
+#### 步骤 2: 在 `BinaryOp` 模板中添加计算逻辑
+
+在同一文件的 `BinaryOp` 模板中添加对应的计算实现：
+
+```cpp
+template <BinaryMode Mode>
+struct BinaryOp {
+    template <typename T>
+    T operator()(const T &a, const T &b) const {
+        // ... 其他算子的实现
+        else if constexpr (Mode == BinaryMode::Pow) {
+            return std::pow(a, b);
+        }
+        // ...
+    }
+};
+```
+
+如果需要在 CUDA 端优化，还需要在 `namespace cuda` 的 `BinaryOp` 模板中添加对应的 CUDA 实现。
+
+#### 步骤 3: 在 API 头文件中声明算子
+
+在 `include/infiniop/ops/binary_ops_api.h` 中添加：
+
+```cpp
+BINARY_OP_API_DECLARE(pow, Pow)
+```
+
+#### 步骤 4: 创建算子目录和文件
+
+创建目录结构 `src/infiniop/ops/pow/`，并创建以下文件：
+
+**`operator.cc`** - 主实现文件：
+```cpp
+#include "../../operator_impl.h"
+#include "infiniop/ops/binary_ops_api.h"
+
+#ifdef ENABLE_CPU_API
+#include "cpu/pow_cpu.h"
+#endif
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API)
+#include "nvidia/pow_nvidia.cuh"
+#endif
+
+BINARY_OP_IMPL(pow, Pow)
+```
+
+**`cpu/pow_cpu.h`** - CPU 头文件：
+```cpp
+#ifndef __POW_CPU_H__
+#define __POW_CPU_H__
+
+#include "../../../elementwise/binary.h"
+#include "../../../elementwise/cpu/elementwise_cpu.h"
+
+BINARY_ELEMENTWISE_DESCRIPTOR(pow, cpu, op::elementwise::binary::BinaryMode::Pow)
+
+#endif // __POW_CPU_H__
+```
+
+**`cpu/pow_cpu.cc`** - CPU 实现文件：
+```cpp
+#include "pow_cpu.h"
+#include "../../../elementwise/cpu/elementwise_cpu_impl.h"
+
+namespace op::pow::cpu {
+
+ELEMENTWISE_CPU_IMPL_BINARY(pow)
+
+} // namespace op::pow::cpu
+```
+
+**`nvidia/pow_nvidia.cuh`** - NVIDIA 头文件：
+```cpp
+#ifndef __POW_CUDA_API_H__
+#define __POW_CUDA_API_H__
+
+#include "../../../elementwise/nvidia/elementwise_nvidia_api.cuh"
+
+ELEMENTWISE_DESCRIPTOR(pow, nvidia)
+
+#endif // __POW_CUDA_API_H__
+```
+
+**`nvidia/pow_nvidia.cu`** - NVIDIA 实现文件：
+```cpp
+#include "../../../elementwise/nvidia/elementwise_nvidia_impl.cuh"
+
+#include "../cuda/kernel.cuh"
+#include "pow_nvidia.cuh"
+
+namespace op::pow::nvidia {
+
+ELEMENTWISE_NVIDIA_IMPL_BINARY(pow)
+
+} // namespace op::pow::nvidia
+```
+
+**`cuda/kernel.cuh`**（可选）- 如果需要在 CUDA kernel 中实现特殊逻辑：
+```cpp
+// 通常不需要，除非有特殊的 CUDA 优化需求
+```
+
+### Unary Elementwise 算子示例（以 `abs` 为例）
+
+Unary 算子的添加流程与 Binary 类似，主要区别如下：
+
+#### 步骤 1: 在 `UnaryMode` 枚举中添加算子
+
+在 `src/infiniop/elementwise/unary.h` 的 `UnaryMode` 枚举中添加：
+
+```cpp
+enum class UnaryMode {
+    // ... 其他算子
+    Abs,  // 添加新算子
+    // ...
+};
+```
+
+#### 步骤 2: 在 `UnaryOp` 模板中添加计算逻辑
+
+```cpp
+template <UnaryMode Mode>
+struct UnaryOp {
+    template <typename T>
+    T operator()(const T &x) const {
+        // ... 其他算子的实现
+        else if constexpr (Mode == UnaryMode::Abs) {
+            if constexpr (std::is_floating_point_v<T>) {
+                return std::fabs(x);
+            } else {
+                return std::abs(x);
+            }
+        }
+        // ...
+    }
+};
+```
+
+#### 步骤 3: 在 API 头文件中声明算子
+
+在 `include/infiniop/ops/unary_ops_api.h` 中添加：
+
+```cpp
+UNARY_OP_API_DECLARE(abs, Abs)
+```
+
+#### 步骤 4: 创建算子目录和文件
+
+文件结构与 Binary 类似，但使用 `UNARY_` 前缀的宏：
+
+**`operator.cc`**:
+```cpp
+UNARY_OP_IMPL(abs, Abs)
+```
+
+**`cpu/abs_cpu.h`**:
+```cpp
+UNARY_ELEMENTWISE_DESCRIPTOR(abs, cpu, op::elementwise::unary::UnaryMode::Abs)
+```
+
+**`cpu/abs_cpu.cc`**:
+```cpp
+ELEMENTWISE_CPU_IMPL_UNARY(abs)
+```
+
+**`nvidia/abs_nvidia.cu`**:
+```cpp
+ELEMENTWISE_NVIDIA_IMPL_UNARY(abs)
+```
+
+### 总结
+
+添加一个新的 elementwise 算子只需要：
+
+1. ✅ 在对应的 `BinaryMode`/`UnaryMode` 枚举中添加算子
+2. ✅ 在 `BinaryOp`/`UnaryOp` 模板中添加计算逻辑
+3. ✅ 在 API 头文件中使用宏声明算子
+4. ✅ 创建算子目录，使用统一的宏实现各平台代码
+
+**关键优势**：
+- 代码复用：所有平台共享相同的实现框架
+- 最小改动：只需添加算子特定的计算逻辑
+- 统一接口：自动生成标准的 C API
+- 易于维护：修改框架代码即可影响所有算子
+
+参考实现：
+- Binary: `src/infiniop/ops/pow/`
+- Unary: `src/infiniop/ops/abs/`

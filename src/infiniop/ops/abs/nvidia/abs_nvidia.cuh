@@ -1,0 +1,8 @@
+#ifndef __ABS_NVIDIA_API_H__
+#define __ABS_NVIDIA_API_H__
+
+#include "../../../elementwise/nvidia/elementwise_nvidia_api.cuh"
+
+ELEMENTWISE_DESCRIPTOR(abs, nvidia)
+
+#endif // __ABS_NVIDIA_API_H__

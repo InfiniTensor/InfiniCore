@@ -83,8 +83,25 @@ class TestTensor(CTensor):
                 InfiniDtype.BYTE,
                 InfiniDtype.BOOL,
             ]:
-                randint_low = -2000000000 if randint_low is None else randint_low
-                randint_high = 2000000000 if randint_high is None else randint_high
+                # Set appropriate default ranges based on dtype
+                if randint_low is None or randint_high is None:
+                    if dt == InfiniDtype.U8 or dt == InfiniDtype.BYTE:
+                        randint_low = 0 if randint_low is None else randint_low
+                        randint_high = 256 if randint_high is None else randint_high
+                    elif dt == InfiniDtype.BOOL:
+                        randint_low = 0 if randint_low is None else randint_low
+                        randint_high = 2 if randint_high is None else randint_high
+                    elif dt == InfiniDtype.U16:
+                        randint_low = 0 if randint_low is None else randint_low
+                        randint_high = 65536 if randint_high is None else randint_high
+                    elif dt in [InfiniDtype.U32, InfiniDtype.U64]:
+                        randint_low = 0 if randint_low is None else randint_low
+                        randint_high = 2000000000 if randint_high is None else randint_high
+                    else:
+                        # For signed integer types (I8, I16, I32, I64)
+                        randint_low = -2000000000 if randint_low is None else randint_low
+                        randint_high = 2000000000 if randint_high is None else randint_high
+                
                 self._torch_tensor = torch.randint(
                     randint_low,
                     randint_high,
@@ -107,8 +124,25 @@ class TestTensor(CTensor):
                 torch_shape, dtype=to_torch_dtype(dt), device=torch_device_map[device]
             )
         elif mode == "randint":
-            randint_low = -2000000000 if randint_low is None else randint_low
-            randint_high = 2000000000 if randint_high is None else randint_high
+            # Set appropriate default ranges based on dtype (same logic as mode="random")
+            if randint_low is None or randint_high is None:
+                if dt == InfiniDtype.U8 or dt == InfiniDtype.BYTE:
+                    randint_low = 0 if randint_low is None else randint_low
+                    randint_high = 256 if randint_high is None else randint_high
+                elif dt == InfiniDtype.BOOL:
+                    randint_low = 0 if randint_low is None else randint_low
+                    randint_high = 2 if randint_high is None else randint_high
+                elif dt == InfiniDtype.U16:
+                    randint_low = 0 if randint_low is None else randint_low
+                    randint_high = 65536 if randint_high is None else randint_high
+                elif dt in [InfiniDtype.U32, InfiniDtype.U64]:
+                    randint_low = 0 if randint_low is None else randint_low
+                    randint_high = 2000000000 if randint_high is None else randint_high
+                else:
+                    # For signed integer types (I8, I16, I32, I64)
+                    randint_low = -2000000000 if randint_low is None else randint_low
+                    randint_high = 2000000000 if randint_high is None else randint_high
+            
             self._torch_tensor = torch.randint(
                 randint_low,
                 randint_high,
