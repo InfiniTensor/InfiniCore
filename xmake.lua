@@ -134,7 +134,7 @@ option_end()
 
 if has_config("ali-ppu") then
     add_defines("ENABLE_ALI_API")
-    includes("xmake/alibaba.lua")
+    includes("xmake/alippu.lua")
 end
 
 -- qy
