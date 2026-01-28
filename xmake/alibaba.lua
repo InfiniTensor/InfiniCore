@@ -43,12 +43,13 @@ target("infiniop-ali")
 
     set_warnings("all", "error")
     add_cuflags("-Wno-error=unused-private-field")
-    add_cuflags("-fPIC", "-x", "ivcore", "-std=c++17", {force = true})
+    add_cuflags("-fPIC", "-x", {force = true})
+    -- add_cuflags("-fPIC", "-x", "-std=c++17", {force = true})
     add_culdflags("-fPIC")
     add_cxflags("-fPIC")
     add_cxxflags("-fPIC")
 
-    set_languages("cxx17")
+    -- set_languages("cxx17")
     add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")
 
     add_files("../src/infiniop/ops/dequantize_awq/ali/*.cu")
@@ -70,12 +71,13 @@ target("infinirt-ali")
     add_links("cudart")
 
     set_warnings("all", "error")
-    add_cuflags("-fPIC", "-x", "ivcore", "-std=c++17", {force = true})
+    add_cuflags("-fPIC", "-x", {force = true})
+    -- add_cuflags("-fPIC", "-x", "-std=c++17", {force = true})
     add_culdflags("-fPIC")
     add_cxflags("-fPIC")
     add_cxxflags("-fPIC")
 
-    set_languages("cxx17")
+    -- set_languages("cxx17")
     add_files("../src/infinirt/cuda/*.cu")
 target_end()
 
@@ -92,7 +94,8 @@ target("infiniccl-ali")
         add_links("cudart")
 
         set_warnings("all", "error")
-        add_cuflags("-fPIC", "-x", "ivcore", "-std=c++17", {force = true})
+        add_cuflags("-fPIC", "-x", {force = true})
+        -- add_cuflags("-fPIC", "-x", "-std=c++17", {force = true})
         add_culdflags("-fPIC")
         add_cxflags("-fPIC")
         add_cxxflags("-fPIC")
@@ -105,7 +108,7 @@ target("infiniccl-ali")
             add_links("nccl") -- Fall back to default nccl linking
         end
 
-        set_languages("cxx17")
+        -- set_languages("cxx17")
         add_files("../src/infiniccl/cuda/*.cu")
     end
 target_end()
