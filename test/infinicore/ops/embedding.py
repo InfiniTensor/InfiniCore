@@ -3,6 +3,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import infinicore
 import torch
 from framework import BaseOperatorTest, TensorSpec, TestCase, GenericTestRunner
 from framework.tensor import TensorInitializer
@@ -12,7 +13,6 @@ from framework.utils.tensor_utils import (
     to_torch_dtype,
 )
 
-import infinicore
 
 # ==============================================================================
 # Operator-specific configuration

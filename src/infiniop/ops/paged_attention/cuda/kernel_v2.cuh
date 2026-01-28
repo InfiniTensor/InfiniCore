@@ -30,7 +30,11 @@ __device__ __forceinline__ float warpReduceMax(float x) {
 }
 
 __device__ __forceinline__ unsigned int cvtaToShared(const void *ptr) {
+#if defined(__CUDA_ARCH__) && defined(__cvta_generic_to_shared)
     return static_cast<unsigned int>(__cvta_generic_to_shared(ptr));
+#else
+    return static_cast<unsigned int>(reinterpret_cast<uintptr_t>(ptr));
+#endif
 }
 
 __device__ __forceinline__ void cpAsyncCaSharedGlobal16(void *dst_shared, const void *src_global) {
