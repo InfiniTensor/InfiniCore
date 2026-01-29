@@ -17,8 +17,7 @@
 // #include "bang/add_rms_norm_bang.h"
 #endif
 #ifdef ENABLE_METAX_API
-// TODO: Add Metax implementation
-// #include "metax/add_rms_norm_metax.cuh"
+#include "metax/add_rms_norm_metax.cuh"
 #endif
 #ifdef ENABLE_MOORE_API
 // TODO: Add Moore implementation
@@ -67,6 +66,9 @@ __C infiniStatus_t infiniopCreateAddRMSNormDescriptor(
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax);
+#endif
 #ifdef ENABLE_KUNLUN_API
         // CREATE(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
@@ -99,6 +101,9 @@ __C infiniStatus_t infiniopGetAddRMSNormWorkspaceSize(infiniopAddRMSNormDescript
 #endif
 #ifdef ENABLE_HYGON_API
         GET(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_KUNLUN_API
         // GET(INFINI_DEVICE_KUNLUN, kunlun);
@@ -144,6 +149,9 @@ __C infiniStatus_t infiniopAddRMSNorm(
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax);
+#endif
 #ifdef ENABLE_KUNLUN_API
         // CALCULATE(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
@@ -178,6 +186,9 @@ __C infiniStatus_t infiniopDestroyAddRMSNormDescriptor(infiniopAddRMSNormDescrip
 #endif
 #ifdef ENABLE_HYGON_API
         DESTROY(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        DESTROY(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_KUNLUN_API
         // DESTROY(INFINI_DEVICE_KUNLUN, kunlun);

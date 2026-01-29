@@ -8,10 +8,31 @@
 
 inline struct SpdlogInitializer {
     SpdlogInitializer() {
-        if (!std::getenv("INFINICORE_LOG_LEVEL")) {
+        const char* log_level_env = std::getenv("INFINICORE_LOG_LEVEL");
+        if (!log_level_env) {
             spdlog::set_level(spdlog::level::info);
         } else {
-            spdlog::cfg::load_env_levels("INFINICORE_LOG_LEVEL");
+            std::string level_str(log_level_env);
+            spdlog::level::level_enum level;
+            if (level_str == "trace") {
+                level = spdlog::level::trace;
+            } else if (level_str == "debug") {
+                level = spdlog::level::debug;
+            } else if (level_str == "info") {
+                level = spdlog::level::info;
+            } else if (level_str == "warn" || level_str == "warning") {
+                level = spdlog::level::warn;
+            } else if (level_str == "error") {
+                level = spdlog::level::err;
+            } else if (level_str == "critical") {
+                level = spdlog::level::critical;
+            } else if (level_str == "off") {
+                level = spdlog::level::off;
+            } else {
+                // Default to info if unknown level
+                level = spdlog::level::info;
+            }
+            spdlog::set_level(level);
         }
         // Set pattern for logging
         // Using SPDLOG_* macros enables source location support (%s and %#)
@@ -23,17 +44,14 @@ inline struct SpdlogInitializer {
 #define STRINGIZE_(x) #x
 #define STRINGIZE(x) STRINGIZE_(x)
 
-#define INFINICORE_CHECK_ERROR(call)                                                                            \
-    do {                                                                                                        \
-        SPDLOG_DEBUG("Entering `" #call "` at `" __FILE__ ":" STRINGIZE(__LINE__) "`.");                        \
-        infiniStatus_t ret = (call);                                                                            \
-        SPDLOG_DEBUG("Exiting `" #call "` at `" __FILE__ ":" STRINGIZE(__LINE__) "`.");                         \
-        if (ret != INFINI_STATUS_SUCCESS) {                                                                     \
-            throw std::runtime_error("`" #call "` failed with error: " + std::string(infini_status_string(ret)) \
-                                     + " from " + std::string(__func__)                                         \
-                                     + " at " + std::string(__FILE__)                                           \
-                                     + ":" + std::to_string(__LINE__) + ".");                                   \
-        }                                                                                                       \
+#define INFINICORE_CHECK_ERROR(call)                                                                         \
+    do {                                                                                                     \
+        SPDLOG_DEBUG("Entering `" #call "` at `" __FILE__ ":" STRINGIZE(__LINE__) "`.");                     \
+        infiniStatus_t ret = (call);                                                                         \
+        SPDLOG_DEBUG("Exiting `" #call "` at `" __FILE__ ":" STRINGIZE(__LINE__) "`.");                      \
+        if (ret != INFINI_STATUS_SUCCESS) {                                                                  \
+            throw std::runtime_error(#call " failed with error: " + std::string(infini_status_string(ret))); \
+        }                                                                                                    \
     } while (false)
 
 #define INFINICORE_ASSERT_TENSORS_SAME_DEVICE(FIRST___, ...)                      \
