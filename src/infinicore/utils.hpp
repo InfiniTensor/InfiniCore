@@ -49,6 +49,7 @@ inline struct SpdlogInitializer {
                                          + ":" + std::to_string(__LINE__) + "."); \
             }                                                                     \
         }                                                                         \
+        infinicore::context::setDevice((FIRST___)->device());                     \
     } while (0)
 
 #define INFINICORE_ASSERT(CONDITION__)                                                                                                         \

@@ -1,17 +1,13 @@
 #pragma once
 
 #include "../device.hpp"
+#include "../graph/graph.hpp"
 #include "common/op.hpp"
 
 namespace infinicore::op {
 
-class PagedCaching {
-public:
-    using schema = void (*)(Tensor, Tensor, Tensor, Tensor, Tensor);
-    static void execute(Tensor k_cache, Tensor v_cache, Tensor k, Tensor v, Tensor slot_mapping);
-    static common::OpDispatcher<schema> &dispatcher();
-};
+INFINICORE_GRAPH_OP_CLASS(PagedCaching, Tensor, Tensor, const Tensor &, const Tensor &, const Tensor &);
 
-void paged_caching_(Tensor k_cache, Tensor v_cache, Tensor k, Tensor v, Tensor slot_mapping);
+void paged_caching_(Tensor k_cache, Tensor v_cache, const Tensor &k, const Tensor &v, const Tensor &slot_mapping);
 
 } // namespace infinicore::op

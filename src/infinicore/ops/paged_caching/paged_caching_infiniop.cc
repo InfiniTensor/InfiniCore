@@ -1,50 +1,57 @@
-#include "../../utils.hpp"
-#include "infinicore/common/hash.hpp"
-#include "infinicore/ops/common/cache.hpp"
 #include "infinicore/ops/paged_caching.hpp"
-#include <infiniop.h>
+
+#include "../infiniop_impl.hpp"
 
 namespace infinicore::op::paged_caching_impl::infiniop {
 
-thread_local common::OpCache<size_t, infiniopPagedCachingDescriptor_t> caches(
-    100, // capacity
-    [](infiniopPagedCachingDescriptor_t &desc) {
-        if (desc != nullptr) {
-            INFINICORE_CHECK_ERROR(infiniopDestroyPagedCachingDescriptor(desc));
-            desc = nullptr;
-        }
-    });
+INFINIOP_CACHABLE_DESCRIPTOR(Descriptor, PagedCaching, 100);
 
-void calculate(Tensor k_cache, Tensor v_cache, Tensor k, Tensor v, Tensor slot_mapping) {
-    size_t seed = hash_combine(k_cache, v_cache, k, v, slot_mapping);
+struct PlannedMeta {
+    std::shared_ptr<Descriptor> descriptor;
 
-    auto device = context::getDevice();
-    auto &cache = caches.getCache(device);
+    graph::GraphTensor workspace, k_cache, v_cache, k, v, slot_mapping;
+};
 
-    auto desc_opt = cache.get(seed);
-    infiniopPagedCachingDescriptor_t desc = nullptr;
+void *plan(Tensor k_cache, Tensor v_cache, const Tensor &k, const Tensor &v, const Tensor &slot_mapping) {
+    size_t key = hash_combine(k_cache, v_cache, k, v, slot_mapping);
 
-    if (!desc_opt) {
-        INFINICORE_CHECK_ERROR(infiniopCreatePagedCachingDescriptor(
-            context::getInfiniopHandle(device), &desc,
-            k_cache->desc(), v_cache->desc(), k->desc(), v->desc(), slot_mapping->desc()));
-        cache.put(seed, desc);
-    } else {
-        desc = *desc_opt;
-    }
+    INFINIOP_CACHABLE_DESCRIPTOR_GET_OR_CREATE(
+        Descriptor, descriptor, PagedCaching,
+        key, k_cache->desc(), v_cache->desc(), k->desc(), v->desc(), slot_mapping->desc());
 
-    size_t workspace_size = 0;
-    INFINICORE_CHECK_ERROR(infiniopGetPagedCachingWorkspaceSize(desc, &workspace_size));
-    std::shared_ptr<Memory> workspace = context::allocateMemory(workspace_size);
+    INFINIOP_WORKSPACE_TENSOR(workspace, PagedCaching, descriptor);
 
-    INFINICORE_CHECK_ERROR(infiniopPagedCaching(
-        desc, workspace->data(), workspace_size,
-        k_cache->data(), v_cache->data(), k->data(), v->data(), slot_mapping->data(), context::getStream()));
+    return new PlannedMeta{
+        descriptor,
+        graph::GraphTensor(workspace),
+        graph::GraphTensor(k_cache),
+        graph::GraphTensor(v_cache),
+        graph::GraphTensor(k),
+        graph::GraphTensor(v),
+        graph::GraphTensor(slot_mapping)};
 }
 
-static bool registered = []() {
-    PagedCaching::dispatcher().registerAll(&calculate, false);
-    return true;
-}();
+void run(void *planned_meta) {
+    auto *p = reinterpret_cast<PlannedMeta *>(planned_meta);
+
+    INFINICORE_CHECK_ERROR(
+        infiniopPagedCaching(
+            p->descriptor->desc,
+            p->workspace->data(),
+            p->workspace->numel(),
+            p->k_cache->data(),
+            p->v_cache->data(),
+            p->k->data(),
+            p->v->data(),
+            p->slot_mapping->data(),
+            context::getStream()));
+}
+
+void cleanup(void **planned_meta_ptr) {
+    delete *reinterpret_cast<PlannedMeta **>(planned_meta_ptr);
+    *planned_meta_ptr = nullptr;
+}
+
+INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(PagedCaching, &plan, &run, &cleanup);
 
 } // namespace infinicore::op::paged_caching_impl::infiniop

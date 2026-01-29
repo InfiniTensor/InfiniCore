@@ -1,6 +1,7 @@
 #include "infinicore/nn/linear.hpp"
 #include "../utils.hpp"
 #include "infinicore/ops.hpp"
+#include "infinicore/ops/distributed/allreduce.hpp"
 #include "infinicore/ops/linear.hpp"
 #include <optional>
 #include <spdlog/spdlog.h>
@@ -102,9 +103,6 @@ ColumnParallelLinear::ColumnParallelLinear(size_t in_features, size_t out_featur
     } else {
         bias_ = Parameter(); // Default constructed empty parameter
     }
-
-    // SPDLOG_DEBUG("Created ColumnParallelLinear module: in_features={}, out_features={}, bias={}, dtype={}",
-    //              in_features, out_features, bias, static_cast<int>(dtype_));
 }
 
 Tensor ColumnParallelLinear::forward(Tensor &input) const {
@@ -138,26 +136,13 @@ RowParallelLinear::RowParallelLinear(size_t in_features, size_t out_features, bo
     } else {
         bias_ = Parameter(); // Default constructed empty parameter
     }
-
-    // SPDLOG_DEBUG("Created RowParallelLinear module: in_features={}, out_features={}, bias={}, dtype={}",
-    //              in_features, out_features, bias, static_cast<int>(dtype_));
 }
 
 Tensor RowParallelLinear::forward(Tensor &input) const {
     auto output = BaseLinear::forward(input);
 
     if ((tp_size_ > 1) && (communicator_ != nullptr)) {
-
-        Size count = output->numel();
-        DataType type = output->dtype();
-
-        infinirtStream_t stream = infinicore::context::getStream();
-
-        INFINICORE_CHECK_ERROR(infinicclAllReduce(output->data(), output->data(), count, static_cast<infiniDtype_t>(static_cast<int>(type)),
-                                                  INFINICCL_SUM, communicator_, stream));
-        INFINICORE_CHECK_ERROR(infinirtStreamSynchronize(stream));
-
-        // RUN_INFINI(infinirtStreamSynchronize(stream));
+        op::distributed::allreduce_(output, output, INFINICCL_SUM, communicator_);
     }
     return output;
 }

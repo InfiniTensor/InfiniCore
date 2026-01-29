@@ -33,19 +33,19 @@
             infiniopHandle_t handle,                             \
             Descriptor **desc_ptr,                               \
             infiniopTensorDescriptor_t y_desc,                   \
+            infiniopTensorDescriptor_t residual_out_desc,        \
             infiniopTensorDescriptor_t a_desc,                   \
             infiniopTensorDescriptor_t b_desc,                   \
             infiniopTensorDescriptor_t weight_desc,              \
-            float epsilon,                                       \
-            infiniopTensorDescriptor_t residual_out_desc);       \
+            float epsilon);                                      \
                                                                  \
         infiniStatus_t calculate(                                \
             void *workspace, size_t workspace_size,              \
             void *y,                                             \
+            void *residual_out,                                  \
             const void *a,                                       \
             const void *b,                                       \
             const void *weight,                                  \
-            void *residual_out,                                  \
             void *stream) const;                                 \
     };                                                           \
     }

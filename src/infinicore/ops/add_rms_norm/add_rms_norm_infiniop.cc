@@ -1,50 +1,53 @@
-#include "../../utils.hpp"
-#include "infinicore/common/hash.hpp"
 #include "infinicore/ops/add_rms_norm.hpp"
-#include "infinicore/ops/common/cache.hpp"
-#include <infiniop.h>
+
+#include "../infiniop_impl.hpp"
 
 namespace infinicore::op::add_rms_norm_impl::infiniop {
 
-thread_local common::OpCache<size_t, infiniopAddRMSNormDescriptor_t> caches(
-    100, // capacity
-    [](infiniopAddRMSNormDescriptor_t &desc) {
-        if (desc != nullptr) {
-            INFINICORE_CHECK_ERROR(infiniopDestroyAddRMSNormDescriptor(desc));
-            desc = nullptr;
-        }
-    });
+INFINIOP_CACHABLE_DESCRIPTOR(Descriptor, AddRMSNorm, 100);
 
-void calculate(Tensor y, Tensor residual_out, Tensor a, Tensor b, Tensor weight, float epsilon) {
+struct PlannedMeta {
+    std::shared_ptr<Descriptor> descriptor;
+    graph::GraphTensor workspace, out, residual, a, b, weight;
+    float epsilon;
+};
+
+void *plan(Tensor y, Tensor residual_out, const Tensor &a, const Tensor &b, const Tensor &weight, float epsilon) {
     size_t seed = hash_combine(y, residual_out, a, b, weight, epsilon);
 
-    auto device = context::getDevice();
-    auto &cache = caches.getCache(device);
+    INFINIOP_CACHABLE_DESCRIPTOR_GET_OR_CREATE(
+        Descriptor, descriptor, AddRMSNorm,
+        seed, y->desc(), residual_out->desc(),
+        a->desc(), b->desc(), weight->desc(), epsilon);
 
-    auto desc_opt = cache.get(seed);
-    infiniopAddRMSNormDescriptor_t desc = nullptr;
+    INFINIOP_WORKSPACE_TENSOR(workspace, AddRMSNorm, descriptor);
 
-    if (!desc_opt) {
-        INFINICORE_CHECK_ERROR(infiniopCreateAddRMSNormDescriptor(
-            context::getInfiniopHandle(device), &desc,
-            y->desc(), a->desc(), b->desc(), weight->desc(), epsilon, residual_out->desc()));
-        cache.put(seed, desc);
-    } else {
-        desc = *desc_opt;
-    }
+    auto planned = new PlannedMeta{
+        descriptor,
+        graph::GraphTensor(workspace),
+        graph::GraphTensor(y),
+        graph::GraphTensor(residual_out),
+        graph::GraphTensor(a),
+        graph::GraphTensor(b),
+        graph::GraphTensor(weight),
+        epsilon};
 
-    size_t workspace_size = 0;
-    INFINICORE_CHECK_ERROR(infiniopGetAddRMSNormWorkspaceSize(desc, &workspace_size));
-    std::shared_ptr<Memory> workspace = context::allocateMemory(workspace_size);
-
-    INFINICORE_CHECK_ERROR(infiniopAddRMSNorm(
-        desc, workspace->data(), workspace_size,
-        y->data(), a->data(), b->data(), weight->data(), residual_out->data(), context::getStream()));
+    return planned;
 }
 
-static bool registered = []() {
-    AddRMSNorm::dispatcher().registerAll(&calculate, false);
-    return true;
-}();
+void run(void *planned_meta) {
+    auto planned = reinterpret_cast<PlannedMeta *>(planned_meta);
+
+    INFINICORE_CHECK_ERROR(infiniopAddRMSNorm(
+        planned->descriptor->desc, planned->workspace->data(), planned->workspace->numel(),
+        planned->out->data(), planned->residual->data(), planned->a->data(), planned->b->data(), planned->weight->data(), context::getStream()));
+}
+
+void cleanup(void **planned_meta_ptr) {
+    delete *reinterpret_cast<PlannedMeta **>(planned_meta_ptr);
+    *planned_meta_ptr = nullptr;
+}
+
+INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(AddRMSNorm, &plan, &run, &cleanup);
 
 } // namespace infinicore::op::add_rms_norm_impl::infiniop

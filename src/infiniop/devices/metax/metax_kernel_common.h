@@ -8,14 +8,22 @@
 
 // Posible maximum number of threads per block for METAX architectures
 // Used for picking correct kernel launch configuration
-#define METAX_BLOCK_SIZE_1024 1024
 #define METAX_BLOCK_SIZE_512 512
+#define METAX_BLOCK_SIZE_1024 1024
+#define METAX_BLOCK_SIZE_2048 2048
+#define METAX_BLOCK_SIZE_4096 4096
 
 #define CHECK_METAX(API) CHECK_INTERNAL(API, hcSuccess)
 
 using cuda_bfloat16 = hpcc_bfloat16;
 using cuda_bfloat162 = hpcc_bfloat162;
 using cuda_fp8_e4m3 = __hpcc_fp8_e4m3;
+
+#ifdef ENABLE_METAX_MC_API
+using __nv_bfloat16 = __maca_bfloat16;
+#else
+using __nv_bfloat16 = __hpcc_bfloat16;
+#endif
 
 namespace device::metax {
 

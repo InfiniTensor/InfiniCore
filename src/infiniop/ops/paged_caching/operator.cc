@@ -2,12 +2,12 @@
 #include "../../handle.h"
 #include "infiniop/ops/paged_caching.h"
 
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
 #include "nvidia/paged_caching_nvidia.cuh"
 #endif
-// #ifdef ENABLE_METAX_API
-// #include "metax/paged_caching_metax.h"
-// #endif
+#ifdef ENABLE_METAX_API
+#include "metax/paged_caching_metax.h"
+#endif
 
 __C infiniStatus_t infiniopCreatePagedCachingDescriptor(
     infiniopHandle_t handle,
@@ -29,9 +29,12 @@ __C infiniStatus_t infiniopCreatePagedCachingDescriptor(
 #ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-    // #ifdef ENABLE_METAX_API
-    //         CREATE(INFINI_DEVICE_METAX, metax)
-    // #endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax)
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        CREATE(INFINI_DEVICE_ILUVATAR, nvidia)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -50,9 +53,12 @@ __C infiniStatus_t infiniopGetPagedCachingWorkspaceSize(
 #ifdef ENABLE_NVIDIA_API
         GET(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-    // #ifdef ENABLE_METAX_API
-    //         GET(INFINI_DEVICE_METAX, metax)
-    // #endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax)
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        GET(INFINI_DEVICE_ILUVATAR, nvidia)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -75,9 +81,12 @@ __C infiniStatus_t infiniopPagedCaching(
 #ifdef ENABLE_NVIDIA_API
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-    // #ifdef ENABLE_METAX_API
-    //         CALCULATE(INFINI_DEVICE_METAX, metax)
-    // #endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax)
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -95,9 +104,12 @@ __C infiniStatus_t infiniopDestroyPagedCachingDescriptor(
 #ifdef ENABLE_NVIDIA_API
         DESTROY(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-    // #ifdef ENABLE_METAX_API
-    //         DESTROY(INFINI_DEVICE_METAX, metax)
-    // #endif
+#ifdef ENABLE_METAX_API
+        DESTROY(INFINI_DEVICE_METAX, metax)
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        DESTROY(INFINI_DEVICE_ILUVATAR, nvidia)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
