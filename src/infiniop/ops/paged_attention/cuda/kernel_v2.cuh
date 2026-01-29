@@ -30,7 +30,11 @@ __device__ __forceinline__ float warpReduceMax(float x) {
 }
 
 __device__ __forceinline__ unsigned int cvtaToShared(const void *ptr) {
+#if defined(ENABLE_ILUVATAR_API)
+    return static_cast<unsigned int>(reinterpret_cast<uintptr_t>(ptr));
+#else
     return static_cast<unsigned int>(__cvta_generic_to_shared(ptr));
+#endif
 }
 
 __device__ __forceinline__ void cpAsyncCaSharedGlobal16(void *dst_shared, const void *src_global) {
