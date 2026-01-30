@@ -2,8 +2,10 @@ import ctypes
 
 import numpy as np
 
-import infinicore.device
-import infinicore.dtype
+import infinicore._device
+import infinicore._dtype
+from infinicore._device import device
+from infinicore._dtype import dtype
 from infinicore.lib import _infinicore
 
 from .utils import (
@@ -18,8 +20,8 @@ class Tensor:
     _underlying: _infinicore.Tensor
     _torch_ref: "torch.Tensor"  # noqa: F821
     shape: list[int]
-    dtype: infinicore.dtype
-    device: infinicore.device
+    dtype: dtype
+    device: device
 
     def __init__(self, underlying, *, _torch_ref=None):
         """An internal method. Please do not use this directly."""
@@ -198,8 +200,8 @@ def from_torch(torch_tensor) -> Tensor:
 def from_numpy(
     np_array,
     *,
-    dtype: infinicore.dtype = None,
-    device: infinicore.device = None,
+    dtype: dtype = None,
+    device: device = None,
 ) -> Tensor:
     """Convert a NumPy ndarray to an infinicore Tensor.
 
