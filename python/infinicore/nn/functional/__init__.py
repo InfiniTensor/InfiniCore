@@ -2,6 +2,7 @@ from .causal_softmax import causal_softmax
 from .embedding import embedding
 from .flash_attention import flash_attention
 from .linear import linear
+from .linear_w8a8i8 import linear_w8a8i8
 from .random_sample import random_sample
 from .rms_norm import rms_norm
 from .rope import RopeAlgo, rope
@@ -19,4 +20,5 @@ __all__ = [
     "rope",
     "silu",
     "swiglu",
+    "linear_w8a8i8",
 ]

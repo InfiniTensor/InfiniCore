@@ -140,20 +140,9 @@ void cutlass_int8_scaled_mm(
     typename Gemm::Arguments args{
         {m, n, k}, {a_ptr, lda}, {b_ptr, ldb}, {b_s_ptr, 0}, {a_s_ptr, 0}, {bias_ptr, ldc}, {o_ptr, ldd}, visitor_args};
 
-    /* 需要先看看是否需要workspace */
-    // auto workspace = torch::empty(
-    //     gemm_op.get_workspace_size(args), torch::TensorOptions().dtype(torch::kUInt8).device(mat_a.device()));
-
-    // auto can_implement = gemm_op.can_implement(args);
     check_cutlass_status(gemm_op.can_implement(args));
-    // TORCH_CHECK(
-    //     can_implement == cutlass::Status::kSuccess,
-    //     "gemm cannot implement, error: ",
-    //     cutlassGetStatusString(can_implement));
-
     auto status = gemm_op(args, nullptr, (cudaStream_t)stream);
     check_cutlass_status(status);
-    // TORCH_CHECK(status == cutlass::Status::kSuccess, "gemm executioin failed, error: ", cutlassGetStatusString(status));
 }
 
 template <typename ElementOutput, typename ArchTag, typename InstructionShape>
