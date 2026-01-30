@@ -54,6 +54,9 @@ from infinicore.ops.paged_caching import paged_caching
 from infinicore.ops.rearrange import rearrange
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.unsqueeze import unsqueeze
+from infinicore.ops.gcd import gcd
+from infinicore.ops.gt import gt
+from infinicore.ops.select_scatter import select_scatter
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -134,6 +137,9 @@ __all__ = [
     "strided_empty",
     "strided_from_blob",
     "zeros",
+    "gcd",
+    "select_scatter",
+    "gt",
 ]
 
 use_ntops = False

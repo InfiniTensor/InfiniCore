@@ -6,6 +6,8 @@ from .rms_norm import rms_norm
 from .rope import RopeAlgo, rope
 from .silu import silu
 from .swiglu import swiglu
+from .nll_loss import nll_loss
+from .glu import glu
 
 __all__ = [
     "causal_softmax",
@@ -17,4 +19,6 @@ __all__ = [
     "embedding",
     "rope",
     "RopeAlgo",
+    "nll_loss",
+    "glu",
 ]

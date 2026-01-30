@@ -7,9 +7,13 @@
 #include "ops/attention.hpp"
 #include "ops/causal_softmax.hpp"
 #include "ops/embedding.hpp"
+#include "ops/gcd.hpp"
+#include "ops/glu.hpp"
+#include "ops/gt.hpp"
 #include "ops/linear.hpp"
 #include "ops/matmul.hpp"
 #include "ops/mul.hpp"
+#include "ops/nll_loss.hpp"
 #include "ops/paged_attention.hpp"
 #include "ops/paged_attention_prefill.hpp"
 #include "ops/paged_caching.hpp"
@@ -17,6 +21,7 @@
 #include "ops/rearrange.hpp"
 #include "ops/rms_norm.hpp"
 #include "ops/rope.hpp"
+#include "ops/select_scatter.hpp"
 #include "ops/silu.hpp"
 #include "ops/swiglu.hpp"
 
@@ -42,6 +47,11 @@ inline void bind(py::module &m) {
     bind_swiglu(m);
     bind_rope(m);
     bind_embedding(m);
+    bind_gcd(m);
+    bind_select_scatter(m);
+    bind_nll_loss(m);
+    bind_glu(m);
+    bind_gt(m);
 }
 
 } // namespace infinicore::ops
