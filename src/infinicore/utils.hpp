@@ -8,10 +8,31 @@
 
 inline struct SpdlogInitializer {
     SpdlogInitializer() {
-        if (!std::getenv("INFINICORE_LOG_LEVEL")) {
+        const char* log_level_env = std::getenv("INFINICORE_LOG_LEVEL");
+        if (!log_level_env) {
             spdlog::set_level(spdlog::level::info);
         } else {
-            spdlog::cfg::load_env_levels("INFINICORE_LOG_LEVEL");
+            std::string level_str(log_level_env);
+            spdlog::level::level_enum level;
+            if (level_str == "trace") {
+                level = spdlog::level::trace;
+            } else if (level_str == "debug") {
+                level = spdlog::level::debug;
+            } else if (level_str == "info") {
+                level = spdlog::level::info;
+            } else if (level_str == "warn" || level_str == "warning") {
+                level = spdlog::level::warn;
+            } else if (level_str == "error") {
+                level = spdlog::level::err;
+            } else if (level_str == "critical") {
+                level = spdlog::level::critical;
+            } else if (level_str == "off") {
+                level = spdlog::level::off;
+            } else {
+                // Default to info if unknown level
+                level = spdlog::level::info;
+            }
+            spdlog::set_level(level);
         }
         // Set pattern for logging
         // Using SPDLOG_* macros enables source location support (%s and %#)
