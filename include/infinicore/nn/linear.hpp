@@ -11,8 +11,10 @@ namespace infinicore::nn {
 class BaseLinear : public Module {
 public:
     BaseLinear(size_t in_features, size_t out_features, bool bias = true,
-               const DataType &dtype = DataType::F32, const Device &device = Device(),
-               const std::optional<QuantScheme> &quant_scheme = std::nullopt);
+               const DataType &dtype = DataType::F32, const Device &device = Device());
+
+    BaseLinear(size_t in_features, size_t out_features, const QuantScheme &quant_scheme, bool bias = true,
+               const DataType &dtype = DataType::F32, const Device &device = Device());
 
     // Forward pass: output = input @ weight.T + bias
     Tensor forward(Tensor &input) const;
@@ -49,7 +51,7 @@ protected:
     size_t out_features_;
     bool has_bias_;
     DataType dtype_;
-    const std::optional<QuantScheme> quant_scheme_;
+    const QuantScheme quant_scheme_ = QuantScheme::NONE;
 };
 
 } // namespace infinicore::nn
@@ -59,8 +61,10 @@ namespace infinicore::nn {
 class Linear : public BaseLinear {
 public:
     Linear(size_t in_features, size_t out_features, bool bias = true,
-           const DataType &dtype = DataType::F32, const Device &device = Device(),
-           const std::optional<QuantScheme> &quant_scheme = std::nullopt);
+           const DataType &dtype = DataType::F32, const Device &device = Device());
+
+    Linear(size_t in_features, size_t out_features, const QuantScheme &quant_scheme, bool bias = true,
+           const DataType &dtype = DataType::F32, const Device &device = Device());
 
     // Forward pass: output = input @ weight.T + bias
     Tensor forward(Tensor &input) const;
@@ -73,8 +77,11 @@ class ColumnParallelLinear : public BaseLinear {
 public:
     ColumnParallelLinear(size_t in_features, size_t out_features, bool bias = true,
                          const DataType &dtype = DataType::F32, const Device &device = Device(),
-                         Size tp_rank = 0, Size tp_size = 1,
-                         const std::optional<QuantScheme> &quant_scheme = std::nullopt);
+                         Size tp_rank = 0, Size tp_size = 1);
+
+    ColumnParallelLinear(size_t in_features, size_t out_features, const QuantScheme &quant_scheme, bool bias = true,
+                         const DataType &dtype = DataType::F32, const Device &device = Device(),
+                         Size tp_rank = 0, Size tp_size = 1);
 
     // Forward pass: output = input @ weight.T + bias
     Tensor forward(Tensor &input) const;
@@ -91,8 +98,11 @@ class RowParallelLinear : public BaseLinear {
 public:
     RowParallelLinear(size_t in_features, size_t out_features, bool bias = true,
                       const DataType &dtype = DataType::F32, const Device &device = Device(),
-                      Size tp_rank = 0, Size tp_size = 1, infinicclComm_t communicator = nullptr,
-                      const std::optional<QuantScheme> &quant_scheme = std::nullopt);
+                      Size tp_rank = 0, Size tp_size = 1, infinicclComm_t communicator = nullptr);
+
+    RowParallelLinear(size_t in_features, size_t out_features, const QuantScheme &quant_scheme, bool bias = true,
+                      const DataType &dtype = DataType::F32, const Device &device = Device(),
+                      Size tp_rank = 0, Size tp_size = 1, infinicclComm_t communicator = nullptr);
 
     // Forward pass: output = input @ weight.T + bias
     Tensor forward(Tensor &input) const;
