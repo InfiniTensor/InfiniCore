@@ -45,6 +45,8 @@ from infinicore.dtype import (
 from infinicore.ops.add import add
 from infinicore.ops.add_rms_norm import add_rms_norm, add_rms_norm_
 from infinicore.ops.attention import attention
+from infinicore.ops.gcd import gcd
+from infinicore.ops.gt import gt
 from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
@@ -52,6 +54,7 @@ from infinicore.ops.paged_attention import paged_attention
 from infinicore.ops.paged_attention_prefill import paged_attention_prefill
 from infinicore.ops.paged_caching import paged_caching
 from infinicore.ops.rearrange import rearrange
+from infinicore.ops.select_scatter import select_scatter
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.unsqueeze import unsqueeze
 from infinicore.tensor import (
@@ -134,6 +137,9 @@ __all__ = [
     "strided_empty",
     "strided_from_blob",
     "zeros",
+    "gcd",
+    "select_scatter",
+    "gt",
 ]
 
 use_ntops = False
