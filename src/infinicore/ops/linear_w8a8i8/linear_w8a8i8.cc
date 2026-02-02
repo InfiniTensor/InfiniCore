@@ -1,7 +1,7 @@
 #include "infinicore/ops/linear_w8a8i8.hpp"
 #include "infinicore/ops/per_channel_quant_i8.hpp"
 #include "infinicore/ops/scaled_mm_i8.hpp"
-#include <iostream>
+
 namespace infinicore::op {
 
 Tensor linear_w8a8i8(Tensor input,

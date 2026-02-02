@@ -7,8 +7,6 @@
 #include <optional>
 #include <spdlog/spdlog.h>
 
-#include <iostream>
-
 namespace infinicore::nn {
 
 BaseLinear::BaseLinear(size_t in_features, size_t out_features, bool bias,
@@ -21,11 +19,11 @@ BaseLinear::BaseLinear(size_t in_features, size_t out_features, bool bias,
     device_ = device;
 }
 
-BaseLinear::BaseLinear(size_t in_features, size_t out_features, const QuantScheme &quant_scheme, bool bias,
+BaseLinear::BaseLinear(size_t in_features, size_t out_features, std::shared_ptr<infinicore::quantization::BaseQuantization> quantization, bool bias,
                        const DataType &dtype, const Device &device)
     : in_features_(in_features),
       out_features_(out_features),
-      quant_scheme_(quant_scheme),
+      quantization_(quantization),
       has_bias_(bias),
       dtype_(dtype) {
 
@@ -33,9 +31,8 @@ BaseLinear::BaseLinear(size_t in_features, size_t out_features, const QuantSchem
 }
 
 Tensor BaseLinear::compute_linear(Tensor &input) const {
-
-    switch (this->quant_scheme_) {
-    case infinicore::nn::QuantScheme::COMPRESSED_TENSOR_W8A8I8: {
+    switch (this->quantization_->get_quant_scheme()) {
+    case infinicore::quantization::QuantScheme::COMPRESSED_TENSOR_W8A8I8: {
         Tensor input_contiguous = input->is_contiguous() ? input : input->contiguous();
 
         Tensor weight_packed_tensor = static_cast<const Tensor &>(weight_);
@@ -101,14 +98,14 @@ Linear::Linear(size_t in_features, size_t out_features, bool bias,
 }
 
 Linear::Linear(size_t in_features, size_t out_features,
-               const QuantScheme &quant_scheme, bool bias,
+               std::shared_ptr<infinicore::quantization::BaseQuantization> quantization, bool bias,
                const DataType &dtype, const Device &device)
-    : BaseLinear(in_features, out_features, quant_scheme, bias, dtype, device_) {
+    : BaseLinear(in_features, out_features, quantization, bias, dtype, device_) {
 
     device_ = device;
 
-    switch (this->quant_scheme_) {
-    case infinicore::nn::QuantScheme::COMPRESSED_TENSOR_W8A8I8: {
+    switch (this->quantization_->get_quant_scheme()) {
+    case infinicore::quantization::QuantScheme::COMPRESSED_TENSOR_W8A8I8: {
         INFINICORE_NN_PARAMETER_INIT(weight, ({out_features, in_features}, infinicore::DataType::I8, device));
         INFINICORE_NN_PARAMETER_INIT(weight_scale, ({out_features, 1}, infinicore::DataType::F32, device));
 
@@ -171,17 +168,17 @@ ColumnParallelLinear::ColumnParallelLinear(size_t in_features, size_t out_featur
     }
 }
 
-ColumnParallelLinear::ColumnParallelLinear(size_t in_features, size_t out_features, const QuantScheme &quant_scheme, bool bias,
+ColumnParallelLinear::ColumnParallelLinear(size_t in_features, size_t out_features, std::shared_ptr<infinicore::quantization::BaseQuantization> quantization, bool bias,
                                            const DataType &dtype, const Device &device,
                                            Size tp_rank, Size tp_size)
-    : BaseLinear(in_features, out_features, quant_scheme, bias, dtype, device_),
+    : BaseLinear(in_features, out_features, quantization, bias, dtype, device_),
       tp_rank_(tp_rank),
       tp_size_(tp_size) {
 
     device_ = device;
 
-    switch (this->quant_scheme_) {
-    case infinicore::nn::QuantScheme::COMPRESSED_TENSOR_W8A8I8: {
+    switch (this->quantization_->get_quant_scheme()) {
+    case infinicore::quantization::QuantScheme::COMPRESSED_TENSOR_W8A8I8: {
 
         INFINICORE_NN_PARAMETER_INIT(weight, ({out_features, in_features}, infinicore::DataType::I8, device, 0, tp_rank_, tp_size_));
         INFINICORE_NN_PARAMETER_INIT(weight_scale, ({out_features, 1}, infinicore::DataType::F32, device, 0, tp_rank_, tp_size_));
@@ -243,17 +240,17 @@ RowParallelLinear::RowParallelLinear(size_t in_features, size_t out_features, bo
     }
 }
 
-RowParallelLinear::RowParallelLinear(size_t in_features, size_t out_features, const QuantScheme &quant_scheme, bool bias,
+RowParallelLinear::RowParallelLinear(size_t in_features, size_t out_features, std::shared_ptr<infinicore::quantization::BaseQuantization> quantization, bool bias,
                                      const DataType &dtype, const Device &device,
                                      Size tp_rank, Size tp_size, infinicclComm_t communicator)
-    : BaseLinear(in_features, out_features, quant_scheme, bias, dtype, device_),
+    : BaseLinear(in_features, out_features, quantization, bias, dtype, device_),
       tp_rank_(tp_rank),
       tp_size_(tp_size), communicator_(communicator) {
 
     device_ = device;
 
-    switch (this->quant_scheme_) {
-    case infinicore::nn::QuantScheme::COMPRESSED_TENSOR_W8A8I8: {
+    switch (this->quantization_->get_quant_scheme()) {
+    case infinicore::quantization::QuantScheme::COMPRESSED_TENSOR_W8A8I8: {
         INFINICORE_NN_PARAMETER_INIT(weight, ({out_features, in_features}, infinicore::DataType::I8, device, 1, tp_rank_, tp_size_));
         INFINICORE_NN_PARAMETER_INIT(weight_scale, ({out_features, 1}, infinicore::DataType::F32, device, 0, 0, 1));
 

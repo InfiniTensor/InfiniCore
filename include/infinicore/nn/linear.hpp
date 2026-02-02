@@ -1,8 +1,8 @@
 #pragma once
 
 #include "../ops.hpp"
+#include "../quantization.hpp"
 #include "module.hpp"
-#include "quantization.hpp"
 #include <infiniccl.h>
 #include <optional>
 
@@ -13,7 +13,7 @@ public:
     BaseLinear(size_t in_features, size_t out_features, bool bias = true,
                const DataType &dtype = DataType::F32, const Device &device = Device());
 
-    BaseLinear(size_t in_features, size_t out_features, const QuantScheme &quant_scheme, bool bias = true,
+    BaseLinear(size_t in_features, size_t out_features, std::shared_ptr<infinicore::quantization::BaseQuantization> quantization, bool bias = true,
                const DataType &dtype = DataType::F32, const Device &device = Device());
 
     // Forward pass: output = input @ weight.T + bias
@@ -51,7 +51,7 @@ protected:
     size_t out_features_;
     bool has_bias_;
     DataType dtype_;
-    const QuantScheme quant_scheme_ = QuantScheme::NONE;
+    std::shared_ptr<infinicore::quantization::BaseQuantization> quantization_ = std::make_shared<infinicore::quantization::NoneQuantization>(nullptr);
 };
 
 } // namespace infinicore::nn
@@ -63,7 +63,7 @@ public:
     Linear(size_t in_features, size_t out_features, bool bias = true,
            const DataType &dtype = DataType::F32, const Device &device = Device());
 
-    Linear(size_t in_features, size_t out_features, const QuantScheme &quant_scheme, bool bias = true,
+    Linear(size_t in_features, size_t out_features, std::shared_ptr<infinicore::quantization::BaseQuantization> quantization, bool bias = true,
            const DataType &dtype = DataType::F32, const Device &device = Device());
 
     // Forward pass: output = input @ weight.T + bias
@@ -79,7 +79,7 @@ public:
                          const DataType &dtype = DataType::F32, const Device &device = Device(),
                          Size tp_rank = 0, Size tp_size = 1);
 
-    ColumnParallelLinear(size_t in_features, size_t out_features, const QuantScheme &quant_scheme, bool bias = true,
+    ColumnParallelLinear(size_t in_features, size_t out_features, std::shared_ptr<infinicore::quantization::BaseQuantization> quantization, bool bias = true,
                          const DataType &dtype = DataType::F32, const Device &device = Device(),
                          Size tp_rank = 0, Size tp_size = 1);
 
@@ -100,7 +100,7 @@ public:
                       const DataType &dtype = DataType::F32, const Device &device = Device(),
                       Size tp_rank = 0, Size tp_size = 1, infinicclComm_t communicator = nullptr);
 
-    RowParallelLinear(size_t in_features, size_t out_features, const QuantScheme &quant_scheme, bool bias = true,
+    RowParallelLinear(size_t in_features, size_t out_features, std::shared_ptr<infinicore::quantization::BaseQuantization> quantization, bool bias = true,
                       const DataType &dtype = DataType::F32, const Device &device = Device(),
                       Size tp_rank = 0, Size tp_size = 1, infinicclComm_t communicator = nullptr);
 
