@@ -71,48 +71,38 @@ NUM_ITERATIONS = 1000
 
 def torch_layer_norm(
     output: torch.Tensor,
-    input_standardization: torch.Tensor,
-    input_std_deviation: torch.Tensor,
+    output_standardization: torch.Tensor,
+    output_rstd: torch.Tensor,
     input: torch.Tensor,
     weight,
     bias,
     eps,
     bias_exist: bool,
 ):
-    normalized_shape = input.shape[-1:]
-    ln = torch.nn.LayerNorm(
-        normalized_shape=normalized_shape,
-        eps=eps,
-        dtype=torch.float,
-        bias=bias_exist,
-        device=input.device,
-    )
-    ln.weight.data = weight.type(torch.float)
-    if bias_exist:
-        ln.bias.data = bias.type(torch.float)
-    input = input.type(torch.float)
-    mean = input.mean(dim=-1, keepdim=True)
-    var = input.var(dim=-1, correction=0)
-    std = torch.sqrt(var + eps)
-    input_standardization.copy_(
-        ((input - mean) / std.unsqueeze(2)).type(input_standardization.dtype)
-    )
-    input_std_deviation.copy_(std.type(input_standardization.dtype))
-    output.copy_(ln(input).detach().type(output.dtype))
+    original_dtype = input.dtype
 
+    input_f32 = input.to(torch.float32)
+    weight_f32 = weight.to(torch.float32)
+    bias_f32 = bias.to(torch.float32) if bias_exist and bias is not None else None
 
-def layer_norm(
-    output: torch.Tensor, input: torch.Tensor, weight, bias, eps, bias_exist: bool
-):
-    normalized_shape = input.shape[-1:]
-    ln = torch.nn.LayerNorm(
-        normalized_shape=normalized_shape, eps=eps, bias=bias_exist, device=input.device
-    )
+    mean = input_f32.mean(dim=-1, keepdim=True)          # [..., 1]
+    var = input_f32.var(dim=-1, keepdim=True, correction=0)  # [..., 1]
 
-    ln.weight.data = weight
-    if bias_exist:
-        ln.bias.data = bias
-    output.copy_(ln.forward(input).detach().type(output.dtype))
+    rstd = torch.rsqrt(var + eps)  # [..., 1]
+    centered_input = input_f32 - mean  # [..., D]
+    normalized = centered_input * rstd  # [..., D]
+
+    #  y = normalized * weight + bias
+    output_f32 = normalized * weight_f32
+    if bias_exist and bias_f32 is not None:
+        output_f32 = output_f32 + bias_f32
+
+    # 写回最终输出（转回原始 dtype）
+    output.copy_(output_f32.to(original_dtype).detach())
+    # 写入中间输出：centered input (x - μ)
+    output_standardization.copy_(normalized.to(output_standardization.dtype).detach())
+    # 写入中间输出：rstd，注意去掉最后的 keepdim 维度（从 [..., 1] → [...]）
+    output_rstd.copy_(rstd.squeeze(-1).to(output_rstd.dtype).detach())
 
 
 def test(
@@ -129,8 +119,9 @@ def test(
     sync=None,
 ):
     print(
-        f"Testing layer_norm on {InfiniDeviceNames[device]} with input_shape:{input_shape},"
-        f"bias:{bias_exist},eps:{eps},"
+        f"Testing layer_norm on {InfiniDeviceNames[device]} with input_shape:{input_shape}, "
+        f"bias:{bias_exist}, eps:{eps}, input_strides:{input_strides}, output_strides:{output_strides}, "
+        f"weight_strides:{weight_strides}, inplace:{inplace}, "
         f"dtype:{InfiniDtypeNames[dtype]}"
     )
 
@@ -148,7 +139,7 @@ def test(
         device,
     )
 
-    input = TestTensor(input_shape, input_strides, dtype, device, mode="zeros")
+    input = TestTensor(input_shape, input_strides, dtype, device)
     if inplace == Inplace.INPLACE:
         if output_strides != input_strides:
             return
@@ -179,8 +170,10 @@ def test(
         else None
     )
 
-    layer_norm(
+    torch_layer_norm(
         output.torch_tensor(),
+        input_standardization.torch_tensor(),
+        input_std_deviation.torch_tensor(),
         input.torch_tensor(),
         weight.torch_tensor(),
         bias.torch_tensor() if bias_exist else None,
@@ -295,4 +288,4 @@ if __name__ == "__main__":
     for device in get_test_devices(args):
         test_operator(device, test, _TEST_CASES, _TENSOR_DTYPES)
 
-    print("\033[92mTest my layer_norm passed!\033[0m")
+    print("\033[92mTest layer_norm passed!\033[0m")
