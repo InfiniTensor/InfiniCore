@@ -199,6 +199,18 @@ if has_config("ninetoothed") then
     add_defines("ENABLE_NINETOOTHED")
 end
 
+-- OpenCL
+option("opencl")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Whether to compile implementations for OpenCL backend")
+option_end()
+
+if has_config("opencl") then
+    add_defines("ENABLE_OPENCL_API")
+    includes("xmake/opencl.lua")
+end
+
 -- InfiniCCL
 option("ccl")
     set_default(false)
@@ -266,6 +278,9 @@ target("infinirt")
     end
     if has_config("hygon-dcu") then
         add_deps("infinirt-hygon")
+    end
+    if has_config("opencl") then
+        add_deps("infinirt-opencl")
     end
     set_languages("cxx17")
     if not is_plat("windows") then

@@ -23,6 +23,7 @@ void printUsage() {
               << "  qy" << std::endl
               << "  kunlun" << std::endl
               << "  hygon" << std::endl
+              << "  opencl" << std::endl
               << std::endl;
     exit(EXIT_FAILURE);
 }
@@ -55,6 +56,7 @@ ParsedArgs parseArgs(int argc, char *argv[]) {
         else PARSE_DEVICE("--qy", INFINI_DEVICE_QY)
         else PARSE_DEVICE("--kunlun", INFINI_DEVICE_KUNLUN)
         else PARSE_DEVICE("--hygon", INFINI_DEVICE_HYGON)
+        else PARSE_DEVICE("--opencl", INFINI_DEVICE_OPENCL)
         else {
             printUsage();
         }
@@ -72,6 +74,11 @@ int main(int argc, char *argv[]) {
     ParsedArgs args = parseArgs(argc, argv);
     std::cout << "Testing Device: " << args.device_type << std::endl;
     infiniDevice_t device = args.device_type;
+
+    // 初始化
+    if (infinirtInit() != INFINI_STATUS_SUCCESS) {
+        std::cerr << "Failed to init device" << std::endl;
+    }
 
     // 获取设备总数
     std::vector<int> deviceCounts(INFINI_DEVICE_TYPE_COUNT, 0);
