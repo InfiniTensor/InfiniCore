@@ -66,6 +66,7 @@ xmake build infinicore-test
 ./infinicore-test --qy
 ./infinicore-test --kunlun
 ./infinicore-test --hygon
+./infinicore-test --ali
 ```
 
 ### Customize Test Parameters
