@@ -2,6 +2,7 @@ from .causal_softmax import causal_softmax
 from .embedding import embedding
 from .flash_attention import flash_attention
 from .linear import linear
+from .paged_attention_v2 import paged_attention_v2
 from .random_sample import random_sample
 from .rms_norm import rms_norm
 from .rope import RopeAlgo, rope
@@ -19,4 +20,5 @@ __all__ = [
     "rope",
     "silu",
     "swiglu",
+    "paged_attention_v2",
 ]
