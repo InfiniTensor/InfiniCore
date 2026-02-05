@@ -1,16 +1,16 @@
-#include "../../../devices/nvidia/nvidia_common.cuh"
-#include "../cuda/attention_kernels.cuh"
-#include "paged_attention_v2_nvidia.cuh"
+#include "../../../devices/m/metax_common.cuh"
+#include "../metax/attention_kernels.cuh"
+#include "paged_attention_v2_metax.cuh"
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <cuda_runtime.h>
+// #include <cuda_runtime.h>
 
 namespace {
 using op::paged_attention_v2::vllm::Fp8KVCacheDataType;
 
 #define LAUNCH_PAGED_ATTENTION_V2(HEAD_SIZE)                                                        \
-    op::paged_attention_v2::cuda::paged_attention_v2_kernel<T, CACHE_T, HEAD_SIZE, BLOCK_SIZE,      \
+    op::paged_attention_v2::metax::paged_attention_v2_kernel<T, CACHE_T, HEAD_SIZE, BLOCK_SIZE,      \
                                                             NUM_THREADS, KV_DTYPE, IS_BLOCK_SPARSE, \
                                                             PARTITION_SIZE>                         \
         <<<grid, block, shared_mem_size, stream>>>(                                                 \
@@ -21,7 +21,7 @@ using op::paged_attention_v2::vllm::Fp8KVCacheDataType;
             blocksparse_local_blocks, blocksparse_vert_stride,                                      \
             blocksparse_block_size, blocksparse_head_sliding_step);                                 \
                                                                                                     \
-    op::paged_attention_v2::cuda::paged_attention_v2_reduce_kernel<T, HEAD_SIZE, NUM_THREADS,       \
+    op::paged_attention_v2::metax::paged_attention_v2_reduce_kernel<T, HEAD_SIZE, NUM_THREADS,       \
                                                                    PARTITION_SIZE>                  \
         <<<reduce_grid, block, reduce_shared_mem_size, stream>>>(                                   \
             out_ptr, exp_sums_ptr, max_logits_ptr, tmp_out_ptr, seq_lens_ptr,                       \
@@ -143,12 +143,12 @@ void paged_attention_v2_launcher(
     }
 } // namespace
 
-namespace op::paged_attention_v2::nvidia {
+namespace op::paged_attention_v2::metax {
 
 using op::paged_attention_v2::vllm::Fp8KVCacheDataType;
 
 struct Descriptor::Opaque {
-    std::shared_ptr<device::nvidia::Handle::Internal> internal;
+    std::shared_ptr<device::metax::Handle::Internal> internal;
 };
 
 Descriptor::~Descriptor() {
@@ -179,7 +179,7 @@ infiniStatus_t Descriptor::create(
     const size_t workspace_bytes = kMaxSplits * per_split;
 
     *desc_ptr = new Descriptor(
-        new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
+        new Opaque{reinterpret_cast<device::metax::Handle *>(handle)->internal()},
         info, workspace_bytes, handle->device, handle->device_id);
 
     return INFINI_STATUS_SUCCESS;
@@ -199,10 +199,10 @@ infiniStatus_t Descriptor::calculate(
     double scale,
     void *block_tables, // [num_seqs, max_num_blocks_per_seq]
     void *seq_lens,     // [num_seqs]
-    int64_t block_size, 
+    int64_t block_size, // *** 不向下传递
     int64_t max_seq_len,
     const void *alibi_slopes,   // 注意cpp中是 std::optional
-    const char *kv_cache_dtype, 
+    const char *kv_cache_dtype, //  *** 不向下传递
     void *k_scale,
     void *v_scale,
     const int64_t tp_rank,
@@ -234,4 +234,4 @@ infiniStatus_t Descriptor::calculate(
     return INFINI_STATUS_SUCCESS;
 }
 
-} // namespace op::paged_attention_v2::nvidia
+} // namespace op::paged_attention_v2::metax

@@ -5,7 +5,9 @@
 #if defined(ENABLE_NVIDIA_API)
 #include "nvidia/paged_attention_v2_nvidia.cuh"
 #endif
-
+#if defined(ENABLE_METAX_API)
+#include "metax/paged_attention_v2_metax.cuh"
+#endif
 __C infiniStatus_t infiniopCreatePagedAttentionV2Descriptor(
     infiniopHandle_t handle,
     infiniopPagedAttentionV2Descriptor_t *desc_ptr,
@@ -29,7 +31,9 @@ __C infiniStatus_t infiniopCreatePagedAttentionV2Descriptor(
 #ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -50,7 +54,9 @@ __C infiniStatus_t infiniopGetPagedAttentionV2WorkspaceSize(
 #ifdef ENABLE_NVIDIA_API
         GET(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -96,7 +102,9 @@ __C infiniStatus_t infiniopPagedAttentionV2(
 #ifdef ENABLE_NVIDIA_API
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -115,6 +123,9 @@ __C infiniStatus_t infiniopDestroyPagedAttentionV2Descriptor(
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API
         DESTROY(INFINI_DEVICE_NVIDIA, nvidia)
+#endif
+#ifdef ENABLE_METAX_API
+        DESTROY(INFINI_DEVICE_METAX, metax)
 #endif
 
     default:
