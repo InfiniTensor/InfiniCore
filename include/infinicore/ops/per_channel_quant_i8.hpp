@@ -1,15 +1,12 @@
 #pragma once
 #include "../device.hpp"
+#include "../graph/graph.hpp"
 #include "common/op.hpp"
 #include <optional>
 
 namespace infinicore::op {
-class PerChannelQuantI8 {
-public:
-    using schema = void (*)(Tensor, Tensor, Tensor);
-    static void execute(Tensor x, Tensor x_packed, Tensor x_scale);
-    static common::OpDispatcher<schema> &dispatcher();
-};
 
-void per_channel_quant_i8_(Tensor x, Tensor x_packed, Tensor x_scale);
+INFINICORE_GRAPH_OP_CLASS(PerChannelQuantI8, const Tensor &, Tensor, Tensor);
+
+void per_channel_quant_i8_(const Tensor &x, Tensor x_packed, Tensor x_scale);
 } // namespace infinicore::op

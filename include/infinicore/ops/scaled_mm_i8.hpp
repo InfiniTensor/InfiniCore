@@ -1,16 +1,13 @@
 #pragma once
 
 #include "../device.hpp"
+#include "../graph/graph.hpp"
 #include "common/op.hpp"
 #include <optional>
 
 namespace infinicore::op {
-class ScaledMMI8 {
-public:
-    using schema = void (*)(Tensor, Tensor, Tensor, Tensor, Tensor, std::optional<Tensor>);
-    static void execute(Tensor c, Tensor a_p, Tensor a_s, Tensor b_p, Tensor b_s, std::optional<Tensor> bias);
-    static common::OpDispatcher<schema> &dispatcher();
-};
 
-void scaled_mm_i8_(Tensor c, Tensor a_p, Tensor a_s, Tensor b_p, Tensor b_s, std::optional<Tensor> bias);
+INFINICORE_GRAPH_OP_CLASS(I8Gemm, Tensor, const Tensor &, const Tensor &, const Tensor &, const Tensor &, std::optional<Tensor>);
+
+void scaled_mm_i8_(Tensor c, const Tensor &a_p, const Tensor &a_s, const Tensor &b_p, const Tensor &b_s, std::optional<Tensor> bias);
 } // namespace infinicore::op

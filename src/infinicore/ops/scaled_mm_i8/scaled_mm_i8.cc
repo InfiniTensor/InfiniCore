@@ -1,50 +1,31 @@
 #include "infinicore/ops/scaled_mm_i8.hpp"
+
 #include "../../utils.hpp"
-#include "infinicore/common/hash.hpp"
-#include "infinicore/ops/common/cache.hpp"
-#include <infiniop.h>
 
-namespace infinicore::op::scaled_mm_i8_impl::infiniop {
+namespace infinicore::op {
 
-thread_local common::OpCache<size_t, infiniopI8GemmDescriptor_t> caches(
-    100, // capacity
-    [](infiniopI8GemmDescriptor_t &desc) {
-        if (desc != nullptr) {
-            INFINICORE_CHECK_ERROR(infiniopDestroyI8GemmDescriptor(desc));
-            desc = nullptr;
-        }
-    });
+// common::OpDispatcher<ScaledMMI8::schema> &ScaledMMI8::dispatcher() {
+//     static common::OpDispatcher<ScaledMMI8::schema> dispatcher_;
+//     return dispatcher_;
+// };
 
-void calculate(Tensor c, Tensor a_p, Tensor a_s, Tensor b_p, Tensor b_s, std::optional<Tensor> bias) {
-    size_t seed = hash_combine(c, a_p, a_s, b_p, b_s);
+// void ScaledMMI8::execute(Tensor c, Tensor a_p, Tensor a_s, Tensor b_p, Tensor b_s, std::optional<Tensor> bias) {
+//     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(c, a_p, a_s, b_p, b_s);
+//     infinicore::context::setDevice(c->device());
+//     dispatcher().lookup(c->device().getType())(c, a_p, a_s, b_p, b_s, bias);
+// }
+INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(I8Gemm);
 
-    auto device = context::getDevice();
-    auto &cache = caches.getCache(device);
-
-    auto desc_opt = cache.get(seed);
-    infiniopGemmDescriptor_t desc = nullptr;
-
-    if (!desc_opt) {
-        INFINICORE_CHECK_ERROR(infiniopCreateI8GemmDescriptor(
-            context::getInfiniopHandle(device), &desc,
-            c->desc(), bias.has_value() ? bias.value()->desc() : nullptr, a_p->desc(), a_s->desc(), b_p->desc(), b_s->desc()));
-        cache.put(seed, desc);
-    } else {
-        desc = *desc_opt;
-    }
-
-    size_t workspace_size = 0;
-    INFINICORE_CHECK_ERROR(infiniopGetI8GemmWorkspaceSize(desc, &workspace_size));
-    std::shared_ptr<Memory> workspace = context::allocateMemory(workspace_size);
-
-    INFINICORE_CHECK_ERROR(infiniopI8Gemm(
-        desc, workspace->data(), workspace_size,
-        c->data(), bias.has_value() ? bias.value()->data() : nullptr, a_p->data(), a_s->data(), b_p->data(), b_s->data(), context::getStream()));
+I8Gemm::I8Gemm(Tensor c, const Tensor &a_p, const Tensor &a_s, const Tensor &b_p, const Tensor &b_s, std::optional<Tensor> bias) {
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(c, a_p, a_s, b_p, b_s);
+    INFINICORE_GRAPH_OP_DISPATCH(c->device().getType(), c, a_p, a_s, b_p, b_s, bias);
+}
+void I8Gemm::execute(Tensor c, const Tensor &a_p, const Tensor &a_s, const Tensor &b_p, const Tensor &b_s, std::optional<Tensor> bias) {
+    INFINICORE_GRAPH_OP_RECORD_OR_RUN(I8Gemm, c, a_p, a_s, b_p, b_s, bias);
 }
 
-static bool registered = []() {
-    ScaledMMI8::dispatcher().registerAll(&calculate, false);
-    return true;
-}();
+void scaled_mm_i8_(Tensor c, const Tensor &a_p, const Tensor &a_s, const Tensor &b_p, const Tensor &b_s, std::optional<Tensor> bias) {
+    I8Gemm::execute(c, a_p, a_s, b_p, b_s, bias);
+}
 
-} // namespace infinicore::op::scaled_mm_i8_impl::infiniop
+} // namespace infinicore::op

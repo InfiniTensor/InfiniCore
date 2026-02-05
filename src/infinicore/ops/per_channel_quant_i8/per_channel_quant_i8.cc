@@ -1,49 +1,33 @@
 #include "infinicore/ops/per_channel_quant_i8.hpp"
+
 #include "../../utils.hpp"
-#include "infinicore/common/hash.hpp"
-#include "infinicore/ops/common/cache.hpp"
-#include <infiniop.h>
 #include <iostream>
 
-namespace infinicore::op::per_channel_quant_i8_impl::infiniop {
+namespace infinicore::op {
 
-thread_local common::OpCache<size_t, infiniopPerChannelQuantI8Descriptor_t> caches(
-    100, // capacity
-    [](infiniopPerChannelQuantI8Descriptor_t &desc) {
-        if (desc != nullptr) {
-            INFINICORE_CHECK_ERROR(infiniopDestroyPerChannelQuantI8Descriptor(desc));
-            desc = nullptr;
-        }
-    });
+INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(PerChannelQuantI8);
 
-void calculate(Tensor x, Tensor x_packed, Tensor x_scale) {
-    size_t seed = hash_combine(x, x_packed, x_scale);
-
-    auto device = context::getDevice();
-    auto &cache = caches.getCache(device);
-
-    auto desc_opt = cache.get(seed);
-    infiniopGemmDescriptor_t desc = nullptr;
-    if (!desc_opt) {
-        INFINICORE_CHECK_ERROR(infiniopCreatePerChannelQuantI8Descriptor(
-            context::getInfiniopHandle(device), &desc,
-            x_packed->desc(), x_scale->desc(), nullptr, x->desc()));
-        cache.put(seed, desc);
-    } else {
-        desc = *desc_opt;
-    }
-
-    size_t workspace_size = 0;
-    INFINICORE_CHECK_ERROR(infiniopGetPerChannelQuantI8WorkspaceSize(desc, &workspace_size));
-    std::shared_ptr<Memory> workspace = context::allocateMemory(workspace_size);
-    INFINICORE_CHECK_ERROR(infiniopPerChannelQuantI8(
-        desc, workspace->data(), workspace_size,
-        x_packed->data(), x_scale->data(), nullptr, x->data(), context::getStream()));
+PerChannelQuantI8::PerChannelQuantI8(const Tensor &x, Tensor x_packed, Tensor x_scale) {
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(x, x_packed, x_scale);
+    INFINICORE_GRAPH_OP_DISPATCH(x->device().getType(), x, x_packed, x_scale);
 }
 
-static bool registered = []() {
-    PerChannelQuantI8::dispatcher().registerAll(&calculate, false);
-    return true;
-}();
+void PerChannelQuantI8::execute(const Tensor &x, Tensor x_packed, Tensor x_scale) {
+    INFINICORE_GRAPH_OP_RECORD_OR_RUN(PerChannelQuantI8, x, x_packed, x_scale);
+}
 
-} // namespace infinicore::op::per_channel_quant_i8_impl::infiniop
+// common::OpDispatcher<PerChannelQuantI8::schema> &PerChannelQuantI8::dispatcher() {
+//     static common::OpDispatcher<PerChannelQuantI8::schema> dispatcher_;
+//     return dispatcher_;
+// };
+
+// void PerChannelQuantI8::execute(Tensor x, Tensor x_packed, Tensor x_scale) {
+//     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(x, x_packed, x_scale);
+//     infinicore::context::setDevice(x->device());
+//     dispatcher().lookup(x->device().getType())(x, x_packed, x_scale);
+// }
+
+void per_channel_quant_i8_(const Tensor &x, Tensor x_packed, Tensor x_scale) {
+    PerChannelQuantI8::execute(x, x_packed, x_scale);
+}
+} // namespace infinicore::op
