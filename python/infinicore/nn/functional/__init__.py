@@ -3,6 +3,7 @@ from .embedding import embedding
 from .flash_attention import flash_attention
 from .linear import linear
 from .linear_w8a8i8 import linear_w8a8i8
+from .paged_attention_v2 import paged_attention_v2
 from .random_sample import random_sample
 from .rms_norm import rms_norm
 from .rope import RopeAlgo, rope
@@ -23,4 +24,5 @@ __all__ = [
     "swiglu",
     "linear_w8a8i8",
     "silu_and_mul",
+    "paged_attention_v2",
 ]
