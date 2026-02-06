@@ -199,10 +199,10 @@ infiniStatus_t Descriptor::calculate(
     double scale,
     void *block_tables, // [num_seqs, max_num_blocks_per_seq]
     void *seq_lens,     // [num_seqs]
-    int64_t block_size, 
+    int64_t block_size,
     int64_t max_seq_len,
-    const void *alibi_slopes,   // 注意cpp中是 std::optional
-    const char *kv_cache_dtype, 
+    const void *alibi_slopes, // 注意cpp中是 std::optional
+    const char *kv_cache_dtype,
     void *k_scale,
     void *v_scale,
     const int64_t tp_rank,
