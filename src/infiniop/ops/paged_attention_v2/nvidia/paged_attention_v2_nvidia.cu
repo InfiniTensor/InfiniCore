@@ -40,8 +40,8 @@ void paged_attention_v2_launcher(
     void *value_cache,    // [num_blocks, num_heads, head_size, block_size]
     int64_t num_kv_heads, // [num_heads]
     double scale,
-    void *block_tables, // [num_seqs, max_num_blocks_per_seq]
-    void *seq_lens,     // [num_seqs]
+    int64_t *block_tables, // [num_seqs, max_num_blocks_per_seq]
+    int64_t *seq_lens,     // [num_seqs]
     int64_t max_seq_len,
     const void *alibi_slopes,
     void *k_scale,
@@ -72,8 +72,8 @@ void paged_attention_v2_launcher(
     T *query_ptr = reinterpret_cast<T *>(query);
     CACHE_T *key_cache_ptr = reinterpret_cast<CACHE_T *>(key_cache);
     CACHE_T *value_cache_ptr = reinterpret_cast<CACHE_T *>(value_cache);
-    int *block_tables_ptr = reinterpret_cast<int *>(block_tables);
-    int *seq_lens_ptr = reinterpret_cast<int *>(seq_lens);
+    int64_t *block_tables_ptr = reinterpret_cast<int64_t *>(block_tables);
+    int64_t *seq_lens_ptr = reinterpret_cast<int64_t *>(seq_lens);
     const float *k_scale_ptr = reinterpret_cast<const float *>(k_scale);
     const float *v_scale_ptr = reinterpret_cast<const float *>(v_scale);
 
@@ -189,22 +189,22 @@ infiniStatus_t Descriptor::calculate(
     void *workspace,
     size_t workspace_size,
     void *out,            // [num_seqs, num_heads, head_size]
-    void *exp_sums,       // [num_seqs, num_heads, max_num_partitions]
-    void *max_logits,     // [num_seqs, num_heads, max_num_partitions]
+    float *exp_sums,       // [num_seqs, num_heads, max_num_partitions] // 类型固定为 float
+    float *max_logits,     // [num_seqs, num_heads, max_num_partitions] // 类型固定为 float
     void *tmp_out,        // [num_seqs, num_heads, max_num_partitions, head_size]
     void *query,          // [num_seqs, num_heads, head_size]
     void *key_cache,      // [num_blocks, num_heads, head_size/x, block_size, x]
     void *value_cache,    // [num_blocks, num_heads, head_size, block_size]
     int64_t num_kv_heads, // [num_heads]
     double scale,
-    void *block_tables, // [num_seqs, max_num_blocks_per_seq]
-    void *seq_lens,     // [num_seqs]
+    int64_t *block_tables, // [num_seqs, max_num_blocks_per_seq] // 类型固定为 int
+    int64_t *seq_lens,     // [num_seqs] // 类型固定为 int
     int64_t block_size,
     int64_t max_seq_len,
-    const void *alibi_slopes, // 注意cpp中是 std::optional
+    const void *alibi_slopes, 
     const char *kv_cache_dtype,
-    void *k_scale,
-    void *v_scale,
+    float *k_scale,// 类型固定为float
+    float *v_scale, // 类型固定为float
     const int64_t tp_rank,
     const int64_t blocksparse_local_blocks,
     const int64_t blocksparse_vert_stride,

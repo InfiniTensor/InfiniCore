@@ -20,8 +20,8 @@
  */
 #pragma once
 
-#include "attention_generic.cuh"
-#include "dtype_float32.cuh"
+#include "../utils/attention_generic.cuh"
+#include "../utils/dtype_float32.cuh"
 
 #ifndef USE_ROCM
   #include <cuda_bf16.h>
@@ -36,7 +36,7 @@ typedef __hip_bfloat16 __nv_bfloat16;
 
 #include <stdint.h>
 
-namespace vllm {
+namespace op::paged_attention_v2::vllm {
 
 // Define custom BF16 vector data types.
 struct bf16_4_t {

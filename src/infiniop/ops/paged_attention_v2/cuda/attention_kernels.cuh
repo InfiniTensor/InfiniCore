@@ -82,8 +82,8 @@ __device__ void paged_attention_kernel(
                                          // head_size, block_size]
     const int num_kv_heads,              // [num_heads]
     const float scale,
-    const int *__restrict__ block_tables, // [num_seqs, max_num_blocks_per_seq]
-    const int *__restrict__ seq_lens,     // [num_seqs]
+    const int64_t *__restrict__ block_tables, // [num_seqs, max_num_blocks_per_seq]
+    const int64_t *__restrict__ seq_lens,     // [num_seqs]
     const int max_num_blocks_per_seq,
     const float *__restrict__ alibi_slopes, // [num_heads]
     const int q_stride, const int kv_block_stride, const int kv_head_stride,
@@ -94,7 +94,7 @@ __device__ void paged_attention_kernel(
     const int partition_idx = blockIdx.z;
     const int max_num_partitions = gridDim.z;
     constexpr bool USE_PARTITIONING = PARTITION_SIZE > 0;
-    const int seq_len = seq_lens[seq_idx];
+    const int seq_len =  static_cast<int>(seq_lens[seq_idx]);
     if (USE_PARTITIONING && partition_idx * PARTITION_SIZE >= seq_len) {
         // No work to do. Terminate the thread block.
         return;
@@ -178,7 +178,7 @@ __device__ void paged_attention_kernel(
     // Each warp fetches a block of keys for each iteration.
     // Each thread group in a warp fetches a key from the block, and computes
     // dot product with the query.
-    const int *block_table = block_tables + seq_idx * max_num_blocks_per_seq;
+    const int64_t *block_table = block_tables + seq_idx * max_num_blocks_per_seq;
 
     // blocksparse specific vars
     int bs_block_offset;
@@ -467,8 +467,8 @@ __global__ void paged_attention_v2_kernel(
                                          // head_size, block_size]
     const int num_kv_heads,              // [num_heads]
     const float scale,
-    const int *__restrict__ block_tables, // [num_seqs, max_num_blocks_per_seq]
-    const int *__restrict__ seq_lens,     // [num_seqs]
+    const int64_t *__restrict__ block_tables, // [num_seqs, max_num_blocks_per_seq]
+    const int64_t *__restrict__ seq_lens,     // [num_seqs]
     const int max_num_blocks_per_seq,
     const float *__restrict__ alibi_slopes, // [num_heads]
     const int q_stride, const int kv_block_stride, const int kv_head_stride,
@@ -496,12 +496,12 @@ __global__ void paged_attention_v2_reduce_kernel(
                                           // max_num_partitions]
     const scalar_t *__restrict__ tmp_out, // [num_seqs, num_heads,
                                           // max_num_partitions, head_size]
-    const int *__restrict__ seq_lens,     // [num_seqs]
+    const int64_t *__restrict__ seq_lens,     // [num_seqs]
     const int max_num_partitions) {
     const int num_heads = gridDim.x;
     const int head_idx = blockIdx.x;
     const int seq_idx = blockIdx.y;
-    const int seq_len = seq_lens[seq_idx];
+    const int seq_len = static_cast<int>(seq_lens[seq_idx]);
     const int num_partitions = DIVIDE_ROUND_UP(seq_len, PARTITION_SIZE);
     if (num_partitions == 1) {
         // No need to reduce. Only copy tmp_out to out.
