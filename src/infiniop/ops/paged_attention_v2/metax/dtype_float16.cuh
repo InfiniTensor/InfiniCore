@@ -21,10 +21,9 @@
  */
 #pragma once
 
-#include "attention_generic.cuh"
-#include "cuda_fp16.h"
-#include "dtype_float32.cuh"
-
+#include "../utils/attention_generic.cuh"
+// #include "cuda_fp16.h"
+#include "../utils/dtype_float32.cuh"
 #include <stdint.h>
 
 namespace op::paged_attention_v2::vllm {
