@@ -4,11 +4,16 @@
 
 #include "ops/add.hpp"
 #include "ops/add_rms_norm.hpp"
+#include "ops/addcdiv.hpp"
+#include "ops/atan2.hpp"
 #include "ops/attention.hpp"
+#include "ops/binary_cross_entropy.hpp"
+#include "ops/bucketize.hpp"
 #include "ops/causal_softmax.hpp"
 #include "ops/embedding.hpp"
 #include "ops/linear.hpp"
 #include "ops/matmul.hpp"
+#include "ops/minimum.hpp"
 #include "ops/mul.hpp"
 #include "ops/paged_attention.hpp"
 #include "ops/paged_attention_prefill.hpp"
@@ -42,6 +47,11 @@ inline void bind(py::module &m) {
     bind_swiglu(m);
     bind_rope(m);
     bind_embedding(m);
+    bind_minimum(m);
+    bind_atan2(m);
+    bind_addcdiv(m);
+    bind_bucketize(m);
+    bind_binary_cross_entropy(m);
 }
 
 } // namespace infinicore::ops

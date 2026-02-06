@@ -1,3 +1,4 @@
+from .binary_cross_entropy import binary_cross_entropy
 from .causal_softmax import causal_softmax
 from .embedding import embedding
 from .linear import linear
@@ -17,4 +18,5 @@ __all__ = [
     "embedding",
     "rope",
     "RopeAlgo",
+    "binary_cross_entropy",
 ]

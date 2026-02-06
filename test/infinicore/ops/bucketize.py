@@ -50,12 +50,14 @@ class OpTest(BaseOperatorTest):
     def get_test_cases(self):
         return parse_test_cases()
 
-    def torch_operator(self, *args, **kwargs):
-        return torch.bucketize(*args, **kwargs)
+    def torch_operator(self, input, boundaries, *args, **kwargs):
+        # 对 PyTorch 的输入进行排序
+        sorted_boundaries, _ = torch.sort(boundaries)
+        return torch.bucketize(input, sorted_boundaries, *args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
-    #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.bucketize(*args, **kwargs)
+    def infinicore_operator(self, *args, **kwargs):
+        """InfiniCore implementation (operator not yet available)."""
+        return infinicore.bucketize(*args, **kwargs)
 
 
 def main():

@@ -44,8 +44,12 @@ from infinicore.dtype import (
 )
 from infinicore.ops.add import add
 from infinicore.ops.add_rms_norm import add_rms_norm, add_rms_norm_
+from infinicore.ops.addcdiv import addcdiv
+from infinicore.ops.atan2 import atan2
 from infinicore.ops.attention import attention
+from infinicore.ops.bucketize import bucketize
 from infinicore.ops.matmul import matmul
+from infinicore.ops.minimum import minimum
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.paged_attention import paged_attention
@@ -134,6 +138,10 @@ __all__ = [
     "strided_empty",
     "strided_from_blob",
     "zeros",
+    "minimum",
+    "atan2",
+    "addcdiv",
+    "bucketize",
 ]
 
 use_ntops = False
