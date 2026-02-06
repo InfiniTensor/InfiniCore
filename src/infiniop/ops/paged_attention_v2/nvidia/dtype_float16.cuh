@@ -20,8 +20,8 @@
  */
 #pragma once
 
-#include "attention_generic.cuh"
-#include "dtype_float32.cuh"
+#include "../utils/attention_generic.cuh"
+#include "../utils/dtype_float32.cuh"
 
 #ifdef USE_ROCM
   #include <hip/hip_fp16.h>
@@ -29,7 +29,7 @@
 
 #include <stdint.h>
 
-namespace vllm {
+namespace op::paged_attention_v2::vllm {
 
 // FP16 vector types for Q, K, V.
 template <>

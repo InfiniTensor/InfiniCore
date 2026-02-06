@@ -74,8 +74,8 @@ public:
         const auto block_tables_dt = block_tables_desc->dtype();
         const auto seq_lens_dt = seq_lens_desc->dtype();
         const bool debug_dtype = (std::getenv("INFINIOP_FLASH_DEBUG_DTYPE") != nullptr);
-        const bool block_tables_ok = (block_tables_dt == INFINI_DTYPE_I32); // int
-        const bool cache_lens_ok = (seq_lens_dt == INFINI_DTYPE_I32);       // int
+        const bool block_tables_ok = (block_tables_dt == INFINI_DTYPE_I64); // int64
+        const bool cache_lens_ok = (seq_lens_dt == INFINI_DTYPE_I64);       // int64
         if (!(block_tables_ok && cache_lens_ok)) {
             if (debug_dtype) {
                 std::fprintf(stderr,

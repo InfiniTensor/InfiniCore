@@ -3,7 +3,6 @@
 #include "attention_generic.cuh"
 #include "attention_utils.cuh"
 #include "cuda_compat.h"
-#include "dtype_bfloat16.cuh"
 #include "dtype_float32.cuh"
 #include "dtype_fp8.cuh"
 

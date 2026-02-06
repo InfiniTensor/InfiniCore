@@ -93,8 +93,8 @@ __C infiniStatus_t infiniopPagedAttentionV2(
 #define CALCULATE(CASE, NAMESPACE)                                                                                             \
     case CASE:                                                                                                                 \
         return reinterpret_cast<op::paged_attention_v2::NAMESPACE::Descriptor *>(desc)->calculate(                             \
-            workspace, workspace_size, out, exp_sums, max_logits, tmp_out, query, key_cache, value_cache, num_kv_heads,        \
-            scale, block_tables, seq_lens, block_size, max_seq_len, alibi_slopes, kv_cache_dtype, k_scale, v_scale,            \
+            workspace, workspace_size, out, static_cast< float *>( exp_sums), static_cast< float *>( max_logits), tmp_out, query, key_cache, value_cache, num_kv_heads,        \
+            scale,  static_cast< int64_t *>(block_tables),  static_cast< int64_t *>(seq_lens), block_size, max_seq_len, alibi_slopes, kv_cache_dtype, static_cast< float *>(k_scale),static_cast< float *>( v_scale),            \
             tp_rank, blocksparse_local_blocks, blocksparse_vert_stride, blocksparse_block_size, blocksparse_head_sliding_step, \
             stream);
 
