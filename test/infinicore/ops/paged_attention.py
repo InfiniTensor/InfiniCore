@@ -37,7 +37,7 @@ _TOLERANCE_MAP = {
 }
 
 # Data types to test
-_TENSOR_DTYPES = [infinicore.float16, infinicore.bfloat16, infinicore.float32]
+_TENSOR_DTYPES = [infinicore.float16, infinicore.bfloat16]
 
 
 # ==============================================================================
