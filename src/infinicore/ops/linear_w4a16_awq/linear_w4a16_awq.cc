@@ -48,18 +48,10 @@ void linear_w4a16_awq_(Tensor out,
         {out_features, in_features},
         out->dtype(),
         weight_packed->device());
-    // op::per_channel_quant_i8_(input->view({N, in_features}), input_packed, input_scale);
     float alpha = 1.0f;
     float beta = 0.0f;
     op::dequantize_awq_(weight, weight_packed, weight_scale, weight_zeros);
     bias = std::make_optional(bias.value()->as_strided({N, out_features}, {0, 1}));
-    // op::scaled_mm_i8_(
-    //     out->view({N, out_features}),
-    //     input_packed,
-    //     input_scale,
-    //     weight_packed->permute({1, 0}),
-    //     weight_scale,
-    //     bias);
     gemm_(out->view({N, out_features}),
           input->view({N, in_features}),
           weight->permute({1, 0}), alpha, beta);

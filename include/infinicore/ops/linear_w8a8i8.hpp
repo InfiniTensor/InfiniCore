@@ -5,8 +5,6 @@
 #include <optional>
 
 namespace infinicore::op {
-//
-// INFINICORE_GRAPH_OP_CLASS(LinearW8A8I8, Tensor, const Tensor &, const Tensor &, std::optional<Tensor>);
 
 Tensor linear_w8a8i8(Tensor input, Tensor weight_packed, Tensor weight_scale, std::optional<Tensor> bias);
 

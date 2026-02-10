@@ -4,12 +4,7 @@
 #include <optional>
 
 namespace infinicore::op {
-class DequantizeAWQ {
-public:
-    using schema = void (*)(Tensor, Tensor, Tensor, Tensor);
-    static void execute(Tensor x, Tensor x_packed, Tensor x_scale, Tensor x_zeros);
-    static common::OpDispatcher<schema> &dispatcher();
-};
+INFINICORE_GRAPH_OP_CLASS(DequantizeAWQ, Tensor, const Tensor &, const Tensor &, const Tensor &);
 
-void dequantize_awq_(Tensor x, Tensor x_packed, Tensor x_scale, Tensor x_zeros);
+void dequantize_awq_(Tensor x, const Tensor &x_packed, const Tensor &x_scale, const Tensor &x_zeros);
 } // namespace infinicore::op

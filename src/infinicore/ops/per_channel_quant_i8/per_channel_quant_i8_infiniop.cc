@@ -1,10 +1,9 @@
 #include "../../utils.hpp"
+#include "../infiniop_impl.hpp"
 #include "infinicore/common/hash.hpp"
 #include "infinicore/ops/common/cache.hpp"
 #include "infinicore/ops/per_channel_quant_i8.hpp"
 #include <infiniop.h>
-// #include <iostream>
-#include "../infiniop_impl.hpp"
 
 namespace infinicore::op::per_channel_quant_i8_impl::infiniop {
 
