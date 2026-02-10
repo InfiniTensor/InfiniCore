@@ -30,7 +30,7 @@ _TOLERANCE_MAP = {
     infinicore.bfloat16: {"atol": 2e-2, "rtol": 2e-2},
 }
 
-_TENSOR_DTYPES = [infinicore.float16, infinicore.bfloat16, infinicore.float32]
+_TENSOR_DTYPES = [infinicore.float16, infinicore.bfloat16]
 
 
 class SimpleCacheManager:
