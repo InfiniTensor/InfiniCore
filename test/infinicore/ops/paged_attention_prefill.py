@@ -1,9 +1,8 @@
 import os
 import sys
 
-import torch
-
 import infinicore
+import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 

@@ -3,6 +3,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import infinicore
 import torch
 from framework import (
     BaseOperatorTest,
@@ -11,8 +12,6 @@ from framework import (
     GenericTestRunner,
     is_broadcast,
 )
-
-import infinicore
 
 # ==============================================================================
 # Operator-specific configuration
