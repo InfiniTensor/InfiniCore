@@ -33,11 +33,11 @@ __device__ void blockPerChannelQuantI8Kernel(
     for (int ind = threadIdx.x; ind < K; ind += BLOCK_SIZE) {
         thread_min = fminf(thread_min, (float)x[tid + ind]);
     }
-    #if CUDART_VERSION >= 12090
-        float local_min = BlockReduce(temp_storage).Reduce(thread_min, ::cuda::minimum());
-    #else
-        float local_min = BlockReduce(temp_storage).Reduce(thread_min, cub::Min());
-    #endif
+#if CUDART_VERSION >= 12090
+    float local_min = BlockReduce(temp_storage).Reduce(thread_min, ::cuda::minimum());
+#else
+    float local_min = BlockReduce(temp_storage).Reduce(thread_min, cub::Min());
+#endif
     __shared__ float global_min_f;
     if (threadIdx.x == 0) {
         global_min_f = local_min;
@@ -91,11 +91,11 @@ __device__ void blockPerChannelQuantI8SymKernel(
     for (int ind = threadIdx.x; ind < K; ind += BLOCK_SIZE) {
         thread_max = fmaxf(thread_max, fabs((float)x[tid + ind]));
     }
-    #if CUDART_VERSION >= 12090
-        float local_max = BlockReduce(temp_storage).Reduce(thread_max, ::cuda::maximum());
-    #else
-        float local_max = BlockReduce(temp_storage).Reduce(thread_max, cub::Max());
-    #endif
+#if CUDART_VERSION >= 12090
+    float local_max = BlockReduce(temp_storage).Reduce(thread_max, ::cuda::maximum());
+#else
+    float local_max = BlockReduce(temp_storage).Reduce(thread_max, cub::Max());
+#endif
     __shared__ float global_max_f;
     if (threadIdx.x == 0) {
         global_max_f = local_max;
