@@ -3,7 +3,7 @@
 #ifdef ENABLE_METAX_MC_API
 #include <maca_fp8.h>
 #else
-#include <hpcc_fp8.h>
+#include <common/hpcc_fp8.h>
 #endif
 
 // Posible maximum number of threads per block for METAX architectures
