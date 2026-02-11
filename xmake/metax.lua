@@ -48,7 +48,10 @@ target("infiniop-metax")
     set_languages("cxx17")
     set_warnings("all", "error")
     add_cxflags("-lstdc++", "-fPIC", "-Wno-defaulted-function-deleted", "-Wno-strict-aliasing", {force = true})
-    add_files("../src/infiniop/devices/metax/*.cc", "../src/infiniop/ops/*/metax/**/*.cc")
+    add_files("../src/infiniop/devices/metax/*.cc", "../src/infiniop/ops/*/metax/*.cc")
+    -- Include hcdnn/hcblas gemm subdirectories explicitly
+    add_files("../src/infiniop/ops/gemm/metax/hcdnn/*.cc")
+    add_files("../src/infiniop/ops/gemm/metax/hcblas/*.cc")
     add_files("../src/infiniop/ops/*/metax/*.maca", {rule = "maca"})
 
     if has_config("ninetoothed") then
