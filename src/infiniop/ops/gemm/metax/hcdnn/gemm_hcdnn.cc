@@ -96,7 +96,6 @@ infiniStatus_t calculate(
                      1 };
         CHECK_MCDNN(hcdnnSetTensorNdDescriptor(
             aDesc,
-            HCDNN_TENSOR_NCHW,
             hcdnn_dtype,
             3,
             a_dims.data(),
@@ -121,7 +120,6 @@ infiniStatus_t calculate(
                      1 };
         CHECK_MCDNN(hcdnnSetTensorNdDescriptor(
             bDesc,
-            HCDNN_TENSOR_NCHW,
             hcdnn_dtype,
             3,
             b_dims.data(),
@@ -136,7 +134,6 @@ infiniStatus_t calculate(
                                         1 };
         CHECK_MCDNN(hcdnnSetTensorNdDescriptor(
             cDesc,
-            HCDNN_TENSOR_NCHW,
             hcdnn_dtype,
             3,
             c_dims.data(),
