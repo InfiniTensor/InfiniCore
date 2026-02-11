@@ -1,8 +1,8 @@
-#include "gemm_metax.h"
+#include "gemm_hcblas.h"
 #include "../../../devices/metax/metax_common.h"
 #include "../../../devices/metax/metax_handle.h"
 
-namespace op::gemm::metax {
+namespace op::gemm::hcblas {
 
 struct Descriptor::Opaque {
     std::shared_ptr<device::metax::Handle::Internal> internal;
@@ -104,4 +104,4 @@ infiniStatus_t Descriptor::calculate(
     return INFINI_STATUS_SUCCESS;
 }
 
-} // namespace op::gemm::metax
+} // namespace op::gemm::hcblas
