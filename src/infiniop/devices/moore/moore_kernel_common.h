@@ -17,6 +17,8 @@ using cuda_bfloat16 = mt_bfloat16;
 using cuda_bfloat162 = mt_bfloat162;
 using cuda_fp8_e4m3 = __mt_fp8_e4m3;
 
+using __nv_bfloat16 = __mt_bfloat16;
+
 namespace device::moore {
 
 // get the memory offset of the given element in a tensor given its flat index
