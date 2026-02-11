@@ -5,7 +5,7 @@
 
 #include <hcdnn/hcdnn.h>
 #include <hcdnn/hcdnn_backend.h>
-#include <hpcc_fp16.h>
+#include <common/hpcc_fp16.h>
 #include <array>
 #include <memory>
 
