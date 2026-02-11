@@ -19,8 +19,6 @@ protected:
 public:
     Runtime *getCurrentRuntime();
 
-    Runtime *getCpuRuntime();
-
     void setDevice(Device);
 
     size_t getDeviceCount(Device::Type type);

@@ -11,6 +11,7 @@ set_encodings("utf-8")
 
 add_includedirs("include")
 add_includedirs("third_party/spdlog/include")
+add_includedirs("third_party/nlohmann_json/single_include/")
 
 if is_mode("debug") then
     add_defines("DEBUG_MODE")
@@ -19,7 +20,7 @@ end
 if is_plat("windows") then
     set_runtimes("MD")
     add_ldflags("/utf-8", {force = true})
-    add_cxflags("/utf-8", {force = true})
+    add_cxxflags("/utf-8", {force = true})
 end
 
 -- CPU
@@ -66,6 +67,16 @@ if has_config("cudnn") then
     add_defines("ENABLE_CUDNN_API")
 end
 
+option("cutlass")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Whether to compile cutlass for Nvidia GPU")
+option_end()
+
+if has_config("cutlass") then 
+    add_defines("ENABLE_CUTLASS_API")
+end
+
 option("cuda_arch")
     set_showmenu(true)
     set_description("Set CUDA GPU architecture (e.g. sm_90)")
@@ -104,9 +115,27 @@ option("iluvatar-gpu")
     set_description("Whether to compile implementations for Iluvatar GPU")
 option_end()
 
+option("ivcore-20")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Use ivcore20")
+option_end()
+
 if has_config("iluvatar-gpu") then
     add_defines("ENABLE_ILUVATAR_API")
     includes("xmake/iluvatar.lua")
+end
+
+-- ali
+option("ali-ppu")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Whether to compile implementations for Ali PPU")
+option_end()
+
+if has_config("ali-ppu") then
+    add_defines("ENABLE_ALI_API")
+    includes("xmake/ali.lua")
 end
 
 -- qy
@@ -189,6 +218,18 @@ if has_config("ninetoothed") then
     add_defines("ENABLE_NINETOOTHED")
 end
 
+-- cuda graph
+option("graph")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Whether to use device graph instantiating feature, such as cuda graph for nvidia")
+option_end()
+
+if has_config("graph") then
+    add_defines("USE_INFINIRT_GRAPH")
+end
+
+
 -- InfiniCCL
 option("ccl")
     set_default(false)
@@ -208,14 +249,15 @@ target("infini-utils")
     set_warnings("all", "error")
 
     if is_plat("windows") then
-        add_cxflags("/wd4068")
+        add_cxxflags("/wd4068")
         if has_config("omp") then
-            add_cxflags("/openmp")
+            add_cxxflags("/openmp")
         end
     else
         add_cxflags("-fPIC", "-Wno-unknown-pragmas")
+        add_cxxflags("-fPIC", "-Wno-unknown-pragmas")
         if has_config("omp") then
-            add_cxflags("-fopenmp")
+            add_cxxflags("-fopenmp")
             add_ldflags("-fopenmp", {force = true})
         end
     end
@@ -247,6 +289,9 @@ target("infinirt")
     if has_config("iluvatar-gpu") then
         add_deps("infinirt-iluvatar")
     end
+    if has_config("ali-ppu") then
+        add_deps("infinirt-ali")
+    end
     if has_config("qy-gpu") then
         add_deps("infinirt-qy")
         add_files("build/.objs/infinirt-qy/rules/qy.cuda/src/infinirt/cuda/*.cu.o", {public = true})
@@ -258,6 +303,10 @@ target("infinirt")
         add_deps("infinirt-hygon")
     end
     set_languages("cxx17")
+    if not is_plat("windows") then
+        add_cxflags("-fPIC")
+        add_cxxflags("-fPIC")
+    end
     set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
     add_files("src/infinirt/*.cc")
     add_installfiles("include/infinirt.h", {prefixdir = "include"})
@@ -276,9 +325,13 @@ target("infiniop")
     if has_config("iluvatar-gpu") then
         add_deps("infiniop-iluvatar")
     end
+    if has_config("ali-ppu") then
+        add_deps("infiniop-ali")
+    end
     if has_config("qy-gpu") then
         add_deps("infiniop-qy")
         add_files("build/.objs/infiniop-qy/rules/qy.cuda/src/infiniop/ops/*/nvidia/*.cu.o", {public = true})
+        add_files("build/.objs/infiniop-qy/rules/qy.cuda/src/infiniop/ops/*/*/nvidia/*.cu.o", {public = true})
         add_files("build/.objs/infiniop-qy/rules/qy.cuda/src/infiniop/devices/nvidia/*.cu.o", {public = true})
     end
 
@@ -302,7 +355,7 @@ target("infiniop")
     end
     set_languages("cxx17")
     add_files("src/infiniop/devices/handle.cc")
-    add_files("src/infiniop/ops/*/operator.cc")
+    add_files("src/infiniop/ops/*/operator.cc", "src/infiniop/ops/*/*/operator.cc")
     add_files("src/infiniop/*.cc")
 
     set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
@@ -330,6 +383,9 @@ target("infiniccl")
     end
     if has_config("iluvatar-gpu") then
         add_deps("infiniccl-iluvatar")
+    end
+    if has_config("ali-ppu") then
+        add_deps("infiniccl-ali")
     end
     if has_config("qy-gpu") then
         add_deps("infiniccl-qy")
@@ -380,6 +436,7 @@ target("infinicore_cpp_api")
     add_files("src/infinicore/context/*.cc")
     add_files("src/infinicore/context/*/*.cc")
     add_files("src/infinicore/tensor/*.cc")
+    add_files("src/infinicore/graph/*.cc")
     add_files("src/infinicore/nn/*.cc")
     add_files("src/infinicore/ops/*/*.cc")
     add_files("src/utils/*.cc")
@@ -408,6 +465,8 @@ target("_infinicore")
     add_packages("pybind11")
     set_languages("cxx17")
 
+    add_deps("infinicore_cpp_api")
+
     set_kind("shared")
     local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
     add_includedirs(INFINI_ROOT.."/include", { public = true })
@@ -415,14 +474,7 @@ target("_infinicore")
     add_linkdirs(INFINI_ROOT.."/lib")
     add_links("infiniop", "infinirt", "infiniccl")
 
-    add_files("src/infinicore/*.cc")
-    add_files("src/infinicore/context/*.cc")
-    add_files("src/infinicore/context/*/*.cc")
-    add_files("src/infinicore/tensor/*.cc")
-    add_files("src/infinicore/nn/*.cc")
-    add_files("src/infinicore/ops/*/*.cc")
     add_files("src/infinicore/pybind11/**.cc")
-    add_files("src/utils/*.cc")
 
     set_installdir("python/infinicore")
 target_end()

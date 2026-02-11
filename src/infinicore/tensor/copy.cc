@@ -19,7 +19,8 @@ Tensor TensorImpl::to(Device device) const {
 
 void TensorImpl::copy_from(Tensor src) {
     if (src->shape() != this->shape()) {
-        throw std::runtime_error("Cannot copy from tensor with different shape");
+        throw std::runtime_error(
+            "Cannot copy from tensor with different shape. Src: " + src->info() + " Dst: " + this->info());
     }
     if (this->device() == src->device()) {
         op::rearrange_(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()), src);
@@ -31,12 +32,13 @@ void TensorImpl::copy_from(Tensor src) {
         // Use nbytes() to get the actual tensor size, not the full memory size
         size_t copy_size = std::min(this->nbytes(), src->nbytes());
         if (this->device().getType() == Device::Type::CPU) {
-            context::setDevice(src->device());
             if (this->is_contiguous()) {
+                context::setDevice(src->device());
                 context::memcpyD2H(this->data(), src->data(), copy_size);
             } else {
                 auto local_src = Tensor::empty(this->shape(), this->dtype(), this->device());
-                context::memcpyD2H(local_src->data(), src->data(), this->data_.memory->size());
+                context::setDevice(src->device());
+                context::memcpyD2H(local_src->data(), src->data(), copy_size);
                 op::rearrange_(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()), local_src);
             }
         } else if (src->device().getType() == Device::Type::CPU) {

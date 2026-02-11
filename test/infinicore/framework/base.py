@@ -8,15 +8,15 @@ import infinicore
 import traceback
 from abc import ABC, abstractmethod
 
-from .test_case import TestCase, TestResult
+from .results import CaseResult
 from .datatypes import to_torch_dtype, to_infinicore_dtype
 from .devices import InfiniDeviceNames, torch_device_map
 from .tensor import TensorSpec, TensorInitializer
-from .utils import (
+from .utils.tensor_utils import (
     clone_torch_tensor,
-    create_test_comparator,
     infinicore_tensor_from_torch,
 )
+from .utils.compare_utils import create_test_comparator
 from .benchmark import BenchmarkUtils
 
 
@@ -84,7 +84,7 @@ class TestRunner:
                 try:
                     print(f"{test_case}")
 
-                    # Execute test and get TestResult object
+                    # Execute test and get CaseResult object
                     test_result = test_func(device, test_case, self.config)
                     self.test_results.append(test_result)
 
@@ -118,8 +118,8 @@ class TestRunner:
                     print(f"\033[91m✗\033[0m {error_msg}")
                     self.failed_tests.append(error_msg)
 
-                    # Create a failed TestResult
-                    failed_result = TestResult(
+                    # Create a failed CaseResult
+                    failed_result = CaseResult(
                         success=False,
                         return_code=-1,
                         error_message=str(e),
@@ -342,7 +342,10 @@ class BaseOperatorTest(ABC):
         for i, inp in enumerate(inputs):
             if isinstance(inp, torch.Tensor):
                 # Clone only if this input will be used for comparison
-                if comparison_target == i:
+                if comparison_target == i or (
+                    isinstance(comparison_target, (list, tuple))
+                    and i in comparison_target
+                ):
                     cloned_inp = clone_torch_tensor(inp)
                     infini_tensor = infinicore_tensor_from_torch(cloned_inp)
                     cloned_tensors.append(cloned_inp)
@@ -400,12 +403,12 @@ class BaseOperatorTest(ABC):
             config: Test configuration
 
         Returns:
-            TestResult: Test result object containing status and timing information
+            CaseResult: Test case result object containing status and timing information
         """
         device_str = torch_device_map[device]
 
-        # Initialize test result
-        test_result = TestResult(
+        # Initialize test case result
+        test_result = CaseResult(
             success=False,
             return_code=-1,  # Default to failure
             test_case=test_case,
@@ -508,7 +511,9 @@ class BaseOperatorTest(ABC):
             # Handle multiple outputs comparison
 
             # Determine what to compare based on comparison_target
-            if comparison_target is None:
+            if comparison_target is None or isinstance(
+                comparison_target, (list, tuple)
+            ):
                 # Compare return values (out-of-place multiple outputs)
                 torch_comparison = torch_result
                 infini_comparison = infini_result
@@ -573,7 +578,9 @@ class BaseOperatorTest(ABC):
         # ==========================================================================
         else:
             # Determine comparison targets for single output
-            if comparison_target is None:
+            if comparison_target is None or isinstance(
+                comparison_target, (list, tuple)
+            ):
                 # Compare return values (out-of-place)
                 torch_comparison = torch_result
                 infini_comparison = infini_result

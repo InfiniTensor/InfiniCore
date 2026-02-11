@@ -24,7 +24,7 @@ target("infiniop-test")
     add_links("infiniop", "infinirt")
 
     if has_config("omp") then
-        add_cxflags("-fopenmp")
+        add_cxxflags("-fopenmp")
         add_ldflags("-fopenmp")
     end
 
@@ -88,8 +88,6 @@ target("infinicore-test")
     add_files(os.projectdir().."/src/infinicore/ops/*/*.cc")
     add_files(os.projectdir().."/src/infinicore/nn/*.cc")
 
-    add_files(os.projectdir().."/src/infinicore-test/*.cc")
-    add_files(os.projectdir().."/src/infinicore-test/*/*.cc")
-
+    add_files(os.projectdir().."/src/infinicore-test/**.cc")
     set_installdir(INFINI_ROOT)
 target_end()

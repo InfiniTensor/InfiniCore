@@ -60,6 +60,7 @@ target("infiniop-hygon")
     add_cuflags("-fPIC", "-std=c++17", {force = true})
     add_culdflags("-fPIC")
     add_cxflags("-fPIC")
+    add_cxxflags("-fPIC")
 
     -- 添加海光DCU特定的编译标志
     -- 检测实际GPU架构，如果未指定则默认使用gfx906
@@ -71,7 +72,7 @@ target("infiniop-hygon")
     add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")
 
     if has_config("ninetoothed") then
-        add_files("../build/ninetoothed/*.c", {cxflags = {"-Wno-return-type"}})
+        add_files("../build/ninetoothed/*.c", "../build/ninetoothed/*.cpp", {cxxflags = {"-Wno-return-type"}})
     end
 target_end()
 
@@ -100,6 +101,7 @@ target("infinirt-hygon")
     add_cuflags("-fPIC", "-std=c++17", {force = true})
     add_culdflags("-fPIC")
     add_cxflags("-fPIC")
+    add_cxxflags("-fPIC")
 
     -- 添加海光DCU特定的编译标志
     -- 检测实际GPU架构，如果未指定则默认使用gfx906
@@ -135,6 +137,7 @@ target("infiniccl-hygon")
         add_cuflags("-fPIC", "-std=c++17", {force = true})
         add_culdflags("-fPIC")
         add_cxflags("-fPIC")
+        add_cxxflags("-fPIC")
 
         -- 添加海光DCU特定的编译标志
         -- 检测实际GPU架构，如果未指定则默认使用gfx906

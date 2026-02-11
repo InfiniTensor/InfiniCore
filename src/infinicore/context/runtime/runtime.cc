@@ -2,19 +2,20 @@
 
 #include "../../utils.hpp"
 
-#include "../allocators/device_caching_allocator.hpp"
 #include "../allocators/device_pinned_allocator.hpp"
 #include "../allocators/host_allocator.hpp"
+#include "../allocators/pinnable_block_allocator.hpp"
+#include "../allocators/stream_ordered_allocator.hpp"
 
 namespace infinicore {
-Runtime::Runtime(Device device) : device_(device) {
+Runtime::Runtime(Device device) : device_(device), graph_manager_(std::make_unique<graph::GraphManager>()) {
     activate();
     INFINICORE_CHECK_ERROR(infinirtStreamCreate(&stream_));
     INFINICORE_CHECK_ERROR(infiniopCreateHandle(&infiniop_handle_));
     if (device_.getType() == Device::Type::CPU) {
-        device_memory_allocator_ = std::make_unique<HostAllocator>();
+        device_memory_allocator_ = std::make_unique<PinnableBlockAllocator>(device);
     } else {
-        device_memory_allocator_ = std::make_unique<DeviceCachingAllocator>(device);
+        device_memory_allocator_ = std::make_unique<PinnableBlockAllocator>(device);
         pinned_host_memory_allocator_ = std::make_unique<DevicePinnedHostAllocator>(device);
     }
 }
@@ -74,6 +75,15 @@ std::shared_ptr<Memory> Runtime::allocatePinnedHostMemory(size_t size) {
             alloc->deallocate(p);
         },
         true);
+}
+
+std::shared_ptr<Memory> Runtime::reinstantiateBlob(std::shared_ptr<Memory> blob) {
+    device_memory_allocator_.get()->mark_in_use_(blob->data(), true);
+    return std::make_shared<Memory>(
+        blob->data(), blob->size(), device_,
+        [alloc = device_memory_allocator_.get()](std::byte *p) {
+            alloc->deallocate(p);
+        });
 }
 
 void Runtime::memcpyH2D(void *dst, const void *src, size_t size, bool async) {
@@ -142,6 +152,25 @@ void Runtime::streamWaitEvent(infinirtStream_t stream, infinirtEvent_t event) {
         stream = stream_;
     }
     INFINICORE_CHECK_ERROR(infinirtStreamWaitEvent(stream, event));
+}
+
+bool Runtime::isGraphRecording() const {
+    return graph_manager_->is_recording();
+}
+
+void Runtime::startGraphRecording() {
+    device_memory_allocator_->set_pin_mode(true);
+    return graph_manager_->start_recording();
+}
+
+void Runtime::addGraphOperator(std::shared_ptr<graph::GraphOperator> op) {
+    return graph_manager_->add_operator(op);
+}
+
+std::shared_ptr<graph::Graph> Runtime::stopGraphRecording() {
+    auto graph = graph_manager_->stop_recording();
+    device_memory_allocator_->set_pin_mode(false);
+    return graph;
 }
 
 std::string Runtime::toString() const {

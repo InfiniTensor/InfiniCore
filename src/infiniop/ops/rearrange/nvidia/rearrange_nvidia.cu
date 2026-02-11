@@ -345,12 +345,10 @@ infiniStatus_t launchKernel(
             const_cast<void *>(static_cast<const void *>(params.dst_grid_stride.data())),
             const_cast<void *>(static_cast<const void *>(constraints_data))};
 
-    CHECK_OR_RETURN(cudaLaunchKernel(
-                        kernel_func,
-                        static_cast<unsigned int>(grid_size), static_cast<unsigned int>(BLOCK_SIZE),
-                        args, 0, stream)
-                        == cudaSuccess,
-                    INFINI_STATUS_INTERNAL_ERROR);
+    CHECK_CUDA(cudaLaunchKernel(
+        kernel_func,
+        static_cast<unsigned int>(grid_size), static_cast<unsigned int>(BLOCK_SIZE),
+        args, 0, stream));
 
     return INFINI_STATUS_SUCCESS;
 }

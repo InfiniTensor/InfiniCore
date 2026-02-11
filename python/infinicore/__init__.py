@@ -8,7 +8,10 @@ from infinicore.context import (
     get_device,
     get_device_count,
     get_stream,
+    is_graph_recording,
     set_device,
+    start_graph_recording,
+    stop_graph_recording,
     sync_device,
     sync_stream,
 )
@@ -40,10 +43,15 @@ from infinicore.dtype import (
     uint8,
 )
 from infinicore.ops.add import add
+from infinicore.ops.add_rms_norm import add_rms_norm
 from infinicore.ops.attention import attention
+from infinicore.ops.kv_caching import kv_caching
 from infinicore.ops.matmul import matmul
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
+from infinicore.ops.paged_attention import paged_attention
+from infinicore.ops.paged_attention_prefill import paged_attention_prefill
+from infinicore.ops.paged_caching import paged_caching
 from infinicore.ops.rearrange import rearrange
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.unsqueeze import unsqueeze
@@ -77,6 +85,9 @@ __all__ = [
     "set_device",
     "sync_device",
     "sync_stream",
+    "is_graph_recording",
+    "start_graph_recording",
+    "stop_graph_recording",
     # Data Types.
     "bfloat16",
     "bool",
@@ -102,7 +113,10 @@ __all__ = [
     "uint8",
     # Operations.
     "add",
+    "add_rms_norm",
+    "add_rms_norm_",
     "attention",
+    "kv_caching",
     "matmul",
     "mul",
     "narrow",
@@ -115,6 +129,9 @@ __all__ = [
     "from_list",
     "from_numpy",
     "from_torch",
+    "paged_caching",
+    "paged_attention",
+    "paged_attention_prefill",
     "ones",
     "strided_empty",
     "strided_from_blob",

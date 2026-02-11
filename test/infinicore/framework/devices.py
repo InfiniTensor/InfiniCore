@@ -9,6 +9,7 @@ class InfiniDeviceEnum:
     KUNLUN = 7
     HYGON = 8
     QY = 9
+    ALI = 10
 
 
 InfiniDeviceNames = {
@@ -22,6 +23,7 @@ InfiniDeviceNames = {
     InfiniDeviceEnum.QY: "Qy",
     InfiniDeviceEnum.KUNLUN: "Kunlun",
     InfiniDeviceEnum.HYGON: "Hygon",
+    InfiniDeviceEnum.ALI: "Ali",
 }
 
 torch_device_map = {
@@ -35,4 +37,5 @@ torch_device_map = {
     InfiniDeviceEnum.KUNLUN: "cuda",
     InfiniDeviceEnum.HYGON: "cuda",
     InfiniDeviceEnum.QY: "cuda",
+    InfiniDeviceEnum.ALI: "cuda",
 }

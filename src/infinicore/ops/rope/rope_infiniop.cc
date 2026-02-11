@@ -1,69 +1,81 @@
-#include "../../utils.hpp"
-#include "infinicore/common/hash.hpp"
-#include "infinicore/ops/common/cache.hpp"
 #include "infinicore/ops/rope.hpp"
-#include <infiniop.h>
+
+#include "../infiniop_impl.hpp"
 
 namespace infinicore::op::rope_impl::infiniop {
 
-thread_local common::OpCache<size_t, infiniopRoPEDescriptor_t> caches(
-    100, // capacity
-    [](infiniopRoPEDescriptor_t &desc) {
-        if (desc != nullptr) {
-            INFINICORE_CHECK_ERROR(infiniopDestroyRoPEDescriptor(desc));
-            desc = nullptr;
-        }
-    });
+INFINIOP_CACHABLE_DESCRIPTOR(Descriptor, RoPE, 100);
 
-void calculate(Tensor x_out, const Tensor &x, const Tensor &pos, const Tensor &sin_cache, const Tensor &cos_cache, infinicore::nn::RoPE::Algo algo) {
-    // Convert infinicore::nn::RoPE::Algo to infiniopRoPEAlgo_t
-    infiniopRoPEAlgo_t infiniop_algo;
+struct PlannedMeta {
+    std::shared_ptr<Descriptor> descriptor;
+    graph::GraphTensor workspace;
+    graph::GraphTensor x_out;
+    graph::GraphTensor x;
+    graph::GraphTensor pos;
+    graph::GraphTensor sin;
+    graph::GraphTensor cos;
+};
+
+static infiniopRoPEAlgo_t to_infiniop_algo(infinicore::nn::RoPE::Algo algo) {
     switch (algo) {
     case infinicore::nn::RoPE::Algo::GPT_J:
-        infiniop_algo = INFINIOP_ROPE_ALGO_GPT_J;
-        break;
+        return INFINIOP_ROPE_ALGO_GPT_J;
     case infinicore::nn::RoPE::Algo::GPT_NEOX:
-        infiniop_algo = INFINIOP_ROPE_ALGO_GPT_NEOX;
-        break;
+        return INFINIOP_ROPE_ALGO_GPT_NEOX;
     default:
-        throw std::runtime_error("Unsupported RoPE algorithm: " + std::to_string(static_cast<int>(algo)));
+        throw std::runtime_error("Unsupported RoPE algorithm");
     }
-
-    // Create hash key for descriptor caching
-    size_t key = hash_combine(x_out, x, pos, sin_cache, cos_cache);
-    hash_combine(key, std::hash<int>()(static_cast<int>(infiniop_algo)));
-
-    auto device = context::getDevice();
-    auto &cache = caches.getCache(device);
-
-    auto desc_opt = cache.get(key);
-    infiniopRoPEDescriptor_t desc = nullptr;
-
-    if (!desc_opt) {
-        INFINICORE_CHECK_ERROR(infiniopCreateRoPEDescriptor(
-            context::getInfiniopHandle(device), &desc,
-            x_out->desc(), x->desc(),
-            pos->desc(), sin_cache->desc(), cos_cache->desc(),
-            infiniop_algo));
-        cache.put(key, desc);
-    } else {
-        desc = *desc_opt;
-    }
-
-    size_t workspace_size = 0;
-    INFINICORE_CHECK_ERROR(infiniopGetRoPEWorkspaceSize(desc, &workspace_size));
-    std::shared_ptr<Memory> workspace = context::allocateMemory(workspace_size);
-
-    // InfiniOP reads from x and writes to x_out (handles copying internally)
-    INFINICORE_CHECK_ERROR(infiniopRoPE(
-        desc, workspace->data(), workspace_size,
-        x_out->data(), x->data(), pos->data(),
-        sin_cache->data(), cos_cache->data(), context::getStream()));
 }
 
-static bool registered = []() {
-    RoPE::dispatcher().registerAll(&calculate, false);
-    return true;
-}();
+void *plan(Tensor x_out,
+           const Tensor &x,
+           const Tensor &pos,
+           const Tensor &sin,
+           const Tensor &cos,
+           infinicore::nn::RoPE::Algo algo) {
+    auto infiniop_algo = to_infiniop_algo(algo);
+    size_t key = hash_combine(x_out, x, pos, sin, cos, static_cast<int>(infiniop_algo));
+
+    INFINIOP_CACHABLE_DESCRIPTOR_GET_OR_CREATE(
+        Descriptor, descriptor, RoPE, key, x_out->desc(),
+        x->desc(),
+        pos->desc(),
+        sin->desc(),
+        cos->desc(),
+        infiniop_algo);
+
+    INFINIOP_WORKSPACE_TENSOR(workspace, RoPE, descriptor);
+    return new PlannedMeta{
+        descriptor,
+        graph::GraphTensor(workspace),
+        graph::GraphTensor(x_out),
+        graph::GraphTensor(x),
+        graph::GraphTensor(pos),
+        graph::GraphTensor(sin),
+        graph::GraphTensor(cos)};
+}
+
+void run(void *planned_meta) {
+    auto *p = reinterpret_cast<PlannedMeta *>(planned_meta);
+
+    INFINICORE_CHECK_ERROR(
+        infiniopRoPE(
+            p->descriptor->desc,
+            p->workspace->data(),
+            p->workspace->numel(),
+            p->x_out->data(),
+            p->x->data(),
+            p->pos->data(),
+            p->sin->data(),
+            p->cos->data(),
+            context::getStream()));
+}
+
+void cleanup(void **planned_meta_ptr) {
+    delete *reinterpret_cast<PlannedMeta **>(planned_meta_ptr);
+    *planned_meta_ptr = nullptr;
+}
+
+INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(RoPE, &plan, &run, &cleanup);
 
 } // namespace infinicore::op::rope_impl::infiniop

@@ -4,6 +4,14 @@
 
 #define CHECK_CUDART(RT_API) CHECK_INTERNAL(RT_API, cudaSuccess)
 
+#define RUN_CUDART(RT_API)                           \
+    do {                                             \
+        auto api_result_ = (RT_API);                 \
+        if (api_result_ != (cudaSuccess)) {          \
+            { return INFINI_STATUS_INTERNAL_ERROR; } \
+        }                                            \
+    } while (0)
+
 // 根据宏定义选择命名空间并实现
 #if defined(ENABLE_NVIDIA_API)
 namespace infinirt::cuda {
@@ -13,6 +21,8 @@ namespace infinirt::iluvatar {
 namespace infinirt::qy {
 #elif defined(ENABLE_HYGON_API)
 namespace infinirt::hygon {
+#elif defined(ENABLE_ALI_API)
+namespace infinirt::ali {
 #else
 namespace infinirt::cuda { // 默认回退
 #endif
@@ -40,7 +50,7 @@ infiniStatus_t streamCreate(infinirtStream_t *stream_ptr) {
 }
 
 infiniStatus_t streamDestroy(infinirtStream_t stream) {
-    CHECK_CUDART(cudaStreamDestroy((cudaStream_t)stream));
+    RUN_CUDART(cudaStreamDestroy((cudaStream_t)stream));
     return INFINI_STATUS_SUCCESS;
 }
 
@@ -105,7 +115,7 @@ infiniStatus_t eventSynchronize(infinirtEvent_t event) {
 }
 
 infiniStatus_t eventDestroy(infinirtEvent_t event) {
-    CHECK_CUDART(cudaEventDestroy((cudaEvent_t)event));
+    RUN_CUDART(cudaEventDestroy((cudaEvent_t)event));
     return INFINI_STATUS_SUCCESS;
 }
 
@@ -125,12 +135,12 @@ infiniStatus_t mallocHost(void **p_ptr, size_t size) {
 }
 
 infiniStatus_t freeDevice(void *ptr) {
-    CHECK_CUDART(cudaFree(ptr));
+    RUN_CUDART(cudaFree(ptr));
     return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t freeHost(void *ptr) {
-    CHECK_CUDART(cudaFreeHost(ptr));
+    RUN_CUDART(cudaFreeHost(ptr));
     return INFINI_STATUS_SUCCESS;
 }
 
@@ -165,7 +175,56 @@ infiniStatus_t mallocAsync(void **p_ptr, size_t size, infinirtStream_t stream) {
 }
 
 infiniStatus_t freeAsync(void *ptr, infinirtStream_t stream) {
-    CHECK_CUDART(cudaFreeAsync(ptr, (cudaStream_t)stream));
+    RUN_CUDART(cudaFreeAsync(ptr, (cudaStream_t)stream));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t streamBeginCapture(infinirtStream_t stream, infinirtStreamCaptureMode_t mode) {
+    cudaStreamCaptureMode graph_mode;
+    if (mode == INFINIRT_STREAM_CAPTURE_MODE_GLOBAL) {
+        graph_mode = cudaStreamCaptureModeGlobal;
+    } else if (mode == INFINIRT_STREAM_CAPTURE_MODE_THREAD_LOCAL) {
+        graph_mode = cudaStreamCaptureModeThreadLocal;
+    } else if (mode == INFINIRT_STREAM_CAPTURE_MODE_RELAXED) {
+        graph_mode = cudaStreamCaptureModeRelaxed;
+    } else {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    CHECK_CUDART(cudaStreamBeginCapture((cudaStream_t)stream, graph_mode));
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t streamEndCapture(infinirtStream_t stream, infinirtGraph_t *graph_ptr) {
+    cudaGraph_t graph;
+    CHECK_CUDART(cudaStreamEndCapture((cudaStream_t)stream, &graph));
+    *graph_ptr = graph;
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t graphDestroy(infinirtGraph_t graph) {
+    RUN_CUDART(cudaGraphDestroy((cudaGraph_t)graph));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t graphInstantiate(
+    infinirtGraphExec_t *graph_exec_ptr,
+    infinirtGraph_t graph,
+    infinirtGraphNode_t *node_ptr,
+    char *log_buffer,
+    size_t buffer_size) {
+    CHECK_CUDART(cudaGraphInstantiate((cudaGraphExec_t *)graph_exec_ptr, (cudaGraph_t)graph, (cudaGraphNode_t *)node_ptr, log_buffer, buffer_size));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t graphExecDestroy(infinirtGraphExec_t graph_exec) {
+    RUN_CUDART(cudaGraphExecDestroy((cudaGraphExec_t)graph_exec));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t graphLuanch(infinirtGraphExec_t graph_exec, infinirtStream_t stream) {
+    CHECK_CUDART(cudaGraphLaunch((cudaGraphExec_t)graph_exec, (cudaStream_t)stream));
     return INFINI_STATUS_SUCCESS;
 }
 }

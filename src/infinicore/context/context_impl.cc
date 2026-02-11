@@ -1,4 +1,5 @@
 #include "context_impl.hpp"
+#include "internal.hpp"
 
 #include "../utils.hpp"
 
@@ -29,14 +30,16 @@ Runtime *ContextImpl::getCurrentRuntime() {
     return current_runtime_;
 }
 
-Runtime *ContextImpl::getCpuRuntime() {
-    return runtime_table_[int(Device::Type::CPU)][0].get();
-}
-
 void ContextImpl::setDevice(Device device) {
     if (device == getCurrentRuntime()->device()) {
         // Do nothing if the device is already set.
         return;
+    }
+
+    thread_local bool warn_switch_runtime = false;
+    if (getCurrentRuntime()->isGraphRecording() && !warn_switch_runtime) {
+        spdlog::warn("Switching device runtime during graph recording may break the graph!");
+        warn_switch_runtime = true;
     }
 
     if (runtime_table_[int(device.getType())][device.getIndex()] == nullptr) {
@@ -100,11 +103,8 @@ infinirtStream_t getStream() {
 }
 
 infiniopHandle_t getInfiniopHandle(Device device) {
-    if (device.getType() == Device::Type::CPU) {
-        return ContextImpl::singleton().getCpuRuntime()->infiniopHandle();
-    }
     if (device != getDevice()) {
-        throw std::runtime_error("Requested device doesn't match current runtime.");
+        setDevice(device);
     }
     return ContextImpl::singleton().getCurrentRuntime()->infiniopHandle();
 }
@@ -122,7 +122,8 @@ std::shared_ptr<Memory> allocateMemory(size_t size) {
 }
 
 std::shared_ptr<Memory> allocateHostMemory(size_t size) {
-    return ContextImpl::singleton().getCpuRuntime()->allocateMemory(size);
+    setDevice(Device::cpu());
+    return allocateMemory(size);
 }
 
 std::shared_ptr<Memory> allocatePinnedHostMemory(size_t size) {
@@ -142,7 +143,8 @@ void memcpyD2D(void *dst, const void *src, size_t size, bool async) {
 }
 
 void memcpyH2H(void *dst, const void *src, size_t size) {
-    return ContextImpl::singleton().getCpuRuntime()->memcpyD2D(dst, src, size);
+    setDevice(Device::cpu());
+    return ContextImpl::singleton().getCurrentRuntime()->memcpyD2D(dst, src, size);
 }
 
 // Timing API implementations
@@ -176,6 +178,27 @@ float elapsedTime(infinirtEvent_t start, infinirtEvent_t end) {
 
 void streamWaitEvent(infinirtStream_t stream, infinirtEvent_t event) {
     ContextImpl::singleton().getCurrentRuntime()->streamWaitEvent(stream, event);
+}
+
+bool isGraphRecording() {
+    return ContextImpl::singleton().getCurrentRuntime()->isGraphRecording();
+}
+
+void startGraphRecording() {
+    ContextImpl::singleton().getCurrentRuntime()->startGraphRecording();
+}
+
+void addGraphOperator(std::shared_ptr<graph::GraphOperator> op) {
+    ContextImpl::singleton().getCurrentRuntime()->addGraphOperator(op);
+}
+
+std::shared_ptr<graph::Graph> stopGraphRecording() {
+    return ContextImpl::singleton().getCurrentRuntime()->stopGraphRecording();
+}
+
+std::shared_ptr<Memory> reinstantiateBlob(std::shared_ptr<Memory> blob) {
+    setDevice(blob->device());
+    return ContextImpl::singleton().getCurrentRuntime()->reinstantiateBlob(blob);
 }
 
 } // namespace context

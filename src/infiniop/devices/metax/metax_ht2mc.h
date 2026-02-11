@@ -85,4 +85,20 @@
 #define hcclSuccess mcclSuccess
 #define hcclCommDestroy mcclCommDestroy
 #define hcclAllReduce mcclAllReduce
+#define hcGetDevice mcGetDevice
+#define hcDeviceAttributeMultiProcessorCount mcDeviceAttributeMultiProcessorCount
+#define hcDeviceGetAttribute mcDeviceGetAttribute
+#define hcStreamCaptureMode mcStreamCaptureMode
+#define hcStreamCaptureModeGlobal mcStreamCaptureModeGlobal
+#define hcStreamCaptureModeThreadLocal mcStreamCaptureModeThreadLocal
+#define hcStreamCaptureModeRelaxed mcStreamCaptureModeRelaxed
+#define hcStreamBeginCapture mcStreamBeginCapture
+#define hcStreamEndCapture mcStreamEndCapture
+#define hcGraph_t mcGraph_t
+#define hcGraphExec_t mcGraphExec_t
+#define hcGraphNode_t mcGraphNode_t
+#define hcGraphInstantiate mcGraphInstantiate
+#define hcGraphDestroy mcGraphDestroy
+#define hcGraphExecDestroy mcGraphExecDestroy
+#define hcGraphLaunch mcGraphLaunch
 #endif

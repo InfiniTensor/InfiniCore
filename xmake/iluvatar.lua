@@ -42,10 +42,14 @@ target("infiniop-iluvatar")
     add_links("cudart", "cublas", "cudnn")
 
     set_warnings("all", "error")
-    add_cuflags("-Wno-error=unused-private-field")
+    add_cuflags("-Wno-error=unused-private-field", "-Wno-error=unused-variable", "-Wno-unused-variable")
     add_cuflags("-fPIC", "-x", "ivcore", "-std=c++17", {force = true})
+    if has_config("ivcore-20") then
+        add_cuflags("--cuda-gpu-arch=ivcore20", {force = true})
+    end
     add_culdflags("-fPIC")
-    add_cxflags("-fPIC")
+    add_cxflags("-fPIC", "-Wno-error=unused-variable", "-Wno-unused-variable")
+    add_cxxflags("-fPIC", "-Wno-error=unused-variable", "-Wno-unused-variable")
 
     -- set_languages("cxx17") 天数似乎不能用这个配置
     add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")
@@ -54,7 +58,7 @@ target("infiniop-iluvatar")
     add_files("../src/infiniop/ops/dequantize_awq/iluvatar/*.cu")
 
     if has_config("ninetoothed") then
-        add_files("../build/ninetoothed/*.c", {cxflags = {"-Wno-return-type"}})
+        add_files("../build/ninetoothed/*.c", "../build/ninetoothed/*.cpp", {cxxflags = {"-Wno-return-type"}})
     end
 target_end()
 
@@ -73,6 +77,7 @@ target("infinirt-iluvatar")
     add_cuflags("-fPIC", "-x", "ivcore", "-std=c++17", {force = true})
     add_culdflags("-fPIC")
     add_cxflags("-fPIC")
+    add_cxxflags("-fPIC")
 
     -- set_languages("cxx17") 天数似乎不能用这个配置
     add_files("../src/infinirt/cuda/*.cu")
@@ -94,6 +99,7 @@ target("infiniccl-iluvatar")
         add_cuflags("-fPIC", "-x", "ivcore", "-std=c++17", {force = true})
         add_culdflags("-fPIC")
         add_cxflags("-fPIC")
+        add_cxxflags("-fPIC")
 
         local nccl_root = os.getenv("NCCL_ROOT")
         if nccl_root then

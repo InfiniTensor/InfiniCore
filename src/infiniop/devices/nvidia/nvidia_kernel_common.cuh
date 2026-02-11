@@ -16,6 +16,7 @@
 // Posible maximum number of threads per block for CUDA architectures
 // Used for picking correct kernel launch configuration
 #define CUDA_BLOCK_SIZE_4096 4096
+#define CUDA_BLOCK_SIZE_2048 2048
 #define CUDA_BLOCK_SIZE_1024 1024
 #define CUDA_BLOCK_SIZE_512 512
 
@@ -54,7 +55,7 @@ exp_(const float val) {
     return expf(val);
 }
 
-#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_QY_API) && !defined(ENABLE_HYGON_API)
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_QY_API) && !defined(ENABLE_HYGON_API) && !defined(ENABLE_ALI_API)
 __forceinline__ __device__ long double
 exp_(const long double val) {
     return expl(val);

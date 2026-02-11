@@ -131,7 +131,7 @@ void causalSoftmaxUnion(void *workspace, int core_per_cluster, int cluster_count
     kernel_dim.x = core_per_cluster;
     kernel_dim.y = cluster_count;
     kernel_dim.z = 1;
-    kernel_type = CNRT_FUNC_TYPE_UNION1;
+    kernel_type = cnrtFuncTypeUnion1;
 
     // Launch kernel
     causalSoftmax<T><<<kernel_dim, kernel_type, queue>>>(
