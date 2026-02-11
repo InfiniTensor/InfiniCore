@@ -15,6 +15,8 @@ def to_torch_dtype(infini_dtype):
         return torch.float16
     elif infini_dtype == infinicore.float32:
         return torch.float32
+    elif infini_dtype == infinicore.float64:
+        return torch.float64
     elif infini_dtype == infinicore.bfloat16:
         return torch.bfloat16
     elif infini_dtype == infinicore.int8:
@@ -27,6 +29,8 @@ def to_torch_dtype(infini_dtype):
         return torch.int64
     elif infini_dtype == infinicore.uint8:
         return torch.uint8
+    elif infini_dtype == infinicore.bool:
+        return torch.bool
     else:
         raise ValueError(f"Unsupported infinicore dtype: {infini_dtype}")
 
@@ -75,6 +79,8 @@ def numpy_to_infinicore_dtype(numpy_dtype):
         return infinicore.int64
     elif numpy_dtype == np.uint8:
         return infinicore.uint8
+    elif numpy_dtype == np.bool_:
+        return infinicore.bool
     else:
         raise ValueError(f"Unsupported numpy dtype: {numpy_dtype}")
 
@@ -106,5 +112,7 @@ def infinicore_to_numpy_dtype(infini_dtype):
         return np.int64
     elif infini_dtype == infinicore.uint8:
         return np.uint8
+    elif infini_dtype == infinicore.bool:
+        return np.bool_
     else:
         raise ValueError(f"Unsupported infinicore dtype: {infini_dtype}")
