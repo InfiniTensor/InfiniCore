@@ -1,4 +1,4 @@
-#ifndef __GEMM_INFO_H__
+#ifndef __I8GEMM_INFO_H__
 #define __I8GEMM_INFO_H__
 
 #include "../../../utils.h"

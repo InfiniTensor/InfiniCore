@@ -6,6 +6,10 @@
 #include "nvidia/int8_gemm_nvidia.cuh"
 #endif
 
+#if defined(ENABLE_MOORE_API)
+#include "moore/int8_gemm_moore.h"
+#endif
+
 __C infiniStatus_t infiniopCreateI8GemmDescriptor(infiniopHandle_t handle,
                                                   infiniopI8GemmDescriptor_t *desc_ptr,
                                                   infiniopTensorDescriptor_t out_desc,
@@ -32,6 +36,9 @@ __C infiniStatus_t infiniopCreateI8GemmDescriptor(infiniopHandle_t handle,
 #if defined(ENABLE_QY_API)
         CREATE(INFINI_DEVICE_QY, nvidia)
 #endif
+#if defined(ENABLE_MOORE_API)
+        CREATE(INFINI_DEVICE_MOORE, moore)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -49,6 +56,9 @@ __C infiniStatus_t infiniopGetI8GemmWorkspaceSize(infiniopI8GemmDescriptor_t des
 #endif
 #if defined(ENABLE_QY_API)
         GET(INFINI_DEVICE_QY, nvidia)
+#endif
+#if defined(ENABLE_MOORE_API)
+        GET(INFINI_DEVICE_MOORE, moore)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -77,6 +87,9 @@ __C infiniStatus_t infiniopI8Gemm(infiniopI8GemmDescriptor_t desc,
 #if defined(ENABLE_QY_API)
         CACULATE(INFINI_DEVICE_QY, nvidia)
 #endif
+#if defined(ENABLE_MOORE_API)
+        CACULATE(INFINI_DEVICE_MOORE, moore)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -94,6 +107,9 @@ __C infiniStatus_t infiniopDestroyI8GemmDescriptor(infiniopI8GemmDescriptor_t de
 #endif
 #if defined(ENABLE_QY_API)
         DESTROY(INFINI_DEVICE_QY, nvidia)
+#endif
+#if defined(ENABLE_MOORE_API)
+        DESTROY(INFINI_DEVICE_MOORE, moore)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
