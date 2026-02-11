@@ -4,6 +4,7 @@
 #include <maca_fp8.h>
 #else
 #include <common/hpcc_fp8.h>
+#include <common/hpcc_bfloat16.h>
 #endif
 
 // Posible maximum number of threads per block for METAX architectures
