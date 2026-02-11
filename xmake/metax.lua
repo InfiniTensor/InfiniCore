@@ -48,6 +48,9 @@ target("infiniop-metax")
     set_languages("cxx17")
     set_warnings("all", "error")
     add_cxflags("-lstdc++", "-fPIC", "-Wno-defaulted-function-deleted", "-Wno-strict-aliasing", {force = true})
+    -- Add InfiniCore source directory to include paths so relative includes work correctly
+    -- This is needed for hcdnn/hcblas files that use paths like ../../../devices/metax/metax_common.h
+    add_includedirs("../src")
     add_files("../src/infiniop/devices/metax/*.cc", "../src/infiniop/ops/*/metax/*.cc")
     -- Include hcdnn/hcblas gemm subdirectories explicitly
     add_files("../src/infiniop/ops/gemm/metax/hcdnn/*.cc")
