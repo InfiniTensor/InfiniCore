@@ -54,10 +54,25 @@ exp_(const double val) {
 
 __forceinline__ __device__ __half
 exp_(const __half x) {
+#ifdef __HPCCCC__
     return hexp(x);
+#else
+    // When not using HPCC compiler, convert to float, compute exp, convert back
+    float f_val = __half2float(x);
+    float f_result = expf(f_val);
+    return __float2half(f_result);
+#endif
 }
 
 __forceinline__ __device__ __hpcc_bfloat16
 exp_(const __hpcc_bfloat16 x) {
+#ifdef __HPCCCC__
     return hexp(x);
+#else
+    // When not using HPCC compiler, convert to float, compute exp, convert back
+    // Use __bfloat162float from HPCC header for conversion
+    float f_val = __bfloat162float(x);
+    float f_result = expf(f_val);
+    return __float2bfloat16(f_result);
+#endif
 }
