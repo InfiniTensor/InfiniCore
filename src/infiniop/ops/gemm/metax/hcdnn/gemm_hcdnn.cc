@@ -1,7 +1,7 @@
 #include "gemm_hcdnn.h"
-#include "../../../devices/metax/metax_common.h"
-#include "../../../devices/metax/metax_handle.h"
-#include "../../../devices/metax/metax_kernel_common.h"
+#include "../../../../devices/metax/metax_common.h"
+#include "../../../../devices/metax/metax_handle.h"
+#include "../../../../devices/metax/metax_kernel_common.h"
 
 #include <hcdnn/hcdnn.h>
 #include <hcdnn/hcdnn_backend.h>

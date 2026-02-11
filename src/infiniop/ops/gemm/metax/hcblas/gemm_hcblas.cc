@@ -1,6 +1,6 @@
 #include "gemm_hcblas.h"
-#include "../../../devices/metax/metax_common.h"
-#include "../../../devices/metax/metax_handle.h"
+#include "../../../../devices/metax/metax_common.h"
+#include "../../../../devices/metax/metax_handle.h"
 
 namespace op::gemm::hcblas {
 
