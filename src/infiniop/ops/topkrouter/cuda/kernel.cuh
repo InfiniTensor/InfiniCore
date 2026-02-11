@@ -27,6 +27,15 @@ struct CustomLess {
     }
 };
 
+// Warp-level sum reduction for Hygon platform
+template <int warp_threads>
+__inline__ __device__ float WarpSum(float val) {
+    for (int mask = warp_threads / 2; mask > 0; mask /= 2) {
+        val += __shfl_xor_sync(0xffffffff, val, mask);
+    }
+    return val;
+}
+
 template <typename T, int BLOCK_THREADS = 256>
 __global__ void topkrouter_kernel(float *values_topk,             // 输出数据, 形状[N, topk]
                                   int *indices_topk,              // 输出索引, 形状[N, topk]
@@ -137,12 +146,19 @@ __global__ void topkrouter_kernel(float *values_topk,             // 输出数�
             value = sigmoid_func(data_input[index]);
         }
         {
+#ifdef ENABLE_HYGON_API
+            float warp_sum = WarpSum<warp_threads>(value);
+            if (0 == tid) {
+                share_sum = warp_sum + 1e-9f;
+            }
+#else
             typedef cub::WarpReduce<float, warp_threads> WarpReduce;
             __shared__ typename WarpReduce::TempStorage temp_storage;
             float warp_sum = WarpReduce(temp_storage).Sum(value);
             if (0 == tid) {
                 share_sum = warp_sum + 1e-9f;
             }
+#endif
         }
         __syncwarp();
 

@@ -19,6 +19,9 @@ __device__ void blockLPNormKernel(
     __shared__ float global_max;
 #if CUDART_VERSION >= 12090
     float max_block = BlockReduce(temp_storage).Reduce(local_max, ::cuda::maximum());
+#elif defined(ENABLE_HYGON_API)
+    float max_block = BlockReduce(temp_storage).Reduce(
+        local_max, [](const float &a, const float &b) { return (a > b) ? a : b; }, BLOCK_SIZE);
 #else
     float max_block = BlockReduce(temp_storage).Reduce(local_max, cub::Max());
 #endif
@@ -75,6 +78,9 @@ __device__ void blockLPNormStridesKernel(
     __shared__ float global_max;
 #if CUDART_VERSION >= 12090
     float max_block = BlockReduce(temp_storage).Reduce(local_max, ::cuda::maximum());
+#elif defined(ENABLE_HYGON_API)
+    float max_block = BlockReduce(temp_storage).Reduce(
+        local_max, [](const float &a, const float &b) { return (a > b) ? a : b; }, BLOCK_SIZE);
 #else
     float max_block = BlockReduce(temp_storage).Reduce(local_max, cub::Max());
 #endif

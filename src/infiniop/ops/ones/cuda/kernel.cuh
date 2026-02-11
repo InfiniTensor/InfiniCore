@@ -27,8 +27,10 @@ public:
             return 1;
         } else if constexpr (std::is_same_v<T, uint64_t>) { // 10
             return 1;
+#ifndef ENABLE_HYGON_API
         } else if constexpr (std::is_same_v<T, cuda_fp8_e4m3>) { // 11
             return cuda_fp8_e4m3(1.0f);
+#endif
         } else if constexpr (std::is_same_v<T, half>) { // 12
             return __float2half(1.0f);
         } else if constexpr (std::is_same_v<T, float>) { // 13
