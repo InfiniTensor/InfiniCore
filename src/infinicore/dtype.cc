@@ -5,43 +5,43 @@ namespace infinicore {
 std::string toString(const DataType &dtype) {
     switch (dtype) {
     case DataType::BYTE:
-        return "BYTE";
+        return "uint8";
     case DataType::BOOL:
-        return "BOOL";
+        return "bool";
     case DataType::I8:
-        return "I8";
+        return "int8";
     case DataType::I16:
-        return "I16";
+        return "int16";
     case DataType::I32:
-        return "I32";
+        return "int32";
     case DataType::I64:
-        return "I64";
+        return "int64";
     case DataType::U8:
-        return "U8";
+        return "uint8";
     case DataType::U16:
-        return "U16";
+        return "uint16";
     case DataType::U32:
-        return "U32";
+        return "uint32";
     case DataType::U64:
-        return "U64";
+        return "uint64";
     case DataType::F8:
-        return "F8";
+        return "float8";
     case DataType::F16:
-        return "F16";
+        return "float16";
     case DataType::F32:
-        return "F32";
+        return "float32";
     case DataType::F64:
-        return "F64";
+        return "float64";
     case DataType::C16:
-        return "C16";
+        return "complex16";
     case DataType::C32:
-        return "C32";
+        return "complex32";
     case DataType::C64:
-        return "C64";
+        return "complex64";
     case DataType::C128:
-        return "C128";
+        return "complex128";
     case DataType::BF16:
-        return "BF16";
+        return "bfloat16";
     }
 
     // TODO: Add error handling.

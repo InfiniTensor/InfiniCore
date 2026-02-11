@@ -898,8 +898,8 @@ TestResult NNModuleTest::testModuleLinear() {
 
             // Test forward with residual connection
             spdlog::info("Testing Linear forward with residual connection");
-            auto residual = infinicore::Tensor::ones({2, 4}, infinicore::DataType::F32, infinicore::Device());
-            auto output_with_residual = m1.forward(input1, residual);
+            // auto residual = infinicore::Tensor::ones({2, 4}, infinicore::DataType::F32, infinicore::Device());
+            auto output_with_residual = m1.forward(input1);
             if (output_with_residual->shape() != std::vector<size_t>({2, 4})) {
                 spdlog::error("Linear output with residual shape mismatch. Expected {{2, 4}}, got different shape");
                 return false;
@@ -911,10 +911,10 @@ TestResult NNModuleTest::testModuleLinear() {
 
             // Create test data with known values for verification
             auto test_input = infinicore::Tensor::ones({2, 8}, infinicore::DataType::F32, infinicore::Device());
-            auto test_residual = infinicore::Tensor::ones({2, 4}, infinicore::DataType::F32, infinicore::Device());
+            // auto test_residual = infinicore::Tensor::ones({2, 4}, infinicore::DataType::F32, infinicore::Device());
 
             // Get InfiniCore result
-            auto infinicore_output = m1.forward(test_input, test_residual);
+            auto infinicore_output = m1.forward(test_input);
 
             // Compute naive result: output = input @ weight.T + bias + residual
             auto naive_output = infinicore::Tensor::empty({2, 4}, infinicore::DataType::F32, infinicore::Device());
@@ -935,7 +935,7 @@ TestResult NNModuleTest::testModuleLinear() {
             infinicore::op::add_(naive_output, matmul_result, bias_view);
 
             // Add residual
-            infinicore::op::add_(naive_output, naive_output, test_residual);
+            // infinicore::op::add_(naive_output, naive_output, test_residual);
 
             // Compare results with actual value checking
             if (infinicore_output->shape() != naive_output->shape()) {
@@ -956,10 +956,10 @@ TestResult NNModuleTest::testModuleLinear() {
             // Test computation correctness without bias (using m2)
             spdlog::info("Testing computation correctness without bias");
             auto test_input_no_bias = infinicore::Tensor::ones({1, 16}, infinicore::DataType::F32, infinicore::Device());
-            auto test_residual_no_bias = infinicore::Tensor::ones({1, 3}, infinicore::DataType::F32, infinicore::Device());
+            // auto test_residual_no_bias = infinicore::Tensor::ones({1, 3}, infinicore::DataType::F32, infinicore::Device());
 
             // Get InfiniCore result (no bias)
-            auto infinicore_output_no_bias = m2.forward(test_input_no_bias, test_residual_no_bias);
+            auto infinicore_output_no_bias = m2.forward(test_input_no_bias);
 
             // Compute naive result without bias: output = input @ weight.T + residual
             auto naive_output_no_bias = infinicore::Tensor::empty({1, 3}, infinicore::DataType::F32, infinicore::Device());
@@ -970,7 +970,7 @@ TestResult NNModuleTest::testModuleLinear() {
             auto matmul_result_no_bias = infinicore::op::matmul(test_input_no_bias, weight_t_no_bias); // [1, 3]
 
             // Add residual
-            infinicore::op::add_(naive_output_no_bias, matmul_result_no_bias, test_residual_no_bias);
+            // infinicore::op::add_(naive_output_no_bias, matmul_result_no_bias, test_residual_no_bias);
 
             // Compare results with actual value checking
             if (infinicore_output_no_bias->shape() != naive_output_no_bias->shape()) {

@@ -1,5 +1,6 @@
 #include "test_tensor_destructor.h"
-
+#include "../src/utils/custom_types.h"
+#include <tuple>
 namespace infinicore::test {
 
 // Test 1: Basic tensor creation and destruction
@@ -269,6 +270,106 @@ TestResult TensorDestructorTest::testTensorCopyDestruction() {
     });
 }
 
+// Test 9: print options
+TestResult TensorDestructorTest::testPrintOptions() {
+    return measureTime("PrintOptions", [this]() {
+        using namespace infinicore::print_options;
+
+        // Prepare test data (stored outside loop to ensure lifetime)
+        bool bool_data[4] = {true, false, true, false};
+        int8_t i8_data[4] = {-128, -64, 32, 127};
+        int16_t i16_data[4] = {-32768, -16384, 8192, 32767};
+        int32_t i32_data[4] = {-2147483648, -1073741824, 1073741824, 2147483647};
+        int64_t i64_data[4] = {-1000000000000000000LL, -500000000000000000LL,
+                               500000000000000000LL, 1000000000000000000LL};
+        uint8_t u8_data[4] = {0, 64, 192, 255};
+        uint16_t u16_data[4] = {0, 16384, 49152, 65535};
+        uint32_t u32_data[4] = {0, 1073741824, 3221225472, 4294967295};
+        uint64_t u64_data[4] = {0, 1000000000000000000ULL, 5000000000000000000ULL, 10000000000000000000ULL};
+        fp16_t f16_data[4] = {_f32_to_f16(1.234f), _f32_to_f16(2.345f), _f32_to_f16(4.567f), _f32_to_f16(5.678f)};
+        bf16_t bf16_data[4] = {_f32_to_bf16(1.234f), _f32_to_bf16(2.345f), _f32_to_bf16(4.567f), _f32_to_bf16(5.678f)};
+        float f32_data[6] = {1.23456789f, 2.3456789f, 3.456789f, 4.56789f, 5.6789f, 6.78901234f};
+        double f64_data[4] = {1.23456789111, 2.3456789, 4.56789, 5.6789};
+
+        // Test cases list: (name, dtype, tensor)
+        using TestCaseTuple = std::tuple<std::string, Tensor>;
+        std::vector<TestCaseTuple> case_list = {
+            {"BOOL", Tensor::from_blob(bool_data, {2, 2}, DataType::BOOL, Device::Type::CPU)},
+            {"I8", Tensor::from_blob(i8_data, {2, 2}, DataType::I8, Device::Type::CPU)},
+            {"I16", Tensor::from_blob(i16_data, {2, 2}, DataType::I16, Device::Type::CPU)},
+            {"I32", Tensor::from_blob(i32_data, {2, 2}, DataType::I32, Device::Type::CPU)},
+            {"I64", Tensor::from_blob(i64_data, {2, 2}, DataType::I64, Device::Type::CPU)},
+            {"U8", Tensor::from_blob(u8_data, {2, 2}, DataType::U8, Device::Type::CPU)},
+            {"U16", Tensor::from_blob(u16_data, {2, 2}, DataType::U16, Device::Type::CPU)},
+            {"U32", Tensor::from_blob(u32_data, {2, 2}, DataType::U32, Device::Type::CPU)},
+            {"U64", Tensor::from_blob(u64_data, {2, 2}, DataType::U64, Device::Type::CPU)},
+            {"F16", Tensor::from_blob(f16_data, {2, 2}, DataType::F16, Device::Type::CPU)},
+            {"BF16", Tensor::from_blob(bf16_data, {2, 2}, DataType::BF16, Device::Type::CPU)},
+            {"F32", Tensor::from_blob(f32_data, {2, 3}, DataType::F32, Device::Type::CPU)},
+            {"F64", Tensor::from_blob(f64_data, {2, 2}, DataType::F64, Device::Type::CPU)},
+        };
+
+        std::cout << "\n=== Testing Print Options for Different Data Types ===" << std::endl;
+        // Process each test case
+        for (const auto &test_case : case_list) {
+            const std::string &name = std::get<0>(test_case);
+            const Tensor &tensor = std::get<1>(test_case);
+            std::cout << "\n--- Testing " << name << " ---" << std::endl;
+            std::cout << tensor << std::endl;
+        }
+
+        // Test print options with F32 tensor
+        std::cout << "\n=== Testing  Print Options with F32 Tensor ===" << std::endl;
+        {
+            auto dataf32 = Tensor::from_blob(f32_data, {2, 3}, DataType::F32, Device::Type::CPU);
+
+            // Test different precision values
+            std::cout << "\n--- Testing Precision Options ---" << std::endl;
+            std::cout << "Default (precision=-1, auto):" << std::endl;
+            std::cout << dataf32 << std::endl;
+
+            std::cout << "\nWith precision=1:" << std::endl;
+            set_precision(1);
+            std::cout << dataf32 << std::endl;
+
+            // Test different line_width values
+            std::cout << "\n--- Testing Line Width Options ---" << std::endl;
+            std::cout << "\nWith line_width=20:" << std::endl;
+            set_line_width(20);
+            std::cout << dataf32 << std::endl;
+
+            // Test summarization
+            std::cout << "\nWith threshold=4:" << std::endl;
+            set_line_width(80);
+            set_edge_items(1);
+            set_threshold(4);
+            std::cout << dataf32 << std::endl;
+
+            // Test sci_mode options
+            std::cout << "\nWith sci_mode=0 (normal notation):" << std::endl;
+            set_sci_mode(0);
+            std::cout << dataf32 << std::endl;
+
+            std::cout << "\nWith sci_mode=1 (scientific notation):" << std::endl;
+            set_sci_mode(1);
+            std::cout << dataf32 << std::endl;
+        }
+
+        // Test Temporary print options with F32 tensor
+        set_sci_mode(-1);
+        std::cout << "\n=== Testing Temporary Print Options with F32 Tensor ===" << std::endl;
+        {
+            auto dataf32 = Tensor::from_blob(f32_data, {2, 3}, DataType::F32, Device::Type::CPU);
+            std::cout << "\nWith precision=2 " << std::endl;
+            std::cout << precision(2) << dataf32 << std::endl;
+            std::cout << dataf32 << std::endl;
+        }
+
+        std::cout << "\nPrint options test completed successfully" << std::endl;
+        return true;
+    });
+}
+
 // Main test runner
 TestResult TensorDestructorTest::run() {
     std::vector<TestResult> results;
@@ -286,6 +387,7 @@ TestResult TensorDestructorTest::run() {
     results.push_back(testStridedTensor());
     results.push_back(testMemoryLeakDetection());
     results.push_back(testTensorCopyDestruction());
+    results.push_back(testPrintOptions());
 
     // Check if all tests passed
     bool all_passed = true;
