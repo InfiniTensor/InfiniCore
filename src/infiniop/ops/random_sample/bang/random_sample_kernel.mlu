@@ -534,13 +534,13 @@ struct Algo {
 
         if constexpr (std::is_same<Tval_, float>::value) {
             auto logits = reinterpret_cast<const float *>(probs);
-            argMax<<<dim, CNRT_FUNC_TYPE_BLOCK, queue>>>(logits, result, gdram_indices, voc);
+            argMax<<<dim, cnrtFuncTypeBlock, queue>>>(logits, result, gdram_indices, voc);
         } else if constexpr (std::is_same<Tval_, CustomFloat16>::value) {
             auto logits = reinterpret_cast<const half *>(probs);
-            argMax<<<dim, CNRT_FUNC_TYPE_BLOCK, queue>>>(logits, result, gdram_indices, voc);
+            argMax<<<dim, cnrtFuncTypeBlock, queue>>>(logits, result, gdram_indices, voc);
         } else if constexpr (std::is_same<Tval_, CustomBFloat16>::value) {
             auto logits = reinterpret_cast<const bfloat16_t *>(probs);
-            argMax<<<dim, CNRT_FUNC_TYPE_BLOCK, queue>>>(logits, result, gdram_indices, voc);
+            argMax<<<dim, cnrtFuncTypeBlock, queue>>>(logits, result, gdram_indices, voc);
         } else {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
@@ -575,10 +575,10 @@ struct Algo {
 
             const int max_num = SRC_MAX_SIZE / sizeof(float);
             if (voc >= task_num * max_num) {
-                randomSampleKernelLarge<<<dim, CNRT_FUNC_TYPE_UNION1, queue>>>(
+                randomSampleKernelLarge<<<dim, cnrtFuncTypeUnion1, queue>>>(
                     logits, result, gdram_indices, global_top_k, global_sum, voc, random_val, topp, topk, temperature);
             } else {
-                randomSampleKernel<<<dim, CNRT_FUNC_TYPE_UNION1, queue>>>(
+                randomSampleKernel<<<dim, cnrtFuncTypeUnion1, queue>>>(
                     logits, result, gdram_indices, global_top_k, global_sum, voc, random_val, topp, topk, temperature);
             }
         } else if constexpr (std::is_same<Tval_, CustomFloat16>::value) {
@@ -592,10 +592,10 @@ struct Algo {
 
             const int max_num = SRC_MAX_SIZE / sizeof(half);
             if (voc >= task_num * max_num) {
-                randomSampleKernelLarge<<<dim, CNRT_FUNC_TYPE_UNION1, queue>>>(
+                randomSampleKernelLarge<<<dim, cnrtFuncTypeUnion1, queue>>>(
                     logits, result, gdram_indices, global_top_k, global_sum, voc, random_val, topp, topk, temperature);
             } else {
-                randomSampleKernel<<<dim, CNRT_FUNC_TYPE_UNION1, queue>>>(
+                randomSampleKernel<<<dim, cnrtFuncTypeUnion1, queue>>>(
                     logits, result, gdram_indices, global_top_k, global_sum, voc, random_val, topp, topk, temperature);
             }
         } else if constexpr (std::is_same<Tval_, CustomBFloat16>::value) {
@@ -609,10 +609,10 @@ struct Algo {
 
             const int max_num = SRC_MAX_SIZE / sizeof(bfloat16_t);
             if (voc >= task_num * max_num) {
-                randomSampleKernelLarge<<<dim, CNRT_FUNC_TYPE_UNION1, queue>>>(
+                randomSampleKernelLarge<<<dim, cnrtFuncTypeUnion1, queue>>>(
                     logits, result, gdram_indices, global_top_k, global_sum, voc, random_val, topp, topk, temperature);
             } else {
-                randomSampleKernel<<<dim, CNRT_FUNC_TYPE_UNION1, queue>>>(
+                randomSampleKernel<<<dim, cnrtFuncTypeUnion1, queue>>>(
                     logits, result, gdram_indices, global_top_k, global_sum, voc, random_val, topp, topk, temperature);
             }
         } else {

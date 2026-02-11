@@ -248,10 +248,10 @@ void launchElementwiseKernelWrapper(
     dim.z = 1;
 
     // Choose kernel type based on problem characteristics
-    cnrtFunctionType_t func_type = CNRT_FUNC_TYPE_BLOCK;
+    cnrtFunctionType_t func_type = cnrtFuncTypeBlock;
     if (output_size > 1024 * 1024 && output_contiguous) {
         // For large contiguous operations, use UNION type
-        func_type = CNRT_FUNC_TYPE_UNION1;
+        func_type = cnrtFuncTypeUnion1;
     }
 
     // Launch the kernel with optimal configuration
