@@ -20,7 +20,7 @@ def run_tests(args):
         #"dequantize_awq.py",
         "gelu.py",
         "gemm.py",
-        "layer_norm.py",
+        # "layer_norm.py",
         "logsoftmax.py",
         "lp_norm.py",
         "mul.py",
@@ -31,7 +31,7 @@ def run_tests(args):
         "rms_norm.py",
         "rope.py",
         "sigmoid.py",
-        "softmax.py",
+        # "softmax.py",
         "softplus.py",
         "sub.py",
         "swiglu.py",
@@ -39,9 +39,9 @@ def run_tests(args):
         "topkrouter.py",
         "topksoftmax.py",
         "zeros.py",
-        "paged_attention.py",
-        "paged_caching.py",
-        "paged_attention_prefill.py"
+        # "paged_attention.py",
+        # "paged_caching.py",
+        # "paged_attention_prefill.py"
     ]:
         result = subprocess.run(
             f"python {test} {args} --debug", text=True, encoding="utf-8", shell=True

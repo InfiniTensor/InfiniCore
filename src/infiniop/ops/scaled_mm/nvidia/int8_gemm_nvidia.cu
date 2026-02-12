@@ -64,6 +64,7 @@ infiniStatus_t Descriptor::create(
     return INFINI_STATUS_SUCCESS;
 }
 
+#ifdef ENABLE_QY_API
 template <unsigned int BLOCK_SIZE, typename Tdata>
 infiniStatus_t Descriptor::launchKernel(const I8GemmInfo &info, Tdata *y, const Tdata *bias, const int8_t *x_packed, const float *x_scale, const int8_t *w_packed, const float *w_scale, void *stream_, void *workspace) const {
     cudaStream_t stream = (cudaStream_t)stream_;
@@ -112,6 +113,7 @@ infiniStatus_t Descriptor::launchKernel(const I8GemmInfo &info, Tdata *y, const 
 
     return INFINI_STATUS_SUCCESS;
 }
+#endif
 
 infiniStatus_t Descriptor::calculate(
     void *workspace,
