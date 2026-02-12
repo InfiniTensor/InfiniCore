@@ -52,10 +52,7 @@ target("infiniop-metax")
     -- hcdnn/hcblas files use paths like ../../../devices/metax/metax_common.h
     -- From src/infiniop/ops/gemm/metax/hcdnn/, ../../../ goes to src/infiniop/, so we need src/infiniop in include path
     add_includedirs("../src/infiniop")
-    add_files("../src/infiniop/devices/metax/*.cc", "../src/infiniop/ops/*/metax/*.cc")
-    -- Include hcdnn/hcblas gemm subdirectories explicitly
-    add_files("../src/infiniop/ops/gemm/metax/hcdnn/*.cc")
-    add_files("../src/infiniop/ops/gemm/metax/hcblas/*.cc")
+    add_files("../src/infiniop/devices/metax/*.cc", "../src/infiniop/ops/*/metax/**.cc")
     add_files("../src/infiniop/ops/*/metax/*.maca", {rule = "maca"})
 
     if has_config("ninetoothed") then
