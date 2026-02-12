@@ -1,5 +1,10 @@
 import contextlib
 
+with contextlib.suppress(ImportError):
+    from ._preload import preload
+
+    preload()
+
 import infinicore.context as context
 import infinicore.nn as nn
 
