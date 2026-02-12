@@ -21,6 +21,11 @@ constexpr size_t ceilDiv(size_t a, size_t b) {
 }
 
 inline const char *default_prefill_kernel(const PagedAttentionPrefillInfo &info) {
+    // Iluvatar: use warp (stable). Users can override via INFINIOP_FLASH_PREFILL_KERNEL.
+#ifdef ENABLE_ILUVATAR_API
+    (void)info;
+    return "warp";
+#endif
     // Heuristic auto-dispatch (v0.4):
     // - Prefer the pipelined + tile-wise softmax kernel on FA2-compatible block_size=256.
     // - Keep a conservative fallback for other shapes / older GPUs (cp.async is a no-op below SM80).

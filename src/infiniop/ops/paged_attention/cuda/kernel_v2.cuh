@@ -16,17 +16,66 @@ struct OnlineSoftmaxState {
     }
 };
 __device__ __forceinline__ float warpReduceSum(float x) {
+#if defined(ENABLE_ILUVATAR_API)
+    // Iluvatar may use warp size 64; __shfl_sync(0xffffffff) only covers 32 threads.
+    // Use shared-memory tree reduce for portability across warp sizes.
+    constexpr int kMaxWarps = 16;
+    __shared__ float _reduce_buf[kMaxWarps * 32];
+    const int lane = threadIdx.x & 31;
+    const int warp_id = threadIdx.x / 32;
+    _reduce_buf[threadIdx.x] = x;
+    __syncthreads();
+    for (int offset = 16; offset > 0; offset >>= 1) {
+        if (lane < offset) {
+            _reduce_buf[warp_id * 32 + lane] += _reduce_buf[warp_id * 32 + lane + offset];
+        }
+        __syncthreads();
+    }
+    return _reduce_buf[warp_id * 32];
+#else
     for (int offset = 16; offset > 0; offset >>= 1) {
         x += __shfl_down_sync(0xffffffff, x, offset);
     }
     return x;
+#endif
+}
+
+__device__ __forceinline__ float warpBroadcast(float x, int src_lane) {
+#if defined(ENABLE_ILUVATAR_API)
+    __shared__ float _bcast_buf[16];
+    const int warp_id = threadIdx.x / 32;
+    if ((threadIdx.x & 31) == src_lane) {
+        _bcast_buf[warp_id] = x;
+    }
+    __syncthreads();
+    return _bcast_buf[warp_id];
+#else
+    return __shfl_sync(0xffffffff, x, src_lane);
+#endif
 }
 
 __device__ __forceinline__ float warpReduceMax(float x) {
+#if defined(ENABLE_ILUVATAR_API)
+    __shared__ float _reduce_buf[16 * 32];
+    const int lane = threadIdx.x & 31;
+    const int warp_id = threadIdx.x / 32;
+    _reduce_buf[threadIdx.x] = x;
+    __syncthreads();
+    for (int offset = 16; offset > 0; offset >>= 1) {
+        if (lane < offset) {
+            float other = _reduce_buf[warp_id * 32 + lane + offset];
+            float cur = _reduce_buf[warp_id * 32 + lane];
+            _reduce_buf[warp_id * 32 + lane] = fmaxf(cur, other);
+        }
+        __syncthreads();
+    }
+    return _reduce_buf[warp_id * 32];
+#else
     for (int offset = 16; offset > 0; offset >>= 1) {
         x = fmaxf(x, __shfl_down_sync(0xffffffff, x, offset));
     }
     return x;
+#endif
 }
 
 __device__ __forceinline__ unsigned int cvtaToShared(const void *ptr) {
