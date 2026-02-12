@@ -45,22 +45,22 @@
             void *workspace,                                                    \
             size_t workspace_size,                                              \
             void *out,                                                          \
-            float *exp_sums,                                                     \
-            float *max_logits,                                                   \
+            float *exp_sums,                                                    \
+            float *max_logits,                                                  \
             void *tmp_out,                                                      \
             void *query,                                                        \
             void *key_cache,                                                    \
             void *value_cache,                                                  \
             int64_t num_kv_heads,                                               \
             double scale,                                                       \
-            int64_t *block_tables,                                                 \
-            int64_t *seq_lens,                                                     \
+            int64_t *block_tables,                                              \
+            int64_t *seq_lens,                                                  \
             int64_t block_size,                                                 \
             int64_t max_seq_len,                                                \
             const void *alibi_slopes,                                           \
             const char *kv_cache_dtype,                                         \
-            float *k_scale,                                                      \
-            float *v_scale,                                                      \
+            float *k_scale,                                                     \
+            float *v_scale,                                                     \
             const int64_t tp_rank,                                              \
             const int64_t blocksparse_local_blocks,                             \
             const int64_t blocksparse_vert_stride,                              \

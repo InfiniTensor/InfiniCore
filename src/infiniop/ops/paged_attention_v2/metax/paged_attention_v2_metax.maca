@@ -57,7 +57,7 @@ void paged_attention_v2_launcher(
     const int64_t blocksparse_block_size,
     const int64_t blocksparse_head_sliding_step,
     const op::paged_attention_v2::PagedAttentionV2Info &info,
-    const mcStream_t stream) {
+    const hcStream_t stream) {
 
     int num_seqs = info.num_seqs;
     int num_heads = info.num_heads;
@@ -220,7 +220,7 @@ infiniStatus_t Descriptor::calculate(
     if (workspace_size < _workspace_size) {
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
-    auto stream = static_cast<mcStream_t>(stream_);
+    auto stream = static_cast<hcStream_t>(stream_);
     const float *alibi_ptr = (alibi_slopes == nullptr) ? nullptr : static_cast<const float *>(alibi_slopes);
 
     const bool is_block_sparse = (blocksparse_vert_stride > 1);

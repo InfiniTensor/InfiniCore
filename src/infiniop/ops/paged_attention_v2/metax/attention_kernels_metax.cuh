@@ -8,8 +8,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include "../../../devices/metax/metax_common.h"
-
 
 #include <float.h>
 
@@ -96,7 +94,7 @@ __device__ void paged_attention_kernel(
     const int partition_idx = blockIdx.z;
     const int max_num_partitions = gridDim.z;
     constexpr bool USE_PARTITIONING = PARTITION_SIZE > 0;
-    const int seq_len = static_cast<int>( seq_lens[seq_idx]);
+    const int seq_len = static_cast<int>(seq_lens[seq_idx]);
     if (USE_PARTITIONING && partition_idx * PARTITION_SIZE >= seq_len) {
         // No work to do. Terminate the thread block.
         return;
@@ -498,7 +496,7 @@ __global__ void paged_attention_v2_reduce_kernel(
                                           // max_num_partitions]
     const scalar_t *__restrict__ tmp_out, // [num_seqs, num_heads,
                                           // max_num_partitions, head_size]
-    const int64_t *__restrict__ seq_lens,     // [num_seqs]
+    const int64_t *__restrict__ seq_lens, // [num_seqs]
     const int max_num_partitions) {
     const int num_heads = gridDim.x;
     const int head_idx = blockIdx.x;
