@@ -115,10 +115,12 @@ option("iluvatar-gpu")
     set_description("Whether to compile implementations for Iluvatar GPU")
 option_end()
 
-option("ivcore-20")
-    set_default(false)
+option("iluvatar_arch")
+    set_default("ivcore20")
     set_showmenu(true)
-    set_description("Use ivcore20")
+    set_description("Set Iluvatar GPU architecture (e.g. ivcore20)")
+    set_values("ivcore20")
+    set_category("option")
 option_end()
 
 if has_config("iluvatar-gpu") then

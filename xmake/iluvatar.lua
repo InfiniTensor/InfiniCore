@@ -1,4 +1,6 @@
-﻿toolchain("iluvatar.toolchain")
+local iluvatar_arch = get_config("iluvatar_arch") or "ivcore20"
+
+toolchain("iluvatar.toolchain")
     set_toolset("cc"  , "clang"  )
     set_toolset("cxx" , "clang++")
     set_toolset("cu"  , "clang++")
@@ -44,9 +46,7 @@ target("infiniop-iluvatar")
     set_warnings("all", "error")
     add_cuflags("-Wno-error=unused-private-field", "-Wno-error=unused-variable", "-Wno-unused-variable")
     add_cuflags("-fPIC", "-x", "ivcore", "-std=c++17", {force = true})
-    if has_config("ivcore-20") then
-        add_cuflags("--cuda-gpu-arch=ivcore20", {force = true})
-    end
+    add_cuflags("--cuda-gpu-arch=" .. iluvatar_arch, {force = true})
     add_culdflags("-fPIC")
     add_cxflags("-fPIC", "-Wno-error=unused-variable", "-Wno-unused-variable")
     add_cxxflags("-fPIC", "-Wno-error=unused-variable", "-Wno-unused-variable")
@@ -75,6 +75,7 @@ target("infinirt-iluvatar")
 
     set_warnings("all", "error")
     add_cuflags("-fPIC", "-x", "ivcore", "-std=c++17", {force = true})
+    add_cuflags("--cuda-gpu-arch=" .. iluvatar_arch, {force = true})
     add_culdflags("-fPIC")
     add_cxflags("-fPIC")
     add_cxxflags("-fPIC")
@@ -97,6 +98,7 @@ target("infiniccl-iluvatar")
 
         set_warnings("all", "error")
         add_cuflags("-fPIC", "-x", "ivcore", "-std=c++17", {force = true})
+        add_cuflags("--cuda-gpu-arch=" .. iluvatar_arch, {force = true})
         add_culdflags("-fPIC")
         add_cxflags("-fPIC")
         add_cxxflags("-fPIC")

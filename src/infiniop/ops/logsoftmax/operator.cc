@@ -40,7 +40,7 @@ __C infiniStatus_t infiniopCreateLogSoftmaxDescriptor(
         CREATE(INFINI_DEVICE_ALI, nvidia);
 #endif
 #ifdef ENABLE_ILUVATAR_API
-        // CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
+        CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_QY_API
         CREATE(INFINI_DEVICE_QY, nvidia);
@@ -73,7 +73,7 @@ __C infiniStatus_t infiniopGetLogSoftmaxWorkspaceSize(infiniopLogSoftmaxDescript
         GET(INFINI_DEVICE_ALI, nvidia);
 #endif
 #ifdef ENABLE_ILUVATAR_API
-        // GET(INFINI_DEVICE_ILUVATAR, nvidia);
+        GET(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_QY_API
         GET(INFINI_DEVICE_QY, nvidia);
@@ -111,7 +111,7 @@ __C infiniStatus_t infiniopLogSoftmax(
         CALCULATE(INFINI_DEVICE_ALI, nvidia);
 #endif
 #ifdef ENABLE_ILUVATAR_API
-        // CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
+        CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_QY_API
         CALCULATE(INFINI_DEVICE_QY, nvidia);
@@ -144,7 +144,7 @@ __C infiniStatus_t infiniopDestroyLogSoftmaxDescriptor(infiniopLogSoftmaxDescrip
         DESTROY(INFINI_DEVICE_ALI, nvidia);
 #endif
 #ifdef ENABLE_ILUVATAR_API
-        // DESTROY(INFINI_DEVICE_ILUVATAR, nvidia);
+        DESTROY(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_QY_API
         DESTROY(INFINI_DEVICE_QY, nvidia);
