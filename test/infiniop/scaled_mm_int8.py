@@ -59,10 +59,8 @@ _TOLERANCE_MAP = {
 DEBUG = False
 PROFILE = False
 NUM_PRERUN = 10
-NUM_ITERATIONS = 1000
-    
-def to_int8(tensor: torch.Tensor) -> torch.Tensor:
-    return torch.round(tensor.clamp(min=-128, max=127)).to(dtype=torch.int8)
+NUM_ITERATIONS = 100
+
 
 def torch_scaled_mm(a, b, scale_a, scale_b, out_dtype, bias):
     o = torch.matmul(a.to(torch.float32), b.to(torch.float32))
@@ -71,6 +69,7 @@ def torch_scaled_mm(a, b, scale_a, scale_b, out_dtype, bias):
     else:
         o = o.to(torch.float32) * scale_a.view(-1, 1) * scale_b.view(1, -1)
     return o.to(out_dtype)
+
 
 def test(
     handle,
@@ -83,34 +82,91 @@ def test(
     sync=None,
 ):
     print(
-        f"Testing Linear on {InfiniDeviceNames[device]} with x_shape:{x_shape}, w_shape:{w_shape}, inplace:{inplace} dtype:{InfiniDtypeNames[dtype]}"
+        f"Testing scaled_mm_int8 on {InfiniDeviceNames[device]} with x_shape:{x_shape}, w_shape:{w_shape}, inplace:{inplace} dtype:{InfiniDtypeNames[dtype]}"
     )
     M, K = x_shape
     N = w_shape[1]
-    
-    x_packed = to_int8(torch.randn((M, K), device="cuda") * 5)
-    weights = to_int8(torch.randn((N, K), device="cuda").t() * 5)
-    
-    x_scale = torch.randn((M,), device="cuda", dtype=torch.float32)
-    weights_scale = torch.randn((N,), device="cuda", dtype=torch.float32)
-    bias = torch.randn((N,), device="cuda", dtype=torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16) * 10
 
-    ans = torch_scaled_mm(x_packed, weights, x_scale, weights_scale, torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16, bias=bias)
-    
+    # --- Tensor Descriptor ---
+    # orig: create a random int8 tensor as the reference data source
+    # torch: extract the torch view to adjust layout/stride
+    # final: wrap it back as TestTensor with explicit stride for device execution
+    x_packed_orig = TestTensor(
+        (M, K),
+        None,
+        InfiniDtype.I8,
+        device,
+        mode="randint",
+        randint_low=-128,
+        randint_high=127,
+    )
+    x_packed_torch = x_packed_orig.torch_tensor()
     x_packed = TestTensor(
-        (M, K), x_packed.stride(), InfiniDtype.I8, device, mode="manual", set_tensor=x_packed
+        (M, K),
+        x_packed_torch.stride(),
+        InfiniDtype.I8,
+        device,
+        mode="manual",
+        set_tensor=x_packed_torch,
     )
-    x_scale = TestTensor(
-        (M,), x_scale.stride(), InfiniDtype.F32, device, mode="manual", set_tensor=x_scale
+
+    weights_orig = TestTensor(
+        (N, K),
+        None,
+        InfiniDtype.I8,
+        device,
+        mode="randint",
+        randint_low=-128,
+        randint_high=127,
     )
+    weights_torch = weights_orig.torch_tensor().t()
     weights = TestTensor(
-        (K, N), weights.stride(), InfiniDtype.I8, device, mode="manual", set_tensor=weights
+        (K, N),
+        weights_torch.stride(),
+        InfiniDtype.I8,
+        device,
+        mode="manual",
+        set_tensor=weights_torch,
     )
+
+    x_scale_orig = TestTensor((M,), None, InfiniDtype.F32, device, mode="random")
+    x_scale_torch = x_scale_orig.torch_tensor()
+    x_scale = TestTensor(
+        (M,),
+        x_scale_torch.stride(),
+        InfiniDtype.F32,
+        device,
+        mode="manual",
+        set_tensor=x_scale_torch,
+    )
+
+    weights_scale_orig = TestTensor((N,), None, InfiniDtype.F32, device, mode="random")
+    weights_scale_torch = weights_scale_orig.torch_tensor()
     weights_scale = TestTensor(
-        (N,), weights_scale.stride(), InfiniDtype.F32, device, mode="manual", set_tensor=weights_scale
+        (N,),
+        weights_scale_torch.stride(),
+        InfiniDtype.F32,
+        device,
+        mode="manual",
+        set_tensor=weights_scale_torch,
     )
-    y = TestTensor(y_shape, None, dtype, device)
-    bias = TestTensor((N,), bias.stride(), dtype, device, mode="manual", set_tensor=bias)
+
+    bias_orig = TestTensor((N,), None, dtype, device, mode="random")
+    bias_torch = bias_orig.torch_tensor()
+    bias = TestTensor(
+        (N,), bias_torch.stride(), dtype, device, mode="manual", set_tensor=bias_torch
+    )
+
+    y = TestTensor(y_shape, None, dtype, device, mode="zeros")
+
+    ans = torch_scaled_mm(
+        x_packed.torch_tensor(),
+        weights.torch_tensor(),
+        x_scale.torch_tensor(),
+        weights_scale.torch_tensor(),
+        out_dtype=torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16,
+        bias=bias.torch_tensor(),
+    )
 
     descriptor = infiniopOperatorDescriptor_t()
     check_error(
@@ -164,7 +220,20 @@ def test(
     # Profiling workflow
     if PROFILE:
         # fmt: off
-        profile_operation("PyTorch", lambda: torch_scaled_mm(x_packed, weights, x_scale, weights_scale, torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16, bias=bias), device, NUM_PRERUN, NUM_ITERATIONS)
+        profile_operation(
+            "PyTorch",
+            lambda: torch_scaled_mm(
+                x_packed.torch_tensor(),
+                weights.torch_tensor(),
+                x_scale.torch_tensor(),
+                weights_scale.torch_tensor(),
+                out_dtype=torch.float16 if dtype == InfiniDtype.F16 else torch.bfloat16,
+                bias=bias.torch_tensor()
+            ),
+            device,
+            NUM_PRERUN,
+            NUM_ITERATIONS
+        )
         profile_operation("    lib", lambda: lib_linear(), device, NUM_PRERUN, NUM_ITERATIONS)
         # fmt: on
 
@@ -181,6 +250,12 @@ if __name__ == "__main__":
     NUM_ITERATIONS = args.num_iterations
 
     for device in get_test_devices(args):
-        test_operator(device, test, _TEST_CASES, _TENSOR_DTYPES)
+        # muDNN(v3101): INT8 quantized multiplication → BF16 output.
+        # Moore backend: BF16 output only.
+        if args.moore == True:
+            _TENSOR_DTYPES_MOORE = [InfiniDtype.BF16]
+            test_operator(device, test, _TEST_CASES, _TENSOR_DTYPES_MOORE)
+        else:
+            test_operator(device, test, _TEST_CASES, _TENSOR_DTYPES)
 
     print("\033[92mTest passed!\033[0m")

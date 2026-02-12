@@ -5,6 +5,9 @@
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API)
 #include "nvidia/per_channel_quant_int8_nvidia.cuh"
 #endif
+#if defined(ENABLE_MOORE_API)
+#include "moore/per_channel_quant_int8_moore.h"
+#endif
 
 __C infiniStatus_t infiniopCreatePerChannelQuantI8Descriptor(infiniopHandle_t handle,
                                                              infiniopPerChannelQuantI8Descriptor_t *desc_ptr,
@@ -28,6 +31,9 @@ __C infiniStatus_t infiniopCreatePerChannelQuantI8Descriptor(infiniopHandle_t ha
 #ifdef ENABLE_QY_API
         CREATE(INFINI_DEVICE_QY, nvidia)
 #endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -45,6 +51,9 @@ __C infiniStatus_t infiniopGetPerChannelQuantI8WorkspaceSize(infiniopPerChannelQ
 #endif
 #ifdef ENABLE_QY_API
         GET(INFINI_DEVICE_QY, nvidia)
+#endif
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, moore)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -72,6 +81,9 @@ __C infiniStatus_t infiniopPerChannelQuantI8(infiniopPerChannelQuantI8Descriptor
 #ifdef ENABLE_QY_API
         QUANT(INFINI_DEVICE_QY, nvidia)
 #endif
+#ifdef ENABLE_MOORE_API
+        QUANT(INFINI_DEVICE_MOORE, moore)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -90,6 +102,9 @@ __C infiniStatus_t infiniopDestroyPerChannelQuantI8Descriptor(infiniopPerChannel
 #endif
 #ifdef ENABLE_QY_API
         DESTROY(INFINI_DEVICE_QY, nvidia)
+#endif
+#ifdef ENABLE_MOORE_API
+        DESTROY(INFINI_DEVICE_MOORE, moore)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
