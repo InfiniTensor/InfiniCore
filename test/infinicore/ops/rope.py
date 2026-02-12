@@ -3,7 +3,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-
+import infinicore
+from infinicore.nn.functional import RopeAlgo
 import torch
 from framework import (
     BaseOperatorTest,
@@ -12,9 +13,6 @@ from framework import (
     GenericTestRunner,
     is_broadcast,
 )
-from infinicore.nn.functional import RopeAlgo
-
-import infinicore
 
 # ==============================================================================
 # Operator-specific configuration

@@ -15,6 +15,7 @@ from libinfiniop import (
     InfiniDtype,
     InfiniDtypeNames,
     InfiniDeviceNames,
+    InfiniDeviceEnum,
     infiniopOperatorDescriptor_t,
 )
 from enum import Enum, auto
@@ -112,6 +113,12 @@ def test(
         dtype=None,
         sync=None,
 ):
+    # Skip strided cases on Iluvatar: Ones with non-contiguous tensors can hang the GPU (requires ixsmi -r to recover)
+    if device == InfiniDeviceEnum.ILUVATAR and (
+        x_stride is not None or y_stride is not None
+    ):
+        return
+
     if dtype in [InfiniDtype.F16, InfiniDtype.BF16, InfiniDtype.F32, InfiniDtype.F64]:
         x = TestTensor(shape, x_stride, dtype, device)
     elif dtype in [InfiniDtype.BYTE, InfiniDtype.U8, InfiniDtype.U16, InfiniDtype.U32, InfiniDtype.U64,

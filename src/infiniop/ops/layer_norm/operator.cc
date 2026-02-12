@@ -174,6 +174,9 @@ infiniopDestroyLayerNormDescriptor(infiniopLayerNormDescriptor_t desc) {
 #ifdef ENABLE_METAX_API
         DELETE(INFINI_DEVICE_METAX, metax);
 #endif
+#ifdef ENABLE_ILUVATAR_API
+        DELETE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

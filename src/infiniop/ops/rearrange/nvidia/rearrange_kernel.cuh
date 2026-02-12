@@ -8,8 +8,8 @@
 #define ARRAY_TYPE_SIZE size_t
 
 // 与 DEFINE_KERNELS_BY_CONSTRAINT 耦合，需要同时修改
-#define MAX_BLOCK_ARRAY_SIZE 5
-#define MAX_GRID_ARRAY_SIZE 5
+#define MAX_BLOCK_ARRAY_SIZE 6
+#define MAX_GRID_ARRAY_SIZE 6
 
 template <int ArrSize, typename ArrayType>
 struct ArrayStruct {
@@ -185,32 +185,43 @@ struct Constraint {
     DEFINE_REARRANGE_KERNEL(double4, constraint_num, block_array_size, grid_array_size)
 
 // 与 MAX_BLOCK_ARRAY_SIZE 和 MAX_GRID_ARRAY_SIZE 耦合，需要同时修改
-// 为1-5和1-5的所有组合生成内核
+// 为1-6和1-6的所有组合生成内核
 DEFINE_KERNELS_BY_CONSTRAINT(1, 1)
 DEFINE_KERNELS_BY_CONSTRAINT(1, 2)
 DEFINE_KERNELS_BY_CONSTRAINT(1, 3)
 DEFINE_KERNELS_BY_CONSTRAINT(1, 4)
 DEFINE_KERNELS_BY_CONSTRAINT(1, 5)
+DEFINE_KERNELS_BY_CONSTRAINT(1, 6)
 DEFINE_KERNELS_BY_CONSTRAINT(2, 1)
 DEFINE_KERNELS_BY_CONSTRAINT(2, 2)
 DEFINE_KERNELS_BY_CONSTRAINT(2, 3)
 DEFINE_KERNELS_BY_CONSTRAINT(2, 4)
 DEFINE_KERNELS_BY_CONSTRAINT(2, 5)
+DEFINE_KERNELS_BY_CONSTRAINT(2, 6)
 DEFINE_KERNELS_BY_CONSTRAINT(3, 1)
 DEFINE_KERNELS_BY_CONSTRAINT(3, 2)
 DEFINE_KERNELS_BY_CONSTRAINT(3, 3)
 DEFINE_KERNELS_BY_CONSTRAINT(3, 4)
 DEFINE_KERNELS_BY_CONSTRAINT(3, 5)
+DEFINE_KERNELS_BY_CONSTRAINT(3, 6)
 DEFINE_KERNELS_BY_CONSTRAINT(4, 1)
 DEFINE_KERNELS_BY_CONSTRAINT(4, 2)
 DEFINE_KERNELS_BY_CONSTRAINT(4, 3)
 DEFINE_KERNELS_BY_CONSTRAINT(4, 4)
 DEFINE_KERNELS_BY_CONSTRAINT(4, 5)
+DEFINE_KERNELS_BY_CONSTRAINT(4, 6)
 DEFINE_KERNELS_BY_CONSTRAINT(5, 1)
 DEFINE_KERNELS_BY_CONSTRAINT(5, 2)
 DEFINE_KERNELS_BY_CONSTRAINT(5, 3)
 DEFINE_KERNELS_BY_CONSTRAINT(5, 4)
 DEFINE_KERNELS_BY_CONSTRAINT(5, 5)
+DEFINE_KERNELS_BY_CONSTRAINT(5, 6)
+DEFINE_KERNELS_BY_CONSTRAINT(6, 1)
+DEFINE_KERNELS_BY_CONSTRAINT(6, 2)
+DEFINE_KERNELS_BY_CONSTRAINT(6, 3)
+DEFINE_KERNELS_BY_CONSTRAINT(6, 4)
+DEFINE_KERNELS_BY_CONSTRAINT(6, 5)
+DEFINE_KERNELS_BY_CONSTRAINT(6, 6)
 
 // 准备参数结构体
 struct RearrangeParams {
@@ -294,6 +305,9 @@ utils::Result<void *> getRearrangeKernel(const RearrangeParams &params) {
     case 5:                                                      \
         GET_REARRANGE_KERNEL_BY_CONSTRAINT(block_array_size, 5); \
         break;                                                   \
+    case 6:                                                      \
+        GET_REARRANGE_KERNEL_BY_CONSTRAINT(block_array_size, 6); \
+        break;                                                   \
     }
 
 #define GET_REARRANGE_KERNEL_BY_BLOCK_NUM    \
@@ -312,6 +326,9 @@ utils::Result<void *> getRearrangeKernel(const RearrangeParams &params) {
         break;                               \
     case 5:                                  \
         GET_REARRANGE_KERNEL_BY_GRID_NUM(5); \
+        break;                               \
+    case 6:                                  \
+        GET_REARRANGE_KERNEL_BY_GRID_NUM(6); \
         break;                               \
     }
 

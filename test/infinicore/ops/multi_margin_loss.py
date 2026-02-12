@@ -3,9 +3,9 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import infinicore
 import torch
 import torch.nn.functional as F
-import infinicore
 from framework import BaseOperatorTest, TensorSpec, TestCase, GenericTestRunner
 from framework.tensor import TensorInitializer
 
