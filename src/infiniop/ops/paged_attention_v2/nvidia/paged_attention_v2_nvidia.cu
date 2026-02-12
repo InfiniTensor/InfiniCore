@@ -189,8 +189,8 @@ infiniStatus_t Descriptor::calculate(
     void *workspace,
     size_t workspace_size,
     void *out,            // [num_seqs, num_heads, head_size]
-    float *exp_sums,       // [num_seqs, num_heads, max_num_partitions] // 类型固定为 float
-    float *max_logits,     // [num_seqs, num_heads, max_num_partitions] // 类型固定为 float
+    float *exp_sums,      // [num_seqs, num_heads, max_num_partitions] // 类型固定为 float
+    float *max_logits,    // [num_seqs, num_heads, max_num_partitions] // 类型固定为 float
     void *tmp_out,        // [num_seqs, num_heads, max_num_partitions, head_size]
     void *query,          // [num_seqs, num_heads, head_size]
     void *key_cache,      // [num_blocks, num_heads, head_size/x, block_size, x]
@@ -201,9 +201,9 @@ infiniStatus_t Descriptor::calculate(
     int64_t *seq_lens,     // [num_seqs] // 类型固定为 int
     int64_t block_size,
     int64_t max_seq_len,
-    const void *alibi_slopes, 
+    const void *alibi_slopes,
     const char *kv_cache_dtype,
-    float *k_scale,// 类型固定为float
+    float *k_scale, // 类型固定为float
     float *v_scale, // 类型固定为float
     const int64_t tp_rank,
     const int64_t blocksparse_local_blocks,
