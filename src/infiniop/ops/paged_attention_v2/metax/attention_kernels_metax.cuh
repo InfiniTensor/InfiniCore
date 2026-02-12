@@ -8,7 +8,9 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <cuda_runtime.h>
+#include "../../../devices/metax/metax_common.h"
+
+
 #include <float.h>
 
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
@@ -82,8 +84,8 @@ __device__ void paged_attention_kernel(
                                          // head_size, block_size]
     const int num_kv_heads,              // [num_heads]
     const float scale,
-    const int *__restrict__ block_tables, // [num_seqs, max_num_blocks_per_seq]
-    const int *__restrict__ seq_lens,     // [num_seqs]
+    const int64_t *__restrict__ block_tables, // [num_seqs, max_num_blocks_per_seq]
+    const int64_t *__restrict__ seq_lens,     // [num_seqs]
     const int max_num_blocks_per_seq,
     const float *__restrict__ alibi_slopes, // [num_heads]
     const int q_stride, const int kv_block_stride, const int kv_head_stride,
@@ -94,7 +96,7 @@ __device__ void paged_attention_kernel(
     const int partition_idx = blockIdx.z;
     const int max_num_partitions = gridDim.z;
     constexpr bool USE_PARTITIONING = PARTITION_SIZE > 0;
-    const int seq_len = seq_lens[seq_idx];
+    const int seq_len = static_cast<int>( seq_lens[seq_idx]);
     if (USE_PARTITIONING && partition_idx * PARTITION_SIZE >= seq_len) {
         // No work to do. Terminate the thread block.
         return;
@@ -178,7 +180,7 @@ __device__ void paged_attention_kernel(
     // Each warp fetches a block of keys for each iteration.
     // Each thread group in a warp fetches a key from the block, and computes
     // dot product with the query.
-    const int *block_table = block_tables + seq_idx * max_num_blocks_per_seq;
+    const int64_t *block_table = block_tables + seq_idx * max_num_blocks_per_seq;
 
     // blocksparse specific vars
     int bs_block_offset;
@@ -247,10 +249,11 @@ __device__ void paged_attention_kernel(
                         k_ptr + offset1 * BLOCK_SIZE * x + offset2);
                 } else {
                     // Vector conversion from Quant_vec to K_vec.
-                    Quant_vec k_vec_quant = *reinterpret_cast<const Quant_vec *>(
-                        k_ptr + offset1 * BLOCK_SIZE * x + offset2);
-                    k_vecs[j] = fp8::scaled_convert<K_vec, Quant_vec, KV_DTYPE>(
-                        k_vec_quant, *k_scale);
+                    // Quant_vec k_vec_quant = *reinterpret_cast<const Quant_vec *>(
+                    //     k_ptr + offset1 * BLOCK_SIZE * x + offset2);
+                    // k_vecs[j] = fp8::scaled_convert<K_vec, Quant_vec, KV_DTYPE>(
+                    //     k_vec_quant, *k_scale);
+                    assert(false && "Not implemented yet.");
                 }
             }
 
@@ -367,10 +370,11 @@ __device__ void paged_attention_kernel(
                 if constexpr (KV_DTYPE == Fp8KVCacheDataType::kAuto) {
                     v_vec = *reinterpret_cast<const V_vec *>(v_ptr + offset);
                 } else {
-                    V_quant_vec v_quant_vec = *reinterpret_cast<const V_quant_vec *>(v_ptr + offset);
+                    // V_quant_vec v_quant_vec = *reinterpret_cast<const V_quant_vec *>(v_ptr + offset);
                     // Vector conversion from V_quant_vec to V_vec.
-                    v_vec = fp8::scaled_convert<V_vec, V_quant_vec, KV_DTYPE>(v_quant_vec,
-                                                                              *v_scale);
+                    // v_vec = fp8::scaled_convert<V_vec, V_quant_vec, KV_DTYPE>(v_quant_vec,
+                    //                                                           *v_scale);
+                    assert(false && "Not implemented yet.");
                 }
                 if (block_idx == num_seq_blocks - 1) {
                     // NOTE(woosuk): When v_vec contains the tokens that are out of the
@@ -466,8 +470,8 @@ __global__ void paged_attention_v2_kernel(
                                          // head_size, block_size]
     const int num_kv_heads,              // [num_heads]
     const float scale,
-    const int *__restrict__ block_tables, // [num_seqs, max_num_blocks_per_seq]
-    const int *__restrict__ seq_lens,     // [num_seqs]
+    const int64_t *__restrict__ block_tables, // [num_seqs, max_num_blocks_per_seq]
+    const int64_t *__restrict__ seq_lens,     // [num_seqs]
     const int max_num_blocks_per_seq,
     const float *__restrict__ alibi_slopes, // [num_heads]
     const int q_stride, const int kv_block_stride, const int kv_head_stride,
@@ -494,12 +498,12 @@ __global__ void paged_attention_v2_reduce_kernel(
                                           // max_num_partitions]
     const scalar_t *__restrict__ tmp_out, // [num_seqs, num_heads,
                                           // max_num_partitions, head_size]
-    const int *__restrict__ seq_lens,     // [num_seqs]
+    const int64_t *__restrict__ seq_lens,     // [num_seqs]
     const int max_num_partitions) {
     const int num_heads = gridDim.x;
     const int head_idx = blockIdx.x;
     const int seq_idx = blockIdx.y;
-    const int seq_len = seq_lens[seq_idx];
+    const int seq_len = static_cast<int>(seq_lens[seq_idx]);
     const int num_partitions = DIVIDE_ROUND_UP(seq_len, PARTITION_SIZE);
     if (num_partitions == 1) {
         // No need to reduce. Only copy tmp_out to out.
@@ -568,7 +572,6 @@ __global__ void paged_attention_v2_reduce_kernel(
     // Aggregate tmp_out to out.
     const scalar_t *tmp_out_ptr = tmp_out + seq_idx * num_heads * max_num_partitions * HEAD_SIZE + head_idx * max_num_partitions * HEAD_SIZE;
     scalar_t *out_ptr = out + seq_idx * num_heads * HEAD_SIZE + head_idx * HEAD_SIZE;
-#pragma unroll
     for (int i = threadIdx.x; i < HEAD_SIZE; i += NUM_THREADS) {
         float acc = 0.0f;
         for (int j = 0; j < num_partitions; ++j) {
