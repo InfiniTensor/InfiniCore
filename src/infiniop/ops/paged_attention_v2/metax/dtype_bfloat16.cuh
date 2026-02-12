@@ -21,15 +21,13 @@
  */
 #pragma once
 
-#include "attention_generic.cuh"
-#include "dtype_float32.cuh"
-
-#include <cuda_bf16.h>
-#include <cuda_fp16.h>
+#include "../utils/attention_generic.cuh"
+#include "../utils/dtype_float32.cuh"
+#include "../../../devices/metax/metax_kernel_common.h"
 
 #include <stdint.h>
 
-namespace vllm {
+namespace  op::paged_attention_v2::vllm {
 
 // Define custom BF16 vector data types.
 struct bf16_4_t {

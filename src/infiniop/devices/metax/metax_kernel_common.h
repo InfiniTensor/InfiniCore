@@ -21,8 +21,10 @@ using cuda_fp8_e4m3 = __hpcc_fp8_e4m3;
 
 #ifdef ENABLE_METAX_MC_API
 using __nv_bfloat16 = __maca_bfloat16;
+using __nv_bfloat162 = __maca_bfloat162;
 #else
 using __nv_bfloat16 = __hpcc_bfloat16;
+using __nv_bfloat162 = __hpcc_bfloat162;
 #endif
 
 namespace device::metax {

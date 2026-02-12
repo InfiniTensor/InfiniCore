@@ -1,3 +1,5 @@
+#pragma once
+
 #include "../../../utils.h"
 #include "../pool.h"
 #include "metax_handle.h"
