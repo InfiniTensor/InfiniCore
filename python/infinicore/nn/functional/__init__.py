@@ -10,6 +10,7 @@ from .rope import RopeAlgo, rope
 from .silu import silu
 from .silu_and_mul import silu_and_mul
 from .swiglu import swiglu
+from .reshape_and_cache import reshape_and_cache
 
 __all__ = [
     "causal_softmax",
@@ -25,4 +26,5 @@ __all__ = [
     "linear_w8a8i8",
     "silu_and_mul",
     "paged_attention_v2",
+    "reshape_and_cache",
 ]

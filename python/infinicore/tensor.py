@@ -185,9 +185,10 @@ def from_torch(torch_tensor) -> Tensor:
     infini_type = to_infinicore_dtype(torch_tensor.dtype)
     infini_device = infinicore.device(torch_tensor.device.type, 0)
     return Tensor(
-        _infinicore.from_blob(
+        _infinicore.strided_from_blob(
             torch_tensor.data_ptr(),
             list(torch_tensor.shape),
+            list(torch_tensor.stride()),
             dtype=infini_type._underlying,
             device=infini_device._underlying,
         ),
