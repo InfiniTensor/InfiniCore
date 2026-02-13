@@ -16,6 +16,7 @@
 #include "ops/paged_attention_prefill.hpp"
 #include "ops/paged_attention_v2.hpp"
 #include "ops/paged_caching.hpp"
+#include "ops/reshape_and_cache.hpp"
 #include "ops/random_sample.hpp"
 #include "ops/rearrange.hpp"
 #include "ops/rms_norm.hpp"
@@ -41,6 +42,7 @@ inline void bind(py::module &m) {
     bind_paged_attention_v2(m);
     bind_paged_attention_prefill(m);
     bind_paged_caching(m);
+    bind_reshape_and_cache(m);
     bind_random_sample(m);
     bind_rearrange(m);
     bind_rms_norm(m);

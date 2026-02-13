@@ -8,6 +8,7 @@ from .rms_norm import rms_norm
 from .rope import RopeAlgo, rope
 from .silu import silu
 from .swiglu import swiglu
+from .reshape_and_cache import reshape_and_cache
 
 __all__ = [
     "causal_softmax",
@@ -21,4 +22,5 @@ __all__ = [
     "silu",
     "swiglu",
     "paged_attention_v2",
+    "reshape_and_cache",
 ]
