@@ -41,6 +41,7 @@ target("infiniop-cambricon")
     on_install(function (target) end)
 
     add_cxflags("-lstdc++ -fPIC")
+    add_cxxflags("-lstdc++ -fPIC")
     set_warnings("all", "error")
 
     set_languages("cxx17")
@@ -59,6 +60,7 @@ target("infinirt-cambricon")
     -- Add include dirs
     add_files("../src/infinirt/bang/*.cc")
     add_cxflags("-lstdc++ -Wall -Werror -fPIC")
+    add_cxxflags("-lstdc++ -Wall -Werror -fPIC")
 target_end()
 
 target("infiniccl-cambricon")
@@ -89,6 +91,7 @@ target("infiniccl-cambricon")
 
             add_files("../src/infiniccl/cambricon/*.cc")
             add_cxflags("-fPIC")
+            add_cxxflags("-fPIC")
             add_ldflags("-fPIC")
         else
             print("[Warning] CNCL is currently only supported on Linux")

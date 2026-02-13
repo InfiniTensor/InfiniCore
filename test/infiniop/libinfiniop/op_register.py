@@ -393,6 +393,7 @@ def add_rms_norm_(lib):
         infiniopTensorDescriptor_t,
         infiniopTensorDescriptor_t,
         infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
         c_float,
     ]
 
@@ -407,6 +408,7 @@ def add_rms_norm_(lib):
         infiniopOperatorDescriptor_t,
         c_void_p,
         c_size_t,
+        c_void_p,
         c_void_p,
         c_void_p,
         c_void_p,
@@ -722,6 +724,41 @@ def dequantize_(lib):
         infiniopOperatorDescriptor_t,
     ]
 
+
+@OpRegister.operator
+def per_channel_quant_int8_(lib):
+    lib.infiniopCreatePerChannelQuantI8Descriptor.restype = c_int32
+    lib.infiniopCreatePerChannelQuantI8Descriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetPerChannelQuantI8WorkspaceSize.restype = c_int32
+    lib.infiniopGetPerChannelQuantI8WorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopPerChannelQuantI8.restype = c_int32
+    lib.infiniopPerChannelQuantI8.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyPerChannelQuantI8Descriptor.restype = c_int32
+    lib.infiniopDestroyPerChannelQuantI8Descriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
 
 @OpRegister.operator
 def softplus_(lib):
@@ -1142,5 +1179,37 @@ def paged_attention_prefill_(lib):
 
     lib.infiniopDestroyPagedAttentionPrefillDescriptor.restype = c_int32
     lib.infiniopDestroyPagedAttentionPrefillDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
+def silu_and_mul(lib):
+    lib.infiniopCreateSiluAndMulDescriptor.restype = c_int32
+    lib.infiniopCreateSiluAndMulDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetSiluAndMulWorkspaceSize.restype = c_int32
+    lib.infiniopGetSiluAndMulWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopSiluAndMul.restype = c_int32
+    lib.infiniopSiluAndMul.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroySiluAndMulDescriptor.restype = c_int32
+    lib.infiniopDestroySiluAndMulDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]

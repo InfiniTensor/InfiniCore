@@ -2,8 +2,12 @@
 #include "../../handle.h"
 #include "infiniop/ops/int8_gemm.h"
 
-#if defined(ENABLE_NVIDIA_API) && defined(ENABLE_CUTLASS_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API)
 #include "nvidia/int8_gemm_nvidia.cuh"
+#endif
+
+#if defined(ENABLE_MOORE_API)
+#include "moore/int8_gemm_moore.h"
 #endif
 
 __C infiniStatus_t infiniopCreateI8GemmDescriptor(infiniopHandle_t handle,
@@ -26,8 +30,14 @@ __C infiniStatus_t infiniopCreateI8GemmDescriptor(infiniopHandle_t handle,
             b_desc,                                                           \
             b_scale_desc);
     switch (handle->device) {
-#if defined(ENABLE_NVIDIA_API) && defined(ENABLE_CUTLASS_API)
+#if defined(ENABLE_NVIDIA_API)
         CREATE(INFINI_DEVICE_NVIDIA, nvidia)
+#endif
+#if defined(ENABLE_QY_API)
+        CREATE(INFINI_DEVICE_QY, nvidia)
+#endif
+#if defined(ENABLE_MOORE_API)
+        CREATE(INFINI_DEVICE_MOORE, moore)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -41,8 +51,14 @@ __C infiniStatus_t infiniopGetI8GemmWorkspaceSize(infiniopI8GemmDescriptor_t des
     case CASE:                                                                                   \
         *size = reinterpret_cast<op::i8gemm::NAMESPACE::Descriptor *>(desc)->minWorkspaceSize(); \
         return INFINI_STATUS_SUCCESS;
-#if defined(ENABLE_NVIDIA_API) && defined(ENABLE_CUTLASS_API)
+#if defined(ENABLE_NVIDIA_API)
         GET(INFINI_DEVICE_NVIDIA, nvidia)
+#endif
+#if defined(ENABLE_QY_API)
+        GET(INFINI_DEVICE_QY, nvidia)
+#endif
+#if defined(ENABLE_MOORE_API)
+        GET(INFINI_DEVICE_MOORE, moore)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -65,8 +81,14 @@ __C infiniStatus_t infiniopI8Gemm(infiniopI8GemmDescriptor_t desc,
         return reinterpret_cast<op::i8gemm::NAMESPACE::Descriptor *>(desc)->calculate( \
             workspace, workspace_size, out, bias, a, a_scale, b, b_scale, stream);
     switch (desc->device_type) {
-#if defined(ENABLE_NVIDIA_API) && defined(ENABLE_CUTLASS_API)
+#if defined(ENABLE_NVIDIA_API)
         CACULATE(INFINI_DEVICE_NVIDIA, nvidia)
+#endif
+#if defined(ENABLE_QY_API)
+        CACULATE(INFINI_DEVICE_QY, nvidia)
+#endif
+#if defined(ENABLE_MOORE_API)
+        CACULATE(INFINI_DEVICE_MOORE, moore)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -80,8 +102,14 @@ __C infiniStatus_t infiniopDestroyI8GemmDescriptor(infiniopI8GemmDescriptor_t de
         delete reinterpret_cast<op::i8gemm::NAMESPACE::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS;
     switch (desc->device_type) {
-#if defined(ENABLE_NVIDIA_API) && defined(ENABLE_CUTLASS_API)
+#if defined(ENABLE_NVIDIA_API)
         DESTROY(INFINI_DEVICE_NVIDIA, nvidia)
+#endif
+#if defined(ENABLE_QY_API)
+        DESTROY(INFINI_DEVICE_QY, nvidia)
+#endif
+#if defined(ENABLE_MOORE_API)
+        DESTROY(INFINI_DEVICE_MOORE, moore)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

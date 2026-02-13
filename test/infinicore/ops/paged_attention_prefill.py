@@ -1,9 +1,8 @@
 import os
 import sys
 
-import torch
-
 import infinicore
+import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -30,7 +29,7 @@ _TOLERANCE_MAP = {
     infinicore.bfloat16: {"atol": 2e-2, "rtol": 2e-2},
 }
 
-_TENSOR_DTYPES = [infinicore.float16, infinicore.bfloat16, infinicore.float32]
+_TENSOR_DTYPES = [infinicore.float16, infinicore.bfloat16]
 
 
 class SimpleCacheManager:

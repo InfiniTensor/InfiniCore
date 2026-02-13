@@ -5,7 +5,7 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/logsoftmax_cpu.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_ALI_API)
 #include "nvidia/logsoftmax_nvidia.cuh"
 #endif
 #ifdef ENABLE_METAX_API
@@ -36,8 +36,11 @@ __C infiniStatus_t infiniopCreateLogSoftmaxDescriptor(
 #ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
+#ifdef ENABLE_ALI_API
+        CREATE(INFINI_DEVICE_ALI, nvidia);
+#endif
 #ifdef ENABLE_ILUVATAR_API
-        // CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
+        CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_QY_API
         CREATE(INFINI_DEVICE_QY, nvidia);
@@ -66,8 +69,11 @@ __C infiniStatus_t infiniopGetLogSoftmaxWorkspaceSize(infiniopLogSoftmaxDescript
 #ifdef ENABLE_NVIDIA_API
         GET(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
+#ifdef ENABLE_ALI_API
+        GET(INFINI_DEVICE_ALI, nvidia);
+#endif
 #ifdef ENABLE_ILUVATAR_API
-        // GET(INFINI_DEVICE_ILUVATAR, nvidia);
+        GET(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_QY_API
         GET(INFINI_DEVICE_QY, nvidia);
@@ -101,8 +107,11 @@ __C infiniStatus_t infiniopLogSoftmax(
 #ifdef ENABLE_NVIDIA_API
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
+#ifdef ENABLE_ALI_API
+        CALCULATE(INFINI_DEVICE_ALI, nvidia);
+#endif
 #ifdef ENABLE_ILUVATAR_API
-        // CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
+        CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_QY_API
         CALCULATE(INFINI_DEVICE_QY, nvidia);
@@ -131,8 +140,11 @@ __C infiniStatus_t infiniopDestroyLogSoftmaxDescriptor(infiniopLogSoftmaxDescrip
 #ifdef ENABLE_NVIDIA_API
         DESTROY(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
+#ifdef ENABLE_ALI_API
+        DESTROY(INFINI_DEVICE_ALI, nvidia);
+#endif
 #ifdef ENABLE_ILUVATAR_API
-        // DESTROY(INFINI_DEVICE_ILUVATAR, nvidia);
+        DESTROY(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
 #ifdef ENABLE_QY_API
         DESTROY(INFINI_DEVICE_QY, nvidia);

@@ -38,4 +38,13 @@ INFINIRT_DEVICE_API_NOOP
 #endif
 } // namespace infinirt::hygon
 
+// ALI namespace
+namespace infinirt::ali {
+#ifdef ENABLE_ALI_API
+INFINIRT_DEVICE_API_IMPL
+#else
+INFINIRT_DEVICE_API_NOOP
+#endif
+} // namespace infinirt::ali
+
 #endif // __INFINIRT_CUDA_H__

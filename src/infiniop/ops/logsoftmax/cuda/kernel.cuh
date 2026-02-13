@@ -56,6 +56,9 @@ __device__ void logSoftmaxKernel(
     }
 #if CUDART_VERSION >= 12090
     max_val = BlockReduce(temp_storage).Reduce(max_val, ::cuda::maximum());
+#elif defined(ENABLE_HYGON_API)
+    max_val = BlockReduce(temp_storage).Reduce(
+        max_val, [](const float &a, const float &b) { return (a > b) ? a : b; }, BLOCK_SIZE);
 #else
     max_val = BlockReduce(temp_storage).Reduce(max_val, cub::Max());
 #endif

@@ -5,7 +5,7 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/random_sample_cpu.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API) || defined(ENABLE_ALI_API)
 #include "nvidia/random_sample_nvidia.cuh"
 #endif
 #ifdef ENABLE_CAMBRICON_API
@@ -49,6 +49,9 @@ infiniopCreateRandomSampleDescriptor(
 #endif
 #ifdef ENABLE_ILUVATAR_API
         CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_ALI_API
+        CREATE(INFINI_DEVICE_ALI, nvidia);
 #endif
 #ifdef ENABLE_QY_API
         CREATE(INFINI_DEVICE_QY, nvidia);
@@ -100,6 +103,9 @@ __C infiniStatus_t infiniopGetRandomSampleWorkspaceSize(
 #endif
 #ifdef ENABLE_ILUVATAR_API
         GET(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_ALI_API
+        GET(INFINI_DEVICE_ALI, nvidia);
 #endif
 #ifdef ENABLE_QY_API
         GET(INFINI_DEVICE_QY, nvidia);
@@ -165,6 +171,9 @@ __C infiniStatus_t infiniopRandomSample(
 #ifdef ENABLE_QY_API
         CALCULATE(INFINI_DEVICE_QY, nvidia);
 #endif
+#ifdef ENABLE_ALI_API
+        CALCULATE(INFINI_DEVICE_ALI, nvidia);
+#endif
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
@@ -209,6 +218,9 @@ __C infiniStatus_t infiniopDestroyRandomSampleDescriptor(
 #endif
 #ifdef ENABLE_ILUVATAR_API
         DELETE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_ALI_API
+        DELETE(INFINI_DEVICE_ALI, nvidia);
 #endif
 #ifdef ENABLE_QY_API
         DELETE(INFINI_DEVICE_QY, nvidia);

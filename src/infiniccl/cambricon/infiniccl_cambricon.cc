@@ -62,7 +62,7 @@ infiniStatus_t commInitAll(
 
     for (int i = 0; i < ndevice; i++) {
         rank_list[i] = i;
-        CHECK_INTERNAL(cnrtSetDevice(device_ids[i]), CNRT_RET_SUCCESS);
+        CHECK_INTERNAL(cnrtSetDevice(device_ids[i]), cnrtSuccess);
     }
 
     CHECK_CNCL(cnclInitComms(cncl_comms.data(), ndevice,

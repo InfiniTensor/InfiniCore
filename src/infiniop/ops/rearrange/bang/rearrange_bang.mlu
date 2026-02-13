@@ -267,7 +267,7 @@ infiniStatus_t Descriptor::calculate(
     dim.x = 4; // Using 4 clusters
     dim.y = 10;
     dim.z = 1;
-    func_type = CNRT_FUNC_TYPE_UNION1;
+    func_type = cnrtFuncTypeUnion1;
 
     if (_opaque->use_2d_copy) {
         // Use optimized 2D copy kernel

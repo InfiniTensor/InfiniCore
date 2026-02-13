@@ -3,6 +3,7 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import infinicore
 import torch
 from framework import BaseOperatorTest, TensorSpec, TestCase, GenericTestRunner
 from framework.tensor import TensorInitializer
@@ -11,8 +12,6 @@ from framework.utils.tensor_utils import (
     infinicore_tensor_from_torch,
     to_torch_dtype,
 )
-
-import infinicore
 
 # ==============================================================================
 # Operator-specific configuration
@@ -102,23 +101,9 @@ class OpTest(BaseOperatorTest):
 
     def infinicore_operator(self, input, weight, out=None, **kwargs):
         """InfiniCore Embedding implementation"""
-
-        if input.device.type == "cpu":
-            input_cpu = input
-        else:
-            # 将 input的数据 转移到 cpu 上
-            torch_reference = torch.zeros(
-                input.shape,
-                dtype=to_torch_dtype(input.dtype),
-                device="cpu" if "cpu" == input.device.type else "cuda",
-            )
-            torch_reference = convert_infinicore_to_torch(input)
-            torch_reference = torch_reference.contiguous().cpu()
-
-            # 创建cpu的 input
-            input_cpu = infinicore_tensor_from_torch(torch_reference)
-
-        return infinicore.nn.functional.embedding(input_cpu, weight, out=out)
+        # Note: embedding now supports device-side input for graph recording
+        # No need to convert to CPU anymore - the implementation handles both CPU and device inputs
+        return infinicore.nn.functional.embedding(input, weight, out=out)
 
 
 def main():

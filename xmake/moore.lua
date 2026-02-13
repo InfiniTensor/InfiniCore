@@ -42,11 +42,15 @@ target("infiniop-moore")
     set_languages("cxx17")
     set_warnings("all", "error")
     add_cxflags("-lstdc++", "-fPIC", "-Wno-comment")
+    add_cxxflags("-lstdc++", "-fPIC", "-Wno-comment")
     add_files("../src/infiniop/devices/moore/*.cc")
     add_files("../src/infiniop/ops/*/moore/*.mu", {rule = "mu"})
 
     -- Add source files for Moore muBLAS/muDNN GEMM backends.
     add_files("../src/infiniop/ops/gemm/moore/*/*.mu", {rule = "mu"})
+
+    -- Add source files for Moore per_channel_quant_int8 backends.
+    add_files("../src/infiniop/ops/quant/per_channel_quant_int8/moore/*.mu", {rule = "mu"})
 target_end()
 
 target("infinirt-moore")
@@ -56,6 +60,7 @@ target("infinirt-moore")
     add_deps("infini-utils")
     set_warnings("all", "error")
     add_cxflags("-lstdc++", "-fPIC")
+    add_cxxflags("-lstdc++", "-fPIC")
     add_files("../src/infinirt/moore/*.cc")
 target_end()
 
@@ -66,6 +71,7 @@ target("infiniccl-moore")
     set_warnings("all", "error")
     if not is_plat("windows") then
         add_cxflags("-fPIC")
+        add_cxxflags("-fPIC")
     end
     if has_config("ccl") then
         add_links("libmccl.so")

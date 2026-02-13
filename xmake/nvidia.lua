@@ -48,6 +48,7 @@ target("infiniop-nvidia")
         add_cuflags("-Xcompiler=-fPIC")
         add_cuflags("--extended-lambda")
         add_culdflags("-Xcompiler=-fPIC")
+        add_cxflags("-fPIC")
         add_cxxflags("-fPIC")
         add_cflags("-fPIC")
         add_cuflags("--expt-relaxed-constexpr")
@@ -70,10 +71,10 @@ target("infiniop-nvidia")
     end
 
     set_languages("cxx17")
-    add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")
+    add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu", "../src/infiniop/ops/*/*/nvidia/*.cu")
 
     if has_config("ninetoothed") then
-        add_files("../build/ninetoothed/*.c")
+        add_files("../build/ninetoothed/*.c", "../build/ninetoothed/*.cpp")
     end
 target_end()
 
@@ -93,6 +94,7 @@ target("infinirt-nvidia")
         add_cuflags("-Xcompiler=-fPIC")
         add_culdflags("-Xcompiler=-fPIC")
         add_cxflags("-fPIC")
+        add_cxxflags("-fPIC")
     end
 
     set_languages("cxx17")
@@ -112,6 +114,7 @@ target("infiniccl-nvidia")
             add_cuflags("-Xcompiler=-fPIC")
             add_culdflags("-Xcompiler=-fPIC")
             add_cxflags("-fPIC")
+            add_cxxflags("-fPIC")
 
             local nccl_root = os.getenv("NCCL_ROOT")
             if nccl_root then

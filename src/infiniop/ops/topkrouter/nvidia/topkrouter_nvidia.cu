@@ -1,4 +1,4 @@
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API) || defined(ENABLE_ALI_API)
 
 #include "../../../devices/nvidia/nvidia_common.cuh"
 #include "../../../devices/nvidia/nvidia_kernel_common.cuh"

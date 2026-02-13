@@ -5,7 +5,7 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/mul_cpu.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_ALI_API)
 #include "nvidia/mul_nvidia.cuh"
 #endif
 #ifdef ENABLE_METAX_API
@@ -48,6 +48,9 @@ __C infiniStatus_t infiniopCreateMulDescriptor(
 #ifdef ENABLE_QY_API
         CREATE(INFINI_DEVICE_QY, nvidia);
 #endif
+#ifdef ENABLE_ALI_API
+        CREATE(INFINI_DEVICE_ALI, nvidia);
+#endif
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, metax);
 #endif
@@ -84,6 +87,9 @@ __C infiniStatus_t infiniopGetMulWorkspaceSize(infiniopMulDescriptor_t desc, siz
 #endif
 #ifdef ENABLE_QY_API
         GET(INFINI_DEVICE_QY, nvidia);
+#endif
+#ifdef ENABLE_ALI_API
+        GET(INFINI_DEVICE_ALI, nvidia);
 #endif
 #ifdef ENABLE_METAX_API
         GET(INFINI_DEVICE_METAX, metax);
@@ -131,6 +137,9 @@ __C infiniStatus_t infiniopMul(
 #ifdef ENABLE_QY_API
         CALCULATE(INFINI_DEVICE_QY, nvidia);
 #endif
+#ifdef ENABLE_ALI_API
+        CALCULATE(INFINI_DEVICE_ALI, nvidia);
+#endif
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
@@ -169,6 +178,9 @@ infiniopDestroyMulDescriptor(infiniopMulDescriptor_t desc) {
 #endif
 #ifdef ENABLE_QY_API
         DELETE(INFINI_DEVICE_QY, nvidia);
+#endif
+#ifdef ENABLE_ALI_API
+        DELETE(INFINI_DEVICE_ALI, nvidia);
 #endif
 #ifdef ENABLE_METAX_API
         DELETE(INFINI_DEVICE_METAX, metax);

@@ -50,7 +50,7 @@ __mlu_func__ float sum(const T *source, T *src, float *dst, int num_elements, in
         size_t curr_batch = std::min<size_t>(max_batch, num_elements - processed);
 
         if (curr_batch < max_batch) {
-            __bang_write_zero(src, max_batch + offset);
+            __bang_write_value(src, max_batch + offset, 0);
         }
 
         __memcpy(src + offset, source + processed, curr_batch * sizeof(T), GDRAM2NRAM);
@@ -81,7 +81,7 @@ __mlu_func__ float sumBatched(const T *source, T *src, float *dst, int num_eleme
         size_t remainder = curr_batch % batch_size;
 
         // Ensure NRAM buffer is zeroed
-        __bang_write_zero(src, max_batch + offset);
+        __bang_write_value(src, max_batch + offset, 0);
 
         // Copy data to NRAM
         __memcpy(src + offset, source + processed, curr_batch * sizeof(T), GDRAM2NRAM);
@@ -120,7 +120,7 @@ __mlu_func__ float sumSquared(const T *source, T *src, float *dst, int num_eleme
         size_t curr_batch = std::min<size_t>(max_batch, num_elements - processed);
 
         if (curr_batch < max_batch) {
-            __bang_write_zero(src, max_batch + offset);
+            __bang_write_value(src, max_batch + offset, 0);
         }
 
         __memcpy(src + offset, source + processed, curr_batch * sizeof(T), GDRAM2NRAM);
@@ -165,7 +165,7 @@ __mlu_func__ float sumSquaredBatched(const T *source, T *src, float *dst, int nu
         size_t remainder = curr_batch % batch_size;
 
         // Ensure NRAM buffer is zeroed
-        __bang_write_zero(src, max_batch + offset);
+        __bang_write_value(src, max_batch + offset, 0);
 
         // Copy data to NRAM
         __memcpy(src + offset, source + processed, curr_batch * sizeof(T), GDRAM2NRAM);
@@ -235,7 +235,7 @@ __mlu_func__ float max(const T *source, T *src, float *dst, int num_elements, in
         size_t curr_batch = std::min<size_t>(max_batch, num_elements - processed);
 
         if (curr_batch < max_batch) {
-            __bang_write_zero(src, max_batch + offset);
+            __bang_write_value(src, max_batch + offset, 0);
         }
 
         __memcpy(src + offset, source + processed, curr_batch * sizeof(T), GDRAM2NRAM);
@@ -264,7 +264,7 @@ __mlu_func__ float maxBatched(const T *source, T *src, float *dst, int num_eleme
         size_t curr_batch = std::min<size_t>(max_batch, num_elements - processed);
 
         if (curr_batch < max_batch) {
-            __bang_write_zero(src, max_batch + offset);
+            __bang_write_value(src, max_batch + offset, 0);
         }
 
         __memcpy(src + offset, source + processed, curr_batch * sizeof(T), GDRAM2NRAM);

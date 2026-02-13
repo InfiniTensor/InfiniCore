@@ -23,6 +23,7 @@ void printUsage() {
               << "  qy" << std::endl
               << "  kunlun" << std::endl
               << "  hygon" << std::endl
+              << "  ali" << std::endl
               << std::endl;
     exit(EXIT_FAILURE);
 }
@@ -55,6 +56,7 @@ ParsedArgs parseArgs(int argc, char *argv[]) {
         else PARSE_DEVICE("--qy", INFINI_DEVICE_QY)
         else PARSE_DEVICE("--kunlun", INFINI_DEVICE_KUNLUN)
         else PARSE_DEVICE("--hygon", INFINI_DEVICE_HYGON)
+        else PARSE_DEVICE("--ali", INFINI_DEVICE_ALI)
         else {
             printUsage();
         }

@@ -2,12 +2,15 @@
 #include "../../handle.h"
 #include "infiniop/ops/paged_attention.h"
 
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ALI_API) || defined(ENABLE_ILUVATAR_API)
 #include "nvidia/paged_attention_nvidia.cuh"
 #endif
-// #ifdef ENABLE_METAX_API
-// #include "metax/paged_attention_metax.h"
-// #endif
+#ifdef ENABLE_MOORE_API
+#include "moore/paged_attention_moore.h"
+#endif
+#ifdef ENABLE_METAX_API
+#include "metax/paged_attention_metax.h"
+#endif
 
 __C infiniStatus_t infiniopCreatePagedAttentionDescriptor(
     infiniopHandle_t handle,
@@ -34,9 +37,18 @@ __C infiniStatus_t infiniopCreatePagedAttentionDescriptor(
 #ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-    // #ifdef ENABLE_METAX_API
-    //         CREATE(INFINI_DEVICE_METAX, metax)
-    // #endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax)
+#endif
+#ifdef ENABLE_ALI_API
+        CREATE(INFINI_DEVICE_ALI, nvidia)
+#endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore)
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        CREATE(INFINI_DEVICE_ILUVATAR, nvidia)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -55,9 +67,18 @@ __C infiniStatus_t infiniopGetPagedAttentionWorkspaceSize(
 #ifdef ENABLE_NVIDIA_API
         GET(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-    // #ifdef ENABLE_METAX_API
-    //         GET(INFINI_DEVICE_METAX, metax)
-    // #endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax)
+#endif
+#ifdef ENABLE_ALI_API
+        GET(INFINI_DEVICE_ALI, nvidia)
+#endif
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, moore)
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        GET(INFINI_DEVICE_ILUVATAR, nvidia)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -80,9 +101,18 @@ __C infiniStatus_t infiniopPagedAttention(
 #ifdef ENABLE_NVIDIA_API
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-    // #ifdef ENABLE_METAX_API
-    //         CALCULATE(INFINI_DEVICE_METAX, metax)
-    // #endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax)
+#endif
+#ifdef ENABLE_ALI_API
+        CALCULATE(INFINI_DEVICE_ALI, nvidia)
+#endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore)
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -100,9 +130,18 @@ __C infiniStatus_t infiniopDestroyPagedAttentionDescriptor(
 #ifdef ENABLE_NVIDIA_API
         DESTROY(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-    // #ifdef ENABLE_METAX_API
-    //         DESTROY(INFINI_DEVICE_METAX, metax)
-    // #endif
+#ifdef ENABLE_METAX_API
+        DESTROY(INFINI_DEVICE_METAX, metax)
+#endif
+#ifdef ENABLE_ALI_API
+        DESTROY(INFINI_DEVICE_ALI, nvidia)
+#endif
+#ifdef ENABLE_MOORE_API
+        DESTROY(INFINI_DEVICE_MOORE, moore)
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        DESTROY(INFINI_DEVICE_ILUVATAR, nvidia)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }

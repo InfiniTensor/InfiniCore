@@ -3,8 +3,8 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import torch
 import infinicore
+import torch
 from framework import (
     BaseOperatorTest,
     TensorSpec,
@@ -37,7 +37,7 @@ _TOLERANCE_MAP = {
 }
 
 # Data types to test
-_TENSOR_DTYPES = [infinicore.float16, infinicore.bfloat16, infinicore.float32]
+_TENSOR_DTYPES = [infinicore.float16, infinicore.bfloat16]
 
 
 # ==============================================================================

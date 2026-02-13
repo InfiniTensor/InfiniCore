@@ -81,6 +81,9 @@ __C infiniStatus_t infinirtGetDevice(infiniDevice_t *device_ptr, int *device_id_
         case INFINI_DEVICE_HYGON:                                      \
             _status = infinirt::hygon::API PARAMS;                     \
             break;                                                     \
+        case INFINI_DEVICE_ALI:                                        \
+            _status = infinirt::ali::API PARAMS;                       \
+            break;                                                     \
         default:                                                       \
             _status = INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;         \
         }                                                              \

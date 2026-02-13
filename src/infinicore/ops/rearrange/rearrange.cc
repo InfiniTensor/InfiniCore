@@ -3,24 +3,30 @@
 
 namespace infinicore::op {
 
-common::OpDispatcher<Rearrange::schema> &Rearrange::dispatcher() {
-    static common::OpDispatcher<Rearrange::schema> dispatcher_;
-    return dispatcher_;
-};
+INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(Rearrange);
 
-void Rearrange::execute(Tensor y, Tensor x) {
+Rearrange::Rearrange(Tensor y, const Tensor &x) {
     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(y, x);
-    infinicore::context::setDevice(y->device());
-    dispatcher().lookup(y->device().getType())(y, x);
+    INFINICORE_GRAPH_OP_DISPATCH(y->device().getType(), y, x);
 }
 
-Tensor rearrange(Tensor x) {
+void Rearrange::execute(Tensor y, const Tensor &x) {
+    auto op = std::make_shared<Rearrange>(y, x);
+    if (context::isGraphRecording()) {
+        context::addGraphOperator(op);
+    } else {
+        op->run();
+    }
+}
+
+Tensor rearrange(const Tensor &x) {
     auto y = Tensor::empty(x->shape(), x->dtype(), x->device());
     rearrange_(y, x);
     return y;
 }
 
-void rearrange_(Tensor y, Tensor x) {
+void rearrange_(Tensor y, const Tensor &x) {
     Rearrange::execute(y, x);
 }
+
 } // namespace infinicore::op
