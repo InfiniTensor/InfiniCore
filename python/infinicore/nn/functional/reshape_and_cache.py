@@ -1,6 +1,5 @@
 from infinicore.lib import _infinicore
-from infinicore.tensor import Tensor, empty
-
+from infinicore.tensor import Tensor
 
 
 def reshape_and_cache(
@@ -9,9 +8,9 @@ def reshape_and_cache(
     key_cache: Tensor,
     value_cache: Tensor,
     slot_mapping: Tensor,
-    kv_cache_dtype:str,
+    kv_cache_dtype: str,
     k_scale: Tensor,
-    v_scale: Tensor ,
+    v_scale: Tensor,
 ):
     _infinicore.reshape_and_cache(
         key._underlying,
