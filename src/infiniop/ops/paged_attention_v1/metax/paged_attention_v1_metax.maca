@@ -1,45 +1,47 @@
 #include "../../../devices/metax/metax_common.h"
 #include "attention_kernels_metax.cuh"
-#include "paged_attention_v2_metax.cuh"
+#include "paged_attention_v1_metax.cuh"
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-// #include <cuda_runtime.h>
 
-#define DIVIDE_ROUND_UP(a, b) (((a) + (b)-1) / (b))
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
-#define WARP_SIZE 32
+
+#include "../../paged_attention_v2/metax/dtype_float16.cuh"
+#include "../../paged_attention_v2/utils/attention_dtypes.h"
+
+namespace op::paged_attention_v1::metax {
+
+using op::paged_attention_v2::vllm::dot;
+using op::paged_attention_v2::vllm::FloatVec;
+using op::paged_attention_v2::vllm::Fp8KVCacheDataType;
+using op::paged_attention_v2::vllm::from_float;
+using op::paged_attention_v2::vllm::Qk_dot;
+using op::paged_attention_v2::vllm::to_float;
+using op::paged_attention_v2::vllm::Vec;
+using op::paged_attention_v2::vllm::zero;
+} // namespace op::paged_attention_v1::metax
 
 namespace {
 using op::paged_attention_v2::vllm::Fp8KVCacheDataType;
+#define DIVIDE_ROUND_UP(a, b) (((a) + (b) - 1) / (b))
 
-#define LAUNCH_PAGED_ATTENTION_V2(HEAD_SIZE)                                                         \
-    op::paged_attention_v2::metax::paged_attention_v2_kernel<T, CACHE_T, HEAD_SIZE, BLOCK_SIZE,      \
-                                                             NUM_THREADS, KV_DTYPE, IS_BLOCK_SPARSE, \
-                                                             PARTITION_SIZE>                         \
-        <<<grid, block, shared_mem_size, stream>>>(                                                  \
-            exp_sums_ptr, max_logits_ptr, tmp_out_ptr, query_ptr, key_cache_ptr,                     \
-            value_cache_ptr, num_kv_heads, scale, block_tables_ptr,                                  \
-            seq_lens_ptr, max_num_blocks_per_seq, alibi_slopes_ptr, q_stride,                        \
-            kv_block_stride, kv_head_stride, k_scale_ptr, v_scale_ptr, tp_rank,                      \
-            blocksparse_local_blocks, blocksparse_vert_stride,                                       \
-            blocksparse_block_size, blocksparse_head_sliding_step);                                  \
-                                                                                                     \
-    op::paged_attention_v2::metax::paged_attention_v2_reduce_kernel<T, HEAD_SIZE, NUM_THREADS,       \
-                                                                    PARTITION_SIZE>                  \
-        <<<reduce_grid, block, reduce_shared_mem_size, stream>>>(                                    \
-            out_ptr, exp_sums_ptr, max_logits_ptr, tmp_out_ptr, seq_lens_ptr,                        \
-            max_num_partitions);
+#define LAUNCH_PAGED_ATTENTION_V1(HEAD_SIZE)                                                        \
+    op::paged_attention_v1::metax::paged_attention_v1_kernel<T, CACHE_T, HEAD_SIZE, BLOCK_SIZE,      \
+                                                            NUM_THREADS, KV_DTYPE, IS_BLOCK_SPARSE> \
+        <<<grid, block, shared_mem_size, stream>>>(                                                 \
+            out_ptr, query_ptr, key_cache_ptr, value_cache_ptr, num_kv_heads,                       \
+            scale, block_tables_ptr, seq_lens_ptr, max_num_blocks_per_seq,                          \
+            alibi_slopes_ptr, q_stride, kv_block_stride, kv_head_stride,                            \
+            k_scale_ptr, v_scale_ptr, tp_rank, blocksparse_local_blocks,                            \
+            blocksparse_vert_stride, blocksparse_block_size,                                        \
+            blocksparse_head_sliding_step);
+
 
 template <typename T, typename CACHE_T, int BLOCK_SIZE,
           Fp8KVCacheDataType KV_DTYPE, bool IS_BLOCK_SPARSE,
-          int NUM_THREADS = 128, int PARTITION_SIZE = 512>
-void paged_attention_v2_launcher(
+          int NUM_THREADS = 128>
+void paged_attention_v1_launcher(
     void *out,            // [num_seqs, num_heads, head_size]
-    void *exp_sums,       // [num_seqs, num_heads, max_num_partitions]
-    void *max_logits,     // [num_seqs, num_heads, max_num_partitions]
-    void *tmp_out,        // [num_seqs, num_heads, max_num_partitions, head_size]
     void *query,          // [num_seqs, num_heads, head_size]
     void *key_cache,      // [num_blocks, num_heads, head_size/x, block_size, x]
     void *value_cache,    // [num_blocks, num_heads, head_size, block_size]
@@ -56,7 +58,7 @@ void paged_attention_v2_launcher(
     const int64_t blocksparse_vert_stride,
     const int64_t blocksparse_block_size,
     const int64_t blocksparse_head_sliding_step,
-    const op::paged_attention_v2::PagedAttentionV2Info &info,
+    const op::paged_attention_v1::PagedAttentionV1Info &info,
     const hcStream_t stream) {
 
     int num_seqs = info.num_seqs;
@@ -71,9 +73,6 @@ void paged_attention_v2_launcher(
     const float *alibi_slopes_ptr = reinterpret_cast<const float *>(alibi_slopes);
 
     T *out_ptr = reinterpret_cast<T *>(out);
-    float *exp_sums_ptr = reinterpret_cast<float *>(exp_sums);
-    float *max_logits_ptr = reinterpret_cast<float *>(max_logits);
-    T *tmp_out_ptr = reinterpret_cast<T *>(tmp_out);
     T *query_ptr = reinterpret_cast<T *>(query);
     CACHE_T *key_cache_ptr = reinterpret_cast<CACHE_T *>(key_cache);
     CACHE_T *value_cache_ptr = reinterpret_cast<CACHE_T *>(value_cache);
@@ -83,35 +82,30 @@ void paged_attention_v2_launcher(
     const float *v_scale_ptr = reinterpret_cast<const float *>(v_scale);
 
     const int NUM_WARPS = NUM_THREADS / WARP_SIZE;
-    int max_num_partitions = DIVIDE_ROUND_UP(max_seq_len, PARTITION_SIZE);
-    int logits_size = PARTITION_SIZE * sizeof(float);
+    int padded_max_seq_len = DIVIDE_ROUND_UP(max_seq_len, BLOCK_SIZE) * BLOCK_SIZE;
+    int logits_size = padded_max_seq_len * sizeof(float);
     int outputs_size = (NUM_WARPS / 2) * head_size * sizeof(float);
-
-    // // For paged attention v2 kernel.
-    dim3 grid(num_heads, num_seqs, max_num_partitions);
+    // Python-side check in vllm.worker.worker._check_if_can_support_max_seq_len
+    // Keep that in sync with the logic here!
     int shared_mem_size = std::max(logits_size, outputs_size);
-    // For paged attention v2 reduce kernel.
-    dim3 reduce_grid(num_heads, num_seqs);
-    int reduce_shared_mem_size = 2 * max_num_partitions * sizeof(float);
 
+    dim3 grid(num_heads, num_seqs, 1);
     dim3 block(NUM_THREADS);
-    // const at::cuda::OptionalCUDAGuard device_guard(device_of(query));
-
     switch (head_size) {
         // NOTE(woosuk): To reduce the compilation time, we only compile for the
         // head sizes that we use in the model. However, we can easily extend this
         // to support any head size which is a multiple of 16.
     case 64:
-        LAUNCH_PAGED_ATTENTION_V2(64);
+        LAUNCH_PAGED_ATTENTION_V1(64);
         break;
     case 128:
-        LAUNCH_PAGED_ATTENTION_V2(128);
+        LAUNCH_PAGED_ATTENTION_V1(128);
         break;
     case 192:
-        LAUNCH_PAGED_ATTENTION_V2(192);
+        LAUNCH_PAGED_ATTENTION_V1(192);
         break;
     case 256:
-        LAUNCH_PAGED_ATTENTION_V2(256);
+        LAUNCH_PAGED_ATTENTION_V1(256);
         break;
     default:
         throw std::runtime_error("Unsupported head size: " + std::to_string(head_size));
@@ -119,28 +113,27 @@ void paged_attention_v2_launcher(
     }
 }
 
-#define CALL_V2_LAUNCHER(T, CACHE_T, BLOCK_SIZE, KV_DTYPE, IS_BLOCK_SPARSE)     \
-    paged_attention_v2_launcher<T, CACHE_T, BLOCK_SIZE, KV_DTYPE,               \
-                                IS_BLOCK_SPARSE>(                               \
-        out, exp_sums, max_logits, tmp_out, query, key_cache, value_cache,      \
-        num_kv_heads, scale, block_tables, seq_lens, max_seq_len, alibi_slopes, \
-        k_scale, v_scale, tp_rank, blocksparse_local_blocks,                    \
-        blocksparse_vert_stride, blocksparse_block_size,                        \
-        blocksparse_head_sliding_step, _info, stream);
+#define CALL_V1_LAUNCHER(T, CACHE_T, BLOCK_SIZE, KV_DTYPE, IS_BLOCK_SPARSE)    \
+    paged_attention_v1_launcher<T, CACHE_T, BLOCK_SIZE, KV_DTYPE,              \
+                                IS_BLOCK_SPARSE>(                              \
+        out, query, key_cache, value_cache, num_kv_heads, scale, block_tables, \
+        seq_lens, max_seq_len, alibi_slopes, k_scale, v_scale, tp_rank,        \
+        blocksparse_local_blocks, blocksparse_vert_stride,                     \
+        blocksparse_block_size, blocksparse_head_sliding_step, _info, stream);
 
-#define CALL_V2_LAUNCHER_SPARSITY(T, CACHE_T, BLOCK_SIZE, IS_FP8_KV_CACHE) \
+#define CALL_V1_LAUNCHER_SPARSITY(T, CACHE_T, BLOCK_SIZE, IS_FP8_KV_CACHE) \
     if (is_block_sparse) {                                                 \
-        CALL_V2_LAUNCHER(T, CACHE_T, BLOCK_SIZE, IS_FP8_KV_CACHE, true);   \
+        CALL_V1_LAUNCHER(T, CACHE_T, BLOCK_SIZE, IS_FP8_KV_CACHE, true);   \
     } else {                                                               \
-        CALL_V2_LAUNCHER(T, CACHE_T, BLOCK_SIZE, IS_FP8_KV_CACHE, false);  \
+        CALL_V1_LAUNCHER(T, CACHE_T, BLOCK_SIZE, IS_FP8_KV_CACHE, false);  \
     }
 
 // NOTE(woosuk): To reduce the compilation time, we omitted block sizes
 // 1, 2, 4, 64, 128, 256.
-#define CALL_V2_LAUNCHER_BLOCK_SIZE(T, CACHE_T, KV_DTYPE)                                  \
+#define CALL_V1_LAUNCHER_BLOCK_SIZE(T, CACHE_T, KV_DTYPE)                                  \
     switch (block_size) {                                                                  \
     case 16:                                                                               \
-        CALL_V2_LAUNCHER_SPARSITY(T, CACHE_T, 16, KV_DTYPE);                               \
+        CALL_V1_LAUNCHER_SPARSITY(T, CACHE_T, 16, KV_DTYPE);                               \
         break;                                                                             \
     default:                                                                               \
         throw std::runtime_error("Unsupported block size: " + std::to_string(block_size)); \
@@ -148,7 +141,7 @@ void paged_attention_v2_launcher(
     }
 } // namespace
 
-namespace op::paged_attention_v2::metax {
+namespace op::paged_attention_v1::metax {
 
 using op::paged_attention_v2::vllm::Fp8KVCacheDataType;
 
@@ -172,7 +165,7 @@ infiniStatus_t Descriptor::create(
     const std::optional<infiniopTensorDescriptor_t> &alibi_slopes_desc,
     double scale) {
 
-    auto info_res = PagedAttentionV2Info::create(out_desc, query_desc, key_cache_desc, value_cache_desc, block_tables_desc,
+    auto info_res = PagedAttentionV1Info::create(out_desc, query_desc, key_cache_desc, value_cache_desc, block_tables_desc,
                                                  seq_lens_desc, alibi_slopes_desc,
                                                  scale);
     CHECK_RESULT(info_res);
@@ -194,22 +187,19 @@ infiniStatus_t Descriptor::calculate(
     void *workspace,
     size_t workspace_size,
     void *out,            // [num_seqs, num_heads, head_size]
-    float *exp_sums,       // [num_seqs, num_heads, max_num_partitions]
-    float *max_logits,     // [num_seqs, num_heads, max_num_partitions]
-    void *tmp_out,        // [num_seqs, num_heads, max_num_partitions, head_size]
     void *query,          // [num_seqs, num_heads, head_size]
     void *key_cache,      // [num_blocks, num_heads, head_size/x, block_size, x]
     void *value_cache,    // [num_blocks, num_heads, head_size, block_size]
     int64_t num_kv_heads, // [num_heads]
     double scale,
-    int64_t *block_tables, // [num_seqs, max_num_blocks_per_seq]
-    int64_t *seq_lens,     // [num_seqs]
+    int64_t *block_tables, // [num_seqs, max_num_blocks_per_seq] // 类型固定为 int
+    int64_t *seq_lens,     // [num_seqs] // 类型固定为 int
     int64_t block_size,
     int64_t max_seq_len,
-    const void *alibi_slopes,   // 注意cpp中是 std::optional
+    const void *alibi_slopes,
     const char *kv_cache_dtype,
-    float *k_scale,
-    float *v_scale,
+    float *k_scale, // 类型固定为float
+    float *v_scale, // 类型固定为float
     const int64_t tp_rank,
     const int64_t blocksparse_local_blocks,
     const int64_t blocksparse_vert_stride,
@@ -223,19 +213,20 @@ infiniStatus_t Descriptor::calculate(
     auto stream = static_cast<hcStream_t>(stream_);
     const float *alibi_ptr = (alibi_slopes == nullptr) ? nullptr : static_cast<const float *>(alibi_slopes);
 
+    //
     const bool is_block_sparse = (blocksparse_vert_stride > 1);
     auto query_dtype = _info.dtype;
 
     if (query_dtype == INFINI_DTYPE_F32) {
-        CALL_V2_LAUNCHER_BLOCK_SIZE(float, float, Fp8KVCacheDataType::kAuto);
+        CALL_V1_LAUNCHER_BLOCK_SIZE(float, float, Fp8KVCacheDataType::kAuto);
     } else if (query_dtype == INFINI_DTYPE_F16) {
-        CALL_V2_LAUNCHER_BLOCK_SIZE(uint16_t, uint16_t, Fp8KVCacheDataType::kAuto);
+        CALL_V1_LAUNCHER_BLOCK_SIZE(uint16_t, uint16_t, Fp8KVCacheDataType::kAuto);
     } else if (query_dtype == INFINI_DTYPE_BF16) {
-        CALL_V2_LAUNCHER_BLOCK_SIZE(__nv_bfloat16, __nv_bfloat16, Fp8KVCacheDataType::kAuto);
+        CALL_V1_LAUNCHER_BLOCK_SIZE(__nv_bfloat16, __nv_bfloat16, Fp8KVCacheDataType::kAuto);
     } else {
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
     return INFINI_STATUS_SUCCESS;
 }
 
-} // namespace op::paged_attention_v2::metax
+} // namespace op::paged_attention_v1::metax
