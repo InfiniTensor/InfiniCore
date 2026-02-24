@@ -1,0 +1,236 @@
+#include "../../../devices/nvidia/nvidia_common.cuh"
+#include "../cuda/attention_kernels.cuh"
+#include "paged_attention_v1_nvidia.cuh"
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <cuda_runtime.h>
+
+#include "../../paged_attention_v2/nvidia/dtype_float16.cuh"
+#include "../../paged_attention_v2/utils/attention_dtypes.h"
+
+namespace op::paged_attention_v1::cuda {
+
+using op::paged_attention_v2::vllm::dot;
+using op::paged_attention_v2::vllm::FloatVec;
+using op::paged_attention_v2::vllm::Fp8KVCacheDataType;
+using op::paged_attention_v2::vllm::from_float;
+using op::paged_attention_v2::vllm::Qk_dot;
+using op::paged_attention_v2::vllm::to_float;
+using op::paged_attention_v2::vllm::Vec;
+using op::paged_attention_v2::vllm::zero;
+} // namespace op::paged_attention_v1::cuda
+
+namespace {
+using op::paged_attention_v2::vllm::Fp8KVCacheDataType;
+#define DIVIDE_ROUND_UP(a, b) (((a) + (b) - 1) / (b))
+
+#define LAUNCH_PAGED_ATTENTION_V1(HEAD_SIZE)                                                        \
+    op::paged_attention_v1::cuda::paged_attention_v1_kernel<T, CACHE_T, HEAD_SIZE, BLOCK_SIZE,      \
+                                                            NUM_THREADS, KV_DTYPE, IS_BLOCK_SPARSE> \
+        <<<grid, block, shared_mem_size, stream>>>(                                                 \
+            out_ptr, query_ptr, key_cache_ptr, value_cache_ptr, num_kv_heads,                       \
+            scale, block_tables_ptr, seq_lens_ptr, max_num_blocks_per_seq,                          \
+            alibi_slopes_ptr, q_stride, kv_block_stride, kv_head_stride,                            \
+            k_scale_ptr, v_scale_ptr, tp_rank, blocksparse_local_blocks,                            \
+            blocksparse_vert_stride, blocksparse_block_size,                                        \
+            blocksparse_head_sliding_step);
+
+/*
+#define LAUNCH_PAGED_ATTENTION_V1(HEAD_SIZE) \
+    ;
+*/
+
+template <typename T, typename CACHE_T, int BLOCK_SIZE,
+          Fp8KVCacheDataType KV_DTYPE, bool IS_BLOCK_SPARSE,
+          int NUM_THREADS = 128>
+void paged_attention_v1_launcher(
+    void *out,            // [num_seqs, num_heads, head_size]
+    void *query,          // [num_seqs, num_heads, head_size]
+    void *key_cache,      // [num_blocks, num_heads, head_size/x, block_size, x]
+    void *value_cache,    // [num_blocks, num_heads, head_size, block_size]
+    int64_t num_kv_heads, // [num_heads]
+    double scale,
+    int64_t *block_tables, // [num_seqs, max_num_blocks_per_seq]
+    int64_t *seq_lens,     // [num_seqs]
+    int64_t max_seq_len,
+    const void *alibi_slopes,
+    void *k_scale,
+    void *v_scale,
+    const int64_t tp_rank,
+    const int64_t blocksparse_local_blocks,
+    const int64_t blocksparse_vert_stride,
+    const int64_t blocksparse_block_size,
+    const int64_t blocksparse_head_sliding_step,
+    const op::paged_attention_v1::PagedAttentionV1Info &info,
+    const cudaStream_t stream) {
+
+    int num_seqs = info.num_seqs;
+    int num_heads = info.num_heads;
+    int head_size = info.head_size;
+    int max_num_blocks_per_seq = info.max_num_blocks_per_seq;
+    int q_stride = info.q_stride;
+    int kv_block_stride = info.k_batch_stride; // int kv_block_stride = key_cache.stride(0);
+    int kv_head_stride = info.k_head_stride;   // int kv_head_stride = key_cache.stride(1);
+
+    // NOTE: alibi_slopes is optional.
+    const float *alibi_slopes_ptr = reinterpret_cast<const float *>(alibi_slopes);
+
+    T *out_ptr = reinterpret_cast<T *>(out);
+    T *query_ptr = reinterpret_cast<T *>(query);
+    CACHE_T *key_cache_ptr = reinterpret_cast<CACHE_T *>(key_cache);
+    CACHE_T *value_cache_ptr = reinterpret_cast<CACHE_T *>(value_cache);
+    int64_t *block_tables_ptr = reinterpret_cast<int64_t *>(block_tables);
+    int64_t *seq_lens_ptr = reinterpret_cast<int64_t *>(seq_lens);
+    const float *k_scale_ptr = reinterpret_cast<const float *>(k_scale);
+    const float *v_scale_ptr = reinterpret_cast<const float *>(v_scale);
+
+    const int NUM_WARPS = NUM_THREADS / WARP_SIZE;
+    int padded_max_seq_len = DIVIDE_ROUND_UP(max_seq_len, BLOCK_SIZE) * BLOCK_SIZE;
+    int logits_size = padded_max_seq_len * sizeof(float);
+    int outputs_size = (NUM_WARPS / 2) * head_size * sizeof(float);
+    // Python-side check in vllm.worker.worker._check_if_can_support_max_seq_len
+    // Keep that in sync with the logic here!
+    int shared_mem_size = std::max(logits_size, outputs_size);
+
+    dim3 grid(num_heads, num_seqs, 1);
+    dim3 block(NUM_THREADS);
+    switch (head_size) {
+        // NOTE(woosuk): To reduce the compilation time, we only compile for the
+        // head sizes that we use in the model. However, we can easily extend this
+        // to support any head size which is a multiple of 16.
+    case 64:
+        LAUNCH_PAGED_ATTENTION_V1(64);
+        break;
+    case 128:
+        LAUNCH_PAGED_ATTENTION_V1(128);
+        break;
+    case 192:
+        LAUNCH_PAGED_ATTENTION_V1(192);
+        break;
+    case 256:
+        LAUNCH_PAGED_ATTENTION_V1(256);
+        break;
+    default:
+        throw std::runtime_error("Unsupported head size: " + std::to_string(head_size));
+        break;
+    }
+}
+
+#define CALL_V1_LAUNCHER(T, CACHE_T, BLOCK_SIZE, KV_DTYPE, IS_BLOCK_SPARSE)    \
+    paged_attention_v1_launcher<T, CACHE_T, BLOCK_SIZE, KV_DTYPE,              \
+                                IS_BLOCK_SPARSE>(                              \
+        out, query, key_cache, value_cache, num_kv_heads, scale, block_tables, \
+        seq_lens, max_seq_len, alibi_slopes, k_scale, v_scale, tp_rank,        \
+        blocksparse_local_blocks, blocksparse_vert_stride,                     \
+        blocksparse_block_size, blocksparse_head_sliding_step, _info, stream);
+
+#define CALL_V1_LAUNCHER_SPARSITY(T, CACHE_T, BLOCK_SIZE, IS_FP8_KV_CACHE) \
+    if (is_block_sparse) {                                                 \
+        CALL_V1_LAUNCHER(T, CACHE_T, BLOCK_SIZE, IS_FP8_KV_CACHE, true);   \
+    } else {                                                               \
+        CALL_V1_LAUNCHER(T, CACHE_T, BLOCK_SIZE, IS_FP8_KV_CACHE, false);  \
+    }
+
+// NOTE(woosuk): To reduce the compilation time, we omitted block sizes
+// 1, 2, 4, 64, 128, 256.
+#define CALL_V1_LAUNCHER_BLOCK_SIZE(T, CACHE_T, KV_DTYPE)                                  \
+    switch (block_size) {                                                                  \
+    case 16:                                                                               \
+        CALL_V1_LAUNCHER_SPARSITY(T, CACHE_T, 16, KV_DTYPE);                               \
+        break;                                                                             \
+    default:                                                                               \
+        throw std::runtime_error("Unsupported block size: " + std::to_string(block_size)); \
+        break;                                                                             \
+    }
+} // namespace
+
+namespace op::paged_attention_v1::nvidia {
+
+using op::paged_attention_v2::vllm::Fp8KVCacheDataType;
+
+struct Descriptor::Opaque {
+    std::shared_ptr<device::nvidia::Handle::Internal> internal;
+};
+
+Descriptor::~Descriptor() {
+    delete _opaque;
+}
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t out_desc,          // [num_seqs, num_heads, head_size]
+    infiniopTensorDescriptor_t query_desc,        // [num_seqs, num_heads, head_size]
+    infiniopTensorDescriptor_t key_cache_desc,    // [num_blocks, num_heads, head_size/x, block_size, x]
+    infiniopTensorDescriptor_t value_cache_desc,  // [num_blocks, num_heads, head_size, block_size]
+    infiniopTensorDescriptor_t block_tables_desc, // [num_seqs, max_num_blocks_per_seq]
+    infiniopTensorDescriptor_t seq_lens_desc,     // [num_seqs]
+    const std::optional<infiniopTensorDescriptor_t> &alibi_slopes_desc,
+    double scale) {
+
+    auto info_res = PagedAttentionV1Info::create(out_desc, query_desc, key_cache_desc, value_cache_desc, block_tables_desc,
+                                                 seq_lens_desc, alibi_slopes_desc,
+                                                 scale);
+    CHECK_RESULT(info_res);
+    auto info = info_res.take();
+    // Reserve workspace for optional split-kv decode (partial acc + m/l).
+    // Workspace is independent of runtime env toggles; kernels will clamp num_splits <= kMaxSplits.
+    constexpr size_t kMaxSplits = 8;
+    const size_t per_split = info.num_seqs * info.num_heads * (info.head_size + 2) * sizeof(float);
+    const size_t workspace_bytes = kMaxSplits * per_split;
+
+    *desc_ptr = new Descriptor(
+        new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
+        info, workspace_bytes, handle->device, handle->device_id);
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *out,            // [num_seqs, num_heads, head_size]
+    void *query,          // [num_seqs, num_heads, head_size]
+    void *key_cache,      // [num_blocks, num_heads, head_size/x, block_size, x]
+    void *value_cache,    // [num_blocks, num_heads, head_size, block_size]
+    int64_t num_kv_heads, // [num_heads]
+    double scale,
+    int64_t *block_tables, // [num_seqs, max_num_blocks_per_seq] // 类型固定为 int
+    int64_t *seq_lens,     // [num_seqs] // 类型固定为 int
+    int64_t block_size,
+    int64_t max_seq_len,
+    const void *alibi_slopes,
+    const char *kv_cache_dtype,
+    float *k_scale, // 类型固定为float
+    float *v_scale, // 类型固定为float
+    const int64_t tp_rank,
+    const int64_t blocksparse_local_blocks,
+    const int64_t blocksparse_vert_stride,
+    const int64_t blocksparse_block_size,
+    const int64_t blocksparse_head_sliding_step,
+    void *stream_) const {
+
+    if (workspace_size < _workspace_size) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+    auto stream = static_cast<cudaStream_t>(stream_);
+    const float *alibi_ptr = (alibi_slopes == nullptr) ? nullptr : static_cast<const float *>(alibi_slopes);
+
+    //
+    const bool is_block_sparse = (blocksparse_vert_stride > 1);
+    auto query_dtype = _info.dtype;
+
+    if (query_dtype == INFINI_DTYPE_F32) {
+        CALL_V1_LAUNCHER_BLOCK_SIZE(float, float, Fp8KVCacheDataType::kAuto);
+    } else if (query_dtype == INFINI_DTYPE_F16) {
+        CALL_V1_LAUNCHER_BLOCK_SIZE(uint16_t, uint16_t, Fp8KVCacheDataType::kAuto);
+    } else if (query_dtype == INFINI_DTYPE_BF16) {
+        CALL_V1_LAUNCHER_BLOCK_SIZE(__nv_bfloat16, __nv_bfloat16, Fp8KVCacheDataType::kAuto);
+    } else {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace op::paged_attention_v1::nvidia

@@ -11,6 +11,7 @@
 #include "ops/ones.hpp"
 #include "ops/paged_attention.hpp"
 #include "ops/paged_attention_prefill.hpp"
+#include "ops/paged_attention_v1.hpp"
 #include "ops/paged_attention_v2.hpp"
 #include "ops/paged_caching.hpp"
 #include "ops/random_sample.hpp"

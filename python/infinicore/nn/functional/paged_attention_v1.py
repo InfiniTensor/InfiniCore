@@ -1,0 +1,47 @@
+from infinicore.lib import _infinicore
+from infinicore.tensor import Tensor
+
+
+def paged_attention_v1(
+    out: Tensor,
+    query: Tensor,
+    key_cache: Tensor,
+    value_cache: Tensor,
+    num_kv_heads: int,
+    scale: float,
+    block_tables: Tensor,
+    seq_lens: Tensor,
+    block_size: int,
+    max_seq_len: int,
+    alibi_slopes: Tensor | None,
+    kv_cache_dtype: str,
+    k_scale: Tensor,
+    v_scale: Tensor,
+    tp_rank: int = 0,
+    blocksparse_local_blocks: int = 0,
+    blocksparse_vert_stride: int = 0,
+    blocksparse_block_size: int = 64,
+    blocksparse_head_sliding_step: int = 0,
+) -> None:
+    _infinicore.paged_attention_v1(
+        out._underlying,
+        query._underlying,
+        key_cache._underlying,
+        value_cache._underlying,
+        num_kv_heads,
+        scale,
+        block_tables._underlying,
+        seq_lens._underlying,
+        block_size,
+        max_seq_len,
+        alibi_slopes._underlying if alibi_slopes is not None else None,
+        kv_cache_dtype,
+        k_scale._underlying,
+        v_scale._underlying,
+        tp_rank,
+        blocksparse_local_blocks,
+        blocksparse_vert_stride,
+        blocksparse_block_size,
+        blocksparse_head_sliding_step,
+    )
+    return out
