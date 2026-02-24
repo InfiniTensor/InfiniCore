@@ -70,6 +70,8 @@ target("infiniop-hygon")
     
     -- 复用NVIDIA的CUDA实现，通过HIP兼容层
     add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")
+    -- temporarily disble paged ops for hygon
+    remove_files("../src/infiniop/ops/paged*/nvidia/*.cu")
 
     if has_config("ninetoothed") then
         add_files("../build/ninetoothed/*.c", "../build/ninetoothed/*.cpp", {cxxflags = {"-Wno-return-type"}})
