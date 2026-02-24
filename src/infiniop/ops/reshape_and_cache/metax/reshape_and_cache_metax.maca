@@ -2,7 +2,7 @@
 #include "../../../devices/metax/metax_kernel_common.h"
 #include "../../paged_attention_v2/utils/dtype_fp8.cuh"
 #include "reshape_and_cache_metax_kernels.cuh"
-#include "reshape_and_cache_metax.cuh"
+#include "reshape_and_cache_metax.h"
 
 namespace {
 // KV_T is the data type of key and value tensors.
@@ -11,20 +11,17 @@ namespace {
 // KV_T is the data type of key and value tensors.
 // CACHE_T is the stored data type of kv-cache.
 // KV_DTYPE is the real data type of kv-cache.
-// #define CALL_RESHAPE_AND_CACHE(KV_T, CACHE_T, KV_DTYPE)                            \
-//     op::reshape_and_cache::metax::reshape_and_cache_kernel<KV_T, CACHE_T, KV_DTYPE> \
-//         <<<grid, block, 0, stream>>>(                                              \
-//             reinterpret_cast<KV_T *>(key),                                         \
-//             reinterpret_cast<KV_T *>(value),                                       \
-//             reinterpret_cast<CACHE_T *>(key_cache),                                \
-//             reinterpret_cast<CACHE_T *>(value_cache),                              \
-//             reinterpret_cast<const int64_t *>(slot_mapping),                       \
-//             key_stride, value_stride, num_heads, head_size, block_size, x,         \
-//             reinterpret_cast<const float *>(k_scale),                              \
-//             reinterpret_cast<const float *>(v_scale));
-
 #define CALL_RESHAPE_AND_CACHE(KV_T, CACHE_T, KV_DTYPE)                            \
-;
+     op::reshape_and_cache::metax::reshape_and_cache_kernel<KV_T, CACHE_T, KV_DTYPE> \
+         <<<grid, block, 0, stream>>>(                                              \
+             reinterpret_cast<KV_T *>(key),                                         \
+             reinterpret_cast<KV_T *>(value),                                       \
+             reinterpret_cast<CACHE_T *>(key_cache),                                \
+             reinterpret_cast<CACHE_T *>(value_cache),                              \
+             reinterpret_cast<const int64_t *>(slot_mapping),                       \
+             key_stride, value_stride, num_heads, head_size, block_size, x,         \
+             reinterpret_cast<const float *>(k_scale),                              \
+             reinterpret_cast<const float *>(v_scale));
 
 }; // namespace
 
