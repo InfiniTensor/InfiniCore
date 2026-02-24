@@ -1,5 +1,6 @@
 import contextlib
 
+import torch  # Import first to avoid double free when mixing C++ extensions (temporary workaround)
 import infinicore.context as context
 import infinicore.nn as nn
 
