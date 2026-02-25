@@ -1,7 +1,7 @@
 #pragma once
+#include "../../../devices/metax/metax_common.h"
 #include "../../paged_attention_v2/metax/dtype_float16.cuh"
 #include "../../paged_attention_v2/utils/attention_dtypes.h"
-#include "../../../devices/metax/metax_common.h"
 #include <algorithm>
 #include <assert.h>
 #include <cstdint>
@@ -479,7 +479,6 @@ __global__ void paged_attention_v1_kernel(
         blocksparse_local_blocks, blocksparse_vert_stride, blocksparse_block_size,
         blocksparse_head_sliding_step);
 }
-
 
 } // namespace op::paged_attention_v1::metax
 

@@ -23,7 +23,7 @@ using op::paged_attention_v2::vllm::zero;
 
 namespace {
 using op::paged_attention_v2::vllm::Fp8KVCacheDataType;
-#define DIVIDE_ROUND_UP(a, b) (((a) + (b) - 1) / (b))
+#define DIVIDE_ROUND_UP(a, b) (((a) + (b)-1) / (b))
 
 #define LAUNCH_PAGED_ATTENTION_V1(HEAD_SIZE)                                                        \
     op::paged_attention_v1::cuda::paged_attention_v1_kernel<T, CACHE_T, HEAD_SIZE, BLOCK_SIZE,      \
