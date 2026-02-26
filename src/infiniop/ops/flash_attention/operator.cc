@@ -2,10 +2,8 @@
 #include "../../handle.h"
 #include "infiniop/ops/flash_attention.h"
 
-#if defined(ENABLE_NINETOOTHED)
 #if defined(ENABLE_NVIDIA_API)
-#include "ninetoothed/descriptor.h"
-#endif
+#include "nvidia/flash_attention_nvidia.cuh"
 #endif
 
 __C infiniStatus_t infiniopCreateFlashAttentionDescriptor(
@@ -34,10 +32,8 @@ __C infiniStatus_t infiniopCreateFlashAttentionDescriptor(
 
     switch (handle->device) {
 
-#if defined(ENABLE_NINETOOTHED)
 #if defined(ENABLE_NVIDIA_API)
-        CREATE(INFINI_DEVICE_NVIDIA, ninetoothed);
-#endif
+        CREATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -57,10 +53,8 @@ __C infiniStatus_t infiniopGetFlashAttentionWorkspaceSize(
 
     switch (desc->device_type) {
 
-#if defined(ENABLE_NINETOOTHED)
 #if defined(ENABLE_NVIDIA_API)
-        GET_SIZE(INFINI_DEVICE_NVIDIA, ninetoothed);
-#endif
+        GET_SIZE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -87,10 +81,8 @@ __C infiniStatus_t infiniopFlashAttention(
 
     switch (desc->device_type) {
 
-#if defined(ENABLE_NINETOOTHED)
 #if defined(ENABLE_NVIDIA_API)
-        CALCULATE(INFINI_DEVICE_NVIDIA, ninetoothed);
-#endif
+        CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -109,10 +101,8 @@ __C infiniStatus_t infiniopDestroyFlashAttentionDescriptor(
 
     switch (desc->device_type) {
 
-#if defined(ENABLE_NINETOOTHED)
 #if defined(ENABLE_NVIDIA_API)
-        DESTROY(INFINI_DEVICE_NVIDIA, ninetoothed);
-#endif
+        DESTROY(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
