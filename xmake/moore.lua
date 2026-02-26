@@ -16,7 +16,7 @@ rule("mu")
         local mcc = MUSA_ROOT .. "/bin/mcc"
         local includedirs = table.concat(target:get("includedirs"), " ")
 
-        local args = {"-c", sourcefile, "-o", objectfile, "-I" .. MUSA_ROOT .. "/include", "-O3", "-fPIC", "-Wall", "-std=c++17", "-pthread"}
+        local args = {"--cuda-gpu-arch=mp_31", "-c", sourcefile, "-o", objectfile, "-I" .. MUSA_ROOT .. "/include", "-O3", "-fPIC", "-Wall", "-std=c++17", "-pthread"}
         for _, includedir in ipairs(target:get("includedirs")) do
             table.insert(args, "-I" .. includedir)
         end
@@ -76,6 +76,8 @@ target("infiniccl-moore")
     if has_config("ccl") then
         add_links("libmccl.so")
         add_files("../src/infiniccl/moore/*.cc")
+        add_defines("MARCH_TYPE=310")
+        add_cxxflags("-Wno-unused-function")
     end
     set_languages("cxx17")
 
