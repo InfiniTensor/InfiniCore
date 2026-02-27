@@ -19,3 +19,4 @@
 #include "ops/silu.hpp"
 #include "ops/silu_and_mul.hpp"
 #include "ops/swiglu.hpp"
+#include "ops/swiglu_cuda.hpp"

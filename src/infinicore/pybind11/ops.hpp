@@ -23,6 +23,7 @@
 #include "ops/silu.hpp"
 #include "ops/silu_and_mul.hpp"
 #include "ops/swiglu.hpp"
+#include "ops/swiglu_cuda.hpp"
 
 namespace py = pybind11;
 
@@ -46,6 +47,7 @@ inline void bind(py::module &m) {
     bind_rms_norm(m);
     bind_silu(m);
     bind_swiglu(m);
+    bind_swiglu_cuda(m);
     bind_rope(m);
     bind_embedding(m);
     bind_linear_w8a8i8(m);
