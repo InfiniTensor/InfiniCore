@@ -3,6 +3,7 @@
 #include "infinicore/ops.hpp"
 #include "infinicore/ops/distributed/allreduce.hpp"
 #include "infinicore/ops/linear.hpp"
+#include "infinicore/ops/linear_w4a16_awq.hpp"
 #include "infinicore/ops/linear_w8a8i8.hpp"
 #include <optional>
 #include <spdlog/spdlog.h>
@@ -41,6 +42,15 @@ Tensor BaseLinear::compute_linear(Tensor &input) const {
         std::optional<Tensor> bias_opt = has_bias_ ? std::make_optional<Tensor>(static_cast<const Tensor &>(bias_)) : std::nullopt;
 
         auto output = infinicore::op::linear_w8a8i8(input_contiguous->contiguous(), weight_packed_tensor, weight_scale_tensor, bias_opt);
+        return output;
+    }
+    case infinicore::quantization::QuantScheme::AWQ_W4A16: {
+        Tensor input_contiguous = input->is_contiguous() ? input : input->contiguous();
+        Tensor qweight = static_cast<const Tensor &>(weight_);
+        Tensor qzeros = static_cast<const Tensor &>(weight_zeros_);
+        Tensor scales = static_cast<const Tensor &>(weight_scale_);
+        std::optional<Tensor> bias_opt = has_bias_ ? std::make_optional<Tensor>(static_cast<const Tensor &>(bias_)) : std::nullopt;
+        auto output = infinicore::op::linear_w4a16_awq(input_contiguous->contiguous(), qweight, scales, qzeros, bias_opt);
         return output;
     }
     default: {
@@ -109,6 +119,20 @@ Linear::Linear(size_t in_features, size_t out_features,
         INFINICORE_NN_PARAMETER_INIT(weight, ({out_features, in_features}, infinicore::DataType::I8, device));
         INFINICORE_NN_PARAMETER_INIT(weight_scale, ({out_features, 1}, infinicore::DataType::F32, device));
 
+        if (bias) {
+            INFINICORE_NN_PARAMETER_INIT(bias, ({out_features}, dtype_, device));
+        } else {
+            bias_ = Parameter();
+        }
+        break;
+    }
+    case infinicore::quantization::QuantScheme::AWQ_W4A16: {
+        weight_ = infinicore::nn::Parameter({out_features, in_features}, infinicore::DataType::I32, device);
+        this->register_parameter("qweight", weight_);
+        weight_zeros_ = infinicore::nn::Parameter({out_features, in_features}, infinicore::DataType::I32, device);
+        this->register_parameter("qzeros", weight_zeros_);
+        weight_scale_ = infinicore::nn::Parameter({out_features, in_features}, infinicore::DataType::F16, device);
+        this->register_parameter("scales", weight_scale_);
         if (bias) {
             INFINICORE_NN_PARAMETER_INIT(bias, ({out_features}, dtype_, device));
         } else {
@@ -190,6 +214,39 @@ ColumnParallelLinear::ColumnParallelLinear(size_t in_features, size_t out_featur
         }
         break;
     }
+    case infinicore::quantization::QuantScheme::AWQ_W4A16: {
+        auto awq_ptr = std::static_pointer_cast<infinicore::quantization::AWQ>(this->quantization_);
+        int group_size = awq_ptr->get_group_size();
+        int packing_num = awq_ptr->get_packing_num();
+
+        weight_ = infinicore::nn::Parameter({in_features, out_features / packing_num},
+                                            infinicore::DataType::I32,
+                                            device, 1, tp_rank_, tp_size_);
+        this->register_parameter("qweight", weight_);
+
+        // Weight scale: [out_features, in_features / group_size]
+        // One FP32 scale per group of weights (group_size=128)
+
+        weight_scale_ = infinicore::nn::Parameter({in_features / group_size, out_features},
+                                                  dtype_,
+                                                  device, 1, tp_rank_, tp_size_);
+        this->register_parameter("scales", weight_scale_);
+
+        // Weight zeros (zero points): [out_features, in_features / group_size]
+        // AWQ implementations (e.g., AutoAWQ) typically store zero points as I32
+        // for symmetric/asymmetric quantization support
+        weight_zeros_ = infinicore::nn::Parameter({in_features / group_size, out_features / packing_num},
+                                                  infinicore::DataType::I32,
+                                                  device, 1, tp_rank_, tp_size_);
+
+        this->register_parameter("qzeros", weight_zeros_);
+        if (bias) {
+            INFINICORE_NN_PARAMETER_INIT(bias, ({out_features}, dtype_, device, 0, 0, 1));
+        } else {
+            bias_ = Parameter();
+        }
+        break;
+    }
     default: {
         // Initialize parameters using macro
         INFINICORE_NN_PARAMETER_INIT(weight, ({out_features, in_features}, dtype_, device,
@@ -256,6 +313,44 @@ RowParallelLinear::RowParallelLinear(size_t in_features, size_t out_features, st
 
         if (bias) {
             INFINICORE_NN_PARAMETER_INIT(bias, ({out_features}, dtype_, device, 0, tp_rank_, tp_size_));
+        } else {
+            bias_ = Parameter();
+        }
+        break;
+    }
+    case infinicore::quantization::QuantScheme::AWQ_W4A16: {
+        // AWQ W4A16 for RowParallelLinear:切分维度为 in_features（权重矩阵的第1维）
+        // - Weight: packed int4 in I32 containers (8 int4 per I32)
+        // - Group-wise quantization with group_size=128
+        // - Scale and zero points stored per group along in_features dimension
+
+        auto awq_ptr = std::static_pointer_cast<infinicore::quantization::AWQ>(this->quantization_);
+        int group_size = awq_ptr->get_group_size();
+        int packing_num = awq_ptr->get_packing_num();
+
+        // Packed weight: [out_features, in_features / 8]
+        weight_ = infinicore::nn::Parameter({in_features, out_features / packing_num},
+                                            infinicore::DataType::I32,
+                                            device, 0, tp_rank_, tp_size_);
+        this->register_parameter("qweight", weight_);
+
+        // Weight scale: [out_features, in_features / group_size]
+
+        weight_scale_ = infinicore::nn::Parameter({in_features / group_size, out_features},
+                                                  dtype_,
+                                                  device, 0, tp_rank_, tp_size_);
+        this->register_parameter("scales", weight_scale_);
+        // Weight zeros (zero points): [out_features, in_features / group_size]
+        weight_zeros_ = infinicore::nn::Parameter({in_features / group_size, out_features / packing_num},
+                                                  infinicore::DataType::I32,
+                                                  device, 0, tp_rank_, tp_size_);
+        this->register_parameter("qzeros", weight_zeros_);
+
+        // Bias handling in RowParallelLinear:
+        // - Only rank 0 holds the full bias (after all-reduce on output)
+        // - Other ranks have empty bias parameter
+        if (bias && (0 == tp_rank_)) {
+            INFINICORE_NN_PARAMETER_INIT(bias, ({out_features}, dtype_, device, 0, 0, 1));
         } else {
             bias_ = Parameter();
         }
