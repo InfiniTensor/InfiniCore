@@ -4,6 +4,7 @@ import infinicore
 from infinicore.nn import functional as F
 
 from ...tensor import Tensor
+from ...utils import infinicore_to_numpy_dtype
 from ..functional import RopeAlgo
 from .module import InfiniCoreModule as Module
 
@@ -31,8 +32,13 @@ def create_sin_cos_table(
         max_position, head_dim, theta
     )
 
-    sin_table_infini = infinicore.from_numpy(sin_table_np, dtype=dtype, device=device)
-    cos_table_infini = infinicore.from_numpy(cos_table_np, dtype=dtype, device=device)
+    if dtype is not None:
+        np_dtype = infinicore_to_numpy_dtype(dtype)
+        sin_table_np = sin_table_np.astype(np_dtype)
+        cos_table_np = cos_table_np.astype(np_dtype)
+
+    sin_table_infini = infinicore.from_numpy(sin_table_np, device=device)
+    cos_table_infini = infinicore.from_numpy(cos_table_np, device=device)
 
     return sin_table_infini, cos_table_infini
 

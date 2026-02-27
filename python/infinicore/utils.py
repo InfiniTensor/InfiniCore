@@ -2,6 +2,12 @@ import ml_dtypes
 import numpy as np
 import torch
 
+try:
+    import torch
+except ImportError:
+    torch = None
+    print("warning: torch not available, some functions may not be available")
+
 import infinicore
 
 
@@ -94,4 +100,6 @@ def infinicore_to_numpy_dtype(infini_dtype):
     elif infini_dtype == infinicore.uint8:
         return np.uint8
     else:
-        raise ValueError(f"Unsupported infinicore dtype: {infini_dtype}")
+        raise ValueError(
+            f"Cannot convert infinicore dtype: {infini_dtype} to numpy dtype"
+        )
