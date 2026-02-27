@@ -1,0 +1,22 @@
+#ifndef __MAXIMUM_BANG_INTERNAL_H__
+#define __MAXIMUM_BANG_INTERNAL_H__
+#include "../../../elementwise/bang/elementwise_bang_kernel.h"
+typedef struct MaximumOp {
+public:
+    static constexpr size_t num_inputs = 2;
+    template <typename T>
+    __mlu_device__ void operator()(T *out, const T *a, const T *b, size_t num_elements) const {
+        if constexpr (std::is_same_v<T, half> || std::is_same_v<T, bfloat16_t> || std::is_same_v<T, float>) {
+            __bang_maximum(out, a, b, num_elements);
+        } else {
+            for (size_t i = 0; i < num_elements; ++i) {
+                out[i] = a[i] > b[i] ? a[i] : b[i];
+            }
+        }
+    }
+} MaximumOp;
+LAUNCH_ELEMENTWISE_KERNEL_IMPL(Maximum, MaximumOp)
+LAUNCH_ELEMENTWISE_KERNEL_INSTANTIATE(Maximum, half)
+LAUNCH_ELEMENTWISE_KERNEL_INSTANTIATE(Maximum, bfloat16_t)
+LAUNCH_ELEMENTWISE_KERNEL_INSTANTIATE(Maximum, float)
+#endif // __MAXIMUM_BANG_INTERNAL_H__

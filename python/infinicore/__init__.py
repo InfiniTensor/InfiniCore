@@ -52,6 +52,7 @@ from infinicore.ops.add_rms_norm import add_rms_norm
 from infinicore.ops.attention import attention
 from infinicore.ops.kv_caching import kv_caching
 from infinicore.ops.matmul import matmul
+from infinicore.ops.maximum import maximum
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.paged_attention import paged_attention
@@ -123,6 +124,7 @@ __all__ = [
     "attention",
     "kv_caching",
     "matmul",
+    "maximum",
     "mul",
     "narrow",
     "squeeze",

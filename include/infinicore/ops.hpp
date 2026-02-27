@@ -8,6 +8,7 @@
 #include "ops/flash_attention.hpp"
 #include "ops/kv_caching.hpp"
 #include "ops/matmul.hpp"
+#include "ops/maximum.hpp"
 #include "ops/ones.hpp"
 #include "ops/paged_attention.hpp"
 #include "ops/paged_attention_prefill.hpp"
