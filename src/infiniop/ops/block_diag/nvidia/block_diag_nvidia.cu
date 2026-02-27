@@ -1,0 +1,152 @@
+#include "block_diag_nvidia.cuh"
+#include "../cuda/kernel.cuh"
+#include "../../../utils.h"
+#include <cuda_bf16.h>
+#include <cuda_fp16.h>
+
+namespace op::block_diag::nvidia {
+
+Descriptor::~Descriptor() = default;
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t y_desc,
+    infiniopTensorDescriptor_t *input_descs,
+    size_t num_inputs) {
+
+    if (num_inputs == 0) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    auto dtype = input_descs[0]->dtype();
+    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64, INFINI_DTYPE_BF16);
+
+    for (size_t i = 1; i < num_inputs; ++i) {
+        if (input_descs[i]->dtype() != dtype) {
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
+    }
+
+    std::vector<size_t> row_offsets(num_inputs);
+    std::vector<size_t> col_offsets(num_inputs);
+    std::vector<std::vector<size_t>> input_shapes(num_inputs);
+
+    size_t total_rows = 0;
+    size_t total_cols = 0;
+
+    for (size_t i = 0; i < num_inputs; ++i) {
+        auto shape = input_descs[i]->shape();
+        if (shape.size() != 2) {
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
+        input_shapes[i] = shape;
+        row_offsets[i] = total_rows;
+        col_offsets[i] = total_cols;
+        total_rows += shape[0];
+        total_cols += shape[1];
+    }
+
+    auto y_shape = y_desc->shape();
+    if (y_shape.size() != 2 || y_shape[0] != total_rows || y_shape[1] != total_cols) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+
+    *desc_ptr = new Descriptor(dtype, num_inputs, y_shape,
+                               row_offsets, col_offsets, input_shapes,
+                               y_desc->numel(),
+                               handle->device, handle->device_id);
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *y,
+    const void **inputs,
+    void *stream) const {
+
+    auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
+
+    // Initialize output to zero
+    size_t output_bytes = output_size * infiniopGetDtypeSize(_dtype);
+    CHECK_CUDA(cudaMemsetAsync(y, 0, output_bytes, cuda_stream));
+
+    // Allocate device memory for metadata
+    size_t *d_row_offsets, *d_col_offsets, *d_input_rows, *d_input_cols;
+    const void **d_inputs;
+    CHECK_CUDA(cudaMallocAsync(&d_row_offsets, num_inputs * sizeof(size_t), cuda_stream));
+    CHECK_CUDA(cudaMallocAsync(&d_col_offsets, num_inputs * sizeof(size_t), cuda_stream));
+    CHECK_CUDA(cudaMallocAsync(&d_input_rows, num_inputs * sizeof(size_t), cuda_stream));
+    CHECK_CUDA(cudaMallocAsync(&d_input_cols, num_inputs * sizeof(size_t), cuda_stream));
+    CHECK_CUDA(cudaMallocAsync(&d_inputs, num_inputs * sizeof(void *), cuda_stream));
+
+    // Copy metadata to device
+    std::vector<size_t> input_rows(num_inputs);
+    std::vector<size_t> input_cols(num_inputs);
+    for (size_t i = 0; i < num_inputs; ++i) {
+        input_rows[i] = input_shapes[i][0];
+        input_cols[i] = input_shapes[i][1];
+    }
+
+    CHECK_CUDA(cudaMemcpyAsync(d_row_offsets, row_offsets.data(), num_inputs * sizeof(size_t), cudaMemcpyHostToDevice, cuda_stream));
+    CHECK_CUDA(cudaMemcpyAsync(d_col_offsets, col_offsets.data(), num_inputs * sizeof(size_t), cudaMemcpyHostToDevice, cuda_stream));
+    CHECK_CUDA(cudaMemcpyAsync(d_input_rows, input_rows.data(), num_inputs * sizeof(size_t), cudaMemcpyHostToDevice, cuda_stream));
+    CHECK_CUDA(cudaMemcpyAsync(d_input_cols, input_cols.data(), num_inputs * sizeof(size_t), cudaMemcpyHostToDevice, cuda_stream));
+    CHECK_CUDA(cudaMemcpyAsync(d_inputs, inputs, num_inputs * sizeof(void *), cudaMemcpyHostToDevice, cuda_stream));
+
+    constexpr int BLOCK_SIZE = 256;
+    int num_blocks = (output_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+    switch (_dtype) {
+    case INFINI_DTYPE_F16:
+        cuda::block_diag_kernel<half><<<num_blocks, BLOCK_SIZE, 0, cuda_stream>>>(
+            reinterpret_cast<half *>(y),
+            reinterpret_cast<const half **>(d_inputs),
+            num_inputs,
+            output_shape[0], output_shape[1],
+            d_row_offsets, d_col_offsets, d_input_rows, d_input_cols);
+        break;
+    case INFINI_DTYPE_BF16:
+        cuda::block_diag_kernel<cuda_bfloat16><<<num_blocks, BLOCK_SIZE, 0, cuda_stream>>>(
+            reinterpret_cast<cuda_bfloat16 *>(y),
+            reinterpret_cast<const cuda_bfloat16 **>(d_inputs),
+            num_inputs,
+            output_shape[0], output_shape[1],
+            d_row_offsets, d_col_offsets, d_input_rows, d_input_cols);
+        break;
+    case INFINI_DTYPE_F32:
+        cuda::block_diag_kernel<float><<<num_blocks, BLOCK_SIZE, 0, cuda_stream>>>(
+            reinterpret_cast<float *>(y),
+            reinterpret_cast<const float **>(d_inputs),
+            num_inputs,
+            output_shape[0], output_shape[1],
+            d_row_offsets, d_col_offsets, d_input_rows, d_input_cols);
+        break;
+    case INFINI_DTYPE_F64:
+        cuda::block_diag_kernel<double><<<num_blocks, BLOCK_SIZE, 0, cuda_stream>>>(
+            reinterpret_cast<double *>(y),
+            reinterpret_cast<const double **>(d_inputs),
+            num_inputs,
+            output_shape[0], output_shape[1],
+            d_row_offsets, d_col_offsets, d_input_rows, d_input_cols);
+        break;
+    default:
+        CHECK_CUDA(cudaFreeAsync(d_row_offsets, cuda_stream));
+        CHECK_CUDA(cudaFreeAsync(d_col_offsets, cuda_stream));
+        CHECK_CUDA(cudaFreeAsync(d_input_rows, cuda_stream));
+        CHECK_CUDA(cudaFreeAsync(d_input_cols, cuda_stream));
+        CHECK_CUDA(cudaFreeAsync(d_inputs, cuda_stream));
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
+    CHECK_CUDA(cudaFreeAsync(d_row_offsets, cuda_stream));
+    CHECK_CUDA(cudaFreeAsync(d_col_offsets, cuda_stream));
+    CHECK_CUDA(cudaFreeAsync(d_input_rows, cuda_stream));
+    CHECK_CUDA(cudaFreeAsync(d_input_cols, cuda_stream));
+    CHECK_CUDA(cudaFreeAsync(d_inputs, cuda_stream));
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace op::block_diag::nvidia
