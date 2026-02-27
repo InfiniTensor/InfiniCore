@@ -358,4 +358,8 @@ class TensorSpec:
             dtype_str = (
                 f", {str(self.dtype).replace('infinicore.', '')}" if self.dtype else ""
             )
-            return f"{name_str}tensor{self.shape}{strides_str}{dtype_str}"
+            # Add [FROM_FILE] marker when loading from file
+            from_file_marker = (
+                " [FROM_FILE]" if self.init_mode == TensorInitializer.FROM_FILE else ""
+            )
+            return f"{name_str}tensor{self.shape}{strides_str}{dtype_str}{from_file_marker}"

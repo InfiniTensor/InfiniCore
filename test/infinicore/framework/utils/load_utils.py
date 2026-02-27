@@ -20,6 +20,7 @@ import torch.nn.functional
 import infinicore
 from framework import (
     BaseOperatorTest,
+    TensorInitializer,
     TensorSpec,
     TestCase,
     GenericTestRunner,
@@ -42,11 +43,25 @@ def _parse_dtype(dtype_str):
 def _dict_to_spec(spec_dict):
     """Convert JSON dict to TensorSpec object."""
     if not isinstance(spec_dict, dict): return spec_dict
+
+    # Collect optional fields
+    kwargs = {k: spec_dict[k] for k in ('name', 'file_path') if k in spec_dict}
+
+    # Determine init_mode: file_path always uses FROM_FILE, otherwise use specified mode or default RANDOM
+    if 'file_path' in spec_dict:
+        init_mode = TensorInitializer.FROM_FILE
+    else:
+        init_mode = spec_dict.get('init_mode', TensorInitializer.RANDOM)
+        if isinstance(init_mode, str):
+            # Map string to enum, default to RANDOM if unknown
+            init_mode = getattr(TensorInitializer, init_mode.upper(), TensorInitializer.RANDOM)
+
     return TensorSpec(
         shape=tuple(spec_dict['shape']),
         dtype=_parse_dtype(spec_dict['dtype']),
-        name=spec_dict.get('name'),
-        strides=tuple(spec_dict['strides']) if spec_dict.get('strides') else None
+        strides=tuple(spec_dict['strides']) if spec_dict.get('strides') else None,
+        init_mode=init_mode,
+        **kwargs
     )
 
 def parse_test_cases():
@@ -131,6 +146,7 @@ if __name__ == "__main__":
     main()
 '''
 
+
 class TestGenerator:
 
     def __init__(self, project_root):
@@ -151,8 +167,9 @@ class TestGenerator:
             # If the op name is provided, generate the return statement.
             # If it's None/null, use 'pass' to avoid syntax errors.
             make_body = lambda name, tag: (
-                f"return {name}(*args, **self._resolve_kwargs(args, kwargs))" 
-                if name else f"pass  # {tag} is null, skipping implementation"
+                f"return {name}(*args, **self._resolve_kwargs(args, kwargs))"
+                if name
+                else f"pass  # {tag} is null, skipping implementation"
             )
 
             torch_body = make_body(torch_op_name, "torch_op")
@@ -162,7 +179,7 @@ class TestGenerator:
             config_str = pprint.pformat(op_config, indent=4, width=120)
             file_content = _TEST_FILE_TEMPLATE.replace("{op_config_json}", config_str)
             file_content = file_content.replace("{project_root}", self.project_root)
-            
+
             # Injected Method Bodies
             file_content = file_content.replace("{torch_method_body}", torch_body)
             file_content = file_content.replace("{infini_method_body}", infini_body)

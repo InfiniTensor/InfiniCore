@@ -133,6 +133,10 @@ class TestCase:
             for key, value in self.kwargs.items():
                 if key == "out" and isinstance(value, int):
                     kwargs_strs.append(f"{key}={self.inputs[value].name}")
+                elif isinstance(value, (list, tuple)):
+                    # Handle tuple/list of TensorSpecs or other values
+                    item_strs = [str(item) for item in value]
+                    kwargs_strs.append(f"{key}=({', '.join(item_strs)})")
                 else:
                     kwargs_strs.append(f"{key}={value}")
 
