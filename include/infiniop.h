@@ -39,6 +39,7 @@
 #include "infiniop/ops/softplus.h"
 #include "infiniop/ops/sub.h"
 #include "infiniop/ops/swiglu.h"
+#include "infiniop/ops/swiglu_cuda.h"
 #include "infiniop/ops/tanh.h"
 #include "infiniop/ops/topkrouter.h"
 #include "infiniop/ops/topksoftmax.h"

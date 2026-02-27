@@ -5,7 +5,10 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/swiglu_cpu.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API) || defined(ENABLE_ALI_API)
+#if defined(ENABLE_NVIDIA_API) 
+#include "nvidia/swiglu_nvidia.cuh"
+#endif
+#if defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API) || defined(ENABLE_ALI_API)
 #if defined(ENABLE_NINETOOTHED)
 #include "ninetoothed/swiglu.h"
 #else
@@ -54,11 +57,7 @@ __C infiniStatus_t infiniopCreateSwiGLUDescriptor(
         CREATE(INFINI_DEVICE_CPU, cpu);
 #endif
 #ifdef ENABLE_NVIDIA_API
-#ifdef ENABLE_NINETOOTHED
-        CREATE(INFINI_DEVICE_NVIDIA, ninetoothed);
-#else
         CREATE(INFINI_DEVICE_NVIDIA, nvidia);
-#endif
 #endif
 #ifdef ENABLE_ILUVATAR_API
 #ifdef ENABLE_NINETOOTHED
@@ -115,11 +114,7 @@ __C infiniStatus_t infiniopGetSwiGLUWorkspaceSize(infiniopSwiGLUDescriptor_t des
         GET(INFINI_DEVICE_CPU, cpu);
 #endif
 #ifdef ENABLE_NVIDIA_API
-#ifdef ENABLE_NINETOOTHED
-        GET(INFINI_DEVICE_NVIDIA, ninetoothed);
-#else
         GET(INFINI_DEVICE_NVIDIA, nvidia);
-#endif
 #endif
 #ifdef ENABLE_ILUVATAR_API
 #ifdef ENABLE_NINETOOTHED
@@ -183,11 +178,7 @@ __C infiniStatus_t infiniopSwiGLU(
         CALCULATE(INFINI_DEVICE_CPU, cpu);
 #endif
 #ifdef ENABLE_NVIDIA_API
-#ifdef ENABLE_NINETOOTHED
-        CALCULATE(INFINI_DEVICE_NVIDIA, ninetoothed);
-#else
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
-#endif
 #endif
 #ifdef ENABLE_ILUVATAR_API
 #ifdef ENABLE_NINETOOTHED
@@ -246,11 +237,7 @@ infiniopDestroySwiGLUDescriptor(infiniopSwiGLUDescriptor_t desc) {
         DELETE(INFINI_DEVICE_CPU, cpu);
 #endif
 #ifdef ENABLE_NVIDIA_API
-#ifdef ENABLE_NINETOOTHED
-        DELETE(INFINI_DEVICE_NVIDIA, ninetoothed);
-#else
         DELETE(INFINI_DEVICE_NVIDIA, nvidia);
-#endif
 #endif
 #ifdef ENABLE_ILUVATAR_API
 #ifdef ENABLE_NINETOOTHED
