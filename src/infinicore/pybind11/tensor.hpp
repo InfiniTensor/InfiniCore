@@ -1,9 +1,8 @@
 #pragma once
 
+#include "infinicore.hpp"
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
-
-#include "infinicore.hpp"
 
 namespace py = pybind11;
 
@@ -36,7 +35,17 @@ inline void bind(py::module &m) {
         .def("permute", [](const Tensor &tensor, const Shape &dims) { return tensor->permute(dims); })
         .def("view", [](const Tensor &tensor, const Shape &shape) { return tensor->view(shape); })
         .def("unsqueeze", [](const Tensor &tensor, std::size_t dim) { return tensor->unsqueeze(dim); })
-        .def("squeeze", [](const Tensor &tensor, std::size_t dim) { return tensor->squeeze(dim); });
+        .def("squeeze", [](const Tensor &tensor, std::size_t dim) { return tensor->squeeze(dim); })
+        .def("__str__", [](const Tensor &tensor) {
+            std::ostringstream oss;
+            oss << tensor;
+            return oss.str();
+        })
+        .def("__repr__", [](const Tensor &tensor) {
+            std::ostringstream oss;
+            oss << tensor;
+            return oss.str();
+        });
 
     m.def("empty", &Tensor::empty,
           py::arg("shape"),

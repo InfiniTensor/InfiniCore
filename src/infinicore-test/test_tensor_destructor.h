@@ -25,6 +25,7 @@ private:
     TestResult testStridedTensor();
     TestResult testMemoryLeakDetection();
     TestResult testTensorCopyDestruction();
+    TestResult testPrintOptions();
 };
 
 } // namespace infinicore::test
