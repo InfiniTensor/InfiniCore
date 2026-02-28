@@ -51,8 +51,9 @@ __C infiniStatus_t infiniopCreateLogSoftmaxDescriptor(
 #ifdef ENABLE_ASCEND_API
         // CREATE(INFINI_DEVICE_ASCEND, ascend)
 #endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
 __C infiniStatus_t infiniopGetLogSoftmaxWorkspaceSize(infiniopLogSoftmaxDescriptor_t desc, size_t *size) {
@@ -84,8 +85,9 @@ __C infiniStatus_t infiniopGetLogSoftmaxWorkspaceSize(infiniopLogSoftmaxDescript
 #ifdef ENABLE_ASCEND_API
         // GET(INFINI_DEVICE_ASCEND, ascend)
 #endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
 __C infiniStatus_t infiniopLogSoftmax(
@@ -122,8 +124,9 @@ __C infiniStatus_t infiniopLogSoftmax(
 #ifdef ENABLE_ASCEND_API
         // CALCULATE(INFINI_DEVICE_ASCEND, ascend)
 #endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
 __C infiniStatus_t infiniopDestroyLogSoftmaxDescriptor(infiniopLogSoftmaxDescriptor_t desc) {
@@ -155,6 +158,7 @@ __C infiniStatus_t infiniopDestroyLogSoftmaxDescriptor(infiniopLogSoftmaxDescrip
 #ifdef ENABLE_ASCEND_API
         // DESTROY(INFINI_DEVICE_ASCEND, ascend)
 #endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }

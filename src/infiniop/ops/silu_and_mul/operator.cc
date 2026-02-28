@@ -24,8 +24,11 @@ __C infiniStatus_t infiniopCreateSiluAndMulDescriptor(
 #ifdef ENABLE_MOORE_API
         CREATE(INFINI_DEVICE_MOORE, moore);
 #endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+
+#undef CREATE
 }
 
 __C infiniStatus_t infiniopGetSiluAndMulWorkspaceSize(infiniopSiluAndMulDescriptor_t desc, size_t *size) {
@@ -39,8 +42,11 @@ __C infiniStatus_t infiniopGetSiluAndMulWorkspaceSize(infiniopSiluAndMulDescript
 #ifdef ENABLE_MOORE_API
         GET(INFINI_DEVICE_MOORE, moore);
 #endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+
+#undef GET
 }
 
 __C infiniStatus_t infiniopSiluAndMul(
@@ -59,8 +65,11 @@ __C infiniStatus_t infiniopSiluAndMul(
 #ifdef ENABLE_MOORE_API
         CALCULATE(INFINI_DEVICE_MOORE, moore);
 #endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+
+#undef CALCULATE
 }
 
 __C infiniStatus_t infiniopDestroySiluAndMulDescriptor(infiniopSiluAndMulDescriptor_t desc) {
@@ -74,6 +83,9 @@ __C infiniStatus_t infiniopDestroySiluAndMulDescriptor(infiniopSiluAndMulDescrip
 #ifdef ENABLE_MOORE_API
         DESTROY(INFINI_DEVICE_MOORE, moore);
 #endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+
+#undef DESTROY
 }

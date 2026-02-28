@@ -72,8 +72,10 @@ __C infiniStatus_t infiniopCreateCausalSoftmaxDescriptor(
 #ifdef ENABLE_MOORE_API
         CREATE(INFINI_DEVICE_MOORE, moore)
 #endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+#undef CREATE
 }
 
 __C infiniStatus_t infiniopGetCausalSoftmaxWorkspaceSize(infiniopCausalSoftmaxDescriptor_t desc, size_t *size) {
@@ -117,8 +119,10 @@ __C infiniStatus_t infiniopGetCausalSoftmaxWorkspaceSize(infiniopCausalSoftmaxDe
 #ifdef ENABLE_MOORE_API
         GET(INFINI_DEVICE_MOORE, moore)
 #endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+#undef GET
 }
 
 __C infiniStatus_t infiniopCausalSoftmax(
@@ -167,8 +171,10 @@ __C infiniStatus_t infiniopCausalSoftmax(
 #ifdef ENABLE_MOORE_API
         CALCULATE(INFINI_DEVICE_MOORE, moore)
 #endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+#undef CALCULATE
 }
 
 __C infiniStatus_t infiniopDestroyCausalSoftmaxDescriptor(infiniopCausalSoftmaxDescriptor_t desc) {
@@ -212,6 +218,8 @@ __C infiniStatus_t infiniopDestroyCausalSoftmaxDescriptor(infiniopCausalSoftmaxD
 #ifdef ENABLE_MOORE_API
         DESTROY(INFINI_DEVICE_MOORE, moore)
 #endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+#undef DESTROY
 }
