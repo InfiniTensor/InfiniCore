@@ -38,7 +38,11 @@ __device__ void pagedCachingKernel(
     const ptrdiff_t k_src_stride,         // Stride between tokens in the source K tensor
     const ptrdiff_t v_src_stride,         // Stride between tokens in the source V tensor
     const ptrdiff_t k_cache_block_stride, // Stride between blocks in the K cache pool
-    const ptrdiff_t v_cache_block_stride  // Stride between blocks in the V cache pool
+    const ptrdiff_t v_cache_block_stride, // Stride between blocks in the V cache pool
+    const ptrdiff_t k_cache_head_stride,  // Stride between heads in the K cache pool
+    const ptrdiff_t v_cache_head_stride,  // Stride between heads in the V cache pool
+    const ptrdiff_t k_cache_slot_stride,  // Stride between block slots in the K cache pool
+    const ptrdiff_t v_cache_slot_stride   // Stride between block slots in the V cache pool
 ) {
     //================================================================================
     // 1. Identify Work Unit & Calculate Addresses
@@ -66,13 +70,11 @@ __device__ void pagedCachingKernel(
 
     // Destination pointer calculation assumes a [num_blocks, block_size, num_heads, head_size] layout.
     // We point to the beginning of the memory region for this token's slot.
-    const ptrdiff_t cache_head_stride = block_size * head_size;
-
     Tdata *k_cache_block_base_ptr = k_cache_ptr + physical_block_idx * k_cache_block_stride;
-    Tdata *k_dst_head_ptr = k_cache_block_base_ptr + head_idx * cache_head_stride + block_offset * head_size;
+    Tdata *k_dst_head_ptr = k_cache_block_base_ptr + head_idx * k_cache_head_stride + block_offset * k_cache_slot_stride;
 
     Tdata *v_cache_block_base_ptr = v_cache_ptr + physical_block_idx * v_cache_block_stride;
-    Tdata *v_dst_head_ptr = v_cache_block_base_ptr + head_idx * cache_head_stride + block_offset * head_size;
+    Tdata *v_dst_head_ptr = v_cache_block_base_ptr + head_idx * v_cache_head_stride + block_offset * v_cache_slot_stride;
 
     //================================================================================
     // 2. Perform Element-wise Data Copy (Safe, Non-Vectorized)

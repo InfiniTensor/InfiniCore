@@ -10,10 +10,13 @@ INFINIOP_CUDA_KERNEL pagedCaching(
     const int64_t *slot_mapping,
     const size_t head_size, const size_t block_size,
     const ptrdiff_t k_src_stride, const ptrdiff_t v_src_stride,
-    const ptrdiff_t k_cache_block_stride, const ptrdiff_t v_cache_block_stride) {
+    const ptrdiff_t k_cache_block_stride, const ptrdiff_t v_cache_block_stride,
+    const ptrdiff_t k_cache_head_stride, const ptrdiff_t v_cache_head_stride,
+    const ptrdiff_t k_cache_slot_stride, const ptrdiff_t v_cache_slot_stride) {
     op::paged_caching::cuda::pagedCachingKernel<Tdata, NUM_THREADS>(
         k_cache, v_cache, k, v, slot_mapping, head_size,
-        block_size, k_src_stride, v_src_stride, k_cache_block_stride, v_cache_block_stride);
+        block_size, k_src_stride, v_src_stride,
+        k_cache_block_stride, v_cache_block_stride, k_cache_head_stride, v_cache_head_stride, k_cache_slot_stride, v_cache_slot_stride);
 }
 
 namespace op::paged_caching::nvidia {
@@ -59,6 +62,8 @@ infiniStatus_t launchKernel(const PagedCachingInfo &info,
                             size_t num_tokens, size_t num_kv_heads, size_t head_size, size_t block_size,
                             ptrdiff_t k_src_stride, ptrdiff_t v_src_stride,
                             ptrdiff_t k_cache_block_stride, ptrdiff_t v_cache_block_stride,
+                            ptrdiff_t k_cache_head_stride, ptrdiff_t v_cache_head_stride,
+                            ptrdiff_t k_cache_slot_stride, ptrdiff_t v_cache_slot_stride,
                             cudaStream_t stream) {
 
     // Grid dimension is 1D, with one block per token, as we decided.
@@ -83,7 +88,11 @@ infiniStatus_t launchKernel(const PagedCachingInfo &info,
                 k_src_stride,
                 v_src_stride,
                 k_cache_block_stride,
-                v_cache_block_stride);
+                v_cache_block_stride,
+                k_cache_head_stride,
+                v_cache_head_stride,
+                k_cache_slot_stride,
+                v_cache_slot_stride);
     } else if (dtype == INFINI_DTYPE_BF16) {
         pagedCaching<__nv_bfloat16, NUM_THREADS>
             <<<grid, block, shared_mem_size, stream>>>(
@@ -97,7 +106,11 @@ infiniStatus_t launchKernel(const PagedCachingInfo &info,
                 k_src_stride,
                 v_src_stride,
                 k_cache_block_stride,
-                v_cache_block_stride);
+                v_cache_block_stride,
+                k_cache_head_stride,
+                v_cache_head_stride,
+                k_cache_slot_stride,
+                v_cache_slot_stride);
     } else if (dtype == INFINI_DTYPE_F32) {
         pagedCaching<float, NUM_THREADS>
             <<<grid, block, shared_mem_size, stream>>>(
@@ -111,7 +124,11 @@ infiniStatus_t launchKernel(const PagedCachingInfo &info,
                 k_src_stride,
                 v_src_stride,
                 k_cache_block_stride,
-                v_cache_block_stride);
+                v_cache_block_stride,
+                k_cache_head_stride,
+                v_cache_head_stride,
+                k_cache_slot_stride,
+                v_cache_slot_stride);
     } else {
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
@@ -137,6 +154,8 @@ infiniStatus_t Descriptor::calculate(
             _info.num_tokens, _info.num_kv_heads, _info.head_size, _info.block_size,
             _info.k_src_stride, _info.v_src_stride,
             _info.k_cache_block_stride, _info.v_cache_block_stride,
+            _info.k_cache_head_stride, _info.v_cache_head_stride,
+            _info.k_cache_slot_stride, _info.v_cache_slot_stride,
             stream);
     } else if (_opaque->internal->maxThreadsPerBlock() >= CUDA_BLOCK_SIZE_512) {
         launchKernel<CUDA_BLOCK_SIZE_512>(
@@ -144,6 +163,8 @@ infiniStatus_t Descriptor::calculate(
             _info.num_tokens, _info.num_kv_heads, _info.head_size, _info.block_size,
             _info.k_src_stride, _info.v_src_stride,
             _info.k_cache_block_stride, _info.v_cache_block_stride,
+            _info.k_cache_head_stride, _info.v_cache_head_stride,
+            _info.k_cache_slot_stride, _info.v_cache_slot_stride,
             stream);
     } else if (_opaque->internal->maxThreadsPerBlock() >= CUDA_BLOCK_SIZE_4096) {
         launchKernel<CUDA_BLOCK_SIZE_4096>(
@@ -151,6 +172,8 @@ infiniStatus_t Descriptor::calculate(
             _info.num_tokens, _info.num_kv_heads, _info.head_size, _info.block_size,
             _info.k_src_stride, _info.v_src_stride,
             _info.k_cache_block_stride, _info.v_cache_block_stride,
+            _info.k_cache_head_stride, _info.v_cache_head_stride,
+            _info.k_cache_slot_stride, _info.v_cache_slot_stride,
             stream);
     } else {
         // If the GPU is older and supports fewer threads, return an error.
