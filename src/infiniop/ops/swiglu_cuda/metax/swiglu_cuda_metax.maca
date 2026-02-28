@@ -20,10 +20,10 @@ INFINIOP_METAX_KERNEL SwiGLUCuda(
                                     b_strides_0, b_strides_1);
 }
 
-namespace op::swiglu_cuda::nvidia {
+namespace op::swiglu_cuda::metax {
 
 struct Descriptor::Opaque {
-    std::shared_ptr<device::nvidia::Handle::Internal> internal;
+    std::shared_ptr<device::metax::Handle::Internal> internal;
 };
 
 Descriptor::~Descriptor() {
@@ -41,7 +41,7 @@ infiniStatus_t Descriptor::create(
     CHECK_RESULT(info);
     
     *desc_ptr = new Descriptor(
-        new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
+        new Opaque{reinterpret_cast<device::metax::Handle *>(handle)->internal()},
         info.take(), 0, handle->device, handle->device_id);
     return INFINI_STATUS_SUCCESS;
 }
@@ -52,7 +52,7 @@ infiniStatus_t calculate_swiglu_cuda(
     T *c,
     const T *a,
     const T *b,
-    cudaStream_t stream,
+    hcStream_t stream,
     void *workspace) {
     
     int length = (int)info.length;
@@ -88,7 +88,7 @@ infiniStatus_t Descriptor::calculate(
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
 
-    cudaStream_t stream = (cudaStream_t)stream_;
+    hcStream_t stream = (hcStream_t)stream_;
 
 #define CALCULATE_SWIGLU_CUDA(BLOCK_SIZE, TDATA) \
     calculate_swiglu_cuda<BLOCK_SIZE, TDATA>(_info, (TDATA *)c, (const TDATA *)a, (const TDATA *)b, stream, workspace)
@@ -112,4 +112,4 @@ infiniStatus_t Descriptor::calculate(
 
     return INFINI_STATUS_SUCCESS;
 }
-} // namespace op::swiglu_cuda::nvidia
+} // namespace op::swiglu_cuda::metax
