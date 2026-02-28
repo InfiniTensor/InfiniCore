@@ -29,17 +29,17 @@ __device__ void SwiGLUCudaKernel(
     const T *b,
     int length,
     size_t batch, size_t seq_len, size_t hidden_dim,
-    ptrdiff_t c_strides_0, ptrdiff_t c_strides_1,
-    ptrdiff_t a_strides_0, ptrdiff_t a_strides_1,
-    ptrdiff_t b_strides_0, ptrdiff_t b_strides_1) {
+    ptrdiff_t c_strides_0, ptrdiff_t c_strides_1, ptrdiff_t c_strides_2,
+    ptrdiff_t a_strides_0, ptrdiff_t a_strides_1, ptrdiff_t a_strides_2,
+    ptrdiff_t b_strides_0, ptrdiff_t b_strides_1, ptrdiff_t b_strides_2) {
     int ind_c = 0;
     int ind_a = 0;
     int ind_b = 0;
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     if (tid < length) {
-        ind_c += tid % (int)hidden_dim;
-        ind_a += tid % (int)hidden_dim;
-        ind_b += tid % (int)hidden_dim;
+        ind_c += tid % (int)hidden_dim * (int)c_strides_2;
+        ind_a += tid % (int)hidden_dim * (int)a_strides_2;
+        ind_b += tid % (int)hidden_dim * (int)b_strides_2;
         tid = tid / (int)hidden_dim;
         ind_c += (tid % (int)seq_len) * (int)c_strides_1;
         ind_a += (tid % (int)seq_len) * (int)a_strides_1;
@@ -51,6 +51,7 @@ __device__ void SwiGLUCudaKernel(
 
         T gate = b[ind_b];
         T up = a[ind_a];
+
         if constexpr (std::is_same_v<T, half2>) {
             c[ind_c] = __hmul2(__hmul2(gate, sigmoid(gate)), up);
         } else if constexpr (std::is_same_v<T, half>) {

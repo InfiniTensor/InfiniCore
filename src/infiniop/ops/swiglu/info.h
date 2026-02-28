@@ -14,9 +14,9 @@ public:
     infiniDtype_t dtype;
     size_t length;
     size_t batch, seq_len, hidden_dim;
-    ptrdiff_t c_strides_0, c_strides_1;
-    ptrdiff_t a_strides_0, a_strides_1;
-    ptrdiff_t b_strides_0, b_strides_1;
+    ptrdiff_t c_strides_0, c_strides_1, c_strides_2;
+    ptrdiff_t a_strides_0, a_strides_1, a_strides_2;
+    ptrdiff_t b_strides_0, b_strides_1, b_strides_2;
 
     static utils::Result<SwiGLUCudaInfo> createSwiGLUCudaInfo(infiniopTensorDescriptor_t c_desc, infiniopTensorDescriptor_t a_desc, infiniopTensorDescriptor_t b_desc) {
         auto dtype = c_desc->dtype();
@@ -37,10 +37,13 @@ public:
 
         ptrdiff_t c_strides_0 = (ndim == 3 ? c_desc->strides()[0] : 0);
         ptrdiff_t c_strides_1 = (ndim == 3 ? c_desc->strides()[1] : c_desc->strides()[0]);
+        ptrdiff_t c_strides_2 = (ndim == 3 ? c_desc->strides()[2] : c_desc->strides()[1]);
         ptrdiff_t a_strides_0 = (ndim == 3 ? a_desc->strides()[0] : 0);
         ptrdiff_t a_strides_1 = (ndim == 3 ? a_desc->strides()[1] : a_desc->strides()[0]);
+        ptrdiff_t a_strides_2 = (ndim == 3 ? a_desc->strides()[2] : a_desc->strides()[1]);
         ptrdiff_t b_strides_0 = (ndim == 3 ? b_desc->strides()[0] : 0);
         ptrdiff_t b_strides_1 = (ndim == 3 ? b_desc->strides()[1] : b_desc->strides()[0]);
+        ptrdiff_t b_strides_2 = (ndim == 3 ? b_desc->strides()[2] : b_desc->strides()[1]);
 
         return utils::Result<SwiGLUCudaInfo>(SwiGLUCudaInfo{
             dtype,
@@ -50,10 +53,13 @@ public:
             hidden_dim,
             c_strides_0,
             c_strides_1,
+            c_strides_2,
             a_strides_0,
             a_strides_1,
+            a_strides_2,
             b_strides_0,
-            b_strides_1});
+            b_strides_1,
+            b_strides_2});
     }
 };
 

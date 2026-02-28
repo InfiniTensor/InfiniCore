@@ -10,13 +10,13 @@ INFINIOP_CUDA_KERNEL SwiGLUCuda(
     const T *b,
     int length,
     size_t batch, size_t seq_len, size_t hidden_dim,
-    ptrdiff_t c_strides_0, ptrdiff_t c_strides_1,
-    ptrdiff_t a_strides_0, ptrdiff_t a_strides_1,
-    ptrdiff_t b_strides_0, ptrdiff_t b_strides_1) {
+    ptrdiff_t c_strides_0, ptrdiff_t c_strides_1, ptrdiff_t c_strides_2,
+    ptrdiff_t a_strides_0, ptrdiff_t a_strides_1, ptrdiff_t a_strides_2,
+    ptrdiff_t b_strides_0, ptrdiff_t b_strides_1, ptrdiff_t b_strides_2) {
     SwiGLUCudaKernel<T, BLOCK_SIZE>(c, a, b, length, batch, seq_len, hidden_dim,
-                                    c_strides_0, c_strides_1,
-                                    a_strides_0, a_strides_1,
-                                    b_strides_0, b_strides_1);
+                                    c_strides_0, c_strides_1, c_strides_2,
+                                    a_strides_0, a_strides_1, a_strides_2,
+                                    b_strides_0, b_strides_1, b_strides_2);
 }
 
 namespace op::swiglu_cuda::nvidia {
@@ -55,22 +55,25 @@ infiniStatus_t calculate_swiglu_cuda(
     void *workspace) {
 
     int length = (int)info.length;
-    int batch = (int)info.batch;
-    int seq_len = (int)info.seq_len;
-    int hidden_dim = (int)info.hidden_dim;
-    int c_strides_0 = (int)info.c_strides_0;
-    int c_strides_1 = (int)info.c_strides_1;
-    int a_strides_0 = (int)info.a_strides_0;
-    int a_strides_1 = (int)info.a_strides_1;
-    int b_strides_0 = (int)info.b_strides_0;
-    int b_strides_1 = (int)info.b_strides_1;
+    size_t batch = info.batch;
+    size_t seq_len = info.seq_len;
+    size_t hidden_dim = info.hidden_dim;
+    ptrdiff_t c_strides_0 = info.c_strides_0;
+    ptrdiff_t c_strides_1 = info.c_strides_1;
+    ptrdiff_t c_strides_2 = info.c_strides_2;
+    ptrdiff_t a_strides_0 = info.a_strides_0;
+    ptrdiff_t a_strides_1 = info.a_strides_1;
+    ptrdiff_t a_strides_2 = info.a_strides_2;
+    ptrdiff_t b_strides_0 = info.b_strides_0;
+    ptrdiff_t b_strides_1 = info.b_strides_1;
+    ptrdiff_t b_strides_2 = info.b_strides_2;
 
     int num_blocks = (length + BLOCK_SIZE - 1) / BLOCK_SIZE;
     SwiGLUCuda<T, BLOCK_SIZE>
         <<<num_blocks, BLOCK_SIZE, 0, stream>>>(c, a, b, length, batch, seq_len, hidden_dim,
-                                                c_strides_0, c_strides_1,
-                                                a_strides_0, a_strides_1,
-                                                b_strides_0, b_strides_1);
+                                                c_strides_0, c_strides_1, c_strides_2,
+                                                a_strides_0, a_strides_1, a_strides_2,
+                                                b_strides_0, b_strides_1, b_strides_2);
 
     return INFINI_STATUS_SUCCESS;
 }
