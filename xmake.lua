@@ -180,6 +180,12 @@ option("moore-gpu")
     set_description("Whether to compile implementations for Moore Threads GPU")
 option_end()
 
+option("moore-gpu-arch")
+    set_default("mp_31")
+    set_showmenu(true)
+    set_description("Set Moore GPU architecture (e.g. mp_31)")
+option_end()
+
 if has_config("moore-gpu") then
     add_defines("ENABLE_MOORE_API")
     includes("xmake/moore.lua")
