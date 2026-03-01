@@ -272,7 +272,17 @@ std::shared_ptr<TensorImpl> TensorImpl::strided_from_blob(
     const Device &device) {
     auto t = std::shared_ptr<TensorImpl>(new TensorImpl(shape, strides, dtype));
     t->data_.offset = 0;
-    t->data_.memory = std::make_shared<Memory>((std::byte *)raw_ptr, t->numel() * dsize(dtype), device, nullptr);
+
+    size_t max_offset = 0;
+    for (size_t i = 0; i < shape.size(); ++i) {
+        if (shape[i] > 0) {
+            max_offset += (shape[i] - 1) * strides[i];
+        }
+    }
+    size_t required_elements = max_offset + 1;
+    size_t required_bytes = required_elements * dsize(dtype);
+
+    t->data_.memory = std::make_shared<Memory>((std::byte *)raw_ptr, required_bytes, device, nullptr);
     return t;
 }
 
