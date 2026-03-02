@@ -26,6 +26,10 @@ public:
     ptrdiff_t v_src_stride;
     ptrdiff_t k_cache_block_stride;
     ptrdiff_t v_cache_block_stride;
+    ptrdiff_t k_cache_head_stride;
+    ptrdiff_t v_cache_head_stride;
+    ptrdiff_t k_cache_slot_stride;
+    ptrdiff_t v_cache_slot_stride;
 
     static utils::Result<PagedCachingInfo> create(
         infiniopTensorDescriptor_t k_cache_desc,
@@ -63,6 +67,10 @@ public:
         ptrdiff_t v_src_stride = v_desc->stride(0);
         ptrdiff_t k_cache_block_stride = k_cache_desc->stride(0);
         ptrdiff_t v_cache_block_stride = v_cache_desc->stride(0);
+        ptrdiff_t k_cache_head_stride = k_cache_desc->stride(1);
+        ptrdiff_t v_cache_head_stride = v_cache_desc->stride(1);
+        ptrdiff_t k_cache_slot_stride = k_cache_desc->stride(2);
+        ptrdiff_t v_cache_slot_stride = v_cache_desc->stride(2);
 
         return utils::Result<PagedCachingInfo>(PagedCachingInfo{
             dtype,
@@ -73,7 +81,11 @@ public:
             k_src_stride,
             v_src_stride,
             k_cache_block_stride,
-            v_cache_block_stride});
+            v_cache_block_stride,
+            k_cache_head_stride,
+            v_cache_head_stride,
+            k_cache_slot_stride,
+            v_cache_slot_stride});
     }
 };
 

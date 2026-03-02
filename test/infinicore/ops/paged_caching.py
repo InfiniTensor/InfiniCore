@@ -18,12 +18,16 @@ from framework import (
 # Operator-specific configuration
 # ==============================================================================
 
-# Test cases format: (num_seqs, max_seq_len, num_kv_heads, head_size, block_size)
+# Test cases format: (num_seqs, max_seq_len, num_kv_heads, head_size, block_size, permute_dim_1_2)
 _TEST_CASES_DATA = [
-    (1, 128, 8, 128, 16),
-    (5, 512, 40, 128, 16),
-    (16, 1024, 8, 64, 32),
-    (10, 1024, 40, 64, 32),
+    (1, 128, 8, 128, 16, False),
+    (1, 128, 8, 128, 16, True),
+    (5, 512, 40, 256, 16, False),
+    (5, 512, 40, 256, 16, True),
+    (16, 1024, 8, 64, 32, False),
+    (16, 1024, 8, 64, 32, True),
+    (10, 1024, 40, 64, 32, False),
+    (10, 1024, 40, 64, 32, True),
 ]
 
 # Tolerance configuration
@@ -40,7 +44,9 @@ _TENSOR_DTYPES = [infinicore.float16, infinicore.bfloat16, infinicore.float32]
 # ==============================================================================
 #  Reference Implementation
 # ==============================================================================
-def ref_paged_caching(key_cache_pool, value_cache_pool, key, value, slot_mapping):
+def ref_paged_caching(
+    key_cache_pool, value_cache_pool, key, value, slot_mapping, permute_dim_1_2
+):
     """
     Reference implementation for paged_caching operator.
 
@@ -52,7 +58,7 @@ def ref_paged_caching(key_cache_pool, value_cache_pool, key, value, slot_mapping
         slot_mapping (torch.Tensor): Slot mapping, shape [ntok]
     """
     ntok = key.shape[0]
-    block_size = key_cache_pool.shape[2]
+    block_size = key_cache_pool.shape[1] if permute_dim_1_2 else key_cache_pool.shape[2]
 
     # This reference implementation operates on a cloned cache to avoid modifying the original input tensor,
     # mimicking the behavior where the custom operator writes to its output tensor.
@@ -67,8 +73,12 @@ def ref_paged_caching(key_cache_pool, value_cache_pool, key, value, slot_mapping
         key_token = key[i]
         value_token = value[i]
 
-        k_cache_ref[block_idx, :, block_offset, :] = key_token
-        v_cache_ref[block_idx, :, block_offset, :] = value_token
+        if permute_dim_1_2:
+            k_cache_ref[block_idx, block_offset, :, :] = key_token
+            v_cache_ref[block_idx, block_offset, :, :] = value_token
+        else:
+            k_cache_ref[block_idx, :, block_offset, :] = key_token
+            v_cache_ref[block_idx, :, block_offset, :] = value_token
 
     return k_cache_ref, v_cache_ref
 
@@ -79,7 +89,14 @@ def parse_test_cases():
     Each test case contains all necessary information for execution and validation.
     """
     test_cases = []
-    for num_seqs, max_seq_len, num_kv_heads, head_size, block_size in _TEST_CASES_DATA:
+    for (
+        num_seqs,
+        max_seq_len,
+        num_kv_heads,
+        head_size,
+        block_size,
+        permute_dim_1_2,
+    ) in _TEST_CASES_DATA:
         num_blocks = 4096  # A reasonably large cache pool for testing
 
         # Create metadata: variable context lengths for each sequence in the batch
@@ -111,6 +128,9 @@ def parse_test_cases():
         v_shape = (ntok, num_kv_heads, head_size)
         k_cache_shape = (num_blocks, num_kv_heads, block_size, head_size)
         v_cache_shape = (num_blocks, num_kv_heads, block_size, head_size)
+        if permute_dim_1_2:
+            k_cache_shape = (num_blocks, block_size, num_kv_heads, head_size)
+            v_cache_shape = (num_blocks, block_size, num_kv_heads, head_size)
 
         # Generate test cases for all data types
         for dtype in _TENSOR_DTYPES:
@@ -142,7 +162,7 @@ def parse_test_cases():
                         v_spec,
                         slot_mapping_spec,
                     ],
-                    kwargs=None,
+                    kwargs={"permute_dim_1_2": permute_dim_1_2},
                     output_spec=None,
                     comparison_target=0,  # Only compare k_cache
                     tolerance=tolerance,
@@ -162,13 +182,22 @@ class OpTest(BaseOperatorTest):
     def get_test_cases(self):
         return parse_test_cases()
 
-    def torch_operator(self, *args, **kwargs):
+    def torch_operator(
+        self, k_cache, v_cache, key, value, slot_mapping, permute_dim_1_2=False
+    ):
         """PyTorch paged_caching implementation"""
-        return ref_paged_caching(*args, **kwargs)
+        return ref_paged_caching(
+            k_cache, v_cache, key, value, slot_mapping, permute_dim_1_2
+        )
 
-    def infinicore_operator(self, *args, **kwargs):
+    def infinicore_operator(
+        self, k_cache, v_cache, key, value, slot_mapping, permute_dim_1_2=False
+    ):
         """InfiniCore paged_caching implementation"""
-        return infinicore.paged_caching(*args, **kwargs)
+        if permute_dim_1_2:
+            k_cache = k_cache.permute([0, 2, 1, 3])
+            v_cache = v_cache.permute([0, 2, 1, 3])
+        return infinicore.paged_caching(k_cache, v_cache, key, value, slot_mapping)
 
 
 def main():
