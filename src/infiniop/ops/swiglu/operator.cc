@@ -102,6 +102,7 @@ __C infiniStatus_t infiniopCreateSwiGLUDescriptor(
     }
 
 #undef CREATE
+#undef CREATE_CUDA
 }
 
 __C infiniStatus_t infiniopGetSwiGLUWorkspaceSize(infiniopSwiGLUDescriptor_t desc, size_t *size) {
@@ -159,11 +160,12 @@ __C infiniStatus_t infiniopGetSwiGLUWorkspaceSize(infiniopSwiGLUDescriptor_t des
 #ifdef ENABLE_MOORE_API
         GET(INFINI_DEVICE_MOORE, moore);
 #endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
 
 #undef GET
-
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+#undef GET_CUDA
 }
 
 __C infiniStatus_t infiniopSwiGLU(
@@ -234,6 +236,7 @@ __C infiniStatus_t infiniopSwiGLU(
     }
 
 #undef CALCULATE
+#undef CALCULATE_CUDA
 }
 
 __C infiniStatus_t
@@ -298,4 +301,5 @@ infiniopDestroySwiGLUDescriptor(infiniopSwiGLUDescriptor_t desc) {
     }
 
 #undef DELETE
+#undef DELETE_CUDA
 }
