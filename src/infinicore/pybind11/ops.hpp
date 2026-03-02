@@ -13,6 +13,7 @@
 #include "ops/linear_w8a8i8.hpp"
 #include "ops/matmul.hpp"
 #include "ops/mul.hpp"
+#include "ops/mha_varlen.hpp"
 #include "ops/paged_attention.hpp"
 #include "ops/paged_attention_prefill.hpp"
 #include "ops/paged_caching.hpp"
@@ -38,6 +39,7 @@ inline void bind(py::module &m) {
     bind_linear(m);
     bind_matmul(m);
     bind_mul(m);
+    bind_mha_varlen(m);
     bind_paged_attention(m);
     bind_paged_attention_prefill(m);
     bind_paged_caching(m);

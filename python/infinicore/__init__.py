@@ -52,6 +52,7 @@ from infinicore.ops.add_rms_norm import add_rms_norm
 from infinicore.ops.attention import attention
 from infinicore.ops.kv_caching import kv_caching
 from infinicore.ops.matmul import matmul
+from infinicore.ops.mha_varlen import mha_varlen
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.paged_attention import paged_attention
@@ -134,6 +135,7 @@ __all__ = [
     "from_list",
     "from_numpy",
     "from_torch",
+    "mha_varlen",
     "paged_caching",
     "paged_attention",
     "paged_attention_prefill",
