@@ -1054,6 +1054,48 @@ def scaled_mm_int8_(lib):
     ]
 
 
+
+@OpRegister.operator
+def kv_caching_(lib):
+    lib.infiniopCreateKVCachingDescriptor.restype = c_int32
+    lib.infiniopCreateKVCachingDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,  
+        infiniopTensorDescriptor_t,  
+        infiniopTensorDescriptor_t,  
+        infiniopTensorDescriptor_t,  
+        infiniopTensorDescriptor_t, 
+    ]
+
+    
+    lib.infiniopGetKVCachingWorkspaceSize.restype = c_int32
+    lib.infiniopGetKVCachingWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    
+    lib.infiniopKVCaching.restype = c_int32
+    lib.infiniopKVCaching.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,  
+        c_size_t,  
+        c_void_p,  
+        c_void_p,  
+        c_void_p,  
+        c_void_p,  
+        c_void_p,  
+        c_void_p,  
+    ]
+
+    
+    lib.infiniopDestroyKVCachingDescriptor.restype = c_int32
+    lib.infiniopDestroyKVCachingDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+    
+
 @OpRegister.operator
 def paged_attention_(lib):
     lib.infiniopCreatePagedAttentionDescriptor.restype = c_int32
