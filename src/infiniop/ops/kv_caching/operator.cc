@@ -8,6 +8,10 @@
 #endif
 #endif
 
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API)
+#include "nvidia/kv_caching_nvidia.cuh"
+#endif
+
 __C infiniStatus_t infiniopCreateKVCachingDescriptor(
     infiniopHandle_t handle,
     infiniopKVCachingDescriptor_t *desc_ptr,
@@ -42,6 +46,13 @@ __C infiniStatus_t infiniopCreateKVCachingDescriptor(
 #endif
 #endif
 
+#ifdef ENABLE_NVIDIA_API
+        CREATE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_QY_API
+        CREATE(INFINI_DEVICE_QY, nvidia);
+#endif
+
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -71,6 +82,13 @@ __C infiniStatus_t infiniopGetKVCachingWorkspaceSize(
 #if defined(ENABLE_METAX_API)
         GET_SIZE(INFINI_DEVICE_METAX, ninetoothed);
 #endif
+#endif
+
+#ifdef ENABLE_NVIDIA_API
+        GET_SIZE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_QY_API
+        GET_SIZE(INFINI_DEVICE_QY, nvidia);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -108,6 +126,13 @@ __C infiniStatus_t infiniopKVCaching(
         CALCULATE(INFINI_DEVICE_METAX, ninetoothed);
 #endif
 #endif
+
+#ifdef ENABLE_NVIDIA_API
+        CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_QY_API
+        CALCULATE(INFINI_DEVICE_QY, nvidia);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -135,6 +160,13 @@ __C infiniStatus_t infiniopDestroyKVCachingDescriptor(
 #if defined(ENABLE_METAX_API)
         DELETE(INFINI_DEVICE_METAX, ninetoothed);
 #endif
+#endif
+
+#ifdef ENABLE_NVIDIA_API
+        DELETE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_QY_API
+        DELETE(INFINI_DEVICE_QY, nvidia);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
