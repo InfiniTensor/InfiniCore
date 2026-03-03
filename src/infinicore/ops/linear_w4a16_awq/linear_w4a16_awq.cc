@@ -1,7 +1,7 @@
 #include "infinicore/ops/linear_w4a16_awq.hpp"
 #include "infinicore/ops/dequantize_awq.hpp"
 #include "infinicore/ops/gemm.hpp"
-
+#include "infinicore/ops/rearrange.hpp"
 namespace infinicore::op {
 
 Tensor linear_w4a16_awq(Tensor input,
@@ -12,7 +12,8 @@ Tensor linear_w4a16_awq(Tensor input,
 
     // Input is of shape [M, K], Weight_packed is of shape [N, K],stirdes is [N, 1]
     Size ndim = input->ndim();
-    Size out_features = weight_packed->shape()[0];
+    Size element_size = weight_packed->element_size();
+    Size out_features = weight_packed->shape()[1] * element_size * 2;
 
     // Assign memory to out variables
     auto output_shape = input->shape();
@@ -33,7 +34,7 @@ void linear_w4a16_awq_(Tensor out,
 
     auto weight_packed_shape = weight_packed->shape();
     Size out_features = weight_packed_shape[0];
-    Size in_features = weight_packed_shape[1];
+    Size in_features = weight_packed_shape[1] * 8;
 
     Size ndim = input->ndim();
     assert(out->ndim() == ndim);
@@ -43,7 +44,6 @@ void linear_w4a16_awq_(Tensor out,
     for (size_t i = 0; i < ndim - 1; ++i) {
         N *= input_shape[i];
     }
-
     auto weight = Tensor::empty(
         {out_features, in_features},
         out->dtype(),
@@ -51,10 +51,14 @@ void linear_w4a16_awq_(Tensor out,
     float alpha = 1.0f;
     float beta = 0.0f;
     op::dequantize_awq_(weight, weight_packed, weight_scale, weight_zeros);
-    bias = std::make_optional(bias.value()->as_strided({N, out_features}, {0, 1}));
-    gemm_(out->view({N, out_features}),
-          input->view({N, in_features}),
-          weight->permute({1, 0}), alpha, beta);
+    if (bias.has_value()) {
+        rearrange_(out,
+                   bias.value()->as_strided({N, in_features}, {0, 1}));
+        beta = 1.0f;
+    }
+    gemm_(out,
+          input->view({N, out_features}),
+          weight, alpha, beta);
 }
 
 } // namespace infinicore::op
