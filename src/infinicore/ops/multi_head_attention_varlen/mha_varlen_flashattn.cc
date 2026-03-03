@@ -38,6 +38,7 @@ void *plan(Tensor out,
 }
 
 void run(void *planned_meta) {
+    c10::cuda::CUDAStreamGuard guard(infinicore::adaptor::get_cuda_stream());
     auto *p = reinterpret_cast<PlannedMeta *>(planned_meta);
 
     auto q = infinicore::adaptor::to_aten_tensor(p->q);
