@@ -15,7 +15,7 @@
 #include "kunlun/topkrouter_kunlun.h"
 #endif
 
-__C infiniStatus_t infiniopCreateTopkrouterDescriptor(infiniopHandle_t handle, infiniopTopkrouterDescriptor_t *desc_ptr,
+__INFINI_C infiniStatus_t infiniopCreateTopkrouterDescriptor(infiniopHandle_t handle, infiniopTopkrouterDescriptor_t *desc_ptr,
                                                       infiniopTensorDescriptor_t x_desc,
                                                       infiniopTensorDescriptor_t correction_bias_desc) {
 #define CREATE(CASE, NAMESPACE)                               \
@@ -49,7 +49,7 @@ __C infiniStatus_t infiniopCreateTopkrouterDescriptor(infiniopHandle_t handle, i
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetTopkrouterWorkspaceSize(infiniopTopkrouterDescriptor_t desc, size_t *size) {
+__INFINI_C infiniStatus_t infiniopGetTopkrouterWorkspaceSize(infiniopTopkrouterDescriptor_t desc, size_t *size) {
 #define GET(CASE, NAMESPACE)                                                                      \
     case CASE:                                                                                    \
         *size = reinterpret_cast<op::topkrouter::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
@@ -81,7 +81,7 @@ __C infiniStatus_t infiniopGetTopkrouterWorkspaceSize(infiniopTopkrouterDescript
 #undef GET
 }
 
-__C infiniStatus_t infiniopTopkrouter(infiniopTopkrouterDescriptor_t desc, void *workspace, size_t workspace_size,
+__INFINI_C infiniStatus_t infiniopTopkrouter(infiniopTopkrouterDescriptor_t desc, void *workspace, size_t workspace_size,
                                       void *values, void *indices, const void *x, const void *correction_bias,
                                       const float routed_scaling_factor, const size_t topk, void *stream) {
 #define CALCULATE(CASE, NAMESPACE)                                                                                          \
@@ -116,7 +116,7 @@ __C infiniStatus_t infiniopTopkrouter(infiniopTopkrouterDescriptor_t desc, void 
 #undef CALCULATE
 }
 
-__C infiniStatus_t infiniopDestroyTopkrouterDescriptor(infiniopTopkrouterDescriptor_t desc) {
+__INFINI_C infiniStatus_t infiniopDestroyTopkrouterDescriptor(infiniopTopkrouterDescriptor_t desc) {
 #define DESTROY(CASE, NAMESPACE)                                                \
     case CASE:                                                                  \
         delete reinterpret_cast<op::topkrouter::NAMESPACE::Descriptor *>(desc); \

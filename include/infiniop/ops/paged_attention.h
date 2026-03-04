@@ -30,7 +30,7 @@ typedef struct InfiniopDescriptor *infiniopPagedAttentionDescriptor_t;
  * @param scale     The attention scaling factor (typically 1/sqrt(head_size)).
  * @return infiniStatus_t Status code.
  */
-__C __export infiniStatus_t infiniopCreatePagedAttentionDescriptor(
+__INFINI_C __export infiniStatus_t infiniopCreatePagedAttentionDescriptor(
     infiniopHandle_t handle,
     infiniopPagedAttentionDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t out_desc,
@@ -49,7 +49,7 @@ __C __export infiniStatus_t infiniopCreatePagedAttentionDescriptor(
  * @param size A pointer to store the required workspace size in bytes.
  * @return infiniStatus_t Status code of the operation.
  */
-__C __export infiniStatus_t infiniopGetPagedAttentionWorkspaceSize(
+__INFINI_C __export infiniStatus_t infiniopGetPagedAttentionWorkspaceSize(
     infiniopPagedAttentionDescriptor_t desc, size_t *size);
 
 /**
@@ -68,7 +68,7 @@ __C __export infiniStatus_t infiniopGetPagedAttentionWorkspaceSize(
  * @param stream The CUDA stream for the operation. Can be NULL.
  * @return infiniStatus_t Status code of the operation.
  */
-__C __export infiniStatus_t infiniopPagedAttention(
+__INFINI_C __export infiniStatus_t infiniopPagedAttention(
     infiniopPagedAttentionDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -87,7 +87,7 @@ __C __export infiniStatus_t infiniopPagedAttention(
  * @param desc The descriptor to be destroyed.
  * @return infiniStatus_t Status code of the operation.
  */
-__C __export infiniStatus_t infiniopDestroyPagedAttentionDescriptor(
+__INFINI_C __export infiniStatus_t infiniopDestroyPagedAttentionDescriptor(
     infiniopPagedAttentionDescriptor_t desc);
 
 #endif // __INFINIOP_PAGED_ATTENTION_API_H__

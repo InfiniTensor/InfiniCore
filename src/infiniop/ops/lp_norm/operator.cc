@@ -6,7 +6,7 @@
 #include "nvidia/lp_norm_nvidia.cuh"
 #endif
 
-__C infiniStatus_t infiniopCreateLPNormDescriptor(
+__INFINI_C infiniStatus_t infiniopCreateLPNormDescriptor(
     infiniopHandle_t handle,
     infiniopLPNormDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t output_desc,
@@ -47,7 +47,7 @@ __C infiniStatus_t infiniopCreateLPNormDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetLPNormWorkspaceSize(infiniopLPNormDescriptor_t desc, size_t *size) {
+__INFINI_C infiniStatus_t infiniopGetLPNormWorkspaceSize(infiniopLPNormDescriptor_t desc, size_t *size) {
 #define GET(CASE, NAMESPACE)                                                                   \
     case CASE:                                                                                 \
         *size = reinterpret_cast<op::lp_norm::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
@@ -75,7 +75,7 @@ __C infiniStatus_t infiniopGetLPNormWorkspaceSize(infiniopLPNormDescriptor_t des
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
-__C infiniStatus_t infiniopLPNorm(
+__INFINI_C infiniStatus_t infiniopLPNorm(
     infiniopLPNormDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -114,7 +114,7 @@ __C infiniStatus_t infiniopLPNorm(
 #undef CALCULATE
 }
 
-__C infiniStatus_t
+__INFINI_C infiniStatus_t
 infiniopDestroyLPNormDescriptor(infiniopLPNormDescriptor_t desc) {
 
 #define DELETE(CASE, NAMESPACE)                                                    \

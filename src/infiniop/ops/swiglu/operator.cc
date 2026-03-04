@@ -28,7 +28,7 @@
 #include "moore/swiglu_moore.h"
 #endif
 
-__C infiniStatus_t infiniopCreateSwiGLUDescriptor(
+__INFINI_C infiniStatus_t infiniopCreateSwiGLUDescriptor(
     infiniopHandle_t handle,
     infiniopSwiGLUDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t c_desc,
@@ -105,7 +105,7 @@ __C infiniStatus_t infiniopCreateSwiGLUDescriptor(
 #undef CREATE_CUDA
 }
 
-__C infiniStatus_t infiniopGetSwiGLUWorkspaceSize(infiniopSwiGLUDescriptor_t desc, size_t *size) {
+__INFINI_C infiniStatus_t infiniopGetSwiGLUWorkspaceSize(infiniopSwiGLUDescriptor_t desc, size_t *size) {
 
 #define GET(CASE, NAMESPACE)                                                                  \
     case CASE:                                                                                \
@@ -168,7 +168,7 @@ __C infiniStatus_t infiniopGetSwiGLUWorkspaceSize(infiniopSwiGLUDescriptor_t des
 #undef GET_CUDA
 }
 
-__C infiniStatus_t infiniopSwiGLU(
+__INFINI_C infiniStatus_t infiniopSwiGLU(
     infiniopSwiGLUDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -239,7 +239,7 @@ __C infiniStatus_t infiniopSwiGLU(
 #undef CALCULATE_CUDA
 }
 
-__C infiniStatus_t
+__INFINI_C infiniStatus_t
 infiniopDestroySwiGLUDescriptor(infiniopSwiGLUDescriptor_t desc) {
 
 #define DELETE(CASE, NAMESPACE)                                                   \

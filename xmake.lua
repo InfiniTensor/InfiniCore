@@ -442,7 +442,7 @@ target("infinicore_cpp_api")
     -- ==============================
     -- LibTorch integration
     -- ==============================
-    local LIBTORCH_ROOT = ("/home/panzezhong/.conda/envs/myenv/lib/python3.13/site-packages/torch")
+    local LIBTORCH_ROOT = ("/usr/local/lib/python3.12/dist-packages/torch")
 
     -- headers
     add_includedirs(
@@ -462,7 +462,7 @@ target("infinicore_cpp_api")
         "c10_cuda"
     )
     -- Flash attention lib
-    add_linkdirs("/home/panzezhong/Projects/InfiniCore/third_party/flash-attention/csrc/build")
+    add_linkdirs("/home/wuwei/temp/InfiniCore/third_party/flash-attention/csrc/flash_attn/build")
     add_links("flash_attn")
 
     -- Add InfiniCore C++ source files (needed for RoPE and other nn modules)

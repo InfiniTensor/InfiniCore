@@ -18,7 +18,7 @@
 #include "moore/mul_moore.h"
 #endif
 
-__C infiniStatus_t infiniopCreateMulDescriptor(
+__INFINI_C infiniStatus_t infiniopCreateMulDescriptor(
     infiniopHandle_t handle,
     infiniopMulDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t c_desc,
@@ -68,7 +68,7 @@ __C infiniStatus_t infiniopCreateMulDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetMulWorkspaceSize(infiniopMulDescriptor_t desc, size_t *size) {
+__INFINI_C infiniStatus_t infiniopGetMulWorkspaceSize(infiniopMulDescriptor_t desc, size_t *size) {
 
 #define GET(CASE, NAMESPACE)                                                               \
     case CASE:                                                                             \
@@ -109,7 +109,7 @@ __C infiniStatus_t infiniopGetMulWorkspaceSize(infiniopMulDescriptor_t desc, siz
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
-__C infiniStatus_t infiniopMul(
+__INFINI_C infiniStatus_t infiniopMul(
     infiniopMulDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -157,7 +157,7 @@ __C infiniStatus_t infiniopMul(
 #undef CALCULATE
 }
 
-__C infiniStatus_t
+__INFINI_C infiniStatus_t
 infiniopDestroyMulDescriptor(infiniopMulDescriptor_t desc) {
 
 #define DELETE(CASE, NAMESPACE)                                                \

@@ -5,20 +5,20 @@
 
 typedef struct InfiniopDescriptor *infiniopOnesDescriptor_t;
 
-__C __export infiniStatus_t infiniopCreateOnesDescriptor(infiniopHandle_t handle,
+__INFINI_C __export infiniStatus_t infiniopCreateOnesDescriptor(infiniopHandle_t handle,
                                                          infiniopOnesDescriptor_t *desc_ptr,
                                                          infiniopTensorDescriptor_t y,
                                                          infiniopTensorDescriptor_t x);
 
-__C __export infiniStatus_t infiniopGetOnesWorkspaceSize(infiniopOnesDescriptor_t desc, size_t *size);
+__INFINI_C __export infiniStatus_t infiniopGetOnesWorkspaceSize(infiniopOnesDescriptor_t desc, size_t *size);
 
-__C __export infiniStatus_t infiniopOnes(infiniopOnesDescriptor_t desc,
+__INFINI_C __export infiniStatus_t infiniopOnes(infiniopOnesDescriptor_t desc,
                                          void *workspace,
                                          size_t workspace_size,
                                          void *y,
                                          const void *x,
                                          void *stream);
 
-__C __export infiniStatus_t infiniopDestroyOnesDescriptor(infiniopOnesDescriptor_t desc);
+__INFINI_C __export infiniStatus_t infiniopDestroyOnesDescriptor(infiniopOnesDescriptor_t desc);
 
 #endif

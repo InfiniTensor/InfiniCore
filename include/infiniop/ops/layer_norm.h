@@ -5,7 +5,7 @@
 
 typedef struct InfiniopDescriptor *infiniopLayerNormDescriptor_t;
 
-__C __export infiniStatus_t infiniopCreateLayerNormDescriptor(
+__INFINI_C __export infiniStatus_t infiniopCreateLayerNormDescriptor(
     infiniopHandle_t handle,
     infiniopLayerNormDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t output_desc,
@@ -16,9 +16,9 @@ __C __export infiniStatus_t infiniopCreateLayerNormDescriptor(
     infiniopTensorDescriptor_t bias_desc,
     float eps);
 
-__C __export infiniStatus_t infiniopGetLayerNormWorkspaceSize(infiniopLayerNormDescriptor_t desc, size_t *size);
+__INFINI_C __export infiniStatus_t infiniopGetLayerNormWorkspaceSize(infiniopLayerNormDescriptor_t desc, size_t *size);
 
-__C __export infiniStatus_t infiniopLayerNorm(infiniopLayerNormDescriptor_t desc,
+__INFINI_C __export infiniStatus_t infiniopLayerNorm(infiniopLayerNormDescriptor_t desc,
                                               void *workspace,
                                               size_t workspace_size,
                                               void *output,
@@ -29,6 +29,6 @@ __C __export infiniStatus_t infiniopLayerNorm(infiniopLayerNormDescriptor_t desc
                                               const void *bias,
                                               void *stream);
 
-__C __export infiniStatus_t infiniopDestroyLayerNormDescriptor(infiniopLayerNormDescriptor_t desc);
+__INFINI_C __export infiniStatus_t infiniopDestroyLayerNormDescriptor(infiniopLayerNormDescriptor_t desc);
 
 #endif

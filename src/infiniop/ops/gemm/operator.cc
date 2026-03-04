@@ -24,7 +24,7 @@
 #include "kunlun/gemm_kunlun.h"
 #endif
 
-__C infiniStatus_t infiniopCreateGemmDescriptor(
+__INFINI_C infiniStatus_t infiniopCreateGemmDescriptor(
     infiniopHandle_t handle,
     infiniopGemmDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t c_desc,
@@ -84,7 +84,7 @@ __C infiniStatus_t infiniopCreateGemmDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t
+__INFINI_C infiniStatus_t
 infiniopGetGemmWorkspaceSize(
     infiniopGemmDescriptor_t desc,
     size_t *size) {
@@ -137,7 +137,7 @@ infiniopGetGemmWorkspaceSize(
 #undef GET
 }
 
-__C infiniStatus_t infiniopGemm(
+__INFINI_C infiniStatus_t infiniopGemm(
     infiniopGemmDescriptor_t desc,
     void *workspace, size_t workspace_size,
     void *c,
@@ -198,7 +198,7 @@ __C infiniStatus_t infiniopGemm(
 #undef CALCULATE
 }
 
-__C infiniStatus_t
+__INFINI_C infiniStatus_t
 infiniopDestroyGemmDescriptor(infiniopGemmDescriptor_t desc) {
 
 #define DELETE(CASE, NAMESPACE)                                                 \

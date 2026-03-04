@@ -21,7 +21,7 @@ typedef struct InfiniopDescriptor *infiniopPagedCachingDescriptor_t;
  * @param slot_mapping_desc Descriptor for the slot mapping tensor.
  * @return infiniStatus_t Status code of the operation.
  */
-__C __export infiniStatus_t infiniopCreatePagedCachingDescriptor(
+__INFINI_C __export infiniStatus_t infiniopCreatePagedCachingDescriptor(
     infiniopHandle_t handle,
     infiniopPagedCachingDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t k_cache_desc,
@@ -37,7 +37,7 @@ __C __export infiniStatus_t infiniopCreatePagedCachingDescriptor(
  * @param size A pointer to store the required workspace size in bytes (typically 0).
  * @return infiniStatus_t Status code of the operation.
  */
-__C __export infiniStatus_t infiniopGetPagedCachingWorkspaceSize(
+__INFINI_C __export infiniStatus_t infiniopGetPagedCachingWorkspaceSize(
     infiniopPagedCachingDescriptor_t desc, size_t *size);
 
 /**
@@ -54,7 +54,7 @@ __C __export infiniStatus_t infiniopGetPagedCachingWorkspaceSize(
  * @param stream The CUDA stream for the operation. Can be NULL.
  * @return infiniStatus_t Status code of the operation.
  */
-__C __export infiniStatus_t infiniopPagedCaching(
+__INFINI_C __export infiniStatus_t infiniopPagedCaching(
     infiniopPagedCachingDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -71,7 +71,7 @@ __C __export infiniStatus_t infiniopPagedCaching(
  * @param desc The descriptor to be destroyed.
  * @return infiniStatus_t Status code of the operation.
  */
-__C __export infiniStatus_t infiniopDestroyPagedCachingDescriptor(
+__INFINI_C __export infiniStatus_t infiniopDestroyPagedCachingDescriptor(
     infiniopPagedCachingDescriptor_t desc);
 
 #endif // __INFINIOP_PAGED_CACHING_API_H__

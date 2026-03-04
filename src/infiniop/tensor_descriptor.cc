@@ -5,7 +5,7 @@
 #include <functional>
 #include <numeric>
 
-__C __export infiniStatus_t infiniopCreateTensorDescriptor(infiniopTensorDescriptor_t *desc_ptr, size_t ndim, size_t const *shape_, ptrdiff_t const *strides_, infiniDtype_t datatype) {
+__INFINI_C __export infiniStatus_t infiniopCreateTensorDescriptor(infiniopTensorDescriptor_t *desc_ptr, size_t ndim, size_t const *shape_, ptrdiff_t const *strides_, infiniDtype_t datatype) {
     if (strides_ != nullptr) {
         *desc_ptr = new InfiniopTensorDescriptor(datatype, ndim, shape_, strides_);
     } else {
@@ -23,7 +23,7 @@ __C __export infiniStatus_t infiniopCreateTensorDescriptor(infiniopTensorDescrip
     return INFINI_STATUS_SUCCESS;
 }
 
-__C __export infiniStatus_t infiniopDestroyTensorDescriptor(infiniopTensorDescriptor_t desc) {
+__INFINI_C __export infiniStatus_t infiniopDestroyTensorDescriptor(infiniopTensorDescriptor_t desc) {
     delete desc;
     return INFINI_STATUS_SUCCESS;
 }

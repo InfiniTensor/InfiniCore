@@ -24,7 +24,7 @@
 #include "moore/rope_moore.h"
 #endif
 
-__C infiniStatus_t infiniopCreateRoPEDescriptor(
+__INFINI_C infiniStatus_t infiniopCreateRoPEDescriptor(
     infiniopHandle_t handle,
     infiniopRoPEDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t y,
@@ -87,7 +87,7 @@ __C infiniStatus_t infiniopCreateRoPEDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetRoPEWorkspaceSize(infiniopRoPEDescriptor_t desc,
+__INFINI_C infiniStatus_t infiniopGetRoPEWorkspaceSize(infiniopRoPEDescriptor_t desc,
                                                 size_t *size) {
 #define GET(CASE, NAMESPACE)                                                                      \
     case CASE:                                                                                    \
@@ -135,7 +135,7 @@ __C infiniStatus_t infiniopGetRoPEWorkspaceSize(infiniopRoPEDescriptor_t desc,
 #undef GET
 }
 
-__C infiniStatus_t infiniopRoPE(
+__INFINI_C infiniStatus_t infiniopRoPE(
     infiniopRoPEDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -192,7 +192,7 @@ __C infiniStatus_t infiniopRoPE(
 #undef CALCULATE
 }
 
-__C infiniStatus_t
+__INFINI_C infiniStatus_t
 infiniopDestroyRoPEDescriptor(infiniopRoPEDescriptor_t desc) {
 
 #define DELETE(CASE, NAMESPACE)                                                 \

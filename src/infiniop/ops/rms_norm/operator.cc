@@ -24,7 +24,7 @@
 #include "kunlun/rms_norm_kunlun.h"
 #endif
 
-__C infiniStatus_t infiniopCreateRMSNormDescriptor(
+__INFINI_C infiniStatus_t infiniopCreateRMSNormDescriptor(
     infiniopHandle_t handle,
     infiniopRMSNormDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t y_desc,
@@ -83,7 +83,7 @@ __C infiniStatus_t infiniopCreateRMSNormDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetRMSNormWorkspaceSize(infiniopRMSNormDescriptor_t desc, size_t *size) {
+__INFINI_C infiniStatus_t infiniopGetRMSNormWorkspaceSize(infiniopRMSNormDescriptor_t desc, size_t *size) {
 
 #define GET(CASE, NAMESPACE)                                                                    \
     case CASE:                                                                                  \
@@ -131,7 +131,7 @@ __C infiniStatus_t infiniopGetRMSNormWorkspaceSize(infiniopRMSNormDescriptor_t d
 #undef GET
 }
 
-__C infiniStatus_t infiniopRMSNorm(infiniopRMSNormDescriptor_t desc, void *workspace, size_t workspace_size,
+__INFINI_C infiniStatus_t infiniopRMSNorm(infiniopRMSNormDescriptor_t desc, void *workspace, size_t workspace_size,
                                    void *y, const void *x, const void *w, void *stream) {
 
 #define CALCULATE(CASE, NAMESPACE)                                                       \
@@ -180,7 +180,7 @@ __C infiniStatus_t infiniopRMSNorm(infiniopRMSNormDescriptor_t desc, void *works
 #undef CALCULATE
 }
 
-__C infiniStatus_t infiniopDestroyRMSNormDescriptor(infiniopRMSNormDescriptor_t desc) {
+__INFINI_C infiniStatus_t infiniopDestroyRMSNormDescriptor(infiniopRMSNormDescriptor_t desc) {
 
 #define DESTROY(CASE, NAMESPACE)                                              \
     case CASE:                                                                \

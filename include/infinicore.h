@@ -10,10 +10,10 @@
 #endif
 
 #ifdef __cplusplus
-#define __C extern "C"
+#define __INFINI_C extern "C"
 #include <cstddef>
 #else
-#define __C
+#define __INFINI_C
 #include <stddef.h>
 #endif
 

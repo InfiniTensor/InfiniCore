@@ -5,7 +5,7 @@
 
 typedef struct InfiniopDescriptor *infiniopKVCachingDescriptor_t;
 
-__C __export infiniStatus_t infiniopCreateKVCachingDescriptor(
+__INFINI_C __export infiniStatus_t infiniopCreateKVCachingDescriptor(
     infiniopHandle_t handle,
     infiniopKVCachingDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t k_cache,
@@ -14,9 +14,9 @@ __C __export infiniStatus_t infiniopCreateKVCachingDescriptor(
     infiniopTensorDescriptor_t v,
     infiniopTensorDescriptor_t past_kv_lengths);
 
-__C __export infiniStatus_t infiniopGetKVCachingWorkspaceSize(infiniopKVCachingDescriptor_t desc, size_t *size);
+__INFINI_C __export infiniStatus_t infiniopGetKVCachingWorkspaceSize(infiniopKVCachingDescriptor_t desc, size_t *size);
 
-__C __export infiniStatus_t infiniopKVCaching(infiniopKVCachingDescriptor_t desc,
+__INFINI_C __export infiniStatus_t infiniopKVCaching(infiniopKVCachingDescriptor_t desc,
                                               void *workspace,
                                               size_t workspace_size,
                                               void *k_cache,
@@ -26,6 +26,6 @@ __C __export infiniStatus_t infiniopKVCaching(infiniopKVCachingDescriptor_t desc
                                               const void *past_kv_lengths,
                                               void *stream);
 
-__C __export infiniStatus_t infiniopDestroyKVCachingDescriptor(infiniopKVCachingDescriptor_t desc);
+__INFINI_C __export infiniStatus_t infiniopDestroyKVCachingDescriptor(infiniopKVCachingDescriptor_t desc);
 
 #endif

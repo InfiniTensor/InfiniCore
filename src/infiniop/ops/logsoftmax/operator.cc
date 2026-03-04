@@ -15,7 +15,7 @@
 // #include "ascend/logsoftmax_ascend.h"
 #endif
 
-__C infiniStatus_t infiniopCreateLogSoftmaxDescriptor(
+__INFINI_C infiniStatus_t infiniopCreateLogSoftmaxDescriptor(
     infiniopHandle_t handle,
     infiniopLogSoftmaxDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t y_desc,
@@ -56,7 +56,7 @@ __C infiniStatus_t infiniopCreateLogSoftmaxDescriptor(
     }
 }
 
-__C infiniStatus_t infiniopGetLogSoftmaxWorkspaceSize(infiniopLogSoftmaxDescriptor_t desc, size_t *size) {
+__INFINI_C infiniStatus_t infiniopGetLogSoftmaxWorkspaceSize(infiniopLogSoftmaxDescriptor_t desc, size_t *size) {
 
 #define GET(CASE, NAMESPACE)                                                                      \
     case CASE:                                                                                    \
@@ -90,7 +90,7 @@ __C infiniStatus_t infiniopGetLogSoftmaxWorkspaceSize(infiniopLogSoftmaxDescript
     }
 }
 
-__C infiniStatus_t infiniopLogSoftmax(
+__INFINI_C infiniStatus_t infiniopLogSoftmax(
     infiniopLogSoftmaxDescriptor_t desc,
     void *workspace, size_t workspace_size,
     void *y,
@@ -129,7 +129,7 @@ __C infiniStatus_t infiniopLogSoftmax(
     }
 }
 
-__C infiniStatus_t infiniopDestroyLogSoftmaxDescriptor(infiniopLogSoftmaxDescriptor_t desc) {
+__INFINI_C infiniStatus_t infiniopDestroyLogSoftmaxDescriptor(infiniopLogSoftmaxDescriptor_t desc) {
 
 #define DESTROY(CASE, NAMESPACE)                                                \
     case CASE:                                                                  \

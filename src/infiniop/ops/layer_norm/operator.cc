@@ -12,7 +12,7 @@
 #include "metax/layer_norm_metax.h"
 #endif
 
-__C infiniStatus_t infiniopCreateLayerNormDescriptor(
+__INFINI_C infiniStatus_t infiniopCreateLayerNormDescriptor(
     infiniopHandle_t handle,
     infiniopLayerNormDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t output_desc,
@@ -63,7 +63,7 @@ __C infiniStatus_t infiniopCreateLayerNormDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetLayerNormWorkspaceSize(infiniopLayerNormDescriptor_t desc, size_t *size) {
+__INFINI_C infiniStatus_t infiniopGetLayerNormWorkspaceSize(infiniopLayerNormDescriptor_t desc, size_t *size) {
 #define GET(CASE, NAMESPACE)                                                                      \
     case CASE:                                                                                    \
         *size = reinterpret_cast<op::layer_norm::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
@@ -96,7 +96,7 @@ __C infiniStatus_t infiniopGetLayerNormWorkspaceSize(infiniopLayerNormDescriptor
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
-__C infiniStatus_t infiniopLayerNorm(
+__INFINI_C infiniStatus_t infiniopLayerNorm(
     infiniopLayerNormDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -149,7 +149,7 @@ __C infiniStatus_t infiniopLayerNorm(
 #undef CALCULATE
 }
 
-__C infiniStatus_t
+__INFINI_C infiniStatus_t
 infiniopDestroyLayerNormDescriptor(infiniopLayerNormDescriptor_t desc) {
 
 #define DELETE(CASE, NAMESPACE)                                                       \

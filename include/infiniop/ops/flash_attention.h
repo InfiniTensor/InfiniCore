@@ -5,7 +5,7 @@
 
 typedef struct InfiniopDescriptor *infiniopFlashAttentionDescriptor_t;
 
-__C __export infiniStatus_t infiniopCreateFlashAttentionDescriptor(
+__INFINI_C __export infiniStatus_t infiniopCreateFlashAttentionDescriptor(
     infiniopHandle_t handle,
     infiniopFlashAttentionDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t out_desc,
@@ -16,11 +16,11 @@ __C __export infiniStatus_t infiniopCreateFlashAttentionDescriptor(
     float scale,
     char is_causal);
 
-__C __export infiniStatus_t infiniopGetFlashAttentionWorkspaceSize(
+__INFINI_C __export infiniStatus_t infiniopGetFlashAttentionWorkspaceSize(
     infiniopFlashAttentionDescriptor_t desc,
     size_t *size);
 
-__C __export infiniStatus_t infiniopFlashAttention(
+__INFINI_C __export infiniStatus_t infiniopFlashAttention(
     infiniopFlashAttentionDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -31,6 +31,6 @@ __C __export infiniStatus_t infiniopFlashAttention(
     const void *total_kv_len,
     void *stream);
 
-__C __export infiniStatus_t infiniopDestroyFlashAttentionDescriptor(
+__INFINI_C __export infiniStatus_t infiniopDestroyFlashAttentionDescriptor(
     infiniopFlashAttentionDescriptor_t desc);
 #endif

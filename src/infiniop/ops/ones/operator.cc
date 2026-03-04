@@ -15,7 +15,7 @@
 #include "moore/ones_moore.h"
 #endif
 
-__C infiniStatus_t infiniopCreateOnesDescriptor(
+__INFINI_C infiniStatus_t infiniopCreateOnesDescriptor(
     infiniopHandle_t handle,
     infiniopOnesDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t y_desc,
@@ -60,7 +60,7 @@ __C infiniStatus_t infiniopCreateOnesDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetOnesWorkspaceSize(infiniopOnesDescriptor_t desc, size_t *size) {
+__INFINI_C infiniStatus_t infiniopGetOnesWorkspaceSize(infiniopOnesDescriptor_t desc, size_t *size) {
 
 #define GET(CASE, NAMESPACE)                                                                \
     case CASE:                                                                              \
@@ -98,7 +98,7 @@ __C infiniStatus_t infiniopGetOnesWorkspaceSize(infiniopOnesDescriptor_t desc, s
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
-__C infiniStatus_t infiniopOnes(
+__INFINI_C infiniStatus_t infiniopOnes(
     infiniopOnesDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -142,7 +142,7 @@ __C infiniStatus_t infiniopOnes(
 #undef CALCULATE
 }
 
-__C infiniStatus_t
+__INFINI_C infiniStatus_t
 infiniopDestroyOnesDescriptor(infiniopOnesDescriptor_t desc) {
 
 #define DELETE(CASE, NAMESPACE)                                                 \

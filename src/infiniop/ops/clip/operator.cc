@@ -15,7 +15,7 @@
 #include "kunlun/clip_kunlun.h"
 #endif
 
-__C infiniStatus_t infiniopCreateClipDescriptor(
+__INFINI_C infiniStatus_t infiniopCreateClipDescriptor(
     infiniopHandle_t handle,
     infiniopClipDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t y,
@@ -62,7 +62,7 @@ __C infiniStatus_t infiniopCreateClipDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetClipWorkspaceSize(infiniopClipDescriptor_t desc, size_t *size) {
+__INFINI_C infiniStatus_t infiniopGetClipWorkspaceSize(infiniopClipDescriptor_t desc, size_t *size) {
 
 #define GET(CASE, NAMESPACE)                                                                \
     case CASE:                                                                              \
@@ -98,7 +98,7 @@ __C infiniStatus_t infiniopGetClipWorkspaceSize(infiniopClipDescriptor_t desc, s
 #undef GET
 }
 
-__C infiniStatus_t infiniopClip(
+__INFINI_C infiniStatus_t infiniopClip(
     infiniopClipDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -144,7 +144,7 @@ __C infiniStatus_t infiniopClip(
 #undef CALCULATE
 }
 
-__C infiniStatus_t
+__INFINI_C infiniStatus_t
 infiniopDestroyClipDescriptor(infiniopClipDescriptor_t desc) {
 
 #define DELETE(CASE, NAMESPACE)                                                 \

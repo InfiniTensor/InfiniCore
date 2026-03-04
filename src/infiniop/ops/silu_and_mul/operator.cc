@@ -6,7 +6,7 @@
 #include "moore/silu_and_mul_moore.h"
 #endif
 
-__C infiniStatus_t infiniopCreateSiluAndMulDescriptor(
+__INFINI_C infiniStatus_t infiniopCreateSiluAndMulDescriptor(
     infiniopHandle_t handle,
     infiniopSiluAndMulDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t y_desc,
@@ -31,7 +31,7 @@ __C infiniStatus_t infiniopCreateSiluAndMulDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetSiluAndMulWorkspaceSize(infiniopSiluAndMulDescriptor_t desc, size_t *size) {
+__INFINI_C infiniStatus_t infiniopGetSiluAndMulWorkspaceSize(infiniopSiluAndMulDescriptor_t desc, size_t *size) {
 
 #define GET(CASE, NAMESPACE)                                                                              \
     case CASE:                                                                                            \
@@ -49,7 +49,7 @@ __C infiniStatus_t infiniopGetSiluAndMulWorkspaceSize(infiniopSiluAndMulDescript
 #undef GET
 }
 
-__C infiniStatus_t infiniopSiluAndMul(
+__INFINI_C infiniStatus_t infiniopSiluAndMul(
     infiniopSiluAndMulDescriptor_t desc,
     void *workspace, size_t workspace_size,
     void *y,
@@ -72,7 +72,7 @@ __C infiniStatus_t infiniopSiluAndMul(
 #undef CALCULATE
 }
 
-__C infiniStatus_t infiniopDestroySiluAndMulDescriptor(infiniopSiluAndMulDescriptor_t desc) {
+__INFINI_C infiniStatus_t infiniopDestroySiluAndMulDescriptor(infiniopSiluAndMulDescriptor_t desc) {
 
 #define DESTROY(CASE, NAMESPACE)                                                        \
     case CASE:                                                                          \

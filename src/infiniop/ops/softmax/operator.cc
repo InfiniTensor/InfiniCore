@@ -6,7 +6,7 @@
 #include "nvidia/softmax_nvidia.cuh"
 #endif
 
-__C infiniStatus_t infiniopCreateSoftmaxDescriptor(
+__INFINI_C infiniStatus_t infiniopCreateSoftmaxDescriptor(
     infiniopHandle_t handle,
     infiniopSoftmaxDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t y_desc,
@@ -42,7 +42,7 @@ __C infiniStatus_t infiniopCreateSoftmaxDescriptor(
     }
 }
 
-__C infiniStatus_t infiniopGetSoftmaxWorkspaceSize(infiniopSoftmaxDescriptor_t desc, size_t *size) {
+__INFINI_C infiniStatus_t infiniopGetSoftmaxWorkspaceSize(infiniopSoftmaxDescriptor_t desc, size_t *size) {
 
 #define GET(CASE, NAMESPACE)                                                                   \
     case CASE:                                                                                 \
@@ -70,7 +70,7 @@ __C infiniStatus_t infiniopGetSoftmaxWorkspaceSize(infiniopSoftmaxDescriptor_t d
     }
 }
 
-__C infiniStatus_t infiniopSoftmax(
+__INFINI_C infiniStatus_t infiniopSoftmax(
     infiniopSoftmaxDescriptor_t desc,
     void *workspace, size_t workspace_size,
     void *y,
@@ -103,7 +103,7 @@ __C infiniStatus_t infiniopSoftmax(
     }
 }
 
-__C infiniStatus_t infiniopDestroySoftmaxDescriptor(infiniopSoftmaxDescriptor_t desc) {
+__INFINI_C infiniStatus_t infiniopDestroySoftmaxDescriptor(infiniopSoftmaxDescriptor_t desc) {
 
 #define DESTROY(CASE, NAMESPACE)                                             \
     case CASE:                                                               \

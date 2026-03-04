@@ -27,7 +27,7 @@
 // #include "kunlun/add_rms_norm_kunlun.h"
 #endif
 
-__C infiniStatus_t infiniopCreateAddRMSNormDescriptor(
+__INFINI_C infiniStatus_t infiniopCreateAddRMSNormDescriptor(
     infiniopHandle_t handle,
     infiniopAddRMSNormDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t residual_out_desc,
@@ -84,7 +84,7 @@ __C infiniStatus_t infiniopCreateAddRMSNormDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetAddRMSNormWorkspaceSize(infiniopAddRMSNormDescriptor_t desc, size_t *size) {
+__INFINI_C infiniStatus_t infiniopGetAddRMSNormWorkspaceSize(infiniopAddRMSNormDescriptor_t desc, size_t *size) {
 
 #define GET(CASE, NAMESPACE)                                                                        \
     case CASE:                                                                                      \
@@ -127,7 +127,7 @@ __C infiniStatus_t infiniopGetAddRMSNormWorkspaceSize(infiniopAddRMSNormDescript
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
-__C infiniStatus_t infiniopAddRMSNorm(
+__INFINI_C infiniStatus_t infiniopAddRMSNorm(
     infiniopAddRMSNormDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -178,7 +178,7 @@ __C infiniStatus_t infiniopAddRMSNorm(
 #undef CALCULATE
 }
 
-__C infiniStatus_t infiniopDestroyAddRMSNormDescriptor(infiniopAddRMSNormDescriptor_t desc) {
+__INFINI_C infiniStatus_t infiniopDestroyAddRMSNormDescriptor(infiniopAddRMSNormDescriptor_t desc) {
     if (desc == nullptr) {
         return INFINI_STATUS_SUCCESS;
     }

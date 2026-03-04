@@ -8,7 +8,7 @@
 #endif
 #endif
 
-__C infiniStatus_t infiniopCreateFlashAttentionDescriptor(
+__INFINI_C infiniStatus_t infiniopCreateFlashAttentionDescriptor(
     infiniopHandle_t handle,
     infiniopFlashAttentionDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t out_desc,
@@ -45,7 +45,7 @@ __C infiniStatus_t infiniopCreateFlashAttentionDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetFlashAttentionWorkspaceSize(
+__INFINI_C infiniStatus_t infiniopGetFlashAttentionWorkspaceSize(
     infiniopFlashAttentionDescriptor_t desc,
     size_t *size) {
 
@@ -69,7 +69,7 @@ __C infiniStatus_t infiniopGetFlashAttentionWorkspaceSize(
 #undef GET_SIZE
 }
 
-__C infiniStatus_t infiniopFlashAttention(
+__INFINI_C infiniStatus_t infiniopFlashAttention(
     infiniopFlashAttentionDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -99,7 +99,7 @@ __C infiniStatus_t infiniopFlashAttention(
 #undef CALCULATE
 }
 
-__C infiniStatus_t infiniopDestroyFlashAttentionDescriptor(
+__INFINI_C infiniStatus_t infiniopDestroyFlashAttentionDescriptor(
     infiniopFlashAttentionDescriptor_t desc) {
 
 #define DESTROY(CASE, NAMESPACE)                                                     \

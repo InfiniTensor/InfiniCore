@@ -5,23 +5,23 @@
 
 typedef struct InfiniopDescriptor *infiniopRandomSampleDescriptor_t;
 
-__C __export infiniStatus_t infiniopCreateRandomSampleDescriptor(
+__INFINI_C __export infiniStatus_t infiniopCreateRandomSampleDescriptor(
     infiniopHandle_t handle,
     infiniopRandomSampleDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t result,
     infiniopTensorDescriptor_t probs);
 
-__C __export infiniStatus_t infiniopGetRandomSampleWorkspaceSize(
+__INFINI_C __export infiniStatus_t infiniopGetRandomSampleWorkspaceSize(
     infiniopRandomSampleDescriptor_t desc,
     size_t *size);
 
-__C __export infiniStatus_t infiniopCreateRandomSampleBatchDescriptor(
+__INFINI_C __export infiniStatus_t infiniopCreateRandomSampleBatchDescriptor(
     infiniopHandle_t handle,
     infiniopRandomSampleDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t result,
     infiniopTensorDescriptor_t probs);
 
-__C __export infiniStatus_t infiniopRandomSample(
+__INFINI_C __export infiniStatus_t infiniopRandomSample(
     infiniopRandomSampleDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -33,7 +33,7 @@ __C __export infiniStatus_t infiniopRandomSample(
     float temperature,
     void *stream);
 
-__C __export infiniStatus_t infiniopRandomSampleBatch(
+__INFINI_C __export infiniStatus_t infiniopRandomSampleBatch(
     infiniopRandomSampleDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -46,7 +46,7 @@ __C __export infiniStatus_t infiniopRandomSampleBatch(
     int batch_size,
     void *stream);
 
-__C __export infiniStatus_t infiniopDestroyRandomSampleDescriptor(
+__INFINI_C __export infiniStatus_t infiniopDestroyRandomSampleDescriptor(
     infiniopRandomSampleDescriptor_t desc);
 
 #endif

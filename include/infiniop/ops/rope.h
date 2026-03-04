@@ -12,7 +12,7 @@ typedef enum {
 
 typedef struct InfiniopDescriptor *infiniopRoPEDescriptor_t;
 
-__C __export infiniStatus_t infiniopCreateRoPEDescriptor(
+__INFINI_C __export infiniStatus_t infiniopCreateRoPEDescriptor(
     infiniopHandle_t handle,
     infiniopRoPEDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t y,
@@ -22,9 +22,9 @@ __C __export infiniStatus_t infiniopCreateRoPEDescriptor(
     infiniopTensorDescriptor_t cos_table,
     infiniopRoPEAlgo_t algo);
 
-__C __export infiniStatus_t infiniopGetRoPEWorkspaceSize(infiniopRoPEDescriptor_t desc, size_t *size);
+__INFINI_C __export infiniStatus_t infiniopGetRoPEWorkspaceSize(infiniopRoPEDescriptor_t desc, size_t *size);
 
-__C __export infiniStatus_t infiniopRoPE(
+__INFINI_C __export infiniStatus_t infiniopRoPE(
     infiniopRoPEDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -35,6 +35,6 @@ __C __export infiniStatus_t infiniopRoPE(
     void const *cos_table,
     void *stream);
 
-__C __export infiniStatus_t infiniopDestroyRoPEDescriptor(infiniopRoPEDescriptor_t desc);
+__INFINI_C __export infiniStatus_t infiniopDestroyRoPEDescriptor(infiniopRoPEDescriptor_t desc);
 
 #endif

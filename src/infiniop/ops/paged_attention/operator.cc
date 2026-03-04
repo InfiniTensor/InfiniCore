@@ -12,7 +12,7 @@
 #include "metax/paged_attention_metax.h"
 #endif
 
-__C infiniStatus_t infiniopCreatePagedAttentionDescriptor(
+__INFINI_C infiniStatus_t infiniopCreatePagedAttentionDescriptor(
     infiniopHandle_t handle,
     infiniopPagedAttentionDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t out_desc,
@@ -54,7 +54,7 @@ __C infiniStatus_t infiniopCreatePagedAttentionDescriptor(
     }
 }
 
-__C infiniStatus_t infiniopGetPagedAttentionWorkspaceSize(
+__INFINI_C infiniStatus_t infiniopGetPagedAttentionWorkspaceSize(
     infiniopPagedAttentionDescriptor_t desc,
     size_t *size) {
 
@@ -84,7 +84,7 @@ __C infiniStatus_t infiniopGetPagedAttentionWorkspaceSize(
     }
 }
 
-__C infiniStatus_t infiniopPagedAttention(
+__INFINI_C infiniStatus_t infiniopPagedAttention(
     infiniopPagedAttentionDescriptor_t desc,
     void *workspace, size_t workspace_size,
     void *out, const void *q, const void *k_cache, const void *v_cache,
@@ -118,7 +118,7 @@ __C infiniStatus_t infiniopPagedAttention(
     }
 }
 
-__C infiniStatus_t infiniopDestroyPagedAttentionDescriptor(
+__INFINI_C infiniStatus_t infiniopDestroyPagedAttentionDescriptor(
     infiniopPagedAttentionDescriptor_t desc) {
 
 #define DESTROY(CASE, NAMESPACE)                                                     \

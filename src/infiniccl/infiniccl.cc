@@ -7,7 +7,7 @@
 #include "./metax/infiniccl_metax.h"
 #include "./moore/infiniccl_moore.h"
 
-__C infiniStatus_t infinicclCommInitAll(
+__INFINI_C infiniStatus_t infinicclCommInitAll(
     infiniDevice_t device_type,
     infinicclComm_t *comms,
     int ndevice,
@@ -35,7 +35,7 @@ __C infiniStatus_t infinicclCommInitAll(
 #undef COMM_INIT_ALL
 }
 
-__C infiniStatus_t infinicclCommDestroy(infinicclComm_t comm) {
+__INFINI_C infiniStatus_t infinicclCommDestroy(infinicclComm_t comm) {
     if (comm == nullptr) {
         return INFINI_STATUS_SUCCESS;
     }
@@ -61,7 +61,7 @@ __C infiniStatus_t infinicclCommDestroy(infinicclComm_t comm) {
 #undef COMM_DESTROY
 }
 
-__C infiniStatus_t infinicclAllReduce(
+__INFINI_C infiniStatus_t infinicclAllReduce(
     void *sendbuf,
     void *recvbuf,
     size_t count,

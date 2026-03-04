@@ -5,15 +5,15 @@
 
 typedef struct InfiniopDescriptor *infiniopCausalSoftmaxDescriptor_t;
 
-__C __export infiniStatus_t infiniopCreateCausalSoftmaxDescriptor(
+__INFINI_C __export infiniStatus_t infiniopCreateCausalSoftmaxDescriptor(
     infiniopHandle_t handle,
     infiniopCausalSoftmaxDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t y_desc,
     infiniopTensorDescriptor_t x_desc);
 
-__C __export infiniStatus_t infiniopGetCausalSoftmaxWorkspaceSize(infiniopCausalSoftmaxDescriptor_t desc, size_t *size);
+__INFINI_C __export infiniStatus_t infiniopGetCausalSoftmaxWorkspaceSize(infiniopCausalSoftmaxDescriptor_t desc, size_t *size);
 
-__C __export infiniStatus_t infiniopCausalSoftmax(
+__INFINI_C __export infiniStatus_t infiniopCausalSoftmax(
     infiniopCausalSoftmaxDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -21,6 +21,6 @@ __C __export infiniStatus_t infiniopCausalSoftmax(
     const void *x,
     void *stream);
 
-__C __export infiniStatus_t infiniopDestroyCausalSoftmaxDescriptor(infiniopCausalSoftmaxDescriptor_t desc);
+__INFINI_C __export infiniStatus_t infiniopDestroyCausalSoftmaxDescriptor(infiniopCausalSoftmaxDescriptor_t desc);
 
 #endif

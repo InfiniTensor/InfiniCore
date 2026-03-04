@@ -31,7 +31,7 @@ struct InfiniopAttentionDescriptor {
     float qk_alpha;
 };
 
-__C __export infiniStatus_t infiniopCreateAttentionDescriptor(infiniopHandle_t handle,
+__INFINI_C __export infiniStatus_t infiniopCreateAttentionDescriptor(infiniopHandle_t handle,
                                                               infiniopAttentionDescriptor_t *desc_ptr,
                                                               infiniopTensorDescriptor_t out_desc,
                                                               infiniopTensorDescriptor_t q_desc,
@@ -218,12 +218,12 @@ __C __export infiniStatus_t infiniopCreateAttentionDescriptor(infiniopHandle_t h
     return INFINI_STATUS_SUCCESS;
 }
 
-__C __export infiniStatus_t infiniopGetAttentionWorkspaceSize(infiniopAttentionDescriptor_t desc, size_t *size) {
+__INFINI_C __export infiniStatus_t infiniopGetAttentionWorkspaceSize(infiniopAttentionDescriptor_t desc, size_t *size) {
     *size = ((InfiniopAttentionDescriptor *)desc)->workspace_size;
     return INFINI_STATUS_SUCCESS;
 }
 
-__C __export infiniStatus_t infiniopAttention(infiniopAttentionDescriptor_t desc_,
+__INFINI_C __export infiniStatus_t infiniopAttention(infiniopAttentionDescriptor_t desc_,
                                               void *workspace_,
                                               size_t workspace_size_,
                                               void *out,
@@ -274,7 +274,7 @@ __C __export infiniStatus_t infiniopAttention(infiniopAttentionDescriptor_t desc
     return INFINI_STATUS_SUCCESS;
 }
 
-__C __export infiniStatus_t infiniopDestroyAttentionDescriptor(infiniopAttentionDescriptor_t desc_) {
+__INFINI_C __export infiniStatus_t infiniopDestroyAttentionDescriptor(infiniopAttentionDescriptor_t desc_) {
     auto desc = (InfiniopAttentionDescriptor *)desc_;
     if (desc->rearrange_desc_q) {
         CHECK_STATUS(infiniopDestroyRearrangeDescriptor(desc->rearrange_desc_q));

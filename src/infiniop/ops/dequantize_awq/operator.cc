@@ -12,7 +12,7 @@
 #include "iluvatar/dequantize_w42f16_iluvatar.cuh"
 #endif
 
-__C infiniStatus_t infiniopCreateDequantizeAWQDescriptor(
+__INFINI_C infiniStatus_t infiniopCreateDequantizeAWQDescriptor(
     infiniopHandle_t handle,
     infiniopDequantizeAWQDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t out_desc,
@@ -54,7 +54,7 @@ __C infiniStatus_t infiniopCreateDequantizeAWQDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetDequantizeAWQWorkspaceSize(infiniopDequantizeAWQDescriptor_t desc,
+__INFINI_C infiniStatus_t infiniopGetDequantizeAWQWorkspaceSize(infiniopDequantizeAWQDescriptor_t desc,
                                                          size_t *size) {
 #define GET(CASE, NAMESPACE)                                                                                \
     case CASE:                                                                                              \
@@ -84,7 +84,7 @@ __C infiniStatus_t infiniopGetDequantizeAWQWorkspaceSize(infiniopDequantizeAWQDe
 #undef GET
 }
 
-__C infiniStatus_t infiniopDequantizeAWQ(
+__INFINI_C infiniStatus_t infiniopDequantizeAWQ(
     infiniopDequantizeAWQDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -123,7 +123,7 @@ __C infiniStatus_t infiniopDequantizeAWQ(
 #undef CALCULATE
 }
 
-__C infiniStatus_t
+__INFINI_C infiniStatus_t
 infiniopDestroyDequantizeAWQDescriptor(infiniopDequantizeAWQDescriptor_t desc) {
 
 #define DELETE(CASE, NAMESPACE)                                                           \

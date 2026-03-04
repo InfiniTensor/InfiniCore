@@ -24,7 +24,7 @@
 #include "metax/metax_handle.h"
 #endif
 
-__C infiniStatus_t infiniopCreateHandle(infiniopHandle_t *handle_ptr) {
+__INFINI_C infiniStatus_t infiniopCreateHandle(infiniopHandle_t *handle_ptr) {
     if (handle_ptr == nullptr) {
         return INFINI_STATUS_NULL_POINTER;
     }
@@ -79,7 +79,7 @@ __C infiniStatus_t infiniopCreateHandle(infiniopHandle_t *handle_ptr) {
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopDestroyHandle(infiniopHandle_t handle) {
+__INFINI_C infiniStatus_t infiniopDestroyHandle(infiniopHandle_t handle) {
 
 #define DELETE(CASE, NAMESPACE)                                       \
     case CASE:                                                        \

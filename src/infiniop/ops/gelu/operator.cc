@@ -15,7 +15,7 @@
 #include "kunlun/gelu_kunlun.h"
 #endif
 
-__C infiniStatus_t infiniopCreateGeluDescriptor(
+__INFINI_C infiniStatus_t infiniopCreateGeluDescriptor(
     infiniopHandle_t handle,
     infiniopGeluDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t output_desc,
@@ -60,7 +60,7 @@ __C infiniStatus_t infiniopCreateGeluDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetGeluWorkspaceSize(infiniopGeluDescriptor_t desc, size_t *size) {
+__INFINI_C infiniStatus_t infiniopGetGeluWorkspaceSize(infiniopGeluDescriptor_t desc, size_t *size) {
 
 #define GET(CASE, NAMESPACE)                                                                \
     case CASE:                                                                              \
@@ -98,7 +98,7 @@ __C infiniStatus_t infiniopGetGeluWorkspaceSize(infiniopGeluDescriptor_t desc, s
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
-__C infiniStatus_t infiniopGelu(
+__INFINI_C infiniStatus_t infiniopGelu(
     infiniopGeluDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -142,7 +142,7 @@ __C infiniStatus_t infiniopGelu(
 #undef CALCULATE
 }
 
-__C infiniStatus_t
+__INFINI_C infiniStatus_t
 infiniopDestroyGeluDescriptor(infiniopGeluDescriptor_t desc) {
 
 #define DELETE(CASE, NAMESPACE)                                                 \

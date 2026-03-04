@@ -15,7 +15,7 @@
 #include "moore/embedding_moore.h"
 #endif
 
-__C infiniStatus_t infiniopCreateEmbeddingDescriptor(
+__INFINI_C infiniStatus_t infiniopCreateEmbeddingDescriptor(
     infiniopHandle_t handle,
     infiniopEmbeddingDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t output_desc,
@@ -65,7 +65,7 @@ __C infiniStatus_t infiniopCreateEmbeddingDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopEmbedding(
+__INFINI_C infiniStatus_t infiniopEmbedding(
     infiniopEmbeddingDescriptor_t desc,
     void *output,
     const void *input,
@@ -111,7 +111,7 @@ __C infiniStatus_t infiniopEmbedding(
 #undef CALCULATE
 }
 
-__C infiniStatus_t infiniopDestroyEmbeddingDescriptor(infiniopEmbeddingDescriptor_t desc) {
+__INFINI_C infiniStatus_t infiniopDestroyEmbeddingDescriptor(infiniopEmbeddingDescriptor_t desc) {
 
 #define DESTROY(CASE, NAMESPACE)                                                     \
     case CASE:                                                                       \

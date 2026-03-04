@@ -5,7 +5,7 @@
 
 typedef struct InfiniopDescriptor *infiniopAddRMSNormDescriptor_t;
 
-__C __export infiniStatus_t infiniopCreateAddRMSNormDescriptor(
+__INFINI_C __export infiniStatus_t infiniopCreateAddRMSNormDescriptor(
     infiniopHandle_t handle,
     infiniopAddRMSNormDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t y_desc,
@@ -15,9 +15,9 @@ __C __export infiniStatus_t infiniopCreateAddRMSNormDescriptor(
     infiniopTensorDescriptor_t weight_desc,
     float epsilon);
 
-__C __export infiniStatus_t infiniopGetAddRMSNormWorkspaceSize(infiniopAddRMSNormDescriptor_t desc, size_t *size);
+__INFINI_C __export infiniStatus_t infiniopGetAddRMSNormWorkspaceSize(infiniopAddRMSNormDescriptor_t desc, size_t *size);
 
-__C __export infiniStatus_t infiniopAddRMSNorm(infiniopAddRMSNormDescriptor_t desc,
+__INFINI_C __export infiniStatus_t infiniopAddRMSNorm(infiniopAddRMSNormDescriptor_t desc,
                                                 void *workspace,
                                                 size_t workspace_size,
                                                 void *y,
@@ -27,6 +27,6 @@ __C __export infiniStatus_t infiniopAddRMSNorm(infiniopAddRMSNormDescriptor_t de
                                                 const void *weight,
                                                 void *stream);
 
-__C __export infiniStatus_t infiniopDestroyAddRMSNormDescriptor(infiniopAddRMSNormDescriptor_t desc);
+__INFINI_C __export infiniStatus_t infiniopDestroyAddRMSNormDescriptor(infiniopAddRMSNormDescriptor_t desc);
 
 #endif

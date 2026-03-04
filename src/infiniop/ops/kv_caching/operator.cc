@@ -9,7 +9,7 @@
 #include "metax/kv_caching_metax.h"
 #endif
 
-__C infiniStatus_t infiniopCreateKVCachingDescriptor(
+__INFINI_C infiniStatus_t infiniopCreateKVCachingDescriptor(
     infiniopHandle_t handle,
     infiniopKVCachingDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t k_cache,
@@ -57,7 +57,7 @@ __C infiniStatus_t infiniopCreateKVCachingDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetKVCachingWorkspaceSize(
+__INFINI_C infiniStatus_t infiniopGetKVCachingWorkspaceSize(
     infiniopKVCachingDescriptor_t desc,
     size_t *size) {
 
@@ -95,7 +95,7 @@ __C infiniStatus_t infiniopGetKVCachingWorkspaceSize(
 #undef GET_SIZE
 }
 
-__C infiniStatus_t infiniopKVCaching(
+__INFINI_C infiniStatus_t infiniopKVCaching(
     infiniopKVCachingDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -139,7 +139,7 @@ __C infiniStatus_t infiniopKVCaching(
 #undef CALCULATE
 }
 
-__C infiniStatus_t infiniopDestroyKVCachingDescriptor(
+__INFINI_C infiniStatus_t infiniopDestroyKVCachingDescriptor(
     infiniopKVCachingDescriptor_t desc) {
 
 #define DELETE(CASE, NAMESPACE)                                                 \

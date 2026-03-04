@@ -22,7 +22,7 @@ typedef struct InfiniopDescriptor *infiniopSiluAndMulDescriptor_t;
  * @param input Descriptor for the input tensor. Shape [..., 2*d].
  * @return infiniStatus_t Status code of the operation.
  */
-__C __export infiniStatus_t infiniopCreateSiluAndMulDescriptor(
+__INFINI_C __export infiniStatus_t infiniopCreateSiluAndMulDescriptor(
     infiniopHandle_t handle,
     infiniopSiluAndMulDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t output,
@@ -34,7 +34,7 @@ __C __export infiniStatus_t infiniopCreateSiluAndMulDescriptor(
  * @param size Pointer to store the required workspace size in bytes.
  * @return infiniStatus_t Status code of the operation.
  */
-__C __export infiniStatus_t infiniopGetSiluAndMulWorkspaceSize(
+__INFINI_C __export infiniStatus_t infiniopGetSiluAndMulWorkspaceSize(
     infiniopSiluAndMulDescriptor_t desc,
     size_t *size);
 
@@ -52,7 +52,7 @@ __C __export infiniStatus_t infiniopGetSiluAndMulWorkspaceSize(
  * @param stream Pointer to the execution stream (e.g., CUDA stream). Can be NULL for default stream.
  * @return infiniStatus_t Status code of the operation.
  */
-__C __export infiniStatus_t infiniopSiluAndMul(
+__INFINI_C __export infiniStatus_t infiniopSiluAndMul(
     infiniopSiluAndMulDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -65,7 +65,7 @@ __C __export infiniStatus_t infiniopSiluAndMul(
  * @param desc The descriptor to destroy.
  * @return infiniStatus_t Status code of the operation.
  */
-__C __export infiniStatus_t infiniopDestroySiluAndMulDescriptor(
+__INFINI_C __export infiniStatus_t infiniopDestroySiluAndMulDescriptor(
     infiniopSiluAndMulDescriptor_t desc);
 
 #endif // __INFINIOP_SILU_AND_MUL_API_H__

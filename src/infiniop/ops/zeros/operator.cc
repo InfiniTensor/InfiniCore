@@ -15,7 +15,7 @@
 #include "moore/zeros_moore.h"
 #endif
 
-__C infiniStatus_t infiniopCreateZerosDescriptor(
+__INFINI_C infiniStatus_t infiniopCreateZerosDescriptor(
     infiniopHandle_t handle,
     infiniopZerosDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t y_desc,
@@ -59,7 +59,7 @@ __C infiniStatus_t infiniopCreateZerosDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetZerosWorkspaceSize(infiniopZerosDescriptor_t desc, size_t *size) {
+__INFINI_C infiniStatus_t infiniopGetZerosWorkspaceSize(infiniopZerosDescriptor_t desc, size_t *size) {
 
 #define GET(CASE, NAMESPACE)                                                                 \
     case CASE:                                                                               \
@@ -96,7 +96,7 @@ __C infiniStatus_t infiniopGetZerosWorkspaceSize(infiniopZerosDescriptor_t desc,
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
-__C infiniStatus_t infiniopZeros(
+__INFINI_C infiniStatus_t infiniopZeros(
     infiniopZerosDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -139,7 +139,7 @@ __C infiniStatus_t infiniopZeros(
 #undef CALCULATE
 }
 
-__C infiniStatus_t
+__INFINI_C infiniStatus_t
 infiniopDestroyZerosDescriptor(infiniopZerosDescriptor_t desc) {
 
 #define DELETE(CASE, NAMESPACE)                                                  \

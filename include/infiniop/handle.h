@@ -7,8 +7,8 @@ struct InfiniopHandle;
 
 typedef struct InfiniopHandle *infiniopHandle_t;
 
-__C __export infiniStatus_t infiniopCreateHandle(infiniopHandle_t *handle_ptr);
+__INFINI_C __export infiniStatus_t infiniopCreateHandle(infiniopHandle_t *handle_ptr);
 
-__C __export infiniStatus_t infiniopDestroyHandle(infiniopHandle_t handle);
+__INFINI_C __export infiniStatus_t infiniopDestroyHandle(infiniopHandle_t handle);
 
 #endif

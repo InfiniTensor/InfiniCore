@@ -15,7 +15,7 @@
 #include "moore/silu_moore.h"
 #endif
 
-__C infiniStatus_t infiniopCreateSiluDescriptor(
+__INFINI_C infiniStatus_t infiniopCreateSiluDescriptor(
     infiniopHandle_t handle,
     infiniopSiluDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t output_desc,
@@ -57,7 +57,7 @@ __C infiniStatus_t infiniopCreateSiluDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetSiluWorkspaceSize(infiniopSiluDescriptor_t desc, size_t *size) {
+__INFINI_C infiniStatus_t infiniopGetSiluWorkspaceSize(infiniopSiluDescriptor_t desc, size_t *size) {
 
 #define GET(CASE, NAMESPACE)                                                                \
     case CASE:                                                                              \
@@ -92,7 +92,7 @@ __C infiniStatus_t infiniopGetSiluWorkspaceSize(infiniopSiluDescriptor_t desc, s
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
-__C infiniStatus_t infiniopSilu(
+__INFINI_C infiniStatus_t infiniopSilu(
     infiniopSiluDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -133,7 +133,7 @@ __C infiniStatus_t infiniopSilu(
 #undef CALCULATE
 }
 
-__C infiniStatus_t
+__INFINI_C infiniStatus_t
 infiniopDestroySiluDescriptor(infiniopSiluDescriptor_t desc) {
 
 #define DELETE(CASE, NAMESPACE)                                                 \

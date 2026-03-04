@@ -5,16 +5,16 @@
 
 typedef InfiniopDescriptor *infiniopPerChannelQuantI8Descriptor_t;
 
-__C __export infiniStatus_t infiniopCreatePerChannelQuantI8Descriptor(infiniopHandle_t handle,
+__INFINI_C __export infiniStatus_t infiniopCreatePerChannelQuantI8Descriptor(infiniopHandle_t handle,
                                                                       infiniopPerChannelQuantI8Descriptor_t *desc_ptr,
                                                                       infiniopTensorDescriptor_t x_packed_desc,
                                                                       infiniopTensorDescriptor_t x_scale_desc,
                                                                       infiniopTensorDescriptor_t x_zero_desc,
                                                                       infiniopTensorDescriptor_t x_desc);
 
-__C __export infiniStatus_t infiniopGetPerChannelQuantI8WorkspaceSize(infiniopPerChannelQuantI8Descriptor_t desc, size_t *size);
+__INFINI_C __export infiniStatus_t infiniopGetPerChannelQuantI8WorkspaceSize(infiniopPerChannelQuantI8Descriptor_t desc, size_t *size);
 
-__C __export infiniStatus_t infiniopPerChannelQuantI8(infiniopPerChannelQuantI8Descriptor_t desc,
+__INFINI_C __export infiniStatus_t infiniopPerChannelQuantI8(infiniopPerChannelQuantI8Descriptor_t desc,
                                                       void *workspace,
                                                       size_t workspace_size,
                                                       void *x_packed,
@@ -23,6 +23,6 @@ __C __export infiniStatus_t infiniopPerChannelQuantI8(infiniopPerChannelQuantI8D
                                                       const void *x,
                                                       void *stream);
 
-__C __export infiniStatus_t infiniopDestroyPerChannelQuantI8Descriptor(infiniopPerChannelQuantI8Descriptor_t desc);
+__INFINI_C __export infiniStatus_t infiniopDestroyPerChannelQuantI8Descriptor(infiniopPerChannelQuantI8Descriptor_t desc);
 
 #endif

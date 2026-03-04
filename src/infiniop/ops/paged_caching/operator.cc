@@ -12,7 +12,7 @@
 #include "moore/paged_caching_moore.h"
 #endif
 
-__C infiniStatus_t infiniopCreatePagedCachingDescriptor(
+__INFINI_C infiniStatus_t infiniopCreatePagedCachingDescriptor(
     infiniopHandle_t handle,
     infiniopPagedCachingDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t k_cache_desc,
@@ -49,7 +49,7 @@ __C infiniStatus_t infiniopCreatePagedCachingDescriptor(
     }
 }
 
-__C infiniStatus_t infiniopGetPagedCachingWorkspaceSize(
+__INFINI_C infiniStatus_t infiniopGetPagedCachingWorkspaceSize(
     infiniopPagedCachingDescriptor_t desc,
     size_t *size) {
 
@@ -79,7 +79,7 @@ __C infiniStatus_t infiniopGetPagedCachingWorkspaceSize(
     }
 }
 
-__C infiniStatus_t infiniopPagedCaching(
+__INFINI_C infiniStatus_t infiniopPagedCaching(
     infiniopPagedCachingDescriptor_t desc,
     void *workspace, size_t workspace_size,
     void *k_cache, void *v_cache,
@@ -113,7 +113,7 @@ __C infiniStatus_t infiniopPagedCaching(
     }
 }
 
-__C infiniStatus_t infiniopDestroyPagedCachingDescriptor(
+__INFINI_C infiniStatus_t infiniopDestroyPagedCachingDescriptor(
     infiniopPagedCachingDescriptor_t desc) {
 
 #define DESTROY(CASE, NAMESPACE)                                                   \

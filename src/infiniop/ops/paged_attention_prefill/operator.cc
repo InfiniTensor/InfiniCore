@@ -12,7 +12,7 @@
 #include "moore/paged_attention_prefill_moore.h"
 #endif
 
-__C infiniStatus_t infiniopCreatePagedAttentionPrefillDescriptor(
+__INFINI_C infiniStatus_t infiniopCreatePagedAttentionPrefillDescriptor(
     infiniopHandle_t handle,
     infiniopPagedAttentionPrefillDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t out_desc,
@@ -56,7 +56,7 @@ __C infiniStatus_t infiniopCreatePagedAttentionPrefillDescriptor(
     }
 }
 
-__C infiniStatus_t infiniopGetPagedAttentionPrefillWorkspaceSize(
+__INFINI_C infiniStatus_t infiniopGetPagedAttentionPrefillWorkspaceSize(
     infiniopPagedAttentionPrefillDescriptor_t desc,
     size_t *size) {
 
@@ -86,7 +86,7 @@ __C infiniStatus_t infiniopGetPagedAttentionPrefillWorkspaceSize(
     }
 }
 
-__C infiniStatus_t infiniopPagedAttentionPrefill(
+__INFINI_C infiniStatus_t infiniopPagedAttentionPrefill(
     infiniopPagedAttentionPrefillDescriptor_t desc,
     void *workspace, size_t workspace_size,
     void *out, const void *q, const void *k_cache, const void *v_cache,
@@ -123,7 +123,7 @@ __C infiniStatus_t infiniopPagedAttentionPrefill(
     }
 }
 
-__C infiniStatus_t infiniopDestroyPagedAttentionPrefillDescriptor(
+__INFINI_C infiniStatus_t infiniopDestroyPagedAttentionPrefillDescriptor(
     infiniopPagedAttentionPrefillDescriptor_t desc) {
 
 #define DESTROY(CASE, NAMESPACE)                                                             \

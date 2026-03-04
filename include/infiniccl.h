@@ -15,15 +15,15 @@ struct InfinicclComm;
 
 typedef struct InfinicclComm *infinicclComm_t;
 
-__C __export infiniStatus_t infinicclCommInitAll(
+__INFINI_C __export infiniStatus_t infinicclCommInitAll(
     infiniDevice_t device_type,
     infinicclComm_t *comms,
     int ndevice,
     const int *device_ids);
 
-__C __export infiniStatus_t infinicclCommDestroy(infinicclComm_t comm);
+__INFINI_C __export infiniStatus_t infinicclCommDestroy(infinicclComm_t comm);
 
-__C __export infiniStatus_t infinicclAllReduce(
+__INFINI_C __export infiniStatus_t infinicclAllReduce(
     void *sendbuf,
     void *recvbuf,
     size_t count,
