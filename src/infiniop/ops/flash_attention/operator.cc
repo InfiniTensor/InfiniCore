@@ -8,6 +8,10 @@
 #endif
 #endif
 
+#if defined(ENABLE_NVIDIA_API)
+#include "nvidia/flash_attention_nvidia.cuh"
+#endif
+
 __INFINI_C infiniStatus_t infiniopCreateFlashAttentionDescriptor(
     infiniopHandle_t handle,
     infiniopFlashAttentionDescriptor_t *desc_ptr,
@@ -34,10 +38,10 @@ __INFINI_C infiniStatus_t infiniopCreateFlashAttentionDescriptor(
 
     switch (handle->device) {
 
-#if defined(ENABLE_NINETOOTHED)
-#if defined(ENABLE_NVIDIA_API)
+#if defined(ENABLE_NINETOOTHED) && defined(ENABLE_NVIDIA_API)
         CREATE(INFINI_DEVICE_NVIDIA, ninetoothed);
-#endif
+#elif defined(ENABLE_NVIDIA_API)
+        CREATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -57,10 +61,10 @@ __INFINI_C infiniStatus_t infiniopGetFlashAttentionWorkspaceSize(
 
     switch (desc->device_type) {
 
-#if defined(ENABLE_NINETOOTHED)
-#if defined(ENABLE_NVIDIA_API)
+#if defined(ENABLE_NINETOOTHED) && defined(ENABLE_NVIDIA_API)
         GET_SIZE(INFINI_DEVICE_NVIDIA, ninetoothed);
-#endif
+#elif defined(ENABLE_NVIDIA_API)
+        GET_SIZE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -87,10 +91,10 @@ __INFINI_C infiniStatus_t infiniopFlashAttention(
 
     switch (desc->device_type) {
 
-#if defined(ENABLE_NINETOOTHED)
-#if defined(ENABLE_NVIDIA_API)
+#if defined(ENABLE_NINETOOTHED) && defined(ENABLE_NVIDIA_API)
         CALCULATE(INFINI_DEVICE_NVIDIA, ninetoothed);
-#endif
+#elif defined(ENABLE_NVIDIA_API)
+        CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -109,10 +113,10 @@ __INFINI_C infiniStatus_t infiniopDestroyFlashAttentionDescriptor(
 
     switch (desc->device_type) {
 
-#if defined(ENABLE_NINETOOTHED)
-#if defined(ENABLE_NVIDIA_API)
+#if defined(ENABLE_NINETOOTHED) && defined(ENABLE_NVIDIA_API)
         DESTROY(INFINI_DEVICE_NVIDIA, ninetoothed);
-#endif
+#elif defined(ENABLE_NVIDIA_API)
+        DESTROY(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
