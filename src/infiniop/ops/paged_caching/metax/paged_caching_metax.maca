@@ -12,7 +12,7 @@ INFINIOP_METAX_KERNEL pagedCaching(
     const ptrdiff_t k_src_stride, const ptrdiff_t v_src_stride,
     const ptrdiff_t k_cache_block_stride, const ptrdiff_t v_cache_block_stride,
     const ptrdiff_t k_cache_head_stride, const ptrdiff_t v_cache_head_stride,
-    const ptrdiff_t k_cache_slot_stride, const ptrdiff_t v_cache_slot_strid) {
+    const ptrdiff_t k_cache_slot_stride, const ptrdiff_t v_cache_slot_stride) {
     op::paged_caching::cuda::pagedCachingKernel<Tdata, NUM_THREADS>(
         k_cache, v_cache, k, v, slot_mapping, head_size,
         block_size, k_src_stride, v_src_stride, 
