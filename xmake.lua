@@ -226,6 +226,28 @@ if has_config("ninetoothed") then
     add_defines("ENABLE_NINETOOTHED")
 end
 
+-- ATen
+option("aten")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Wether to link aten and torch libraries")
+option_end()
+
+-- Flash-Attn
+option("flash-attn")
+    set_default(nil)
+    set_showmenu(true)
+    set_description("Path to flash-attention repo. If not set, flash-attention will not used.")
+option_end()
+
+if has_config("aten") then
+    add_defines("ENABLE_ATEN")
+    if get_config("flash-attn") ~= nil then
+        add_defines("ENABLE_FLASH_ATTN")
+    end
+end
+
+
 -- cuda graph
 option("graph")
     set_default(false)
@@ -314,6 +336,7 @@ target("infinirt")
     if not is_plat("windows") then
         add_cxflags("-fPIC")
         add_cxxflags("-fPIC")
+        add_ldflags("-fPIC", {force = true})
     end
     set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
     add_files("src/infinirt/*.cc")
@@ -439,8 +462,44 @@ target("infinicore_cpp_api")
     add_linkdirs(INFINI_ROOT.."/lib")
     add_links("infiniop", "infinirt", "infiniccl")
 
+    if get_config("flash-attn") ~= nil then
+        add_installfiles("(builddir)/$(plat)/$(arch)/$(mode)/flash-attn*.so", {prefixdir = "lib"})
+        if has_config("nv-gpu") then
+            add_deps("flash-attn-nvidia")
+        end
+    end
+
+    before_build(function (target)
+        if has_config("aten") then
+            local outdata = os.iorunv("python", {"-c", "import torch, os; print(os.path.dirname(torch.__file__))"}):trim()
+            local TORCH_DIR = outdata
+
+            target:add(
+                "includedirs", 
+                path.join(TORCH_DIR, "include"), 
+                path.join(TORCH_DIR, "include/torch/csrc/api/include"),
+                { public = true })
+            
+            target:add(
+                "linkdirs",
+                path.join(TORCH_DIR, "lib"),
+                { public = true }
+            )
+            target:add(
+                "links",
+                "torch",
+                "c10",
+                "torch_cuda",
+                "c10_cuda",
+                { public = true }
+            )
+        end
+
+    end)
+
     -- Add InfiniCore C++ source files (needed for RoPE and other nn modules)
     add_files("src/infinicore/*.cc")
+    add_files("src/infinicore/adaptor/*.cc")
     add_files("src/infinicore/context/*.cc")
     add_files("src/infinicore/context/*/*.cc")
     add_files("src/infinicore/tensor/*.cc")
