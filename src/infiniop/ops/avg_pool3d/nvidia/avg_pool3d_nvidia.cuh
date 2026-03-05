@@ -2,6 +2,7 @@
 #define __AVG_POOL3D_NVIDIA_H__
 
 #include "../../../operator.h"
+#include "../../../tensor.h"
 #include "../../../devices/nvidia/nvidia_common.cuh"
 #include "../../../devices/nvidia/nvidia_handle.cuh"
 #include <cudnn.h>
@@ -13,11 +14,10 @@ class Descriptor final : public InfiniopDescriptor {
     std::unique_ptr<Opaque> _opaque;
     infiniDtype_t _dtype;
 
+    // Defined out-of-line (in .cu) to avoid requiring Opaque to be complete
+    // in every translation unit that includes this header.
     Descriptor(infiniDtype_t dtype, std::unique_ptr<Opaque> opaque,
-               infiniDevice_t device_type, int device_id)
-        : InfiniopDescriptor{device_type, device_id},
-          _dtype(dtype),
-          _opaque(std::move(opaque)) {}
+               infiniDevice_t device_type, int device_id);
 
 public:
     ~Descriptor();

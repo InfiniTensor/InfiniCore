@@ -1,5 +1,5 @@
 #include "avg_pool3d_moore.h"
-#include "../../../utils.h"
+#include "../../../../utils.h"
 // MOORE uses CUDA-compatible API, so we can reuse NVIDIA implementation
 // by including the NVIDIA source and adapting stream types
 
@@ -9,6 +9,14 @@ namespace op::avg_pool3d::moore {
 // We can reuse the NVIDIA implementation structure
 // For now, return NOT_IMPLEMENTED as a placeholder
 // Full implementation would require adapting NVIDIA code to use musaStream_t
+
+struct Descriptor::Opaque {};
+
+Descriptor::Descriptor(infiniDtype_t dtype, std::unique_ptr<Opaque> opaque,
+                       infiniDevice_t device_type, int device_id)
+    : InfiniopDescriptor{device_type, device_id},
+      _opaque(std::move(opaque)),
+      _dtype(dtype) {}
 
 Descriptor::~Descriptor() = default;
 

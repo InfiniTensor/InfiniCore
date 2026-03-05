@@ -2,8 +2,8 @@
 #define __DOT_MOORE_H__
 
 #include "../../../operator.h"
+#include "../../../tensor.h"
 #include "../../../devices/moore/moore_common.h"
-#include <cub/block/block_reduce.cuh>
 
 namespace op::dot::moore {
 

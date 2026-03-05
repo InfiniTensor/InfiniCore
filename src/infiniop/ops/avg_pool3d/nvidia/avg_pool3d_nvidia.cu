@@ -1,6 +1,7 @@
 #include "avg_pool3d_nvidia.cuh"
-#include "../../../utils.h"
+#include "../../../../utils.h"
 #include <cudnn.h>
+#include <limits>
 
 namespace op::avg_pool3d::nvidia {
 
@@ -20,6 +21,12 @@ struct Descriptor::Opaque {
         if (pool_desc) cudnnDestroyPoolingDescriptor(pool_desc);
     }
 };
+
+Descriptor::Descriptor(infiniDtype_t dtype, std::unique_ptr<Opaque> opaque,
+                       infiniDevice_t device_type, int device_id)
+    : InfiniopDescriptor{device_type, device_id},
+      _opaque(std::move(opaque)),
+      _dtype(dtype) {}
 
 Descriptor::~Descriptor() = default;
 
@@ -86,22 +93,30 @@ infiniStatus_t Descriptor::create(
     int out_w = static_cast<int>(y_shape[4]);
 
     int input_dims[5] = {n, c, d, h, w};
-    int input_strides[5] = {
-        static_cast<int>(c * d * h * w),
-        static_cast<int>(d * h * w),
-        static_cast<int>(h * w),
-        static_cast<int>(w),
-        1
-    };
+    auto x_strides = x_desc->strides();
+    if (x_strides.size() != 5) {
+        return INFINI_STATUS_BAD_TENSOR_STRIDES;
+    }
+    int input_strides[5] = {};
+    for (size_t i = 0; i < 5; ++i) {
+        if (x_strides[i] <= 0 || x_strides[i] > std::numeric_limits<int>::max()) {
+            return INFINI_STATUS_BAD_TENSOR_STRIDES;
+        }
+        input_strides[i] = static_cast<int>(x_strides[i]);
+    }
 
     int output_dims[5] = {n, c, out_d, out_h, out_w};
-    int output_strides[5] = {
-        static_cast<int>(c * out_d * out_h * out_w),
-        static_cast<int>(out_d * out_h * out_w),
-        static_cast<int>(out_h * out_w),
-        static_cast<int>(out_w),
-        1
-    };
+    auto y_strides = y_desc->strides();
+    if (y_strides.size() != 5) {
+        return INFINI_STATUS_BAD_TENSOR_STRIDES;
+    }
+    int output_strides[5] = {};
+    for (size_t i = 0; i < 5; ++i) {
+        if (y_strides[i] <= 0 || y_strides[i] > std::numeric_limits<int>::max()) {
+            return INFINI_STATUS_BAD_TENSOR_STRIDES;
+        }
+        output_strides[i] = static_cast<int>(y_strides[i]);
+    }
 
     cudnnDataType_t cudnn_dtype = device::nvidia::getCudnnDtype(dtype);
     CHECK_CUDNN(cudnnSetTensorNdDescriptor(

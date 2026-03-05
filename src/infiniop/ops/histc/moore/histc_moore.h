@@ -2,6 +2,7 @@
 #define __HISTC_MOORE_H__
 
 #include "../../../operator.h"
+#include "../../../tensor.h"
 #include "../../../devices/moore/moore_common.h"
 
 namespace op::histc::moore {

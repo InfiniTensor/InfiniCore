@@ -1,5 +1,5 @@
 #include "avg_pool3d_cpu.h"
-#include "../../../utils.h"
+#include "../../../../utils.h"
 #include <algorithm>
 #include <cmath>
 
@@ -136,7 +136,6 @@ void avg_pool3d_impl(
                 for (size_t oh = 0; oh < info.output_h; ++oh) {
                     for (size_t ow = 0; ow < info.output_w; ++ow) {
                         float sum = 0.0f;
-                        size_t count = 0;
 
                         // Calculate input window
                         size_t id_start = od * info.stride_d - info.pad_d;
@@ -160,7 +159,6 @@ void avg_pool3d_impl(
                                                       static_cast<size_t>(ih) * info.input_strides[3] +
                                                       static_cast<size_t>(iw) * info.input_strides[4];
                                         sum += utils::cast<float>(x[x_idx]);
-                                        count++;
                                     }
                                 }
                             }
@@ -171,7 +169,9 @@ void avg_pool3d_impl(
                                       od * info.output_strides[2] +
                                       oh * info.output_strides[3] +
                                       ow * info.output_strides[4];
-                        y[y_idx] = utils::cast<T>(sum / static_cast<float>(count > 0 ? count : 1));
+                        // Match torch.nn.functional.avg_pool3d default behavior (count_include_pad=True):
+                        // padding contributes zeros but still counts in the divisor.
+                        y[y_idx] = utils::cast<T>(sum * inv_kernel_size);
                     }
                 }
             }

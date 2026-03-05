@@ -2,8 +2,8 @@
 #define __DOT_METAX_H__
 
 #include "../../../operator.h"
+#include "../../../tensor.h"
 #include "../../../devices/metax/metax_common.h"
-#include <cub/block/block_reduce.cuh>
 
 namespace op::dot::metax {
 

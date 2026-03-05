@@ -2,6 +2,7 @@
 #define __AVG_POOL3D_METAX_H__
 
 #include "../../../operator.h"
+#include "../../../tensor.h"
 #include "../../../devices/metax/metax_common.h"
 #include "../../../devices/metax/metax_handle.h"
 
@@ -19,10 +20,7 @@ class Descriptor final : public InfiniopDescriptor {
     infiniDtype_t _dtype;
 
     Descriptor(infiniDtype_t dtype, std::unique_ptr<Opaque> opaque,
-               infiniDevice_t device_type, int device_id)
-        : InfiniopDescriptor{device_type, device_id},
-          _dtype(dtype),
-          _opaque(std::move(opaque)) {}
+               infiniDevice_t device_type, int device_id);
 
 public:
     ~Descriptor();

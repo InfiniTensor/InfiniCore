@@ -2,6 +2,7 @@
 #define __HISTC_CPU_H__
 
 #include "../../../operator.h"
+#include "../../../tensor.h"
 #include "../../../devices/cpu/common_cpu.h"
 
 namespace op::histc::cpu {

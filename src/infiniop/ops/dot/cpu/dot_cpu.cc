@@ -1,5 +1,5 @@
 #include "dot_cpu.h"
-#include "../../../utils.h"
+#include "../../../../utils.h"
 
 namespace op::dot::cpu {
 

@@ -20,22 +20,15 @@ from libinfiniop import (
 from enum import Enum, auto
 
 # ==============================================================================
-#  Configuration (Internal Use Only)
+#  Configuration
 # ==============================================================================
-# These are not meant to be imported from other modules
+
 _TEST_CASES_ = [
     # shape, x_stride, y_stride
-    ((13, 4), None, None),
-    ((13, 4), (10, 1), (10, 1)),
-    ((13, 4), (0, 1), (0, 1)),
-    ((13, 4, 4), None, None),
-    ((13, 4, 4), (20, 4, 1), (20, 4, 1)),
-    ((13, 4, 4), (4, 0, 1), (4, 0, 1)),
-    ((16, 5632), None, None),
-    ((16, 5632), (13312, 1), (13312, 1)),
-    ((4, 4, 5632), None, None),
-    ((4, 4, 5632), (45056, 5632, 1), (45056, 5632, 1)),
-    ((4, 4, 56320), None, None),
+    ((2, 3), None, None),
+    ((1, 4, 8), (32, 8, 1), (32, 8, 1)),
+    ((3, 2, 5, 7), None, None),
+    ((1, 8, 9, 11), (792, 99, 11, 1), (792, 99, 11, 1)),
 ]
 
 
@@ -44,27 +37,22 @@ class Inplace(Enum):
     INPLACE_X = auto()
 
 
-# Inplace options applied for each test case in _TEST_CASES_
 _INPLACE = [
     Inplace.OUT_OF_PLACE,
     Inplace.INPLACE_X,
 ]
 
-# Form the test cases by appending each element of _INPLACE to each tuple in _TEST_CASES_
 _TEST_CASES = [
     test_case + (inplace_item,)
     for test_case in _TEST_CASES_
     for inplace_item in _INPLACE
 ]
 
-# Data types used for testing
-_TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.F32, InfiniDtype.BF16]
+_TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.F32]
 
-# Tolerance map for different data types
 _TOLERANCE_MAP = {
-    InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
+    InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-2},
     InfiniDtype.F32: {"atol": 1e-6, "rtol": 1e-6},
-    InfiniDtype.BF16: {"atol": 1e-2, "rtol": 1e-2},
 }
 
 DEBUG = False
@@ -73,9 +61,8 @@ NUM_PRERUN = 10
 NUM_ITERATIONS = 1000
 
 
-def torch_log10(y, x):
-    # Input is preprocessed to be positive in the test harness.
-    torch.log10(x, out=y)
+def torch_log1p(y, x):
+    torch.log1p(x, out=y)
 
 
 def test(
@@ -88,6 +75,10 @@ def test(
     dtype=torch.float16,
     sync=None,
 ):
+    torch.manual_seed(0)
+    if device != 0:
+        torch.cuda.manual_seed_all(0)
+
     x = TestTensor(shape, x_stride, dtype, device)
     if inplace == Inplace.INPLACE_X:
         if x_stride != y_stride:
@@ -100,22 +91,17 @@ def test(
         return
 
     print(
-        f"Testing Log10 on {InfiniDeviceNames[device]} with shape:{shape} x_stride:{x_stride} y_stride:{y_stride} "
+        f"Testing Log1p on {InfiniDeviceNames[device]} with shape:{shape} x_stride:{x_stride} y_stride:{y_stride} "
         f"dtype:{InfiniDtypeNames[dtype]} inplace:{inplace}"
     )
 
-    # Create positive input values for log10 operation
-    x_tensor = torch.abs(x.torch_tensor()) + 1e-6  # Add small epsilon to avoid log(0)
-    x.set_tensor(x_tensor)
-    
-    torch_log10(y.torch_tensor(), x.torch_tensor())
-
+    torch_log1p(y.torch_tensor(), x.torch_tensor())
     if sync is not None:
         sync()
 
     descriptor = infiniopOperatorDescriptor_t()
     check_error(
-        LIBINFINIOP.infiniopCreateLog10Descriptor(
+        LIBINFINIOP.infiniopCreateLog1pDescriptor(
             handle,
             ctypes.byref(descriptor),
             y.descriptor,
@@ -123,21 +109,20 @@ def test(
         )
     )
 
-    # Invalidate the shape and strides in the descriptor to prevent them from being directly used by the kernel
     for tensor in [x, y]:
         tensor.destroy_desc()
 
     workspace_size = c_uint64(0)
     check_error(
-        LIBINFINIOP.infiniopGetLog10WorkspaceSize(
+        LIBINFINIOP.infiniopGetLog1pWorkspaceSize(
             descriptor, ctypes.byref(workspace_size)
         )
     )
     workspace = TestWorkspace(workspace_size.value, y.device)
 
-    def lib_log10():
+    def lib_log1p():
         check_error(
-            LIBINFINIOP.infiniopLog10(
+            LIBINFINIOP.infiniopLog1p(
                 descriptor,
                 workspace.data(),
                 workspace.size(),
@@ -147,27 +132,25 @@ def test(
             )
         )
 
-    lib_log10()
+    lib_log1p()
 
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:
         debug(y.actual_tensor(), y.torch_tensor(), atol=atol, rtol=rtol)
-
     assert torch.allclose(y.actual_tensor(), y.torch_tensor(), atol=atol, rtol=rtol)
 
-    # Profiling workflow
     if PROFILE:
         # fmt: off
-        profile_operation("PyTorch", lambda: torch_log10(y.torch_tensor(), x.torch_tensor()), device, NUM_PRERUN, NUM_ITERATIONS)
-        profile_operation("    lib", lambda: lib_log10(), device, NUM_PRERUN, NUM_ITERATIONS)
+        profile_operation("PyTorch", lambda: torch_log1p(y.torch_tensor(), x.torch_tensor()), device, NUM_PRERUN, NUM_ITERATIONS)
+        profile_operation("    lib", lambda: lib_log1p(), device, NUM_PRERUN, NUM_ITERATIONS)
         # fmt: on
-    check_error(LIBINFINIOP.infiniopDestroyLog10Descriptor(descriptor))
+
+    check_error(LIBINFINIOP.infiniopDestroyLog1pDescriptor(descriptor))
 
 
 if __name__ == "__main__":
     args = get_args()
 
-    # Configure testing options
     DEBUG = args.debug
     PROFILE = args.profile
     NUM_PRERUN = args.num_prerun

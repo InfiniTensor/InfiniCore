@@ -1,10 +1,21 @@
 #include "dot_nvidia.cuh"
 #include "../cuda/kernel.cuh"
-#include "../../../utils.h"
-#include <cuda_bf16.h>
-#include <cuda_fp16.h>
+#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
+#include "../../../../utils.h"
 
 namespace op::dot::nvidia {
+
+__global__ void store_half_from_f32(half *dst, const float *src) {
+    if (threadIdx.x == 0) {
+        dst[0] = __float2half(src[0]);
+    }
+}
+
+__global__ void store_bf16_from_f32(cuda_bfloat16 *dst, const float *src) {
+    if (threadIdx.x == 0) {
+        dst[0] = __float2bfloat16_rn(src[0]);
+    }
+}
 
 Descriptor::~Descriptor() = default;
 
@@ -53,19 +64,13 @@ infiniStatus_t Descriptor::calculate(
     // Initialize result to zero
     switch (_dtype) {
     case INFINI_DTYPE_F16: {
-        half zero = __float2half(0.0f);
-        CHECK_CUDA(cudaMemsetAsync(y, 0, sizeof(half), cuda_stream));
         float *result_f = nullptr;
         CHECK_CUDA(cudaMallocAsync(&result_f, sizeof(float), cuda_stream));
         CHECK_CUDA(cudaMemsetAsync(result_f, 0, sizeof(float), cuda_stream));
         cuda::dot_kernel<BLOCK_SIZE, half, float><<<1, BLOCK_SIZE, 0, cuda_stream>>>(
             result_f, reinterpret_cast<const half *>(a), reinterpret_cast<const half *>(b),
             _n, _a_stride, _b_stride);
-        // Copy result back
-        float result_val;
-        CHECK_CUDA(cudaMemcpyAsync(&result_val, result_f, sizeof(float), cudaMemcpyDeviceToHost, cuda_stream));
-        CHECK_CUDA(cudaStreamSynchronize(cuda_stream));
-        *reinterpret_cast<half *>(y) = __float2half(result_val);
+        store_half_from_f32<<<1, 1, 0, cuda_stream>>>(reinterpret_cast<half *>(y), result_f);
         CHECK_CUDA(cudaFreeAsync(result_f, cuda_stream));
         break;
     }
@@ -76,10 +81,7 @@ infiniStatus_t Descriptor::calculate(
         cuda::dot_kernel<BLOCK_SIZE, cuda_bfloat16, float><<<1, BLOCK_SIZE, 0, cuda_stream>>>(
             result_f, reinterpret_cast<const cuda_bfloat16 *>(a), reinterpret_cast<const cuda_bfloat16 *>(b),
             _n, _a_stride, _b_stride);
-        float result_val;
-        CHECK_CUDA(cudaMemcpyAsync(&result_val, result_f, sizeof(float), cudaMemcpyDeviceToHost, cuda_stream));
-        CHECK_CUDA(cudaStreamSynchronize(cuda_stream));
-        *reinterpret_cast<cuda_bfloat16 *>(y) = __float2bfloat16_rn(result_val);
+        store_bf16_from_f32<<<1, 1, 0, cuda_stream>>>(reinterpret_cast<cuda_bfloat16 *>(y), result_f);
         CHECK_CUDA(cudaFreeAsync(result_f, cuda_stream));
         break;
     }

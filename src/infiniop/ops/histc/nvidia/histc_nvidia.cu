@@ -1,8 +1,7 @@
 #include "histc_nvidia.cuh"
 #include "../cuda/kernel.cuh"
-#include "../../../utils.h"
-#include <cuda_bf16.h>
-#include <cuda_fp16.h>
+#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
+#include "../../../../utils.h"
 
 namespace op::histc::nvidia {
 

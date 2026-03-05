@@ -1,5 +1,5 @@
 #include "avg_pool3d_metax.h"
-#include "../../../utils.h"
+#include "../../../../utils.h"
 
 namespace op::avg_pool3d::metax {
 
@@ -31,6 +31,12 @@ struct Descriptor::Opaque {
 #endif
     }
 };
+
+Descriptor::Descriptor(infiniDtype_t dtype, std::unique_ptr<Opaque> opaque,
+                       infiniDevice_t device_type, int device_id)
+    : InfiniopDescriptor{device_type, device_id},
+      _opaque(std::move(opaque)),
+      _dtype(dtype) {}
 
 Descriptor::~Descriptor() = default;
 

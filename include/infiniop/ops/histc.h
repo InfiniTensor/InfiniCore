@@ -2,6 +2,7 @@
 #define __INFINIOP_HISTC_API_H__
 
 #include "../operator_descriptor.h"
+#include <cstdint>
 
 typedef struct InfiniopDescriptor *infiniopHistcDescriptor_t;
 
