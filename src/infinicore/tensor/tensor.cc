@@ -1,4 +1,5 @@
 #include "infinicore/tensor.hpp"
+#include "../context/internal.hpp"
 #include "../utils.hpp"
 #include "infinicore/context/context.hpp"
 #include "infinicore/dtype.hpp"
@@ -273,6 +274,26 @@ std::shared_ptr<TensorImpl> TensorImpl::strided_from_blob(
     t->data_.offset = 0;
     t->data_.memory = std::make_shared<Memory>((std::byte *)raw_ptr, t->numel() * dsize(dtype), device, nullptr);
     return t;
+}
+
+Tensor TensorImpl::to_blob_() const {
+    auto t = std::shared_ptr<TensorImpl>(new TensorImpl(shape(), strides(), dtype()));
+    t->data_.offset = this->data_.offset;
+    t->data_.memory = std::make_shared<Memory>(this->data_.memory->data(), this->data_.memory->size(), this->data_.memory->device(), nullptr);
+    t->to_blob_mark_ = true;
+    return Tensor{t};
+}
+
+Tensor TensorImpl::resume_from_blob_() const {
+    auto t = std::shared_ptr<TensorImpl>(new TensorImpl(shape(), strides(), dtype()));
+    t->data_.offset = this->data_.offset;
+    if (to_blob_mark_) {
+        t->data_.memory = context::reinstantiateBlob(this->data_.memory);
+    } else {
+        t->data_.memory = this->data_.memory;
+    }
+
+    return Tensor{t};
 }
 
 } // namespace infinicore

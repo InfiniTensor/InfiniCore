@@ -95,6 +95,20 @@ void print_data_bf16(const uint16_t *data, const Shape &shape, const Strides &st
     }
 }
 
+// Function for printing I8 data
+void print_data_i8(const int8_t *data, const Shape &shape, const Strides &strides, size_t dim) {
+    if (dim == shape.size() - 1) {
+        for (size_t i = 0; i < shape[dim]; i++) {
+            std::cout << static_cast<int>(data[i * strides[dim]]) << " ";
+        }
+        std::cout << std::endl;
+    } else if (dim < shape.size() - 1) {
+        for (size_t i = 0; i < shape[dim]; i++) {
+            print_data_i8(data + i * strides[dim], shape, strides, dim + 1);
+        }
+    }
+}
+
 // Template function for writing data recursively to binary file (handles non-contiguous tensors)
 template <typename T>
 void write_binary_data(std::ofstream &out, const T *data, const Shape &shape, const Strides &strides, size_t dim) {
@@ -181,8 +195,8 @@ void TensorImpl::debug(const std::string &filename) const {
                    cpu_tensor->shape(), cpu_tensor->strides(), 0);
         break;
     case DataType::I8:
-        print_data(reinterpret_cast<const int8_t *>(cpu_data),
-                   cpu_tensor->shape(), cpu_tensor->strides(), 0);
+        print_data_i8(reinterpret_cast<const int8_t *>(cpu_data),
+                      cpu_tensor->shape(), cpu_tensor->strides(), 0);
         break;
     case DataType::BF16:
         print_data_bf16(reinterpret_cast<const uint16_t *>(cpu_data),

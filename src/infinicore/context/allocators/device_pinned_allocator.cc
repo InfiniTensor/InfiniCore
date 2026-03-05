@@ -12,12 +12,18 @@ DevicePinnedHostAllocator::~DevicePinnedHostAllocator() {
 }
 
 std::byte *DevicePinnedHostAllocator::allocate(size_t size) {
+    if (size == 0) {
+        return nullptr;
+    }
     void *ptr;
     INFINICORE_CHECK_ERROR(infinirtMallocHost(&ptr, size));
     return (std::byte *)ptr;
 }
 
 void DevicePinnedHostAllocator::deallocate(std::byte *ptr) {
+    if (ptr == nullptr) {
+        return;
+    }
     if (owner_ == context::getDevice()) {
         INFINICORE_CHECK_ERROR(infinirtFreeHost(ptr));
         gc();

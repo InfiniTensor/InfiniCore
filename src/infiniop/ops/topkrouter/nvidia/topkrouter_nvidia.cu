@@ -1,10 +1,18 @@
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API) || defined(ENABLE_ALI_API)
 
 #include "../../../devices/nvidia/nvidia_common.cuh"
 #include "../../../devices/nvidia/nvidia_kernel_common.cuh"
-#include "../cuda/kernel.cuh"
+
 #include "topkrouter_nvidia.cuh"
+
+#include <cfloat>
+#include <cub/block/block_load.cuh>
+#include <cub/block/block_radix_sort.cuh>
 #include <cub/block/block_reduce.cuh>
+#include <cub/block/block_store.cuh>
+#include <cub/cub.cuh>
+
+#include "../cuda/kernel.cuh"
 
 namespace op::topkrouter::nvidia {
 

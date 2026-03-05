@@ -10,6 +10,8 @@
 
 thread_local infiniDevice_t CURRENT_DEVICE_TYPE = INFINI_DEVICE_CPU;
 thread_local int CURRENT_DEVICE_ID = 0;
+thread_local infiniDevice_t PREVIOUS_NON_CPU_DEVICE_TYPE = INFINI_DEVICE_TYPE_COUNT;
+thread_local int PREVIOUS_NON_CPU_DEVICE_ID = 0;
 
 __C infiniStatus_t infinirtInit() {
 #ifdef ENABLE_ASCEND_API
@@ -79,6 +81,9 @@ __C infiniStatus_t infinirtGetDevice(infiniDevice_t *device_ptr, int *device_id_
         case INFINI_DEVICE_HYGON:                                      \
             _status = infinirt::hygon::API PARAMS;                     \
             break;                                                     \
+        case INFINI_DEVICE_ALI:                                        \
+            _status = infinirt::ali::API PARAMS;                       \
+            break;                                                     \
         default:                                                       \
             _status = INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;         \
         }                                                              \
@@ -96,6 +101,16 @@ __C infiniStatus_t infinirtGetDeviceCount(infiniDevice_t device, int *count) {
 }
 
 __C infiniStatus_t infinirtSetDevice(infiniDevice_t device, int device_id) {
+    bool skip_set = CURRENT_DEVICE_TYPE == INFINI_DEVICE_CPU && device == PREVIOUS_NON_CPU_DEVICE_TYPE && device_id == PREVIOUS_NON_CPU_DEVICE_ID;
+    if (CURRENT_DEVICE_TYPE != INFINI_DEVICE_CPU) {
+        PREVIOUS_NON_CPU_DEVICE_TYPE = CURRENT_DEVICE_TYPE;
+        PREVIOUS_NON_CPU_DEVICE_ID = CURRENT_DEVICE_ID;
+    }
+    if (skip_set) {
+        CURRENT_DEVICE_TYPE = device;
+        CURRENT_DEVICE_ID = device_id;
+        return INFINI_STATUS_SUCCESS;
+    }
     INFINIRT_CALL_DEVICE_API_AND(device, setDevice, (device_id),
                                  { CURRENT_DEVICE_TYPE = device;
                                    CURRENT_DEVICE_ID = device_id; });
@@ -179,4 +194,33 @@ __C infiniStatus_t infinirtMallocAsync(void **p_ptr, size_t size, infinirtStream
 
 __C infiniStatus_t infinirtFreeAsync(void *ptr, infinirtStream_t stream) {
     INFINIRT_CALL_DEVICE_API(freeAsync, (ptr, stream));
+}
+
+__C infiniStatus_t infinirtStreamBeginCapture(infinirtStream_t stream, infinirtStreamCaptureMode_t mode) {
+    INFINIRT_CALL_DEVICE_API(streamBeginCapture, (stream, mode));
+}
+
+__C infiniStatus_t infinirtStreamEndCapture(infinirtStream_t stream, infinirtGraph_t *graph_ptr) {
+    INFINIRT_CALL_DEVICE_API(streamEndCapture, (stream, graph_ptr));
+}
+
+__C infiniStatus_t infinirtGraphDestroy(infinirtGraph_t graph) {
+    INFINIRT_CALL_DEVICE_API(graphDestroy, (graph));
+}
+
+__C infiniStatus_t infinirtGraphInstantiate(
+    infinirtGraphExec_t *graph_exec_ptr,
+    infinirtGraph_t graph,
+    infinirtGraphNode_t *node_ptr,
+    char *log_buffer,
+    size_t buffer_size) {
+    INFINIRT_CALL_DEVICE_API(graphInstantiate, (graph_exec_ptr, graph, node_ptr, log_buffer, buffer_size));
+}
+
+__C infiniStatus_t infinirtGraphExecDestroy(infinirtGraphExec_t graph_exec) {
+    INFINIRT_CALL_DEVICE_API(graphExecDestroy, (graph_exec));
+}
+
+__C infiniStatus_t infinirtGraphLuanch(infinirtGraphExec_t graph_exec, infinirtStream_t stream) {
+    INFINIRT_CALL_DEVICE_API(graphLuanch, (graph_exec, stream));
 }

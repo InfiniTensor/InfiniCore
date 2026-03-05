@@ -2,10 +2,29 @@
 #include "infinicore/dtype.hpp"
 #include "infinicore/tensor.hpp"
 
+#include "../utils.hpp"
+
 #include <spdlog/spdlog.h>
 #include <stdexcept>
 
 namespace infinicore {
+Tensor TensorImpl::squeeze(size_t dim) const {
+    // Create new shape with dimension of size one removed at dim
+    if (meta_.shape[dim] != 1) {
+        spdlog::error("Dimension {} is not of size 1 for squeeze operation on {}.", dim, this->info());
+        throw std::runtime_error("Invalid squeeze operation on tensor.");
+    }
+    Shape new_shape = meta_.shape;
+    new_shape.erase(new_shape.begin() + dim);
+    Strides new_strides = meta_.strides;
+    new_strides.erase(new_strides.begin() + dim);
+
+    auto tensor_impl = std::make_shared<TensorImpl>(new_shape, new_strides, meta_.dtype);
+    tensor_impl->data_ = data_;
+
+    return Tensor(tensor_impl);
+}
+
 Tensor TensorImpl::unsqueeze(size_t dim) const {
     // Create new shape with dimension of size one inserted at dim
     Shape new_shape = meta_.shape;
@@ -45,11 +64,11 @@ Tensor TensorImpl::narrow(const std::vector<TensorSliceParams> &slices) const {
 
 Tensor TensorImpl::permute(const Shape &order) const {
     // Validate input
-    assert(meta_.shape.size() == order.size());
+    INFINICORE_ASSERT(meta_.shape.size() == order.size());
 
     // Check that order contains all indices from 0 to n-1 exactly once
     for (size_t i = 0; i < order.size(); i++) {
-        assert(std::find(order.begin(), order.end(), i) != order.end());
+        INFINICORE_ASSERT(std::find(order.begin(), order.end(), i) != order.end());
     }
 
     // Permute shape and strides

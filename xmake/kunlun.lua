@@ -75,6 +75,7 @@ target("infiniop-kunlun")
     on_install(function (target) end)
 
     add_cxflags("-lstdc++ -fPIC -Wno-error=unused-function")
+    add_cxxflags("-lstdc++ -fPIC -Wno-error=unused-function")
     set_warnings("all", "error")
 
     set_languages("cxx17")
@@ -102,6 +103,7 @@ target("infinirt-kunlun")
     -- Add include dirs
     add_files("$(projectdir)/src/infinirt/kunlun/*.cc")
     add_cxflags("-lstdc++ -Wall -Werror -fPIC")
+    add_cxxflags("-lstdc++ -Wall -Werror -fPIC")
 target_end()
 
 target("infiniccl-kunlun")
@@ -117,5 +119,6 @@ target("infiniccl-kunlun")
         add_links("bkcl")
         add_files("$(projectdir)/src/infiniccl/kunlun/*.cc")
         add_cxflags("-lstdc++ -fPIC")
+        add_cxxflags("-lstdc++ -fPIC")
     end
 target_end()

@@ -82,7 +82,7 @@ __mlu_global__ void rmsnorm(T *output, const T *input, const Tw *weight,
             }
         } else {
             // Large vector processing with chunking
-            __bang_write_zero(reduction_buffer, reduce_buffer_size);
+            __bang_write_value(reduction_buffer, reduce_buffer_size, 0);
             size_t processed_elements = 0;
 
             while (processed_elements < vector_size) {
@@ -223,9 +223,9 @@ void rmsnormUnion(void *workspace, int core_per_cluster, int cluster_count, cnrt
     kernel_dim.x = core_per_cluster;
     kernel_dim.y = cluster_count;
     kernel_dim.z = 1;
-    kernel_type = CNRT_FUNC_TYPE_UNION1; // Can choose others, but must adapt kernel_type accordingly
-    int dimsize = shape[ndim - 1];       // Length of operation dimension
-    int dim_s;                           // dim_s is the next power of 2 greater than dimsize
+    kernel_type = cnrtFuncTypeUnion1; // Can choose others, but must adapt kernel_type accordingly
+    int dimsize = shape[ndim - 1];    // Length of operation dimension
+    int dim_s;                        // dim_s is the next power of 2 greater than dimsize
     float mi = log2(dimsize);
     if (floor(mi) == mi) {
         dim_s = dimsize;

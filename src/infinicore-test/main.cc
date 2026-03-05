@@ -42,6 +42,7 @@ void printUsage() {
               << "  qy" << std::endl
               << "  kunlun" << std::endl
               << "  hygon" << std::endl
+              << "  ali" << std::endl
               << std::endl
               << "Available tests:" << std::endl
               << "  basic       - Basic memory allocation and deallocation tests" << std::endl
@@ -84,6 +85,8 @@ ParsedArgs parseArgs(int argc, char *argv[]) {
             args.device_type = INFINI_DEVICE_KUNLUN;
         } else if (arg == "--hygon") {
             args.device_type = INFINI_DEVICE_HYGON;
+        } else if (arg == "--ali") {
+            args.device_type = INFINI_DEVICE_ALI;
         } else if (arg == "--test") {
             if (i + 1 >= argc) {
                 std::cerr << "Error: --test requires a test name" << std::endl;
