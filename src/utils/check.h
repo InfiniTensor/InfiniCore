@@ -3,7 +3,18 @@
 #include <iostream>
 #include <tuple>
 
+#include "../utils.h"
 #include "infini_status_string.h"
+
+#define CHECK_OR_DO(CONDITION, ACTION)                                       \
+    do {                                                                     \
+        if (!(CONDITION)) {                                                  \
+            std::cerr << "Check Failed: `(" << #CONDITION << ")` is False"   \
+                      << " from " << __func__                                \
+                      << " at " << __FILE__ << ":" << __LINE__ << std::endl; \
+            { ACTION; }                                                      \
+        }                                                                    \
+    } while (0)
 
 #define CHECK_OR_RETURN(CONDITION, ERROR)                                    \
     do {                                                                     \
@@ -33,17 +44,19 @@
                  std::cerr << "Error: " << infini_status_string(api_result_) << std::endl; \
                  return api_result_)
 
-#define CHECK_DTYPE(DT, ...)                                 \
-    do {                                                     \
-        auto found_supported_dtype = false;                  \
-        for (auto dt : {__VA_ARGS__}) {                      \
-            if (dt == DT) {                                  \
-                found_supported_dtype = true;                \
-                break;                                       \
-            }                                                \
-        }                                                    \
-        CHECK_API_OR(found_supported_dtype, true,            \
-                     return INFINI_STATUS_BAD_TENSOR_DTYPE); \
+#define CHECK_DTYPE(DT, ...)               \
+    do {                                   \
+        auto dtype_is_supported = false;   \
+        for (auto dt : {__VA_ARGS__}) {    \
+            if (dt == DT) {                \
+                dtype_is_supported = true; \
+                break;                     \
+            }                              \
+        }                                  \
+        CHECK_OR_DO(dtype_is_supported,    \
+                    { std::cerr << "Unsupported dtype: " << \
+                        infiniDtypeToString(DT) << ". "; \
+                        return INFINI_STATUS_BAD_TENSOR_DTYPE; });                  \
     } while (0)
 
 #define CHECK_DTYPE_ANY_INT(DT)                                                        \

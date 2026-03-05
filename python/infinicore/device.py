@@ -34,7 +34,10 @@ class device:
     def __getattr__(self, name):
         # Lazily construct and cache an attribute.
         # such as, self._underlying .
-        setattr(self, name, device._to_infinicore_device(self.type, self.index))
+        if name == "_underlying":
+            setattr(self, name, device._to_infinicore_device(self.type, self.index))
+        else:
+            raise AttributeError("{!r} object has no attribute {!r}".format(self, name))
         return getattr(self, name)
 
     def __repr__(self):
@@ -79,6 +82,7 @@ _TORCH_DEVICE_MAP = {
     _infinicore.Device.Type.KUNLUN: "cuda",
     _infinicore.Device.Type.HYGON: "cuda",
     _infinicore.Device.Type.QY: "cuda",
+    _infinicore.Device.Type.ALI: "cuda",
 }
 
 

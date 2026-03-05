@@ -5,7 +5,7 @@ Benchmarking utilities for the InfiniCore testing framework
 import time
 import torch
 import infinicore
-from .utils import synchronize_device
+from .utils.tensor_utils import synchronize_device
 
 
 class BenchmarkUtils:

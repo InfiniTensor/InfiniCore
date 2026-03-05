@@ -1,37 +1,27 @@
 #include "infinicore/ops/causal_softmax.hpp"
-
 #include "../../utils.hpp"
-
-#include <stdexcept>
 
 namespace infinicore::op {
 
-common::OpDispatcher<CausalSoftmax::schema> &CausalSoftmax::dispatcher() {
-    static common::OpDispatcher<CausalSoftmax::schema> dispatcher_;
-    return dispatcher_;
-};
+INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(CausalSoftmax);
 
-void CausalSoftmax::execute(Tensor output, Tensor input) {
+CausalSoftmax::CausalSoftmax(Tensor output, const Tensor &input) {
     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(output, input);
-    infinicore::context::setDevice(output->device());
-    auto device_type = output->device().getType();
-    auto func = dispatcher().lookup(device_type);
-
-    if (func == nullptr) {
-        throw std::runtime_error("No CausalSoftmax implementation found for device type: " + std::to_string(static_cast<int>(device_type)));
-    }
-
-    func(output, input);
+    INFINICORE_GRAPH_OP_DISPATCH(output->device().getType(), output, input);
 }
 
-Tensor causal_softmax(Tensor input) {
-    Shape shape = input->shape();
-    auto output = Tensor::empty(shape, input->dtype(), input->device());
+void CausalSoftmax::execute(Tensor output, const Tensor &input) {
+    INFINICORE_GRAPH_OP_RECORD_OR_RUN(CausalSoftmax, output, input);
+}
+
+Tensor causal_softmax(const Tensor &input) {
+    auto output = Tensor::empty(input->shape(), input->dtype(), input->device());
     causal_softmax_(output, input);
     return output;
 }
 
-void causal_softmax_(Tensor output, Tensor input) {
+void causal_softmax_(Tensor output, const Tensor &input) {
     CausalSoftmax::execute(output, input);
 }
+
 } // namespace infinicore::op

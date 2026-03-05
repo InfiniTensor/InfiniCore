@@ -6,6 +6,9 @@
 
 typedef void *infinirtStream_t;
 typedef void *infinirtEvent_t;
+typedef void *infinirtGraph_t;
+typedef void *infinirtGraphNode_t;
+typedef void *infinirtGraphExec_t;
 
 __C __export infiniStatus_t infinirtInit();
 
@@ -62,5 +65,25 @@ __C __export infiniStatus_t infinirtMemcpyAsync(void *dst, const void *src, size
 // Stream-ordered memory
 __C __export infiniStatus_t infinirtMallocAsync(void **p_ptr, size_t size, infinirtStream_t stream);
 __C __export infiniStatus_t infinirtFreeAsync(void *ptr, infinirtStream_t stream);
+
+// Graph
+typedef enum {
+    INFINIRT_STREAM_CAPTURE_MODE_GLOBAL = 0,
+    INFINIRT_STREAM_CAPTURE_MODE_THREAD_LOCAL = 1,
+    INFINIRT_STREAM_CAPTURE_MODE_RELAXED = 2,
+
+} infinirtStreamCaptureMode_t;
+
+__C __export infiniStatus_t infinirtStreamBeginCapture(infinirtStream_t stream, infinirtStreamCaptureMode_t mode);
+__C __export infiniStatus_t infinirtStreamEndCapture(infinirtStream_t stream, infinirtGraph_t *graph_ptr);
+__C __export infiniStatus_t infinirtGraphDestroy(infinirtGraph_t graph);
+__C __export infiniStatus_t infinirtGraphInstantiate(
+    infinirtGraphExec_t *graph_exec_ptr,
+    infinirtGraph_t graph,
+    infinirtGraphNode_t *node_ptr,
+    char *log_buffer,
+    size_t buffer_size);
+__C __export infiniStatus_t infinirtGraphExecDestroy(infinirtGraphExec_t graph_exec);
+__C __export infiniStatus_t infinirtGraphLuanch(infinirtGraphExec_t graph_exec, infinirtStream_t stream);
 
 #endif // __INFINIRT_API_H__

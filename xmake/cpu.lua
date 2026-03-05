@@ -6,14 +6,15 @@ target("infiniop-cpu")
     set_warnings("all", "error")
 
     if is_plat("windows") then
-        add_cxflags("/wd4068")
+        add_cxxflags("/wd4068")
         if has_config("omp") then
-            add_cxflags("/openmp")
+            add_cxxflags("/openmp")
         end
     else
         add_cxflags("-fPIC", "-Wno-unknown-pragmas")
+        add_cxxflags("-fPIC", "-Wno-unknown-pragmas")
         if has_config("omp") then
-            add_cxflags("-fopenmp")
+            add_cxxflags("-fopenmp")
             add_ldflags("-fopenmp")
         end
     end
@@ -32,6 +33,7 @@ target("infinirt-cpu")
 
     if not is_plat("windows") then
         add_cxflags("-fPIC")
+        add_cxxflags("-fPIC")
     end
 
     set_languages("cxx17")
