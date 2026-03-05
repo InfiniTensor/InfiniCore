@@ -22,6 +22,9 @@ __pycache__/
 # Cache
 cache/
 
+# Humanize RLCR loop state
+.humanize/
+
 # JSON
 *.json
 
