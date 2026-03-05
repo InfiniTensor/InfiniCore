@@ -40,6 +40,12 @@ utils::Result<HistcInfo> HistcInfo::create(
     info.min_val = min_val;
     info.max_val = max_val;
     info.input_stride = x_desc->strides()[0];
+    info.output_stride = y_desc->strides()[0];
+
+    // Writing a histogram into a broadcasted or negatively strided output is undefined.
+    if (info.output_stride <= 0) {
+        return INFINI_STATUS_BAD_TENSOR_STRIDES;
+    }
 
     return utils::Result<HistcInfo>(std::move(info));
 }
@@ -58,6 +64,11 @@ infiniStatus_t Descriptor::create(
     auto dtype = x_desc->dtype();
     CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64, INFINI_DTYPE_BF16);
 
+    // Histc output is always float32.
+    if (y_desc->dtype() != INFINI_DTYPE_F32) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
     auto info_result = HistcInfo::create(x_desc, y_desc, bins, min_val, max_val);
     CHECK_RESULT(info_result);
 
@@ -71,8 +82,10 @@ void histc_impl(
     float *y,
     const T *x) {
 
-    // Initialize output to zero
-    std::memset(y, 0, info.bins * sizeof(float));
+    // Initialize output to zero (supports non-unit stride).
+    for (int64_t b = 0; b < info.bins; ++b) {
+        y[b * info.output_stride] = 0.0f;
+    }
 
     const double bin_width = (info.max_val - info.min_val) / static_cast<double>(info.bins);
 
@@ -95,7 +108,7 @@ void histc_impl(
             bin_idx = 0;
         }
 
-        y[bin_idx] += 1.0f;
+        y[bin_idx * info.output_stride] += 1.0f;
     }
 }
 
@@ -106,7 +119,6 @@ infiniStatus_t Descriptor::calculate(
     const void *x,
     void *stream) const {
 
-    // Histc output is always float32
     float *y_ptr = reinterpret_cast<float *>(y);
 
     switch (_dtype) {

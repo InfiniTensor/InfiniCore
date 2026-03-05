@@ -138,16 +138,22 @@ void avg_pool3d_impl(
                         float sum = 0.0f;
 
                         // Calculate input window
-                        size_t id_start = od * info.stride_d - info.pad_d;
-                        size_t ih_start = oh * info.stride_h - info.pad_h;
-                        size_t iw_start = ow * info.stride_w - info.pad_w;
+                        ptrdiff_t id_start =
+                            static_cast<ptrdiff_t>(od) * static_cast<ptrdiff_t>(info.stride_d) -
+                            static_cast<ptrdiff_t>(info.pad_d);
+                        ptrdiff_t ih_start =
+                            static_cast<ptrdiff_t>(oh) * static_cast<ptrdiff_t>(info.stride_h) -
+                            static_cast<ptrdiff_t>(info.pad_h);
+                        ptrdiff_t iw_start =
+                            static_cast<ptrdiff_t>(ow) * static_cast<ptrdiff_t>(info.stride_w) -
+                            static_cast<ptrdiff_t>(info.pad_w);
 
                         for (size_t kd = 0; kd < info.kernel_d; ++kd) {
                             for (size_t kh = 0; kh < info.kernel_h; ++kh) {
                                 for (size_t kw = 0; kw < info.kernel_w; ++kw) {
-                                    ptrdiff_t id = static_cast<ptrdiff_t>(id_start + kd);
-                                    ptrdiff_t ih = static_cast<ptrdiff_t>(ih_start + kh);
-                                    ptrdiff_t iw = static_cast<ptrdiff_t>(iw_start + kw);
+                                    ptrdiff_t id = id_start + static_cast<ptrdiff_t>(kd);
+                                    ptrdiff_t ih = ih_start + static_cast<ptrdiff_t>(kh);
+                                    ptrdiff_t iw = iw_start + static_cast<ptrdiff_t>(kw);
 
                                     // Check bounds (accounting for padding)
                                     if (id >= 0 && id < static_cast<ptrdiff_t>(info.input_d) &&

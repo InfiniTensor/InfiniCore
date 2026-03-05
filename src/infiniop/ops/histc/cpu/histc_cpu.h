@@ -13,6 +13,7 @@ struct HistcInfo {
     double min_val;
     double max_val;
     ptrdiff_t input_stride;
+    ptrdiff_t output_stride;
 
     static utils::Result<HistcInfo> create(
         infiniopTensorDescriptor_t x_desc,
