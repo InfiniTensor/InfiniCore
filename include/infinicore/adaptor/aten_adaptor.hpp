@@ -1,7 +1,11 @@
 #pragma once
+#include "../context/context.hpp"
 #include "../tensor.hpp"
 
 #include <ATen/ATen.h>
+
+#include <ATen/cuda/CUDAContext.h>
+#include <c10/cuda/CUDAGuard.h>
 
 namespace infinicore::adaptor {
 inline at::ScalarType to_at_dtype(DataType dtype) {
@@ -32,4 +36,6 @@ inline at::Device to_at_device(const Device &device) {
 }
 
 at::Tensor to_aten_tensor(const infinicore::Tensor &t);
+
+c10::cuda::CUDAStream get_cuda_stream();
 } // namespace infinicore::adaptor
