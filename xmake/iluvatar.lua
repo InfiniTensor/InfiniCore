@@ -1,4 +1,6 @@
-﻿toolchain("iluvatar.toolchain")
+local iluvatar_arch = get_config("iluvatar_arch") or "ivcore20"
+
+toolchain("iluvatar.toolchain")
     set_toolset("cc"  , "clang"  )
     set_toolset("cxx" , "clang++")
     set_toolset("cu"  , "clang++")
@@ -42,19 +44,23 @@ target("infiniop-iluvatar")
     add_links("cudart", "cublas", "cudnn")
 
     set_warnings("all", "error")
-    add_cuflags("-Wno-error=unused-private-field")
+    add_cuflags("-Wno-error=unused-private-field", "-Wno-error=unused-variable", "-Wno-unused-variable")
     add_cuflags("-fPIC", "-x", "ivcore", "-std=c++17", {force = true})
+    add_cuflags("--cuda-gpu-arch=" .. iluvatar_arch, {force = true})
     add_culdflags("-fPIC")
-    add_cxflags("-fPIC")
+    add_cxflags("-fPIC", "-Wno-error=unused-variable", "-Wno-unused-variable")
+    add_cxxflags("-fPIC", "-Wno-error=unused-variable", "-Wno-unused-variable")
 
     -- set_languages("cxx17") 天数似乎不能用这个配置
     add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")
+    -- skip scaled_mm, adapt it later
+    -- remove_files("../src/infiniop/ops/scaled_mm/nvidia/*.cu")
 
     -- 天数平台不支持部分 NVIDIA PTX 指令，AWQ 反量化改用 CUDA C++ 实现
     add_files("../src/infiniop/ops/dequantize_awq/iluvatar/*.cu")
 
     if has_config("ninetoothed") then
-        add_files("../build/ninetoothed/*.c", {cxflags = {"-Wno-return-type"}})
+        add_files("../build/ninetoothed/*.c", "../build/ninetoothed/*.cpp", {cxxflags = {"-Wno-return-type"}})
     end
 target_end()
 
@@ -71,8 +77,10 @@ target("infinirt-iluvatar")
 
     set_warnings("all", "error")
     add_cuflags("-fPIC", "-x", "ivcore", "-std=c++17", {force = true})
+    add_cuflags("--cuda-gpu-arch=" .. iluvatar_arch, {force = true})
     add_culdflags("-fPIC")
     add_cxflags("-fPIC")
+    add_cxxflags("-fPIC")
 
     -- set_languages("cxx17") 天数似乎不能用这个配置
     add_files("../src/infinirt/cuda/*.cu")
@@ -92,8 +100,10 @@ target("infiniccl-iluvatar")
 
         set_warnings("all", "error")
         add_cuflags("-fPIC", "-x", "ivcore", "-std=c++17", {force = true})
+        add_cuflags("--cuda-gpu-arch=" .. iluvatar_arch, {force = true})
         add_culdflags("-fPIC")
         add_cxflags("-fPIC")
+        add_cxxflags("-fPIC")
 
         local nccl_root = os.getenv("NCCL_ROOT")
         if nccl_root then

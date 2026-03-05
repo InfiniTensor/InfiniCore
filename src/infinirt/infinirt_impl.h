@@ -30,7 +30,19 @@
     INLINE infiniStatus_t memcpyAsync(void *dst, const void *src, size_t size, infinirtMemcpyKind_t kind, infinirtStream_t stream) IMPL; \
                                                                                                                                          \
     INLINE infiniStatus_t mallocAsync(void **p_ptr, size_t size, infinirtStream_t stream) IMPL;                                          \
-    INLINE infiniStatus_t freeAsync(void *ptr, infinirtStream_t stream) IMPL;
+    INLINE infiniStatus_t freeAsync(void *ptr, infinirtStream_t stream) IMPL;                                                            \
+                                                                                                                                         \
+    INLINE infiniStatus_t streamBeginCapture(infinirtStream_t stream, infinirtStreamCaptureMode_t mode) IMPL;                            \
+    INLINE infiniStatus_t streamEndCapture(infinirtStream_t stream, infinirtGraph_t *graph_ptr) IMPL;                                    \
+    INLINE infiniStatus_t graphDestroy(infinirtGraph_t graph) IMPL;                                                                      \
+    INLINE infiniStatus_t graphInstantiate(                                                                                              \
+        infinirtGraphExec_t *graph_exec_ptr,                                                                                             \
+        infinirtGraph_t graph,                                                                                                           \
+        infinirtGraphNode_t *node_ptr,                                                                                                   \
+        char *log_buffer,                                                                                                                \
+        size_t buffer_size) IMPL;                                                                                                        \
+    INLINE infiniStatus_t graphExecDestroy(infinirtGraphExec_t graph_exec) IMPL;                                                         \
+    INLINE infiniStatus_t graphLuanch(infinirtGraphExec_t graph_exec, infinirtStream_t stream) IMPL;
 
 #define INFINIRT_DEVICE_API_IMPL INFINIRT_DEVICE_API(, , )
 #define INFINIRT_DEVICE_API_NOOP INFINIRT_DEVICE_API(            \

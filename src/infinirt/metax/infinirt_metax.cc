@@ -152,4 +152,59 @@ infiniStatus_t freeAsync(void *ptr, infinirtStream_t stream) {
     CHECK_MACART(hcFreeAsync(ptr, (hcStream_t)stream));
     return INFINI_STATUS_SUCCESS;
 }
+
+infiniStatus_t streamBeginCapture(infinirtStream_t stream, infinirtStreamCaptureMode_t mode) {
+    hcStreamCaptureMode graph_mode;
+    if (mode == INFINIRT_STREAM_CAPTURE_MODE_GLOBAL) {
+        graph_mode = hcStreamCaptureModeGlobal;
+    } else if (mode == INFINIRT_STREAM_CAPTURE_MODE_THREAD_LOCAL) {
+        graph_mode = hcStreamCaptureModeThreadLocal;
+    } else if (mode == INFINIRT_STREAM_CAPTURE_MODE_RELAXED) {
+        graph_mode = hcStreamCaptureModeRelaxed;
+    } else {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    CHECK_MACART(hcStreamBeginCapture((hcStream_t)stream, graph_mode));
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t streamEndCapture(infinirtStream_t stream, infinirtGraph_t *graph_ptr) {
+    hcGraph_t graph;
+    CHECK_MACART(hcStreamEndCapture((hcStream_t)stream, &graph));
+    *graph_ptr = graph;
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t graphDestroy(infinirtGraph_t graph) {
+    CHECK_MACART(hcGraphDestroy((hcGraph_t)graph));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t graphInstantiate(
+    infinirtGraphExec_t *graph_exec_ptr,
+    infinirtGraph_t graph,
+    infinirtGraphNode_t *node_ptr,
+    char *log_buffer,
+    size_t buffer_size) {
+    CHECK_MACART(hcGraphInstantiate(
+        (hcGraphExec_t *)graph_exec_ptr,
+        (hcGraph_t)graph,
+        (hcGraphNode_t *)node_ptr,
+        log_buffer,
+        buffer_size));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t graphExecDestroy(infinirtGraphExec_t graph_exec) {
+    CHECK_MACART(hcGraphExecDestroy((hcGraphExec_t)graph_exec));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t graphLuanch(infinirtGraphExec_t graph_exec, infinirtStream_t stream) {
+    CHECK_MACART(hcGraphLaunch((hcGraphExec_t)graph_exec, (hcStream_t)stream));
+    return INFINI_STATUS_SUCCESS;
+}
+
 } // namespace infinirt::metax

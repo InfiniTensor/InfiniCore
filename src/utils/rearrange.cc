@@ -144,11 +144,14 @@ void rearrange(
 utils::Result<RearrangeMeta> RearrangeMeta::distributeUnit(const std::vector<size_t> &candidates) const {
     // 获取当前的unit大小
     size_t current_unit = _meta[0];
+    const size_t ndim = this->ndim();
+    const ptrdiff_t dst_strides_0 = _meta[2 + ndim];
+    const ptrdiff_t src_strides_0 = _meta[2 + ndim + ndim];
 
     // 寻找满足条件的unit值：当前unit能被其整除
     size_t new_unit = 0;
-    for (size_t candidate : candidates) {
-        if (current_unit % candidate == 0) {
+    for (const size_t &candidate : candidates) {
+        if ((current_unit % candidate == 0) && 0 == (dst_strides_0 & (candidate - 1)) && 0 == (src_strides_0 & (candidate - 1))) {
             new_unit = candidate;
             break;
         }

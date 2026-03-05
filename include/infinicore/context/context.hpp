@@ -3,6 +3,8 @@
 #include "../device.hpp"
 #include "../memory.hpp"
 
+#include "../graph/graph.hpp"
+
 #include <infiniop.h>
 #include <infinirt.h>
 
@@ -11,7 +13,7 @@
 namespace infinicore {
 
 namespace context {
-void setDevice(Device device, bool force_cpu = false);
+void setDevice(Device device);
 Device getDevice();
 size_t getDeviceCount(Device::Type type);
 
@@ -39,6 +41,12 @@ void synchronizeEvent(infinirtEvent_t event);
 void destroyEvent(infinirtEvent_t event);
 float elapsedTime(infinirtEvent_t start, infinirtEvent_t end);
 void streamWaitEvent(infinirtStream_t stream, infinirtEvent_t event);
+
+// Graph recording APIs
+bool isGraphRecording();
+void startGraphRecording();
+void addGraphOperator(std::shared_ptr<graph::GraphOperator> op);
+std::shared_ptr<graph::Graph> stopGraphRecording();
 
 } // namespace context
 

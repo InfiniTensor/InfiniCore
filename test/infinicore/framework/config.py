@@ -24,6 +24,7 @@ def get_supported_hardware_platforms():
         ("--kunlun", "Kunlun XPUs (requires torch_xmlir)"),
         ("--hygon", "Hygon DCUs"),
         ("--qy", "QY GPUs"),
+        ("--ali", "Ali PPU accelerators"),
     ]
 
 
@@ -230,12 +231,20 @@ def get_test_devices(args):
 
     if args.qy:
         try:
-            # Iluvatar GPU detection
+            # QY GPU detection
             import torch
 
             devices_to_test.append(InfiniDeviceEnum.QY)
         except ImportError:
             print("Warning: QY GPU support not available")
+
+    if args.ali:
+        try:
+            import torch
+
+            devices_to_test.append(InfiniDeviceEnum.ALI)
+        except ImportError:
+            print("Warning: Ali PPU support not available")
 
     # Default to CPU if no devices specified
     if not devices_to_test:

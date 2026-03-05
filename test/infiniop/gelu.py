@@ -15,6 +15,7 @@ from libinfiniop import (
     InfiniDtype,
     InfiniDtypeNames,
     InfiniDeviceNames,
+    InfiniDeviceEnum,
     infiniopOperatorDescriptor_t,
 )
 from enum import Enum, auto
@@ -83,6 +84,12 @@ def test(
     dtype=torch.float16,
     sync=None,
 ):
+    # Skip strided cases on Iluvatar: GELU with non-contiguous tensors can hang the GPU (requires ixsmi -r to recover)
+    if device == InfiniDeviceEnum.ILUVATAR and (
+        input_stride is not None or output_stride is not None
+    ):
+        return
+
     input = TestTensor(shape, input_stride, dtype, device)
     if inplace == Inplace.INPLACE:
         if input_stride != output_stride:
@@ -140,6 +147,9 @@ def test(
         )
 
     lib_gelu()
+
+    if sync is not None:
+        sync()
 
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:

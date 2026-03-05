@@ -18,17 +18,15 @@ thread_local common::OpCache<size_t, infiniopAttentionDescriptor_t> caches(
 void calculate(Tensor out, Tensor q, Tensor k, Tensor v, Tensor k_cache, Tensor v_cache, size_t pos) {
     size_t seed = hash_combine(out, q, k, v, k_cache, v_cache, pos);
 
-    auto device_type = context::getDevice().getType();
-    auto device_index = context::getDevice().getIndex();
-
-    auto &cache = caches.getCache(device_type, device_index);
+    auto device = context::getDevice();
+    auto &cache = caches.getCache(device);
 
     auto desc_opt = cache.get(seed);
     infiniopAttentionDescriptor_t desc = nullptr;
 
     if (!desc_opt) {
         INFINICORE_CHECK_ERROR(infiniopCreateAttentionDescriptor(
-            context::getInfiniopHandle(out->device()), &desc,
+            context::getInfiniopHandle(device), &desc,
             out->desc(), q->desc(), k->desc(), v->desc(),
             k_cache->desc(), v_cache->desc(), pos));
         cache.put(seed, desc);

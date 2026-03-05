@@ -3,6 +3,12 @@ if CUDNN_ROOT ~= nil then
     add_includedirs(CUDNN_ROOT .. "/include")
 end
 
+local CUTLASS_ROOT = os.getenv("CUTLASS_ROOT") or os.getenv("CUTLASS_HOME") or os.getenv("CUTLASS_PATH")
+
+if CUTLASS_ROOT ~= nil then
+    add_includedirs(CUTLASS_ROOT)
+end
+
 target("infiniop-nvidia")
     set_kind("static")
     add_deps("infini-utils")
@@ -14,7 +20,6 @@ target("infiniop-nvidia")
     if has_config("cudnn") then
         add_links("cudnn")
     end
-    add_cugencodes("native")
 
     on_load(function (target)
         import("lib.detect.find_tool")
@@ -43,20 +48,33 @@ target("infiniop-nvidia")
         add_cuflags("-Xcompiler=-fPIC")
         add_cuflags("--extended-lambda")
         add_culdflags("-Xcompiler=-fPIC")
+        add_cxflags("-fPIC")
         add_cxxflags("-fPIC")
+        add_cflags("-fPIC")
         add_cuflags("--expt-relaxed-constexpr")
         if CUDNN_ROOT ~= nil then
             add_linkdirs(CUDNN_ROOT .. "/lib")
         end
     end
 
-    add_cuflags("-Xcompiler=-Wno-error=deprecated-declarations")
+    add_cuflags("-Xcompiler=-Wno-error=deprecated-declarations", "-Xcompiler=-Wno-error=unused-function")
+
+    local arch_opt = get_config("cuda_arch")
+    if arch_opt and type(arch_opt) == "string" then
+        for _, arch in ipairs(arch_opt:split(",")) do
+            arch = arch:trim()
+            local compute = arch:gsub("sm_", "compute_")
+            add_cuflags("-gencode=arch=" .. compute .. ",code=" .. arch)
+        end
+    else
+        add_cugencodes("native")
+    end
 
     set_languages("cxx17")
-    add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")
+    add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu", "../src/infiniop/ops/*/*/nvidia/*.cu")
 
     if has_config("ninetoothed") then
-        add_files("../build/ninetoothed/*.c")
+        add_files("../build/ninetoothed/*.c", "../build/ninetoothed/*.cpp")
     end
 target_end()
 
@@ -76,6 +94,7 @@ target("infinirt-nvidia")
         add_cuflags("-Xcompiler=-fPIC")
         add_culdflags("-Xcompiler=-fPIC")
         add_cxflags("-fPIC")
+        add_cxxflags("-fPIC")
     end
 
     set_languages("cxx17")
@@ -95,6 +114,7 @@ target("infiniccl-nvidia")
             add_cuflags("-Xcompiler=-fPIC")
             add_culdflags("-Xcompiler=-fPIC")
             add_cxflags("-fPIC")
+            add_cxxflags("-fPIC")
 
             local nccl_root = os.getenv("NCCL_ROOT")
             if nccl_root then

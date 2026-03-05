@@ -3,8 +3,8 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import torch
 import infinicore
+import torch
 from framework import (
     BaseOperatorTest,
     TensorSpec,
@@ -34,6 +34,8 @@ _TEST_CASES_DATA = [
     # Large tensors
     ((16, 5632), None, None, None),
     ((4, 4, 5632), None, None, None),
+    ((1, 512, 16384), (16777216, 32768, 1), (16777216, 32768, 1), None),
+    ((1, 16384, 16384), (536870912, 32768, 1), (536870912, 32768, 1), None),
 ]
 
 # Tolerance configuration
