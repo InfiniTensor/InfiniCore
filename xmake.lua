@@ -336,6 +336,7 @@ target("infinirt")
     if not is_plat("windows") then
         add_cxflags("-fPIC")
         add_cxxflags("-fPIC")
+        add_ldflags("-fPIC", {force = true})
     end
     set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
     add_files("src/infinirt/*.cc")

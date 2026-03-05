@@ -147,14 +147,10 @@ target("flash-attn-nvidia")
 
     before_build(function (target)
         if FLASH_ATTN_ROOT ~= nil then
-            local outdata = os.iorunv("python", {"-c", "import torch, os; print(os.path.dirname(torch.__file__))"}):trim()
-            local TORCH_DIR = outdata
-
-            local outdata = os.iorunv("python", {"-c", "import sysconfig; print(sysconfig.get_paths()['include'])"}):trim()
-            local PYTHON_INCLUDE = outdata
-
-            local outdata = os.iorunv("python", {"-c", "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))"}):trim()
-            local PYTHON_LIB_DIR = outdata
+            local TORCH_DIR = os.iorunv("python", {"-c", "import torch, os; print(os.path.dirname(torch.__file__))"}):trim()
+            local PYTHON_INCLUDE = os.iorunv("python", {"-c", "import sysconfig; print(sysconfig.get_paths()['include'])"}):trim()
+            local PYTHON_LIB_DIR= os.iorunv("python", {"-c", "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))"}):trim()
+            local LIB_PYTHON = os.iorunv("python", {"-c", "import sysconfig, os; print(sysconfig.get_config_var('LDLIBRARY'))"}):trim()
             -- Include dirs
             target:add("includedirs", FLASH_ATTN_ROOT .. "/csrc/flash_attn/src", {public = false})
             target:add("includedirs", TORCH_DIR .. "/include/torch/csrc/api/include", {public = false})
@@ -165,7 +161,7 @@ target("flash-attn-nvidia")
 
             -- Link libraries
             target:add("linkdirs", TORCH_DIR .. "/lib", PYTHON_LIB_DIR)
-            target:add("links", "torch", "torch_cuda", "torch_cpu", "c10", "c10_cuda", "torch_python", "python3")
+            target:add("links", "torch", "torch_cuda", "torch_cpu", "c10", "c10_cuda", "torch_python", LIB_PYTHON)
 
         end
 
