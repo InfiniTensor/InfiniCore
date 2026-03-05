@@ -2,6 +2,8 @@
 
 #include "infinicore/adaptor/flash_attention_adaptor.hpp"
 
+#include <stdexcept>
+
 namespace infinicore::op::mha_varlen_impl::flashattn {
 
 struct PlannedMeta {
@@ -38,6 +40,7 @@ void *plan(Tensor out,
 }
 
 void run(void *planned_meta) {
+#ifdef ENABLE_FLASH_ATTN
     c10::cuda::CUDAStreamGuard guard(infinicore::adaptor::get_cuda_stream());
     auto *p = reinterpret_cast<PlannedMeta *>(planned_meta);
 
@@ -77,6 +80,9 @@ void run(void *planned_meta) {
         0.0,
         false,
         std::nullopt);
+#else
+    throw std::runtime_error("FlashAttention is not enabled in this build");
+#endif
 }
 
 void cleanup(void **planned_meta_ptr) {

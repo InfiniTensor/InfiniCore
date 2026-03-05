@@ -9,6 +9,10 @@ if CUTLASS_ROOT ~= nil then
     add_includedirs(CUTLASS_ROOT)
 end
 
+local FLASH_ATTN_ROOT = get_config("flash-attn")
+
+local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
+
 target("infiniop-nvidia")
     set_kind("static")
     add_deps("infini-utils")
@@ -130,5 +134,55 @@ target("infiniccl-nvidia")
         end
     end
     set_languages("cxx17")
+
+target_end()
+
+target("flash-attn-nvidia")
+    set_kind("shared")
+    set_default(false)
+    set_policy("build.cuda.devlink", true)
+    set_toolchains("cuda")
+    add_links("cudart")
+    add_cugencodes("native")
+
+    before_build(function (target)
+        if FLASH_ATTN_ROOT ~= nil then
+            local outdata = os.iorunv("python", {"-c", "import torch, os; print(os.path.dirname(torch.__file__))"}):trim()
+            local TORCH_DIR = outdata
+
+            local outdata = os.iorunv("python", {"-c", "import sysconfig; print(sysconfig.get_paths()['include'])"}):trim()
+            local PYTHON_INCLUDE = outdata
+
+            local outdata = os.iorunv("python", {"-c", "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))"}):trim()
+            local PYTHON_LIB_DIR = outdata
+            -- Include dirs
+            target:add("includedirs", FLASH_ATTN_ROOT .. "/csrc/flash_attn/src", {public = false})
+            target:add("includedirs", TORCH_DIR .. "/include/torch/csrc/api/include", {public = false})
+            target:add("includedirs", TORCH_DIR .. "/include", {public = false})
+            target:add("includedirs", PYTHON_INCLUDE, {public = false})
+            target:add("includedirs", CUTLASS_ROOT .. "/include", {public = false})
+            target:add("includedirs", FLASH_ATTN_ROOT .. "/csrc/flash_attn", {public = false})
+
+            -- Link libraries
+            target:add("linkdirs", TORCH_DIR .. "/lib", PYTHON_LIB_DIR)
+            target:add("links", "torch", "torch_cuda", "torch_cpu", "c10", "c10_cuda", "torch_python", "python3")
+
+        end
+
+    end)
+
+    if FLASH_ATTN_ROOT ~= nil then
+        add_files(FLASH_ATTN_ROOT .. "/csrc/flash_attn/flash_api.cpp")
+        add_files(FLASH_ATTN_ROOT .. "/csrc/flash_attn/src/*.cu")
+        -- Link options
+        add_ldflags("-Wl,--no-undefined", {force = true})
+        -- Compile options
+        add_cxflags("-fPIC", {force = true})
+        add_cuflags("-Xcompiler=-fPIC")
+        add_cuflags("--forward-unknown-to-host-compiler --expt-relaxed-constexpr --use_fast_math", {force = true})
+        set_values("cuda.rdc", false)
+    end
+
+    on_install(function (target) end)
 
 target_end()

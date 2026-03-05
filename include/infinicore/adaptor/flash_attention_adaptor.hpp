@@ -1,3 +1,4 @@
+#ifdef ENABLE_FLASH_ATTN
 #pragma once
 #include "aten_adaptor.hpp"
 
@@ -110,3 +111,4 @@ mha_fwd_kvcache(at::Tensor &q,                                     // batch_size
                 int num_splits);
 
 } // namespace flash
+#endif // ENABLE_FLASH_ATTN

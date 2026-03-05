@@ -1,3 +1,4 @@
+#ifdef ENABLE_ATEN
 #include "infinicore/adaptor/aten_adaptor.hpp"
 
 namespace infinicore::adaptor {
@@ -31,8 +32,13 @@ at::Tensor to_aten_tensor(const infinicore::Tensor &t) {
         options);
 }
 
+#ifdef ENABLE_NVIDIA_API
 c10::cuda::CUDAStream get_cuda_stream() {
     return c10::cuda::getStreamFromExternal(
         cudaStream_t(infinicore::context::getStream()), infinicore::context::getDevice().getIndex());
 }
+#endif
+
 } // namespace infinicore::adaptor
+
+#endif // ENABLE_ATEN
