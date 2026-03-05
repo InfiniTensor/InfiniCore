@@ -28,8 +28,7 @@ __C infiniStatus_t infiniopCreateBitwiseRightShiftDescriptor(
             handle,                                                                          \
             reinterpret_cast<op::bitwise_right_shift::NAMESPACE::Descriptor **>(desc_ptr),  \
             y_desc,                                                                          \
-            x1_desc,                                                                         \
-            x2_desc)
+            {x1_desc, x2_desc})
 
     switch (handle->device) {
 
@@ -99,7 +98,7 @@ __C infiniStatus_t infiniopBitwiseRightShift(
 #define CALCULATE(CASE, NAMESPACE)                                                              \
     case CASE:                                                                                  \
         return reinterpret_cast<const op::bitwise_right_shift::NAMESPACE::Descriptor *>(desc)  \
-            ->calculate(workspace, workspace_size, y, x1, x2, stream)
+            ->calculate(workspace, workspace_size, y, {x1, x2}, stream)
 
     switch (desc->device_type) {
 

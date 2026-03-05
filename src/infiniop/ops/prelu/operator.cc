@@ -28,8 +28,7 @@ __C infiniStatus_t infiniopCreatePreluDescriptor(
             handle,                                                              \
             reinterpret_cast<op::prelu::NAMESPACE::Descriptor **>(desc_ptr),    \
             y_desc,                                                              \
-            x_desc,                                                              \
-            weight_desc)
+            {x_desc, weight_desc})
 
     switch (handle->device) {
 
@@ -99,7 +98,7 @@ __C infiniStatus_t infiniopPrelu(
 #define CALCULATE(CASE, NAMESPACE)                                                  \
     case CASE:                                                                      \
         return reinterpret_cast<const op::prelu::NAMESPACE::Descriptor *>(desc)     \
-            ->calculate(workspace, workspace_size, y, x, weight, stream)
+            ->calculate(workspace, workspace_size, y, {x, weight}, stream)
 
     switch (desc->device_type) {
 

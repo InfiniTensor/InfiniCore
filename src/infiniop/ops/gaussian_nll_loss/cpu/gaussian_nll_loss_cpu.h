@@ -2,6 +2,7 @@
 #define __GAUSSIAN_NLL_LOSS_CPU_H__
 
 #include "../../../operator.h"
+#include "../../../tensor.h"
 #include "../../../devices/cpu/common_cpu.h"
 #include <vector>
 

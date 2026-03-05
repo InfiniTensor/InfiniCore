@@ -20,6 +20,8 @@ class Descriptor final : public InfiniopDescriptor {
     size_t ndim;
     std::vector<size_t> input_shape;
     std::vector<size_t> output_shape;
+    std::vector<ptrdiff_t> input_strides;
+    std::vector<ptrdiff_t> output_strides;
     InterpolateMode mode;
     int align_corners;
     size_t input_size;
@@ -27,6 +29,7 @@ class Descriptor final : public InfiniopDescriptor {
 
     Descriptor(infiniDtype_t dtype, size_t ndim,
                std::vector<size_t> input_shape, std::vector<size_t> output_shape,
+               std::vector<ptrdiff_t> input_strides, std::vector<ptrdiff_t> output_strides,
                InterpolateMode mode, int align_corners,
                size_t input_size, size_t output_size,
                infiniDevice_t device_type, int device_id)
@@ -35,6 +38,8 @@ class Descriptor final : public InfiniopDescriptor {
           ndim(ndim),
           input_shape(std::move(input_shape)),
           output_shape(std::move(output_shape)),
+          input_strides(std::move(input_strides)),
+          output_strides(std::move(output_strides)),
           mode(mode),
           align_corners(align_corners),
           input_size(input_size),

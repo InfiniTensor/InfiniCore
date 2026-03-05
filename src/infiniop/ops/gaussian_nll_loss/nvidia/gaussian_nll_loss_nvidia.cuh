@@ -3,6 +3,8 @@
 
 #include "../../../operator.h"
 #include "../../../devices/nvidia/nvidia_common.cuh"
+#include <cstddef>
+#include <vector>
 
 namespace op::gaussian_nll_loss::nvidia {
 
@@ -15,18 +17,43 @@ enum class Reduction {
 class Descriptor final : public InfiniopDescriptor {
     infiniDtype_t _dtype;
     size_t input_size;
+    size_t ndim;
+    std::vector<size_t> shape;
+    std::vector<ptrdiff_t> y_strides;
+    std::vector<ptrdiff_t> input_strides;
+    std::vector<ptrdiff_t> target_strides;
+    std::vector<ptrdiff_t> var_strides;
     int full;
     double eps;
     Reduction reduction;
+    void *reduce_buffer;
 
-    Descriptor(infiniDtype_t dtype, size_t input_size, int full, double eps, Reduction reduction,
+    Descriptor(infiniDtype_t dtype,
+               size_t input_size,
+               size_t ndim,
+               std::vector<size_t> shape,
+               std::vector<ptrdiff_t> y_strides,
+               std::vector<ptrdiff_t> input_strides,
+               std::vector<ptrdiff_t> target_strides,
+               std::vector<ptrdiff_t> var_strides,
+               int full,
+               double eps,
+               Reduction reduction,
+               void *reduce_buffer,
                infiniDevice_t device_type, int device_id)
         : InfiniopDescriptor{device_type, device_id},
           _dtype(dtype),
           input_size(input_size),
+          ndim(ndim),
+          shape(std::move(shape)),
+          y_strides(std::move(y_strides)),
+          input_strides(std::move(input_strides)),
+          target_strides(std::move(target_strides)),
+          var_strides(std::move(var_strides)),
           full(full),
           eps(eps),
-          reduction(reduction) {}
+          reduction(reduction),
+          reduce_buffer(reduce_buffer) {}
 
 public:
     ~Descriptor();

@@ -1,5 +1,5 @@
 #include "interpolate_cpu.h"
-#include "../../../utils.h"
+#include "../../../../utils.h"
 #include <cstring>
 #include <cmath>
 #include <algorithm>
@@ -51,8 +51,8 @@ utils::Result<InterpolateInfo> InterpolateInfo::create(
             double scale = scale_array[0];
             expected_y_shape[2] = static_cast<size_t>(x_shape[2] * scale);
         } else {
+            const double scale = scale_array[0];
             for (size_t i = 0; i < ndim; ++i) {
-                double scale = scale_array[i];
                 expected_y_shape[i + 2] = static_cast<size_t>(x_shape[i + 2] * scale);
             }
         }
@@ -256,15 +256,16 @@ void interpolate_impl(
                         size_t w0 = static_cast<size_t>(std::floor(start_w));
                         size_t w1 = static_cast<size_t>(std::ceil(end_w));
 
-                        T sum = utils::cast<T>(0.0);
+                        double sum = 0.0;
                         size_t count = 0;
                         for (size_t ih = h0; ih < h1 && ih < in_h; ++ih) {
                             for (size_t iw = w0; iw < w1 && iw < in_w; ++iw) {
-                                sum += x[(b * channels + c) * in_h * in_w + ih * in_w + iw];
+                                sum += utils::cast<double>(x[(b * channels + c) * in_h * in_w + ih * in_w + iw]);
                                 count++;
                             }
                         }
-                        y[(b * channels + c) * out_h * out_w + oh * out_w + ow] = count > 0 ? sum / utils::cast<T>(static_cast<double>(count)) : utils::cast<T>(0.0);
+                        y[(b * channels + c) * out_h * out_w + oh * out_w + ow] =
+                            count > 0 ? utils::cast<T>(sum / static_cast<double>(count)) : utils::cast<T>(0.0);
                     }
                 }
             }

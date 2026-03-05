@@ -1,6 +1,6 @@
 #include "interpolate_metax.h"
 #include "../cuda/kernel.cuh"
-#include "../../../utils.h"
+#include "../../../../utils.h"
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
 #include <cstring>
@@ -58,8 +58,8 @@ infiniStatus_t Descriptor::create(
             double scale = scale_array[0];
             expected_y_shape[2] = static_cast<size_t>(x_shape[2] * scale);
         } else {
+            const double scale = scale_array[0];
             for (size_t i = 0; i < ndim; ++i) {
-                double scale = scale_array[i];
                 expected_y_shape[i + 2] = static_cast<size_t>(x_shape[i + 2] * scale);
             }
         }

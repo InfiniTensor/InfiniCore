@@ -1,5 +1,5 @@
 #include "gaussian_nll_loss_cpu.h"
-#include "../../../utils.h"
+#include "../../../../utils.h"
 #include <cmath>
 
 namespace op::gaussian_nll_loss::cpu {
@@ -75,36 +75,36 @@ void gaussian_nll_loss_impl(
     const T *var) {
 
     size_t n = info.input_size;
-    T eps_val = utils::cast<T>(info.eps);
-    T log_2pi = utils::cast<T>(std::log(2.0 * 3.14159265358979323846));
+    const double eps_val = info.eps;
+    const double log_2pi = std::log(2.0 * 3.14159265358979323846);
 
     if (info.reduction == Reduction::NONE) {
         // Element-wise loss
         for (size_t i = 0; i < n; ++i) {
-            T diff = input[i] - target[i];
-            T var_val = var[i] + eps_val;
-            T loss = T(0.5) * (std::log(var_val) + (diff * diff) / var_val);
+            const double diff = utils::cast<double>(input[i]) - utils::cast<double>(target[i]);
+            const double var_val = utils::cast<double>(var[i]) + eps_val;
+            double loss = 0.5 * (std::log(var_val) + (diff * diff) / var_val);
             if (info.full) {
-                loss += T(0.5) * log_2pi;
+                loss += 0.5 * log_2pi;
             }
-            y[i] = loss;
+            y[i] = utils::cast<T>(loss);
         }
     } else {
         // Sum or Mean
-        T sum = utils::cast<T>(0.0);
+        double sum = 0.0;
         for (size_t i = 0; i < n; ++i) {
-            T diff = input[i] - target[i];
-            T var_val = var[i] + eps_val;
-            T loss = T(0.5) * (std::log(var_val) + (diff * diff) / var_val);
+            const double diff = utils::cast<double>(input[i]) - utils::cast<double>(target[i]);
+            const double var_val = utils::cast<double>(var[i]) + eps_val;
+            double loss = 0.5 * (std::log(var_val) + (diff * diff) / var_val);
             if (info.full) {
-                loss += T(0.5) * log_2pi;
+                loss += 0.5 * log_2pi;
             }
             sum += loss;
         }
         if (info.reduction == Reduction::MEAN) {
-            y[0] = sum / utils::cast<T>(static_cast<double>(n));
+            y[0] = utils::cast<T>(sum / static_cast<double>(n));
         } else {
-            y[0] = sum;
+            y[0] = utils::cast<T>(sum);
         }
     }
 }

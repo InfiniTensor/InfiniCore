@@ -20,6 +20,10 @@ infiniStatus_t Descriptor::create(
 
     CHECK_DTYPE(dtype, INFINI_DTYPE_BF16, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64);
 
+    if (input_desc->dtype() != dtype || weight_desc->dtype() != dtype) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
     CHECK_SAME_SHAPE(output_shape, input_shape);
 
     CREATE_ELEMENTWISE_CPU_DESCRIPTOR(handle, dtype, out_desc, input_desc_vec);
@@ -36,13 +40,13 @@ infiniStatus_t Descriptor::calculate(
 
     switch (_dtype) {
     case INFINI_DTYPE_BF16:
-        return _device_info->calculate<PreluOp, bf16_t, bf16_t, bf16_t>(_info, output, inputs, stream);
+        return _device_info->calculate<PreluOp, bf16_t>(_info, output, inputs, stream);
     case INFINI_DTYPE_F16:
-        return _device_info->calculate<PreluOp, fp16_t, fp16_t, fp16_t>(_info, output, inputs, stream);
+        return _device_info->calculate<PreluOp, fp16_t>(_info, output, inputs, stream);
     case INFINI_DTYPE_F32:
-        return _device_info->calculate<PreluOp, float, float, float>(_info, output, inputs, stream);
+        return _device_info->calculate<PreluOp, float>(_info, output, inputs, stream);
     case INFINI_DTYPE_F64:
-        return _device_info->calculate<PreluOp, double, double, double>(_info, output, inputs, stream);
+        return _device_info->calculate<PreluOp, double>(_info, output, inputs, stream);
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }

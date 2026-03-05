@@ -3,39 +3,100 @@
 #include <type_traits>
 #include <cmath>
 #include "../../../reduce/cuda/reduce.cuh"
+#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 
 namespace op::cuda {
 
+constexpr int kGaussianNllMaxDims = 8;
+
+struct GaussianNllTensorMeta {
+    int ndim;
+    size_t shape[kGaussianNllMaxDims];
+    ptrdiff_t strides[kGaussianNllMaxDims]; // strides in elements
+};
+
 template <typename T>
+struct GaussianNllTypeTag {};
+
+template <typename Tcompute>
+__device__ __forceinline__ Tcompute gaussian_nll_to_compute(const half v) {
+    return static_cast<Tcompute>(__half2float(v));
+}
+
+template <typename Tcompute>
+__device__ __forceinline__ Tcompute gaussian_nll_to_compute(const cuda_bfloat16 v) {
+    return static_cast<Tcompute>(__bfloat162float(v));
+}
+
+template <typename Tcompute, typename T>
+__device__ __forceinline__ Tcompute gaussian_nll_to_compute(const T v) {
+    return static_cast<Tcompute>(v);
+}
+
+__device__ __forceinline__ half gaussian_nll_from_compute(const float v, GaussianNllTypeTag<half>) {
+    return __float2half_rn(v);
+}
+
+__device__ __forceinline__ cuda_bfloat16 gaussian_nll_from_compute(const float v, GaussianNllTypeTag<cuda_bfloat16>) {
+    return __float2bfloat16_rn(v);
+}
+
+template <typename Tcompute, typename T>
+__device__ __forceinline__ T gaussian_nll_from_compute(const Tcompute v, GaussianNllTypeTag<T>) {
+    return static_cast<T>(v);
+}
+
+__device__ __forceinline__ size_t gaussian_nll_offset(size_t flat, const GaussianNllTensorMeta &meta) {
+    return device::nvidia::indexToOffset(
+        flat,
+        static_cast<size_t>(meta.ndim),
+        meta.shape,
+        meta.strides);
+}
+
+template <typename T, typename Tcompute>
 __global__ void gaussian_nll_loss_kernel(
     T *output,
     const T *input,
     const T *target,
     const T *var,
     size_t n,
-    T eps_val,
+    GaussianNllTensorMeta out_meta,
+    GaussianNllTensorMeta in_meta,
+    GaussianNllTensorMeta tgt_meta,
+    GaussianNllTensorMeta var_meta,
+    Tcompute eps_val,
     int full) {
 
-    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
-    if (idx >= n) return;
-
-    T diff = input[idx] - target[idx];
-    T var_val = var[idx] + eps_val;
-    T loss = T(0.5) * (log(var_val) + (diff * diff) / var_val);
-    if (full) {
-        T log_2pi = T(0.9189385332046727);  // log(2*pi) / 2
-        loss += log_2pi;
+    const size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= n) {
+        return;
     }
-    output[idx] = loss;
+
+    const size_t out_off = gaussian_nll_offset(idx, out_meta);
+    const size_t in_off = gaussian_nll_offset(idx, in_meta);
+    const size_t tgt_off = gaussian_nll_offset(idx, tgt_meta);
+    const size_t var_off = gaussian_nll_offset(idx, var_meta);
+
+    const Tcompute diff = gaussian_nll_to_compute<Tcompute>(input[in_off]) - gaussian_nll_to_compute<Tcompute>(target[tgt_off]);
+    const Tcompute var_val = gaussian_nll_to_compute<Tcompute>(var[var_off]) + eps_val;
+    Tcompute loss = Tcompute(0.5) * (log(var_val) + (diff * diff) / var_val);
+    if (full) {
+        loss += Tcompute(0.9189385332046727); // log(2*pi)/2
+    }
+    output[out_off] = gaussian_nll_from_compute(loss, GaussianNllTypeTag<T>{});
 }
 
 template <typename T, typename Tcompute>
 __global__ void gaussian_nll_loss_reduce_kernel(
-    T *output,
+    Tcompute *output,
     const T *input,
     const T *target,
     const T *var,
     size_t n,
+    GaussianNllTensorMeta in_meta,
+    GaussianNllTensorMeta tgt_meta,
+    GaussianNllTensorMeta var_meta,
     Tcompute eps_val,
     int full) {
 
@@ -45,9 +106,13 @@ __global__ void gaussian_nll_loss_reduce_kernel(
     Tcompute log_2pi = full ? Tcompute(0.9189385332046727) : Tcompute(0.0);
 
     for (size_t i = idx; i < n; i += blockDim.x * gridDim.x) {
-        Tcompute diff = static_cast<Tcompute>(input[i]) - static_cast<Tcompute>(target[i]);
-        Tcompute var_val = static_cast<Tcompute>(var[i]) + eps_val;
-        Tcompute loss = Tcompute(0.5) * (log(var_val) + (diff * diff) / var_val) + log_2pi;
+        const size_t in_off = gaussian_nll_offset(i, in_meta);
+        const size_t tgt_off = gaussian_nll_offset(i, tgt_meta);
+        const size_t var_off = gaussian_nll_offset(i, var_meta);
+
+        const Tcompute diff = gaussian_nll_to_compute<Tcompute>(input[in_off]) - gaussian_nll_to_compute<Tcompute>(target[tgt_off]);
+        const Tcompute var_val = gaussian_nll_to_compute<Tcompute>(var[var_off]) + eps_val;
+        const Tcompute loss = Tcompute(0.5) * (log(var_val) + (diff * diff) / var_val) + log_2pi;
         sum += loss;
     }
 
@@ -56,11 +121,18 @@ __global__ void gaussian_nll_loss_reduce_kernel(
     Tcompute block_sum = BlockReduce(temp_storage).Sum(sum);
 
     if (threadIdx.x == 0) {
-        if (blockIdx.x == 0) {
-            *output = static_cast<T>(block_sum);
-        } else {
-            atomicAdd(reinterpret_cast<Tcompute *>(output), block_sum);
-        }
+        atomicAdd(output, block_sum);
+    }
+}
+
+template <typename Tout, typename Tcompute>
+__global__ void gaussian_nll_loss_finalize_kernel(
+    Tout *output,
+    const Tcompute *accum,
+    Tcompute scale) {
+    if (blockIdx.x == 0 && threadIdx.x == 0) {
+        const Tcompute v = (*accum) * scale;
+        output[0] = gaussian_nll_from_compute(v, GaussianNllTypeTag<Tout>{});
     }
 }
 
