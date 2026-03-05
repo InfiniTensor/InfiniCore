@@ -2,6 +2,7 @@
 #include "../../../../utils.h"
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 namespace op::avg_pool3d::cpu {
 
@@ -67,10 +68,22 @@ utils::Result<AvgPool3dInfo> AvgPool3dInfo::create(
         pad_d = pad_h = pad_w = 0;
     }
 
-    // Calculate output dimensions
-    size_t output_d = (input_d + 2 * pad_d - kernel_d) / stride_d + 1;
-    size_t output_h = (input_h + 2 * pad_h - kernel_h) / stride_h + 1;
-    size_t output_w = (input_w + 2 * pad_w - kernel_w) / stride_w + 1;
+    // Calculate output dimensions. Guard against unsigned underflow when kernel > input + 2*pad.
+    if (pad_d > (std::numeric_limits<size_t>::max() - input_d) / 2 ||
+        pad_h > (std::numeric_limits<size_t>::max() - input_h) / 2 ||
+        pad_w > (std::numeric_limits<size_t>::max() - input_w) / 2) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    size_t effective_d = input_d + 2 * pad_d;
+    size_t effective_h = input_h + 2 * pad_h;
+    size_t effective_w = input_w + 2 * pad_w;
+    if (kernel_d > effective_d || kernel_h > effective_h || kernel_w > effective_w) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    size_t output_d = (effective_d - kernel_d) / stride_d + 1;
+    size_t output_h = (effective_h - kernel_h) / stride_h + 1;
+    size_t output_w = (effective_w - kernel_w) / stride_w + 1;
 
     // Verify output shape
     if (y_shape[0] != batch || y_shape[1] != channels ||
@@ -115,6 +128,10 @@ infiniStatus_t Descriptor::create(
 
     auto dtype = x_desc->dtype();
     CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64, INFINI_DTYPE_BF16);
+
+    if (y_desc->dtype() != dtype) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
 
     auto info_result = AvgPool3dInfo::create(x_desc, y_desc, kernel_size, stride, padding);
     CHECK_RESULT(info_result);

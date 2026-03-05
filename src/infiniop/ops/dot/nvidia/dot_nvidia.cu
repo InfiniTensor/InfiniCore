@@ -29,6 +29,11 @@ infiniStatus_t Descriptor::create(
     auto dtype = a_desc->dtype();
     CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64, INFINI_DTYPE_BF16);
 
+    // This op does not do implicit dtype conversion: y/a/b must match.
+    if (b_desc->dtype() != dtype || y_desc->dtype() != dtype) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
     // Check that y is a scalar (0D tensor or shape [1])
     auto y_shape = y_desc->shape();
     if (y_shape.size() != 0 && (y_shape.size() != 1 || y_shape[0] != 1)) {
@@ -45,6 +50,11 @@ infiniStatus_t Descriptor::create(
     size_t n = a_shape[0];
     ptrdiff_t a_stride = a_desc->strides()[0];
     ptrdiff_t b_stride = b_desc->strides()[0];
+
+    // Negative/broadcasted strides are not supported without an explicit base offset.
+    if (a_stride <= 0 || b_stride <= 0) {
+        return INFINI_STATUS_BAD_TENSOR_STRIDES;
+    }
 
     *desc_ptr = new Descriptor(dtype, n, a_stride, b_stride, handle->device, handle->device_id);
     return INFINI_STATUS_SUCCESS;

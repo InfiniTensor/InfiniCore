@@ -23,6 +23,11 @@ infiniStatus_t Descriptor::create(
     auto dtype = x_desc->dtype();
     CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64, INFINI_DTYPE_BF16);
 
+    // Histc output is always float32. This backend also requires a contiguous output.
+    if (y_desc->dtype() != INFINI_DTYPE_F32) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
     auto x_shape = x_desc->shape();
     auto y_shape = y_desc->shape();
 
@@ -32,6 +37,16 @@ infiniStatus_t Descriptor::create(
 
     size_t input_size = x_shape[0];
     ptrdiff_t input_stride = x_desc->strides()[0];
+    ptrdiff_t output_stride = y_desc->strides()[0];
+
+    // This implementation treats y as a contiguous `float*` buffer.
+    if (output_stride != 1) {
+        return INFINI_STATUS_BAD_TENSOR_STRIDES;
+    }
+    // Negative (or broadcasted) strides are not supported by this kernel without an explicit base offset.
+    if (input_stride <= 0) {
+        return INFINI_STATUS_BAD_TENSOR_STRIDES;
+    }
 
     *desc_ptr = new Descriptor(dtype, input_size, bins, min_val, max_val,
                                input_stride, handle->device, handle->device_id);

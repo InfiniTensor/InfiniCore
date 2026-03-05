@@ -42,6 +42,12 @@ utils::Result<HistcInfo> HistcInfo::create(
     info.input_stride = x_desc->strides()[0];
     info.output_stride = y_desc->strides()[0];
 
+    // This implementation assumes x points to the first logical element and uses linear indexing.
+    // Negative (or broadcasted) strides would require an explicit base offset.
+    if (info.input_stride <= 0) {
+        return INFINI_STATUS_BAD_TENSOR_STRIDES;
+    }
+
     // Writing a histogram into a broadcasted or negatively strided output is undefined.
     if (info.output_stride <= 0) {
         return INFINI_STATUS_BAD_TENSOR_STRIDES;
