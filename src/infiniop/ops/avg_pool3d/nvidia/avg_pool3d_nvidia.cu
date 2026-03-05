@@ -50,7 +50,13 @@ infiniStatus_t Descriptor::create(
         return INFINI_STATUS_BAD_TENSOR_SHAPE;
     }
 
+    if (!kernel_size) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
     size_t *ks = reinterpret_cast<size_t *>(kernel_size);
+    if (ks[0] == 0 || ks[1] == 0 || ks[2] == 0) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
     size_t kernel_d = ks[0], kernel_h = ks[1], kernel_w = ks[2];
 
     size_t stride_d, stride_h, stride_w;

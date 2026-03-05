@@ -43,6 +43,9 @@ utils::Result<AvgPool3dInfo> AvgPool3dInfo::create(
     size_t stride_d, stride_h, stride_w;
     if (stride) {
         size_t *s = reinterpret_cast<size_t *>(stride);
+        if (s[0] == 0 || s[1] == 0 || s[2] == 0) {
+            return INFINI_STATUS_BAD_PARAM;
+        }
         stride_d = s[0];
         stride_h = s[1];
         stride_w = s[2];

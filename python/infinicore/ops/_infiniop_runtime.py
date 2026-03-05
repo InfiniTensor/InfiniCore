@@ -1,7 +1,7 @@
 import ctypes
 import os
 import platform
-from ctypes import POINTER, Structure, c_double, c_int, c_int64, c_size_t, c_uint64
+from ctypes import POINTER, Structure, c_double, c_int, c_int64, c_size_t, c_ssize_t
 from pathlib import Path
 
 
@@ -85,9 +85,9 @@ def _load_lib() -> _InfiniLib:
     # Core runtime and descriptor APIs
     lib.infiniopCreateTensorDescriptor.argtypes = [
         POINTER(infiniopTensorDescriptor_t),
-        c_uint64,
-        POINTER(c_uint64),
-        POINTER(c_int64),
+        c_size_t,
+        POINTER(c_size_t),
+        POINTER(c_ssize_t),
         c_int,
     ]
     lib.infiniopCreateTensorDescriptor.restype = c_int
@@ -270,13 +270,17 @@ def create_tensor_descriptor(tensor) -> infiniopTensorDescriptor_t:
     strides = list(tensor.stride())
     ndim = len(shape)
 
-    c_shape = (c_uint64 * ndim)(*shape)
-    c_strides = (c_int64 * ndim)(*strides)
+    c_shape = (c_size_t * ndim)(*shape)
+    c_strides = (c_ssize_t * ndim)(*strides)
 
     desc = infiniopTensorDescriptor_t()
     _check_error(
         lib.infiniopCreateTensorDescriptor(
-            ctypes.byref(desc), c_uint64(ndim), c_shape, c_strides, c_int(int(tensor.dtype._underlying))
+            ctypes.byref(desc),
+            c_size_t(ndim),
+            c_shape,
+            c_strides,
+            c_int(int(tensor.dtype._underlying)),
         )
     )
     return desc
@@ -286,4 +290,3 @@ def destroy_tensor_descriptor(desc: infiniopTensorDescriptor_t) -> None:
     lib = _load_lib()
     if desc:
         _check_error(lib.infiniopDestroyTensorDescriptor(desc))
-
