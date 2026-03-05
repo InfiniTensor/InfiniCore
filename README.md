@@ -20,6 +20,7 @@ InfiniCore 是一个跨平台统一编程工具集，为不同芯片平台的功
   - 天数智芯 GPU；
   - 沐曦 GPU；
   - 海光 DCU；
+  - 阿里 PPU；
 - 华为昇腾 NPU；
 - 寒武纪 MLU；
 - 昆仑芯 XPU；
@@ -103,6 +104,7 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
 | `--qy-gpu=[y\|n]`        | 是否编译QY GPU 接口实现           | n
 | `--hygon-dcu=[y\|n]`     | 是否编译海光 DCU 接口实现         | n
 | `--kunlun-xpu=[y\|n]`    | 是否编译昆仑 XPU 接口实现         | n
+| `--ali-ppu=[y\|n]`       | 是否编译阿里 PPU 接口实现         | n
 | `--ninetoothed=[y\|n]`   | 是否编译九齿实现                 | n
 | `--ccl=[y\|n]`           | 是否编译 InfiniCCL 通信库接口实现 | n
 
@@ -187,9 +189,9 @@ pip install -e .
 
 ```bash
 # 测试单算子
-python test/infinicore/ops/[operator].py [--bench | --debug | --verbose] [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun | --Hygon]
+python test/infinicore/ops/[operator].py [--bench | --debug | --verbose] [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun | --Hygon | --ali]
 # 测试全部算子
-python test/infinicore/run.py [--bench | --debug | --verbose] [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun]
+python test/infinicore/run.py [--bench | --debug | --verbose] [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun | --ali]
 ```
 
 使用 -h 查看更多参数。
@@ -198,9 +200,9 @@ python test/infinicore/run.py [--bench | --debug | --verbose] [--cpu | --nvidia 
 
 ```shell
 # 测试单算子
-python test/infiniop/[operator].py [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun | --Hygon]
+python test/infiniop/[operator].py [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun | --Hygon | --ali]
 # 测试全部算子
-python scripts/python_test.py [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun | --Hygon]
+python scripts/python_test.py [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun | --Hygon | --ali]
 ```
 
 #### 通信库（InfiniCCL）测试

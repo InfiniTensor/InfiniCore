@@ -39,6 +39,9 @@ def run_tests(args):
         "topkrouter.py",
         "topksoftmax.py",
         "zeros.py",
+        # "paged_attention.py",
+        # "paged_caching.py",
+        # "paged_attention_prefill.py"
     ]:
         result = subprocess.run(
             f"python {test} {args} --debug", text=True, encoding="utf-8", shell=True

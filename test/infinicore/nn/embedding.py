@@ -4,10 +4,15 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
-from framework.base import BaseOperatorTest, TensorSpec, TestCase
-from framework.runner import GenericTestRunner
-from framework.tensor import TensorInitializer
-from framework.utils import convert_infinicore_to_torch
+
+from framework import (
+    BaseOperatorTest,
+    GenericTestRunner,
+    TensorInitializer,
+    TensorSpec,
+    TestCase,
+    convert_infinicore_to_torch,
+)
 
 import infinicore
 
@@ -109,14 +114,9 @@ class OpTest(BaseOperatorTest):
 
     def infinicore_operator(self, x, weight):
         """InfiniCore nn.Embedding implementation"""
-
-        if x.device.type != "cpu":
-            # 将 input的数据 转移到 cpu 上
-            x_torch = convert_infinicore_to_torch(x)
-            x_torch_cpu = x_torch.contiguous().cpu()
-
-            x = infinicore.from_torch(x_torch_cpu)
-
+        # Note: embedding now supports device-side input for graph recording
+        # No need to convert to CPU anymore - the implementation handles both CPU and device inputs
+        
         num_embeddings, embedding_dim = weight.shape
 
         model = infinicore.nn.Embedding(

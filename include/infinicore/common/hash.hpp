@@ -2,6 +2,7 @@
 
 #include "../tensor.hpp"
 
+#include <optional>
 #include <type_traits>
 
 namespace infinicore {
@@ -21,6 +22,15 @@ inline void hash_combine(size_t &seed, Tensor tensor) {
     }
     for (Stride stride : tensor->strides()) {
         hash_combine(seed, static_cast<size_t>(stride));
+    }
+}
+
+// Specialization for optional
+template <typename T>
+inline void hash_combine(size_t &seed, const std::optional<T> &opt) {
+    hash_combine(seed, opt.has_value());
+    if (opt) {
+        hash_combine(seed, *opt);
     }
 }
 

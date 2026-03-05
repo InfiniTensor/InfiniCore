@@ -1,21 +1,12 @@
 #ifndef _TOPKROUTER_KERNEL_CUH__
 #define _TOPKROUTER_KERNEL_CUH__
-#include <cfloat>
-#include <cub/block/block_load.cuh>
-#include <cub/block/block_radix_sort.cuh>
-#include <cub/block/block_reduce.cuh>
-#include <cub/block/block_store.cuh>
-#include <cub/cub.cuh>
-#include <cuda_bf16.h>
-#include <cuda_fp16.h>
-#include <cuda_runtime.h>
 
 template <typename T>
 inline __device__ float exp_func(T x) {
     float data;
     if constexpr (std::is_same_v<T, float>) {
         data = x;
-    } else if constexpr (std::is_same_v<T, __nv_bfloat16>) {
+    } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
         data = __bfloat162float(x);
     } else if constexpr (std::is_same_v<T, half>) {
         data = __half2float(x);
@@ -35,6 +26,15 @@ struct CustomLess {
         return lhs > rhs;
     }
 };
+
+// Warp-level sum reduction for Hygon platform
+template <int warp_threads>
+__inline__ __device__ float WarpSum(float val) {
+    for (int mask = warp_threads / 2; mask > 0; mask /= 2) {
+        val += __shfl_xor_sync(0xffffffff, val, mask);
+    }
+    return val;
+}
 
 template <typename T, int BLOCK_THREADS = 256>
 __global__ void topkrouter_kernel(float *values_topk,             // 输出数据, 形状[N, topk]
@@ -146,12 +146,19 @@ __global__ void topkrouter_kernel(float *values_topk,             // 输出数�
             value = sigmoid_func(data_input[index]);
         }
         {
+#ifdef ENABLE_HYGON_API
+            float warp_sum = WarpSum<warp_threads>(value);
+            if (0 == tid) {
+                share_sum = warp_sum + 1e-9f;
+            }
+#else
             typedef cub::WarpReduce<float, warp_threads> WarpReduce;
             __shared__ typename WarpReduce::TempStorage temp_storage;
             float warp_sum = WarpReduce(temp_storage).Sum(value);
             if (0 == tid) {
                 share_sum = warp_sum + 1e-9f;
             }
+#endif
         }
         __syncwarp();
 

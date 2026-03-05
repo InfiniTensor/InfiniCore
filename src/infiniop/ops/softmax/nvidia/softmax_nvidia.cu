@@ -128,6 +128,9 @@ infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size,
     } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_4096) {
         CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_4096>(
             y, x, _info.dtype, _info.othersize, _info.dimsize, _info.stride, stream));
+    } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_2048) {
+        CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_2048>(
+            y, x, _info.dtype, _info.othersize, _info.dimsize, _info.stride, stream));
     } else {
         return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
     }

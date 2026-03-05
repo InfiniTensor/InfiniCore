@@ -22,6 +22,7 @@ inline void bind(py::module &m) {
         .value("QY", Device::Type::QY)
         .value("KUNLUN", Device::Type::KUNLUN)
         .value("HYGON", Device::Type::HYGON)
+        .value("ALI", Device::Type::ALI)
         .value("COUNT", Device::Type::COUNT);
 
     device

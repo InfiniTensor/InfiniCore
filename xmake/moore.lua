@@ -16,7 +16,22 @@ rule("mu")
         local mcc = MUSA_ROOT .. "/bin/mcc"
         local includedirs = table.concat(target:get("includedirs"), " ")
 
-        local args = {"-c", sourcefile, "-o", objectfile, "-I" .. MUSA_ROOT .. "/include", "-O3", "-fPIC", "-Wall", "-std=c++17", "-pthread"}
+        local args = {
+            "-c", sourcefile,
+            "-o", objectfile,
+            "-I" .. MUSA_ROOT .. "/include",
+            "-O3",
+            "-fPIC",
+            "-Wall",
+            "-std=c++17",
+            "-pthread"
+        }
+        local moore_gpu_arch = get_config("moore-gpu-arch")
+
+        if moore_gpu_arch == "mp_31" then
+            table.insert(args, 1, "--cuda-gpu-arch=mp_31")
+        end
+
         for _, includedir in ipairs(target:get("includedirs")) do
             table.insert(args, "-I" .. includedir)
         end
@@ -42,11 +57,15 @@ target("infiniop-moore")
     set_languages("cxx17")
     set_warnings("all", "error")
     add_cxflags("-lstdc++", "-fPIC", "-Wno-comment")
+    add_cxxflags("-lstdc++", "-fPIC", "-Wno-comment")
     add_files("../src/infiniop/devices/moore/*.cc")
     add_files("../src/infiniop/ops/*/moore/*.mu", {rule = "mu"})
 
     -- Add source files for Moore muBLAS/muDNN GEMM backends.
     add_files("../src/infiniop/ops/gemm/moore/*/*.mu", {rule = "mu"})
+
+    -- Add source files for Moore per_channel_quant_int8 backends.
+    add_files("../src/infiniop/ops/quant/per_channel_quant_int8/moore/*.mu", {rule = "mu"})
 target_end()
 
 target("infinirt-moore")
@@ -56,6 +75,7 @@ target("infinirt-moore")
     add_deps("infini-utils")
     set_warnings("all", "error")
     add_cxflags("-lstdc++", "-fPIC")
+    add_cxxflags("-lstdc++", "-fPIC")
     add_files("../src/infinirt/moore/*.cc")
 target_end()
 
@@ -66,10 +86,17 @@ target("infiniccl-moore")
     set_warnings("all", "error")
     if not is_plat("windows") then
         add_cxflags("-fPIC")
+        add_cxxflags("-fPIC")
     end
     if has_config("ccl") then
         add_links("libmccl.so")
         add_files("../src/infiniccl/moore/*.cc")
+        
+        -- Moore GPU arch with mp_31 support mcclBfloat16 in MCCL
+        if get_config("moore-gpu-arch") == "mp_31" then
+            add_defines("MARCH_TYPE=310")
+            add_cxxflags("-Wno-unused-function")
+        end
     end
     set_languages("cxx17")
 

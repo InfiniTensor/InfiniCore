@@ -5,14 +5,18 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/swiglu_cpu.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
-#include "nvidia/swiglu_nvidia.cuh"
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API) || defined(ENABLE_ALI_API)
+#include "nvidia/swiglu_nvidia_cuda.cuh"
 #endif
 #ifdef ENABLE_KUNLUN_API
 #include "kunlun/swiglu_kunlun.h"
 #endif
 #ifdef ENABLE_METAX_API
-#include "metax/swiglu_metax.h"
+#if defined(ENABLE_NINETOOTHED)
+#include "ninetoothed/swiglu.h"
+#else
+#include "metax/swiglu_metax_cuda.h"
+#endif
 #endif
 #ifdef ENABLE_CAMBRICON_API
 #include "bang/swiglu_bang.h"
@@ -40,28 +44,48 @@ __C infiniStatus_t infiniopCreateSwiGLUDescriptor(
             {a_desc,                                                          \
              b_desc})
 
+#define CREATE_CUDA(CASE, NAMESPACE)                                               \
+    case CASE:                                                                     \
+        return op::swiglu_cuda::NAMESPACE::Descriptor::create(                     \
+            handle,                                                                \
+            reinterpret_cast<op::swiglu_cuda::NAMESPACE::Descriptor **>(desc_ptr), \
+            c_desc,                                                                \
+            a_desc,                                                                \
+            b_desc)
+
     switch (handle->device) {
 
 #ifdef ENABLE_CPU_API
         CREATE(INFINI_DEVICE_CPU, cpu);
 #endif
 #ifdef ENABLE_NVIDIA_API
-        CREATE(INFINI_DEVICE_NVIDIA, nvidia);
+        CREATE_CUDA(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
 #ifdef ENABLE_ILUVATAR_API
-        CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
+#ifdef ENABLE_NINETOOTHED
+        CREATE(INFINI_DEVICE_ILUVATAR, ninetoothed);
+#else
+        CREATE_CUDA(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#endif
+#ifdef ENABLE_ALI_API
+        CREATE_CUDA(INFINI_DEVICE_ALI, nvidia);
 #endif
 #ifdef ENABLE_QY_API
-        CREATE(INFINI_DEVICE_QY, nvidia);
+        CREATE_CUDA(INFINI_DEVICE_QY, nvidia);
 #endif
 #ifdef ENABLE_HYGON_API
-        CREATE(INFINI_DEVICE_HYGON, nvidia);
+        CREATE_CUDA(INFINI_DEVICE_HYGON, nvidia);
 #endif
 #ifdef ENABLE_KUNLUN_API
         CREATE(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
 #ifdef ENABLE_METAX_API
-        CREATE(INFINI_DEVICE_METAX, metax);
+#ifdef ENABLE_NINETOOTHED
+        CREATE(INFINI_DEVICE_METAX, ninetoothed);
+#else
+        CREATE_CUDA(INFINI_DEVICE_METAX, metax);
+#endif
 #endif
 #ifdef ENABLE_CAMBRICON_API
         CREATE(INFINI_DEVICE_CAMBRICON, bang);
@@ -78,6 +102,7 @@ __C infiniStatus_t infiniopCreateSwiGLUDescriptor(
     }
 
 #undef CREATE
+#undef CREATE_CUDA
 }
 
 __C infiniStatus_t infiniopGetSwiGLUWorkspaceSize(infiniopSwiGLUDescriptor_t desc, size_t *size) {
@@ -87,27 +112,44 @@ __C infiniStatus_t infiniopGetSwiGLUWorkspaceSize(infiniopSwiGLUDescriptor_t des
         *size = reinterpret_cast<op::swiglu::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
         return INFINI_STATUS_SUCCESS
 
+#define GET_CUDA(CASE, NAMESPACE)                                                                  \
+    case CASE:                                                                                     \
+        *size = reinterpret_cast<op::swiglu_cuda::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
+        return INFINI_STATUS_SUCCESS
+
     switch (desc->device_type) {
+
 #ifdef ENABLE_CPU_API
         GET(INFINI_DEVICE_CPU, cpu);
 #endif
 #ifdef ENABLE_NVIDIA_API
-        GET(INFINI_DEVICE_NVIDIA, nvidia);
+        GET_CUDA(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
 #ifdef ENABLE_ILUVATAR_API
-        GET(INFINI_DEVICE_ILUVATAR, nvidia);
+#ifdef ENABLE_NINETOOTHED
+        GET(INFINI_DEVICE_ILUVATAR, ninetoothed);
+#else
+        GET_CUDA(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#endif
+#ifdef ENABLE_ALI_API
+        GET_CUDA(INFINI_DEVICE_ALI, nvidia);
 #endif
 #ifdef ENABLE_QY_API
-        GET(INFINI_DEVICE_QY, nvidia);
+        GET_CUDA(INFINI_DEVICE_QY, nvidia);
 #endif
 #ifdef ENABLE_HYGON_API
-        GET(INFINI_DEVICE_HYGON, nvidia);
+        GET_CUDA(INFINI_DEVICE_HYGON, nvidia);
 #endif
 #ifdef ENABLE_KUNLUN_API
         GET(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
 #ifdef ENABLE_METAX_API
-        GET(INFINI_DEVICE_METAX, metax);
+#ifdef ENABLE_NINETOOTHED
+        GET(INFINI_DEVICE_METAX, ninetoothed);
+#else
+        GET_CUDA(INFINI_DEVICE_METAX, metax);
+#endif
 #endif
 #ifdef ENABLE_CAMBRICON_API
         GET(INFINI_DEVICE_CAMBRICON, bang);
@@ -118,11 +160,12 @@ __C infiniStatus_t infiniopGetSwiGLUWorkspaceSize(infiniopSwiGLUDescriptor_t des
 #ifdef ENABLE_MOORE_API
         GET(INFINI_DEVICE_MOORE, moore);
 #endif
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
 
 #undef GET
-
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+#undef GET_CUDA
 }
 
 __C infiniStatus_t infiniopSwiGLU(
@@ -139,28 +182,44 @@ __C infiniStatus_t infiniopSwiGLU(
         return reinterpret_cast<const op::swiglu::NAMESPACE::Descriptor *>(desc) \
             ->calculate(workspace, workspace_size, c, {a, b}, stream)
 
+#define CALCULATE_CUDA(CASE, NAMESPACE)                                               \
+    case CASE:                                                                        \
+        return reinterpret_cast<const op::swiglu_cuda::NAMESPACE::Descriptor *>(desc) \
+            ->calculate(workspace, workspace_size, c, a, b, stream)
+
     switch (desc->device_type) {
 
 #ifdef ENABLE_CPU_API
         CALCULATE(INFINI_DEVICE_CPU, cpu);
 #endif
 #ifdef ENABLE_NVIDIA_API
-        CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
+        CALCULATE_CUDA(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
 #ifdef ENABLE_ILUVATAR_API
-        CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
+#ifdef ENABLE_NINETOOTHED
+        CALCULATE(INFINI_DEVICE_ILUVATAR, ninetoothed);
+#else
+        CALCULATE_CUDA(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#endif
+#ifdef ENABLE_ALI_API
+        CALCULATE_CUDA(INFINI_DEVICE_ALI, nvidia);
 #endif
 #ifdef ENABLE_QY_API
-        CALCULATE(INFINI_DEVICE_QY, nvidia);
+        CALCULATE_CUDA(INFINI_DEVICE_QY, nvidia);
 #endif
 #ifdef ENABLE_HYGON_API
-        CALCULATE(INFINI_DEVICE_HYGON, nvidia);
+        CALCULATE_CUDA(INFINI_DEVICE_HYGON, nvidia);
 #endif
 #ifdef ENABLE_KUNLUN_API
         CALCULATE(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
 #ifdef ENABLE_METAX_API
-        CALCULATE(INFINI_DEVICE_METAX, metax);
+#ifdef ENABLE_NINETOOTHED
+        CALCULATE(INFINI_DEVICE_METAX, ninetoothed);
+#else
+        CALCULATE_CUDA(INFINI_DEVICE_METAX, metax);
+#endif
 #endif
 #ifdef ENABLE_CAMBRICON_API
         CALCULATE(INFINI_DEVICE_CAMBRICON, bang);
@@ -177,6 +236,7 @@ __C infiniStatus_t infiniopSwiGLU(
     }
 
 #undef CALCULATE
+#undef CALCULATE_CUDA
 }
 
 __C infiniStatus_t
@@ -187,28 +247,44 @@ infiniopDestroySwiGLUDescriptor(infiniopSwiGLUDescriptor_t desc) {
         delete reinterpret_cast<const op::swiglu::NAMESPACE::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS;
 
+#define DELETE_CUDA(CASE, NAMESPACE)                                                   \
+    case CASE:                                                                         \
+        delete reinterpret_cast<const op::swiglu_cuda::NAMESPACE::Descriptor *>(desc); \
+        return INFINI_STATUS_SUCCESS;
+
     switch (desc->device_type) {
 
 #ifdef ENABLE_CPU_API
         DELETE(INFINI_DEVICE_CPU, cpu);
 #endif
 #ifdef ENABLE_NVIDIA_API
-        DELETE(INFINI_DEVICE_NVIDIA, nvidia);
+        DELETE_CUDA(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
 #ifdef ENABLE_ILUVATAR_API
-        DELETE(INFINI_DEVICE_ILUVATAR, nvidia);
+#ifdef ENABLE_NINETOOTHED
+        DELETE(INFINI_DEVICE_ILUVATAR, ninetoothed);
+#else
+        DELETE_CUDA(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#endif
+#ifdef ENABLE_ALI_API
+        DELETE_CUDA(INFINI_DEVICE_ALI, nvidia);
 #endif
 #ifdef ENABLE_QY_API
-        DELETE(INFINI_DEVICE_QY, nvidia);
+        DELETE_CUDA(INFINI_DEVICE_QY, nvidia);
 #endif
 #ifdef ENABLE_HYGON_API
-        DELETE(INFINI_DEVICE_HYGON, nvidia);
+        DELETE_CUDA(INFINI_DEVICE_HYGON, nvidia);
 #endif
 #ifdef ENABLE_KUNLUN_API
         DELETE(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
 #ifdef ENABLE_METAX_API
-        DELETE(INFINI_DEVICE_METAX, metax);
+#ifdef ENABLE_NINETOOTHED
+        DELETE(INFINI_DEVICE_METAX, ninetoothed);
+#else
+        DELETE_CUDA(INFINI_DEVICE_METAX, metax);
+#endif
 #endif
 #ifdef ENABLE_CAMBRICON_API
         DELETE(INFINI_DEVICE_CAMBRICON, bang);
@@ -225,4 +301,5 @@ infiniopDestroySwiGLUDescriptor(infiniopSwiGLUDescriptor_t desc) {
     }
 
 #undef DELETE
+#undef DELETE_CUDA
 }

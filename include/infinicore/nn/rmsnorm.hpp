@@ -1,7 +1,7 @@
 #pragma once
 
-#include "module.hpp"
 #include "../ops.hpp"
+#include "module.hpp"
 
 namespace infinicore::nn {
 
@@ -57,6 +57,21 @@ public:
      */
     Tensor forward(const Tensor &x) const;
 
+    /**
+     * @brief Forward pass: apply RMSNorm in-place with residual
+     *
+     * @param x Input tensor of shape (*, normalized_shape) where * is any number of dimensions.
+     *       Will be modified in-place to the normalized output.
+     * @param residual Residual tensor to add to input before normalization.
+     *       Will be modified in-place to the sum of input and residual.
+     *
+     * The normalization is applied over the last dimension.
+     * For example:
+     *   Input: [batch, seq_len, hidden_size] -> normalize over hidden_size
+     *   Input: [batch, hidden_size] -> normalize over hidden_size
+     */
+    void forward_inplace(Tensor &x, Tensor &residual) const;
+
     // Module information
     size_t normalized_shape() const { return normalized_shape_; }
     double eps() const { return eps_; }
@@ -73,9 +88,9 @@ protected:
     INFINICORE_NN_PARAMETER(weight);
 
 private:
-    size_t normalized_shape_;  // Size of the feature dimension
-    double eps_;               // Epsilon for numerical stability
-    DataType dtype_;           // Data type for weight
+    size_t normalized_shape_; // Size of the feature dimension
+    double eps_;              // Epsilon for numerical stability
+    DataType dtype_;          // Data type for weight
 };
 
 } // namespace infinicore::nn
