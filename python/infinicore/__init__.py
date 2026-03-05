@@ -60,6 +60,10 @@ from infinicore.ops.paged_caching import paged_caching
 from infinicore.ops.rearrange import rearrange
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.unsqueeze import unsqueeze
+from infinicore.ops.log10 import log10
+from infinicore.ops.log1p import log1p
+from infinicore.ops.histc import histc
+from infinicore.ops.dot import dot
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -137,6 +141,10 @@ __all__ = [
     "paged_caching",
     "paged_attention",
     "paged_attention_prefill",
+    "log10",
+    "log1p",
+    "histc",
+    "dot",
     "ones",
     "strided_empty",
     "strided_from_blob",
@@ -154,3 +162,9 @@ with contextlib.suppress(ImportError, ModuleNotFoundError):
         getattr(ntops.torch, op_name).__globals__["torch"] = sys.modules[__name__]
 
     use_ntops = True
+
+# Allow the official benchmark runner to use a default InfiniCore operator dispatcher
+# without modifying any files under test/infinicore.
+from infinicore._framework_patch import install_default_operator_dispatch
+
+install_default_operator_dispatch()
