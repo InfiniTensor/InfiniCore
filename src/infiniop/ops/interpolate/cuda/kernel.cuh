@@ -383,3 +383,75 @@ __global__ void area_2d_kernel(
 }
 
 } // namespace op::interpolate::cuda
+
+// ---------------------------------------------------------------------------
+// Compatibility wrappers for backends that still reference `op::cuda::*`.
+// These assume contiguous NCHW layout.
+// ---------------------------------------------------------------------------
+
+namespace op::cuda {
+
+template <typename T>
+__global__ void interpolate_bilinear_2d_kernel(
+    T *output,
+    const T *input,
+    size_t batch,
+    size_t channels,
+    size_t in_h,
+    size_t in_w,
+    size_t out_h,
+    size_t out_w,
+    double scale_h,
+    double scale_w,
+    int align_corners) {
+
+    const size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    const size_t total = batch * channels * out_h * out_w;
+    if (idx >= total) {
+        return;
+    }
+
+    const size_t n = idx / (channels * out_h * out_w);
+    size_t rem = idx - n * (channels * out_h * out_w);
+    const size_t c = rem / (out_h * out_w);
+    rem -= c * (out_h * out_w);
+    const size_t oh = rem / out_w;
+    const size_t ow = rem - oh * out_w;
+
+    double src_y = align_corners ? static_cast<double>(oh) * scale_h : (static_cast<double>(oh) + 0.5) * scale_h - 0.5;
+    double src_x = align_corners ? static_cast<double>(ow) * scale_w : (static_cast<double>(ow) + 0.5) * scale_w - 0.5;
+
+    src_y = fmax(0.0, fmin(src_y, static_cast<double>(in_h - 1)));
+    src_x = fmax(0.0, fmin(src_x, static_cast<double>(in_w - 1)));
+
+    const size_t y0 = static_cast<size_t>(floor(src_y));
+    const size_t x0 = static_cast<size_t>(floor(src_x));
+    const size_t y1 = (y0 + 1 < in_h) ? (y0 + 1) : y0;
+    const size_t x1 = (x0 + 1 < in_w) ? (x0 + 1) : x0;
+    const double wy = src_y - static_cast<double>(y0);
+    const double wx = src_x - static_cast<double>(x0);
+
+    using Tcompute = std::conditional_t<std::is_same_v<T, double>, double, float>;
+
+    const size_t base = ((n * channels + c) * in_h) * in_w;
+    const Tcompute v00 = op::interpolate::cuda::to_compute<Tcompute>(input[base + y0 * in_w + x0]);
+    const Tcompute v01 = op::interpolate::cuda::to_compute<Tcompute>(input[base + y0 * in_w + x1]);
+    const Tcompute v10 = op::interpolate::cuda::to_compute<Tcompute>(input[base + y1 * in_w + x0]);
+    const Tcompute v11 = op::interpolate::cuda::to_compute<Tcompute>(input[base + y1 * in_w + x1]);
+
+    const double w00 = (1.0 - wy) * (1.0 - wx);
+    const double w01 = (1.0 - wy) * wx;
+    const double w10 = wy * (1.0 - wx);
+    const double w11 = wy * wx;
+
+    const Tcompute out = static_cast<Tcompute>(
+        w00 * static_cast<double>(v00) +
+        w01 * static_cast<double>(v01) +
+        w10 * static_cast<double>(v10) +
+        w11 * static_cast<double>(v11));
+
+    output[((n * channels + c) * out_h + oh) * out_w + ow] =
+        op::interpolate::cuda::from_compute(out, op::interpolate::cuda::TypeTag<T>{});
+}
+
+} // namespace op::cuda

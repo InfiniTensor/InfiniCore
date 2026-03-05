@@ -136,4 +136,65 @@ __global__ void gaussian_nll_loss_finalize_kernel(
     }
 }
 
+// ---------------------------------------------------------------------------
+// Compatibility wrappers for backends that still reference the older contiguous
+// kernel signatures.
+// ---------------------------------------------------------------------------
+
+template <typename T>
+__global__ void gaussian_nll_loss_kernel(
+    T *output,
+    const T *input,
+    const T *target,
+    const T *var,
+    size_t n,
+    T eps_val,
+    int full) {
+
+    const size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= n) {
+        return;
+    }
+
+    using Tcompute = std::conditional_t<std::is_same_v<T, double>, double, float>;
+    const Tcompute eps_c = gaussian_nll_to_compute<Tcompute>(eps_val);
+    const Tcompute diff = gaussian_nll_to_compute<Tcompute>(input[idx]) - gaussian_nll_to_compute<Tcompute>(target[idx]);
+    const Tcompute var_val = gaussian_nll_to_compute<Tcompute>(var[idx]) + eps_c;
+    Tcompute loss = Tcompute(0.5) * (log(var_val) + (diff * diff) / var_val);
+    if (full) {
+        loss += Tcompute(0.9189385332046727);
+    }
+    output[idx] = gaussian_nll_from_compute(loss, GaussianNllTypeTag<T>{});
+}
+
+template <typename T, typename Tcompute>
+__global__ void gaussian_nll_loss_reduce_kernel(
+    T *output,
+    const T *input,
+    const T *target,
+    const T *var,
+    size_t n,
+    Tcompute eps_val,
+    int full) {
+
+    const size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    Tcompute sum = 0;
+
+    const Tcompute log_2pi = full ? Tcompute(0.9189385332046727) : Tcompute(0.0);
+    for (size_t i = idx; i < n; i += blockDim.x * gridDim.x) {
+        const Tcompute diff = gaussian_nll_to_compute<Tcompute>(input[i]) - gaussian_nll_to_compute<Tcompute>(target[i]);
+        const Tcompute var_val = gaussian_nll_to_compute<Tcompute>(var[i]) + eps_val;
+        const Tcompute loss = Tcompute(0.5) * (log(var_val) + (diff * diff) / var_val) + log_2pi;
+        sum += loss;
+    }
+
+    using BlockReduce = cub::BlockReduce<Tcompute, 256>;
+    __shared__ typename BlockReduce::TempStorage temp_storage;
+    const Tcompute block_sum = BlockReduce(temp_storage).Sum(sum);
+
+    if (threadIdx.x == 0) {
+        atomicAdd(reinterpret_cast<Tcompute *>(output), block_sum);
+    }
+}
+
 } // namespace op::cuda
