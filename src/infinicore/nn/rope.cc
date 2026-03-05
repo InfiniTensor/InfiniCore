@@ -16,12 +16,14 @@ RoPE::RoPE(size_t head_dim,
            double theta,
            Algo algo,
            const DataType &dtype,
-           const Device &device)
+           const Device &device,
+           std::shared_ptr<ScalingConfig> scaling)
     : head_dim_(head_dim),
       max_seq_len_(max_seq_len),
       theta_(theta),
       algo_(algo),
-      dtype_(dtype) {
+      dtype_(dtype),
+      scaling_(scaling) {
     if (head_dim % 2 != 0) {
         throw std::invalid_argument("head_dim must be even for RoPE, got " + std::to_string(head_dim));
     }
@@ -54,14 +56,30 @@ void RoPE::initialize_cache() {
         for (size_t j = 0; j < cache_dim; j++) {
             // GPT-J style inverse frequency: theta^(-2j/head_dim)
             // Compute directly in float to avoid double->float casting
-            float inv_freq = 1.0f / std::pow(static_cast<float>(theta_), 2.0f * static_cast<float>(j) / static_cast<float>(head_dim_));
+            float inv_freq;
+            float table_factor = 1.0f;
+            if (scaling_ == nullptr) {
+                inv_freq = 1.0f / std::pow(static_cast<float>(theta_), 2.0f * static_cast<float>(j) / static_cast<float>(head_dim_));
+            } else if (scaling_->type() == ScalingType::LONGROPE) {
+                std::shared_ptr<LongRopeConfig> lr = std::dynamic_pointer_cast<LongRopeConfig>(scaling_);
+                table_factor = lr->factor();
+                float _ext;
+                if (pos < lr->original_max_position_embeddings()) {
+                    _ext = lr->short_factor()[j];
+                } else {
+                    _ext = lr->long_factor()[j];
+                }
+                inv_freq = 1.0f / (_ext * std::pow(static_cast<float>(theta_), 2.0f * static_cast<float>(j) / static_cast<float>(head_dim_)));
+            } else {
+                inv_freq = 1.0f / std::pow(static_cast<float>(theta_), 2.0f * static_cast<float>(j) / static_cast<float>(head_dim_));
+            }
 
             // Compute angle: position * inverse_frequency
             float angle = static_cast<float>(pos) * inv_freq;
 
             // Compute sin and cos directly on float
-            sin_data[pos * cache_dim + j] = std::sin(angle);
-            cos_data[pos * cache_dim + j] = std::cos(angle);
+            sin_data[pos * cache_dim + j] = std::sin(angle) * table_factor;
+            cos_data[pos * cache_dim + j] = std::cos(angle) * table_factor;
         }
     }
 

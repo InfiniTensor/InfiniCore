@@ -1,3 +1,4 @@
+import concurrent.futures
 import functools
 import inspect
 import itertools
@@ -16,40 +17,28 @@ BUILD_DIRECTORY_PATH = (
 def build(premake, constexpr_param_grid, caller, op_name, output_dir):
     headers = []
     all_param_names = []
+    combinations = []
     launches = []
 
-    for combination in _generate_param_value_combinations(constexpr_param_grid):
-        arrangement, application, tensors = premake(**combination)
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        futures = []
 
-        for param_name, param_value in combination.items():
-            if isinstance(param_value, str):
-                combination[param_name] = (
-                    f"INFINI_DTYPE_{combination[param_name].replace('fp', 'F').upper()}"
-                )
+        for combination in tuple(
+            _generate_param_value_combinations(constexpr_param_grid)
+        ):
+            future = executor.submit(
+                _make, premake, combination, caller, op_name, output_dir
+            )
 
-        combination = {f"{name}_": value for name, value in combination.items()}
+            futures.append(future)
 
-        kernel_name = f"{op_name}_{_generate_suffix(combination.values())}"
+        for future in concurrent.futures.as_completed(futures):
+            header, param_names, combination, launch = future.result()
 
-        ninetoothed.make(
-            arrangement,
-            application,
-            tensors,
-            caller=caller,
-            kernel_name=kernel_name,
-            output_dir=output_dir,
-        )
-
-        header = output_dir / f"{kernel_name}.h"
-        param_names = ("stream",) + tuple(
-            inspect.signature(application).parameters.keys()
-        )
-        launch = f"""    if ({_generate_condition(combination)})
-        return launch_{kernel_name}({", ".join(param_names)});"""
-
-        headers.append(header)
-        all_param_names.append(param_names)
-        launches.append(launch)
+            headers.append(header)
+            all_param_names.append(param_names)
+            combinations.append(combination)
+            launches.append(launch)
 
     includes = "\n".join(f'#include "{header}"' for header in headers)
 
@@ -64,7 +53,7 @@ def build(premake, constexpr_param_grid, caller, op_name, output_dir):
         "NineToothedStream",
     ] + ["NineToothedTensor" for _ in range(len(param_names) - 1)]
 
-    for param_name in combination:
+    for param_name in functools.reduce(lambda x, y: x | y, combinations, {}):
         param_names.append(param_name)
         param_types.append("int")
 
@@ -95,6 +84,36 @@ def build(premake, constexpr_param_grid, caller, op_name, output_dir):
 
     (BUILD_DIRECTORY_PATH / source_file_name).write_text(source_content)
     (BUILD_DIRECTORY_PATH / header_file_name).write_text(header_content)
+
+
+def _make(premake, combination, caller, op_name, output_dir):
+    arrangement, application, tensors = premake(**combination)
+
+    for param_name, param_value in combination.items():
+        if isinstance(param_value, str):
+            combination[param_name] = (
+                f"INFINI_DTYPE_{combination[param_name].replace('fp', 'F').upper()}"
+            )
+
+    combination = {f"{name}_": value for name, value in combination.items()}
+
+    kernel_name = f"{op_name}_{_generate_suffix(combination.values())}"
+
+    ninetoothed.make(
+        arrangement,
+        application,
+        tensors,
+        caller=caller,
+        kernel_name=kernel_name,
+        output_dir=output_dir,
+    )
+
+    header = output_dir / f"{kernel_name}.h"
+    param_names = ("stream",) + tuple(inspect.signature(application).parameters.keys())
+    launch = f"""    if ({_generate_condition(combination)})
+        return launch_{kernel_name}({", ".join(param_names)});"""
+
+    return header, param_names, combination, launch
 
 
 def _generate_condition(combination):

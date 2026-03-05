@@ -25,17 +25,15 @@ static void calculate(
     // cache per (result desc + logits desc) on device
     size_t seed = hash_combine(indices, logits);
 
-    auto device_type = context::getDevice().getType();
-    auto device_index = context::getDevice().getIndex();
-
-    auto &cache = caches.getCache(device_type, device_index);
+    auto device = context::getDevice();
+    auto &cache = caches.getCache(device);
 
     auto desc_opt = cache.get(seed);
     infiniopRandomSampleDescriptor_t desc = nullptr;
 
     if (!desc_opt) {
         INFINICORE_CHECK_ERROR(infiniopCreateRandomSampleDescriptor(
-            context::getInfiniopHandle(indices->device()), &desc,
+            context::getInfiniopHandle(device), &desc,
             indices->desc(), logits->desc()));
         cache.put(seed, desc);
     } else {

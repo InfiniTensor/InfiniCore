@@ -3,10 +3,11 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import torch
 import infinicore
+import torch
 from framework import (
     BaseOperatorTest,
+    CaseResult,
     TensorSpec,
     TestCase,
     GenericTestRunner,
@@ -122,7 +123,7 @@ class OpTest(BaseOperatorTest):
                 and isinstance(test_case.inputs[0], TensorSpec)
                 and test_case.inputs[0].strides is not None
             ):
-                return TestResult(
+                return CaseResult(
                     success=False,
                     return_code=-2,
                     test_case=test_case,
@@ -135,7 +136,7 @@ class OpTest(BaseOperatorTest):
                 and isinstance(test_case.output_spec, TensorSpec)
                 and test_case.output_spec.strides is not None
             ):
-                return TestResult(
+                return CaseResult(
                     success=False,
                     return_code=-2,
                     test_case=test_case,

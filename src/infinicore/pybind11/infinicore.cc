@@ -6,6 +6,7 @@
 #include "device.hpp"
 #include "device_event.hpp"
 #include "dtype.hpp"
+#include "graph.hpp"
 #include "ops.hpp"
 #include "tensor.hpp"
 
@@ -18,6 +19,7 @@ PYBIND11_MODULE(_infinicore, m) {
     dtype::bind(m);
     ops::bind(m);
     tensor::bind(m);
+    graph::bind(m);
 }
 
 } // namespace infinicore

@@ -5,7 +5,7 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/relu_cpu.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_ALI_API)
 #include "nvidia/relu_nvidia.cuh"
 #endif
 #ifdef ENABLE_METAX_API
@@ -47,6 +47,9 @@ __C infiniStatus_t infiniopCreateReluDescriptor(
         CREATE(INFINI_DEVICE_METAX, metax);
 #endif
 #endif
+#ifdef ENABLE_ALI_API
+        CREATE(INFINI_DEVICE_ALI, nvidia);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -80,6 +83,10 @@ __C infiniStatus_t infiniopGetReluWorkspaceSize(infiniopReluDescriptor_t desc, s
         GET(INFINI_DEVICE_METAX, metax)
 #endif
 #endif
+#ifdef ENABLE_ALI_API
+        GET(INFINI_DEVICE_ALI, nvidia);
+#endif
+
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -120,6 +127,9 @@ __C infiniStatus_t infiniopRelu(
         CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
 #endif
+#ifdef ENABLE_ALI_API
+        CALCULATE(INFINI_DEVICE_ALI, nvidia);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -154,6 +164,9 @@ infiniopDestroyReluDescriptor(infiniopReluDescriptor_t desc) {
 #ifdef ENABLE_NINETOOTHED
         DELETE(INFINI_DEVICE_METAX, metax);
 #endif
+#endif
+#ifdef ENABLE_ALI_API
+        DELETE(INFINI_DEVICE_ALI, nvidia);
 #endif
 
     default:

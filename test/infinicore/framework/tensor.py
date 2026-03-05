@@ -3,7 +3,7 @@ import math
 from pathlib import Path
 from .datatypes import to_torch_dtype
 from .devices import torch_device_map
-from .utils import is_integer_dtype, is_complex_dtype
+from .utils.tensor_utils import is_integer_dtype, is_complex_dtype
 
 
 class TensorInitializer:
@@ -60,7 +60,12 @@ class TensorInitializer:
 
         # Handle real floating-point types
         if mode == TensorInitializer.RANDOM:
-            return torch.rand(shape, dtype=torch_dtype, device=torch_device_str)
+            scale = kwargs.get("scale", 1.0)
+            bias = kwargs.get("bias", 0.0)
+            return (
+                torch.rand(shape, dtype=torch_dtype, device=torch_device_str) * scale
+                + bias
+            )
         elif mode == TensorInitializer.ZEROS:
             return torch.zeros(shape, dtype=torch_dtype, device=torch_device_str)
         elif mode == TensorInitializer.ONES:

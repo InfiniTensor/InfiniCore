@@ -23,6 +23,10 @@ Handle::Internal::Internal(int device_id) {
     _grid_size[0] = prop.maxGridSize[0];
     _grid_size[1] = prop.maxGridSize[1];
     _grid_size[2] = prop.maxGridSize[2];
+    this->useCublas(nullptr, [](cublasHandle_t handle) { return INFINI_STATUS_SUCCESS; });
+#ifdef ENABLE_CUDNN_API
+    this->useCudnn(nullptr, [](cudnnHandle_t handle) { return INFINI_STATUS_SUCCESS; });
+#endif
 }
 
 infiniStatus_t Handle::Internal::useCublas(cudaStream_t stream, const Fn<cublasHandle_t> &f) const {
@@ -105,6 +109,18 @@ infiniStatus_t Handle::create(InfiniopHandle **handle_ptr, int device_id) {
 }
 
 } // namespace iluvatar
+
+namespace ali {
+
+Handle::Handle(int device_id)
+    : nvidia::Handle(INFINI_DEVICE_ALI, device_id) {}
+
+infiniStatus_t Handle::create(InfiniopHandle **handle_ptr, int device_id) {
+    *handle_ptr = new Handle(device_id);
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace ali
 
 namespace qy {
 

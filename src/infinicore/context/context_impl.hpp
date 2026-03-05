@@ -19,9 +19,7 @@ protected:
 public:
     Runtime *getCurrentRuntime();
 
-    Runtime *getCpuRuntime();
-
-    void setDevice(Device, bool force_cpu = false);
+    void setDevice(Device);
 
     size_t getDeviceCount(Device::Type type);
 
