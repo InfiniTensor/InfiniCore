@@ -32,3 +32,6 @@ cache/
 *.gz
 *.zip
 *.tar
+
+# Humanize RLCR loop state
+.humanize/
