@@ -7,8 +7,10 @@
 
 namespace op::cuda {
 
-template <typename T>
 struct ErfOp {
+    static constexpr size_t num_inputs = 1;
+
+    template <typename T>
     __device__ __forceinline__ T operator()(T x) const {
         if constexpr (std::is_same_v<T, float>) {
             return erff(x);

@@ -3,6 +3,7 @@
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
+#include <math_constants.h>
 #include <type_traits>
 
 namespace op::cuda {
@@ -29,8 +30,10 @@ __device__ __forceinline__ T erfinv_impl(T x) {
     return y;
 }
 
-template <typename T>
 struct ErfinvOp {
+    static constexpr size_t num_inputs = 1;
+
+    template <typename T>
     __device__ __forceinline__ T operator()(T x) const {
         if constexpr (std::is_same_v<T, float>) {
             return erfinv_impl(x);

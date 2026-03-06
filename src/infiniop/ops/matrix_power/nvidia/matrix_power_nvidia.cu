@@ -1,8 +1,10 @@
 #include "matrix_power_nvidia.cuh"
 #include "../../../utils.h"
 #include "../../../devices/nvidia/nvidia_handle.cuh"
+#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
+#include <algorithm>
 #include <vector>
 #include <cstring>
 
@@ -68,10 +70,9 @@ infiniStatus_t Descriptor::calculate(
 
     // Use workspace for temporary matrices
     void *temp1 = workspace;
-    void *temp2 = reinterpret_cast<char *>(workspace) + n * n * infiniopGetDtypeSize(_dtype);
 
-    size_t input_bytes = input_size * infiniopGetDtypeSize(_dtype);
-    size_t output_bytes = output_size * infiniopGetDtypeSize(_dtype);
+    size_t input_bytes = input_size * infiniSizeOf(_dtype);
+    size_t output_bytes = output_size * infiniSizeOf(_dtype);
     
     // Initialize result as identity matrix
     CHECK_CUDA(cudaMemsetAsync(y, 0, output_bytes, cuda_stream));
@@ -81,7 +82,6 @@ infiniStatus_t Descriptor::calculate(
     // Copy input to temp1
     CHECK_CUDA(cudaMemcpyAsync(temp1, x, input_bytes, cudaMemcpyDeviceToDevice, cuda_stream));
 
-    size_t input_bytes = input_size * infiniopGetDtypeSize(_dtype);
     std::vector<float> h_matrix(input_size);
     CHECK_CUDA(cudaMemcpyAsync(h_matrix.data(), x, input_bytes, cudaMemcpyDeviceToHost, cuda_stream));
     CHECK_CUDA(cudaStreamSynchronize(cuda_stream));

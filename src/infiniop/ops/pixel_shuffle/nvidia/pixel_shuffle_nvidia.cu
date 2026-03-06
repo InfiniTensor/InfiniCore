@@ -75,9 +75,9 @@ infiniStatus_t Descriptor::calculate(
             upscale_factor);
         break;
     case INFINI_DTYPE_BF16:
-        cuda::pixel_shuffle_kernel<cuda_bfloat16><<<num_blocks, BLOCK_SIZE, 0, cuda_stream>>>(
-            reinterpret_cast<cuda_bfloat16 *>(y),
-            reinterpret_cast<const cuda_bfloat16 *>(x),
+        cuda::pixel_shuffle_kernel<__nv_bfloat16><<<num_blocks, BLOCK_SIZE, 0, cuda_stream>>>(
+            reinterpret_cast<__nv_bfloat16 *>(y),
+            reinterpret_cast<const __nv_bfloat16 *>(x),
             batch, out_channels, height * upscale_factor, width * upscale_factor,
             upscale_factor);
         break;
