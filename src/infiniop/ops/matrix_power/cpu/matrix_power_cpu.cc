@@ -110,12 +110,43 @@ void matrix_power_impl(
     }
 }
 
+template <typename T>
+void write_identity_impl(size_t n, T *y) {
+    std::fill(y, y + n * n, utils::cast<T>(0.0));
+    for (size_t i = 0; i < n; ++i) {
+        y[i * n + i] = utils::cast<T>(1.0);
+    }
+}
+
 infiniStatus_t Descriptor::calculate(
     void *workspace,
     size_t workspace_size,
     void *y,
     const void *x,
     void *stream) const {
+
+    if (_info.matrix_size == 0) {
+        return INFINI_STATUS_SUCCESS;
+    }
+    if (_info.n == 0) {
+        const size_t n = _info.matrix_size;
+        switch (_dtype) {
+        case INFINI_DTYPE_F16:
+            write_identity_impl<fp16_t>(n, reinterpret_cast<fp16_t *>(y));
+            return INFINI_STATUS_SUCCESS;
+        case INFINI_DTYPE_BF16:
+            write_identity_impl<bf16_t>(n, reinterpret_cast<bf16_t *>(y));
+            return INFINI_STATUS_SUCCESS;
+        case INFINI_DTYPE_F32:
+            write_identity_impl<float>(n, reinterpret_cast<float *>(y));
+            return INFINI_STATUS_SUCCESS;
+        case INFINI_DTYPE_F64:
+            write_identity_impl<double>(n, reinterpret_cast<double *>(y));
+            return INFINI_STATUS_SUCCESS;
+        default:
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
+    }
 
     if (workspace_size < this->workspaceSize()) {
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;

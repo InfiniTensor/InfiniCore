@@ -40,6 +40,9 @@ public:
         int n);
 
     size_t workspaceSize() const {
+        if (_info.n == 0 || _info.matrix_size == 0) {
+            return 0;
+        }
         const size_t elems = 2 * _info.matrix_size * _info.matrix_size;
         switch (_dtype) {
         case INFINI_DTYPE_F16:
