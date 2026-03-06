@@ -40,6 +40,15 @@ Tensor diff(const Tensor &x, int n, int dim) {
     y_shape[static_cast<size_t>(d)] = (dim_size >= static_cast<size_t>(n)) ? (dim_size - static_cast<size_t>(n)) : 0;
 
     auto y = Tensor::empty(y_shape, x->dtype(), x->device());
+    if (n == 0) {
+        y->copy_from(x);
+        return y;
+    }
+    if (dim_size <= static_cast<size_t>(n)) {
+        // Empty output by definition; nothing to compute.
+        return y;
+    }
+
     diff_(y, x, n, dim);
     return y;
 }
@@ -49,8 +58,21 @@ void diff_(Tensor y, const Tensor &x, int n, int dim) {
         throw std::runtime_error("diff_: n must be non-negative.");
     }
     const int d = normalize_dim(dim, x->shape().size());
+    Shape expected = x->shape();
+    const auto dim_size = expected[static_cast<size_t>(d)];
+    expected[static_cast<size_t>(d)] = (dim_size >= static_cast<size_t>(n)) ? (dim_size - static_cast<size_t>(n)) : 0;
+    if (y->shape() != expected) {
+        throw std::runtime_error("diff_: output tensor has incorrect shape.");
+    }
+    if (n == 0) {
+        y->copy_from(x);
+        return;
+    }
+    if (x->shape()[static_cast<size_t>(d)] <= static_cast<size_t>(n)) {
+        // Empty output by definition; nothing to compute.
+        return;
+    }
     Diff::execute(y, x, d, n);
 }
 
 } // namespace infinicore::op
-

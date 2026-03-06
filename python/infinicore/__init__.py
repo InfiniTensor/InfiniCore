@@ -123,7 +123,6 @@ __all__ = [
     # Operations.
     "add",
     "add_rms_norm",
-    "add_rms_norm_",
     "attention",
     "kv_caching",
     "matmul",
@@ -255,4 +254,19 @@ def _install_test_framework_adapter() -> None:
     _apply_if_ready()
 
 
-_install_test_framework_adapter()
+def _should_install_test_framework_adapter() -> bool:
+    """
+    Install the runtime test adapter only when the test framework is present.
+
+    This avoids import-time monkeypatching in normal library usage.
+    """
+    import importlib.util
+    import os
+
+    if os.getenv("INFINICORE_ENABLE_TEST_ADAPTER") in {"1", "true", "TRUE", "yes", "YES"}:
+        return True
+    return importlib.util.find_spec("framework") is not None
+
+
+if _should_install_test_framework_adapter():
+    _install_test_framework_adapter()
