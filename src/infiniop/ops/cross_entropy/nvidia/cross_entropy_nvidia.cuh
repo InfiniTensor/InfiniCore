@@ -3,7 +3,6 @@
 
 #include "../cross_entropy.h"
 
-
 DESCRIPTOR(nvidia)
 
-#endif 
+#endif

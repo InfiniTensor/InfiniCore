@@ -58,4 +58,4 @@ static bool registered = []() {
     return true;
 }();
 
-} 
+} // namespace infinicore::op::hardswish_impl::infiniop

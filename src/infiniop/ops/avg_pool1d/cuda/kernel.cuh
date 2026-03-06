@@ -12,7 +12,7 @@ __device__ void avgPool1dKernel(
     size_t kernel_size,
     size_t stride,
     size_t padding,
-    
+
     ptrdiff_t y_stride_batch,
     ptrdiff_t y_stride_channel,
     ptrdiff_t y_stride_width,
@@ -20,44 +20,32 @@ __device__ void avgPool1dKernel(
     ptrdiff_t x_stride_channel,
     ptrdiff_t x_stride_width) {
 
-    
-    
     size_t total_elements = batch * channels * out_width;
 
-    
-    for (size_t idx = blockIdx.x * blockDim.x + threadIdx.x; 
-         idx < total_elements; 
+    for (size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+         idx < total_elements;
          idx += gridDim.x * blockDim.x) {
 
-        
         size_t ow = idx % out_width;
         size_t temp = idx / out_width;
         size_t c = temp % channels;
         size_t b = temp / channels;
 
-        
         size_t y_offset = b * y_stride_batch + c * y_stride_channel + ow * y_stride_width;
 
-        
         long long start_w = static_cast<long long>(ow * stride) - padding;
-        
-        
+
         T sum = 0;
-        
-        
-        
+
         for (size_t k = 0; k < kernel_size; ++k) {
             long long iw = start_w + k;
-            
-            
+
             if (iw >= 0 && iw < static_cast<long long>(in_width)) {
                 size_t x_offset = b * x_stride_batch + c * x_stride_channel + iw * x_stride_width;
                 sum += x[x_offset];
             }
         }
 
-        
-        
 #if defined(ENABLE_ILUVATAR_API)
         // Iluvatar __half doesn't accept size_t directly.
         y[y_offset] = sum / static_cast<T>(static_cast<double>(kernel_size));
@@ -67,4 +55,4 @@ __device__ void avgPool1dKernel(
     }
 }
 
-#endif 
+#endif

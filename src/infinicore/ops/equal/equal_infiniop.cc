@@ -54,4 +54,4 @@ static bool registered = []() {
     return true;
 }();
 
-} 
+} // namespace infinicore::op::equal_impl::infiniop

@@ -6,8 +6,7 @@ namespace op::hardswish::cpu {
 namespace {
 
 inline bool can_use_contiguous_fast_path(const op::elementwise::ElementwiseInfo &info) {
-    return info.isOutputContiguous() && info.getInputSize() == 1 &&
-           info.getInputContiguous()[0] && !info.getInputBroadcasted()[0];
+    return info.isOutputContiguous() && info.getInputSize() == 1 && info.getInputContiguous()[0] && !info.getInputBroadcasted()[0];
 }
 
 template <typename T>
@@ -25,7 +24,7 @@ infiniStatus_t launch_contiguous_cpu(const op::elementwise::ElementwiseInfo &inf
     return INFINI_STATUS_SUCCESS;
 }
 
-} 
+} // namespace
 
 Descriptor::~Descriptor() = default;
 
@@ -38,19 +37,14 @@ infiniStatus_t Descriptor::create(
     auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
     auto dtype = out_desc->dtype();
 
-    
     const auto &input_desc = input_desc_vec.at(0);
     const auto &output_shape = out_desc->shape();
     const auto &input_shape = input_desc->shape();
 
-    
     CHECK_DTYPE(dtype, INFINI_DTYPE_BF16, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64);
 
-    
     CHECK_SAME_SHAPE(output_shape, input_shape);
 
-    
-    
     CREATE_ELEMENTWISE_CPU_DESCRIPTOR(handle, dtype, out_desc, input_desc_vec);
 
     return INFINI_STATUS_SUCCESS;
@@ -79,8 +73,6 @@ infiniStatus_t Descriptor::calculate(
         }
     }
 
-    
-    
     switch (_dtype) {
     case INFINI_DTYPE_BF16:
         return _device_info->calculate<HardSwishOp, bf16_t>(_info, output, inputs, stream);
@@ -96,4 +88,4 @@ infiniStatus_t Descriptor::calculate(
 
     return INFINI_STATUS_SUCCESS;
 }
-} 
+} // namespace op::hardswish::cpu

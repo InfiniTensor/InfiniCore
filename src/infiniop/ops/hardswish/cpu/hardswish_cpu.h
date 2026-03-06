@@ -3,19 +3,15 @@
 
 #include "../../../elementwise/cpu/elementwise_cpu.h"
 
-
-
 ELEMENTWISE_DESCRIPTOR(hardswish, cpu)
 
-#include <algorithm> 
+#include <algorithm>
 #include <cmath>
 
 namespace op::hardswish::cpu {
 
-
 typedef struct HardSwishOp {
 public:
-    
     static constexpr size_t num_inputs = 1;
 
     template <typename T>
@@ -33,29 +29,22 @@ public:
 
     template <typename T>
     T operator()(const T &x) const {
-        
-        
 
-        
         T three = static_cast<T>(3);
         T zero = static_cast<T>(0);
         T six = static_cast<T>(6);
-        
+
         T scale = static_cast<T>(0.16666667f);
 
-        
         T val = x + three;
 
-        
-        
-        val = std::max(zero, val); 
-        val = std::min(six, val);  
+        val = std::max(zero, val);
+        val = std::min(six, val);
 
-        
         return x * val * scale;
     }
 } HardSwishContiguousOp;
 
-} 
+} // namespace op::hardswish::cpu
 
-#endif 
+#endif

@@ -19,8 +19,7 @@ void Hardswish::execute(Tensor output, Tensor input) {
 
     if (func == nullptr) {
         throw std::runtime_error(
-            "No Hardswish implementation found for device type: " +
-            std::to_string(static_cast<int>(device_type)));
+            "No Hardswish implementation found for device type: " + std::to_string(static_cast<int>(device_type)));
     }
 
     func(output, input);
@@ -36,4 +35,4 @@ void hardswish_(Tensor output, Tensor input) {
     Hardswish::execute(output, input);
 }
 
-} 
+} // namespace infinicore::op

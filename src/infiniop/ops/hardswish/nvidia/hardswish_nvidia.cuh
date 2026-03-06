@@ -3,7 +3,6 @@
 
 #include "../../../elementwise/nvidia/elementwise_nvidia_api.cuh"
 
-
 ELEMENTWISE_DESCRIPTOR(hardswish, nvidia)
 
-#endif 
+#endif

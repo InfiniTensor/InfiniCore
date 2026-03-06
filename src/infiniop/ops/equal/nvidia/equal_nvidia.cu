@@ -40,7 +40,7 @@ infiniStatus_t launchFastEqualKernel(size_t numel,
     return err == cudaSuccess ? INFINI_STATUS_SUCCESS : INFINI_STATUS_INTERNAL_ERROR;
 }
 
-} 
+} // namespace
 
 namespace op::equal::nvidia {
 
@@ -53,9 +53,7 @@ infiniStatus_t Descriptor::create(
     std::vector<infiniopTensorDescriptor_t> input_desc_vec) {
 
     auto handle = reinterpret_cast<device::nvidia::Handle *>(handle_);
-    
-    
-    
+
     const auto &a_desc = input_desc_vec.at(0);
     auto compute_dtype = a_desc->dtype();
     auto out_dtype = out_desc->dtype();
@@ -65,17 +63,13 @@ infiniStatus_t Descriptor::create(
     const auto &a_shape = a_desc->shape();
     const auto &b_shape = b_desc->shape();
 
-    
-    CHECK_DTYPE(compute_dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_BF16, 
+    CHECK_DTYPE(compute_dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_BF16,
                 INFINI_DTYPE_I32, INFINI_DTYPE_I64, INFINI_DTYPE_F64);
-    
-    
+
     CHECK_DTYPE(out_dtype, INFINI_DTYPE_BOOL, INFINI_DTYPE_U8, INFINI_DTYPE_I8);
 
     CHECK_SAME_SHAPE(c_shape, a_shape, b_shape);
 
-    
-    
     CREATE_ELEMENTWISE_CUDA_DESCRIPTOR(handle, compute_dtype, out_desc, input_desc_vec)
 
     return INFINI_STATUS_SUCCESS;
@@ -175,4 +169,4 @@ infiniStatus_t Descriptor::calculate(
 
     return INFINI_STATUS_SUCCESS;
 }
-} 
+} // namespace op::equal::nvidia

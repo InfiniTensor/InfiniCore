@@ -5,19 +5,16 @@
 
 #include "../../../elementwise/cpu/elementwise_cpu.h"
 
-
 ELEMENTWISE_DESCRIPTOR(equal, cpu)
 
 namespace op::equal::cpu {
-
 
 typedef struct EqualOp {
 public:
     static constexpr size_t num_inputs = 2;
 
     template <typename T>
-    
-    
+
     T operator()(const T &a, const T &b) const {
         return static_cast<T>(a == b);
     }
@@ -29,6 +26,6 @@ public:
     }
 } EqualOp;
 
-} 
+} // namespace op::equal::cpu
 
-#endif 
+#endif

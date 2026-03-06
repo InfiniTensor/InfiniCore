@@ -2,10 +2,10 @@
 #define __INFINIOP_ELEMENTWISE_MOORE_H__
 
 #include "../../../utils.h"
-#include <type_traits>
 #include "../../devices/moore/moore_common.h"
 #include "../../devices/moore/moore_kernel_common.h"
 #include "elementwise_moore_api.h"
+#include <type_traits>
 
 namespace op::elementwise::moore {
 template <typename T>

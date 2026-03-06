@@ -79,8 +79,8 @@ static infiniStatus_t launchCpuHardTanh(const op::elementwise::ElementwiseInfo &
                                  ? static_cast<size_t>(i)
                                  : op::common_cpu::indexToOffset(i, ndim, output_shape, output_strides);
         const size_t in_idx = input_contiguous[0]
-                                  ? static_cast<size_t>(i)
-                                  : op::common_cpu::indexToOffset(i, ndim, input_shape, input_strides);
+                                ? static_cast<size_t>(i)
+                                : op::common_cpu::indexToOffset(i, ndim, input_shape, input_strides);
 
         if constexpr (std::is_same_v<T, fp16_t> || std::is_same_v<T, bf16_t>) {
             float value = utils::cast<float>(in[in_idx]);
@@ -121,4 +121,4 @@ infiniStatus_t Descriptor::calculate(
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
 }
-} 
+} // namespace op::hardtanh::cpu

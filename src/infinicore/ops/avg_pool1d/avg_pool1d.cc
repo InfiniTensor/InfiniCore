@@ -29,8 +29,7 @@ void AvgPool1d::execute(
 
     if (func == nullptr) {
         throw std::runtime_error(
-            "No AvgPool1d implementation for device type: " +
-            std::to_string(static_cast<int>(device_type)));
+            "No AvgPool1d implementation for device type: " + std::to_string(static_cast<int>(device_type)));
     }
 
     func(output, input, kernel_size, stride, padding);
@@ -66,4 +65,4 @@ void avg_pool1d_(Tensor output, Tensor input, size_t kernel_size, size_t stride,
     AvgPool1d::execute(output, input, kernel_size, stride, padding);
 }
 
-} 
+} // namespace infinicore::op

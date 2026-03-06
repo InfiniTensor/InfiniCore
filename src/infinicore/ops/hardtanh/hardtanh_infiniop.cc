@@ -60,4 +60,4 @@ static bool registered = []() {
     return true;
 }();
 
-} 
+} // namespace infinicore::op::hardtanh_impl::infiniop

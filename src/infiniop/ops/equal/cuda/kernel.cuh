@@ -2,11 +2,11 @@
 #define __EQUAL_CUDA_H__
 
 #if defined(__MACACC__)
-#include <maca_fp16.h>
 #include <maca_bfloat16.h>
+#include <maca_fp16.h>
 #else
-#include <cuda_fp16.h>
 #include <cuda_bf16.h>
+#include <cuda_fp16.h>
 #endif
 #include <type_traits>
 
@@ -18,25 +18,24 @@ public:
 
     template <typename T>
     __device__ __forceinline__ T operator()(const T &a, const T &b) const {
-        
+
         if constexpr (std::is_same_v<T, half2>) {
-            
+
             return __heq2(a, b);
-        } 
-        
+        }
+
         else if constexpr (std::is_same_v<T, half>) {
-            
+
             return static_cast<T>(__heq(a, b));
         }
-        
+
         else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
-            
-             return static_cast<T>(a == b);
+
+            return static_cast<T>(a == b);
         }
-        
+
         else {
-            
-            
+
             return static_cast<T>(a == b);
         }
     }
@@ -54,6 +53,6 @@ public:
     }
 } EqualOp;
 
-} 
+} // namespace op::equal::cuda
 
-#endif 
+#endif

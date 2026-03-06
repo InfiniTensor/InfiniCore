@@ -1,7 +1,7 @@
 #pragma once
 
-#include <pybind11/pybind11.h>
 #include <optional>
+#include <pybind11/pybind11.h>
 
 #include "infinicore/ops/avg_pool1d.hpp"
 

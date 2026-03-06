@@ -19,8 +19,7 @@ void HardTanh::execute(Tensor output, Tensor input, float min_val, float max_val
     auto func = dispatcher().lookup(device_type);
     if (func == nullptr) {
         throw std::runtime_error(
-            "No HardTanh implementation found for device type: " +
-            std::to_string(static_cast<int>(device_type)));
+            "No HardTanh implementation found for device type: " + std::to_string(static_cast<int>(device_type)));
     }
 
     func(output, input, min_val, max_val);
@@ -36,4 +35,4 @@ void hardtanh_(Tensor output, Tensor input, float min_val, float max_val) {
     HardTanh::execute(output, input, min_val, max_val);
 }
 
-} 
+} // namespace infinicore::op

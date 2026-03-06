@@ -3,7 +3,6 @@
 
 #include "../avg_pool1d.h"
 
-
 DESCRIPTOR(cpu)
 
-#endif 
+#endif

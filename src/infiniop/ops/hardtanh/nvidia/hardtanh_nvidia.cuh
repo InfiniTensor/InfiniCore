@@ -46,6 +46,6 @@ public:
     float maxVal() const { return _max_val; }
 };
 
-} 
+} // namespace op::hardtanh::nvidia
 
-#endif 
+#endif

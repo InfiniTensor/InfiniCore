@@ -9,8 +9,7 @@ namespace op::hardtanh::nvidia {
 namespace {
 
 inline bool can_use_contiguous_fast_path(const op::elementwise::ElementwiseInfo &info) {
-    return info.isOutputContiguous() && info.getInputSize() == 1 &&
-           info.getInputContiguous()[0] && !info.getInputBroadcasted()[0];
+    return info.isOutputContiguous() && info.getInputSize() == 1 && info.getInputContiguous()[0] && !info.getInputBroadcasted()[0];
 }
 
 template <typename T>
@@ -47,7 +46,7 @@ infiniStatus_t launch_fast_path(size_t numel,
     return err == cudaSuccess ? INFINI_STATUS_SUCCESS : INFINI_STATUS_INTERNAL_ERROR;
 }
 
-} 
+} // namespace
 
 Descriptor::Descriptor(infiniDtype_t dtype,
                        op::elementwise::ElementwiseInfo info,
@@ -72,8 +71,8 @@ infiniStatus_t Descriptor::create(
     Descriptor **desc_ptr,
     infiniopTensorDescriptor_t out_desc,
     std::vector<infiniopTensorDescriptor_t> input_desc_vec,
-    float min_val,   
-    float max_val) { 
+    float min_val,
+    float max_val) {
 
     auto handle = reinterpret_cast<device::nvidia::Handle *>(handle_);
     auto dtype = out_desc->dtype();
@@ -148,4 +147,4 @@ infiniStatus_t Descriptor::calculate(
 
     return INFINI_STATUS_SUCCESS;
 }
-} 
+} // namespace op::hardtanh::nvidia

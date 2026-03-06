@@ -37,9 +37,7 @@ def hardtanh(
 
     if out is None:
         return Tensor(
-            _infinicore.hardtanh(
-                input._underlying, float(min_val), float(max_val)
-            )
+            _infinicore.hardtanh(input._underlying, float(min_val), float(max_val))
         )
 
     _infinicore.hardtanh_(

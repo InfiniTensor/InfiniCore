@@ -2,7 +2,7 @@
 #define __HARDTANH_CPU_H__
 
 #include "../../../elementwise/cpu/elementwise_cpu.h"
-#include <algorithm> 
+#include <algorithm>
 
 namespace op::hardtanh::cpu {
 
@@ -58,6 +58,6 @@ public:
     }
 } HardTanhOp;
 
-} 
+} // namespace op::hardtanh::cpu
 
-#endif 
+#endif
