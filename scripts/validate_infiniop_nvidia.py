@@ -154,7 +154,7 @@ def _platform_lib_names() -> Tuple[str, str]:
 
 
 def _parse_paths_from_text(text: str, marker: str) -> List[Path]:
-    pattern = rf"([~\w\-./\\]+{re.escape(marker)})"
+    pattern = rf"([~\w\-./\\: ]+{re.escape(marker)})"
     out: List[Path] = []
     for raw in re.findall(pattern, text):
         p = Path(raw).expanduser()
@@ -381,9 +381,10 @@ def _run_negative_descriptor_tests(
     c_void_p_p = ctypes.POINTER(ctypes.c_void_p)
 
     if hasattr(api, "infinirtSetDevice"):
-        status = api.infinirtSetDevice(INFINI_DEVICE_NVIDIA, 0)
+        dev = int(torch.cuda.current_device())
+        status = api.infinirtSetDevice(INFINI_DEVICE_NVIDIA, dev)
         if status != 0:
-            failures.append(f"infinirtSetDevice(NVIDIA,0) failed with status={status}")
+            failures.append(f"infinirtSetDevice(NVIDIA,{dev}) failed with status={status}")
             return failures
 
     try:
