@@ -40,6 +40,12 @@ static infiniStatus_t parsePadsTorchOrder(
     if (pads_out == nullptr) {
         return INFINI_STATUS_BAD_PARAM;
     }
+    if ((pad_size % sizeof(int)) != 0) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    if (pad_size != 0 && pad == nullptr) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
     const int *pad_array = reinterpret_cast<const int *>(pad);
     const size_t pad_len = pad_size / sizeof(int);
     if (pad_len == 0 || (pad_len % 2) != 0 || pad_len > 2 * ndim) {
