@@ -16,7 +16,8 @@ infiniStatus_t Descriptor::create(
     int n) {
 
     auto dtype = x_desc->dtype();
-    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64, INFINI_DTYPE_BF16);
+    CHECK_DTYPE(dtype, INFINI_DTYPE_F32);
+    CHECK_OR_RETURN(y_desc->dtype() == dtype, INFINI_STATUS_BAD_TENSOR_DTYPE);
 
     auto x_shape = x_desc->shape();
     auto y_shape = y_desc->shape();
@@ -29,7 +30,12 @@ infiniStatus_t Descriptor::create(
         return INFINI_STATUS_BAD_TENSOR_SHAPE;
     }
 
-    *desc_ptr = new Descriptor(dtype, x_shape[0], (n < 0) ? -n : n,
+    CHECK_OR_RETURN(n >= 0, INFINI_STATUS_BAD_PARAM);
+
+    CHECK_OR_RETURN(x_desc->isContiguous() && y_desc->isContiguous(), INFINI_STATUS_BAD_TENSOR_STRIDES);
+    CHECK_OR_RETURN(!x_desc->hasBroadcastDim() && !y_desc->hasBroadcastDim(), INFINI_STATUS_BAD_TENSOR_STRIDES);
+
+    *desc_ptr = new Descriptor(dtype, x_shape[0], static_cast<size_t>(n),
                                x_desc->numel(), y_desc->numel(),
                                handle->device, handle->device_id);
     return INFINI_STATUS_SUCCESS;
@@ -47,7 +53,8 @@ infiniStatus_t Descriptor::calculate(
     }
 
     auto musa_stream = reinterpret_cast<musaStream_t>(stream);
-    size_t input_bytes = input_size * infiniopGetDtypeSize(_dtype);
+    CHECK_OR_RETURN(_dtype == INFINI_DTYPE_F32, INFINI_STATUS_BAD_TENSOR_DTYPE);
+    size_t input_bytes = input_size * sizeof(float);
 
     std::vector<float> h_matrix(input_size);
     CHECK_MOORE(musaMemcpyAsync(h_matrix.data(), x, input_bytes, musaMemcpyDeviceToHost, musa_stream));

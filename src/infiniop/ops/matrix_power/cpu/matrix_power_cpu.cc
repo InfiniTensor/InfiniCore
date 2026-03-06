@@ -45,6 +45,10 @@ infiniStatus_t Descriptor::create(
 
     auto dtype = x_desc->dtype();
     CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64, INFINI_DTYPE_BF16);
+    CHECK_OR_RETURN(y_desc->dtype() == dtype, INFINI_STATUS_BAD_TENSOR_DTYPE);
+
+    CHECK_OR_RETURN(x_desc->isContiguous() && y_desc->isContiguous(), INFINI_STATUS_BAD_TENSOR_STRIDES);
+    CHECK_OR_RETURN(!x_desc->hasBroadcastDim() && !y_desc->hasBroadcastDim(), INFINI_STATUS_BAD_TENSOR_STRIDES);
 
     auto info_result = MatrixPowerInfo::create(x_desc, y_desc, n);
     CHECK_RESULT(info_result);
