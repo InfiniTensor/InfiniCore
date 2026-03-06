@@ -120,18 +120,21 @@ infiniStatus_t Descriptor::calculate(
     if (workspace_size < this->workspaceSize()) {
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
+    if (this->workspaceSize() > 0 && workspace == nullptr) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
 
     switch (_dtype) {
     case INFINI_DTYPE_F16: {
         // Convert to float for computation
         std::vector<float> x_f(_info.input_size);
         std::vector<float> y_f(_info.output_size);
-        std::vector<float> workspace_f(_info.matrix_size * _info.matrix_size * 2);
+        float *workspace_f = reinterpret_cast<float *>(workspace);
         for (size_t i = 0; i < _info.input_size; ++i) {
             x_f[i] = utils::cast<float>(reinterpret_cast<const fp16_t *>(x)[i]);
         }
         MatrixPowerInfo info_f = _info;
-        matrix_power_impl<float>(info_f, y_f.data(), x_f.data(), workspace_f.data());
+        matrix_power_impl<float>(info_f, y_f.data(), x_f.data(), workspace_f);
         for (size_t i = 0; i < _info.output_size; ++i) {
             reinterpret_cast<fp16_t *>(y)[i] = utils::cast<fp16_t>(y_f[i]);
         }
@@ -140,12 +143,12 @@ infiniStatus_t Descriptor::calculate(
     case INFINI_DTYPE_BF16: {
         std::vector<float> x_f(_info.input_size);
         std::vector<float> y_f(_info.output_size);
-        std::vector<float> workspace_f(_info.matrix_size * _info.matrix_size * 2);
+        float *workspace_f = reinterpret_cast<float *>(workspace);
         for (size_t i = 0; i < _info.input_size; ++i) {
             x_f[i] = utils::cast<float>(reinterpret_cast<const bf16_t *>(x)[i]);
         }
         MatrixPowerInfo info_f = _info;
-        matrix_power_impl<float>(info_f, y_f.data(), x_f.data(), workspace_f.data());
+        matrix_power_impl<float>(info_f, y_f.data(), x_f.data(), workspace_f);
         for (size_t i = 0; i < _info.output_size; ++i) {
             reinterpret_cast<bf16_t *>(y)[i] = utils::cast<bf16_t>(y_f[i]);
         }
