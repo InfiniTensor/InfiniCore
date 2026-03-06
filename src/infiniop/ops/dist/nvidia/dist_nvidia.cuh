@@ -3,6 +3,8 @@
 
 #include "../../../operator.h"
 #include "../../../devices/nvidia/nvidia_common.cuh"
+#include <cstddef>
+#include <vector>
 
 namespace op::dist::nvidia {
 
@@ -10,18 +12,23 @@ class Descriptor final : public InfiniopDescriptor {
     infiniDtype_t _dtype;
     size_t _input_size;
     double _p;
-    ptrdiff_t _x1_stride;
-    ptrdiff_t _x2_stride;
+    size_t _ndim;
+    std::vector<size_t> _shape;
+    std::vector<ptrdiff_t> _x1_strides;
+    std::vector<ptrdiff_t> _x2_strides;
 
     Descriptor(infiniDtype_t dtype, size_t input_size, double p,
-               ptrdiff_t x1_stride, ptrdiff_t x2_stride,
+               size_t ndim, std::vector<size_t> shape,
+               std::vector<ptrdiff_t> x1_strides, std::vector<ptrdiff_t> x2_strides,
                infiniDevice_t device_type, int device_id)
         : InfiniopDescriptor{device_type, device_id},
           _dtype(dtype),
           _input_size(input_size),
           _p(p),
-          _x1_stride(x1_stride),
-          _x2_stride(x2_stride) {}
+          _ndim(ndim),
+          _shape(std::move(shape)),
+          _x1_strides(std::move(x1_strides)),
+          _x2_strides(std::move(x2_strides)) {}
 
 public:
     ~Descriptor();

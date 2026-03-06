@@ -8,14 +8,19 @@
 #include "ops/causal_softmax.hpp"
 #include "ops/embedding.hpp"
 #include "ops/flash_attention.hpp"
+#include "ops/diff.hpp"
+#include "ops/digamma.hpp"
+#include "ops/dist.hpp"
 #include "ops/kv_caching.hpp"
 #include "ops/linear.hpp"
 #include "ops/linear_w8a8i8.hpp"
+#include "ops/logdet.hpp"
 #include "ops/matmul.hpp"
 #include "ops/mul.hpp"
 #include "ops/paged_attention.hpp"
 #include "ops/paged_attention_prefill.hpp"
 #include "ops/paged_caching.hpp"
+#include "ops/pad.hpp"
 #include "ops/random_sample.hpp"
 #include "ops/rearrange.hpp"
 #include "ops/rms_norm.hpp"
@@ -33,14 +38,19 @@ inline void bind(py::module &m) {
     bind_add_rms_norm(m);
     bind_attention(m);
     bind_causal_softmax(m);
+    bind_diff(m);
+    bind_digamma(m);
+    bind_dist(m);
     bind_flash_attention(m);
     bind_kv_caching(m);
     bind_linear(m);
+    bind_logdet(m);
     bind_matmul(m);
     bind_mul(m);
     bind_paged_attention(m);
     bind_paged_attention_prefill(m);
     bind_paged_caching(m);
+    bind_pad(m);
     bind_random_sample(m);
     bind_rearrange(m);
     bind_rms_norm(m);

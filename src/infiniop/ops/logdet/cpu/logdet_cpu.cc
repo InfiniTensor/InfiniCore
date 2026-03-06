@@ -2,6 +2,8 @@
 #include "../../../utils.h"
 #include <cmath>
 #include <cstring>
+#include <limits>
+#include <type_traits>
 
 namespace op::logdet::cpu {
 
@@ -24,6 +26,7 @@ utils::Result<LogdetInfo> LogdetInfo::create(
     LogdetInfo info;
     info.matrix_size = x_shape[0];
     info.input_size = x_desc->numel();
+    info.input_strides = x_desc->strides();
 
     return utils::Result<LogdetInfo>(std::move(info));
 }
@@ -46,29 +49,12 @@ infiniStatus_t Descriptor::create(
     return INFINI_STATUS_SUCCESS;
 }
 
-// LU decomposition for computing determinant
 template <typename T>
-bool lu_decompose(const T *A, T *L, T *U, size_t n) {
-    // Initialize L as identity, U as copy of A
-    std::memset(L, 0, n * n * sizeof(T));
-    std::memcpy(U, A, n * n * sizeof(T));
-    for (size_t i = 0; i < n; ++i) {
-        L[i * n + i] = utils::cast<T>(1.0);
+constexpr T singular_pivot_eps() {
+    if constexpr (std::is_same_v<T, float>) {
+        return static_cast<T>(1e-6f);
     }
-
-    for (size_t k = 0; k < n; ++k) {
-        if (std::abs(U[k * n + k]) < utils::cast<T>(1e-10)) {
-            return false;  // Singular matrix
-        }
-        for (size_t i = k + 1; i < n; ++i) {
-            T factor = U[i * n + k] / U[k * n + k];
-            L[i * n + k] = factor;
-            for (size_t j = k; j < n; ++j) {
-                U[i * n + j] -= factor * U[k * n + j];
-            }
-        }
-    }
-    return true;
+    return static_cast<T>(1e-12);
 }
 
 template <typename T>
@@ -78,30 +64,66 @@ void logdet_impl(
     const T *x,
     void *workspace) {
 
-    size_t n = info.matrix_size;
-    T *L = reinterpret_cast<T *>(workspace);
-    T *U = L + n * n;
+    const size_t n = info.matrix_size;
+    T *U = reinterpret_cast<T *>(workspace);
 
-    // Perform LU decomposition
-    if (!lu_decompose(x, L, U, n)) {
-        // Singular matrix: logdet = -inf
-        y[0] = utils::cast<T>(-std::numeric_limits<double>::infinity());
+    // Copy into a contiguous row-major buffer so the LU decomposition below can
+    // use simple indexing, while still respecting arbitrary input strides.
+    const ptrdiff_t s0 = info.input_strides[0];
+    const ptrdiff_t s1 = info.input_strides[1];
+    for (size_t i = 0; i < n; ++i) {
+        for (size_t j = 0; j < n; ++j) {
+            U[i * n + j] = x[static_cast<ptrdiff_t>(i) * s0 + static_cast<ptrdiff_t>(j) * s1];
+        }
+    }
+
+    int det_sign = 1;
+    double log_abs_det = 0.0;
+
+    for (size_t k = 0; k < n; ++k) {
+        size_t pivot_row = k;
+        double pivot_abs = std::abs(static_cast<double>(U[k * n + k]));
+        for (size_t i = k + 1; i < n; ++i) {
+            const double v = std::abs(static_cast<double>(U[i * n + k]));
+            if (v > pivot_abs) {
+                pivot_abs = v;
+                pivot_row = i;
+            }
+        }
+
+        if (pivot_abs <= static_cast<double>(singular_pivot_eps<T>())) {
+            y[0] = utils::cast<T>(-std::numeric_limits<double>::infinity());
+            return;
+        }
+
+        if (pivot_row != k) {
+            for (size_t j = 0; j < n; ++j) {
+                std::swap(U[k * n + j], U[pivot_row * n + j]);
+            }
+            det_sign *= -1;
+        }
+
+        const T pivot = U[k * n + k];
+        if (pivot < static_cast<T>(0)) {
+            det_sign *= -1;
+        }
+        log_abs_det += std::log(std::abs(static_cast<double>(pivot)));
+
+        for (size_t i = k + 1; i < n; ++i) {
+            const T factor = U[i * n + k] / pivot;
+            U[i * n + k] = static_cast<T>(0);
+            for (size_t j = k + 1; j < n; ++j) {
+                U[i * n + j] -= factor * U[k * n + j];
+            }
+        }
+    }
+
+    if (det_sign <= 0) {
+        y[0] = utils::cast<T>(std::numeric_limits<double>::quiet_NaN());
         return;
     }
 
-    // Compute log(det) = sum(log(diag(U)))
-    T logdet_val = utils::cast<T>(0.0);
-    int sign = 1;
-    for (size_t i = 0; i < n; ++i) {
-        T diag = U[i * n + i];
-        if (diag < utils::cast<T>(0.0)) {
-            sign *= -1;
-            diag = -diag;
-        }
-        logdet_val += std::log(diag);
-    }
-
-    y[0] = logdet_val;
+    y[0] = utils::cast<T>(log_abs_det);
 }
 
 infiniStatus_t Descriptor::calculate(

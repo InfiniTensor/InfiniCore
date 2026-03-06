@@ -3,6 +3,8 @@
 
 #include "../../../operator.h"
 #include "../../../devices/nvidia/nvidia_common.cuh"
+#include <cstddef>
+#include <vector>
 
 namespace op::logdet::nvidia {
 
@@ -10,13 +12,16 @@ class Descriptor final : public InfiniopDescriptor {
     infiniDtype_t _dtype;
     size_t matrix_size;
     size_t input_size;
+    std::vector<ptrdiff_t> input_strides;
 
     Descriptor(infiniDtype_t dtype, size_t matrix_size, size_t input_size,
+               std::vector<ptrdiff_t> input_strides,
                infiniDevice_t device_type, int device_id)
         : InfiniopDescriptor{device_type, device_id},
           _dtype(dtype),
           matrix_size(matrix_size),
-          input_size(input_size) {}
+          input_size(input_size),
+          input_strides(std::move(input_strides)) {}
 
 public:
     ~Descriptor();

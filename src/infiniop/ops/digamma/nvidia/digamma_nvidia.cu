@@ -42,13 +42,13 @@ infiniStatus_t Descriptor::calculate(
 
     switch (_dtype) {
     case INFINI_DTYPE_F16:
-        return _device_info->calculate<256, cuda::DigammaOp, half>(_info, workspace, output, inputs, stream);
+        return _device_info->calculate<256, op::cuda::DigammaOp, half>(_info, workspace, output, inputs, stream);
     case INFINI_DTYPE_BF16:
-        return _device_info->calculate<256, cuda::DigammaOp, cuda_bfloat16>(_info, workspace, output, inputs, stream);
+        return _device_info->calculate<256, op::cuda::DigammaOp, nv_bfloat16>(_info, workspace, output, inputs, stream);
     case INFINI_DTYPE_F32:
-        return _device_info->calculate<256, cuda::DigammaOp, float>(_info, workspace, output, inputs, stream);
+        return _device_info->calculate<256, op::cuda::DigammaOp, float>(_info, workspace, output, inputs, stream);
     case INFINI_DTYPE_F64:
-        return _device_info->calculate<256, cuda::DigammaOp, double>(_info, workspace, output, inputs, stream);
+        return _device_info->calculate<256, op::cuda::DigammaOp, double>(_info, workspace, output, inputs, stream);
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }

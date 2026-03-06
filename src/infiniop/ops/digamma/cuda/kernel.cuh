@@ -7,68 +7,54 @@
 
 namespace op::cuda {
 
-// Digamma function implementation
+// Digamma for x > 0 using recurrence + asymptotic series.
 template <typename T>
 __device__ __forceinline__ T digamma_impl(T x) {
-    if (x <= 0.0f) return CUDART_NAN_F;
-    
-    T result = 0.0f;
-    const T gamma = 0.57721566490153286060651209008240243104215933593992f;
-    
-    // Reduce to [1, 2] range
-    while (x < 1.0f) {
-        result -= 1.0f / x;
-        x += 1.0f;
+    if (x == static_cast<T>(0)) {
+        return static_cast<T>(-INFINITY);
     }
-    while (x > 2.0f) {
-        x -= 1.0f;
-        result += 1.0f / x;
+    if (x < static_cast<T>(0)) {
+        return static_cast<T>(NAN);
     }
-    
-    result -= gamma;
-    result -= 1.0f / x;
-    
-    // Series expansion
-    T sum = 0.0f;
-    for (int k = 1; k <= 20; ++k) {
-        sum += x / (static_cast<T>(k) * (static_cast<T>(k) + x));
+
+    T result = static_cast<T>(0);
+    while (x < static_cast<T>(8)) {
+        result -= static_cast<T>(1) / x;
+        x += static_cast<T>(1);
     }
-    result += sum;
-    
+
+    const T inv = static_cast<T>(1) / x;
+    const T inv2 = inv * inv;
+
+    const T series =
+        inv2 * (static_cast<T>(-1.0 / 12.0)
+                + inv2 * (static_cast<T>(1.0 / 120.0)
+                          + inv2 * (static_cast<T>(-1.0 / 252.0)
+                                    + inv2 * (static_cast<T>(1.0 / 240.0)
+                                              + inv2 * (static_cast<T>(-1.0 / 132.0))))));
+
+    result += log(x) - static_cast<T>(0.5) * inv + series;
     return result;
 }
 
-template <typename T>
-struct DigammaOp {
-    __device__ __forceinline__ T operator()(T x) const {
-        if constexpr (std::is_same_v<T, float>) {
+typedef struct DigammaOp {
+public:
+    static constexpr size_t num_inputs = 1;
+
+    template <typename T>
+    __device__ __forceinline__ T operator()(const T &x) const {
+        if constexpr (std::is_same_v<T, half>) {
+            float xf = __half2float(x);
+            return __float2half(digamma_impl(xf));
+        } else if constexpr (std::is_same_v<T, nv_bfloat16>) {
+            float xf = __bfloat162float(x);
+            return __float2bfloat16_rn(digamma_impl(xf));
+        } else if constexpr (std::is_same_v<T, float>) {
             return digamma_impl(x);
-        } else if constexpr (std::is_same_v<T, double>) {
-            if (x <= 0.0) return CUDART_NAN;
-            double result = 0.0;
-            const double gamma = 0.57721566490153286060651209008240243104215933593992;
-            while (x < 1.0) {
-                result -= 1.0 / x;
-                x += 1.0;
-            }
-            while (x > 2.0) {
-                x -= 1.0;
-                result += 1.0 / x;
-            }
-            result -= gamma;
-            result -= 1.0 / x;
-            double sum = 0.0;
-            for (int k = 1; k <= 20; ++k) {
-                sum += x / (static_cast<double>(k) * (static_cast<double>(k) + x));
-            }
-            result += sum;
-            return result;
-        } else {
-            // For F16/BF16: promote to float, compute, then cast back
-            float xf = static_cast<float>(x);
-            return static_cast<T>(digamma_impl(xf));
+        } else { // double
+            return digamma_impl(static_cast<double>(x));
         }
     }
-};
+} DigammaOp;
 
 } // namespace op::cuda

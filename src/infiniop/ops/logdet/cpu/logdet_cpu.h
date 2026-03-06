@@ -3,6 +3,7 @@
 
 #include "../../../operator.h"
 #include "../../../devices/cpu/common_cpu.h"
+#include <cstddef>
 #include <vector>
 
 namespace op::logdet::cpu {
@@ -10,6 +11,7 @@ namespace op::logdet::cpu {
 struct LogdetInfo {
     size_t matrix_size;  // N x N matrix
     size_t input_size;
+    std::vector<ptrdiff_t> input_strides;
 
     static utils::Result<LogdetInfo> create(
         infiniopTensorDescriptor_t x_desc,

@@ -18,7 +18,9 @@ enum class PadMode {
 struct PadInfo {
     size_t ndim;
     std::vector<size_t> input_shape;
+    std::vector<ptrdiff_t> input_strides;
     std::vector<size_t> output_shape;
+    std::vector<ptrdiff_t> output_strides;
     std::vector<int> pads;  // [pad_left_dim0, pad_right_dim0, pad_left_dim1, pad_right_dim1, ...]
     PadMode mode;
     double value;

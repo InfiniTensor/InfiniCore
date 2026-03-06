@@ -2,6 +2,7 @@
 #include "../../../utils.h"
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 namespace op::diff::cpu {
 
@@ -78,53 +79,73 @@ void diff_impl(
     T *y,
     const T *x) {
 
-    // Compute n-th order difference along specified dimension
-    // For n=1: y[i] = x[i+1] - x[i]
-    // For n>1: recursively apply diff
+    // n-th order forward difference along `dim`:
+    //   y[i] = sum_{k=0..n} (-1)^(n-k) * C(n,k) * x[i+k]
+    // Implemented directly to:
+    // - avoid intermediate buffers (and their size pitfalls for n>1)
+    // - respect input/output strides (tests cover as_strided cases)
 
-    size_t dim_size = info.input_shape[info.dim];
-    size_t output_dim_size = info.output_shape[info.dim];
+    auto binom = [](int n, int k) -> double {
+        if (k < 0 || k > n) {
+            return 0.0;
+        }
+        k = std::min(k, n - k);
+        double res = 1.0;
+        for (int i = 1; i <= k; ++i) {
+            res *= static_cast<double>(n - (k - i));
+            res /= static_cast<double>(i);
+        }
+        return res;
+    };
 
-    // Calculate sizes before and after the dimension
-    size_t size_before = 1;
-    for (size_t i = 0; i < static_cast<size_t>(info.dim); ++i) {
-        size_before *= info.input_shape[i];
+    std::vector<double> coeff(static_cast<size_t>(info.n) + 1);
+    for (int k = 0; k <= info.n; ++k) {
+        double c = binom(info.n, k);
+        if (((info.n - k) & 1) != 0) {
+            c = -c;
+        }
+        coeff[static_cast<size_t>(k)] = c;
     }
-    size_t size_after = 1;
-    for (size_t i = static_cast<size_t>(info.dim) + 1; i < info.ndim; ++i) {
-        size_after *= info.input_shape[i];
-    }
 
-    // Allocate temporary buffer for recursive diff computation
-    std::vector<T> temp_input(info.input_size);
-    std::vector<T> temp_output(info.output_size);
-    std::memcpy(temp_input.data(), x, info.input_size * sizeof(T));
+    const auto &out_shape = info.output_shape;
+    const auto &in_strides = info.input_strides;
+    const auto &out_strides = info.output_strides;
+    const size_t out_numel = info.output_size;
+    const size_t stride_dim = in_strides[static_cast<size_t>(info.dim)];
 
-    // Apply diff n times
-    for (int order = 0; order < info.n; ++order) {
-        size_t current_dim_size = dim_size - order;
-        size_t current_output_size = current_dim_size - 1;
+    auto unravel_index = [](size_t linear, const std::vector<size_t> &shape, std::vector<size_t> &idx) {
+        const size_t ndim = shape.size();
+        for (size_t d = ndim; d-- > 0;) {
+            const size_t s = shape[d];
+            idx[d] = linear % s;
+            linear /= s;
+        }
+    };
 
-#pragma omp parallel for collapse(2)
-        for (ptrdiff_t b = 0; b < static_cast<ptrdiff_t>(size_before); ++b) {
-            for (ptrdiff_t a = 0; a < static_cast<ptrdiff_t>(size_after); ++a) {
-                for (size_t i = 0; i < current_output_size; ++i) {
-                    size_t idx1 = b * current_dim_size * size_after + i * size_after + a;
-                    size_t idx2 = b * current_dim_size * size_after + (i + 1) * size_after + a;
-                    size_t out_idx = b * current_output_size * size_after + i * size_after + a;
-                    temp_output[out_idx] = temp_input[idx2] - temp_input[idx1];
-                }
+#pragma omp parallel
+    {
+        std::vector<size_t> idx(info.ndim, 0);
+
+#pragma omp for
+        for (ptrdiff_t linear = 0; linear < static_cast<ptrdiff_t>(out_numel); ++linear) {
+            unravel_index(static_cast<size_t>(linear), out_shape, idx);
+
+            size_t y_off = 0;
+            size_t x_base_off = 0;
+            for (size_t d = 0; d < info.ndim; ++d) {
+                y_off += idx[d] * out_strides[d];
+                x_base_off += idx[d] * in_strides[d];
             }
-        }
 
-        if (order < info.n - 1) {
-            std::swap(temp_input, temp_output);
-            current_dim_size = current_output_size;
+            double acc = 0.0;
+            for (int k = 0; k <= info.n; ++k) {
+                const size_t x_off = x_base_off + static_cast<size_t>(k) * stride_dim;
+                acc += coeff[static_cast<size_t>(k)] * utils::cast<double>(x[x_off]);
+            }
+
+            y[y_off] = utils::cast<T>(acc);
         }
     }
-
-    // Copy final result to output
-    std::memcpy(y, temp_output.data(), info.output_size * sizeof(T));
 }
 
 infiniStatus_t Descriptor::calculate(

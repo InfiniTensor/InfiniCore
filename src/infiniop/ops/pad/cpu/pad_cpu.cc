@@ -3,6 +3,7 @@
 #include <cstring>
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 
 namespace op::pad::cpu {
 
@@ -35,24 +36,18 @@ utils::Result<PadInfo> PadInfo::create(
     const int *pad_array = reinterpret_cast<const int *>(pad);
     size_t pad_len = pad_size / sizeof(int);
 
-    // Pad array should have 2*ndim elements (left and right for each dimension)
-    // But it might be shorter (only last dimensions)
+    // Padding follows PyTorch order:
+    // (pad_left_last_dim, pad_right_last_dim, pad_left_second_last, pad_right_second_last, ...)
+    // and applies to the last dimensions first.
     std::vector<int> pads(2 * ndim, 0);
-    if (pad_len == 2 * ndim) {
-        // Full pad specification
-        std::memcpy(pads.data(), pad_array, pad_len * sizeof(int));
-    } else if (pad_len == 2) {
-        // Only last dimension
-        pads[2 * (ndim - 1)] = pad_array[0];
-        pads[2 * (ndim - 1) + 1] = pad_array[1];
-    } else if (pad_len % 2 == 0 && pad_len <= 2 * ndim) {
-        // Last few dimensions
-        size_t start_dim = ndim - pad_len / 2;
-        for (size_t i = 0; i < pad_len; ++i) {
-            pads[2 * start_dim + i] = pad_array[i];
-        }
-    } else {
+    if (pad_len == 0 || (pad_len % 2) != 0 || pad_len > 2 * ndim) {
         return INFINI_STATUS_BAD_PARAM;
+    }
+    size_t dims_padded = pad_len / 2;
+    for (size_t j = 0; j < dims_padded; ++j) {
+        size_t dim = ndim - 1 - j;
+        pads[2 * dim] = pad_array[2 * j];
+        pads[2 * dim + 1] = pad_array[2 * j + 1];
     }
 
     // Calculate expected output shape
@@ -68,7 +63,9 @@ utils::Result<PadInfo> PadInfo::create(
     PadInfo info;
     info.ndim = ndim;
     info.input_shape = x_shape;
+    info.input_strides = x_desc->strides();
     info.output_shape = y_shape;
+    info.output_strides = y_desc->strides();
     info.pads = pads;
     info.mode = parseMode(mode_str);
     info.value = value;
@@ -104,98 +101,76 @@ void pad_impl(
     T *y,
     const T *x) {
 
-    size_t output_size = 1;
+    size_t out_numel = 1;
     for (size_t i = 0; i < info.ndim; ++i) {
-        output_size *= info.output_shape[i];
+        out_numel *= info.output_shape[i];
     }
 
-    // Initialize output with padding value (for constant mode)
-    if (info.mode == PadMode::CONSTANT) {
-        T pad_value = utils::cast<T>(info.value);
-        std::fill(y, y + output_size, pad_value);
-    }
+    const T pad_value = utils::cast<T>(info.value);
 
-    // Helper function to map output index to input index
-    auto getInputIndex = [&](const std::vector<size_t> &out_coords) -> std::pair<bool, size_t> {
-        std::vector<size_t> in_coords(info.ndim);
-        bool valid = true;
+    std::vector<int64_t> out_coords(info.ndim);
+    std::vector<int64_t> in_coords(info.ndim);
 
+    for (size_t linear = 0; linear < out_numel; ++linear) {
+        // Convert linear index to logical coordinates in row-major order.
+        size_t tmp = linear;
+        for (size_t d = info.ndim; d-- > 0;) {
+            out_coords[d] = static_cast<int64_t>(tmp % info.output_shape[d]);
+            tmp /= info.output_shape[d];
+        }
+
+        bool inside = true;
         for (size_t d = 0; d < info.ndim; ++d) {
-            int pad_left = info.pads[2 * d];
-            int pad_right = info.pads[2 * d + 1];
-            size_t out_idx = out_coords[d];
-            size_t in_size = info.input_shape[d];
+            const int64_t pad_left = static_cast<int64_t>(info.pads[2 * d]);
+            const int64_t in_size = static_cast<int64_t>(info.input_shape[d]);
+            const int64_t out_i = out_coords[d];
+            int64_t in_i = out_i - pad_left;
 
-            if (out_idx < static_cast<size_t>(pad_left)) {
-                // Left padding
+            if (in_i < 0 || in_i >= in_size) {
                 if (info.mode == PadMode::CONSTANT) {
-                    valid = false;
+                    inside = false;
                     break;
-                } else if (info.mode == PadMode::REFLECT) {
-                    in_coords[d] = pad_left - out_idx;
-                } else if (info.mode == PadMode::REPLICATE) {
-                    in_coords[d] = 0;
-                } else if (info.mode == PadMode::CIRCULAR) {
-                    in_coords[d] = in_size - (pad_left - out_idx);
                 }
-            } else if (out_idx >= pad_left + in_size) {
-                // Right padding
-                if (info.mode == PadMode::CONSTANT) {
-                    valid = false;
-                    break;
-                } else {
-                    size_t excess = out_idx - (pad_left + in_size);
-                    if (info.mode == PadMode::REFLECT) {
-                        in_coords[d] = in_size - 2 - excess;
-                    } else if (info.mode == PadMode::REPLICATE) {
-                        in_coords[d] = in_size - 1;
-                    } else if (info.mode == PadMode::CIRCULAR) {
-                        in_coords[d] = excess;
+
+                if (info.mode == PadMode::REPLICATE) {
+                    in_i = (in_i < 0) ? 0 : (in_size - 1);
+                } else if (info.mode == PadMode::CIRCULAR) {
+                    int64_t m = in_i % in_size;
+                    if (m < 0) {
+                        m += in_size;
+                    }
+                    in_i = m;
+                } else if (info.mode == PadMode::REFLECT) {
+                    // Reflect around the edges, excluding the edge value.
+                    while (in_i < 0 || in_i >= in_size) {
+                        if (in_i < 0) {
+                            in_i = -in_i;
+                        } else {
+                            in_i = 2 * (in_size - 1) - in_i;
+                        }
                     }
                 }
-            } else {
-                // Inside input range
-                in_coords[d] = out_idx - pad_left;
             }
 
-            // Bounds checking for reflect mode
-            if (info.mode == PadMode::REFLECT) {
-                while (in_coords[d] >= in_size) {
-                    in_coords[d] = 2 * (in_size - 1) - in_coords[d];
-                }
-            }
+            in_coords[d] = in_i;
         }
 
-        if (!valid) {
-            return {false, 0};
+        ptrdiff_t out_off = 0;
+        for (size_t d = 0; d < info.ndim; ++d) {
+            out_off += static_cast<ptrdiff_t>(out_coords[d]) * info.output_strides[d];
         }
 
-        // Convert coordinates to linear index
-        size_t in_index = 0;
-        size_t stride = 1;
-        for (size_t d = info.ndim; d-- > 0;) {
-            in_index += in_coords[d] * stride;
-            stride *= info.input_shape[d];
+        if (!inside) {
+            *(y + out_off) = pad_value;
+            continue;
         }
 
-        return {true, in_index};
-    };
-
-    // Iterate over output tensor
-    std::vector<size_t> out_coords(info.ndim, 0);
-    for (size_t out_idx = 0; out_idx < output_size; ++out_idx) {
-        // Convert linear index to coordinates
-        size_t temp = out_idx;
-        for (size_t d = info.ndim; d-- > 0;) {
-            out_coords[d] = temp % info.output_shape[d];
-            temp /= info.output_shape[d];
+        ptrdiff_t in_off = 0;
+        for (size_t d = 0; d < info.ndim; ++d) {
+            in_off += static_cast<ptrdiff_t>(in_coords[d]) * info.input_strides[d];
         }
 
-        auto [valid, in_idx] = getInputIndex(out_coords);
-        if (valid) {
-            y[out_idx] = x[in_idx];
-        }
-        // For constant mode, value is already set
+        *(y + out_off) = *(x + in_off);
     }
 }
 
