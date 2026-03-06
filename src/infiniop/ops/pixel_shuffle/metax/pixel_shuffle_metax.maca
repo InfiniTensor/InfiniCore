@@ -69,6 +69,9 @@ infiniStatus_t Descriptor::calculate(
     auto hc_stream = reinterpret_cast<hcStream_t>(stream);
     constexpr int BLOCK_SIZE = 256;
     size_t total = output_size;
+    if (total == 0) {
+        return INFINI_STATUS_SUCCESS;
+    }
     int num_blocks = (total + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
     switch (_dtype) {
