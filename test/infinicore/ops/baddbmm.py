@@ -99,9 +99,9 @@ class OpTest(BaseOperatorTest):
     def torch_operator(self, *args, **kwargs):
         return torch.baddbmm(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
-    #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.baddbmm(*args, **kwargs)
+    def infinicore_operator(self, *args, **kwargs):
+        """InfiniCore implementation (operator not yet available)."""
+        return infinicore.baddbmm(*args, **kwargs)
 
 
 def main():

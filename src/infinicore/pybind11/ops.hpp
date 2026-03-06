@@ -2,12 +2,17 @@
 
 #include <pybind11/pybind11.h>
 
+#include "ops/adaptive_max_pool1d.hpp"
 #include "ops/add.hpp"
 #include "ops/add_rms_norm.hpp"
+#include "ops/asinh.hpp"
 #include "ops/attention.hpp"
+#include "ops/baddbmm.hpp"
+#include "ops/bilinear.hpp"
 #include "ops/causal_softmax.hpp"
 #include "ops/embedding.hpp"
 #include "ops/flash_attention.hpp"
+#include "ops/fmod.hpp"
 #include "ops/kv_caching.hpp"
 #include "ops/linear.hpp"
 #include "ops/linear_w8a8i8.hpp"
@@ -30,12 +35,18 @@ namespace py = pybind11;
 namespace infinicore::ops {
 
 inline void bind(py::module &m) {
+    bind_adaptive_max_pool1d(m);
     bind_add(m);
     bind_add_rms_norm(m);
     bind_attention(m);
+    bind_asinh(m);
+    bind_baddbmm(m);
+    bind_bilinear(m);
     bind_causal_softmax(m);
     bind_flash_attention(m);
     bind_kv_caching(m);
+    bind_fmod(m);
+    bind_random_sample(m);
     bind_linear(m);
     bind_matmul(m);
     bind_mul(m);

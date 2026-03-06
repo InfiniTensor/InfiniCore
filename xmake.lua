@@ -452,8 +452,7 @@ target("infinicore_cpp_api")
     set_kind("shared")
     add_deps("infiniop", "infinirt", "infiniccl")
     set_languages("cxx17")
-    set_symbols("visibility")
-
+    set_policy("build.optimization.lto", false)
     local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
 
     add_includedirs("include")

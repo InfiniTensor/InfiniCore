@@ -1,3 +1,4 @@
+from .adaptive_max_pool1d import adaptive_max_pool1d
 from .causal_softmax import causal_softmax
 from .embedding import embedding
 from .flash_attention import flash_attention
@@ -11,6 +12,7 @@ from .silu_and_mul import silu_and_mul
 from .swiglu import swiglu
 
 __all__ = [
+    "adaptive_max_pool1d",
     "causal_softmax",
     "embedding",
     "flash_attention",
