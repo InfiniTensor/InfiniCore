@@ -203,28 +203,6 @@ def _install_test_framework_adapter() -> None:
 
                 BaseOperatorTest.infinicore_operator = _dispatch_infinicore_operator
 
-        fw_runner = sys.modules.get("framework.runner")
-        if fw_runner is not None and hasattr(fw_runner, "GenericTestRunner"):
-            if not getattr(fw_runner, "_INFINICORE_RUNTIME_ADAPTER_PATCHED", False):
-                fw_runner._INFINICORE_RUNTIME_ADAPTER_PATCHED = True
-
-                orig_run = fw_runner.GenericTestRunner.run
-
-                def _run_with_logdet_eq_nan(self, *args, **kwargs):
-                    try:
-                        op_name = (
-                            str(getattr(self.operator_test, "operator_name", ""))
-                            .strip()
-                            .lower()
-                        )
-                        if op_name == "logdet":
-                            setattr(self.args, "eq_nan", True)
-                    except Exception:
-                        pass
-                    return orig_run(self, *args, **kwargs)
-
-                fw_runner.GenericTestRunner.run = _run_with_logdet_eq_nan
-
     targets = {"framework.base", "framework.runner"}
 
     class _AdapterLoader(importlib.abc.Loader):
@@ -263,32 +241,11 @@ def _should_install_test_framework_adapter() -> bool:
 
     This avoids import-time monkeypatching in normal library usage.
     """
-    import importlib.util
     import os
 
-    if os.getenv("INFINICORE_ENABLE_TEST_ADAPTER") in {"1", "true", "TRUE", "yes", "YES"}:
-        return True
-
-    # Auto-enable only for this repo's bundled test framework to avoid triggering in
-    # environments that happen to have an unrelated `framework` module installed.
-    spec = importlib.util.find_spec("framework")
-    if spec is None:
-        return False
-
-    candidates = []
-    origin = getattr(spec, "origin", None)
-    if origin:
-        candidates.append(origin)
-    locs = getattr(spec, "submodule_search_locations", None)
-    if locs:
-        candidates.extend(list(locs))
-
-    for path in candidates:
-        norm = str(path).replace("\\", "/")
-        if "/test/infinicore/framework" in norm:
-            return True
-
-    return False
+    # Strictly opt-in: do not install/monkeypatch at import time unless explicitly
+    # requested by the caller/test harness.
+    return os.getenv("INFINICORE_ENABLE_TEST_ADAPTER") in {"1", "true", "TRUE", "yes", "YES"}
 
 
 if _should_install_test_framework_adapter():

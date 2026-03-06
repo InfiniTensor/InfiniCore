@@ -1,6 +1,8 @@
 #include "logdet_metax.h"
 #include "../../../utils.h"
 #include <cuda_runtime.h>
+#include <cstring>
+#include <limits>
 #include <vector>
 #include <cmath>
 
@@ -62,9 +64,11 @@ infiniStatus_t Descriptor::calculate(
     for (size_t k = 0; k < matrix_size; ++k) {
         if (std::abs(U[k * matrix_size + k]) < 1e-10f) {
             if (_dtype == INFINI_DTYPE_F32) {
-                *reinterpret_cast<float *>(y) = -std::numeric_limits<float>::infinity();
+                float neg_inf = -std::numeric_limits<float>::infinity();
+                CHECK_METAX(hcMemcpyAsync(y, &neg_inf, sizeof(float), hcMemcpyHostToDevice, hc_stream));
             } else {
-                *reinterpret_cast<double *>(y) = -std::numeric_limits<double>::infinity();
+                double neg_inf = -std::numeric_limits<double>::infinity();
+                CHECK_METAX(hcMemcpyAsync(y, &neg_inf, sizeof(double), hcMemcpyHostToDevice, hc_stream));
             }
             return INFINI_STATUS_SUCCESS;
         }

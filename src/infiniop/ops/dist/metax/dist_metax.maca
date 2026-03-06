@@ -62,7 +62,8 @@ infiniStatus_t Descriptor::calculate(
         float result_val;
         CHECK_METAX(hcMemcpyAsync(&result_val, result_f, sizeof(float), hcMemcpyDeviceToHost, hc_stream));
         CHECK_METAX(hcStreamSynchronize(hc_stream));
-        *reinterpret_cast<half *>(y) = __float2half(result_val);
+        half out_val = __float2half(result_val);
+        CHECK_METAX(hcMemcpyAsync(y, &out_val, sizeof(half), hcMemcpyHostToDevice, hc_stream));
         CHECK_METAX(hcFree(result_f));
         break;
     }
@@ -76,7 +77,8 @@ infiniStatus_t Descriptor::calculate(
         float result_val;
         CHECK_METAX(hcMemcpyAsync(&result_val, result_f, sizeof(float), hcMemcpyDeviceToHost, hc_stream));
         CHECK_METAX(hcStreamSynchronize(hc_stream));
-        *reinterpret_cast<cuda_bfloat16 *>(y) = __float2bfloat16_rn(result_val);
+        cuda_bfloat16 out_val = __float2bfloat16_rn(result_val);
+        CHECK_METAX(hcMemcpyAsync(y, &out_val, sizeof(cuda_bfloat16), hcMemcpyHostToDevice, hc_stream));
         CHECK_METAX(hcFree(result_f));
         break;
     }

@@ -53,6 +53,12 @@ utils::Result<PadInfo> PadInfo::create(
         pads[2 * dim + 1] = pad_array[2 * j + 1];
     }
 
+    for (size_t i = 0; i < ndim; ++i) {
+        if (pads[2 * i] < 0 || pads[2 * i + 1] < 0) {
+            return INFINI_STATUS_BAD_PARAM;
+        }
+    }
+
     // Calculate expected output shape
     std::vector<size_t> expected_output_shape = x_shape;
     for (size_t i = 0; i < ndim; ++i) {

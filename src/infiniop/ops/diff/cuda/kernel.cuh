@@ -30,14 +30,13 @@ __global__ void diff_kernel(
     // For n=1: output[i] = input[i+1] - input[i]
     // For n>1: recursively apply
     T result = input[(b * dim_size + (i + n)) * size_after + a];
-    T sign = (n % 2 == 0) ? 1 : -1;
-    for (int k = 0; k < n; ++k) {
+    for (int k = 1; k <= n; ++k) {
         T coeff = 1.0;
         for (int j = 0; j < k; ++j) {
             coeff *= static_cast<T>(n - j) / static_cast<T>(j + 1);
         }
         if (k % 2 == 1) coeff = -coeff;
-        result += coeff * input[(b * dim_size + (i + n - k - 1)) * size_after + a];
+        result += coeff * input[(b * dim_size + (i + n - k)) * size_after + a];
     }
 
     output[idx] = result;
