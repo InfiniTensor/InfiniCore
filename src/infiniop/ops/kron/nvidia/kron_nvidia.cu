@@ -74,21 +74,29 @@ infiniStatus_t Descriptor::calculate(
     }
 
     auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
-    size_t *shape_data = reinterpret_cast<size_t *>(workspace);
-    ptrdiff_t *stride_data = reinterpret_cast<ptrdiff_t *>(shape_data + 3 * ndim);
-    auto a_shape_d = shape_data;
-    auto b_shape_d = shape_data + ndim;
-    auto y_shape_d = shape_data + 2 * ndim;
-    auto a_strides_d = stride_data;
-    auto b_strides_d = stride_data + ndim;
-    auto y_strides_d = stride_data + 2 * ndim;
+    size_t *a_shape_d = nullptr;
+    size_t *b_shape_d = nullptr;
+    size_t *y_shape_d = nullptr;
+    ptrdiff_t *a_strides_d = nullptr;
+    ptrdiff_t *b_strides_d = nullptr;
+    ptrdiff_t *y_strides_d = nullptr;
+    if (ndim > 0) {
+        size_t *shape_data = reinterpret_cast<size_t *>(workspace);
+        ptrdiff_t *stride_data = reinterpret_cast<ptrdiff_t *>(shape_data + 3 * ndim);
+        a_shape_d = shape_data;
+        b_shape_d = shape_data + ndim;
+        y_shape_d = shape_data + 2 * ndim;
+        a_strides_d = stride_data;
+        b_strides_d = stride_data + ndim;
+        y_strides_d = stride_data + 2 * ndim;
 
-    CHECK_CUDA(cudaMemcpyAsync(a_shape_d, a_shape.data(), ndim * sizeof(size_t), cudaMemcpyHostToDevice, cuda_stream));
-    CHECK_CUDA(cudaMemcpyAsync(b_shape_d, b_shape.data(), ndim * sizeof(size_t), cudaMemcpyHostToDevice, cuda_stream));
-    CHECK_CUDA(cudaMemcpyAsync(y_shape_d, y_shape.data(), ndim * sizeof(size_t), cudaMemcpyHostToDevice, cuda_stream));
-    CHECK_CUDA(cudaMemcpyAsync(a_strides_d, a_strides.data(), ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, cuda_stream));
-    CHECK_CUDA(cudaMemcpyAsync(b_strides_d, b_strides.data(), ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, cuda_stream));
-    CHECK_CUDA(cudaMemcpyAsync(y_strides_d, y_strides.data(), ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, cuda_stream));
+        CHECK_CUDA(cudaMemcpyAsync(a_shape_d, a_shape.data(), ndim * sizeof(size_t), cudaMemcpyHostToDevice, cuda_stream));
+        CHECK_CUDA(cudaMemcpyAsync(b_shape_d, b_shape.data(), ndim * sizeof(size_t), cudaMemcpyHostToDevice, cuda_stream));
+        CHECK_CUDA(cudaMemcpyAsync(y_shape_d, y_shape.data(), ndim * sizeof(size_t), cudaMemcpyHostToDevice, cuda_stream));
+        CHECK_CUDA(cudaMemcpyAsync(a_strides_d, a_strides.data(), ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, cuda_stream));
+        CHECK_CUDA(cudaMemcpyAsync(b_strides_d, b_strides.data(), ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, cuda_stream));
+        CHECK_CUDA(cudaMemcpyAsync(y_strides_d, y_strides.data(), ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, cuda_stream));
+    }
 
     constexpr int BLOCK_SIZE = 256;
     int num_blocks = (y_size + BLOCK_SIZE - 1) / BLOCK_SIZE;

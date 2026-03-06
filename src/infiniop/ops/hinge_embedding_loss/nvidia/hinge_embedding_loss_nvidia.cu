@@ -89,15 +89,21 @@ infiniStatus_t Descriptor::calculate(
     }
 
     if (reduction == Reduction::NONE) {
-        size_t *shape_d = reinterpret_cast<size_t *>(workspace);
-        ptrdiff_t *input_strides_d = reinterpret_cast<ptrdiff_t *>(shape_d + ndim);
-        ptrdiff_t *target_strides_d = input_strides_d + ndim;
-        ptrdiff_t *output_strides_d = target_strides_d + ndim;
+        size_t *shape_d = nullptr;
+        ptrdiff_t *input_strides_d = nullptr;
+        ptrdiff_t *target_strides_d = nullptr;
+        ptrdiff_t *output_strides_d = nullptr;
+        if (ndim > 0) {
+            shape_d = reinterpret_cast<size_t *>(workspace);
+            input_strides_d = reinterpret_cast<ptrdiff_t *>(shape_d + ndim);
+            target_strides_d = input_strides_d + ndim;
+            output_strides_d = target_strides_d + ndim;
 
-        CHECK_CUDA(cudaMemcpyAsync(shape_d, shape.data(), ndim * sizeof(size_t), cudaMemcpyHostToDevice, cuda_stream));
-        CHECK_CUDA(cudaMemcpyAsync(input_strides_d, input_strides.data(), ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, cuda_stream));
-        CHECK_CUDA(cudaMemcpyAsync(target_strides_d, target_strides.data(), ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, cuda_stream));
-        CHECK_CUDA(cudaMemcpyAsync(output_strides_d, output_strides.data(), ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, cuda_stream));
+            CHECK_CUDA(cudaMemcpyAsync(shape_d, shape.data(), ndim * sizeof(size_t), cudaMemcpyHostToDevice, cuda_stream));
+            CHECK_CUDA(cudaMemcpyAsync(input_strides_d, input_strides.data(), ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, cuda_stream));
+            CHECK_CUDA(cudaMemcpyAsync(target_strides_d, target_strides.data(), ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, cuda_stream));
+            CHECK_CUDA(cudaMemcpyAsync(output_strides_d, output_strides.data(), ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, cuda_stream));
+        }
 
         // Element-wise loss
         switch (_dtype) {
