@@ -4,15 +4,196 @@
 #include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
-#include <algorithm>
-#include <vector>
-#include <cstring>
+#include <limits>
+#include <utility>
 
 namespace op::matrix_power::nvidia {
 
+namespace {
+
+INFINIOP_CUDA_KERNEL setDiagonalFp16(__half *out, size_t n) {
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        out[idx * n + idx] = __float2half(1.0f);
+    }
+}
+
+INFINIOP_CUDA_KERNEL setDiagonalBf16(cuda_bfloat16 *out, size_t n) {
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        out[idx * n + idx] = __float2bfloat16(1.0f);
+    }
+}
+
+INFINIOP_CUDA_KERNEL setDiagonalFp32(float *out, size_t n) {
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        out[idx * n + idx] = 1.0f;
+    }
+}
+
+INFINIOP_CUDA_KERNEL setDiagonalFp64(double *out, size_t n) {
+    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        out[idx * n + idx] = 1.0;
+    }
+}
+
+infiniStatus_t initializeIdentity(
+    void *y,
+    infiniDtype_t dtype,
+    size_t matrix_size,
+    size_t matrix_numel,
+    cudaStream_t stream) {
+
+    CHECK_CUDA(cudaMemsetAsync(y, 0, matrix_numel * infiniSizeOf(dtype), stream));
+    if (matrix_size == 0) {
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    constexpr int threads = 256;
+    size_t blocks = CEIL_DIV(matrix_size, static_cast<size_t>(threads));
+    switch (dtype) {
+    case INFINI_DTYPE_F16:
+        setDiagonalFp16<<<static_cast<unsigned int>(blocks), threads, 0, stream>>>(
+            reinterpret_cast<__half *>(y), matrix_size);
+        break;
+    case INFINI_DTYPE_BF16:
+        setDiagonalBf16<<<static_cast<unsigned int>(blocks), threads, 0, stream>>>(
+            reinterpret_cast<cuda_bfloat16 *>(y), matrix_size);
+        break;
+    case INFINI_DTYPE_F32:
+        setDiagonalFp32<<<static_cast<unsigned int>(blocks), threads, 0, stream>>>(
+            reinterpret_cast<float *>(y), matrix_size);
+        break;
+    case INFINI_DTYPE_F64:
+        setDiagonalFp64<<<static_cast<unsigned int>(blocks), threads, 0, stream>>>(
+            reinterpret_cast<double *>(y), matrix_size);
+        break;
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+    CHECK_CUDA(cudaGetLastError());
+    return INFINI_STATUS_SUCCESS;
+}
+
+#if defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
+using GemmComputeType = cudaDataType;
+#else
+using GemmComputeType = cublasComputeType_t;
+#endif
+
+struct GemmTypeConfig {
+    cudaDataType io_type;
+    GemmComputeType compute_type;
+};
+
+infiniStatus_t getGemmTypeConfig(infiniDtype_t dtype, GemmTypeConfig &cfg) {
+    switch (dtype) {
+    case INFINI_DTYPE_F16:
+        cfg.io_type = CUDA_R_16F;
+#if defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
+        cfg.compute_type = CUDA_R_32F;
+#else
+        cfg.compute_type = CUBLAS_COMPUTE_32F;
+#endif
+        return INFINI_STATUS_SUCCESS;
+    case INFINI_DTYPE_BF16:
+        cfg.io_type = CUDA_R_16BF;
+#if defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
+        cfg.compute_type = CUDA_R_32F;
+#else
+        cfg.compute_type = CUBLAS_COMPUTE_32F;
+#endif
+        return INFINI_STATUS_SUCCESS;
+    case INFINI_DTYPE_F32:
+        cfg.io_type = CUDA_R_32F;
+#if defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
+        cfg.compute_type = CUDA_R_32F;
+#else
+        cfg.compute_type = CUBLAS_COMPUTE_32F;
+#endif
+        return INFINI_STATUS_SUCCESS;
+    case INFINI_DTYPE_F64:
+        cfg.io_type = CUDA_R_64F;
+#if defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
+        cfg.compute_type = CUDA_R_64F;
+#else
+        cfg.compute_type = CUBLAS_COMPUTE_64F;
+#endif
+        return INFINI_STATUS_SUCCESS;
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+}
+
+// Compute row-major C = A * B using cuBLAS column-major GEMM:
+// C_col = B_col * A_col, where *_col views the same memory as column-major.
+infiniStatus_t gemmRowMajorSquare(
+    cublasHandle_t handle,
+    const GemmTypeConfig &cfg,
+    infiniDtype_t dtype,
+    int n,
+    const void *a,
+    const void *b,
+    void *c) {
+
+    if (dtype == INFINI_DTYPE_F64) {
+        const double alpha = 1.0;
+        const double beta = 0.0;
+        CHECK_CUBLAS(cublasGemmEx(
+            handle,
+            CUBLAS_OP_N,
+            CUBLAS_OP_N,
+            n,
+            n,
+            n,
+            &alpha,
+            b,
+            cfg.io_type,
+            n,
+            a,
+            cfg.io_type,
+            n,
+            &beta,
+            c,
+            cfg.io_type,
+            n,
+            cfg.compute_type,
+            CUBLAS_GEMM_DEFAULT));
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    const float alpha = 1.0f;
+    const float beta = 0.0f;
+    CHECK_CUBLAS(cublasGemmEx(
+        handle,
+        CUBLAS_OP_N,
+        CUBLAS_OP_N,
+        n,
+        n,
+        n,
+        &alpha,
+        b,
+        cfg.io_type,
+        n,
+        a,
+        cfg.io_type,
+        n,
+        &beta,
+        c,
+        cfg.io_type,
+        n,
+        cfg.compute_type,
+        CUBLAS_GEMM_DEFAULT));
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace
+
 struct Descriptor::Opaque {
     std::shared_ptr<device::nvidia::Handle::Internal> internal;
-    
+
     Opaque(std::shared_ptr<device::nvidia::Handle::Internal> internal_)
         : internal(internal_) {}
 };
@@ -30,8 +211,18 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t x_desc,
     int n) {
 
+    if (handle == nullptr || desc_ptr == nullptr || y_desc == nullptr || x_desc == nullptr) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    if (n < 0) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
     auto dtype = x_desc->dtype();
     CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64, INFINI_DTYPE_BF16);
+    if (y_desc->dtype() != dtype) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
 
     auto x_shape = x_desc->shape();
     auto y_shape = y_desc->shape();
@@ -43,10 +234,16 @@ infiniStatus_t Descriptor::create(
     if (y_shape != x_shape) {
         return INFINI_STATUS_BAD_TENSOR_SHAPE;
     }
+    if (x_shape[0] > static_cast<size_t>(std::numeric_limits<int>::max())) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    size_t matrix_numel = x_desc->numel();
+    size_t workspace_size = (n == 0) ? 0 : matrix_numel * infiniSizeOf(dtype) * 2;
 
     auto handle_nvidia = reinterpret_cast<device::nvidia::Handle *>(handle);
-    Descriptor *desc = new Descriptor(dtype, x_shape[0], (n < 0) ? -n : n,
-                                      x_desc->numel(), y_desc->numel(),
+    Descriptor *desc = new Descriptor(dtype, x_shape[0], static_cast<size_t>(n),
+                                      matrix_numel, y_desc->numel(), workspace_size,
                                       handle->device, handle->device_id);
     desc->_opaque = new Opaque(handle_nvidia->internal());
     *desc_ptr = desc;
@@ -60,74 +257,58 @@ infiniStatus_t Descriptor::calculate(
     const void *x,
     void *stream) const {
 
+    if (x == nullptr || y == nullptr) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
     if (workspace_size < this->workspaceSize()) {
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
+    if (this->workspaceSize() != 0 && workspace == nullptr) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
 
     auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
-    size_t n = matrix_size;
-    int power = static_cast<int>(this->n);
-
-    // Use workspace for temporary matrices
-    void *temp1 = workspace;
-
-    size_t input_bytes = input_size * infiniSizeOf(_dtype);
-    size_t output_bytes = output_size * infiniSizeOf(_dtype);
-    
-    // Initialize result as identity matrix
-    CHECK_CUDA(cudaMemsetAsync(y, 0, output_bytes, cuda_stream));
-    // Set diagonal to 1
-    // TODO: Launch kernel to set identity matrix
-
-    // Copy input to temp1
-    CHECK_CUDA(cudaMemcpyAsync(temp1, x, input_bytes, cudaMemcpyDeviceToDevice, cuda_stream));
-
-    std::vector<float> h_matrix(input_size);
-    CHECK_CUDA(cudaMemcpyAsync(h_matrix.data(), x, input_bytes, cudaMemcpyDeviceToHost, cuda_stream));
-    CHECK_CUDA(cudaStreamSynchronize(cuda_stream));
-
-    // Compute on CPU (temporary solution)
-    std::vector<float> result(output_size, 0.0f);
-    std::vector<float> temp1_cpu(input_size);
-    std::vector<float> temp2_cpu(input_size);
-    std::memcpy(temp1_cpu.data(), h_matrix.data(), input_bytes);
-
-    // Initialize result as identity
-    for (size_t i = 0; i < n; ++i) {
-        result[i * n + i] = 1.0f;
+    CHECK_STATUS(initializeIdentity(y, _dtype, matrix_size, output_size, cuda_stream));
+    if (n == 0) {
+        return INFINI_STATUS_SUCCESS;
     }
 
-    // Binary exponentiation
-    while (power > 0) {
-        if (power & 1) {
-            // Multiply result by temp1
-            std::fill(temp2_cpu.begin(), temp2_cpu.end(), 0.0f);
-            for (size_t i = 0; i < n; ++i) {
-                for (size_t k = 0; k < n; ++k) {
-                    float val = result[i * n + k];
-                    for (size_t j = 0; j < n; ++j) {
-                        temp2_cpu[i * n + j] += val * temp1_cpu[k * n + j];
-                    }
-                }
-            }
-            std::memcpy(result.data(), temp2_cpu.data(), output_bytes);
-        }
-        // Square temp1
-        std::fill(temp2_cpu.begin(), temp2_cpu.end(), 0.0f);
-        for (size_t i = 0; i < n; ++i) {
-            for (size_t k = 0; k < n; ++k) {
-                float val = temp1_cpu[i * n + k];
-                for (size_t j = 0; j < n; ++j) {
-                    temp2_cpu[i * n + j] += val * temp1_cpu[k * n + j];
-                }
-            }
-        }
-        std::memcpy(temp1_cpu.data(), temp2_cpu.data(), input_bytes);
-        power >>= 1;
-    }
+    size_t matrix_bytes = input_size * infiniSizeOf(_dtype);
+    char *workspace_ptr = reinterpret_cast<char *>(workspace);
+    void *base = workspace_ptr;
+    void *temp = workspace_ptr + matrix_bytes;
+    CHECK_CUDA(cudaMemcpyAsync(base, x, matrix_bytes, cudaMemcpyDeviceToDevice, cuda_stream));
 
-    // Copy result back to GPU
-    CHECK_CUDA(cudaMemcpyAsync(y, result.data(), output_bytes, cudaMemcpyHostToDevice, cuda_stream));
+    GemmTypeConfig cfg;
+    CHECK_STATUS(getGemmTypeConfig(_dtype, cfg));
+
+    void *result = y;
+    void *scratch = temp;
+    void *base_matrix = base;
+    size_t power = n;
+    int matrix_dim = static_cast<int>(matrix_size);
+
+    CHECK_STATUS(_opaque->internal->useCublas(
+        cuda_stream,
+        [&](cublasHandle_t handle) {
+            while (power > 0) {
+                if (power & 1) {
+                    CHECK_STATUS(gemmRowMajorSquare(handle, cfg, _dtype, matrix_dim, result, base_matrix, scratch));
+                    std::swap(result, scratch);
+                }
+                power >>= 1;
+                if (power == 0) {
+                    break;
+                }
+                CHECK_STATUS(gemmRowMajorSquare(handle, cfg, _dtype, matrix_dim, base_matrix, base_matrix, scratch));
+                std::swap(base_matrix, scratch);
+            }
+            return INFINI_STATUS_SUCCESS;
+        }));
+
+    if (result != y) {
+        CHECK_CUDA(cudaMemcpyAsync(y, result, matrix_bytes, cudaMemcpyDeviceToDevice, cuda_stream));
+    }
 
     return INFINI_STATUS_SUCCESS;
 }

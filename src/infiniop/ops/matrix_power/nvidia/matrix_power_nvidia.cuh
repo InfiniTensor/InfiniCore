@@ -14,9 +14,11 @@ class Descriptor final : public InfiniopDescriptor {
     size_t n;
     size_t input_size;
     size_t output_size;
+    size_t workspace_size;
 
     Descriptor(infiniDtype_t dtype, size_t matrix_size, size_t n,
                size_t input_size, size_t output_size,
+               size_t workspace_size,
                infiniDevice_t device_type, int device_id)
         : InfiniopDescriptor{device_type, device_id},
           _opaque(nullptr),
@@ -24,7 +26,8 @@ class Descriptor final : public InfiniopDescriptor {
           matrix_size(matrix_size),
           n(n),
           input_size(input_size),
-          output_size(output_size) {}
+          output_size(output_size),
+          workspace_size(workspace_size) {}
 
 public:
     ~Descriptor();
@@ -38,7 +41,7 @@ public:
         infiniopTensorDescriptor_t x_desc,
         int n);
 
-    size_t workspaceSize() const { return matrix_size * matrix_size * sizeof(double) * 2; }
+    size_t workspaceSize() const { return workspace_size; }
 
     infiniStatus_t calculate(
         void *workspace,
