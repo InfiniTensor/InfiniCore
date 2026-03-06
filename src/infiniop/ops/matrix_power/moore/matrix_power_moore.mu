@@ -1,5 +1,6 @@
 #include "matrix_power_moore.h"
 #include "../../../utils.h"
+#include "../../../devices/moore/moore_kernel_common.h"
 #include <cuda_runtime.h>
 #include <vector>
 #include <cstring>

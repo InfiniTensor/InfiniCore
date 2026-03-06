@@ -1,5 +1,6 @@
 #include "matrix_power_metax.h"
 #include "../../../utils.h"
+#include "../../../devices/metax/metax_kernel_common.h"
 #include <cuda_runtime.h>
 #include <vector>
 #include <cstring>
