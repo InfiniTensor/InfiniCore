@@ -1,19 +1,19 @@
-#ifndef __PER_CHANNEL_QUANT_INT8_H__
-#define __PER_CHANNEL_QUANT_INT8_H__
+#ifndef __PER_TENSOR_QUANT_I8_H__
+#define __PER_TENSOR_QUANT_I8_H__
 
 #include "../../../operator.h"
 #include "info.h"
 
 #define DESCRIPTOR(NAMESPACE)                                                                \
                                                                                              \
-    namespace op::per_channel_quant_int8::NAMESPACE {                                        \
+    namespace op::per_tensor_quant_int8::NAMESPACE {                                         \
     class Descriptor final : public InfiniopDescriptor {                                     \
         struct Opaque;                                                                       \
         Opaque *_opaque;                                                                     \
-        PerChannelQuantI8Info _info;                                                         \
+        PerTensorQuantI8Info _info;                                                          \
         size_t _workspace_size;                                                              \
                                                                                              \
-        Descriptor(Opaque *opaque, PerChannelQuantI8Info info,                               \
+        Descriptor(Opaque *opaque, PerTensorQuantI8Info info,                                \
                    size_t workspace_size,                                                    \
                    infiniDevice_t device_type, int device_id)                                \
             : InfiniopDescriptor{device_type, device_id},                                    \
@@ -37,4 +37,4 @@
     };                                                                                       \
     }
 
-#endif // __PER_CHANNEL_QUANT_INT8_H__
+#endif // __PER_TENSOR_QUANT_I8_H__

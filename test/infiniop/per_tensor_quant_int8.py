@@ -28,9 +28,9 @@ _TEST_CASES = [
     ((8, 8), True),
     ((128, 512), True),
     ((128, 128), True),
-    ((256, 1024), False),
+    ((256, 1024), True),
     ((256, 2048), True),
-    ((1024, 2048), False),
+    ((1024, 2048), True),
 ]
 
 
@@ -50,33 +50,21 @@ NUM_PRERUN = 10
 NUM_ITERATIONS = 1000
 
 
-def per_token_quant_int8_torch(x, symmetric):
-    if symmetric:
+def per_tensor_quant_int8_torch(x, symmetric):
+    if symmetric == False:
+        return
+    else:
         x = x.float()
-        absmax = x.abs().max(dim=-1).values
-        absmax = absmax.clamp_min(1e-10).unsqueeze(-1)
+        absmax = x.flatten().abs().max()
+        if absmax == 0:
+            scale = torch.tensor(1.0, device=x.device, dtype=torch.float32)
+            q = torch.zeros_like(x, dtype=torch.int8)
+            return q, scale, None
         scale_x = absmax / 127
         x_q = x.mul(127 / absmax)
         x_q = torch.round(x_q).to(torch.int8)
 
         return x_q, scale_x, None
-    else:
-        w = x.float()
-        w_min = w.min(dim=-1, keepdim=True)[0]
-        w_max = w.max(dim=-1, keepdim=True)[0]
-
-        w_scale = (w_max - w_min) / 255.0
-        w_scale = torch.clamp(w_scale, min=1e-8)
-
-        w_zero = -w_min / w_scale - 128.0
-
-        w_q = torch.round(w / w_scale + w_zero)
-
-        w_q = torch.clamp(w_q, -128, 127)
-
-        w_packed = w_q.to(torch.int8)
-
-        return w_packed, w_scale, w_zero
 
 def test(
     handle,
@@ -88,24 +76,24 @@ def test(
 ):
     
     print(
-        f"Testing Per Channel Quant Int8 on {InfiniDeviceNames[device]} with x_shape:{x_shape}, symmetric:{symmetric} , dtype:{InfiniDtypeNames[dtype]}"
+        f"Testing Per Tensor Quant Int8 on {InfiniDeviceNames[device]} with x_shape:{x_shape}, symmetric:{symmetric} , dtype:{InfiniDtypeNames[dtype]}"
     )
     M, K = x_shape
    
     x = TestTensor(x_shape, None, dtype, device)
-    x_p, x_s, x_z = per_token_quant_int8_torch(x.torch_tensor(), symmetric)
+    x_p, x_s, x_z = per_tensor_quant_int8_torch(x.torch_tensor(), symmetric)
     x_packed = TestTensor(x_shape, None, InfiniDtype.I8, device, mode="zeros")
-    x_scale = TestTensor((M, 1), None, InfiniDtype.F32, device)
+    x_scale = TestTensor((1, ), None, InfiniDtype.F32, device)
     if symmetric:
         x_zero = None
     else:
-        x_zero = TestTensor((M, 1), None, InfiniDtype.F32, device)
+        x_zero = TestTensor((1, ), None, InfiniDtype.F32, device)
     if sync is not None:
         sync()
 
     descriptor = infiniopOperatorDescriptor_t()
     check_error(
-        LIBINFINIOP.infiniopCreatePerChannelQuantI8Descriptor(
+        LIBINFINIOP.infiniopCreatePerTensorQuantI8Descriptor(
             handle,
             ctypes.byref(descriptor),
             x_packed.descriptor,
@@ -124,15 +112,15 @@ def test(
 
     workspace_size = c_uint64(0)
     check_error(
-        LIBINFINIOP.infiniopGetPerChannelQuantI8WorkspaceSize(
+        LIBINFINIOP.infiniopGetPerTensorQuantI8WorkspaceSize(
             descriptor, ctypes.byref(workspace_size)
         )
     )
     workspace = TestWorkspace(workspace_size.value, x.device)
     
-    def lib_per_channel_quant_int8():
+    def lib_per_tensor_quant_int8():
         check_error(
-            LIBINFINIOP.infiniopPerChannelQuantI8(
+            LIBINFINIOP.infiniopPerTensorQuantI8(
                 descriptor,
                 workspace.data(),
                 workspace_size.value,
@@ -144,7 +132,7 @@ def test(
             )
         )
 
-    lib_per_channel_quant_int8()
+    lib_per_tensor_quant_int8()
     
     if sync is not None:
         sync()
@@ -155,7 +143,7 @@ def test(
         debug(x_scale.actual_tensor(), x_s, atol=atol, rtol=rtol)
         if symmetric == False:
             debug(x_zero.actual_tensor(), x_z, atol=atol, rtol=rtol)
-
+    
     if symmetric:
         assert (torch.allclose(x_packed.actual_tensor(), x_p, atol=1, rtol=0) and 
                 torch.allclose(x_scale.actual_tensor(), x_s, atol=atol, rtol=rtol))
@@ -167,11 +155,11 @@ def test(
     # Profiling workflow
     if PROFILE:
         # fmt: off
-        profile_operation("PyTorch", lambda: per_token_quant_int8_torch(x.torch_tensor(), symmetric), device, NUM_PRERUN, NUM_ITERATIONS)
-        profile_operation("    lib", lambda: lib_per_channel_quant_int8(), device, NUM_PRERUN, NUM_ITERATIONS)
+        profile_operation("PyTorch", lambda: per_tensor_quant_int8_torch(x.torch_tensor(), symmetric), device, NUM_PRERUN, NUM_ITERATIONS)
+        profile_operation("    lib", lambda: lib_per_tensor_quant_int8(), device, NUM_PRERUN, NUM_ITERATIONS)
         # fmt: on
 
-    check_error(LIBINFINIOP.infiniopDestroyPerChannelQuantI8Descriptor(descriptor))
+    check_error(LIBINFINIOP.infiniopDestroyPerTensorQuantI8Descriptor(descriptor))
 
 
 if __name__ == "__main__":
