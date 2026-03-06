@@ -50,6 +50,10 @@ __device__ __forceinline__ Tcompute hinge_embedding_loss_value(Tcompute input, T
     //  - target == 1  : loss = input
     //  - target == -1 : loss = max(0, margin - input)
     //  - else         : loss = max(input, margin)
+    //
+    // Note: While the docs state targets should be ±1, PyTorch defines a fallback
+    // behavior for other values (e.g., randomly-initialized float targets).
+    // Example (PyTorch): input=0.2, target=0.5, margin=1.0 -> loss=1.0.
     if (target == static_cast<Tcompute>(1)) {
         return input;
     }

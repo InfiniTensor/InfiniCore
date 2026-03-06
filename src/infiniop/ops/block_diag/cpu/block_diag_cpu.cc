@@ -74,6 +74,10 @@ infiniStatus_t Descriptor::create(
     auto dtype = input_descs[0]->dtype();
     CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64, INFINI_DTYPE_BF16);
 
+    if (y_desc->dtype() != dtype) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
     // Check all inputs have same dtype
     for (size_t i = 1; i < num_inputs; ++i) {
         if (input_descs[i]->dtype() != dtype) {

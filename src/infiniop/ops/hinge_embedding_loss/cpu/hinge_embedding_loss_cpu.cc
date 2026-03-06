@@ -64,6 +64,10 @@ infiniStatus_t Descriptor::create(
     auto dtype = input_desc->dtype();
     CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64, INFINI_DTYPE_BF16);
 
+    if (target_desc->dtype() != dtype || y_desc->dtype() != dtype) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
     auto info_result = HingeEmbeddingLossInfo::create(input_desc, target_desc, y_desc, margin, reduction);
     CHECK_RESULT(info_result);
 
@@ -101,6 +105,8 @@ void hinge_embedding_loss_impl(
         if (t == static_cast<Tcompute>(-1)) {
             return std::max(static_cast<Tcompute>(0), margin_val - in);
         }
+        // PyTorch defines a fallback behavior for unexpected target values
+        // (i.e., not exactly ±1): loss = max(input, margin).
         return std::max(in, margin_val);
     };
 
