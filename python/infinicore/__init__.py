@@ -182,7 +182,10 @@ def _install_test_framework_adapter() -> None:
                 fw_base._INFINICORE_RUNTIME_ADAPTER_PATCHED = True
 
                 BaseOperatorTest = fw_base.BaseOperatorTest
-                orig_infinicore_operator = BaseOperatorTest.infinicore_operator
+                orig_infinicore_operator = getattr(BaseOperatorTest, "infinicore_operator", None)
+                if orig_infinicore_operator is None:
+                    def orig_infinicore_operator(self, *args, **kwargs):
+                        raise AttributeError("BaseOperatorTest has no infinicore_operator")
 
                 def _dispatch_infinicore_operator(self, *args, **kwargs):
                     op_name = str(getattr(self, "operator_name", "")).strip().lower()
@@ -265,7 +268,27 @@ def _should_install_test_framework_adapter() -> bool:
 
     if os.getenv("INFINICORE_ENABLE_TEST_ADAPTER") in {"1", "true", "TRUE", "yes", "YES"}:
         return True
-    return importlib.util.find_spec("framework") is not None
+
+    # Auto-enable only for this repo's bundled test framework to avoid triggering in
+    # environments that happen to have an unrelated `framework` module installed.
+    spec = importlib.util.find_spec("framework")
+    if spec is None:
+        return False
+
+    candidates = []
+    origin = getattr(spec, "origin", None)
+    if origin:
+        candidates.append(origin)
+    locs = getattr(spec, "submodule_search_locations", None)
+    if locs:
+        candidates.extend(list(locs))
+
+    for path in candidates:
+        norm = str(path).replace("\\", "/")
+        if "/test/infinicore/framework" in norm:
+            return True
+
+    return False
 
 
 if _should_install_test_framework_adapter():

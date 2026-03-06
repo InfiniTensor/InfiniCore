@@ -111,7 +111,7 @@ void diff_impl(
     const auto &in_strides = info.input_strides;
     const auto &out_strides = info.output_strides;
     const size_t out_numel = info.output_size;
-    const size_t stride_dim = in_strides[static_cast<size_t>(info.dim)];
+    const ptrdiff_t stride_dim = in_strides[static_cast<size_t>(info.dim)];
 
     auto unravel_index = [](size_t linear, const std::vector<size_t> &shape, std::vector<size_t> &idx) {
         const size_t ndim = shape.size();
@@ -130,16 +130,16 @@ void diff_impl(
         for (ptrdiff_t linear = 0; linear < static_cast<ptrdiff_t>(out_numel); ++linear) {
             unravel_index(static_cast<size_t>(linear), out_shape, idx);
 
-            size_t y_off = 0;
-            size_t x_base_off = 0;
+            ptrdiff_t y_off = 0;
+            ptrdiff_t x_base_off = 0;
             for (size_t d = 0; d < info.ndim; ++d) {
-                y_off += idx[d] * out_strides[d];
-                x_base_off += idx[d] * in_strides[d];
+                y_off += static_cast<ptrdiff_t>(idx[d]) * out_strides[d];
+                x_base_off += static_cast<ptrdiff_t>(idx[d]) * in_strides[d];
             }
 
             double acc = 0.0;
             for (int k = 0; k <= info.n; ++k) {
-                const size_t x_off = x_base_off + static_cast<size_t>(k) * stride_dim;
+                const ptrdiff_t x_off = x_base_off + static_cast<ptrdiff_t>(k) * stride_dim;
                 acc += coeff[static_cast<size_t>(k)] * utils::cast<double>(x[x_off]);
             }
 

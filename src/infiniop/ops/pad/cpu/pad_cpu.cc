@@ -8,6 +8,9 @@
 namespace op::pad::cpu {
 
 PadMode parseMode(const char *mode_str) {
+    if (mode_str == nullptr) {
+        return PadMode::CONSTANT;
+    }
     if (std::strcmp(mode_str, "constant") == 0) {
         return PadMode::CONSTANT;
     } else if (std::strcmp(mode_str, "reflect") == 0) {
@@ -60,6 +63,24 @@ utils::Result<PadInfo> PadInfo::create(
         return INFINI_STATUS_BAD_TENSOR_SHAPE;
     }
 
+    const PadMode mode = parseMode(mode_str);
+    if (mode == PadMode::REFLECT) {
+        for (size_t i = 0; i < ndim; ++i) {
+            const int64_t in_size = static_cast<int64_t>(x_shape[i]);
+            const int64_t pad_left = static_cast<int64_t>(pads[2 * i]);
+            const int64_t pad_right = static_cast<int64_t>(pads[2 * i + 1]);
+            if (pad_left == 0 && pad_right == 0) {
+                continue;
+            }
+            if (in_size <= 1) {
+                return INFINI_STATUS_BAD_PARAM;
+            }
+            if (pad_left >= in_size || pad_right >= in_size) {
+                return INFINI_STATUS_BAD_PARAM;
+            }
+        }
+    }
+
     PadInfo info;
     info.ndim = ndim;
     info.input_shape = x_shape;
@@ -67,7 +88,7 @@ utils::Result<PadInfo> PadInfo::create(
     info.output_shape = y_shape;
     info.output_strides = y_desc->strides();
     info.pads = pads;
-    info.mode = parseMode(mode_str);
+    info.mode = mode;
     info.value = value;
 
     return utils::Result<PadInfo>(std::move(info));
