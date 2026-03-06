@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <type_traits>
 
 namespace op::avg_pool3d::cpu {
 
@@ -164,7 +165,8 @@ void avg_pool3d_impl(
     const T *x) {
 
     const size_t kernel_size = info.kernel_d * info.kernel_h * info.kernel_w;
-    const float inv_kernel_size = 1.0f / static_cast<float>(kernel_size);
+    using Tacc = std::conditional_t<std::is_same_v<T, double>, double, float>;
+    const Tacc inv_kernel_size = Tacc(1) / static_cast<Tacc>(kernel_size);
 
 #pragma omp parallel for collapse(2)
     for (ptrdiff_t b = 0; b < static_cast<ptrdiff_t>(info.batch); ++b) {
@@ -172,7 +174,7 @@ void avg_pool3d_impl(
             for (size_t od = 0; od < info.output_d; ++od) {
                 for (size_t oh = 0; oh < info.output_h; ++oh) {
                     for (size_t ow = 0; ow < info.output_w; ++ow) {
-                        float sum = 0.0f;
+                        Tacc sum = Tacc(0);
 
                         // Calculate input window
                         ptrdiff_t id_start =
@@ -201,7 +203,7 @@ void avg_pool3d_impl(
                                                       static_cast<size_t>(id) * info.input_strides[2] +
                                                       static_cast<size_t>(ih) * info.input_strides[3] +
                                                       static_cast<size_t>(iw) * info.input_strides[4];
-                                        sum += utils::cast<float>(x[x_idx]);
+                                        sum += utils::cast<Tacc>(x[x_idx]);
                                     }
                                 }
                             }
