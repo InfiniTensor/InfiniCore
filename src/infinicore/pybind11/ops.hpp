@@ -5,12 +5,15 @@
 #include "ops/add.hpp"
 #include "ops/add_rms_norm.hpp"
 #include "ops/attention.hpp"
+#include "ops/block_diag.hpp"
 #include "ops/causal_softmax.hpp"
 #include "ops/embedding.hpp"
 #include "ops/flash_attention.hpp"
+#include "ops/hinge_embedding_loss.hpp"
 #include "ops/kv_caching.hpp"
 #include "ops/linear.hpp"
 #include "ops/linear_w8a8i8.hpp"
+#include "ops/kron.hpp"
 #include "ops/matmul.hpp"
 #include "ops/mha_varlen.hpp"
 #include "ops/mul.hpp"
@@ -21,8 +24,10 @@
 #include "ops/rearrange.hpp"
 #include "ops/rms_norm.hpp"
 #include "ops/rope.hpp"
+#include "ops/selu.hpp"
 #include "ops/silu.hpp"
 #include "ops/silu_and_mul.hpp"
+#include "ops/sinh.hpp"
 #include "ops/swiglu.hpp"
 
 namespace py = pybind11;
@@ -33,11 +38,14 @@ inline void bind(py::module &m) {
     bind_add(m);
     bind_add_rms_norm(m);
     bind_attention(m);
+    bind_block_diag(m);
     bind_causal_softmax(m);
     bind_flash_attention(m);
+    bind_hinge_embedding_loss(m);
     bind_kv_caching(m);
     bind_linear(m);
     bind_matmul(m);
+    bind_kron(m);
     bind_mul(m);
     bind_mha_varlen(m);
     bind_paged_attention(m);
@@ -52,6 +60,8 @@ inline void bind(py::module &m) {
     bind_embedding(m);
     bind_linear_w8a8i8(m);
     bind_silu_and_mul(m);
+    bind_selu(m);
+    bind_sinh(m);
 }
 
 } // namespace infinicore::ops
