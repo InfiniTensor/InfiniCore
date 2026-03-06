@@ -79,7 +79,10 @@ __global__ void gaussian_nll_loss_kernel(
     const size_t var_off = gaussian_nll_offset(idx, var_meta);
 
     const Tcompute diff = gaussian_nll_to_compute<Tcompute>(input[in_off]) - gaussian_nll_to_compute<Tcompute>(target[tgt_off]);
-    const Tcompute var_val = gaussian_nll_to_compute<Tcompute>(var[var_off]) + eps_val;
+    Tcompute var_val = gaussian_nll_to_compute<Tcompute>(var[var_off]);
+    if (var_val < eps_val) {
+        var_val = eps_val;
+    }
     Tcompute loss = Tcompute(0.5) * (log(var_val) + (diff * diff) / var_val);
     if (full) {
         loss += Tcompute(0.9189385332046727); // log(2*pi)/2
@@ -111,7 +114,10 @@ __global__ void gaussian_nll_loss_reduce_kernel(
         const size_t var_off = gaussian_nll_offset(i, var_meta);
 
         const Tcompute diff = gaussian_nll_to_compute<Tcompute>(input[in_off]) - gaussian_nll_to_compute<Tcompute>(target[tgt_off]);
-        const Tcompute var_val = gaussian_nll_to_compute<Tcompute>(var[var_off]) + eps_val;
+        Tcompute var_val = gaussian_nll_to_compute<Tcompute>(var[var_off]);
+        if (var_val < eps_val) {
+            var_val = eps_val;
+        }
         const Tcompute loss = Tcompute(0.5) * (log(var_val) + (diff * diff) / var_val) + log_2pi;
         sum += loss;
     }
@@ -159,7 +165,10 @@ __global__ void gaussian_nll_loss_kernel(
     using Tcompute = std::conditional_t<std::is_same_v<T, double>, double, float>;
     const Tcompute eps_c = gaussian_nll_to_compute<Tcompute>(eps_val);
     const Tcompute diff = gaussian_nll_to_compute<Tcompute>(input[idx]) - gaussian_nll_to_compute<Tcompute>(target[idx]);
-    const Tcompute var_val = gaussian_nll_to_compute<Tcompute>(var[idx]) + eps_c;
+    Tcompute var_val = gaussian_nll_to_compute<Tcompute>(var[idx]);
+    if (var_val < eps_c) {
+        var_val = eps_c;
+    }
     Tcompute loss = Tcompute(0.5) * (log(var_val) + (diff * diff) / var_val);
     if (full) {
         loss += Tcompute(0.9189385332046727);
@@ -183,7 +192,10 @@ __global__ void gaussian_nll_loss_reduce_kernel(
     const Tcompute log_2pi = full ? Tcompute(0.9189385332046727) : Tcompute(0.0);
     for (size_t i = idx; i < n; i += blockDim.x * gridDim.x) {
         const Tcompute diff = gaussian_nll_to_compute<Tcompute>(input[i]) - gaussian_nll_to_compute<Tcompute>(target[i]);
-        const Tcompute var_val = gaussian_nll_to_compute<Tcompute>(var[i]) + eps_val;
+        Tcompute var_val = gaussian_nll_to_compute<Tcompute>(var[i]);
+        if (var_val < eps_val) {
+            var_val = eps_val;
+        }
         const Tcompute loss = Tcompute(0.5) * (log(var_val) + (diff * diff) / var_val) + log_2pi;
         sum += loss;
     }

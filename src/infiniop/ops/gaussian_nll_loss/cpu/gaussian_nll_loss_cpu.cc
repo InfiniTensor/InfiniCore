@@ -82,7 +82,10 @@ void gaussian_nll_loss_impl(
         // Element-wise loss
         for (size_t i = 0; i < n; ++i) {
             const double diff = utils::cast<double>(input[i]) - utils::cast<double>(target[i]);
-            const double var_val = utils::cast<double>(var[i]) + eps_val;
+            double var_val = utils::cast<double>(var[i]);
+            if (var_val < eps_val) {
+                var_val = eps_val;
+            }
             double loss = 0.5 * (std::log(var_val) + (diff * diff) / var_val);
             if (info.full) {
                 loss += 0.5 * log_2pi;
@@ -94,7 +97,10 @@ void gaussian_nll_loss_impl(
         double sum = 0.0;
         for (size_t i = 0; i < n; ++i) {
             const double diff = utils::cast<double>(input[i]) - utils::cast<double>(target[i]);
-            const double var_val = utils::cast<double>(var[i]) + eps_val;
+            double var_val = utils::cast<double>(var[i]);
+            if (var_val < eps_val) {
+                var_val = eps_val;
+            }
             double loss = 0.5 * (std::log(var_val) + (diff * diff) / var_val);
             if (info.full) {
                 loss += 0.5 * log_2pi;

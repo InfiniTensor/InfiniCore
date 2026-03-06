@@ -119,7 +119,15 @@ bool InfiniopTensorDescriptor::isContiguous(size_t dim_start, size_t dim_end) co
         return false;
     }
 
-    return stride(dim_end) == ptrdiff_t(1);
+    // Contiguity should be determined by the last effective (non-1 sized) dimension.
+    // Dimensions with size 1 do not contribute to address computation.
+    for (size_t i = dim_end + 1; i-- > dim_start;) {
+        if (dim(i) != 1) {
+            return stride(i) == ptrdiff_t(1);
+        }
+    }
+
+    return true;
 }
 
 bool InfiniopTensorDescriptor::isContiguous() const {
