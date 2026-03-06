@@ -13,8 +13,9 @@ namespace op::erfinv::cpu {
 template <typename T>
 T erfinv_impl(T x) {
     // Domain: x in (-1, 1)
-    if (x >= 1.0) return std::numeric_limits<T>::infinity();
-    if (x <= -1.0) return -std::numeric_limits<T>::infinity();
+    if (x == 1.0) return std::numeric_limits<T>::infinity();
+    if (x == -1.0) return -std::numeric_limits<T>::infinity();
+    if (x > 1.0 || x < -1.0) return std::numeric_limits<T>::quiet_NaN();
     if (x == 0.0) return 0.0;
 
     // Use Newton's method to solve erf(y) = x

@@ -33,7 +33,7 @@ public:
         infiniopTensorDescriptor_t x_desc,
         int n);
 
-    size_t workspaceSize() const { return matrix_size * matrix_size * sizeof(double) * 2; }
+    size_t workspaceSize() const { return 0; }
 
     infiniStatus_t calculate(
         void *workspace,

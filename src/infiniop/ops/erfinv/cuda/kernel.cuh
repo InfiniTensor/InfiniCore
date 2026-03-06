@@ -11,8 +11,9 @@ namespace op::cuda {
 // Inverse error function using Newton's method
 template <typename T>
 __device__ __forceinline__ T erfinv_impl(T x) {
-    if (x >= 1.0f) return CUDART_INF_F;
-    if (x <= -1.0f) return -CUDART_INF_F;
+    if (x == 1.0f) return CUDART_INF_F;
+    if (x == -1.0f) return -CUDART_INF_F;
+    if (x > 1.0f || x < -1.0f) return CUDART_NAN_F;
     if (x == 0.0f) return 0.0f;
 
     T y = x; // Initial guess
@@ -39,8 +40,9 @@ struct ErfinvOp {
             return erfinv_impl(x);
         } else if constexpr (std::is_same_v<T, double>) {
             // For double, use similar approach
-            if (x >= 1.0) return CUDART_INF;
-            if (x <= -1.0) return -CUDART_INF;
+            if (x == 1.0) return CUDART_INF;
+            if (x == -1.0) return -CUDART_INF;
+            if (x > 1.0 || x < -1.0) return CUDART_NAN;
             if (x == 0.0) return 0.0;
             double y = x;
             const int max_iter = 10;

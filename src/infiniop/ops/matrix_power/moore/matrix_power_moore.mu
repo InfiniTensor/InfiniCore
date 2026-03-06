@@ -97,6 +97,7 @@ infiniStatus_t Descriptor::calculate(
     }
 
     CHECK_MOORE(musaMemcpyAsync(y, result.data(), input_bytes, musaMemcpyHostToDevice, musa_stream));
+    CHECK_MOORE(musaStreamSynchronize(musa_stream));
 
     return INFINI_STATUS_SUCCESS;
 }
