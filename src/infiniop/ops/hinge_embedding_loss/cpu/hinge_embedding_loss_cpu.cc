@@ -1,7 +1,9 @@
 #include "hinge_embedding_loss_cpu.h"
-#include "../../../utils.h"
+#include "../../../../utils.h"
+#include "../../../tensor.h"
 #include <algorithm>
 #include <cmath>
+#include <type_traits>
 
 namespace op::hinge_embedding_loss::cpu {
 
@@ -70,37 +72,38 @@ void hinge_embedding_loss_impl(
     const T *target) {
 
     size_t n = info.input_size;
-    T margin_val = utils::cast<T>(info.margin);
+    using Tcompute = std::conditional_t<std::is_same_v<T, double>, double, float>;
+    Tcompute margin_val = static_cast<Tcompute>(info.margin);
+
+    auto loss_value = [&](Tcompute in, Tcompute t) -> Tcompute {
+        if (t == static_cast<Tcompute>(1)) {
+            return in;
+        }
+        if (t == static_cast<Tcompute>(-1)) {
+            return std::max(static_cast<Tcompute>(0), margin_val - in);
+        }
+        return std::max(in, margin_val);
+    };
 
     if (info.reduction == Reduction::NONE) {
         // Element-wise loss
         for (size_t i = 0; i < n; ++i) {
-            T t = target[i];
-            T in = input[i];
-            if (t > 0) {
-                // target == 1: loss = max(0, margin - input)
-                y[i] = std::max(utils::cast<T>(0.0), margin_val - in);
-            } else {
-                // target == -1: loss = max(0, input)
-                y[i] = std::max(utils::cast<T>(0.0), in);
-            }
+            Tcompute t = utils::cast<Tcompute>(target[i]);
+            Tcompute in = utils::cast<Tcompute>(input[i]);
+            y[i] = utils::cast<T>(loss_value(in, t));
         }
     } else {
         // Sum or Mean
-        T sum = utils::cast<T>(0.0);
+        Tcompute sum = static_cast<Tcompute>(0);
         for (size_t i = 0; i < n; ++i) {
-            T t = target[i];
-            T in = input[i];
-            if (t > 0) {
-                sum += std::max(utils::cast<T>(0.0), margin_val - in);
-            } else {
-                sum += std::max(utils::cast<T>(0.0), in);
-            }
+            Tcompute t = utils::cast<Tcompute>(target[i]);
+            Tcompute in = utils::cast<Tcompute>(input[i]);
+            sum += loss_value(in, t);
         }
         if (info.reduction == Reduction::MEAN) {
-            y[0] = sum / utils::cast<T>(static_cast<double>(n));
+            y[0] = utils::cast<T>(n > 0 ? (sum / static_cast<Tcompute>(n)) : static_cast<Tcompute>(0));
         } else {
-            y[0] = sum;
+            y[0] = utils::cast<T>(sum);
         }
     }
 }

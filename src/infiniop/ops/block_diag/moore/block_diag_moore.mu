@@ -1,6 +1,7 @@
 #include "block_diag_moore.h"
 #include "../cuda/kernel.cuh"
-#include "../../../utils.h"
+#include "../../../../utils.h"
+#include "../../../tensor.h"
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
 

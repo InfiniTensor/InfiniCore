@@ -1,5 +1,7 @@
 #include "kron_cpu.h"
-#include "../../../utils.h"
+#include "../../../../utils.h"
+#include "../../../tensor.h"
+#include <type_traits>
 
 namespace op::kron::cpu {
 
@@ -103,7 +105,13 @@ void kron_impl(
         size_t a_idx = coordsToIndex(a_coords, info.a_shape);
         size_t b_idx = coordsToIndex(b_coords, info.b_shape);
 
-        y[y_idx] = a[a_idx] * b[b_idx];
+        if constexpr (std::is_same_v<T, fp16_t> || std::is_same_v<T, bf16_t>) {
+            float av = utils::cast<float>(a[a_idx]);
+            float bv = utils::cast<float>(b[b_idx]);
+            y[y_idx] = utils::cast<T>(av * bv);
+        } else {
+            y[y_idx] = a[a_idx] * b[b_idx];
+        }
     }
 }
 

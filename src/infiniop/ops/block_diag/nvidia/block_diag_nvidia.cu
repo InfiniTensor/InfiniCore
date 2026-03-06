@@ -1,6 +1,8 @@
 #include "block_diag_nvidia.cuh"
 #include "../cuda/kernel.cuh"
-#include "../../../utils.h"
+#include "../../../../utils.h"
+#include "../../../tensor.h"
+#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
 
@@ -31,6 +33,10 @@ infiniStatus_t Descriptor::create(
     std::vector<size_t> row_offsets(num_inputs);
     std::vector<size_t> col_offsets(num_inputs);
     std::vector<std::vector<size_t>> input_shapes(num_inputs);
+    std::vector<size_t> input_rows(num_inputs);
+    std::vector<size_t> input_cols(num_inputs);
+    std::vector<ptrdiff_t> input_stride0(num_inputs);
+    std::vector<ptrdiff_t> input_stride1(num_inputs);
 
     size_t total_rows = 0;
     size_t total_cols = 0;
@@ -41,6 +47,10 @@ infiniStatus_t Descriptor::create(
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
         input_shapes[i] = shape;
+        input_rows[i] = shape[0];
+        input_cols[i] = shape[1];
+        input_stride0[i] = input_descs[i]->stride(0);
+        input_stride1[i] = input_descs[i]->stride(1);
         row_offsets[i] = total_rows;
         col_offsets[i] = total_cols;
         total_rows += shape[0];
@@ -52,8 +62,16 @@ infiniStatus_t Descriptor::create(
         return INFINI_STATUS_BAD_TENSOR_SHAPE;
     }
 
+    auto y_strides = y_desc->strides();
+    if (y_strides.size() != 2) {
+        return INFINI_STATUS_BAD_TENSOR_STRIDES;
+    }
+
     *desc_ptr = new Descriptor(dtype, num_inputs, y_shape,
+                               y_strides[0], y_strides[1],
                                row_offsets, col_offsets, input_shapes,
+                               input_rows, input_cols,
+                               input_stride0, input_stride1,
                                y_desc->numel(),
                                handle->device, handle->device_id);
     return INFINI_STATUS_SUCCESS;
@@ -68,31 +86,24 @@ infiniStatus_t Descriptor::calculate(
 
     auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
 
-    // Initialize output to zero
-    size_t output_bytes = output_size * infiniopGetDtypeSize(_dtype);
-    CHECK_CUDA(cudaMemsetAsync(y, 0, output_bytes, cuda_stream));
-
-    // Allocate device memory for metadata
-    size_t *d_row_offsets, *d_col_offsets, *d_input_rows, *d_input_cols;
-    const void **d_inputs;
-    CHECK_CUDA(cudaMallocAsync(&d_row_offsets, num_inputs * sizeof(size_t), cuda_stream));
-    CHECK_CUDA(cudaMallocAsync(&d_col_offsets, num_inputs * sizeof(size_t), cuda_stream));
-    CHECK_CUDA(cudaMallocAsync(&d_input_rows, num_inputs * sizeof(size_t), cuda_stream));
-    CHECK_CUDA(cudaMallocAsync(&d_input_cols, num_inputs * sizeof(size_t), cuda_stream));
-    CHECK_CUDA(cudaMallocAsync(&d_inputs, num_inputs * sizeof(void *), cuda_stream));
-
-    // Copy metadata to device
-    std::vector<size_t> input_rows(num_inputs);
-    std::vector<size_t> input_cols(num_inputs);
-    for (size_t i = 0; i < num_inputs; ++i) {
-        input_rows[i] = input_shapes[i][0];
-        input_cols[i] = input_shapes[i][1];
+    if (workspace_size < this->workspaceSize()) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
+
+    size_t *d_row_offsets = reinterpret_cast<size_t *>(workspace);
+    size_t *d_col_offsets = d_row_offsets + num_inputs;
+    size_t *d_input_rows = d_col_offsets + num_inputs;
+    size_t *d_input_cols = d_input_rows + num_inputs;
+    ptrdiff_t *d_input_stride0 = reinterpret_cast<ptrdiff_t *>(d_input_cols + num_inputs);
+    ptrdiff_t *d_input_stride1 = d_input_stride0 + num_inputs;
+    const void **d_inputs = reinterpret_cast<const void **>(d_input_stride1 + num_inputs);
 
     CHECK_CUDA(cudaMemcpyAsync(d_row_offsets, row_offsets.data(), num_inputs * sizeof(size_t), cudaMemcpyHostToDevice, cuda_stream));
     CHECK_CUDA(cudaMemcpyAsync(d_col_offsets, col_offsets.data(), num_inputs * sizeof(size_t), cudaMemcpyHostToDevice, cuda_stream));
     CHECK_CUDA(cudaMemcpyAsync(d_input_rows, input_rows.data(), num_inputs * sizeof(size_t), cudaMemcpyHostToDevice, cuda_stream));
     CHECK_CUDA(cudaMemcpyAsync(d_input_cols, input_cols.data(), num_inputs * sizeof(size_t), cudaMemcpyHostToDevice, cuda_stream));
+    CHECK_CUDA(cudaMemcpyAsync(d_input_stride0, input_stride0.data(), num_inputs * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, cuda_stream));
+    CHECK_CUDA(cudaMemcpyAsync(d_input_stride1, input_stride1.data(), num_inputs * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, cuda_stream));
     CHECK_CUDA(cudaMemcpyAsync(d_inputs, inputs, num_inputs * sizeof(void *), cudaMemcpyHostToDevice, cuda_stream));
 
     constexpr int BLOCK_SIZE = 256;
@@ -105,7 +116,9 @@ infiniStatus_t Descriptor::calculate(
             reinterpret_cast<const half **>(d_inputs),
             num_inputs,
             output_shape[0], output_shape[1],
-            d_row_offsets, d_col_offsets, d_input_rows, d_input_cols);
+            output_stride0, output_stride1,
+            d_row_offsets, d_col_offsets, d_input_rows, d_input_cols,
+            d_input_stride0, d_input_stride1);
         break;
     case INFINI_DTYPE_BF16:
         cuda::block_diag_kernel<cuda_bfloat16><<<num_blocks, BLOCK_SIZE, 0, cuda_stream>>>(
@@ -113,7 +126,9 @@ infiniStatus_t Descriptor::calculate(
             reinterpret_cast<const cuda_bfloat16 **>(d_inputs),
             num_inputs,
             output_shape[0], output_shape[1],
-            d_row_offsets, d_col_offsets, d_input_rows, d_input_cols);
+            output_stride0, output_stride1,
+            d_row_offsets, d_col_offsets, d_input_rows, d_input_cols,
+            d_input_stride0, d_input_stride1);
         break;
     case INFINI_DTYPE_F32:
         cuda::block_diag_kernel<float><<<num_blocks, BLOCK_SIZE, 0, cuda_stream>>>(
@@ -121,7 +136,9 @@ infiniStatus_t Descriptor::calculate(
             reinterpret_cast<const float **>(d_inputs),
             num_inputs,
             output_shape[0], output_shape[1],
-            d_row_offsets, d_col_offsets, d_input_rows, d_input_cols);
+            output_stride0, output_stride1,
+            d_row_offsets, d_col_offsets, d_input_rows, d_input_cols,
+            d_input_stride0, d_input_stride1);
         break;
     case INFINI_DTYPE_F64:
         cuda::block_diag_kernel<double><<<num_blocks, BLOCK_SIZE, 0, cuda_stream>>>(
@@ -129,22 +146,13 @@ infiniStatus_t Descriptor::calculate(
             reinterpret_cast<const double **>(d_inputs),
             num_inputs,
             output_shape[0], output_shape[1],
-            d_row_offsets, d_col_offsets, d_input_rows, d_input_cols);
+            output_stride0, output_stride1,
+            d_row_offsets, d_col_offsets, d_input_rows, d_input_cols,
+            d_input_stride0, d_input_stride1);
         break;
     default:
-        CHECK_CUDA(cudaFreeAsync(d_row_offsets, cuda_stream));
-        CHECK_CUDA(cudaFreeAsync(d_col_offsets, cuda_stream));
-        CHECK_CUDA(cudaFreeAsync(d_input_rows, cuda_stream));
-        CHECK_CUDA(cudaFreeAsync(d_input_cols, cuda_stream));
-        CHECK_CUDA(cudaFreeAsync(d_inputs, cuda_stream));
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
-
-    CHECK_CUDA(cudaFreeAsync(d_row_offsets, cuda_stream));
-    CHECK_CUDA(cudaFreeAsync(d_col_offsets, cuda_stream));
-    CHECK_CUDA(cudaFreeAsync(d_input_rows, cuda_stream));
-    CHECK_CUDA(cudaFreeAsync(d_input_cols, cuda_stream));
-    CHECK_CUDA(cudaFreeAsync(d_inputs, cuda_stream));
 
     return INFINI_STATUS_SUCCESS;
 }

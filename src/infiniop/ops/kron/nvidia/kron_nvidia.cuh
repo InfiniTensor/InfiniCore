@@ -13,12 +13,16 @@ class Descriptor final : public InfiniopDescriptor {
     std::vector<size_t> a_shape;
     std::vector<size_t> b_shape;
     std::vector<size_t> y_shape;
+    std::vector<ptrdiff_t> a_strides;
+    std::vector<ptrdiff_t> b_strides;
+    std::vector<ptrdiff_t> y_strides;
     size_t a_size;
     size_t b_size;
     size_t y_size;
 
     Descriptor(infiniDtype_t dtype, size_t ndim,
                std::vector<size_t> a_shape, std::vector<size_t> b_shape, std::vector<size_t> y_shape,
+               std::vector<ptrdiff_t> a_strides, std::vector<ptrdiff_t> b_strides, std::vector<ptrdiff_t> y_strides,
                size_t a_size, size_t b_size, size_t y_size,
                infiniDevice_t device_type, int device_id)
         : InfiniopDescriptor{device_type, device_id},
@@ -27,6 +31,9 @@ class Descriptor final : public InfiniopDescriptor {
           a_shape(std::move(a_shape)),
           b_shape(std::move(b_shape)),
           y_shape(std::move(y_shape)),
+          a_strides(std::move(a_strides)),
+          b_strides(std::move(b_strides)),
+          y_strides(std::move(y_strides)),
           a_size(a_size),
           b_size(b_size),
           y_size(y_size) {}
@@ -41,7 +48,7 @@ public:
         infiniopTensorDescriptor_t a_desc,
         infiniopTensorDescriptor_t b_desc);
 
-    size_t workspaceSize() const { return (ndim * 3) * sizeof(size_t); }
+    size_t workspaceSize() const { return 3 * ndim * sizeof(size_t) + 3 * ndim * sizeof(ptrdiff_t); }
 
     infiniStatus_t calculate(
         void *workspace,

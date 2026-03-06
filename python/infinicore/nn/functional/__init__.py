@@ -6,6 +6,8 @@ from .linear_w8a8i8 import linear_w8a8i8
 from .random_sample import random_sample
 from .rms_norm import rms_norm
 from .rope import RopeAlgo, rope
+from .selu import selu
+from .hinge_embedding_loss import hinge_embedding_loss
 from .silu import silu
 from .silu_and_mul import silu_and_mul
 from .swiglu import swiglu
@@ -19,6 +21,8 @@ __all__ = [
     "rms_norm",
     "RopeAlgo",
     "rope",
+    "selu",
+    "hinge_embedding_loss",
     "silu",
     "swiglu",
     "linear_w8a8i8",

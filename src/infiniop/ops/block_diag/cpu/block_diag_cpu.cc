@@ -1,5 +1,6 @@
 #include "block_diag_cpu.h"
-#include "../../../utils.h"
+#include "../../../../utils.h"
+#include "../../../tensor.h"
 #include <cstring>
 
 namespace op::block_diag::cpu {
