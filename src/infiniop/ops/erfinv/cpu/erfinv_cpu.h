@@ -3,6 +3,7 @@
 
 #include "../../../elementwise/cpu/elementwise_cpu.h"
 #include <cmath>
+#include <limits>
 
 ELEMENTWISE_DESCRIPTOR(erfinv, cpu)
 

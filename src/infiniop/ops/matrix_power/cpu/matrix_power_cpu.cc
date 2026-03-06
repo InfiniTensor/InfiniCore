@@ -21,9 +21,13 @@ utils::Result<MatrixPowerInfo> MatrixPowerInfo::create(
         return INFINI_STATUS_BAD_TENSOR_SHAPE;
     }
 
+    if (n < 0) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
     MatrixPowerInfo info;
     info.matrix_size = x_shape[0];
-    info.n = (n < 0) ? -n : n;
+    info.n = static_cast<size_t>(n);
     info.input_size = x_desc->numel();
     info.output_size = y_desc->numel();
 

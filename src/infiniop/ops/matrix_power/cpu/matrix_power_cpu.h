@@ -39,7 +39,19 @@ public:
         infiniopTensorDescriptor_t x_desc,
         int n);
 
-    size_t workspaceSize() const { return _info.matrix_size * _info.matrix_size * sizeof(double); }
+    size_t workspaceSize() const {
+        const size_t elems = 2 * _info.matrix_size * _info.matrix_size;
+        switch (_dtype) {
+        case INFINI_DTYPE_F16:
+        case INFINI_DTYPE_BF16:
+        case INFINI_DTYPE_F32:
+            return elems * sizeof(float);
+        case INFINI_DTYPE_F64:
+            return elems * sizeof(double);
+        default:
+            return 0;
+        }
+    }
 
     infiniStatus_t calculate(
         void *workspace,
