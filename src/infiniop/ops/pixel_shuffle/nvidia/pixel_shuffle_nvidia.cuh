@@ -3,6 +3,8 @@
 
 #include "../../../operator.h"
 #include "../../../devices/nvidia/nvidia_common.cuh"
+#include <array>
+#include <cstddef>
 
 namespace op::pixel_shuffle::nvidia {
 
@@ -16,10 +18,14 @@ class Descriptor final : public InfiniopDescriptor {
     int upscale_factor;
     size_t input_size;
     size_t output_size;
+    std::array<ptrdiff_t, 4> x_strides;
+    std::array<ptrdiff_t, 4> y_strides;
 
     Descriptor(infiniDtype_t dtype, size_t batch, size_t in_channels, size_t out_channels,
                size_t height, size_t width, int upscale_factor,
                size_t input_size, size_t output_size,
+               std::array<ptrdiff_t, 4> x_strides,
+               std::array<ptrdiff_t, 4> y_strides,
                infiniDevice_t device_type, int device_id)
         : InfiniopDescriptor{device_type, device_id},
           _dtype(dtype),
@@ -30,7 +36,9 @@ class Descriptor final : public InfiniopDescriptor {
           width(width),
           upscale_factor(upscale_factor),
           input_size(input_size),
-          output_size(output_size) {}
+          output_size(output_size),
+          x_strides(x_strides),
+          y_strides(y_strides) {}
 
 public:
     ~Descriptor();
