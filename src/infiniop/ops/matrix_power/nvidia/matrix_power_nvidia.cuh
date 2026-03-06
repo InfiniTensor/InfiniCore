@@ -3,6 +3,7 @@
 
 #include "../../../operator.h"
 #include "../../../devices/nvidia/nvidia_common.cuh"
+#include <cstddef>
 
 namespace op::matrix_power::nvidia {
 
@@ -15,10 +16,19 @@ class Descriptor final : public InfiniopDescriptor {
     size_t input_size;
     size_t output_size;
     size_t workspace_size;
+    ptrdiff_t x_stride_0;
+    ptrdiff_t x_stride_1;
+    ptrdiff_t y_stride_0;
+    ptrdiff_t y_stride_1;
+    bool x_contiguous;
+    bool y_contiguous;
 
     Descriptor(infiniDtype_t dtype, size_t matrix_size, size_t n,
                size_t input_size, size_t output_size,
                size_t workspace_size,
+               ptrdiff_t x_stride_0, ptrdiff_t x_stride_1,
+               ptrdiff_t y_stride_0, ptrdiff_t y_stride_1,
+               bool x_contiguous, bool y_contiguous,
                infiniDevice_t device_type, int device_id)
         : InfiniopDescriptor{device_type, device_id},
           _opaque(nullptr),
@@ -27,7 +37,13 @@ class Descriptor final : public InfiniopDescriptor {
           n(n),
           input_size(input_size),
           output_size(output_size),
-          workspace_size(workspace_size) {}
+          workspace_size(workspace_size),
+          x_stride_0(x_stride_0),
+          x_stride_1(x_stride_1),
+          y_stride_0(y_stride_0),
+          y_stride_1(y_stride_1),
+          x_contiguous(x_contiguous),
+          y_contiguous(y_contiguous) {}
 
 public:
     ~Descriptor();
