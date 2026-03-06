@@ -16,13 +16,15 @@ __global__ void histc_kernel(
     double min_val,
     double max_val) {
 
-    int idx = blockIdx.x * blockDim.x + threadIdx.x;
-    int stride = blockDim.x * gridDim.x;
+    size_t idx = static_cast<size_t>(blockIdx.x) * static_cast<size_t>(blockDim.x) +
+                 static_cast<size_t>(threadIdx.x);
+    size_t stride = static_cast<size_t>(blockDim.x) * static_cast<size_t>(gridDim.x);
+    size_t input_stride_u = static_cast<size_t>(input_stride);
 
     double bin_width = (max_val - min_val) / static_cast<double>(bins);
 
-    for (int i = idx; i < static_cast<int>(input_size); i += stride) {
-        double val = static_cast<double>(input[i * input_stride]);
+    for (size_t i = idx; i < input_size; i += stride) {
+        double val = static_cast<double>(input[i * input_stride_u]);
 
         // Skip values outside range
         if (val < min_val || val > max_val) {

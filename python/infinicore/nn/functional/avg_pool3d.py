@@ -26,6 +26,11 @@ def _out_dim(in_size: int, kernel: int, stride: int, pad: int) -> int:
 
 
 def avg_pool3d(input, *, kernel_size, stride=None, padding=0):
+    if len(input.shape) != 5:
+        raise ValueError(
+            f"avg_pool3d expects a 5D input tensor [N, C, D, H, W], got shape={tuple(input.shape)!r}"
+        )
+
     ks = _triple(kernel_size)
     st = None if stride is None else _triple(stride)
     pad = _triple(padding)

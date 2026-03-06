@@ -43,6 +43,10 @@ infiniStatus_t Descriptor::create(
     auto dtype = x_desc->dtype();
     CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64, INFINI_DTYPE_BF16);
 
+    if (y_desc->dtype() != dtype) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
     auto x_shape = x_desc->shape();
     auto y_shape = y_desc->shape();
 

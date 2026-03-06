@@ -166,8 +166,21 @@ with contextlib.suppress(ImportError, ModuleNotFoundError):
 # Allow the official benchmark runner to use a default InfiniCore operator dispatcher
 # without modifying any files under test/infinicore.
 #
-# This installs a lightweight import hook (no background threads) that patches the
-# test framework when/if it is imported.
-from infinicore._framework_patch import install_default_operator_dispatch
+# We gate this behind a runner-specific condition (or explicit env var) to avoid
+# mutating global import state for normal library usage.
+with contextlib.suppress(Exception):
+    import os
+    import sys
 
-install_default_operator_dispatch()
+    enable_patch = os.environ.get("INFINICORE_ENABLE_FRAMEWORK_PATCH") == "1"
+
+    if not enable_patch:
+        argv0 = sys.argv[0] if sys.argv else ""
+        argv0 = os.path.abspath(argv0).replace("\\", "/")
+        # The official runner is invoked from this repo as `test/infinicore/run.py`.
+        enable_patch = "/test/infinicore/" in argv0
+
+    if enable_patch:
+        from infinicore._framework_patch import install_default_operator_dispatch
+
+        install_default_operator_dispatch()
