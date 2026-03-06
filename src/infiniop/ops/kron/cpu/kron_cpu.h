@@ -12,6 +12,9 @@ struct KronInfo {
     std::vector<size_t> a_shape;
     std::vector<size_t> b_shape;
     std::vector<size_t> y_shape;
+    std::vector<ptrdiff_t> a_strides;
+    std::vector<ptrdiff_t> b_strides;
+    std::vector<ptrdiff_t> y_strides;
     size_t a_size;
     size_t b_size;
     size_t y_size;

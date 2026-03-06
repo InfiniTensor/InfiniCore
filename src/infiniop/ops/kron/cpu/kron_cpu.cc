@@ -36,6 +36,9 @@ utils::Result<KronInfo> KronInfo::create(
     info.a_shape = a_shape;
     info.b_shape = b_shape;
     info.y_shape = y_shape;
+    info.a_strides = a_desc->strides();
+    info.b_strides = b_desc->strides();
+    info.y_strides = y_desc->strides();
     info.a_size = a_desc->numel();
     info.b_size = b_desc->numel();
     info.y_size = y_desc->numel();
@@ -73,17 +76,6 @@ void kron_impl(
     // y[output_idx] = a[a_idx] * b[b_idx]
     // where output coordinates are computed from a and b coordinates
 
-    // Helper to convert coordinates to linear index
-    auto coordsToIndex = [](const std::vector<size_t> &coords, const std::vector<size_t> &shape) {
-        size_t idx = 0;
-        size_t stride = 1;
-        for (size_t d = coords.size(); d-- > 0;) {
-            idx += coords[d] * stride;
-            stride *= shape[d];
-        }
-        return idx;
-    };
-
     // Iterate over output tensor
     std::vector<size_t> y_coords(info.ndim, 0);
     for (size_t y_idx = 0; y_idx < info.y_size; ++y_idx) {
@@ -94,23 +86,25 @@ void kron_impl(
             temp /= info.y_shape[d];
         }
 
-        // Compute corresponding a and b coordinates
-        std::vector<size_t> a_coords(info.ndim);
-        std::vector<size_t> b_coords(info.ndim);
+        // Compute corresponding a and b coordinates, then use descriptor strides
+        // to compute element offsets (supports non-contiguous / broadcasted strides).
+        ptrdiff_t a_off = 0;
+        ptrdiff_t b_off = 0;
+        ptrdiff_t out_off = 0;
         for (size_t d = 0; d < info.ndim; ++d) {
-            a_coords[d] = y_coords[d] / info.b_shape[d];
-            b_coords[d] = y_coords[d] % info.b_shape[d];
+            size_t a_coord = y_coords[d] / info.b_shape[d];
+            size_t b_coord = y_coords[d] % info.b_shape[d];
+            a_off += static_cast<ptrdiff_t>(a_coord) * info.a_strides[d];
+            b_off += static_cast<ptrdiff_t>(b_coord) * info.b_strides[d];
+            out_off += static_cast<ptrdiff_t>(y_coords[d]) * info.y_strides[d];
         }
 
-        size_t a_idx = coordsToIndex(a_coords, info.a_shape);
-        size_t b_idx = coordsToIndex(b_coords, info.b_shape);
-
         if constexpr (std::is_same_v<T, fp16_t> || std::is_same_v<T, bf16_t>) {
-            float av = utils::cast<float>(a[a_idx]);
-            float bv = utils::cast<float>(b[b_idx]);
-            y[y_idx] = utils::cast<T>(av * bv);
+            float av = utils::cast<float>(a[a_off]);
+            float bv = utils::cast<float>(b[b_off]);
+            y[out_off] = utils::cast<T>(av * bv);
         } else {
-            y[y_idx] = a[a_idx] * b[b_idx];
+            y[out_off] = a[a_off] * b[b_off];
         }
     }
 }

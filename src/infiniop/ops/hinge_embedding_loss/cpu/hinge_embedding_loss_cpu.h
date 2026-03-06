@@ -14,6 +14,11 @@ enum class Reduction {
 };
 
 struct HingeEmbeddingLossInfo {
+    size_t ndim;
+    std::vector<size_t> shape;
+    std::vector<ptrdiff_t> input_strides;
+    std::vector<ptrdiff_t> target_strides;
+    std::vector<ptrdiff_t> y_strides;
     size_t input_size;
     double margin;
     Reduction reduction;

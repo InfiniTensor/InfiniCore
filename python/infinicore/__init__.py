@@ -258,9 +258,11 @@ def _patch_test_framework_operator_fallback() -> None:
             _patch_test_framework_operator_fallback._finder = finder
             _sys.meta_path.insert(0, finder)
 
-        # 2) Circular-import safe path: `framework.base` imports `infinicore`, so
-        #    `BaseOperatorTest` may not exist yet while we're importing. Use a
-        #    short-lived background worker to patch as soon as it becomes available.
+    def _start_circular_import_patch_worker() -> None:
+        if getattr(_patch_test_framework_operator_fallback, "_worker_started", False):
+            return
+        _patch_test_framework_operator_fallback._worker_started = True
+
         import threading as _threading
         import time as _time
 
@@ -286,15 +288,22 @@ def _patch_test_framework_operator_fallback() -> None:
         ).start()
 
     framework_base = _sys.modules.get("framework.base")
-    BaseOperatorTest = (
-        getattr(framework_base, "BaseOperatorTest", None)
-        if framework_base is not None
-        else None
-    )
-    if BaseOperatorTest is not None:
-        _apply_patch(BaseOperatorTest)
-    else:
-        _install_deferred_patch()
+    if framework_base is not None:
+        BaseOperatorTest = getattr(framework_base, "BaseOperatorTest", None)
+        if BaseOperatorTest is not None:
+            _apply_patch(BaseOperatorTest)
+            return
+        # `framework.base` is currently importing (circular import), so patch later.
+        _start_circular_import_patch_worker()
+        return
+
+    # Avoid global import side-effects for normal users: only install the
+    # deferred import hook if the test framework is actually importable.
+    with contextlib.suppress(Exception):
+        import importlib.util as _importlib_util
+
+        if _importlib_util.find_spec("framework.base") is not None:
+            _install_deferred_patch()
 
 
 _patch_test_framework_operator_fallback()

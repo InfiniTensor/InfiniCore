@@ -36,6 +36,13 @@ utils::Result<HingeEmbeddingLossInfo> HingeEmbeddingLossInfo::create(
     }
 
     HingeEmbeddingLossInfo info;
+    info.ndim = input_shape.size();
+    info.shape = input_shape;
+    info.input_strides = input_desc->strides();
+    info.target_strides = target_desc->strides();
+    if (red == Reduction::NONE) {
+        info.y_strides = y_desc->strides();
+    }
     info.input_size = input_desc->numel();
     info.margin = margin;
     info.reduction = red;
@@ -75,6 +82,18 @@ void hinge_embedding_loss_impl(
     using Tcompute = std::conditional_t<std::is_same_v<T, double>, double, float>;
     Tcompute margin_val = static_cast<Tcompute>(info.margin);
 
+    auto linearToOffset = [&](size_t linear, const std::vector<ptrdiff_t> &strides) -> ptrdiff_t {
+        ptrdiff_t off = 0;
+        for (size_t d = info.ndim; d-- > 0;) {
+            size_t coord = (info.shape.empty() ? 0 : (linear % info.shape[d]));
+            if (!info.shape.empty()) {
+                linear /= info.shape[d];
+            }
+            off += static_cast<ptrdiff_t>(coord) * strides[d];
+        }
+        return off;
+    };
+
     auto loss_value = [&](Tcompute in, Tcompute t) -> Tcompute {
         if (t == static_cast<Tcompute>(1)) {
             return in;
@@ -88,16 +107,21 @@ void hinge_embedding_loss_impl(
     if (info.reduction == Reduction::NONE) {
         // Element-wise loss
         for (size_t i = 0; i < n; ++i) {
-            Tcompute t = utils::cast<Tcompute>(target[i]);
-            Tcompute in = utils::cast<Tcompute>(input[i]);
-            y[i] = utils::cast<T>(loss_value(in, t));
+            ptrdiff_t in_off = linearToOffset(i, info.input_strides);
+            ptrdiff_t t_off = linearToOffset(i, info.target_strides);
+            ptrdiff_t y_off = linearToOffset(i, info.y_strides);
+            Tcompute t = utils::cast<Tcompute>(target[t_off]);
+            Tcompute in = utils::cast<Tcompute>(input[in_off]);
+            y[y_off] = utils::cast<T>(loss_value(in, t));
         }
     } else {
         // Sum or Mean
         Tcompute sum = static_cast<Tcompute>(0);
         for (size_t i = 0; i < n; ++i) {
-            Tcompute t = utils::cast<Tcompute>(target[i]);
-            Tcompute in = utils::cast<Tcompute>(input[i]);
+            ptrdiff_t in_off = linearToOffset(i, info.input_strides);
+            ptrdiff_t t_off = linearToOffset(i, info.target_strides);
+            Tcompute t = utils::cast<Tcompute>(target[t_off]);
+            Tcompute in = utils::cast<Tcompute>(input[in_off]);
             sum += loss_value(in, t);
         }
         if (info.reduction == Reduction::MEAN) {

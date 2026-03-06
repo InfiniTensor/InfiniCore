@@ -10,7 +10,11 @@ namespace op::block_diag::cpu {
 struct BlockDiagInfo {
     size_t num_inputs;
     std::vector<std::vector<size_t>> input_shapes;  // Each input is 2D matrix
+    std::vector<ptrdiff_t> input_stride0;           // stride(0) per input
+    std::vector<ptrdiff_t> input_stride1;           // stride(1) per input
     std::vector<size_t> output_shape;  // 2D output
+    ptrdiff_t output_stride0;
+    ptrdiff_t output_stride1;
     std::vector<size_t> row_offsets;   // Row offset for each input matrix
     std::vector<size_t> col_offsets;   // Column offset for each input matrix
     size_t output_size;

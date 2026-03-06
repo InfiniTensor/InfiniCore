@@ -17,6 +17,8 @@ utils::Result<BlockDiagInfo> BlockDiagInfo::create(
     BlockDiagInfo info;
     info.num_inputs = num_inputs;
     info.input_shapes.resize(num_inputs);
+    info.input_stride0.resize(num_inputs);
+    info.input_stride1.resize(num_inputs);
     info.row_offsets.resize(num_inputs);
     info.col_offsets.resize(num_inputs);
 
@@ -30,6 +32,8 @@ utils::Result<BlockDiagInfo> BlockDiagInfo::create(
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
         info.input_shapes[i] = shape;
+        info.input_stride0[i] = input_descs[i]->stride(0);
+        info.input_stride1[i] = input_descs[i]->stride(1);
         info.row_offsets[i] = total_rows;
         info.col_offsets[i] = total_cols;
         total_rows += shape[0];
@@ -43,6 +47,12 @@ utils::Result<BlockDiagInfo> BlockDiagInfo::create(
     }
 
     info.output_shape = y_shape;
+    auto y_strides = y_desc->strides();
+    if (y_strides.size() != 2) {
+        return INFINI_STATUS_BAD_TENSOR_STRIDES;
+    }
+    info.output_stride0 = y_strides[0];
+    info.output_stride1 = y_strides[1];
     info.output_size = y_desc->numel();
 
     return utils::Result<BlockDiagInfo>(std::move(info));
@@ -84,8 +94,19 @@ void block_diag_impl(
     T *y,
     const T **inputs) {
 
-    // Initialize output to zero
-    std::memset(y, 0, info.output_size * sizeof(T));
+    const size_t out_rows = info.output_shape[0];
+    const size_t out_cols = info.output_shape[1];
+    const ptrdiff_t out_s0 = info.output_stride0;
+    const ptrdiff_t out_s1 = info.output_stride1;
+
+    // Initialize output to zero (stride-aware).
+    for (size_t r = 0; r < out_rows; ++r) {
+        for (size_t c = 0; c < out_cols; ++c) {
+            ptrdiff_t out_off =
+                static_cast<ptrdiff_t>(r) * out_s0 + static_cast<ptrdiff_t>(c) * out_s1;
+            y[out_off] = utils::cast<T>(0.0f);
+        }
+    }
 
     // Place each input matrix at its diagonal position
     for (size_t i = 0; i < info.num_inputs; ++i) {
@@ -94,15 +115,20 @@ void block_diag_impl(
         size_t row_offset = info.row_offsets[i];
         size_t col_offset = info.col_offsets[i];
         const T *input = reinterpret_cast<const T *>(inputs[i]);
+        const ptrdiff_t in_s0 = info.input_stride0[i];
+        const ptrdiff_t in_s1 = info.input_stride1[i];
 
         // Copy input matrix to output at diagonal position
         for (size_t r = 0; r < rows; ++r) {
             for (size_t c = 0; c < cols; ++c) {
                 size_t out_row = row_offset + r;
                 size_t out_col = col_offset + c;
-                size_t out_idx = out_row * info.output_shape[1] + out_col;
-                size_t in_idx = r * cols + c;
-                y[out_idx] = input[in_idx];
+
+                ptrdiff_t out_off =
+                    static_cast<ptrdiff_t>(out_row) * out_s0 + static_cast<ptrdiff_t>(out_col) * out_s1;
+                ptrdiff_t in_off =
+                    static_cast<ptrdiff_t>(r) * in_s0 + static_cast<ptrdiff_t>(c) * in_s1;
+                y[out_off] = input[in_off];
             }
         }
     }
