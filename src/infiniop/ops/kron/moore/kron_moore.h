@@ -3,6 +3,7 @@
 
 #include "../../../operator.h"
 #include "../../../devices/moore/moore_common.h"
+#include <cstddef>
 #include <vector>
 
 namespace op::kron::moore {
@@ -41,7 +42,9 @@ public:
         infiniopTensorDescriptor_t a_desc,
         infiniopTensorDescriptor_t b_desc);
 
-    size_t workspaceSize() const { return (ndim * 3) * sizeof(size_t); }
+    size_t workspaceSize() const {
+        return (ndim * 3) * sizeof(size_t) + (ndim * 3) * sizeof(ptrdiff_t);
+    }
 
     infiniStatus_t calculate(
         void *workspace,

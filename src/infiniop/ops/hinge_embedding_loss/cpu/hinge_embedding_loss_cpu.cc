@@ -3,6 +3,7 @@
 #include "../../../tensor.h"
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <type_traits>
 
 namespace op::hinge_embedding_loss::cpu {
@@ -131,7 +132,9 @@ void hinge_embedding_loss_impl(
             sum += loss_value(in, t);
         }
         if (info.reduction == Reduction::MEAN) {
-            y[0] = utils::cast<T>(n > 0 ? (sum / static_cast<Tcompute>(n)) : static_cast<Tcompute>(0));
+            const Tcompute mean_val =
+                (n > 0) ? (sum / static_cast<Tcompute>(n)) : std::numeric_limits<Tcompute>::quiet_NaN();
+            y[0] = utils::cast<T>(mean_val);
         } else {
             y[0] = utils::cast<T>(sum);
         }

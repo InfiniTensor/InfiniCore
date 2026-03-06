@@ -112,6 +112,9 @@ infiniStatus_t Descriptor::calculate(
 
     constexpr int BLOCK_SIZE = 256;
     int num_blocks = (output_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
+    if (num_blocks < 1) {
+        num_blocks = 1;
+    }
 
     switch (_dtype) {
     case INFINI_DTYPE_F16:

@@ -77,6 +77,9 @@ infiniStatus_t Descriptor::calculate(
     auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
     constexpr int BLOCK_SIZE = 256;
     int num_blocks = static_cast<int>((input_size + BLOCK_SIZE - 1) / BLOCK_SIZE);
+    if (num_blocks < 1) {
+        num_blocks = 1;
+    }
     if (num_blocks > 1024) {
         num_blocks = 1024;
     }

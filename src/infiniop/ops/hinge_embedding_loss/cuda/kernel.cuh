@@ -2,6 +2,7 @@
 #include <cuda_runtime.h>
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
+#include <limits>
 #include <type_traits>
 
 #include "../../../devices/nvidia/nvidia_kernel_common.cuh"
@@ -137,8 +138,13 @@ __global__ void hinge_embedding_loss_finalize_kernel(
     if (blockIdx.x != 0 || threadIdx.x != 0) return;
 
     Tcompute result = *accum;
-    if (mean && n > 0) {
-        result = result / static_cast<Tcompute>(n);
+    if (mean) {
+        // Match PyTorch behavior: mean reduction on an empty tensor yields NaN.
+        if (n == 0) {
+            result = std::numeric_limits<Tcompute>::quiet_NaN();
+        } else {
+            result = result / static_cast<Tcompute>(n);
+        }
     }
     store_from<Tout, Tcompute>(output, 0, result);
 }

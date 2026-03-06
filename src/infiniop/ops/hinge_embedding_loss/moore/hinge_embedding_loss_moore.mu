@@ -4,6 +4,7 @@
 #include "../../../tensor.h"
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
+#include <limits>
 
 namespace op::hinge_embedding_loss::moore {
 
@@ -20,6 +21,9 @@ infiniStatus_t Descriptor::create(
 
     auto dtype = input_desc->dtype();
     CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64, INFINI_DTYPE_BF16);
+    if (target_desc->dtype() != dtype || y_desc->dtype() != dtype) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
 
     auto input_shape = input_desc->shape();
     auto target_shape = target_desc->shape();
@@ -56,44 +60,92 @@ infiniStatus_t Descriptor::calculate(
 
     auto musa_stream = reinterpret_cast<musaStream_t>(stream);
     constexpr int BLOCK_SIZE = 256;
+    if (input_size == 0) {
+        if (reduction != Reduction::NONE) {
+            if (_dtype == INFINI_DTYPE_F32) {
+                float value = (reduction == Reduction::MEAN) ? std::numeric_limits<float>::quiet_NaN() : 0.0f;
+                CHECK_MOORE(musaMemcpyAsync(y, &value, sizeof(value), musaMemcpyHostToDevice, musa_stream));
+            } else if (_dtype == INFINI_DTYPE_F64) {
+                double value = (reduction == Reduction::MEAN) ? std::numeric_limits<double>::quiet_NaN() : 0.0;
+                CHECK_MOORE(musaMemcpyAsync(y, &value, sizeof(value), musaMemcpyHostToDevice, musa_stream));
+            }
+        }
+        return INFINI_STATUS_SUCCESS;
+    }
     int num_blocks = (input_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
     if (reduction == Reduction::NONE) {
         switch (_dtype) {
         case INFINI_DTYPE_F16: {
-            half margin_val = __float2half(static_cast<float>(margin));
-            cuda::hinge_embedding_loss_kernel<half><<<num_blocks, BLOCK_SIZE, 0, musa_stream>>>(
+            float margin_val = static_cast<float>(margin);
+            cuda::hinge_embedding_loss_none_kernel<half, float><<<num_blocks, BLOCK_SIZE, 0, musa_stream>>>(
                 reinterpret_cast<half *>(y),
                 reinterpret_cast<const half *>(input),
                 reinterpret_cast<const half *>(target),
-                input_size, margin_val);
+                input_size,
+                /*ndim=*/0,
+                /*shape=*/nullptr,
+                /*output_strides=*/nullptr,
+                /*input_strides=*/nullptr,
+                /*target_strides=*/nullptr,
+                /*output_contiguous=*/true,
+                /*input_contiguous=*/true,
+                /*target_contiguous=*/true,
+                margin_val);
             break;
         }
         case INFINI_DTYPE_BF16: {
-            cuda_bfloat16 margin_val = __float2bfloat16_rn(static_cast<float>(margin));
-            cuda::hinge_embedding_loss_kernel<cuda_bfloat16><<<num_blocks, BLOCK_SIZE, 0, musa_stream>>>(
+            float margin_val = static_cast<float>(margin);
+            cuda::hinge_embedding_loss_none_kernel<cuda_bfloat16, float><<<num_blocks, BLOCK_SIZE, 0, musa_stream>>>(
                 reinterpret_cast<cuda_bfloat16 *>(y),
                 reinterpret_cast<const cuda_bfloat16 *>(input),
                 reinterpret_cast<const cuda_bfloat16 *>(target),
-                input_size, margin_val);
+                input_size,
+                /*ndim=*/0,
+                /*shape=*/nullptr,
+                /*output_strides=*/nullptr,
+                /*input_strides=*/nullptr,
+                /*target_strides=*/nullptr,
+                /*output_contiguous=*/true,
+                /*input_contiguous=*/true,
+                /*target_contiguous=*/true,
+                margin_val);
             break;
         }
         case INFINI_DTYPE_F32: {
             float margin_val = static_cast<float>(margin);
-            cuda::hinge_embedding_loss_kernel<float><<<num_blocks, BLOCK_SIZE, 0, musa_stream>>>(
+            cuda::hinge_embedding_loss_none_kernel<float, float><<<num_blocks, BLOCK_SIZE, 0, musa_stream>>>(
                 reinterpret_cast<float *>(y),
                 reinterpret_cast<const float *>(input),
                 reinterpret_cast<const float *>(target),
-                input_size, margin_val);
+                input_size,
+                /*ndim=*/0,
+                /*shape=*/nullptr,
+                /*output_strides=*/nullptr,
+                /*input_strides=*/nullptr,
+                /*target_strides=*/nullptr,
+                /*output_contiguous=*/true,
+                /*input_contiguous=*/true,
+                /*target_contiguous=*/true,
+                margin_val);
             break;
         }
         case INFINI_DTYPE_F64: {
             double margin_val = margin;
-            cuda::hinge_embedding_loss_kernel<double><<<num_blocks, BLOCK_SIZE, 0, musa_stream>>>(
+            cuda::hinge_embedding_loss_none_kernel<double, double><<<num_blocks, BLOCK_SIZE, 0, musa_stream>>>(
                 reinterpret_cast<double *>(y),
                 reinterpret_cast<const double *>(input),
                 reinterpret_cast<const double *>(target),
-                input_size, margin_val);
+                input_size,
+                /*ndim=*/0,
+                /*shape=*/nullptr,
+                /*output_strides=*/nullptr,
+                /*input_strides=*/nullptr,
+                /*target_strides=*/nullptr,
+                /*output_contiguous=*/true,
+                /*input_contiguous=*/true,
+                /*target_contiguous=*/true,
+                margin_val);
             break;
         }
         default:
@@ -101,25 +153,50 @@ infiniStatus_t Descriptor::calculate(
         }
     } else {
         // Sum or Mean reduction
+        const bool mean = (reduction == Reduction::MEAN);
         switch (_dtype) {
         case INFINI_DTYPE_F32: {
             float margin_val = static_cast<float>(margin);
             CHECK_MOORE(musaMemsetAsync(y, 0, sizeof(float), musa_stream));
-            cuda::hinge_embedding_loss_reduce_kernel<float, float><<<num_blocks, BLOCK_SIZE, 0, musa_stream>>>(
+            cuda::hinge_embedding_loss_reduce_kernel<float, float, BLOCK_SIZE><<<num_blocks, BLOCK_SIZE, 0, musa_stream>>>(
                 reinterpret_cast<float *>(y),
                 reinterpret_cast<const float *>(input),
                 reinterpret_cast<const float *>(target),
-                input_size, margin_val);
+                input_size,
+                /*ndim=*/0,
+                /*shape=*/nullptr,
+                /*input_strides=*/nullptr,
+                /*target_strides=*/nullptr,
+                /*input_contiguous=*/true,
+                /*target_contiguous=*/true,
+                margin_val);
+            cuda::hinge_embedding_loss_finalize_kernel<float, float><<<1, 1, 0, musa_stream>>>(
+                reinterpret_cast<float *>(y),
+                reinterpret_cast<const float *>(y),
+                input_size,
+                mean);
             break;
         }
         case INFINI_DTYPE_F64: {
             double margin_val = margin;
             CHECK_MOORE(musaMemsetAsync(y, 0, sizeof(double), musa_stream));
-            cuda::hinge_embedding_loss_reduce_kernel<double, double><<<num_blocks, BLOCK_SIZE, 0, musa_stream>>>(
+            cuda::hinge_embedding_loss_reduce_kernel<double, double, BLOCK_SIZE><<<num_blocks, BLOCK_SIZE, 0, musa_stream>>>(
                 reinterpret_cast<double *>(y),
                 reinterpret_cast<const double *>(input),
                 reinterpret_cast<const double *>(target),
-                input_size, margin_val);
+                input_size,
+                /*ndim=*/0,
+                /*shape=*/nullptr,
+                /*input_strides=*/nullptr,
+                /*target_strides=*/nullptr,
+                /*input_contiguous=*/true,
+                /*target_contiguous=*/true,
+                margin_val);
+            cuda::hinge_embedding_loss_finalize_kernel<double, double><<<1, 1, 0, musa_stream>>>(
+                reinterpret_cast<double *>(y),
+                reinterpret_cast<const double *>(y),
+                input_size,
+                mean);
             break;
         }
         default:
