@@ -18,8 +18,17 @@ struct ErfOp {
             return erf(x);
         } else {
             // For F16/BF16: promote to float, compute, then cast back
-            float xf = static_cast<float>(x);
-            return static_cast<T>(erff(xf));
+            float xf;
+            if constexpr (std::is_same_v<T, half>) {
+                xf = __half2float(x);
+                return __float2half_rn(erff(xf));
+            } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
+                xf = __bfloat162float(x);
+                return __float2bfloat16_rn(erff(xf));
+            } else {
+                xf = static_cast<float>(x);
+                return static_cast<T>(erff(xf));
+            }
         }
     }
 };
