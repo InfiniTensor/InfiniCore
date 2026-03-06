@@ -15,7 +15,7 @@
 #include "moore/erf_moore.h"
 #endif
 
-__C infiniStatus_t infiniopCreateErfDescriptor(
+__C __export infiniStatus_t infiniopCreateErfDescriptor(
     infiniopHandle_t handle,
     infiniopErfDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t y_desc,
@@ -54,7 +54,7 @@ __C infiniStatus_t infiniopCreateErfDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetErfWorkspaceSize(infiniopErfDescriptor_t desc, size_t *size) {
+__C __export infiniStatus_t infiniopGetErfWorkspaceSize(infiniopErfDescriptor_t desc, size_t *size) {
 
 #define GET(CASE, NAMESPACE)                                                                 \
     case CASE:                                                                               \
@@ -85,7 +85,7 @@ __C infiniStatus_t infiniopGetErfWorkspaceSize(infiniopErfDescriptor_t desc, siz
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
-__C infiniStatus_t infiniopErf(
+__C __export infiniStatus_t infiniopErf(
     infiniopErfDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -123,7 +123,7 @@ __C infiniStatus_t infiniopErf(
 #undef CALCULATE
 }
 
-__C infiniStatus_t
+__C __export infiniStatus_t
 infiniopDestroyErfDescriptor(infiniopErfDescriptor_t desc) {
 
 #define DELETE(CASE, NAMESPACE)                                                  \

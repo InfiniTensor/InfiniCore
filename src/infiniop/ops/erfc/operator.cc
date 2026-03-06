@@ -15,7 +15,7 @@
 #include "moore/erfc_moore.h"
 #endif
 
-__C infiniStatus_t infiniopCreateErfcDescriptor(
+__C __export infiniStatus_t infiniopCreateErfcDescriptor(
     infiniopHandle_t handle,
     infiniopErfcDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t y_desc,
@@ -54,7 +54,7 @@ __C infiniStatus_t infiniopCreateErfcDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetErfcWorkspaceSize(infiniopErfcDescriptor_t desc, size_t *size) {
+__C __export infiniStatus_t infiniopGetErfcWorkspaceSize(infiniopErfcDescriptor_t desc, size_t *size) {
 
 #define GET(CASE, NAMESPACE)                                                                 \
     case CASE:                                                                               \
@@ -85,7 +85,7 @@ __C infiniStatus_t infiniopGetErfcWorkspaceSize(infiniopErfcDescriptor_t desc, s
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
-__C infiniStatus_t infiniopErfc(
+__C __export infiniStatus_t infiniopErfc(
     infiniopErfcDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -123,7 +123,7 @@ __C infiniStatus_t infiniopErfc(
 #undef CALCULATE
 }
 
-__C infiniStatus_t
+__C __export infiniStatus_t
 infiniopDestroyErfcDescriptor(infiniopErfcDescriptor_t desc) {
 
 #define DELETE(CASE, NAMESPACE)                                                  \

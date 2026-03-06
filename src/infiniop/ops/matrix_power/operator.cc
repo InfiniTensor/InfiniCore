@@ -15,7 +15,7 @@
 #include "moore/matrix_power_moore.h"
 #endif
 
-__C infiniStatus_t infiniopCreateMatrixPowerDescriptor(
+__C __export infiniStatus_t infiniopCreateMatrixPowerDescriptor(
     infiniopHandle_t handle,
     infiniopMatrixPowerDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t y_desc,
@@ -56,7 +56,7 @@ __C infiniStatus_t infiniopCreateMatrixPowerDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetMatrixPowerWorkspaceSize(infiniopMatrixPowerDescriptor_t desc, size_t *size) {
+__C __export infiniStatus_t infiniopGetMatrixPowerWorkspaceSize(infiniopMatrixPowerDescriptor_t desc, size_t *size) {
 
 #define GET(CASE, NAMESPACE)                                                                              \
     case CASE:                                                                                            \
@@ -87,7 +87,7 @@ __C infiniStatus_t infiniopGetMatrixPowerWorkspaceSize(infiniopMatrixPowerDescri
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
-__C infiniStatus_t infiniopMatrixPower(
+__C __export infiniStatus_t infiniopMatrixPower(
     infiniopMatrixPowerDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -125,7 +125,7 @@ __C infiniStatus_t infiniopMatrixPower(
 #undef CALCULATE
 }
 
-__C infiniStatus_t
+__C __export infiniStatus_t
 infiniopDestroyMatrixPowerDescriptor(infiniopMatrixPowerDescriptor_t desc) {
 
 #define DELETE(CASE, NAMESPACE)                                                                  \

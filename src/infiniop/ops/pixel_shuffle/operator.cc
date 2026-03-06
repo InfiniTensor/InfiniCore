@@ -15,7 +15,7 @@
 #include "moore/pixel_shuffle_moore.h"
 #endif
 
-__C infiniStatus_t infiniopCreatePixelShuffleDescriptor(
+__C __export infiniStatus_t infiniopCreatePixelShuffleDescriptor(
     infiniopHandle_t handle,
     infiniopPixelShuffleDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t y_desc,
@@ -56,7 +56,7 @@ __C infiniStatus_t infiniopCreatePixelShuffleDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetPixelShuffleWorkspaceSize(infiniopPixelShuffleDescriptor_t desc, size_t *size) {
+__C __export infiniStatus_t infiniopGetPixelShuffleWorkspaceSize(infiniopPixelShuffleDescriptor_t desc, size_t *size) {
 
 #define GET(CASE, NAMESPACE)                                                                          \
     case CASE:                                                                                        \
@@ -87,7 +87,7 @@ __C infiniStatus_t infiniopGetPixelShuffleWorkspaceSize(infiniopPixelShuffleDesc
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
-__C infiniStatus_t infiniopPixelShuffle(
+__C __export infiniStatus_t infiniopPixelShuffle(
     infiniopPixelShuffleDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -125,7 +125,7 @@ __C infiniStatus_t infiniopPixelShuffle(
 #undef CALCULATE
 }
 
-__C infiniStatus_t
+__C __export infiniStatus_t
 infiniopDestroyPixelShuffleDescriptor(infiniopPixelShuffleDescriptor_t desc) {
 
 #define DELETE(CASE, NAMESPACE)                                                              \
