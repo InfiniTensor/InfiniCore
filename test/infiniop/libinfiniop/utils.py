@@ -83,8 +83,12 @@ class TestTensor(CTensor):
                 InfiniDtype.BYTE,
                 InfiniDtype.BOOL,
             ]:
-                randint_low = -2000000000 if randint_low is None else randint_low
-                randint_high = 2000000000 if randint_high is None else randint_high
+                if dt == InfiniDtype.BOOL:
+                    randint_low = 0 if randint_low is None else randint_low
+                    randint_high = 2 if randint_high is None else randint_high
+                else:
+                    randint_low = -2000000000 if randint_low is None else randint_low
+                    randint_high = 2000000000 if randint_high is None else randint_high
                 self._torch_tensor = torch.randint(
                     randint_low,
                     randint_high,

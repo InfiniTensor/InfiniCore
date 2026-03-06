@@ -9,7 +9,7 @@
 #include "moore/paged_attention_moore.h"
 #endif
 #ifdef ENABLE_METAX_API
-#include "metax/paged_attention_metax.h"
+// #include "metax/paged_attention_metax.h" // TEMP: missing metax header
 #endif
 
 __INFINI_C infiniStatus_t infiniopCreatePagedAttentionDescriptor(
@@ -38,7 +38,7 @@ __INFINI_C infiniStatus_t infiniopCreatePagedAttentionDescriptor(
         CREATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
 #ifdef ENABLE_METAX_API
-        CREATE(INFINI_DEVICE_METAX, metax)
+//        CREATE(INFINI_DEVICE_METAX, metax)
 #endif
 #ifdef ENABLE_ALI_API
         CREATE(INFINI_DEVICE_ALI, nvidia)
@@ -68,7 +68,7 @@ __INFINI_C infiniStatus_t infiniopGetPagedAttentionWorkspaceSize(
         GET(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
 #ifdef ENABLE_METAX_API
-        GET(INFINI_DEVICE_METAX, metax)
+//        GET(INFINI_DEVICE_METAX, metax)
 #endif
 #ifdef ENABLE_ALI_API
         GET(INFINI_DEVICE_ALI, nvidia)
@@ -102,7 +102,7 @@ __INFINI_C infiniStatus_t infiniopPagedAttention(
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
 #ifdef ENABLE_METAX_API
-        CALCULATE(INFINI_DEVICE_METAX, metax)
+//        CALCULATE(INFINI_DEVICE_METAX, metax)
 #endif
 #ifdef ENABLE_ALI_API
         CALCULATE(INFINI_DEVICE_ALI, nvidia)
@@ -131,7 +131,7 @@ __INFINI_C infiniStatus_t infiniopDestroyPagedAttentionDescriptor(
         DESTROY(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
 #ifdef ENABLE_METAX_API
-        DESTROY(INFINI_DEVICE_METAX, metax)
+//        DESTROY(INFINI_DEVICE_METAX, metax)
 #endif
 #ifdef ENABLE_ALI_API
         DESTROY(INFINI_DEVICE_ALI, nvidia)

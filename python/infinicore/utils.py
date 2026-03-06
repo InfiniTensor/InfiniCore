@@ -1,8 +1,12 @@
-import ml_dtypes
 import numpy as np
 import torch
 
 import infinicore
+
+try:
+    import ml_dtypes
+except ModuleNotFoundError:
+    ml_dtypes = None
 
 
 def to_torch_dtype(infini_dtype):
@@ -57,7 +61,9 @@ def numpy_to_infinicore_dtype(numpy_dtype):
         return infinicore.float64
     elif numpy_dtype == np.float16:
         return infinicore.float16
-    elif numpy_dtype == ml_dtypes.bfloat16:
+    elif hasattr(np, "bfloat16") and numpy_dtype == np.bfloat16:
+        return infinicore.bfloat16
+    elif ml_dtypes is not None and numpy_dtype == ml_dtypes.bfloat16:
         return infinicore.bfloat16
     elif numpy_dtype == np.int8:
         return infinicore.int8
@@ -86,6 +92,13 @@ def infinicore_to_numpy_dtype(infini_dtype):
     elif infini_dtype == infinicore.int16:
         return np.int16
     elif infini_dtype == infinicore.bfloat16:
+        if hasattr(np, "bfloat16"):
+            return np.bfloat16
+        if ml_dtypes is None:
+            raise ModuleNotFoundError(
+                "ml_dtypes is required for bfloat16 numpy conversion. "
+                "Please install ml_dtypes."
+            )
         return ml_dtypes.bfloat16
     elif infini_dtype == infinicore.int32:
         return np.int32

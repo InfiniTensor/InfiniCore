@@ -5,6 +5,7 @@
 #include "../../devices/metax/metax_common.h"
 #include "../../devices/metax/metax_kernel_common.h"
 #include "elementwise_metax_api.h"
+#include <type_traits>
 
 namespace op::elementwise::metax {
 template <typename T>
@@ -115,9 +116,9 @@ struct DeviceImpl::Opaque {
         return launchElementwiseKernel<BLOCK_SIZE, N>(
             info, workspace,
             reinterpret_cast<Tdata *>(output), inputs,
-            elementwiseKernel<N, Op, Tdata, Args...>,
+            elementwiseKernel<N, Op, Tdata, std::decay_t<Args>...>,
             stream,
-            std::forward<Args>(args)...);
+            static_cast<std::decay_t<Args>>(std::forward<Args>(args))...);
     }
 
     template <uint32_t BLOCK_SIZE, size_t N, typename Op, typename Tout, typename... Tin, typename... Args,

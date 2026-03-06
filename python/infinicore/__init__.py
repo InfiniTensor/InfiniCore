@@ -55,6 +55,7 @@ from infinicore.ops.baddbmm import baddbmm
 from infinicore.ops.bilinear import bilinear
 from infinicore.ops.fmod import fmod
 from infinicore.ops.kv_caching import kv_caching
+from infinicore.ops.equal import equal
 from infinicore.ops.matmul import matmul
 from infinicore.ops.mha_varlen import mha_varlen
 from infinicore.ops.mul import mul
@@ -63,6 +64,7 @@ from infinicore.ops.paged_attention import paged_attention
 from infinicore.ops.paged_attention_prefill import paged_attention_prefill
 from infinicore.ops.paged_caching import paged_caching
 from infinicore.ops.rearrange import rearrange
+from infinicore.ops.cross_entropy import cross_entropy
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.unsqueeze import unsqueeze
 from infinicore.tensor import (
@@ -132,11 +134,13 @@ __all__ = [
     "bilinear",
     "fmod",
     "matmul",
+    "equal",
     "mul",
     "narrow",
     "squeeze",
     "unsqueeze",
     "rearrange",
+    "cross_entropy",
     "empty",
     "empty_like",
     "from_blob",

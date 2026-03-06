@@ -74,8 +74,11 @@ def parse_test_cases():
                     )
                 )
 
-            # in-place a
-            if a_supports_inplace:
+            # Equal 结果为 bool，无法安全复用浮点/整型输入作为输出缓冲区。
+            # 只有当输入 dtype 本身为 bool 时才允许 inplace，这里提前留出开关。
+            allow_input_inplace = dtype == infinicore.bool
+
+            if allow_input_inplace and a_supports_inplace:
                 test_cases.append(
                     TestCase(
                         inputs=[a_spec, b_spec],
@@ -87,8 +90,7 @@ def parse_test_cases():
                     )
                 )
 
-            # in-place b
-            if b_supports_inplace:
+            if allow_input_inplace and b_supports_inplace:
                 test_cases.append(
                     TestCase(
                         inputs=[a_spec, b_spec],
@@ -115,9 +117,8 @@ class OpTest(BaseOperatorTest):
     def torch_operator(self, *args, **kwargs):
         return torch.eq(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
-    #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.eq(*args, **kwargs)
+    def infinicore_operator(self, *args, **kwargs):
+        return infinicore.equal(*args, **kwargs)
 
 
 def main():
