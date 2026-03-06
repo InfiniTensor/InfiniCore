@@ -1,8 +1,6 @@
 import ctypes
 from ctypes import c_size_t
 
-import torch
-
 from ._infiniop_runtime import (
     _check_error,
     _load_lib,
@@ -11,6 +9,8 @@ from ._infiniop_runtime import (
     handle_for_tensor,
     infiniopOperatorDescriptor_t,
 )
+from ..dtype import uint8
+from ..tensor import empty
 from ..tensor import empty_like
 
 
@@ -21,28 +21,27 @@ def log10(input, *, out=None):
     lib = _load_lib()
     handle = handle_for_tensor(out)
 
-    y_desc = create_tensor_descriptor(out)
-    x_desc = create_tensor_descriptor(input)
-
     op_desc = infiniopOperatorDescriptor_t()
-    _check_error(
-        lib.infiniopCreateLog10Descriptor(
-            handle, ctypes.byref(op_desc), y_desc, x_desc
-        )
-    )
+    y_desc = None
+    x_desc = None
 
     try:
+        y_desc = create_tensor_descriptor(out)
+        x_desc = create_tensor_descriptor(input)
+        _check_error(
+            lib.infiniopCreateLog10Descriptor(
+                handle, ctypes.byref(op_desc), y_desc, x_desc
+            )
+        )
+
         workspace_size = c_size_t(0)
         _check_error(lib.infiniopGetLog10WorkspaceSize(op_desc, ctypes.byref(workspace_size)))
 
         workspace = None
         workspace_ptr = None
         if workspace_size.value:
-            workspace = torch.empty(
-                (workspace_size.value,),
-                dtype=torch.uint8,
-                device=torch.device(str(out.device)),
-            )
+            # Allocate workspace using infinicore so device selection doesn't depend on torch.
+            workspace = empty([int(workspace_size.value)], dtype=uint8, device=out.device)
             workspace_ptr = ctypes.c_void_p(workspace.data_ptr())
 
         _check_error(
@@ -55,9 +54,18 @@ def log10(input, *, out=None):
                 None,
             )
         )
+        # Keep temporary workspace alive across asynchronous backends (e.g. CUDA).
+        if workspace is not None:
+            keepalive = getattr(out, "_infiniop_keepalive", None)
+            if keepalive is None:
+                keepalive = []
+                out._infiniop_keepalive = keepalive
+            keepalive.append(workspace)
         return out
     finally:
-        _check_error(lib.infiniopDestroyLog10Descriptor(op_desc))
-        destroy_tensor_descriptor(x_desc)
-        destroy_tensor_descriptor(y_desc)
-
+        if op_desc:
+            _check_error(lib.infiniopDestroyLog10Descriptor(op_desc))
+        if x_desc:
+            destroy_tensor_descriptor(x_desc)
+        if y_desc:
+            destroy_tensor_descriptor(y_desc)

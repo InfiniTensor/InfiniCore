@@ -1,8 +1,6 @@
 import ctypes
 from ctypes import c_size_t
 
-import torch
-
 from ._infiniop_runtime import (
     _check_error,
     _load_lib,
@@ -11,6 +9,7 @@ from ._infiniop_runtime import (
     handle_for_tensor,
     infiniopOperatorDescriptor_t,
 )
+from ..dtype import uint8
 from ..tensor import empty
 
 
@@ -21,29 +20,28 @@ def dot(a, b):
     lib = _load_lib()
     handle = handle_for_tensor(out_1d)
 
-    y_desc = create_tensor_descriptor(out_1d)
-    a_desc = create_tensor_descriptor(a)
-    b_desc = create_tensor_descriptor(b)
-
     op_desc = infiniopOperatorDescriptor_t()
-    _check_error(
-        lib.infiniopCreateDotDescriptor(
-            handle, ctypes.byref(op_desc), y_desc, a_desc, b_desc
-        )
-    )
+    y_desc = None
+    a_desc = None
+    b_desc = None
 
     try:
+        y_desc = create_tensor_descriptor(out_1d)
+        a_desc = create_tensor_descriptor(a)
+        b_desc = create_tensor_descriptor(b)
+        _check_error(
+            lib.infiniopCreateDotDescriptor(
+                handle, ctypes.byref(op_desc), y_desc, a_desc, b_desc
+            )
+        )
+
         workspace_size = c_size_t(0)
         _check_error(lib.infiniopGetDotWorkspaceSize(op_desc, ctypes.byref(workspace_size)))
 
         workspace = None
         workspace_ptr = None
         if workspace_size.value:
-            workspace = torch.empty(
-                (workspace_size.value,),
-                dtype=torch.uint8,
-                device=torch.device(str(out_1d.device)),
-            )
+            workspace = empty([int(workspace_size.value)], dtype=uint8, device=out_1d.device)
             workspace_ptr = ctypes.c_void_p(workspace.data_ptr())
 
         _check_error(
@@ -57,10 +55,20 @@ def dot(a, b):
                 None,
             )
         )
-        return out_1d.view([])
+        out = out_1d.view([])
+        if workspace is not None:
+            keepalive = getattr(out, "_infiniop_keepalive", None)
+            if keepalive is None:
+                keepalive = []
+                out._infiniop_keepalive = keepalive
+            keepalive.append(workspace)
+        return out
     finally:
-        _check_error(lib.infiniopDestroyDotDescriptor(op_desc))
-        destroy_tensor_descriptor(b_desc)
-        destroy_tensor_descriptor(a_desc)
-        destroy_tensor_descriptor(y_desc)
-
+        if op_desc:
+            _check_error(lib.infiniopDestroyDotDescriptor(op_desc))
+        if b_desc:
+            destroy_tensor_descriptor(b_desc)
+        if a_desc:
+            destroy_tensor_descriptor(a_desc)
+        if y_desc:
+            destroy_tensor_descriptor(y_desc)

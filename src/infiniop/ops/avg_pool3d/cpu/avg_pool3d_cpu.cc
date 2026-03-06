@@ -112,6 +112,23 @@ utils::Result<AvgPool3dInfo> AvgPool3dInfo::create(
     info.input_strides = x_desc->strides();
     info.output_strides = y_desc->strides();
 
+    if (info.input_strides.size() != x_shape.size() || info.output_strides.size() != y_shape.size()) {
+        return INFINI_STATUS_BAD_TENSOR_STRIDES;
+    }
+
+    // Reject broadcasted (0-stride) or negative strides for dimensions that are actually indexed.
+    // The kernel computes indices using size_t, so negative strides would underflow and go OOB.
+    for (size_t i = 0; i < x_shape.size(); ++i) {
+        if (x_shape[i] > 1 && info.input_strides[i] <= 0) {
+            return INFINI_STATUS_BAD_TENSOR_STRIDES;
+        }
+    }
+    for (size_t i = 0; i < y_shape.size(); ++i) {
+        if (y_shape[i] > 1 && info.output_strides[i] <= 0) {
+            return INFINI_STATUS_BAD_TENSOR_STRIDES;
+        }
+    }
+
     return utils::Result<AvgPool3dInfo>(std::move(info));
 }
 
