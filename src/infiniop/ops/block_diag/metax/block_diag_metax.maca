@@ -36,6 +36,8 @@ infiniStatus_t Descriptor::create(
     std::vector<size_t> row_offsets(num_inputs);
     std::vector<size_t> col_offsets(num_inputs);
     std::vector<std::vector<size_t>> input_shapes(num_inputs);
+    std::vector<size_t> input_rows(num_inputs);
+    std::vector<size_t> input_cols(num_inputs);
     std::vector<ptrdiff_t> input_stride0(num_inputs);
     std::vector<ptrdiff_t> input_stride1(num_inputs);
 
@@ -48,6 +50,8 @@ infiniStatus_t Descriptor::create(
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
         input_shapes[i] = shape;
+        input_rows[i] = shape[0];
+        input_cols[i] = shape[1];
         input_stride0[i] = input_descs[i]->stride(0);
         input_stride1[i] = input_descs[i]->stride(1);
         row_offsets[i] = total_rows;
@@ -69,6 +73,7 @@ infiniStatus_t Descriptor::create(
     *desc_ptr = new Descriptor(dtype, num_inputs, y_shape,
                                y_strides[0], y_strides[1],
                                row_offsets, col_offsets, input_shapes,
+                               std::move(input_rows), std::move(input_cols),
                                std::move(input_stride0), std::move(input_stride1),
                                y_desc->numel(),
                                handle->device, handle->device_id);
@@ -90,23 +95,17 @@ infiniStatus_t Descriptor::calculate(
         return INFINI_STATUS_SUCCESS;
     }
 
-    size_t *d_row_offsets, *d_col_offsets, *d_input_rows, *d_input_cols;
-    ptrdiff_t *d_input_stride0, *d_input_stride1;
-    const void **d_inputs;
-    CHECK_METAX(hcMalloc((void **)&d_row_offsets, num_inputs * sizeof(size_t)));
-    CHECK_METAX(hcMalloc((void **)&d_col_offsets, num_inputs * sizeof(size_t)));
-    CHECK_METAX(hcMalloc((void **)&d_input_rows, num_inputs * sizeof(size_t)));
-    CHECK_METAX(hcMalloc((void **)&d_input_cols, num_inputs * sizeof(size_t)));
-    CHECK_METAX(hcMalloc((void **)&d_input_stride0, num_inputs * sizeof(ptrdiff_t)));
-    CHECK_METAX(hcMalloc((void **)&d_input_stride1, num_inputs * sizeof(ptrdiff_t)));
-    CHECK_METAX(hcMalloc((void **)&d_inputs, num_inputs * sizeof(void *)));
-
-    std::vector<size_t> input_rows(num_inputs);
-    std::vector<size_t> input_cols(num_inputs);
-    for (size_t i = 0; i < num_inputs; ++i) {
-        input_rows[i] = input_shapes[i][0];
-        input_cols[i] = input_shapes[i][1];
+    if (workspace_size < this->workspaceSize()) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
+
+    size_t *d_row_offsets = reinterpret_cast<size_t *>(workspace);
+    size_t *d_col_offsets = d_row_offsets + num_inputs;
+    size_t *d_input_rows = d_col_offsets + num_inputs;
+    size_t *d_input_cols = d_input_rows + num_inputs;
+    ptrdiff_t *d_input_stride0 = reinterpret_cast<ptrdiff_t *>(d_input_cols + num_inputs);
+    ptrdiff_t *d_input_stride1 = d_input_stride0 + num_inputs;
+    const void **d_inputs = reinterpret_cast<const void **>(d_input_stride1 + num_inputs);
 
     CHECK_METAX(hcMemcpyAsync(d_row_offsets, row_offsets.data(), num_inputs * sizeof(size_t), hcMemcpyHostToDevice, hc_stream));
     CHECK_METAX(hcMemcpyAsync(d_col_offsets, col_offsets.data(), num_inputs * sizeof(size_t), hcMemcpyHostToDevice, hc_stream));
@@ -161,23 +160,8 @@ infiniStatus_t Descriptor::calculate(
             d_input_stride0, d_input_stride1);
         break;
     default:
-        CHECK_METAX(hcFree(d_row_offsets));
-        CHECK_METAX(hcFree(d_col_offsets));
-        CHECK_METAX(hcFree(d_input_rows));
-        CHECK_METAX(hcFree(d_input_cols));
-        CHECK_METAX(hcFree(d_input_stride0));
-        CHECK_METAX(hcFree(d_input_stride1));
-        CHECK_METAX(hcFree(d_inputs));
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
-
-    CHECK_METAX(hcFree(d_row_offsets));
-    CHECK_METAX(hcFree(d_col_offsets));
-    CHECK_METAX(hcFree(d_input_rows));
-    CHECK_METAX(hcFree(d_input_cols));
-    CHECK_METAX(hcFree(d_input_stride0));
-    CHECK_METAX(hcFree(d_input_stride1));
-    CHECK_METAX(hcFree(d_inputs));
 
     return INFINI_STATUS_SUCCESS;
 }

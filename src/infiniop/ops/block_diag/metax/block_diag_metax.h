@@ -17,6 +17,8 @@ class Descriptor final : public InfiniopDescriptor {
     std::vector<size_t> row_offsets;
     std::vector<size_t> col_offsets;
     std::vector<std::vector<size_t>> input_shapes;
+    std::vector<size_t> input_rows;
+    std::vector<size_t> input_cols;
     std::vector<ptrdiff_t> input_stride0;
     std::vector<ptrdiff_t> input_stride1;
     size_t output_size;
@@ -28,6 +30,8 @@ class Descriptor final : public InfiniopDescriptor {
                std::vector<size_t> row_offsets,
                std::vector<size_t> col_offsets,
                std::vector<std::vector<size_t>> input_shapes,
+               std::vector<size_t> input_rows,
+               std::vector<size_t> input_cols,
                std::vector<ptrdiff_t> input_stride0,
                std::vector<ptrdiff_t> input_stride1,
                size_t output_size,
@@ -41,6 +45,8 @@ class Descriptor final : public InfiniopDescriptor {
           row_offsets(std::move(row_offsets)),
           col_offsets(std::move(col_offsets)),
           input_shapes(std::move(input_shapes)),
+          input_rows(std::move(input_rows)),
+          input_cols(std::move(input_cols)),
           input_stride0(std::move(input_stride0)),
           input_stride1(std::move(input_stride1)),
           output_size(output_size) {}
@@ -55,7 +61,14 @@ public:
         infiniopTensorDescriptor_t *input_descs,
         size_t num_inputs);
 
-    size_t workspaceSize() const { return 0; }
+    size_t workspaceSize() const {
+        if (output_size == 0) {
+            return 0;
+        }
+        return 4 * num_inputs * sizeof(size_t) +
+               2 * num_inputs * sizeof(ptrdiff_t) +
+               num_inputs * sizeof(void *);
+    }
 
     infiniStatus_t calculate(
         void *workspace,
