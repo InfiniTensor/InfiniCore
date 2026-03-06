@@ -16,7 +16,6 @@ class Descriptor final : public InfiniopDescriptor {
     ptrdiff_t output_stride1;
     std::vector<size_t> row_offsets;
     std::vector<size_t> col_offsets;
-    std::vector<std::vector<size_t>> input_shapes;
     std::vector<size_t> input_rows;
     std::vector<size_t> input_cols;
     std::vector<ptrdiff_t> input_stride0;
@@ -29,7 +28,6 @@ class Descriptor final : public InfiniopDescriptor {
                ptrdiff_t output_stride1,
                std::vector<size_t> row_offsets,
                std::vector<size_t> col_offsets,
-               std::vector<std::vector<size_t>> input_shapes,
                std::vector<size_t> input_rows,
                std::vector<size_t> input_cols,
                std::vector<ptrdiff_t> input_stride0,
@@ -44,7 +42,6 @@ class Descriptor final : public InfiniopDescriptor {
           output_stride1(output_stride1),
           row_offsets(std::move(row_offsets)),
           col_offsets(std::move(col_offsets)),
-          input_shapes(std::move(input_shapes)),
           input_rows(std::move(input_rows)),
           input_cols(std::move(input_cols)),
           input_stride0(std::move(input_stride0)),

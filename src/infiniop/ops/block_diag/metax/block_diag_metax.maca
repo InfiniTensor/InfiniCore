@@ -35,7 +35,6 @@ infiniStatus_t Descriptor::create(
 
     std::vector<size_t> row_offsets(num_inputs);
     std::vector<size_t> col_offsets(num_inputs);
-    std::vector<std::vector<size_t>> input_shapes(num_inputs);
     std::vector<size_t> input_rows(num_inputs);
     std::vector<size_t> input_cols(num_inputs);
     std::vector<ptrdiff_t> input_stride0(num_inputs);
@@ -49,7 +48,6 @@ infiniStatus_t Descriptor::create(
         if (shape.size() != 2) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
-        input_shapes[i] = shape;
         input_rows[i] = shape[0];
         input_cols[i] = shape[1];
         input_stride0[i] = input_descs[i]->stride(0);
@@ -72,7 +70,7 @@ infiniStatus_t Descriptor::create(
 
     *desc_ptr = new Descriptor(dtype, num_inputs, y_shape,
                                y_strides[0], y_strides[1],
-                               row_offsets, col_offsets, input_shapes,
+                               row_offsets, col_offsets,
                                std::move(input_rows), std::move(input_cols),
                                std::move(input_stride0), std::move(input_stride1),
                                y_desc->numel(),
