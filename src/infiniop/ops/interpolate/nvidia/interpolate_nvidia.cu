@@ -8,19 +8,24 @@
 
 namespace op::interpolate::nvidia {
 
-InterpolateMode parseMode(const char *mode_str) {
+static bool try_parse_mode(const char *mode_str, InterpolateMode &mode) {
     if (std::strcmp(mode_str, "nearest") == 0) {
-        return InterpolateMode::NEAREST;
+        mode = InterpolateMode::NEAREST;
+        return true;
     } else if (std::strcmp(mode_str, "linear") == 0) {
-        return InterpolateMode::LINEAR;
+        mode = InterpolateMode::LINEAR;
+        return true;
     } else if (std::strcmp(mode_str, "bilinear") == 0) {
-        return InterpolateMode::BILINEAR;
+        mode = InterpolateMode::BILINEAR;
+        return true;
     } else if (std::strcmp(mode_str, "trilinear") == 0) {
-        return InterpolateMode::TRILINEAR;
+        mode = InterpolateMode::TRILINEAR;
+        return true;
     } else if (std::strcmp(mode_str, "area") == 0) {
-        return InterpolateMode::AREA;
+        mode = InterpolateMode::AREA;
+        return true;
     }
-    return InterpolateMode::NEAREST;
+    return false;
 }
 
 Descriptor::~Descriptor() = default;
@@ -66,40 +71,37 @@ infiniStatus_t Descriptor::create(
         return INFINI_STATUS_BAD_TENSOR_SHAPE;
     }
 
-    size_t ndim = x_shape.size() - 2;
-
-    std::vector<size_t> expected_y_shape = x_shape;
-    if (size != nullptr) {
-        const int64_t *size_array = reinterpret_cast<const int64_t *>(size);
-        for (size_t i = 0; i < ndim; ++i) {
-            expected_y_shape[i + 2] = static_cast<size_t>(size_array[i]);
-        }
-    } else if (scale_factor != nullptr) {
-        const double *scale_array = reinterpret_cast<const double *>(scale_factor);
-        if (ndim == 1) {
-            double scale = scale_array[0];
-            expected_y_shape[2] = static_cast<size_t>(x_shape[2] * scale);
-        } else {
-            // `scale_factor` can be provided as a scalar for multi-dimensional input.
-            // Treat it as a single value applied to all spatial dimensions.
-            const double scale = scale_array[0];
-            for (size_t i = 0; i < ndim; ++i) {
-                expected_y_shape[i + 2] = static_cast<size_t>(x_shape[i + 2] * scale);
-            }
-        }
-    } else {
+    if ((size != nullptr) == (scale_factor != nullptr)) {
         return INFINI_STATUS_BAD_PARAM;
     }
-
-    if (y_shape != expected_y_shape) {
+    if (y_shape.size() != x_shape.size() || y_shape[0] != x_shape[0] || y_shape[1] != x_shape[1]) {
         return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+
+    size_t ndim = x_shape.size() - 2;
+
+    if (scale_factor != nullptr) {
+        const double *scale_array = reinterpret_cast<const double *>(scale_factor);
+        const double scale = scale_array[0];
+        std::vector<size_t> expected_y_shape = x_shape;
+        for (size_t i = 0; i < ndim; ++i) {
+            expected_y_shape[i + 2] = static_cast<size_t>(static_cast<double>(x_shape[i + 2]) * scale);
+        }
+        if (y_shape != expected_y_shape) {
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
     }
 
     if (y_desc->dtype() != dtype) {
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
 
-    *desc_ptr = new Descriptor(dtype, ndim, x_shape, y_shape, x_desc->strides(), y_desc->strides(), parseMode(mode), align_corners,
+    InterpolateMode parsed_mode{};
+    if (!try_parse_mode(mode, parsed_mode)) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    *desc_ptr = new Descriptor(dtype, ndim, x_shape, y_shape, x_desc->strides(), y_desc->strides(), parsed_mode, align_corners,
                                x_desc->numel(), y_desc->numel(),
                                handle->device, handle->device_id);
     return INFINI_STATUS_SUCCESS;

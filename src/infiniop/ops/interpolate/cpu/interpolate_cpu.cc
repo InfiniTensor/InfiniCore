@@ -6,19 +6,34 @@
 
 namespace op::interpolate::cpu {
 
-InterpolateMode parseMode(const char *mode_str) {
+static bool try_parse_mode(const char *mode_str, InterpolateMode &mode) {
     if (std::strcmp(mode_str, "nearest") == 0) {
-        return InterpolateMode::NEAREST;
+        mode = InterpolateMode::NEAREST;
+        return true;
     } else if (std::strcmp(mode_str, "linear") == 0) {
-        return InterpolateMode::LINEAR;
+        mode = InterpolateMode::LINEAR;
+        return true;
     } else if (std::strcmp(mode_str, "bilinear") == 0) {
-        return InterpolateMode::BILINEAR;
+        mode = InterpolateMode::BILINEAR;
+        return true;
     } else if (std::strcmp(mode_str, "trilinear") == 0) {
-        return InterpolateMode::TRILINEAR;
+        mode = InterpolateMode::TRILINEAR;
+        return true;
     } else if (std::strcmp(mode_str, "area") == 0) {
-        return InterpolateMode::AREA;
+        mode = InterpolateMode::AREA;
+        return true;
     }
-    return InterpolateMode::NEAREST;  // Default
+    return false;
+}
+
+static double compute_scale(size_t in_size, size_t out_size, int align_corners) {
+    if (out_size == 0) {
+        return 0.0;
+    }
+    if (align_corners) {
+        return (out_size > 1) ? (static_cast<double>(in_size) - 1.0) / (static_cast<double>(out_size) - 1.0) : 0.0;
+    }
+    return static_cast<double>(in_size) / static_cast<double>(out_size);
 }
 
 utils::Result<InterpolateInfo> InterpolateInfo::create(
@@ -36,39 +51,38 @@ utils::Result<InterpolateInfo> InterpolateInfo::create(
         return INFINI_STATUS_BAD_TENSOR_SHAPE;
     }
 
-    size_t ndim = x_shape.size() - 2;  // Exclude batch and channel dimensions
-
-    // Calculate output shape
-    std::vector<size_t> expected_y_shape = x_shape;
-    if (size != nullptr) {
-        const int64_t *size_array = reinterpret_cast<const int64_t *>(size);
-        for (size_t i = 0; i < ndim; ++i) {
-            expected_y_shape[i + 2] = static_cast<size_t>(size_array[i]);
-        }
-    } else if (scale_factor != nullptr) {
-        const double *scale_array = reinterpret_cast<const double *>(scale_factor);
-        if (ndim == 1) {
-            double scale = scale_array[0];
-            expected_y_shape[2] = static_cast<size_t>(x_shape[2] * scale);
-        } else {
-            const double scale = scale_array[0];
-            for (size_t i = 0; i < ndim; ++i) {
-                expected_y_shape[i + 2] = static_cast<size_t>(x_shape[i + 2] * scale);
-            }
-        }
-    } else {
+    if ((size != nullptr) == (scale_factor != nullptr)) {
         return INFINI_STATUS_BAD_PARAM;
     }
 
-    if (y_shape != expected_y_shape) {
+    if (y_shape.size() != x_shape.size() || y_shape[0] != x_shape[0] || y_shape[1] != x_shape[1]) {
         return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+
+    size_t ndim = x_shape.size() - 2;  // Exclude batch and channel dimensions
+
+    // Validate output shape when a scalar scale_factor is provided.
+    // Note: `size` / `scale_factor` are passed as void* without an explicit length, so avoid
+    // unbounded reads and rely primarily on the tensor descriptors.
+    if (scale_factor != nullptr) {
+        const double *scale_array = reinterpret_cast<const double *>(scale_factor);
+        const double scale = scale_array[0];
+        std::vector<size_t> expected_y_shape = x_shape;
+        for (size_t i = 0; i < ndim; ++i) {
+            expected_y_shape[i + 2] = static_cast<size_t>(static_cast<double>(x_shape[i + 2]) * scale);
+        }
+        if (y_shape != expected_y_shape) {
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
     }
 
     InterpolateInfo info;
     info.ndim = ndim;
     info.input_shape = x_shape;
     info.output_shape = y_shape;
-    info.mode = parseMode(mode_str);
+    if (!try_parse_mode(mode_str, info.mode)) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
     info.align_corners = align_corners;
     info.input_size = x_desc->numel();
     info.output_size = y_desc->numel();
@@ -105,7 +119,7 @@ void interpolate_nearest_1d(
     size_t in_w, size_t out_w,
     int align_corners) {
 
-    double scale = align_corners ? (in_w - 1.0) / (out_w - 1.0) : static_cast<double>(in_w) / out_w;
+    double scale = compute_scale(in_w, out_w, align_corners);
 
     for (size_t b = 0; b < batch; ++b) {
         for (size_t c = 0; c < channels; ++c) {
@@ -128,8 +142,8 @@ void interpolate_bilinear_2d(
     size_t out_h, size_t out_w,
     int align_corners) {
 
-    double scale_h = align_corners ? (in_h - 1.0) / (out_h - 1.0) : static_cast<double>(in_h) / out_h;
-    double scale_w = align_corners ? (in_w - 1.0) / (out_w - 1.0) : static_cast<double>(in_w) / out_w;
+    double scale_h = compute_scale(in_h, out_h, align_corners);
+    double scale_w = compute_scale(in_w, out_w, align_corners);
 
     for (size_t b = 0; b < batch; ++b) {
         for (size_t c = 0; c < channels; ++c) {
@@ -187,8 +201,8 @@ void interpolate_impl(
             size_t in_w = info.input_shape[3];
             size_t out_h = info.output_shape[2];
             size_t out_w = info.output_shape[3];
-            double scale_h = info.align_corners ? (in_h - 1.0) / (out_h - 1.0) : static_cast<double>(in_h) / out_h;
-            double scale_w = info.align_corners ? (in_w - 1.0) / (out_w - 1.0) : static_cast<double>(in_w) / out_w;
+            double scale_h = compute_scale(in_h, out_h, info.align_corners);
+            double scale_w = compute_scale(in_w, out_w, info.align_corners);
 
             for (size_t b = 0; b < batch; ++b) {
                 for (size_t c = 0; c < channels; ++c) {
@@ -211,7 +225,7 @@ void interpolate_impl(
             // Linear interpolation for 1D
             size_t in_w = info.input_shape[2];
             size_t out_w = info.output_shape[2];
-            double scale = info.align_corners ? (in_w - 1.0) / (out_w - 1.0) : static_cast<double>(in_w) / out_w;
+            double scale = compute_scale(in_w, out_w, info.align_corners);
 
             for (size_t b = 0; b < batch; ++b) {
                 for (size_t c = 0; c < channels; ++c) {

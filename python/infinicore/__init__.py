@@ -120,7 +120,6 @@ __all__ = [
     # Operations.
     "add",
     "add_rms_norm",
-    "add_rms_norm_",
     "attention",
     "bitwise_right_shift",
     "kv_caching",
