@@ -240,4 +240,31 @@ def _install_test_runner_operator_patch() -> None:
     sys.meta_path.insert(0, finder)
 
 
-_install_test_runner_operator_patch()
+def _should_install_test_runner_operator_patch() -> bool:
+    import os
+    from pathlib import Path
+
+    flag = os.environ.get("INFINICORE_TEST_RUNNER_PATCH")
+    if flag is not None and flag.lower() not in {"0", "false", "no", "off", ""}:
+        return True
+
+    # Auto-enable only when the official runner's `test/infinicore` tree is on sys.path.
+    # The official op test files insert that directory into sys.path before importing `infinicore`.
+    for entry in sys.path:
+        if not entry:
+            continue
+        try:
+            path = Path(entry).resolve()
+        except Exception:
+            continue
+
+        if path.name != "infinicore" or path.parent.name != "test":
+            continue
+        if (path / "framework" / "base.py").is_file():
+            return True
+
+    return False
+
+
+if _should_install_test_runner_operator_patch():
+    _install_test_runner_operator_patch()

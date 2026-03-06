@@ -1,6 +1,8 @@
 #include "infinicore/ops/interpolate.hpp"
 #include "../../utils.hpp"
 
+#include <cmath>
+
 namespace infinicore::op {
 
 INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(Interpolate);
@@ -46,6 +48,9 @@ static std::vector<size_t> infer_interpolate_shape(
             throw std::runtime_error("interpolate size dimensionality mismatch");
         }
         for (size_t i = 0; i < spatial_ndim; ++i) {
+            if (size[i] < 0) {
+                throw std::runtime_error("interpolate size values must be non-negative");
+            }
             out_shape[i + 2] = static_cast<size_t>(size[i]);
         }
         return out_shape;
@@ -60,6 +65,9 @@ static std::vector<size_t> infer_interpolate_shape(
         }
     }
     const double scale = scale_factor[0];
+    if (!std::isfinite(scale) || scale < 0.0) {
+        throw std::runtime_error("interpolate scale_factor must be finite and non-negative");
+    }
     for (size_t i = 0; i < spatial_ndim; ++i) {
         out_shape[i + 2] = static_cast<size_t>(static_cast<double>(input_shape[i + 2]) * scale);
     }
@@ -88,6 +96,11 @@ static void normalize_interpolate_params(
         if (size.size() != spatial_ndim) {
             throw std::runtime_error("interpolate size dimensionality mismatch");
         }
+        for (size_t i = 0; i < spatial_ndim; ++i) {
+            if (size[i] < 0) {
+                throw std::runtime_error("interpolate size values must be non-negative");
+            }
+        }
         return;
     }
 
@@ -101,6 +114,9 @@ static void normalize_interpolate_params(
         if (scale_factor[i] != scale_factor[0]) {
             throw std::runtime_error("interpolate only supports scalar/uniform scale_factor");
         }
+    }
+    if (!std::isfinite(scale_factor[0]) || scale_factor[0] < 0.0) {
+        throw std::runtime_error("interpolate scale_factor must be finite and non-negative");
     }
 }
 
