@@ -172,6 +172,30 @@ def _patch_test_framework_operator_fallback() -> None:
     """
     import sys as _sys
 
+    # Safety: only patch the *repo-local* test framework. The module name
+    # `framework.base` is very generic and could exist in unrelated projects.
+    try:
+        from pathlib import Path as _Path
+    except Exception:
+        return
+
+    expected_framework_base = None
+    with contextlib.suppress(Exception):
+        repo_root = _Path(__file__).resolve().parents[2]
+        candidate = repo_root / "test" / "infinicore" / "framework" / "base.py"
+        if candidate.is_file():
+            expected_framework_base = candidate.resolve()
+
+    if expected_framework_base is None:
+        return
+
+    def _is_repo_test_framework_base(origin) -> bool:
+        if not origin:
+            return False
+        with contextlib.suppress(Exception):
+            return _Path(origin).resolve() == expected_framework_base
+        return False
+
     allowlist = {"block_diag", "hinge_embedding_loss", "kron", "selu", "sinh"}
 
     def _apply_patch(BaseOperatorTest) -> None:
@@ -238,6 +262,8 @@ def _patch_test_framework_operator_fallback() -> None:
 
                 def exec_module(self, module):
                     self._wrapped_loader.exec_module(module)
+                    if not _is_repo_test_framework_base(getattr(module, "__file__", None)):
+                        return
                     BaseOperatorTest = getattr(module, "BaseOperatorTest", None)
                     if BaseOperatorTest is not None:
                         _apply_patch(BaseOperatorTest)
@@ -248,6 +274,8 @@ def _patch_test_framework_operator_fallback() -> None:
                         return None
                     spec = _importlib_machinery.PathFinder.find_spec(fullname, path)
                     if spec is None or spec.loader is None:
+                        return spec
+                    if not _is_repo_test_framework_base(getattr(spec, "origin", None)):
                         return spec
                     if not hasattr(spec.loader, "exec_module"):
                         return spec
@@ -271,6 +299,8 @@ def _patch_test_framework_operator_fallback() -> None:
             while _time.time() < deadline:
                 module = _sys.modules.get("framework.base")
                 if module is not None:
+                    if not _is_repo_test_framework_base(getattr(module, "__file__", None)):
+                        return
                     with contextlib.suppress(Exception):
                         import importlib._bootstrap as _bootstrap
 
@@ -289,6 +319,8 @@ def _patch_test_framework_operator_fallback() -> None:
 
     framework_base = _sys.modules.get("framework.base")
     if framework_base is not None:
+        if not _is_repo_test_framework_base(getattr(framework_base, "__file__", None)):
+            return
         BaseOperatorTest = getattr(framework_base, "BaseOperatorTest", None)
         if BaseOperatorTest is not None:
             _apply_patch(BaseOperatorTest)
@@ -297,13 +329,7 @@ def _patch_test_framework_operator_fallback() -> None:
         _start_circular_import_patch_worker()
         return
 
-    # Avoid global import side-effects for normal users: only install the
-    # deferred import hook if the test framework is actually importable.
-    with contextlib.suppress(Exception):
-        import importlib.util as _importlib_util
-
-        if _importlib_util.find_spec("framework.base") is not None:
-            _install_deferred_patch()
+    _install_deferred_patch()
 
 
 _patch_test_framework_operator_fallback()
