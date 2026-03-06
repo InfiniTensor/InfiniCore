@@ -84,7 +84,7 @@ infiniStatus_t Descriptor::calculate(
 
     auto musa_stream = reinterpret_cast<musaStream_t>(stream);
 
-    size_t output_bytes = output_size * infiniopGetDtypeSize(_dtype);
+    size_t output_bytes = output_size * infiniSizeOf(_dtype);
     CHECK_MOORE(musaMemsetAsync(y, 0, output_bytes, musa_stream));
     if (output_size == 0) {
         return INFINI_STATUS_SUCCESS;
