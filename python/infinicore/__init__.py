@@ -241,11 +241,32 @@ def _should_install_test_framework_adapter() -> bool:
 
     This avoids import-time monkeypatching in normal library usage.
     """
+    import importlib.util
     import os
 
-    # Strictly opt-in: do not install/monkeypatch at import time unless explicitly
-    # requested by the caller/test harness.
-    return os.getenv("INFINICORE_ENABLE_TEST_ADAPTER") in {"1", "true", "TRUE", "yes", "YES"}
+    if os.getenv("INFINICORE_ENABLE_TEST_ADAPTER") in {"1", "true", "TRUE", "yes", "YES"}:
+        return True
+
+    # Auto-enable only for this repo's bundled test framework to avoid triggering in
+    # environments that happen to have an unrelated `framework` module installed.
+    spec = importlib.util.find_spec("framework")
+    if spec is None:
+        return False
+
+    candidates = []
+    origin = getattr(spec, "origin", None)
+    if origin:
+        candidates.append(origin)
+    locs = getattr(spec, "submodule_search_locations", None)
+    if locs:
+        candidates.extend(list(locs))
+
+    for path in candidates:
+        norm = str(path).replace("\\", "/")
+        if "/test/infinicore/framework" in norm:
+            return True
+
+    return False
 
 
 if _should_install_test_framework_adapter():

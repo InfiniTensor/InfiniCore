@@ -2,9 +2,7 @@
 #include "../../../utils.h"
 #include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 #include <cuda_runtime.h>
-#include <vector>
 #include <cmath>
-#include <cstring>
 #include <cstdint>
 #include <limits>
 #include <type_traits>
@@ -29,6 +27,67 @@ __global__ void pack_matrix_kernel(
     const size_t i = idx / n;
     const size_t j = idx % n;
     dst[idx] = src[static_cast<ptrdiff_t>(i) * s0 + static_cast<ptrdiff_t>(j) * s1];
+}
+
+template <typename T>
+__global__ void logdet_lu_kernel(
+    T *packed,
+    size_t n,
+    T *out) {
+
+    if (blockIdx.x != 0 || threadIdx.x != 0) {
+        return;
+    }
+
+    int det_sign = 1;
+    double log_abs_det = 0.0;
+    const double eps = std::is_same_v<T, float> ? 1e-6 : 1e-12;
+
+    for (size_t k = 0; k < n; ++k) {
+        size_t pivot_row = k;
+        double pivot_abs = fabs(static_cast<double>(packed[k * n + k]));
+        for (size_t i = k + 1; i < n; ++i) {
+            const double v = fabs(static_cast<double>(packed[i * n + k]));
+            if (v > pivot_abs) {
+                pivot_abs = v;
+                pivot_row = i;
+            }
+        }
+
+        if (pivot_abs <= eps) {
+            *out = -std::numeric_limits<T>::infinity();
+            return;
+        }
+
+        if (pivot_row != k) {
+            for (size_t j = 0; j < n; ++j) {
+                const T tmp = packed[k * n + j];
+                packed[k * n + j] = packed[pivot_row * n + j];
+                packed[pivot_row * n + j] = tmp;
+            }
+            det_sign *= -1;
+        }
+
+        const T pivot = packed[k * n + k];
+        if (pivot < static_cast<T>(0)) {
+            det_sign *= -1;
+        }
+        log_abs_det += log(fabs(static_cast<double>(pivot)));
+
+        for (size_t i = k + 1; i < n; ++i) {
+            const T factor = packed[i * n + k] / pivot;
+            packed[i * n + k] = static_cast<T>(0);
+            for (size_t j = k + 1; j < n; ++j) {
+                packed[i * n + j] -= factor * packed[k * n + j];
+            }
+        }
+    }
+
+    if (det_sign <= 0) {
+        *out = static_cast<T>(std::numeric_limits<double>::quiet_NaN());
+        return;
+    }
+    *out = static_cast<T>(log_abs_det);
 }
 
 infiniStatus_t Descriptor::create(
@@ -69,78 +128,33 @@ infiniStatus_t Descriptor::calculate(
 
     auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
 
-    auto run_host_lu = [&](auto tag) -> infiniStatus_t {
-        using T = decltype(tag);
-        const size_t input_bytes = input_size * sizeof(T);
+    if (_dtype == INFINI_DTYPE_F32) {
+        using T = float;
         T *packed = reinterpret_cast<T *>(workspace);
         const ptrdiff_t s0 = input_strides[0];
         const ptrdiff_t s1 = input_strides[1];
-
         constexpr int BLOCK_SIZE = 256;
         const int blocks = static_cast<int>((input_size + BLOCK_SIZE - 1) / BLOCK_SIZE);
-        pack_matrix_kernel<T><<<blocks, BLOCK_SIZE, 0, cuda_stream>>>(packed, reinterpret_cast<const T *>(x), s0, s1, matrix_size);
-
-        std::vector<T> h_matrix(input_size);
-        CHECK_CUDA(cudaMemcpyAsync(h_matrix.data(), packed, input_bytes, cudaMemcpyDeviceToHost, cuda_stream));
-        CHECK_CUDA(cudaStreamSynchronize(cuda_stream));
-
-        // In-place LU decomposition on host (with partial pivoting) to compute sign + log|det|.
-        std::vector<T> U = std::move(h_matrix);
-        int det_sign = 1;
-        double log_abs_det = 0.0;
-        const double eps = std::is_same_v<T, float> ? 1e-6 : 1e-12;
-
-        for (size_t k = 0; k < matrix_size; ++k) {
-            size_t pivot_row = k;
-            double pivot_abs = std::abs(static_cast<double>(U[k * matrix_size + k]));
-            for (size_t i = k + 1; i < matrix_size; ++i) {
-                const double v = std::abs(static_cast<double>(U[i * matrix_size + k]));
-                if (v > pivot_abs) {
-                    pivot_abs = v;
-                    pivot_row = i;
-                }
-            }
-
-            if (pivot_abs <= eps) {
-                const T neg_inf = -std::numeric_limits<T>::infinity();
-                CHECK_CUDA(cudaMemcpyAsync(y, &neg_inf, sizeof(T), cudaMemcpyHostToDevice, cuda_stream));
-                return INFINI_STATUS_SUCCESS;
-            }
-
-            if (pivot_row != k) {
-                for (size_t j = 0; j < matrix_size; ++j) {
-                    std::swap(U[k * matrix_size + j], U[pivot_row * matrix_size + j]);
-                }
-                det_sign *= -1;
-            }
-
-            const T pivot = U[k * matrix_size + k];
-            if (pivot < static_cast<T>(0)) {
-                det_sign *= -1;
-            }
-            log_abs_det += std::log(std::abs(static_cast<double>(pivot)));
-
-            for (size_t i = k + 1; i < matrix_size; ++i) {
-                const T factor = U[i * matrix_size + k] / pivot;
-                U[i * matrix_size + k] = static_cast<T>(0);
-                for (size_t j = k + 1; j < matrix_size; ++j) {
-                    U[i * matrix_size + j] -= factor * U[k * matrix_size + j];
-                }
-            }
-        }
-
-        const T out =
-            (det_sign <= 0)
-                ? static_cast<T>(std::numeric_limits<double>::quiet_NaN())
-                : static_cast<T>(log_abs_det);
-        CHECK_CUDA(cudaMemcpyAsync(y, &out, sizeof(T), cudaMemcpyHostToDevice, cuda_stream));
+        pack_matrix_kernel<T><<<blocks, BLOCK_SIZE, 0, cuda_stream>>>(
+            packed, reinterpret_cast<const T *>(x), s0, s1, matrix_size);
+        logdet_lu_kernel<T><<<1, 1, 0, cuda_stream>>>(
+            packed, matrix_size, reinterpret_cast<T *>(y));
         return INFINI_STATUS_SUCCESS;
-    };
-
-    if (_dtype == INFINI_DTYPE_F32) {
-        return run_host_lu(float{});
     }
-    return run_host_lu(double{});
+
+    {
+        using T = double;
+        T *packed = reinterpret_cast<T *>(workspace);
+        const ptrdiff_t s0 = input_strides[0];
+        const ptrdiff_t s1 = input_strides[1];
+        constexpr int BLOCK_SIZE = 256;
+        const int blocks = static_cast<int>((input_size + BLOCK_SIZE - 1) / BLOCK_SIZE);
+        pack_matrix_kernel<T><<<blocks, BLOCK_SIZE, 0, cuda_stream>>>(
+            packed, reinterpret_cast<const T *>(x), s0, s1, matrix_size);
+        logdet_lu_kernel<T><<<1, 1, 0, cuda_stream>>>(
+            packed, matrix_size, reinterpret_cast<T *>(y));
+        return INFINI_STATUS_SUCCESS;
+    }
 }
 
 } // namespace op::logdet::nvidia
