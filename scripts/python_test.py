@@ -17,12 +17,12 @@ def run_tests(args):
         "causal_softmax.py",
         "clip.py",
         "conv.py",
-        #"dequantize_awq.py",
+        # "dequantize_awq.py",
         "gelu.py",
         "gemm.py",
-        #"layer_norm.py",
+        # "layer_norm.py",
         "logsoftmax.py",
-        #"lp_norm.py",
+        # "lp_norm.py",
         "mul.py",
         "ones.py",
         "random_sample.py",
@@ -31,7 +31,7 @@ def run_tests(args):
         "rms_norm.py",
         "rope.py",
         "sigmoid.py",
-        #"softmax.py",
+        # "softmax.py",
         "softplus.py",
         "sub.py",
         "swiglu.py",
@@ -42,6 +42,7 @@ def run_tests(args):
         # "paged_attention.py",
         # "paged_caching.py",
         # "paged_attention_prefill.py"
+        "cross_entropy.py",
     ]:
         result = subprocess.run(
             f"python {test} {args} --debug", text=True, encoding="utf-8", shell=True

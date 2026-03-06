@@ -1,7 +1,10 @@
 from .adaptive_max_pool1d import adaptive_max_pool1d
+from .avg_pool1d import avg_pool1d
 from .causal_softmax import causal_softmax
 from .embedding import embedding
 from .flash_attention import flash_attention
+from .hardswish import hardswish
+from .hardtanh import hardtanh
 from .linear import linear
 from .linear_w8a8i8 import linear_w8a8i8
 from .random_sample import random_sample
@@ -22,6 +25,9 @@ __all__ = [
     "RopeAlgo",
     "rope",
     "silu",
+    "hardswish",
+    "hardtanh",
+    "avg_pool1d",
     "swiglu",
     "linear_w8a8i8",
     "silu_and_mul",

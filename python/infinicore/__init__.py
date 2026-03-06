@@ -53,6 +53,8 @@ from infinicore.ops.asinh import asinh
 from infinicore.ops.attention import attention
 from infinicore.ops.baddbmm import baddbmm
 from infinicore.ops.bilinear import bilinear
+from infinicore.ops.cross_entropy import cross_entropy
+from infinicore.ops.equal import equal
 from infinicore.ops.fmod import fmod
 from infinicore.ops.kv_caching import kv_caching
 from infinicore.ops.matmul import matmul
@@ -132,11 +134,13 @@ __all__ = [
     "bilinear",
     "fmod",
     "matmul",
+    "equal",
     "mul",
     "narrow",
     "squeeze",
     "unsqueeze",
     "rearrange",
+    "cross_entropy",
     "empty",
     "empty_like",
     "from_blob",

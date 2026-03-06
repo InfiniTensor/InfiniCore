@@ -5,6 +5,7 @@
 #include "../../devices/moore/moore_common.h"
 #include "../../devices/moore/moore_kernel_common.h"
 #include "elementwise_moore_api.h"
+#include <type_traits>
 
 namespace op::elementwise::moore {
 template <typename T>
@@ -115,7 +116,7 @@ struct DeviceImpl::Opaque {
         return launchElementwiseKernel<BLOCK_SIZE, N>(
             info, workspace,
             reinterpret_cast<Tdata *>(output), inputs,
-            elementwiseKernel<N, Op, Tdata, Args...>,
+            elementwiseKernel<N, Op, Tdata, std::decay_t<Args>...>,
             stream,
             std::forward<Args>(args)...);
     }
