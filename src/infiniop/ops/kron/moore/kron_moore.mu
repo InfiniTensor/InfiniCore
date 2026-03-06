@@ -43,7 +43,15 @@ infiniStatus_t Descriptor::create(
         return INFINI_STATUS_BAD_TENSOR_SHAPE;
     }
 
+    auto a_strides = a_desc->strides();
+    auto b_strides = b_desc->strides();
+    auto y_strides = y_desc->strides();
+    if (a_strides.size() != ndim || b_strides.size() != ndim || y_strides.size() != ndim) {
+        return INFINI_STATUS_BAD_TENSOR_STRIDES;
+    }
+
     *desc_ptr = new Descriptor(dtype, ndim, a_shape, b_shape, y_shape,
+                               std::move(a_strides), std::move(b_strides), std::move(y_strides),
                                a_desc->numel(), b_desc->numel(), y_desc->numel(),
                                handle->device, handle->device_id);
     return INFINI_STATUS_SUCCESS;
@@ -66,35 +74,29 @@ infiniStatus_t Descriptor::calculate(
     }
 
     auto musa_stream = reinterpret_cast<musaStream_t>(stream);
-    size_t *shape_data = reinterpret_cast<size_t *>(workspace);
-    ptrdiff_t *stride_data = reinterpret_cast<ptrdiff_t *>(shape_data + 3 * ndim);
-    auto a_shape_d = shape_data;
-    auto b_shape_d = shape_data + ndim;
-    auto y_shape_d = shape_data + 2 * ndim;
-    auto a_strides_d = stride_data;
-    auto b_strides_d = stride_data + ndim;
-    auto y_strides_d = stride_data + 2 * ndim;
+    size_t *a_shape_d = nullptr;
+    size_t *b_shape_d = nullptr;
+    size_t *y_shape_d = nullptr;
+    ptrdiff_t *a_strides_d = nullptr;
+    ptrdiff_t *b_strides_d = nullptr;
+    ptrdiff_t *y_strides_d = nullptr;
+    if (ndim > 0) {
+        size_t *shape_data = reinterpret_cast<size_t *>(workspace);
+        ptrdiff_t *stride_data = reinterpret_cast<ptrdiff_t *>(shape_data + 3 * ndim);
+        a_shape_d = shape_data;
+        b_shape_d = shape_data + ndim;
+        y_shape_d = shape_data + 2 * ndim;
+        a_strides_d = stride_data;
+        b_strides_d = stride_data + ndim;
+        y_strides_d = stride_data + 2 * ndim;
 
-    std::vector<ptrdiff_t> a_strides_h(ndim);
-    std::vector<ptrdiff_t> b_strides_h(ndim);
-    std::vector<ptrdiff_t> y_strides_h(ndim);
-    auto make_contiguous_strides = [](const std::vector<size_t> &shape, std::vector<ptrdiff_t> &strides) {
-        ptrdiff_t stride = 1;
-        for (size_t d = shape.size(); d-- > 0;) {
-            strides[d] = stride;
-            stride *= static_cast<ptrdiff_t>(shape[d]);
-        }
-    };
-    make_contiguous_strides(a_shape, a_strides_h);
-    make_contiguous_strides(b_shape, b_strides_h);
-    make_contiguous_strides(y_shape, y_strides_h);
-
-    CHECK_MOORE(musaMemcpyAsync(a_shape_d, a_shape.data(), ndim * sizeof(size_t), musaMemcpyHostToDevice, musa_stream));
-    CHECK_MOORE(musaMemcpyAsync(b_shape_d, b_shape.data(), ndim * sizeof(size_t), musaMemcpyHostToDevice, musa_stream));
-    CHECK_MOORE(musaMemcpyAsync(y_shape_d, y_shape.data(), ndim * sizeof(size_t), musaMemcpyHostToDevice, musa_stream));
-    CHECK_MOORE(musaMemcpyAsync(a_strides_d, a_strides_h.data(), ndim * sizeof(ptrdiff_t), musaMemcpyHostToDevice, musa_stream));
-    CHECK_MOORE(musaMemcpyAsync(b_strides_d, b_strides_h.data(), ndim * sizeof(ptrdiff_t), musaMemcpyHostToDevice, musa_stream));
-    CHECK_MOORE(musaMemcpyAsync(y_strides_d, y_strides_h.data(), ndim * sizeof(ptrdiff_t), musaMemcpyHostToDevice, musa_stream));
+        CHECK_MOORE(musaMemcpyAsync(a_shape_d, a_shape.data(), ndim * sizeof(size_t), musaMemcpyHostToDevice, musa_stream));
+        CHECK_MOORE(musaMemcpyAsync(b_shape_d, b_shape.data(), ndim * sizeof(size_t), musaMemcpyHostToDevice, musa_stream));
+        CHECK_MOORE(musaMemcpyAsync(y_shape_d, y_shape.data(), ndim * sizeof(size_t), musaMemcpyHostToDevice, musa_stream));
+        CHECK_MOORE(musaMemcpyAsync(a_strides_d, a_strides.data(), ndim * sizeof(ptrdiff_t), musaMemcpyHostToDevice, musa_stream));
+        CHECK_MOORE(musaMemcpyAsync(b_strides_d, b_strides.data(), ndim * sizeof(ptrdiff_t), musaMemcpyHostToDevice, musa_stream));
+        CHECK_MOORE(musaMemcpyAsync(y_strides_d, y_strides.data(), ndim * sizeof(ptrdiff_t), musaMemcpyHostToDevice, musa_stream));
+    }
 
     constexpr int BLOCK_SIZE = 256;
     int num_blocks = (y_size + BLOCK_SIZE - 1) / BLOCK_SIZE;

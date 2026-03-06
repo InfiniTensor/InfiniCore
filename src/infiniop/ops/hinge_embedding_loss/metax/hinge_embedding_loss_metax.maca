@@ -34,6 +34,13 @@ infiniStatus_t Descriptor::create(
     }
 
     Reduction red = static_cast<Reduction>(reduction);
+    if (red != Reduction::NONE && (dtype == INFINI_DTYPE_F16 || dtype == INFINI_DTYPE_BF16)) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+    if (!input_desc->isContiguous() || !target_desc->isContiguous() ||
+        (red == Reduction::NONE && !y_desc->isContiguous())) {
+        return INFINI_STATUS_BAD_TENSOR_STRIDES;
+    }
     std::vector<size_t> expected_y_shape;
     if (red == Reduction::NONE) {
         expected_y_shape = input_shape;

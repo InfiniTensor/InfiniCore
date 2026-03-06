@@ -36,6 +36,8 @@ infiniStatus_t Descriptor::create(
     std::vector<size_t> row_offsets(num_inputs);
     std::vector<size_t> col_offsets(num_inputs);
     std::vector<std::vector<size_t>> input_shapes(num_inputs);
+    std::vector<ptrdiff_t> input_stride0(num_inputs);
+    std::vector<ptrdiff_t> input_stride1(num_inputs);
 
     size_t total_rows = 0;
     size_t total_cols = 0;
@@ -46,6 +48,8 @@ infiniStatus_t Descriptor::create(
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
         input_shapes[i] = shape;
+        input_stride0[i] = input_descs[i]->stride(0);
+        input_stride1[i] = input_descs[i]->stride(1);
         row_offsets[i] = total_rows;
         col_offsets[i] = total_cols;
         total_rows += shape[0];
@@ -57,8 +61,15 @@ infiniStatus_t Descriptor::create(
         return INFINI_STATUS_BAD_TENSOR_SHAPE;
     }
 
+    auto y_strides = y_desc->strides();
+    if (y_strides.size() != 2) {
+        return INFINI_STATUS_BAD_TENSOR_STRIDES;
+    }
+
     *desc_ptr = new Descriptor(dtype, num_inputs, y_shape,
+                               y_strides[0], y_strides[1],
                                row_offsets, col_offsets, input_shapes,
+                               std::move(input_stride0), std::move(input_stride1),
                                y_desc->numel(),
                                handle->device, handle->device_id);
     return INFINI_STATUS_SUCCESS;
@@ -92,13 +103,9 @@ infiniStatus_t Descriptor::calculate(
 
     std::vector<size_t> input_rows(num_inputs);
     std::vector<size_t> input_cols(num_inputs);
-    std::vector<ptrdiff_t> input_stride0(num_inputs);
-    std::vector<ptrdiff_t> input_stride1(num_inputs);
     for (size_t i = 0; i < num_inputs; ++i) {
         input_rows[i] = input_shapes[i][0];
         input_cols[i] = input_shapes[i][1];
-        input_stride0[i] = static_cast<ptrdiff_t>(input_cols[i]);
-        input_stride1[i] = 1;
     }
 
     CHECK_METAX(hcMemcpyAsync(d_row_offsets, row_offsets.data(), num_inputs * sizeof(size_t), hcMemcpyHostToDevice, hc_stream));
@@ -111,9 +118,6 @@ infiniStatus_t Descriptor::calculate(
 
     constexpr int BLOCK_SIZE = 256;
     int num_blocks = (output_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
-
-    ptrdiff_t output_stride0 = static_cast<ptrdiff_t>(output_shape[1]);
-    ptrdiff_t output_stride1 = 1;
 
     switch (_dtype) {
     case INFINI_DTYPE_F16:

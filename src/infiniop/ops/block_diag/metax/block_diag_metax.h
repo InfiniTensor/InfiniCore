@@ -3,6 +3,7 @@
 
 #include "../../../operator.h"
 #include "../../../devices/metax/metax_common.h"
+#include <cstddef>
 #include <vector>
 
 namespace op::block_diag::metax {
@@ -11,25 +12,37 @@ class Descriptor final : public InfiniopDescriptor {
     infiniDtype_t _dtype;
     size_t num_inputs;
     std::vector<size_t> output_shape;
+    ptrdiff_t output_stride0;
+    ptrdiff_t output_stride1;
     std::vector<size_t> row_offsets;
     std::vector<size_t> col_offsets;
     std::vector<std::vector<size_t>> input_shapes;
+    std::vector<ptrdiff_t> input_stride0;
+    std::vector<ptrdiff_t> input_stride1;
     size_t output_size;
 
     Descriptor(infiniDtype_t dtype, size_t num_inputs,
                std::vector<size_t> output_shape,
+               ptrdiff_t output_stride0,
+               ptrdiff_t output_stride1,
                std::vector<size_t> row_offsets,
                std::vector<size_t> col_offsets,
                std::vector<std::vector<size_t>> input_shapes,
+               std::vector<ptrdiff_t> input_stride0,
+               std::vector<ptrdiff_t> input_stride1,
                size_t output_size,
                infiniDevice_t device_type, int device_id)
         : InfiniopDescriptor{device_type, device_id},
           _dtype(dtype),
           num_inputs(num_inputs),
           output_shape(std::move(output_shape)),
+          output_stride0(output_stride0),
+          output_stride1(output_stride1),
           row_offsets(std::move(row_offsets)),
           col_offsets(std::move(col_offsets)),
           input_shapes(std::move(input_shapes)),
+          input_stride0(std::move(input_stride0)),
+          input_stride1(std::move(input_stride1)),
           output_size(output_size) {}
 
 public:
