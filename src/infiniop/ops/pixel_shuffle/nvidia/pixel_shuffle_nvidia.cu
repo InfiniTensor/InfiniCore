@@ -77,6 +77,9 @@ infiniStatus_t Descriptor::calculate(
     const size_t out_height = height * static_cast<size_t>(upscale_factor);
     const size_t out_width = width * static_cast<size_t>(upscale_factor);
     const size_t total = output_size;
+    if (total == 0) {
+        return INFINI_STATUS_SUCCESS;
+    }
     int num_blocks = (total + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
     switch (_dtype) {

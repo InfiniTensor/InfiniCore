@@ -481,6 +481,9 @@ infiniStatus_t Descriptor::calculate(
     }
 
     auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
+    if (matrix_size == 0) {
+        return INFINI_STATUS_SUCCESS;
+    }
     if (n == 0) {
         CHECK_STATUS(initializeIdentity(
             y, _dtype, matrix_size, y_contiguous, y_stride_0, y_stride_1, cuda_stream));
