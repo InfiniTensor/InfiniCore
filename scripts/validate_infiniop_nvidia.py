@@ -27,6 +27,7 @@ import torch
 
 
 INFINI_DEVICE_NVIDIA = 1
+INFINI_STATUS_BAD_TENSOR_STRIDES = 12
 INFINI_DTYPE_F16 = 12
 INFINI_DTYPE_F32 = 13
 INFINI_DTYPE_BF16 = 19
@@ -316,6 +317,198 @@ def _create_tensor_desc(api: _InfiniLib, t: torch.Tensor) -> ctypes.c_void_p:
         "infiniopCreateTensorDescriptor",
     )
     return desc
+
+
+def _create_tensor_desc_from_spec(
+    api: _InfiniLib,
+    shape: Sequence[int],
+    stride: Sequence[int],
+    dtype: int,
+) -> ctypes.c_void_p:
+    if len(shape) != len(stride):
+        raise ValueError(f"shape/stride rank mismatch: {shape} vs {stride}")
+
+    ndim = len(shape)
+    shape_arr = (ctypes.c_size_t * ndim)(*map(int, shape))
+    stride_arr = (ctypes.c_ssize_t * ndim)(*map(int, stride))
+    desc = ctypes.c_void_p()
+    _status_ok(
+        api.infiniopCreateTensorDescriptor(
+            ctypes.byref(desc),
+            ctypes.c_size_t(ndim),
+            shape_arr,
+            stride_arr,
+            ctypes.c_int(dtype),
+        ),
+        f"infiniopCreateTensorDescriptor shape={tuple(shape)} stride={tuple(stride)}",
+    )
+    return desc
+
+
+def _expect_descriptor_reject(
+    create_call: Callable[[ctypes.POINTER(ctypes.c_void_p)], int],
+    destroy_fn: Callable,
+    op_name: str,
+    case_name: str,
+) -> Optional[str]:
+    op_desc = ctypes.c_void_p()
+    status = create_call(ctypes.byref(op_desc))
+    if status == 0:
+        if op_desc:
+            destroy_status = destroy_fn(op_desc)
+            if destroy_status != 0:
+                return (
+                    f"{op_name}/{case_name}: unexpected success and destroy status={destroy_status}; "
+                    f"expected status={INFINI_STATUS_BAD_TENSOR_STRIDES}"
+                )
+        return (
+            f"{op_name}/{case_name}: unexpected success; "
+            f"expected status={INFINI_STATUS_BAD_TENSOR_STRIDES}"
+        )
+    if status != INFINI_STATUS_BAD_TENSOR_STRIDES:
+        return (
+            f"{op_name}/{case_name}: rejected with wrong status={status}; "
+            f"expected status={INFINI_STATUS_BAD_TENSOR_STRIDES}"
+        )
+    return None
+
+
+def _run_negative_descriptor_tests(
+    api: _InfiniLib,
+    handle: ctypes.c_void_p,
+) -> List[str]:
+    failures: List[str] = []
+    c_void_p_p = ctypes.POINTER(ctypes.c_void_p)
+
+    if hasattr(api, "infinirtSetDevice"):
+        status = api.infinirtSetDevice(INFINI_DEVICE_NVIDIA, 0)
+        if status != 0:
+            failures.append(f"infinirtSetDevice(NVIDIA,0) failed with status={status}")
+            return failures
+
+    try:
+        api.infiniopCreatePixelShuffleDescriptor.argtypes = [
+            ctypes.c_void_p,
+            c_void_p_p,
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+            ctypes.c_int,
+        ]
+        api.infiniopCreatePixelShuffleDescriptor.restype = ctypes.c_int
+        api.infiniopDestroyPixelShuffleDescriptor.argtypes = [ctypes.c_void_p]
+        api.infiniopDestroyPixelShuffleDescriptor.restype = ctypes.c_int
+
+        api.infiniopCreateMatrixPowerDescriptor.argtypes = [
+            ctypes.c_void_p,
+            c_void_p_p,
+            ctypes.c_void_p,
+            ctypes.c_void_p,
+            ctypes.c_int,
+        ]
+        api.infiniopCreateMatrixPowerDescriptor.restype = ctypes.c_int
+        api.infiniopDestroyMatrixPowerDescriptor.argtypes = [ctypes.c_void_p]
+        api.infiniopDestroyMatrixPowerDescriptor.restype = ctypes.c_int
+    except AttributeError as exc:
+        failures.append(f"negative tests missing symbol: {exc}")
+        return failures
+
+    pixel_x_desc = ctypes.c_void_p()
+    pixel_y_desc = ctypes.c_void_p()
+    matrix_x_desc = ctypes.c_void_p()
+    matrix_y_desc = ctypes.c_void_p()
+    matrix_valid_desc = ctypes.c_void_p()
+
+    try:
+        pixel_in_shape = (1, 4, 2, 2)
+        pixel_in_stride = (0, 0, 2, 1)
+        pixel_factor = 2
+        pixel_out_shape = _pixel_shuffle_output_shape(pixel_in_shape, pixel_factor)
+        pixel_out_stride = (16, 16, 4, 1)
+
+        pixel_x_desc = _create_tensor_desc_from_spec(api, pixel_in_shape, pixel_in_stride, INFINI_DTYPE_F32)
+        pixel_y_desc = _create_tensor_desc_from_spec(api, pixel_out_shape, pixel_out_stride, INFINI_DTYPE_F32)
+
+        err = _expect_descriptor_reject(
+            lambda out_desc: api.infiniopCreatePixelShuffleDescriptor(
+                handle, out_desc, pixel_y_desc, pixel_x_desc, int(pixel_factor)
+            ),
+            api.infiniopDestroyPixelShuffleDescriptor,
+            "pixel_shuffle",
+            "broadcasted input channel stride",
+        )
+        if err is not None:
+            failures.append(err)
+
+        matrix_shape = (2, 2)
+        matrix_valid_stride = (2, 1)
+        matrix_invalid_strides = [(0, 1), (2, 0)]
+
+        matrix_valid_desc = _create_tensor_desc_from_spec(api, matrix_shape, matrix_valid_stride, INFINI_DTYPE_F32)
+        for invalid_stride in matrix_invalid_strides:
+            matrix_x_desc = _create_tensor_desc_from_spec(api, matrix_shape, invalid_stride, INFINI_DTYPE_F32)
+            err = _expect_descriptor_reject(
+                lambda out_desc: api.infiniopCreateMatrixPowerDescriptor(
+                    handle, out_desc, matrix_valid_desc, matrix_x_desc, int(3)
+                ),
+                api.infiniopDestroyMatrixPowerDescriptor,
+                "matrix_power",
+                f"x_stride={invalid_stride}",
+            )
+            if err is not None:
+                failures.append(err)
+            if matrix_x_desc:
+                destroy_status = api.infiniopDestroyTensorDescriptor(matrix_x_desc)
+                if destroy_status != 0:
+                    failures.append(
+                        f"matrix_power/x_stride={invalid_stride}: destroy x descriptor status={destroy_status}"
+                    )
+                matrix_x_desc = ctypes.c_void_p()
+
+        for invalid_stride in matrix_invalid_strides:
+            matrix_y_desc = _create_tensor_desc_from_spec(api, matrix_shape, invalid_stride, INFINI_DTYPE_F32)
+            err = _expect_descriptor_reject(
+                lambda out_desc: api.infiniopCreateMatrixPowerDescriptor(
+                    handle, out_desc, matrix_y_desc, matrix_valid_desc, int(3)
+                ),
+                api.infiniopDestroyMatrixPowerDescriptor,
+                "matrix_power",
+                f"y_stride={invalid_stride}",
+            )
+            if err is not None:
+                failures.append(err)
+            if matrix_y_desc:
+                destroy_status = api.infiniopDestroyTensorDescriptor(matrix_y_desc)
+                if destroy_status != 0:
+                    failures.append(
+                        f"matrix_power/y_stride={invalid_stride}: destroy y descriptor status={destroy_status}"
+                    )
+                matrix_y_desc = ctypes.c_void_p()
+
+    except Exception as exc:
+        failures.append(f"negative tests error: {exc}")
+    finally:
+        if pixel_x_desc:
+            status = api.infiniopDestroyTensorDescriptor(pixel_x_desc)
+            if status != 0:
+                failures.append(f"pixel_shuffle: destroy x descriptor status={status}")
+        if pixel_y_desc:
+            status = api.infiniopDestroyTensorDescriptor(pixel_y_desc)
+            if status != 0:
+                failures.append(f"pixel_shuffle: destroy y descriptor status={status}")
+        if matrix_x_desc:
+            status = api.infiniopDestroyTensorDescriptor(matrix_x_desc)
+            if status != 0:
+                failures.append(f"matrix_power: destroy x descriptor status={status}")
+        if matrix_y_desc:
+            status = api.infiniopDestroyTensorDescriptor(matrix_y_desc)
+            if status != 0:
+                failures.append(f"matrix_power: destroy y descriptor status={status}")
+        if matrix_valid_desc:
+            status = api.infiniopDestroyTensorDescriptor(matrix_valid_desc)
+            if status != 0:
+                failures.append(f"matrix_power: destroy valid descriptor status={status}")
+
+    return failures
 
 
 def _run_unary_case(
@@ -693,6 +886,7 @@ def main() -> int:
 
     handle = ctypes.c_void_p()
     summary: List[Tuple[str, int, int, List[str]]] = []
+    negative_failures: List[str] = []
 
     try:
         handle = _create_handle(api)
@@ -727,6 +921,7 @@ def main() -> int:
         )
         summary.append(("matrix_power",) + _run_matrix_power(api, handle))
         summary.append(("pixel_shuffle",) + _run_pixel_shuffle(api, handle))
+        negative_failures = _run_negative_descriptor_tests(api, handle)
 
     except Exception as exc:
         print(f"fatal: FAIL ({exc})")
@@ -747,6 +942,14 @@ def main() -> int:
         print(f"{op_name}: FAIL ({passed}/{total})")
         for msg in failures:
             print(f"  {msg}")
+
+    if negative_failures:
+        any_fail = True
+        print("negative tests: FAIL")
+        for msg in negative_failures:
+            print(f"  {msg}")
+    else:
+        print("negative tests: PASS")
 
     return 1 if any_fail else 0
 
