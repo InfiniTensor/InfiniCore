@@ -9,8 +9,10 @@ from .rope import RopeAlgo, rope
 from .silu import silu
 from .silu_and_mul import silu_and_mul
 from .swiglu import swiglu
+from .avg_pool3d import avg_pool3d
 
 __all__ = [
+    "avg_pool3d",
     "causal_softmax",
     "embedding",
     "flash_attention",
