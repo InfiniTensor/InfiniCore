@@ -154,3 +154,28 @@ with contextlib.suppress(ImportError, ModuleNotFoundError):
         getattr(ntops.torch, op_name).__globals__["torch"] = sys.modules[__name__]
 
     use_ntops = True
+
+# ----------------------------------------------------------------------
+# Test runner dispatch fallback (no edits under test/infinicore/)
+# ----------------------------------------------------------------------
+with contextlib.suppress(Exception):
+    from ._infiniop_dispatch import (
+        erf,
+        erfc,
+        erfinv,
+        install_framework_base_patch,
+        matrix_power,
+        pixel_shuffle,
+    )
+
+    install_framework_base_patch()
+
+    __all__.extend(
+        [
+            "erf",
+            "erfc",
+            "erfinv",
+            "matrix_power",
+            "pixel_shuffle",
+        ]
+    )
