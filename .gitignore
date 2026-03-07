@@ -22,6 +22,12 @@ __pycache__/
 # Cache
 cache/
 
+# Humanize RLCR loop state
+.humanize/
+
+# RLCR plan file (untracked mode)
+plan.md
+
 # JSON
 *.json
 

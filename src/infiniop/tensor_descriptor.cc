@@ -131,11 +131,12 @@ bool InfiniopTensorDescriptor::isContiguous() const {
 }
 
 bool InfiniopTensorDescriptor::hasBroadcastDim() const {
-    return std::any_of(
-        _shape.begin(), _shape.end(),
-        [&, i = 0](const auto &) mutable {
-            return _shape[i] != 1 && _strides[i++] == 0;
-        });
+    for (size_t i = 0; i < ndim(); ++i) {
+        if (_shape[i] != 1 && _strides[i] == 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 std::vector<size_t> InfiniopTensorDescriptor::getBroadcastDim() const {
