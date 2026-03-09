@@ -1,27 +1,25 @@
-#ifndef __PER_TENSOR_QUANT_INT8_INFO_H__
-#define __PER_TENSOR_QUANT_INT8_INFO_H__
+#ifndef __PER_TENSOR_DEQUANT_INT8_INFO_H__
+#define __PER_TENSOR_DEQUANT_INT8_INFO_H__
 
 #include "../../../../utils.h"
 #include "../../../operator.h"
 #include "../../../tensor.h"
 
-namespace op::per_tensor_quant_int8 {
+namespace op::per_tensor_dequant_int8 {
 
-class PerTensorQuantI8Info {
+class PerTensorDequantI8Info {
 private:
-    PerTensorQuantI8Info() = default;
+    PerTensorDequantI8Info() = default;
 
 public:
     infiniDtype_t dtype, packed_type;
     int num_elements;
-    bool is_static;
 
-    static utils::Result<PerTensorQuantI8Info> createPerTensorQuantI8Info(
+    static utils::Result<PerTensorDequantI8Info> createPerTensorDequantI8Info(
+        infiniopTensorDescriptor_t x_desc,
         infiniopTensorDescriptor_t x_packed_desc,
         infiniopTensorDescriptor_t x_scale_desc,
-        infiniopTensorDescriptor_t x_zero_desc,
-        infiniopTensorDescriptor_t x_desc,
-        bool is_static) {
+        infiniopTensorDescriptor_t x_zero_desc) {
 
         CHECK_OR_RETURN(
             x_packed_desc != nullptr && x_scale_desc != nullptr && x_desc != nullptr,
@@ -47,14 +45,13 @@ public:
             num_elements *= static_cast<int>(shape[i]);
         }
 
-        return utils::Result<PerTensorQuantI8Info>(PerTensorQuantI8Info{
+        return utils::Result<PerTensorDequantI8Info>(PerTensorDequantI8Info{
             dtype,
             packed_type,
-            num_elements,
-            is_static});
+            num_elements});
     }
 };
 
-} // namespace op::per_tensor_quant_int8
+} // namespace op::per_tensor_dequant_int8
 
-#endif //  __PER_TENSOR_QUANT_INT8_INFO_H__
+#endif //  __PER_TENSOR_DEQUANT_INT8_INFO_H__

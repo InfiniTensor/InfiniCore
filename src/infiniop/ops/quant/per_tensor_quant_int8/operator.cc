@@ -11,7 +11,8 @@ __INFINI_C infiniStatus_t infiniopCreatePerTensorQuantI8Descriptor(infiniopHandl
                                                                    infiniopTensorDescriptor_t x_packed_desc,
                                                                    infiniopTensorDescriptor_t x_scale_desc,
                                                                    infiniopTensorDescriptor_t x_zero_desc,
-                                                                   infiniopTensorDescriptor_t x_desc) {
+                                                                   infiniopTensorDescriptor_t x_desc,
+                                                                   bool is_static) {
 #define CREATE(CASE, NAMESPACE)                                                              \
     case CASE:                                                                               \
         return op::per_tensor_quant_int8::NAMESPACE::Descriptor::create(                     \
@@ -20,7 +21,8 @@ __INFINI_C infiniStatus_t infiniopCreatePerTensorQuantI8Descriptor(infiniopHandl
             x_packed_desc,                                                                   \
             x_scale_desc,                                                                    \
             x_zero_desc,                                                                     \
-            x_desc);
+            x_desc,                                                                          \
+            is_static);
     switch (handle->device) {
 #ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia)

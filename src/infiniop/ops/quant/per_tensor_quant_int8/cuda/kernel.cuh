@@ -10,10 +10,7 @@ __device__ inline int round_half_away_from_zero(float x) {
 }
 
 template <typename Tdata, unsigned int BLOCK_SIZE>
-__device__ void perTensorQuantI8SymKernel(
-    int8_t *x_packed, float *x_scale, const Tdata *x,
-    int num_elements) {
-
+__device__ void perTensorAbsmaxSymKernel(float *x_scale, const Tdata *x, int num_elements) {
     unsigned int gid = blockIdx.x * blockDim.x + threadIdx.x;
     const int grid_size = blockDim.x * gridDim.x;
 
@@ -42,8 +39,17 @@ __device__ void perTensorQuantI8SymKernel(
     if (gid == 0) {
         x_scale[0] = scale;
     }
-    __syncthreads();
-    float scale_val = 1.0f / scale;
+}
+
+template <typename Tdata, unsigned int BLOCK_SIZE>
+__device__ void perTensorQuantI8SymKernel(
+    int8_t *x_packed, float *x_scale, const Tdata *x,
+    int num_elements) {
+
+    unsigned int gid = blockIdx.x * blockDim.x + threadIdx.x;
+    const int grid_size = blockDim.x * gridDim.x;
+
+    float scale_val = 1.0f / x_scale[0];
 
     for (int tid = gid; tid < num_elements; tid += grid_size) {
 

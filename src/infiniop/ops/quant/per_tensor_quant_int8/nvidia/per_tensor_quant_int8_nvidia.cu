@@ -8,6 +8,12 @@
 #include "../cuda/kernel.cuh"
 
 template <typename Tdata, unsigned int BLOCK_SIZE>
+INFINIOP_CUDA_KERNEL perTensorAbsmaxSym(
+    float *x_scale, const Tdata *x, int num_elements) {
+    perTensorAbsmaxSymKernel<Tdata, BLOCK_SIZE>(x_scale, x, num_elements);
+}
+
+template <typename Tdata, unsigned int BLOCK_SIZE>
 INFINIOP_CUDA_KERNEL perTensorQuantI8Sym(
     int8_t *x_packed, float *x_scale, const Tdata *x, int num_elements) {
     perTensorQuantI8SymKernel<Tdata, BLOCK_SIZE>(x_packed, x_scale, x, num_elements);
@@ -28,8 +34,9 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t x_packed_desc,
     infiniopTensorDescriptor_t x_scale_desc,
     infiniopTensorDescriptor_t x_zero_desc,
-    infiniopTensorDescriptor_t x_desc) {
-    auto info = PerTensorQuantI8Info::createPerTensorQuantI8Info(x_packed_desc, x_scale_desc, x_zero_desc, x_desc);
+    infiniopTensorDescriptor_t x_desc,
+    bool is_static) {
+    auto info = PerTensorQuantI8Info::createPerTensorQuantI8Info(x_packed_desc, x_scale_desc, x_zero_desc, x_desc, is_static);
     CHECK_RESULT(info);
 
     *desc_ptr = new Descriptor(
@@ -41,10 +48,14 @@ infiniStatus_t Descriptor::create(
 template <unsigned int BLOCK_SIZE, typename Tdata>
 infiniStatus_t per_tensor_quant_int8Kernel(const PerTensorQuantI8Info &info, int8_t *x_packed, float *x_scale, float *x_zero, const Tdata *x, cudaStream_t stream) {
     int num_elements = (int)info.num_elements;
-
+    bool is_static = info.is_static;
     int num_blocks = (num_elements + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
     if (x_zero == nullptr) {
+        if (is_static == false) {
+            perTensorAbsmaxSym<Tdata, BLOCK_SIZE>
+                <<<num_blocks, BLOCK_SIZE, 0, stream>>>(x_scale, x, num_elements);
+        }
         perTensorQuantI8Sym<Tdata, BLOCK_SIZE>
             <<<num_blocks, BLOCK_SIZE, 0, stream>>>(x_packed, x_scale, x, num_elements);
     } else {

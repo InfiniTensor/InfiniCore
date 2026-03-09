@@ -4,7 +4,7 @@ from .structs import (
     infiniopOperatorDescriptor_t,
 )
 
-from ctypes import c_int32, c_void_p, c_size_t, POINTER, c_float, c_double, c_uint64
+from ctypes import c_int32, c_void_p, c_size_t, POINTER, c_float, c_bool, c_double, c_uint64
 
 class OpRegister:
     registry = []
@@ -1032,6 +1032,7 @@ def per_tensor_quant_int8_(lib):
         infiniopTensorDescriptor_t,
         infiniopTensorDescriptor_t,
         infiniopTensorDescriptor_t,
+        c_bool,
     ]
 
     lib.infiniopGetPerTensorQuantI8WorkspaceSize.restype = c_int32
@@ -1054,6 +1055,42 @@ def per_tensor_quant_int8_(lib):
 
     lib.infiniopDestroyPerTensorQuantI8Descriptor.restype = c_int32
     lib.infiniopDestroyPerTensorQuantI8Descriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
+def per_tensor_dequant_int8_(lib):
+    lib.infiniopCreatePerTensorDequantI8Descriptor.restype = c_int32
+    lib.infiniopCreatePerTensorDequantI8Descriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetPerTensorDequantI8WorkspaceSize.restype = c_int32
+    lib.infiniopGetPerTensorDequantI8WorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopPerTensorDequantI8.restype = c_int32
+    lib.infiniopPerTensorDequantI8.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyPerTensorDequantI8Descriptor.restype = c_int32
+    lib.infiniopDestroyPerTensorDequantI8Descriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
 

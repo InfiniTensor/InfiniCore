@@ -24,13 +24,13 @@ from enum import Enum, auto
 # ==============================================================================
 # These are not meant to be imported from other modules
 _TEST_CASES = [
-    # x_shape, symmetric, is_static
-    ((8, 8), True, True),
-    ((8, 128), True, False),
-    ((256, 1024), True, True),
-    ((1024, 2048), True, False),
-    ((2048, 2048), True, True),
-    ((4096, 2048), True, False),
+    # x_shape, symmetric
+    ((8, 8), True),
+    ((128, 512), True),
+    ((128, 128), True),
+    ((256, 1024), True),
+    ((256, 2048), True),
+    ((1024, 2048), True),
 ]
 
 
@@ -50,66 +50,48 @@ NUM_PRERUN = 10
 NUM_ITERATIONS = 1000
 
 
-def per_tensor_quant_int8_torch(x, x_scale, symmetric, is_static):
-    if symmetric == False:
-        return
-    else:
-        x = x.float()
-        if is_static:
-            x_q = x.mul(1 / x_scale)
-            x_q = torch.round(x_q).to(torch.int8)
-            return x_q, x_scale, None
-        else:
-            absmax = x.flatten().abs().max()
-            if absmax == 0:
-                scale = torch.tensor(1.0, device=x.device, dtype=torch.float32)
-                q = torch.zeros_like(x, dtype=torch.int8)
-                return q, scale, None
-        scale = absmax / 127
-        x_q = x.mul(127 / absmax)
-        x_q = torch.round(x_q).to(torch.int8)
-
-        return x_q, scale, None
+def per_tensor_dequant_int8_torch(x_packed, x_scale, dtype):
+    fake_qweight = x_packed.to(dtype)
+    dq_weight = fake_qweight * x_scale
+    return dq_weight
+        
 
 def test(
     handle,
     device,
     x_shape,
     symmetric,
-    is_static,
     dtype=InfiniDtype.F16,
     sync=None,
 ):
-    
+    if symmetric == False:
+        return 
     print(
-        f"Testing Per Tensor Quant Int8 on {InfiniDeviceNames[device]} with x_shape:{x_shape}, symmetric:{symmetric}, is_static:{is_static} dtype:{InfiniDtypeNames[dtype]}"
+        f"Testing Per Tensor Dequant Int8 on {InfiniDeviceNames[device]} with x_shape:{x_shape}, symmetric:{symmetric} , dtype:{InfiniDtypeNames[dtype]}"
     )
-    M, K = x_shape
    
     x = TestTensor(x_shape, None, dtype, device)
-    x_packed = TestTensor(x_shape, None, InfiniDtype.I8, device, mode="zeros")
-    if is_static == False:
-        x_scale = TestTensor((1,), None, InfiniDtype.F32, device, mode="zeros")
-    else:
-        x_scale = TestTensor((1,), None, InfiniDtype.F32, device)
+    
+    x_packed = TestTensor(x_shape, None, InfiniDtype.I8, device, randint_low= -127, randint_high=127)
+    x_scale = TestTensor((1, ), None, InfiniDtype.F32, device)
     if symmetric:
         x_zero = None
     else:
         x_zero = TestTensor((1, ), None, InfiniDtype.F32, device)
+
+    ans = per_tensor_dequant_int8_torch(x_packed.torch_tensor(), x_scale.torch_tensor(), x.torch_tensor().dtype)
     if sync is not None:
         sync()
 
-    x_p, x_s, x_z = per_tensor_quant_int8_torch(x.torch_tensor(), x_scale.torch_tensor(), symmetric, is_static)
     descriptor = infiniopOperatorDescriptor_t()
     check_error(
-        LIBINFINIOP.infiniopCreatePerTensorQuantI8Descriptor(
+        LIBINFINIOP.infiniopCreatePerTensorDequantI8Descriptor(
             handle,
             ctypes.byref(descriptor),
+            x.descriptor,
             x_packed.descriptor,
             x_scale.descriptor,
             None if symmetric else x_zero.descriptor,
-            x.descriptor,
-            is_static,
         )
     )
 
@@ -122,54 +104,45 @@ def test(
 
     workspace_size = c_uint64(0)
     check_error(
-        LIBINFINIOP.infiniopGetPerTensorQuantI8WorkspaceSize(
+        LIBINFINIOP.infiniopGetPerTensorDequantI8WorkspaceSize(
             descriptor, ctypes.byref(workspace_size)
         )
     )
     workspace = TestWorkspace(workspace_size.value, x.device)
     
-    def lib_per_tensor_quant_int8():
+    def lib_per_tensor_dequant_int8():
         check_error(
-            LIBINFINIOP.infiniopPerTensorQuantI8(
+            LIBINFINIOP.infiniopPerTensorDequantI8(
                 descriptor,
                 workspace.data(),
                 workspace_size.value,
+                x.data(),
                 x_packed.data(),
                 x_scale.data(),
                 None if symmetric else x_zero.data(),
-                x.data(),
                 None,
             )
         )
 
-    lib_per_tensor_quant_int8()
+    lib_per_tensor_dequant_int8()
     
     if sync is not None:
         sync()
 
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:
-        debug(x_packed.actual_tensor(), x_p, atol=1, rtol=0)
-        debug(x_scale.actual_tensor(), x_s, atol=atol, rtol=rtol)
-        if symmetric == False:
-            debug(x_zero.actual_tensor(), x_z, atol=atol, rtol=rtol)
-    
-    if symmetric:
-        assert (torch.allclose(x_packed.actual_tensor(), x_p, atol=1, rtol=0) and 
-                torch.allclose(x_scale.actual_tensor(), x_s, atol=atol, rtol=rtol))
-    else:
-        assert (torch.allclose(x_packed.actual_tensor(), x_p, atol=1, rtol=0) and 
-                torch.allclose(x_scale.actual_tensor(), x_s, atol=atol, rtol=rtol) and
-                torch.allclose(x_zero.actual_tensor(), x_z, atol=atol, rtol=rtol))
+        debug(x.actual_tensor().float(), ans.float(), atol=atol, rtol=rtol)
+        
+    assert torch.allclose(x.actual_tensor().float(), ans.float(), atol=atol, rtol=rtol)
 
     # Profiling workflow
     if PROFILE:
         # fmt: off
-        profile_operation("PyTorch", lambda: per_tensor_quant_int8_torch(x.torch_tensor(), x_scale.torch_tensor(), symmetric, is_static), device, NUM_PRERUN, NUM_ITERATIONS)
-        profile_operation("    lib", lambda: lib_per_tensor_quant_int8(), device, NUM_PRERUN, NUM_ITERATIONS)
+        profile_operation("PyTorch", lambda: per_tensor_dequant_int8_torch(x_packed.torch_tensor(), x_scale.torch_tensor(), x.torch_tensor().dtype), device, NUM_PRERUN, NUM_ITERATIONS)
+        profile_operation("    lib", lambda: lib_per_tensor_dequant_int8(), device, NUM_PRERUN, NUM_ITERATIONS)
         # fmt: on
 
-    check_error(LIBINFINIOP.infiniopDestroyPerTensorQuantI8Descriptor(descriptor))
+    check_error(LIBINFINIOP.infiniopDestroyPerTensorDequantI8Descriptor(descriptor))
 
 
 if __name__ == "__main__":

@@ -10,7 +10,8 @@ __INFINI_C __export infiniStatus_t infiniopCreatePerTensorQuantI8Descriptor(infi
                                                                             infiniopTensorDescriptor_t x_packed_desc,
                                                                             infiniopTensorDescriptor_t x_scale_desc,
                                                                             infiniopTensorDescriptor_t x_zero_desc,
-                                                                            infiniopTensorDescriptor_t x_desc);
+                                                                            infiniopTensorDescriptor_t x_desc,
+                                                                            bool is_static);
 
 __INFINI_C __export infiniStatus_t infiniopGetPerTensorQuantI8WorkspaceSize(infiniopPerTensorQuantI8Descriptor_t desc, size_t *size);
 
