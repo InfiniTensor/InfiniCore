@@ -41,7 +41,7 @@ infiniStatus_t cross_entropy_kernel(const CrossEntropyInfo *info,
     const Tidx *label = reinterpret_cast<const Tidx *>(target);
 
 #pragma omp parallel for
-    for (size_t i = 0; i < info->outer_size; ++i) {
+    for (ptrdiff_t i = 0; i < ptrdiff_t(info->outer_size); ++i) {
         const T *row = x + i * info->x_stride;
         Tidx idx = label[i];
 
