@@ -16,7 +16,7 @@ rule("mu")
         local mcc = MUSA_ROOT .. "/bin/mcc"
         local includedirs = table.concat(target:get("includedirs"), " ")
 
-        local args = {"--cuda-gpu-arch=mp_31", "-c", sourcefile, "-o", objectfile, "-I" .. MUSA_ROOT .. "/include", "-O3", "-fPIC", "-Wall", "-std=c++17", "-pthread"}
+        local args = {"--cuda-gpu-arch=mp_31", "-DUSE_MUSA", "-c", sourcefile, "-o", objectfile, "-I" .. MUSA_ROOT .. "/include", "-O3", "-fPIC", "-Wall", "-std=c++17", "-pthread"}
         for _, includedir in ipairs(target:get("includedirs")) do
             table.insert(args, "-I" .. includedir)
         end
@@ -68,16 +68,22 @@ target("infiniccl-moore")
     set_kind("static")
     add_deps("infinirt")
     on_install(function (target) end)
+    set_languages("cxx17")
     set_warnings("all", "error")
     if not is_plat("windows") then
-        add_cxflags("-fPIC")
+        add_cxflags("-lstdc++", "-fPIC", "-Wno-comment")
         add_cxxflags("-fPIC")
     end
     if has_config("ccl") then
         add_links("libmccl.so")
         add_files("../src/infiniccl/moore/*.cc")
-        add_defines("MARCH_TYPE=310")
-        add_cxxflags("-Wno-unused-function")
+        add_files("../src/infiniccl/moore/*.mu", {rule = "mu"})
+        
+        -- Moore GPU arch with mp_31 support mcclBfloat16 in MCCL
+        if get_config("moore-gpu-arch") == "mp_31" then
+            add_defines("MARCH_TYPE=310")
+            add_cxxflags("-Wno-unused-function")
+        end
     end
     set_languages("cxx17")
 
