@@ -20,8 +20,7 @@ public:
         infiniopTensorDescriptor_t x_packed_desc,
         infiniopTensorDescriptor_t x_scale_desc,
         infiniopTensorDescriptor_t x_zero_desc,
-        infiniopTensorDescriptor_t x_desc,
-        bool is_static) {
+        infiniopTensorDescriptor_t x_desc) {
 
         CHECK_OR_RETURN(
             x_packed_desc != nullptr && x_scale_desc != nullptr && x_desc != nullptr,
@@ -50,8 +49,7 @@ public:
         return utils::Result<PerTensorQuantI8Info>(PerTensorQuantI8Info{
             dtype,
             packed_type,
-            num_elements,
-            is_static});
+            num_elements});
     }
 };
 

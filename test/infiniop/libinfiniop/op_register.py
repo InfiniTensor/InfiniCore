@@ -814,6 +814,7 @@ def swiglu_(lib):
         c_void_p,
         c_void_p,
         c_void_p,
+        c_bool,
         c_void_p,
     ]
 
@@ -1032,7 +1033,6 @@ def per_tensor_quant_int8_(lib):
         infiniopTensorDescriptor_t,
         infiniopTensorDescriptor_t,
         infiniopTensorDescriptor_t,
-        c_bool,
     ]
 
     lib.infiniopGetPerTensorQuantI8WorkspaceSize.restype = c_int32

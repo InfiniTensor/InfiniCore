@@ -109,7 +109,6 @@ def test(
             x_scale.descriptor,
             None if symmetric else x_zero.descriptor,
             x.descriptor,
-            is_static,
         )
     )
 
@@ -138,6 +137,7 @@ def test(
                 x_scale.data(),
                 None if symmetric else x_zero.data(),
                 x.data(),
+                is_static,
                 None,
             )
         )
