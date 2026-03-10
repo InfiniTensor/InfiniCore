@@ -181,7 +181,6 @@ target("flash-attn-nvidia")
         before_build(function (target)
             print("Flash Attention not available, skipping flash-attn-nvidia build")
         end)
-        on_build(function (target) end)
     end
 
     on_install(function (target) end)
