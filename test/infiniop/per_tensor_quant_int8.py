@@ -25,12 +25,12 @@ from enum import Enum, auto
 # These are not meant to be imported from other modules
 _TEST_CASES = [
     # x_shape, symmetric, is_static
-    ((8, 8), True, True),
-    ((8, 128), True, False),
-    ((256, 1024), True, True),
+    ((256, 2048), True, True),
     ((1024, 2048), True, False),
-    ((2048, 2048), True, True),
-    ((4096, 2048), True, False),
+    ((16, 128, 512), True, True),
+    ((16, 256, 1024), True, False),
+    ((8, 8, 128, 1024), True, True),
+    ((4, 16, 128, 128), True, False),
 ]
 
 
@@ -84,7 +84,6 @@ def test(
     print(
         f"Testing Per Tensor Quant Int8 on {InfiniDeviceNames[device]} with x_shape:{x_shape}, symmetric:{symmetric}, is_static:{is_static} dtype:{InfiniDtypeNames[dtype]}"
     )
-    M, K = x_shape
    
     x = TestTensor(x_shape, None, dtype, device)
     x_packed = TestTensor(x_shape, None, InfiniDtype.I8, device, mode="zeros")

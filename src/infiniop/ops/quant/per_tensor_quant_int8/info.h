@@ -32,10 +32,6 @@ public:
         CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_BF16, INFINI_DTYPE_F32);
         CHECK_DTYPE(packed_type, INFINI_DTYPE_I8);
 
-        CHECK_OR_RETURN(x_desc->ndim() == 2
-                            && x_packed_desc->ndim() == 2,
-                        INFINI_STATUS_BAD_TENSOR_SHAPE);
-
         auto shape = x_desc->shape();
         CHECK_SAME_SHAPE(shape, x_packed_desc->shape());
 

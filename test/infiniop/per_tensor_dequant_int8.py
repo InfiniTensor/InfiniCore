@@ -25,12 +25,12 @@ from enum import Enum, auto
 # These are not meant to be imported from other modules
 _TEST_CASES = [
     # x_shape, symmetric
-    ((8, 8), True),
-    ((128, 512), True),
-    ((128, 128), True),
-    ((256, 1024), True),
     ((256, 2048), True),
     ((1024, 2048), True),
+    ((16, 128, 512), True),
+    ((16, 256, 1024), True),
+    ((8, 8, 128, 1024), True),
+    ((4, 16, 128, 128), True),
 ]
 
 
