@@ -9,4 +9,9 @@ enum class QuantScheme {
     AWQ_W4A16,
 };
 
+enum class KVQuantScheme {
+    NONE,
+    INT8,
+};
+
 } // namespace infinicore::quantization

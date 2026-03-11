@@ -20,6 +20,8 @@
 #include "ops/paged_attention.hpp"
 #include "ops/paged_attention_prefill.hpp"
 #include "ops/paged_caching.hpp"
+#include "ops/per_tensor_dequant_i8.hpp"
+#include "ops/per_tensor_quant_i8.hpp"
 #include "ops/random_sample.hpp"
 #include "ops/rearrange.hpp"
 #include "ops/reciprocal.hpp"
