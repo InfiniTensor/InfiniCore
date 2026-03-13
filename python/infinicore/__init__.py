@@ -72,6 +72,7 @@ from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.paged_attention import paged_attention
 from infinicore.ops.paged_attention_prefill import paged_attention_prefill
+from infinicore.ops.eyes import eye
 from infinicore.ops.paged_caching import paged_caching
 from infinicore.ops.rearrange import rearrange
 from infinicore.ops.reciprocal import reciprocal
@@ -169,6 +170,7 @@ __all__ = [
     "mha_kvcache",
     "mha_varlen",
     "paged_caching",
+    "eye",
     "paged_attention",
     "paged_attention_prefill",
     "ones",

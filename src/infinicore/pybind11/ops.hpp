@@ -19,6 +19,7 @@
 #include "ops/cross_entropy.hpp"
 #include "ops/embedding.hpp"
 #include "ops/equal.hpp"
+#include "ops/eye.hpp"
 #include "ops/flash_attention.hpp"
 #include "ops/fmod.hpp"
 #include "ops/hardswish.hpp"
@@ -45,6 +46,7 @@
 #include "ops/topk.hpp"
 #include "ops/var.hpp"
 #include "ops/var_mean.hpp"
+#include "ops/topksoftmax.hpp"
 
 namespace py = pybind11;
 
@@ -80,8 +82,10 @@ inline void bind(py::module &m) {
     bind_avg_pool1d(m);
     bind_silu(m);
     bind_swiglu(m);
+    bind_topksoftmax(m);
     bind_rope(m);
     bind_embedding(m);
+    bind_eye(m);
     bind_linear_w8a8i8(m);
     bind_silu_and_mul(m);
     bind_sum(m);

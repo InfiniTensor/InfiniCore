@@ -15,6 +15,7 @@
 #include "ops/cdist.hpp"
 #include "ops/cross_entropy.hpp"
 #include "ops/embedding.hpp"
+#include "ops/eye.hpp"
 #include "ops/flash_attention.hpp"
 #include "ops/fmod.hpp"
 #include "ops/hardswish.hpp"
@@ -33,3 +34,4 @@
 #include "ops/silu.hpp"
 #include "ops/silu_and_mul.hpp"
 #include "ops/swiglu.hpp"
+#include "ops/topksoftmax.hpp"
