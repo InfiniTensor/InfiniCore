@@ -9,14 +9,28 @@
 
 template <typename Tdata, unsigned int BLOCK_SIZE>
 INFINIOP_CUDA_KERNEL perTensorAbsmaxSym(
-    float *x_scale, const Tdata *x, int num_elements) {
-    perTensorAbsmaxSymKernel<Tdata, BLOCK_SIZE>(x_scale, x, num_elements);
+    float *x_scale, const Tdata *x,
+    size_t batch_size, size_t channel, size_t hidden_dim, size_t width,
+    ptrdiff_t strides_0, ptrdiff_t strides_1, ptrdiff_t strides_2, ptrdiff_t strides_3,
+    int num_elements) {
+    perTensorAbsmaxSymKernel<Tdata, BLOCK_SIZE>(x_scale, x,
+                                                batch_size, channel, hidden_dim, width,
+                                                strides_0, strides_1, strides_2, strides_3,
+                                                num_elements);
 }
 
 template <typename Tdata, unsigned int BLOCK_SIZE>
 INFINIOP_CUDA_KERNEL perTensorQuantI8Sym(
-    int8_t *x_packed, float *x_scale, const Tdata *x, int num_elements) {
-    perTensorQuantI8SymKernel<Tdata, BLOCK_SIZE>(x_packed, x_scale, x, num_elements);
+    int8_t *x_packed, float *x_scale, const Tdata *x,
+    size_t batch_size, size_t channel, size_t hidden_dim, size_t width,
+    ptrdiff_t strides_0, ptrdiff_t strides_1, ptrdiff_t strides_2, ptrdiff_t strides_3,
+    ptrdiff_t p_strides_0, ptrdiff_t p_strides_1, ptrdiff_t p_strides_2, ptrdiff_t p_strides_3,
+    int num_elements) {
+    perTensorQuantI8SymKernel<Tdata, BLOCK_SIZE>(x_packed, x_scale, x,
+                                                 batch_size, channel, hidden_dim, width,
+                                                 strides_0, strides_1, strides_2, strides_3,
+                                                 p_strides_0, p_strides_1, p_strides_2, p_strides_3,
+                                                 num_elements);
 }
 
 namespace op::per_tensor_quant_int8::nvidia {
@@ -49,13 +63,35 @@ infiniStatus_t per_tensor_quant_int8Kernel(const PerTensorQuantI8Info &info, int
     int num_elements = (int)info.num_elements;
     int num_blocks = (num_elements + BLOCK_SIZE - 1) / BLOCK_SIZE;
 
+    size_t batch_size = info.batch_size;
+    size_t channel = info.channel;
+    size_t hidden_dim = info.hidden_dim;
+    size_t width = info.width;
+
+    ptrdiff_t strides_0 = info.strides_0;
+    ptrdiff_t strides_1 = info.strides_1;
+    ptrdiff_t strides_2 = info.strides_2;
+    ptrdiff_t strides_3 = info.strides_3;
+
+    ptrdiff_t p_strides_0 = info.p_strides_0;
+    ptrdiff_t p_strides_1 = info.p_strides_1;
+    ptrdiff_t p_strides_2 = info.p_strides_2;
+    ptrdiff_t p_strides_3 = info.p_strides_3;
+
     if (x_zero == nullptr) {
         if (is_static == false) {
             perTensorAbsmaxSym<Tdata, BLOCK_SIZE>
-                <<<num_blocks, BLOCK_SIZE, 0, stream>>>(x_scale, x, num_elements);
+                <<<num_blocks, BLOCK_SIZE, 0, stream>>>(x_scale, x,
+                                                        batch_size, channel, hidden_dim, width,
+                                                        strides_0, strides_1, strides_2, strides_3,
+                                                        num_elements);
         }
         perTensorQuantI8Sym<Tdata, BLOCK_SIZE>
-            <<<num_blocks, BLOCK_SIZE, 0, stream>>>(x_packed, x_scale, x, num_elements);
+            <<<num_blocks, BLOCK_SIZE, 0, stream>>>(x_packed, x_scale, x,
+                                                    batch_size, channel, hidden_dim, width,
+                                                    strides_0, strides_1, strides_2, strides_3,
+                                                    p_strides_0, p_strides_1, p_strides_2, p_strides_3,
+                                                    num_elements);
     } else {
         return INFINI_STATUS_BAD_PARAM;
     }

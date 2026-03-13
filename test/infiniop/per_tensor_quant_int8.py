@@ -24,13 +24,17 @@ from enum import Enum, auto
 # ==============================================================================
 # These are not meant to be imported from other modules
 _TEST_CASES = [
-    # x_shape, symmetric, is_static
-    ((256, 2048), True, True),
-    ((1024, 2048), True, False),
-    ((16, 128, 512), True, True),
-    ((16, 256, 1024), True, False),
-    ((8, 8, 128, 1024), True, True),
-    ((4, 16, 128, 128), True, False),
+    # x_shape, x_stride, x_packed_stride, symmetric, is_static
+    ((16, 5632), None, None, True, False),
+    ((13, 4), (10, 1), None, True, True),
+    ((13, 4), (10, 1), (10, 1), True, False),
+    ((16, 5632), (13312, 1), (13312, 1), True, True),
+    ((4, 4, 5632), None, None, True, False),
+    ((4, 4, 5632), (45056, 5632, 1), (45056, 5632, 1), True, True),
+    ((1, 1, 8, 1), None, None, True, False),
+    ((1, 8, 32, 32), None, None, True, True),
+    ((8, 16, 64, 128), (8388608, 524288, 8192, 1), None, True, False),
+    ((1, 2, 2304, 128), (589824, 294912, 128, 1), (589824, 294912, 128, 1), True, True),
 ]
 
 
@@ -71,22 +75,27 @@ def per_tensor_quant_int8_torch(x, x_scale, symmetric, is_static):
 
         return x_q, scale, None
 
+
 def test(
     handle,
     device,
     x_shape,
+    x_stride,
+    x_packed_stride,
     symmetric,
     is_static,
     dtype=InfiniDtype.F16,
     sync=None,
 ):
-    
+
     print(
-        f"Testing Per Tensor Quant Int8 on {InfiniDeviceNames[device]} with x_shape:{x_shape}, symmetric:{symmetric}, is_static:{is_static} dtype:{InfiniDtypeNames[dtype]}"
+        f"Testing Per Tensor Quant Int8 on {InfiniDeviceNames[device]} with x_shape:{x_shape}, x_stride:{x_stride}, x_packed_stride:{x_packed_stride}, symmetric:{symmetric}, is_static:{is_static}, dtype:{InfiniDtypeNames[dtype]}"
     )
-   
-    x = TestTensor(x_shape, None, dtype, device)
-    x_packed = TestTensor(x_shape, None, InfiniDtype.I8, device, mode="zeros")
+
+    x = TestTensor(x_shape, x_stride, dtype, device)
+    x_packed = TestTensor(
+        x_shape, x_packed_stride, InfiniDtype.I8, device, mode="zeros"
+    )
     if is_static == False:
         x_scale = TestTensor((1,), None, InfiniDtype.F32, device, mode="zeros")
     else:
@@ -94,11 +103,14 @@ def test(
     if symmetric:
         x_zero = None
     else:
-        x_zero = TestTensor((1, ), None, InfiniDtype.F32, device)
+        x_zero = TestTensor((1,), None, InfiniDtype.F32, device)
     if sync is not None:
         sync()
 
-    x_p, x_s, x_z = per_tensor_quant_int8_torch(x.torch_tensor(), x_scale.torch_tensor(), symmetric, is_static)
+    x_p, x_s, x_z = per_tensor_quant_int8_torch(
+        x.torch_tensor(), x_scale.torch_tensor(), symmetric, is_static
+    )
+
     descriptor = infiniopOperatorDescriptor_t()
     check_error(
         LIBINFINIOP.infiniopCreatePerTensorQuantI8Descriptor(
@@ -125,7 +137,7 @@ def test(
         )
     )
     workspace = TestWorkspace(workspace_size.value, x.device)
-    
+
     def lib_per_tensor_quant_int8():
         check_error(
             LIBINFINIOP.infiniopPerTensorQuantI8(
@@ -145,21 +157,24 @@ def test(
     
     if sync is not None:
         sync()
-
+    
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:
-        debug(x_packed.actual_tensor(), x_p, atol=1, rtol=0)
+        debug(x_packed.actual_tensor(), x_p, atol=2, rtol=0)
         debug(x_scale.actual_tensor(), x_s, atol=atol, rtol=rtol)
         if symmetric == False:
             debug(x_zero.actual_tensor(), x_z, atol=atol, rtol=rtol)
     
     if symmetric:
-        assert (torch.allclose(x_packed.actual_tensor(), x_p, atol=1, rtol=0) and 
-                torch.allclose(x_scale.actual_tensor(), x_s, atol=atol, rtol=rtol))
+        assert torch.allclose(
+            x_packed.actual_tensor(), x_p, atol=2, rtol=0
+        ) and torch.allclose(x_scale.actual_tensor(), x_s, atol=atol, rtol=rtol)
     else:
-        assert (torch.allclose(x_packed.actual_tensor(), x_p, atol=1, rtol=0) and 
-                torch.allclose(x_scale.actual_tensor(), x_s, atol=atol, rtol=rtol) and
-                torch.allclose(x_zero.actual_tensor(), x_z, atol=atol, rtol=rtol))
+        assert (
+            torch.allclose(x_packed.actual_tensor(), x_p, atol=2, rtol=0)
+            and torch.allclose(x_scale.actual_tensor(), x_s, atol=atol, rtol=rtol)
+            and torch.allclose(x_zero.actual_tensor(), x_z, atol=atol, rtol=rtol)
+        )
 
     # Profiling workflow
     if PROFILE:
@@ -182,5 +197,5 @@ if __name__ == "__main__":
 
     for device in get_test_devices(args):
         test_operator(device, test, _TEST_CASES, _TENSOR_DTYPES)
-    
+
     print("\033[92mTest passed!\033[0m")

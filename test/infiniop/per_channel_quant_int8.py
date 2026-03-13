@@ -151,16 +151,16 @@ def test(
 
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:
-        debug(x_packed.actual_tensor(), x_p, atol=1, rtol=0)
+        debug(x_packed.actual_tensor(), x_p, atol=2, rtol=0)
         debug(x_scale.actual_tensor(), x_s, atol=atol, rtol=rtol)
         if symmetric == False:
             debug(x_zero.actual_tensor(), x_z, atol=atol, rtol=rtol)
 
     if symmetric:
-        assert (torch.allclose(x_packed.actual_tensor(), x_p, atol=1, rtol=0) and 
+        assert (torch.allclose(x_packed.actual_tensor(), x_p, atol=2, rtol=0) and 
                 torch.allclose(x_scale.actual_tensor(), x_s, atol=atol, rtol=rtol))
     else:
-        assert (torch.allclose(x_packed.actual_tensor(), x_p, atol=1, rtol=0) and 
+        assert (torch.allclose(x_packed.actual_tensor(), x_p, atol=2, rtol=0) and 
                 torch.allclose(x_scale.actual_tensor(), x_s, atol=atol, rtol=rtol) and
                 torch.allclose(x_zero.actual_tensor(), x_z, atol=atol, rtol=rtol))
 

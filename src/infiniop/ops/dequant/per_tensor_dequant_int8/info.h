@@ -13,6 +13,9 @@ private:
 
 public:
     infiniDtype_t dtype, packed_type;
+    size_t batch_size, channel, hidden_dim, width;
+    ptrdiff_t strides_0, strides_1, strides_2, strides_3;
+    ptrdiff_t p_strides_0, p_strides_1, p_strides_2, p_strides_3;
     int num_elements;
 
     static utils::Result<PerTensorDequantI8Info> createPerTensorDequantI8Info(
@@ -35,6 +38,23 @@ public:
         CHECK_SAME_SHAPE(shape, x_packed_desc->shape());
 
         auto ndim = x_desc->ndim();
+        CHECK_OR_RETURN(ndim <= 4,
+                        INFINI_STATUS_BAD_TENSOR_SHAPE);
+
+        size_t width = shape[ndim - 1];
+        size_t hidden_dim = (ndim > 1 ? shape[ndim - 2] : 1);
+        size_t channel = (ndim > 2 ? shape[ndim - 3] : 1);
+        size_t batch_size = (ndim > 3 ? shape[ndim - 4] : 1);
+
+        ptrdiff_t strides_3 = x_desc->strides()[ndim - 1];
+        ptrdiff_t strides_2 = (ndim > 1 ? x_desc->strides()[ndim - 2] : 0);
+        ptrdiff_t strides_1 = (ndim > 2 ? x_desc->strides()[ndim - 3] : 0);
+        ptrdiff_t strides_0 = (ndim > 3 ? x_desc->strides()[ndim - 4] : 0);
+
+        ptrdiff_t p_strides_3 = x_packed_desc->strides()[ndim - 1];
+        ptrdiff_t p_strides_2 = (ndim > 1 ? x_packed_desc->strides()[ndim - 2] : 0);
+        ptrdiff_t p_strides_1 = (ndim > 2 ? x_packed_desc->strides()[ndim - 3] : 0);
+        ptrdiff_t p_strides_0 = (ndim > 3 ? x_packed_desc->strides()[ndim - 4] : 0);
 
         int num_elements = 1;
         for (int i = 0; i < (int)ndim; i++) {
@@ -44,6 +64,9 @@ public:
         return utils::Result<PerTensorDequantI8Info>(PerTensorDequantI8Info{
             dtype,
             packed_type,
+            batch_size, channel, hidden_dim, width,
+            strides_0, strides_1, strides_2, strides_3,
+            p_strides_0, p_strides_1, p_strides_2, p_strides_3,
             num_elements});
     }
 };

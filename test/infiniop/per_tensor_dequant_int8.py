@@ -24,13 +24,17 @@ from enum import Enum, auto
 # ==============================================================================
 # These are not meant to be imported from other modules
 _TEST_CASES = [
-    # x_shape, symmetric
-    ((256, 2048), True),
-    ((1024, 2048), True),
-    ((16, 128, 512), True),
-    ((16, 256, 1024), True),
-    ((8, 8, 128, 1024), True),
-    ((4, 16, 128, 128), True),
+    # x_shape, x_stride, x_packed_stride, symmetric
+    ((16, 5632), None, None, True),
+    ((13, 4), (10, 1), None, True),
+    ((13, 4), (10, 1), (10, 1), True),
+    ((16, 5632), (13312, 1), (13312, 1), True),
+    ((4, 4, 5632), None, None, True),
+    ((4, 4, 5632), (45056, 5632, 1), (45056, 5632, 1), True),
+    ((1, 1, 8, 1), None, None, True),
+    ((1, 8, 32, 32), None, None, True),
+    ((8, 16, 64, 128), (8388608, 524288, 8192, 1), None, True),
+    ((1, 2, 2304, 128), (589824, 294912, 128, 1), (589824, 294912, 128, 1), True),
 ]
 
 
@@ -54,32 +58,43 @@ def per_tensor_dequant_int8_torch(x_packed, x_scale, dtype):
     fake_qweight = x_packed.to(dtype)
     dq_weight = fake_qweight * x_scale
     return dq_weight
-        
+
 
 def test(
     handle,
     device,
     x_shape,
+    x_stride,
+    x_packed_stride,
     symmetric,
     dtype=InfiniDtype.F16,
     sync=None,
 ):
     if symmetric == False:
-        return 
+        return
     print(
-        f"Testing Per Tensor Dequant Int8 on {InfiniDeviceNames[device]} with x_shape:{x_shape}, symmetric:{symmetric} , dtype:{InfiniDtypeNames[dtype]}"
+        f"Testing Per Tensor Dequant Int8 on {InfiniDeviceNames[device]} with x_shape:{x_shape}, x_stride:{x_stride}, x_packed_stride:{x_packed_stride}, symmetric:{symmetric} , dtype:{InfiniDtypeNames[dtype]}"
     )
-   
-    x = TestTensor(x_shape, None, dtype, device)
-    
-    x_packed = TestTensor(x_shape, None, InfiniDtype.I8, device, randint_low= -127, randint_high=127)
-    x_scale = TestTensor((1, ), None, InfiniDtype.F32, device)
+
+    x = TestTensor(x_shape, x_stride, dtype, device)
+
+    x_packed = TestTensor(
+        x_shape,
+        x_packed_stride,
+        InfiniDtype.I8,
+        device,
+        randint_low=-127,
+        randint_high=127,
+    )
+    x_scale = TestTensor((1,), None, InfiniDtype.F32, device)
     if symmetric:
         x_zero = None
     else:
-        x_zero = TestTensor((1, ), None, InfiniDtype.F32, device)
+        x_zero = TestTensor((1,), None, InfiniDtype.F32, device)
 
-    ans = per_tensor_dequant_int8_torch(x_packed.torch_tensor(), x_scale.torch_tensor(), x.torch_tensor().dtype)
+    ans = per_tensor_dequant_int8_torch(
+        x_packed.torch_tensor(), x_scale.torch_tensor(), x.torch_tensor().dtype
+    )
     if sync is not None:
         sync()
 
@@ -109,7 +124,7 @@ def test(
         )
     )
     workspace = TestWorkspace(workspace_size.value, x.device)
-    
+
     def lib_per_tensor_dequant_int8():
         check_error(
             LIBINFINIOP.infiniopPerTensorDequantI8(
@@ -125,14 +140,14 @@ def test(
         )
 
     lib_per_tensor_dequant_int8()
-    
+
     if sync is not None:
         sync()
 
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:
         debug(x.actual_tensor().float(), ans.float(), atol=atol, rtol=rtol)
-        
+
     assert torch.allclose(x.actual_tensor().float(), ans.float(), atol=atol, rtol=rtol)
 
     # Profiling workflow
@@ -156,5 +171,5 @@ if __name__ == "__main__":
 
     for device in get_test_devices(args):
         test_operator(device, test, _TEST_CASES, _TENSOR_DTYPES)
-    
+
     print("\033[92mTest passed!\033[0m")
