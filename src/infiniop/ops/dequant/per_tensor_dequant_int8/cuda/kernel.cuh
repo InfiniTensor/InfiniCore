@@ -12,7 +12,8 @@ __device__ void perTensorDequantI8SymKernel(
     unsigned int gid = blockIdx.x * blockDim.x + threadIdx.x;
     const int grid_size = blockDim.x * gridDim.x;
     float x_scale_val = x_scale[0];
-    for (int tid = gid; tid < num_elements; tid += grid_size) {
+    for (int ind = gid; ind < num_elements; ind += grid_size) {
+        int tid = ind;
         int w = tid % (int)width;
         tid = tid / (int)width;
 

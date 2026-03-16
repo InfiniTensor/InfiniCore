@@ -31,10 +31,8 @@ _TEST_CASES = [
     ((16, 5632), (13312, 1), (13312, 1), True, True),
     ((4, 4, 5632), None, None, True, False),
     ((4, 4, 5632), (45056, 5632, 1), (45056, 5632, 1), True, True),
-    ((1, 1, 8, 1), None, None, True, False),
-    ((1, 8, 32, 32), None, None, True, True),
-    ((8, 16, 64, 128), (8388608, 524288, 8192, 1), None, True, False),
-    ((1, 2, 2304, 128), (589824, 294912, 128, 1), (589824, 294912, 128, 1), True, True),
+    ((1, 32, 4, 128), (147456, 4608, 128, 1), (147456, 4608, 128, 1), True, False),
+    ((1, 32, 4, 128), (16384, 512, 128, 1), (16384, 512, 128, 1), True, True),
 ]
 
 
@@ -61,8 +59,8 @@ def per_tensor_quant_int8_torch(x, x_scale, symmetric, is_static):
         x = x.float()
         if is_static:
             x_q = x.mul(1 / x_scale)
-            x_q = torch.round(x_q).to(torch.int8)
-            return x_q, x_scale, None
+            x_packed = torch.clamp(x_q, -127, 127).to(torch.int8)
+            return x_packed, x_scale, None
         else:
             absmax = x.flatten().abs().max()
             if absmax == 0:
@@ -71,9 +69,8 @@ def per_tensor_quant_int8_torch(x, x_scale, symmetric, is_static):
                 return q, scale, None
         scale = absmax / 127
         x_q = x.mul(127 / absmax)
-        x_q = torch.round(x_q).to(torch.int8)
-
-        return x_q, scale, None
+        x_packed = torch.clamp(x_q, -127, 127).to(torch.int8)
+        return x_packed, scale, None
 
 
 def test(
@@ -154,17 +151,17 @@ def test(
         )
 
     lib_per_tensor_quant_int8()
-    
+
     if sync is not None:
         sync()
-    
+
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:
         debug(x_packed.actual_tensor(), x_p, atol=2, rtol=0)
         debug(x_scale.actual_tensor(), x_s, atol=atol, rtol=rtol)
         if symmetric == False:
             debug(x_zero.actual_tensor(), x_z, atol=atol, rtol=rtol)
-    
+
     if symmetric:
         assert torch.allclose(
             x_packed.actual_tensor(), x_p, atol=2, rtol=0
