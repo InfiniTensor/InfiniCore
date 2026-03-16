@@ -4,7 +4,7 @@ from .structs import (
     infiniopOperatorDescriptor_t,
 )
 
-from ctypes import c_int32, c_void_p, c_size_t, POINTER, c_float, c_double, c_uint64
+from ctypes import c_int32, c_void_p, c_size_t, POINTER, c_float, c_double, c_uint64, c_bool
 
 class OpRegister:
     registry = []
@@ -1049,6 +1049,7 @@ def per_tensor_quant_int8_(lib):
         c_void_p,
         c_void_p,
         c_void_p,
+        c_bool,
         c_void_p,
     ]
 
