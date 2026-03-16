@@ -4,7 +4,7 @@ from .structs import (
     infiniopOperatorDescriptor_t,
 )
 
-from ctypes import c_int32, c_void_p, c_size_t, POINTER, c_float, c_bool, c_double, c_uint64
+from ctypes import c_int32, c_void_p, c_size_t, POINTER, c_float, c_double, c_uint64
 
 class OpRegister:
     registry = []
@@ -814,7 +814,6 @@ def swiglu_(lib):
         c_void_p,
         c_void_p,
         c_void_p,
-        c_bool,
         c_void_p,
     ]
 
@@ -1495,43 +1494,47 @@ def scaled_mm_int8_(lib):
     ]
 
 
+
 @OpRegister.operator
 def kv_caching_(lib):
     lib.infiniopCreateKVCachingDescriptor.restype = c_int32
     lib.infiniopCreateKVCachingDescriptor.argtypes = [
         infiniopHandle_t,
         POINTER(infiniopOperatorDescriptor_t),
-        infiniopTensorDescriptor_t,
-        infiniopTensorDescriptor_t,
-        infiniopTensorDescriptor_t,
-        infiniopTensorDescriptor_t,
-        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,  
+        infiniopTensorDescriptor_t,  
+        infiniopTensorDescriptor_t,  
+        infiniopTensorDescriptor_t,  
+        infiniopTensorDescriptor_t, 
     ]
 
+    
     lib.infiniopGetKVCachingWorkspaceSize.restype = c_int32
     lib.infiniopGetKVCachingWorkspaceSize.argtypes = [
         infiniopOperatorDescriptor_t,
         POINTER(c_size_t),
     ]
 
+    
     lib.infiniopKVCaching.restype = c_int32
     lib.infiniopKVCaching.argtypes = [
         infiniopOperatorDescriptor_t,
-        c_void_p,
-        c_size_t,
-        c_void_p,
-        c_void_p,
-        c_void_p,
-        c_void_p,
-        c_void_p,
-        c_void_p,
+        c_void_p,  
+        c_size_t,  
+        c_void_p,  
+        c_void_p,  
+        c_void_p,  
+        c_void_p,  
+        c_void_p,  
+        c_void_p,  
     ]
 
+    
     lib.infiniopDestroyKVCachingDescriptor.restype = c_int32
     lib.infiniopDestroyKVCachingDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
-
+    
 
 @OpRegister.operator
 def paged_attention_(lib):
