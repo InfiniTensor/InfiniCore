@@ -64,14 +64,14 @@ target("infiniop-hygon")
 
     -- 添加海光DCU特定的编译标志
     -- 检测实际GPU架构，如果未指定则默认使用gfx906
-    local hygon_arch = os.getenv("HYGON_ARCH") or "gfx906"
+    local hygon_arch = os.getenv("HYGON_ARCH") or "gfx936"
     add_cuflags("-arch=" .. hygon_arch)
-    print("编译海光DCU架构: " .. hygon_arch)
-    
+    print("compile hygon architecture: " .. hygon_arch)
+
     -- 复用NVIDIA的CUDA实现，通过HIP兼容层
     add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")
-    -- temporarily disble paged ops for hygon
-    remove_files("../src/infiniop/ops/paged*/nvidia/*.cu")
+    -- temporarily disable paged ops for hygon (segfault on gfx936, needs HIP adaptation)
+    -- remove_files("../src/infiniop/ops/paged*/nvidia/*.cu")
 
     if has_config("ninetoothed") then
         add_files("../build/ninetoothed/*.c", "../build/ninetoothed/*.cpp", {cxxflags = {"-Wno-return-type"}})
@@ -107,9 +107,9 @@ target("infinirt-hygon")
 
     -- 添加海光DCU特定的编译标志
     -- 检测实际GPU架构，如果未指定则默认使用gfx906
-    local hygon_arch = os.getenv("HYGON_ARCH") or "gfx906"
+    local hygon_arch = os.getenv("HYGON_ARCH") or "gfx936"
     add_cuflags("-arch=" .. hygon_arch)
-    
+
     add_files("../src/infinirt/cuda/*.cu")
 target_end()
 
@@ -143,7 +143,7 @@ target("infiniccl-hygon")
 
         -- 添加海光DCU特定的编译标志
         -- 检测实际GPU架构，如果未指定则默认使用gfx906
-        local hygon_arch = os.getenv("HYGON_ARCH") or "gfx906"
+        local hygon_arch = os.getenv("HYGON_ARCH") or "gfx936"
         add_cuflags("-arch=" .. hygon_arch)
 
         -- 使用NCCL (NVIDIA Collective Communications Library)

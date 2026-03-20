@@ -37,7 +37,7 @@ struct Graph::DeviceGraph {
     infinirtGraphNode_t node;
     std::vector<char> log_buffer;
 
-    DeviceGraph() {
+    DeviceGraph() : graph(nullptr), exec(nullptr), node(nullptr) {
         log_buffer.resize(4 * 1024);
     }
 
@@ -111,6 +111,7 @@ void Graph::instantiate() {
             warned_once = true;
             spdlog::warn("Fail to instantiate device graph: {}", std::string(device_graph_.get()->log_buffer.data()));
         }
+        device_graph_.reset();
     }
 }
 
