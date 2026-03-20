@@ -5,10 +5,8 @@
 
 #include <ATen/ATen.h>
 
-#ifdef ENABLE_NVIDIA_API
 #include <ATen/cuda/CUDAContext.h>
 #include <c10/cuda/CUDAGuard.h>
-#endif
 
 namespace infinicore::adaptor {
 inline at::ScalarType to_at_dtype(DataType dtype) {
@@ -33,6 +31,8 @@ inline at::Device to_at_device(const Device &device) {
         return at::Device(at::kCUDA, device.getIndex());
     } else if (device.getType() == Device::Type::CPU) {
         return at::Device(at::kCPU);
+    } else if (device.getType() == Device::Type::QY) {
+        return at::Device(at::kCUDA, device.getIndex());
     } else {
         throw std::runtime_error("Unsupported device type for ATen");
     }
@@ -40,9 +40,8 @@ inline at::Device to_at_device(const Device &device) {
 
 at::Tensor to_aten_tensor(const infinicore::Tensor &t);
 
-#ifdef ENABLE_NVIDIA_API
 c10::cuda::CUDAStream get_cuda_stream();
-#endif
+
 } // namespace infinicore::adaptor
 
 #endif // ENABLE_ATEN
