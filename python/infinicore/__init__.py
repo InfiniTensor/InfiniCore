@@ -78,6 +78,7 @@ from infinicore.ops.paged_attention_prefill import paged_attention_prefill
 from infinicore.ops.paged_caching import paged_caching
 from infinicore.ops.rearrange import rearrange
 from infinicore.ops.reciprocal import reciprocal
+from infinicore.ops.round import round
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.sum import sum
 from infinicore.ops.topk import topk
@@ -146,6 +147,7 @@ __all__ = [
     "binary_cross_entropy_with_logits",
     "cdist",
     "reciprocal",
+    "round",
     "add",
     "addr",
     "add_rms_norm",
