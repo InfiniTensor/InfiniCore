@@ -13,6 +13,35 @@ local FLASH_ATTN_ROOT = get_config("flash-attn")
 
 local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
 
+local FLASH_ATTN_QY_CUDA_SO_CONTAINER_DEFAULT =
+    "/home/shangyouren/miniconda3/envs/xiaobase/lib/python3.12/site-packages/flash_attn_2_cuda.cpython-312-x86_64-linux-gnu.so"
+
+function _qy_flash_attn_cuda_so_path()
+    -- Highest priority: override the exact `.so` file to link.
+    local env_path = os.getenv("FLASH_ATTN_2_CUDA_SO")
+    if env_path and env_path ~= "" then
+        env_path = env_path:trim()
+        if not os.isfile(env_path) then
+            raise("qy+flash-attn: FLASH_ATTN_2_CUDA_SO is not a file: %s", env_path)
+        end
+        return env_path
+    end
+
+    -- Second priority: allow overriding the "expected" container path via env.
+    local container_path = os.getenv("FLASH_ATTN_QY_CUDA_SO_CONTAINER")
+    if not container_path or container_path == "" then
+        container_path = FLASH_ATTN_QY_CUDA_SO_CONTAINER_DEFAULT
+    end
+
+    if not os.isfile(container_path) then
+        raise(
+            "qy+flash-attn: expected %s\n  Install flash-attn in the conda env, or export FLASH_ATTN_2_CUDA_SO to your .so path.",
+            container_path
+        )
+    end
+    return container_path
+end
+
 add_includedirs("/usr/local/denglin/sdk/include", "../include")
 add_linkdirs("/usr/local/denglin/sdk/lib")
 add_links("curt", "cublas", "cudnn")
@@ -177,89 +206,24 @@ target("infiniccl-qy")
 target_end()
 
 target("flash-attn-qy")
-    set_kind("shared")
+    set_kind("phony")
     set_default(false)
+    
 
-    set_languages("cxx17")
-    add_cxxflags("-std=c++17")
-    add_cuflags("--std=c++17", {force = true})
-
-    -- 🔥 DLCC 规则
-    add_rules("qy.cuda", {override = true})
-
-    if FLASH_ATTN_ROOT and FLASH_ATTN_ROOT ~= false and FLASH_ATTN_ROOT ~= "" then
-
-        -- ⭐⭐⭐ 关键：用 on_load（不是 before_build）
-        on_load(function (target)
-
+    if FLASH_ATTN_ROOT and FLASH_ATTN_ROOT ~= "" then
+        before_build(function (target)
+            target:add("includedirs", "/usr/local/denglin/sdk/include", {public = true})
             local TORCH_DIR = os.iorunv("python", {"-c", "import torch, os; print(os.path.dirname(torch.__file__))"}):trim()
             local PYTHON_INCLUDE = os.iorunv("python", {"-c", "import sysconfig; print(sysconfig.get_paths()['include'])"}):trim()
             local PYTHON_LIB_DIR = os.iorunv("python", {"-c", "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))"}):trim()
-            local LIB_PYTHON = os.iorunv("python", {"-c", "import glob,sysconfig,os;print(glob.glob(os.path.join(sysconfig.get_config_var('LIBDIR'),'libpython*.so'))[0])"}):trim()
-
-            -- ✅ CUDA（最关键）
-            target:add("includedirs", "/usr/local/denglin/sdk/include", {public = true})
-
-            -- ✅ flash-attn
-            target:add("includedirs", FLASH_ATTN_ROOT .. "/csrc")
-            target:add("includedirs", FLASH_ATTN_ROOT .. "/csrc/flash_attn")
-            target:add("includedirs", FLASH_ATTN_ROOT .. "/csrc/flash_attn/src")
-            target:add("includedirs", FLASH_ATTN_ROOT .. "/csrc/common")
-
-            -- ✅ torch
-            target:add("includedirs", TORCH_DIR .. "/include")
-            target:add("includedirs", TORCH_DIR .. "/include/torch/csrc/api/include")
-
-            -- ⚠️ 很关键：ATen 有些头在这里
-            target:add("includedirs", TORCH_DIR .. "/include/TH")
-            target:add("includedirs", TORCH_DIR .. "/include/THC")
-
-            -- ✅ python
-            target:add("includedirs", PYTHON_INCLUDE)
-
-            -- ✅ cutlass
-            if CUTLASS_ROOT then
-                target:add("includedirs", CUTLASS_ROOT .. "/include")
-            end
-
-            -- link dirs
-            target:add("linkdirs", TORCH_DIR .. "/lib")
-            target:add("linkdirs", PYTHON_LIB_DIR)
-            target:add("linkdirs", "/usr/local/denglin/sdk/lib")
-
-            -- links
-            target:add("links",
-                "curt",
-                "cublas",
-                "cudnn",
-                "torch",
-                "torch_cpu",
-                "torch_cuda",
-                "c10",
-                "c10_cuda",
-                "torch_python",
-                LIB_PYTHON
-            )
+            
+            -- Validate build/runtime env in container and keep these paths available for downstream linking.
+            target:add("includedirs", TORCH_DIR .. "/include", TORCH_DIR .. "/include/torch/csrc/api/include", PYTHON_INCLUDE, {public = false})
+            target:add("linkdirs", TORCH_DIR .. "/lib", PYTHON_LIB_DIR, {public = false})
         end)
-
-        -- ✅ C++ host
-        add_files(FLASH_ATTN_ROOT .. "/csrc/flash_attn/flash_api.cpp")
-
-        -- ✅ CUDA kernel
-        add_files(FLASH_ATTN_ROOT .. "/csrc/flash_attn/src/*.cu")
-
-        -- flags
-        add_cxflags("-fPIC", {force = true})
-        add_cuflags("-O2", "-fPIC", "--expt-relaxed-constexpr", "--use_fast_math", {force = true})
-
-        add_ldflags("-Wl,--no-undefined", {force = true})
-
     else
-        on_load(function ()
-            print("Flash Attention not available, skipping flash-attn-qy build")
+        before_build(function (target)
+            print("Flash Attention not available, skipping flash-attn-qy integration")
         end)
     end
-
-    on_install(function (target) end)
-
 target_end()

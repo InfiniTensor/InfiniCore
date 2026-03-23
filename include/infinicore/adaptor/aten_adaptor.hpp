@@ -5,8 +5,10 @@
 
 #include <ATen/ATen.h>
 
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API)
 #include <ATen/cuda/CUDAContext.h>
 #include <c10/cuda/CUDAGuard.h>
+#endif
 
 namespace infinicore::adaptor {
 inline at::ScalarType to_at_dtype(DataType dtype) {
