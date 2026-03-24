@@ -79,7 +79,7 @@ void run(void *planned_meta) {
     auto out = use_dynamic_out ? std::optional<at::Tensor>(std::nullopt)
                                : std::optional<at::Tensor>(out_tensor);
 
-    auto result = INFINICORE_FLASH_OP(mha_fwd_kvcache)(
+    auto result = INFINICORE_FLASH_OP(flash::mha_fwd_kvcache)(
         q,
         k_cache,
         v_cache,

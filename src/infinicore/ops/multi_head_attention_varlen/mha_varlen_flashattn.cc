@@ -100,7 +100,7 @@ void run_flashattn_varlen_qy(PlannedMeta *p) {
     auto t = prepare_varlen_flash_tensors(p);
     std::optional<at::Tensor> seqused_k = std::nullopt;
     std::optional<const at::Tensor> leftpad_k = std::nullopt;
-    ::mha_varlen_fwd(
+    flash::mha_varlen_fwd(
         t.q,
         t.k,
         t.v,
