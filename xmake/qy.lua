@@ -21,10 +21,10 @@ function _qy_flash_attn_cuda_so_path()
     local env_path = os.getenv("FLASH_ATTN_2_CUDA_SO")
     if env_path and env_path ~= "" then
         env_path = env_path:trim()
-        if not os.isfile(env_path) then
-            raise("qy+flash-attn: FLASH_ATTN_2_CUDA_SO is not a file: %s", env_path)
+        if os.isfile(env_path) then
+            return env_path
         end
-        return env_path
+        print(string.format("warning: qy+flash-attn: FLASH_ATTN_2_CUDA_SO is not a file: %s, fallback to container/default path", env_path))
     end
 
     -- Second priority: allow overriding the "expected" container path via env.
@@ -34,9 +34,11 @@ function _qy_flash_attn_cuda_so_path()
     end
 
     if not os.isfile(container_path) then
-        raise(
-            "qy+flash-attn: expected %s\n  Install flash-attn in the conda env, or export FLASH_ATTN_2_CUDA_SO to your .so path.",
-            container_path
+        print(
+            string.format(
+                "warning: qy+flash-attn: expected %s; install flash-attn in conda env, or export FLASH_ATTN_2_CUDA_SO.",
+                container_path
+            )
         )
     end
     return container_path
