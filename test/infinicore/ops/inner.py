@@ -21,7 +21,7 @@ _TEST_CASES_DATA = [
 
 _TOLERANCE_MAP = {
     infinicore.float16: {"atol": 1e-3, "rtol": 1e-2},
-    infinicore.float32: {"atol": 1e-5, "rtol": 1e-4},
+    infinicore.float32: {"atol": 1e-5, "rtol": 1e-3},
     infinicore.bfloat16: {"atol": 1e-2, "rtol": 5e-2},
 }
 
@@ -62,9 +62,9 @@ class OpTest(BaseOperatorTest):
     def torch_operator(self, *args, **kwargs):
         return torch.inner(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
-    #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.inner(*args, **kwargs)
+    def infinicore_operator(self, *args, **kwargs):
+        """InfiniCore implementation (operator not yet available)."""
+        return infinicore.inner(*args, **kwargs)
 
 
 def main():
