@@ -64,6 +64,7 @@ from infinicore.ops.binary_cross_entropy_with_logits import (
 )
 from infinicore.ops.cat import cat
 from infinicore.ops.cdist import cdist
+from infinicore.ops.cosh import cosh
 from infinicore.ops.cross_entropy import cross_entropy
 from infinicore.ops.equal import equal
 from infinicore.ops.fmin import fmin
@@ -178,6 +179,7 @@ __all__ = [
     "squeeze",
     "unsqueeze",
     "rearrange",
+    "cosh",
     "cross_entropy",
     "tan",
     "empty",

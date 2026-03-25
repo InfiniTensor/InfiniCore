@@ -21,6 +21,7 @@
 #include "ops/cat.hpp"
 #include "ops/causal_softmax.hpp"
 #include "ops/cdist.hpp"
+#include "ops/cosh.hpp"
 #include "ops/cross_entropy.hpp"
 #include "ops/embedding.hpp"
 #include "ops/equal.hpp"
@@ -78,6 +79,7 @@ inline void bind(py::module &m) {
     bind_baddbmm(m);
     bind_bilinear(m);
     bind_causal_softmax(m);
+    bind_cosh(m);
     bind_flash_attention(m);
     bind_kv_caching(m);
     bind_fmod(m);
