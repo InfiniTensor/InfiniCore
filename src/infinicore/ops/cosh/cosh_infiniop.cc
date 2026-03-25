@@ -1,7 +1,7 @@
 #include "../../utils.hpp"
 #include "infinicore/common/hash.hpp"
-#include "infinicore/ops/cosh.hpp"
 #include "infinicore/ops/common/cache.hpp"
+#include "infinicore/ops/cosh.hpp"
 #include <infiniop.h>
 
 namespace infinicore::op::cosh_impl::infiniop {
