@@ -1,0 +1,88 @@
+#include "../../../elementwise/moore/elementwise_moore.h"
+#include "round_moore.h"
+
+#include "../cuda/kernel.cuh"
+
+namespace op::round::moore {
+
+Descriptor::Descriptor(infiniDtype_t dtype,
+                       op::elementwise::ElementwiseInfo info,
+                       op::elementwise::moore::DeviceImpl *device_info,
+                       size_t workspace_size,
+                       infiniDevice_t device_type,
+                       int device_id,
+                       int decimals)
+    : InfiniopDescriptor{device_type, device_id},
+      _dtype(dtype),
+      _info(std::move(info)),
+      _device_info(device_info),
+      _workspace_size(workspace_size),
+      _decimals(decimals) {}
+
+Descriptor::~Descriptor() = default;
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t out_desc,
+    std::vector<infiniopTensorDescriptor_t> input_desc_vec,
+    int decimals) {
+
+    auto handle = reinterpret_cast<device::moore::Handle *>(handle_);
+    auto dtype = out_desc->dtype();
+
+    const auto &x_desc = input_desc_vec.at(0);
+    const auto &y_shape = out_desc->shape();
+    const auto &x_shape = x_desc->shape();
+
+    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64, INFINI_DTYPE_BF16);
+    CHECK_SAME_SHAPE(y_shape, x_shape);
+
+    auto info_result = op::elementwise::ElementwiseInfo::create(out_desc, input_desc_vec);
+    CHECK_RESULT(info_result);
+    auto info = info_result.take();
+    auto workspace_size = info.getMetaMemSize() + info.getInputSize() * sizeof(void *);
+
+    auto device_impl_result = op::elementwise::moore::DeviceImpl::create(handle->internal());
+    CHECK_RESULT(device_impl_result);
+
+    *desc_ptr = new Descriptor(
+        dtype,
+        std::move(info),
+        device_impl_result.take(),
+        workspace_size,
+        handle->device,
+        handle->device_id,
+        decimals);
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *output,
+    std::vector<const void *> inputs,
+    void *stream) const {
+
+    if (workspace_size < _workspace_size) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+
+    switch (_dtype) {
+    case INFINI_DTYPE_F16:
+        return _device_info->calculate<256, cuda::RoundOp, half>(_info, workspace, output, inputs, stream, int(_decimals));
+    case INFINI_DTYPE_BF16:
+        return _device_info->calculate<256, cuda::RoundOp, cuda_bfloat16>(_info, workspace, output, inputs, stream, int(_decimals));
+    case INFINI_DTYPE_F32:
+        return _device_info->calculate<256, cuda::RoundOp, float>(_info, workspace, output, inputs, stream, int(_decimals));
+    case INFINI_DTYPE_F64:
+        return _device_info->calculate<256, cuda::RoundOp, double>(_info, workspace, output, inputs, stream, int(_decimals));
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace op::round::moore

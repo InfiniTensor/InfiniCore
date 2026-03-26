@@ -1,17 +1,18 @@
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import infinicore
 import torch
 from framework import (
     BaseOperatorTest,
+    GenericTestRunner,
     TensorSpec,
     TestCase,
-    GenericTestRunner,
     is_broadcast,
 )
+
+import infinicore
 
 # round(input, decimals=0)
 # We'll test with various decimals including negative values and None.

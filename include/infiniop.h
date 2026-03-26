@@ -56,6 +56,7 @@
 #include "infiniop/ops/relu.h"
 #include "infiniop/ops/rms_norm.h"
 #include "infiniop/ops/rope.h"
+#include "infiniop/ops/round.h"
 #include "infiniop/ops/sigmoid.h"
 #include "infiniop/ops/silu.h"
 #include "infiniop/ops/silu_and_mul.h"

@@ -50,6 +50,7 @@
 #include "ops/reciprocal.hpp"
 #include "ops/rms_norm.hpp"
 #include "ops/rope.hpp"
+#include "ops/round.hpp"
 #include "ops/silu.hpp"
 #include "ops/silu_and_mul.hpp"
 #include "ops/smooth_l1_loss.hpp"
@@ -114,6 +115,7 @@ inline void bind(py::module &m) {
     bind_tan(m);
     bind_tanhshrink(m);
     bind_rope(m);
+    bind_round(m);
     bind_embedding(m);
     bind_linear_w8a8i8(m);
     bind_silu_and_mul(m);
