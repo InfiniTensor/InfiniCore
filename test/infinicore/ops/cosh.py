@@ -1,17 +1,18 @@
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import infinicore
 import torch
 from framework import (
     BaseOperatorTest,
+    GenericTestRunner,
     TensorSpec,
     TestCase,
-    GenericTestRunner,
     is_broadcast,
 )
+
+import infinicore
 
 # =======================================================================
 # Test cases format: (shape, input_strides_or_None)
@@ -97,9 +98,9 @@ class OpTest(BaseOperatorTest):
     def torch_operator(self, *args, **kwargs):
         return torch.cosh(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
-    #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.cosh(*args, **kwargs)
+    def infinicore_operator(self, *args, **kwargs):
+        """InfiniCore cosh implementation"""
+        return infinicore.cosh(*args, **kwargs)
 
 
 def main():

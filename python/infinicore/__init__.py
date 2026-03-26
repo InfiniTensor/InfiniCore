@@ -64,6 +64,7 @@ from infinicore.ops.binary_cross_entropy_with_logits import (
 )
 from infinicore.ops.cat import cat
 from infinicore.ops.cdist import cdist
+from infinicore.ops.cosh import cosh
 from infinicore.ops.cross_entropy import cross_entropy
 from infinicore.ops.equal import equal
 from infinicore.ops.fmin import fmin
@@ -84,6 +85,7 @@ from infinicore.ops.paged_attention_prefill import paged_attention_prefill
 from infinicore.ops.paged_caching import paged_caching
 from infinicore.ops.rearrange import rearrange
 from infinicore.ops.reciprocal import reciprocal
+from infinicore.ops.round import round
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.sum import sum
 from infinicore.ops.take import take
@@ -154,6 +156,7 @@ __all__ = [
     "binary_cross_entropy_with_logits",
     "cdist",
     "reciprocal",
+    "round",
     "add",
     "addr",
     "add_rms_norm",
@@ -176,6 +179,7 @@ __all__ = [
     "squeeze",
     "unsqueeze",
     "rearrange",
+    "cosh",
     "cross_entropy",
     "tan",
     "empty",
