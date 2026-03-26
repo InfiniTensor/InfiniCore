@@ -1,4 +1,5 @@
 import torch
+import numpy
 import ctypes
 from ctypes import c_uint64
 from libinfiniop import (
@@ -25,10 +26,15 @@ from enum import Enum, auto
 # These are not meant to be imported from other modules
 _TEST_CASES = [
     # M, K, N, use_exllama, quant_bit, group_size
-    (128, 256, 32, False, 4, 128),
-    (512, 2048, 128, True, 4, 128),
-    (1024, 1024, 128, False, 8, 128),
-    (1024, 1024, 128, True, 8, 128),
+    (1, 2048, 2048, True, 4, 128),
+    (1, 2048, 4096, False, 4, 128),
+    (1, 4096, 2048, False, 4, 128),
+    (8, 2048, 2048, False, 4, 128),
+    (8, 2048, 4096, False, 4, 128),
+    (8, 4096, 2048, False, 4, 128),
+    (128, 2048, 2048, False, 4, 128),
+    (128, 2048, 4096, False, 4, 128),
+    (128, 4096, 2048, False, 4, 128),
 ]
 
 
@@ -49,6 +55,7 @@ NUM_ITERATIONS = 1000
 def get_pack_factor(num_bits):
     assert 32 % num_bits == 0, f"Unsupported num_bits = {num_bits}"
     return 32 // num_bits
+
 
 def pack_cols(
     q_w: torch.Tensor,
@@ -98,6 +105,7 @@ def pack_rows(
 
     q_res = torch.from_numpy(q_res.astype(numpy.int32)).to(orig_device)
     return q_res
+
 
 def torch_dequantize(q_weight, q_zeros, scales, g_idx, use_shuffle, bit, K, N):
     assert bit == 4, "Reference dequantization only supports 4-bit"
@@ -160,8 +168,8 @@ def test(
     M,
     K,
     N,
-    use_exllama, 
-    quant_bit, 
+    use_exllama,
+    quant_bit,
     group_size,
     dtype=InfiniDtype.F16,
     sync=None,
@@ -181,7 +189,9 @@ def test(
         return
     else:
         g_idx = torch.tensor(
-            [i // group_size for i in range(K)], dtype=torch.int32, device=device
+            [i // group_size for i in range(K)],
+            dtype=torch.int32,
+            device=b_fp.torch_tensor().device,
         )
         b_shuffled = b_fp.torch_tensor()[g_idx]
 
@@ -196,7 +206,10 @@ def test(
     zeros_float = (-b_min / scales).round()
 
     q_b = (
-        (b_grouped / scales + zeros_float).round().clamp(0, 2**quant_bit - 1).to(torch.uint8)
+        (b_grouped / scales + zeros_float)
+        .round()
+        .clamp(0, 2**quant_bit - 1)
+        .to(torch.uint8)
     )
 
     q_zeros_unpacked = zeros_float.to(torch.uint8) - 1
@@ -210,17 +223,45 @@ def test(
     A = TestTensor((M, K), None, dtype, device)
     C = TestTensor((M, N), None, dtype, device)
 
-
-    B = TestTensor(b_q_weight.shape, b_q_weight.stride(), infiniDtype.I32, device, mode="manual", set_tensor=b_q_weight)
-    b_scales = TestTensor(b_gptq_scales.shape, b_gptq_scales.stride(), dtype, device, mode="manual", set_tensor=b_gptq_scales)
-    b_zeros = TestTensor(b_gptq_qzeros.shape, b_gptq_qzeros.stride(), infiniDtype.I32, device, mode="manual", set_tensor=b_gptq_qzeros)
-    b_g_idx = TestTensor((K, ), g_idx.stride(), InfiniDtype.I32, device, mode="manual", set_tensor=g_idx)
+    B = TestTensor(
+        b_q_weight.shape,
+        b_q_weight.stride(),
+        InfiniDtype.I32,
+        device,
+        mode="manual",
+        set_tensor=b_q_weight,
+    )
+    b_scales = TestTensor(
+        b_gptq_scales.shape,
+        b_gptq_scales.stride(),
+        dtype,
+        device,
+        mode="manual",
+        set_tensor=b_gptq_scales,
+    )
+    b_zeros = TestTensor(
+        b_gptq_qzeros.shape,
+        b_gptq_qzeros.stride(),
+        InfiniDtype.I32,
+        device,
+        mode="manual",
+        set_tensor=b_gptq_qzeros,
+    )
+    b_g_idx = TestTensor(
+        (K,), g_idx.stride(), InfiniDtype.I32, device, mode="manual", set_tensor=g_idx
+    )
 
     if sync is not None:
         sync()
 
     ans = torch_gptq_gemm(
-        A.torch_tensor(), B.torch_tensor(), b_zeros.torch_tensor(), b_scales.torch_tensor(), b_g_idx.torch_tensor(), use_shuffle, quant_bit
+        A.torch_tensor(),
+        B.torch_tensor(),
+        b_zeros.torch_tensor(),
+        b_scales.torch_tensor(),
+        b_g_idx.torch_tensor(),
+        use_shuffle,
+        quant_bit,
     )
 
     descriptor = infiniopOperatorDescriptor_t()
@@ -250,7 +291,7 @@ def test(
             descriptor, ctypes.byref(workspace_size)
         )
     )
-    workspace = TestWorkspace(workspace_size.value, x.device)
+    workspace = TestWorkspace(workspace_size.value, A.device)
 
     def lib_gptq_gemm():
         check_error(
@@ -276,7 +317,6 @@ def test(
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:
         debug(C.actual_tensor(), ans, atol=atol, rtol=rtol)
-        
 
     assert torch.allclose(C.actual_tensor(), ans, atol=atol, rtol=rtol)
 

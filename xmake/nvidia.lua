@@ -25,6 +25,32 @@ target("infiniop-nvidia")
         add_links("cudnn")
     end
 
+    before_build(function (target)
+        local TORCH_DIR = os.iorun("python -c 'import torch; import os; print(os.path.dirname(torch.__file__))' 2>/dev/null"):trim()
+        local PYTHON_INCLUDE = os.iorun("python -c 'import sysconfig; print(sysconfig.get_paths()[\"include\"])' 2>/dev/null"):trim()
+        local PYTHON_LIB_DIR = os.iorun("python -c 'import sysconfig; print(sysconfig.get_config_var(\"LIBDIR\"))' 2>/dev/null"):trim()
+        local LIB_PYTHON = os.iorun("python -c 'import glob,sysconfig,os; print(glob.glob(os.path.join(sysconfig.get_config_var(\"LIBDIR\"),\"libpython*.so\"))[0])' 2>/dev/null"):trim()
+
+        target:add("includedirs", 
+            TORCH_DIR .. "/include/torch/csrc/api/include",
+            TORCH_DIR .. "/include",
+            PYTHON_INCLUDE, 
+            { public = true }  
+        )
+
+        target:add("linkdirs", TORCH_DIR .. "/lib", PYTHON_LIB_DIR, { public = true })
+        target:add("links", 
+            "torch", 
+            "torch_cuda", 
+            "torch_cpu", 
+            "c10", 
+            "c10_cuda", 
+            "torch_python", 
+            { public = true }  
+        )
+        target:add("links", LIB_PYTHON, { public = true })
+    end)
+
     on_load(function (target)
         import("lib.detect.find_tool")
         local nvcc = find_tool("nvcc")

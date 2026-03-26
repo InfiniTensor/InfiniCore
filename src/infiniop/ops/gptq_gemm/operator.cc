@@ -2,7 +2,7 @@
 #include "../../handle.h"
 #include "infiniop/ops/gptq_gemm.h"
 
-#if defined(ENABLE_QY_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API)
 #include "nvidia/gptq_gemm_nvidia.cuh"
 #endif
 
@@ -26,6 +26,9 @@ __INFINI_C infiniStatus_t infiniopCreateGptqGemmDescriptor(
             out_desc, a_desc, b_desc, b_scales_desc, b_zeros_desc, b_g_idx_desc, use_exllama, quant_bit);
 
     switch (handle->device) {
+#ifdef ENABLE_NVIDIA_API
+        CREATE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
 #ifdef ENABLE_QY_API
         CREATE(INFINI_DEVICE_QY, nvidia)
 #endif
@@ -45,6 +48,9 @@ __INFINI_C infiniStatus_t infiniopGetGptqGemmWorkspaceSize(
         return INFINI_STATUS_SUCCESS;
 
     switch (desc->device_type) {
+#ifdef ENABLE_NVIDIA_API
+        GET(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
 #ifdef ENABLE_QY_API
         GET(INFINI_DEVICE_QY, nvidia)
 #endif
@@ -71,6 +77,9 @@ __INFINI_C infiniStatus_t infiniopGptqGemm(
             workspace, workspace_size, out, a, b, b_scale, b_zero, b_g_idx, stream);
 
     switch (desc->device_type) {
+#ifdef ENABLE_NVIDIA_API
+        CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
 #ifdef ENABLE_QY_API
         CALCULATE(INFINI_DEVICE_QY, nvidia)
 #endif
@@ -88,6 +97,9 @@ __INFINI_C infiniStatus_t infiniopDestroyGptqGemmDescriptor(
         return INFINI_STATUS_SUCCESS;
 
     switch (desc->device_type) {
+#ifdef ENABLE_NVIDIA_API
+        DESTROY(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
 #ifdef ENABLE_QY_API
         DESTROY(INFINI_DEVICE_QY, nvidia)
 #endif

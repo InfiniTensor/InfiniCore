@@ -1654,7 +1654,7 @@ INFINIOP_CUDA_KERNEL make_sequential_8bit_kernel(const uint32_t *__restrict__ w,
 } // namespace gptq
 } // namespace vllm
 
-infiniStatus_t GptqGemmKernel(void *c, const void *a, const void *b,
+cublasStatus_t GptqGemmKernel(void *c, const void *a, const void *b,
                               const void *b_scales, const void *b_zeros, const void *b_g_idx,
                               int M, int K, int N, int num_groups,
                               bool use_exllama, int64_t bit, cublasHandle_t cublas_handle, void *workspace) {
@@ -1674,7 +1674,7 @@ infiniStatus_t GptqGemmKernel(void *c, const void *a, const void *b,
         K,
         num_groups,
         use_exllama, bit);
-    return INFINI_STATUS_SUCCESS;
+    return CUBLAS_STATUS_SUCCESS;
 }
 
 namespace op::gptq_gemm::nvidia {
@@ -1702,7 +1702,7 @@ infiniStatus_t Descriptor::create(
 
     CHECK_RESULT(info);
 
-    size_t workspace_size = b_desc->shape()[0] * 32 / static_cast<int64_t>(quant_bit) * b_desc->shape()[1];
+    size_t workspace_size = b_desc->shape()[0] * 32 / static_cast<int64_t>(quant_bit) * b_desc->shape()[1] * infiniSizeOf(a_desc->dtype());
     *desc_ptr = new Descriptor(
         new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
         info.take(), workspace_size, handle->device, handle->device_id);

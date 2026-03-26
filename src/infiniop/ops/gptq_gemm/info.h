@@ -59,9 +59,7 @@ public:
                             && b_zeros_desc->ndim() == ndim,
                         INFINI_STATUS_BAD_TENSOR_SHAPE);
         CHECK_OR_RETURN(b_scales_desc->shape()[1] == N
-                            && b_scales_desc->shape()[0] == num_groups
-                            && b_zeros_desc->shape()[1] == N
-                            && b_zeros_desc->shape()[0] == num_groups,
+                            && static_cast<int>(b_scales_desc->shape()[0]) == num_groups,
                         INFINI_STATUS_BAD_TENSOR_SHAPE);
 
         return utils::Result<GptqGemmInfo>(GptqGemmInfo{
