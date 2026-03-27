@@ -1,33 +1,3 @@
-local TORCH_DIR = os.getenv("TORCH_DIR")
-
-if not TORCH_DIR then
-    raise("TORCH_DIR is not set! please export it first")
-end
-
-print("TORCH_DIR =", TORCH_DIR)
-
-if TORCH_DIR and os.isdir(TORCH_DIR) then
-    local TORCH_INCLUDE = TORCH_DIR .. "/include"
-    local TORCH_LIB = TORCH_DIR .. "/lib"
-    
-    print("✅ 自动找到 PyTorch 路径: " .. TORCH_DIR)
-    print("✅ PyTorch 头文件: " .. TORCH_INCLUDE)
-    print("✅ PyTorch 库路径: " .. TORCH_LIB)
-
-    -- 添加 PyTorch 头文件
-    add_includedirs(TORCH_INCLUDE)
-    add_includedirs(TORCH_INCLUDE .. "/torch/csrc/api/include")
-
-    -- 添加 PyTorch 库路径
-    add_linkdirs(TORCH_LIB)
-
-    -- 链接 PyTorch 核心库（解决 undefined symbol）
-    add_links("torch", "torch_cpu", "torch_cuda", "c10", "c10_cuda", "torch_python")
-else
-    print("⚠️  未检测到 PyTorch，将跳过 PyTorch 依赖")
-end
-
-
 local CUDNN_ROOT = os.getenv("CUDNN_ROOT") or os.getenv("CUDNN_HOME") or os.getenv("CUDNN_PATH")
 if CUDNN_ROOT ~= nil then
     add_includedirs(CUDNN_ROOT .. "/include")
@@ -51,12 +21,6 @@ rule("qy.cuda")
 
     on_load(function (target)
         target:add("includedirs", "/usr/local/denglin/sdk/include")
-        
-        -- 把 PyTorch 头文件也加入自定义规则
-        if TORCH_DIR then
-            target:add("includedirs", TORCH_DIR .. "/include")
-            target:add("includedirs", TORCH_DIR .. "/include/torch/csrc/api/include")
-        end
     end)
 
     after_load(function (target)

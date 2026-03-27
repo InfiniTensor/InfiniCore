@@ -6,11 +6,8 @@ https://github.com/qwopqwop200/GPTQ-for-LLaMa
 #include <cstdint>
 #include <cstdio>
 
-#include <ATen/cuda/CUDAContext.h>
-#include <c10/cuda/CUDAGuard.h>
 #include <cuda_fp16.h>
 #include <cuda_runtime.h>
-#include <torch/all.h>
 
 #include "compat.cuh"
 #include "matrix_view.cuh"
@@ -30,7 +27,7 @@ namespace gptq {
 #define MAX_ALT_GEMM_ROWS 8
 #define THREADS_X 32
 #define THREADS_Y 32
-#define DIVIDE(x, size) (((x) + (size)-1) / (size))
+#define DIVIDE(x, size) (((x) + (size) - 1) / (size))
 
 #if defined(USE_ROCM)
 #include <hipblas/hipblas.h>
