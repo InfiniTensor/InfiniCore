@@ -3,18 +3,9 @@ if CUDNN_ROOT ~= nil then
     add_includedirs(CUDNN_ROOT .. "/include")
 end
 
-local CUTLASS_ROOT = os.getenv("CUTLASS_ROOT") or os.getenv("CUTLASS_HOME") or os.getenv("CUTLASS_PATH")
-
-if CUTLASS_ROOT ~= nil then
-    add_includedirs(CUTLASS_ROOT)
-end
-
 local FLASH_ATTN_ROOT = get_config("flash-attn")
 
 local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
-
-local FLASH_ATTN_QY_CUDA_SO_CONTAINER_DEFAULT =
-    "/home/shangyouren/miniconda3/envs/xiaobase/lib/python3.12/site-packages/flash_attn_2_cuda.cpython-312-x86_64-linux-gnu.so"
 
 function _qy_flash_attn_cuda_so_path()
     -- Highest priority: override the exact `.so` file to link.
@@ -30,8 +21,8 @@ function _qy_flash_attn_cuda_so_path()
     -- Second priority: allow overriding the "expected" container path via env.
     local container_path = os.getenv("FLASH_ATTN_QY_CUDA_SO_CONTAINER")
     if not container_path or container_path == "" then
-        container_path = FLASH_ATTN_QY_CUDA_SO_CONTAINER_DEFAULT
-    end
+        raise("Error: Flash Attention SO path not specified!\n")
+end
 
     if not os.isfile(container_path) then
         print(
@@ -88,7 +79,6 @@ rule("qy.cuda")
         
         local relpath = path.relative(sourcefile, os.projectdir())
 
-        -- 去掉 ..，转成安全路径
         relpath = relpath:gsub("%.%.", "__")
 
         local objfile = path.join(
@@ -100,7 +90,6 @@ rule("qy.cuda")
             relpath .. ".o"
         )
 
-        -- 🟢 强制注册 .o 文件给 target
         target:add("objectfiles", objfile)
         target:set("buildadd", true)
         local argv = {

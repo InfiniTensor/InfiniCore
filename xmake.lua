@@ -467,7 +467,6 @@ target("infinicore_cpp_api")
         end
         if has_config("qy-gpu") then
             add_deps("flash-attn-qy")
-            add_files("build/.objs/flash-attn-qy/rules/qy.cuda/__/__/flash-attention-dl-v2.7.4.post1-19/csrc/flash_attn/src/*.cu.o", {public = true})
         end
     end
 
