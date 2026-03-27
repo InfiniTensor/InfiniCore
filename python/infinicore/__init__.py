@@ -106,6 +106,17 @@ from infinicore.tensor import (
     zeros,
 )
 
+# Re-attempt flash_attn preload after _infinicore.so (and its DTK/HIP
+# dependencies) are loaded. The initial preload() above may have failed
+# because flash_attn_2_cuda.so's dependencies were not yet available.
+# Now that _infinicore.so is loaded we can call dlopen(path, RTLD_GLOBAL)
+# to upgrade the already-loaded library from RTLD_LOCAL to RTLD_GLOBAL,
+# making its symbols visible to dlsym(RTLD_DEFAULT).
+with contextlib.suppress(Exception):
+    from ._preload import preload_flash_attn
+
+    preload_flash_attn()
+
 __all__ = [
     # Modules.
     "context",

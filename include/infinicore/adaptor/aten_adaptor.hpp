@@ -5,9 +5,12 @@
 
 #include <ATen/ATen.h>
 
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API)
 #include <ATen/cuda/CUDAContext.h>
 #include <c10/cuda/CUDAGuard.h>
+#elif defined(ENABLE_HYGON_API)
+#include <ATen/hip/HIPContext.h>
+#include <c10/hip/HIPGuard.h>
 #endif
 
 namespace infinicore::adaptor {
@@ -29,7 +32,8 @@ inline at::ScalarType to_at_dtype(DataType dtype) {
 }
 
 inline at::Device to_at_device(const Device &device) {
-    if (device.getType() == Device::Type::NVIDIA) {
+    if (device.getType() == Device::Type::NVIDIA
+        || device.getType() == Device::Type::HYGON) {
         return at::Device(at::kCUDA, device.getIndex());
     } else if (device.getType() == Device::Type::CPU) {
         return at::Device(at::kCPU);
@@ -40,8 +44,14 @@ inline at::Device to_at_device(const Device &device) {
 
 at::Tensor to_aten_tensor(const infinicore::Tensor &t);
 
-#ifdef ENABLE_NVIDIA_API
-c10::cuda::CUDAStream get_cuda_stream();
+#if defined(ENABLE_HYGON_API)
+using TorchStream = c10::hip::HIPStream;
+using TorchStreamGuard = c10::hip::HIPStreamGuard;
+TorchStream get_cuda_stream();
+#elif defined(ENABLE_NVIDIA_API)
+using TorchStream = c10::cuda::CUDAStream;
+using TorchStreamGuard = c10::cuda::CUDAStreamGuard;
+TorchStream get_cuda_stream();
 #endif
 } // namespace infinicore::adaptor
 

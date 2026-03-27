@@ -15,13 +15,16 @@ from framework import (
     TestCase,
 )
 
+# gfx936 (Hygon DCU) paged attention only supports page_block_size=64
+_BLOCK_SIZE = 64 if "--hygon" in sys.argv else 256
+
 # Test Cases: (num_heads, num_kv_heads, head_size, block_size, [request_batch])
 _TEST_CASES_DATA = [
-    (1, 1, 128, 256, [(250,), (7,)]),
-    (4, 4, 128, 256, [(250,), (7,)]),
-    (1, 1, 128, 256, [(260, 73), (1, 1)]),
-    (8, 2, 128, 256, [(250,), (7,)]),
-    (8, 2, 128, 256, [(260, 73), (1, 1)]),
+    (1, 1, 128, _BLOCK_SIZE, [(250,), (7,)]),
+    (4, 4, 128, _BLOCK_SIZE, [(250,), (7,)]),
+    (1, 1, 128, _BLOCK_SIZE, [(260, 73), (1, 1)]),
+    (8, 2, 128, _BLOCK_SIZE, [(250,), (7,)]),
+    (8, 2, 128, _BLOCK_SIZE, [(260, 73), (1, 1)]),
 ]
 
 _MAX_SEQUENCE_LENGTH = 8192

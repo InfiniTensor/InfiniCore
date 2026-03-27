@@ -1143,8 +1143,7 @@ __device__ void flashAttentionDecodeCtaPipelinedKernel(
 
     // Prefetch the very first token.
     int buf = 0;
-    int t_base = 0;
-    int token_in_block = 0;
+    (void)0;  // t_base, token_in_block removed (unused)
     int logical_block = 0;
     {
         if (tid == 0) {

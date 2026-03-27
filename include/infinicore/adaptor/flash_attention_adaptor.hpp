@@ -110,5 +110,46 @@ mha_fwd_kvcache(at::Tensor &q,                                     // batch_size
                 bool is_rotary_interleaved, // if true, rotary combines indices 0 & 1, else indices 0 & rotary_dim / 2
                 int num_splits);
 
+#ifdef ENABLE_HYGON_API
+// Hygon-specific wrappers resolved via dlsym at runtime.
+
+std::vector<at::Tensor>
+vllm_mha_varlen_fwd(at::Tensor &q,
+                    const at::Tensor &k,
+                    const at::Tensor &v,
+                    std::optional<at::Tensor> &out_,
+                    const at::Tensor &cu_seqlens_q,
+                    const at::Tensor &cu_seqlens_k,
+                    std::optional<at::Tensor> &seqused_k,
+                    std::optional<const at::Tensor> &leftpad_k_,
+                    std::optional<at::Tensor> &block_table_,
+                    std::optional<at::Tensor> &alibi_slopes_,
+                    int max_seqlen_q,
+                    const int max_seqlen_k,
+                    const float p_dropout,
+                    const float softmax_scale,
+                    const bool zero_tensors,
+                    bool is_causal,
+                    int window_size_left,
+                    int window_size_right,
+                    const float softcap,
+                    const bool return_softmax,
+                    std::optional<at::Generator> gen_);
+
+void paged_attention(at::Tensor &out,
+                     at::Tensor &q,
+                     at::Tensor &k_cache,
+                     at::Tensor &v_cache,
+                     double scale,
+                     at::Tensor &block_table,
+                     at::Tensor &context_lens,
+                     std::optional<at::Tensor> alibi_slopes,
+                     const std::string &kv_cache_dtype,
+                     std::optional<at::Tensor> q_scale,
+                     std::optional<at::Tensor> k_scale,
+                     std::optional<at::Tensor> v_scale,
+                     int max_context_len);
+#endif // ENABLE_HYGON_API
+
 } // namespace flash
 #endif // ENABLE_FLASH_ATTN
