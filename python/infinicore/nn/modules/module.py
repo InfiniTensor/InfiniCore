@@ -32,6 +32,7 @@ from typing import (
 
 import infinicore
 
+from ...device import device as InfiniCoreDevice
 from ...tensor import Tensor
 from ..parameter import InfiniCoreParameter as Parameter
 
@@ -481,15 +482,14 @@ class InfiniCoreModule:
                         f"While copying the parameter named {key}, expected Tensor from checkpoint but received {type(input_param)}"
                     )
 
-                if (
-                    (param.shape == input_param.shape)
-                    and (param.dtype == input_param.dtype)
-                    and (param.device == input_param.device)
+                if (param.shape == input_param.shape) and (
+                    param.dtype == input_param.dtype
                 ):
                     param.copy_(input_param)
                 else:
-                    print(f"param '{name}' don't match input_param '{key}'")
-                    setattr(self, name, input_param)
+                    raise KeyError(
+                        f"param '{name}' don't match input_param '{key}' with shape or dtype"
+                    )
 
             elif strict:
                 missing_keys.append(key)
@@ -848,10 +848,29 @@ class InfiniCoreModule:
         Returns:
             Module: self
         """
-        pass
+        raise KeyError("not support")
 
     def _apply(self, fn, recurse=True):
-        raise KeyError("not support")
+        if recurse:
+            for module in self.children():
+                module._apply(fn)
 
-    def to(self, *args, **kwargs):
-        raise KeyError("not support")
+        for key, param in self._parameters.items():
+            if param is not None:
+                setattr(self, key, fn(param))
+
+        for key, buf in self._buffers.items():
+            if buf is not None:
+                setattr(self, key, fn(buf))
+
+        return self
+
+    def to(self, device: str | InfiniCoreDevice):
+        if device is None:
+            raise ValueError("device cannot be None")
+        device = InfiniCoreDevice(device)
+
+        def convert(t):
+            return t.to(device)
+
+        return self._apply(convert)
