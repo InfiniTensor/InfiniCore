@@ -127,7 +127,8 @@ template <bool kUsePDL>
 SGL_DEVICE void PDLWaitPrimary() {
 #if SGL_ARCH_HOPPER_OR_GREATER
     if constexpr (kUsePDL) {
-        asm volatile("griddepcontrol.wait;" ::: "memory");
+        asm volatile("griddepcontrol.wait;" ::
+                         : "memory");
     }
 #endif
 }
@@ -142,7 +143,8 @@ template <bool kUsePDL>
 SGL_DEVICE void PDLTriggerSecondary() {
 #if SGL_ARCH_HOPPER_OR_GREATER
     if constexpr (kUsePDL) {
-        asm volatile("griddepcontrol.launch_dependents;" :::);
+        asm volatile("griddepcontrol.launch_dependents;" ::
+                         :);
     }
 #endif
 }
