@@ -4,7 +4,7 @@ from .structs import (
     infiniopOperatorDescriptor_t,
 )
 
-from ctypes import c_int32, c_void_p, c_size_t, POINTER, c_float, c_double, c_uint64, c_bool
+from ctypes import c_int32, c_void_p, c_size_t, POINTER, c_float, c_double, c_uint64, c_bool, c_int64
 
 class OpRegister:
     registry = []
@@ -1018,6 +1018,53 @@ def dequantize_gptq_(lib):
     ]
     lib.infiniopDestroyDequantizeGPTQDescriptor.restype = c_int32
     lib.infiniopDestroyDequantizeGPTQDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
+def gptq_marlin_gemm_(lib):
+    lib.infiniopCreateGptqMarlinGemmDescriptor.restype = c_int32
+    lib.infiniopCreateGptqMarlinGemmDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+    lib.infiniopGetGptqMarlinGemmWorkspaceSize.restype = c_int32
+    lib.infiniopGetGptqMarlinGemmWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopGptqMarlinGemm.restype = c_int32
+    lib.infiniopGptqMarlinGemm.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_int64,
+        c_bool,
+        c_bool,
+        c_bool,
+        c_bool,
+        c_void_p,
+        
+    ]
+    lib.infiniopDestroyGptqMarlinGemmDescriptor.restype = c_int32
+    lib.infiniopDestroyGptqMarlinGemmDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
 
