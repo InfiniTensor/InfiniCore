@@ -188,6 +188,19 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
   xmake f --moore-gpu=y --aten=y --flash-attn=y -cv
   ```
 
+  ##### 试验功能 -- 编译marlin相关算子
+
+  ```shell
+
+  # 需要从github上克隆tvm_ffi仓库，克隆命令参考
+  ## tvm-ffi commit: 35c99d0ac4cb784862115d0089f60c603acec8f9
+      git clone https://github.com/apache/tvm-ffi.git --recursive
+
+  # 设置TVM_ROOT
+      export TVM_ROOT=<path-to>/tvm-ffi #用来搜索tvm相关头文件
+  # 注意，编译gptq_marlin_gemm算子的时候除了指定TVM_ROOT以外，还需要指定cuda_arch
+  ```
+
 2. 编译安装
 
    默认安装路径为 `$HOME/.infini`。

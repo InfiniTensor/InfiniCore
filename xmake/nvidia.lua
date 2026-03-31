@@ -4,6 +4,7 @@ if CUDNN_ROOT ~= nil then
 end
 
 local CUTLASS_ROOT = os.getenv("CUTLASS_ROOT") or os.getenv("CUTLASS_HOME") or os.getenv("CUTLASS_PATH")
+local TVM_ROOT = os.getenv("TVM_ROOT") or os.getenv("TVM_HOME") or os.getenv("TVM_PATH")
 
 local FLASH_ATTN_ROOT = get_config("flash-attn")
 
@@ -179,6 +180,40 @@ target("infiniop-nvidia")
     if CUTLASS_ROOT ~= nil then
         add_defines("ENABLE_CUTLASS_API")
         add_includedirs(CUTLASS_ROOT, CUTLASS_ROOT .. "/include", CUTLASS_ROOT .. "/tools/util/include")
+    end
+
+    local arch_opt = get_config("cuda_arch")
+    if TVM_ROOT ~= nil then
+        add_defines("ENABLE_TVM_API")
+        add_includedirs(TVM_ROOT, TVM_ROOT .. "/include", TVM_ROOT .. "/3rdparty/dlpack/include/")
+        function parse_sgl_cuda_arch(arch)
+    
+            local num = arch:match("sm_(%d+)")
+            if not num then
+                return nil
+            end
+
+            return tonumber(num) * 10
+        end
+        if arch_opt then
+            local sgl_arch = parse_sgl_cuda_arch(arch_opt)
+            if sgl_arch then
+                add_defines("SGL_CUDA_ARCH=" .. sgl_arch)
+                print("SGL_CUDA_ARCH =", sgl_arch)
+            else
+                print("Invalid cuda_arch:", arch_opt)
+            end
+        else
+            error("tvm complie marlin needs cuda_arch")
+        end
+    end
+    
+    if arch_opt and type(arch_opt) == "string" then
+        for _, arch in ipairs(arch_opt:split(",")) do
+            arch = arch:trim()
+            local compute = arch:gsub("sm_", "compute_")
+            add_cuflags("-gencode=arch=" .. compute .. ",code=" .. arch)
+        end
     end
 
     set_languages("cxx17")
