@@ -350,5 +350,3 @@ class scalar_types:
     # colloquial names
     bfloat16 = float16_e8m7
     float16 = float16_e5m10
-
-

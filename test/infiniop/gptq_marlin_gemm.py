@@ -41,17 +41,21 @@ group_size = [-1, 128]
 mnk_factors = MNK_FACTORS
 act_order = [False, True]
 
+
 def to_iter(x):
     return x if isinstance(x, (list, tuple)) else (x,)
 
-_TEST_CASES = list(itertools.product(
-    to_iter(k_chunk),
-    to_iter(n_chunk),
-    to_iter(quant_type),
-    to_iter(group_size),
-    to_iter(mnk_factors),
-    to_iter(act_order),
-))
+
+_TEST_CASES = list(
+    itertools.product(
+        to_iter(k_chunk),
+        to_iter(n_chunk),
+        to_iter(quant_type),
+        to_iter(group_size),
+        to_iter(mnk_factors),
+        to_iter(act_order),
+    )
+)
 
 _TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.BF16]
 
@@ -69,6 +73,7 @@ NUM_ITERATIONS = 1000
 GPTQ_MARLIN_TILE = 16
 SUPPORTED_GPTQ_QUANT_TYPES = [scalar_types.uint4b8, scalar_types.uint8b128]
 SUPPORTED_GROUP_SIZES = [-1, 32, 64, 128]
+
 
 def quantize_weights(
     w: torch.Tensor,
@@ -164,9 +169,11 @@ def quantize_weights(
         maybe_w_zp,
     )
 
+
 def get_pack_factor(num_bits):
     assert 32 % num_bits == 0, f"Unsupported num_bits = {num_bits}"
     return 32 // num_bits
+
 
 def marlin_permute_weights(q_w, size_k, size_n, perm, tile=GPTQ_MARLIN_TILE):
     assert q_w.shape == (size_k, size_n)
@@ -181,6 +188,7 @@ def marlin_permute_weights(q_w, size_k, size_n, perm, tile=GPTQ_MARLIN_TILE):
     q_w = q_w.reshape((-1, perm.numel()))[:, perm].reshape(q_w.shape)
 
     return q_w
+
 
 def marlin_weights(q_w, size_k, size_n, num_bits, perm):
     # Permute
@@ -230,6 +238,7 @@ def get_weight_perm(num_bits: int):
     perm = torch.from_numpy(perm)
     return perm
 
+
 def get_scale_perms():
     scale_perm: list[int] = []
     for i in range(8):
@@ -252,6 +261,7 @@ def marlin_permute_scales(
     s = s.reshape((-1, size_n)).contiguous()
 
     return s
+
 
 def pack_cols(
     q_w: torch.Tensor,
@@ -278,6 +288,7 @@ def pack_cols(
 
     return q_res
 
+
 def marlin_zero_points(
     zp: torch.Tensor, size_k: int, size_n: int, num_bits: int
 ) -> torch.Tensor:
@@ -299,6 +310,7 @@ def marlin_zero_points(
     zp = pack_cols(zp, num_bits, size_k, size_n)
 
     return zp
+
 
 def permute_rows(
     q_w: torch.Tensor,
@@ -328,6 +340,7 @@ def permute_rows(
         g_idx.to(device=orig_device),
         rand_perm.to(device=orig_device),
     )
+
 
 def gptq_quantize_weights(
     w: torch.Tensor,
@@ -377,6 +390,7 @@ def sort_weights(q_w: torch.Tensor, g_idx: torch.Tensor):
         sort_indices.to(device=orig_device),
     )
 
+
 def marlin_quantize(
     w: torch.Tensor,
     quant_type: ScalarType,
@@ -415,6 +429,7 @@ def marlin_quantize(
 
     return res_list
 
+
 def awq_marlin_quantize(w: torch.Tensor, quant_type: ScalarType, group_size: int):
     size_k, size_n = w.shape
 
@@ -442,6 +457,7 @@ def awq_marlin_quantize(w: torch.Tensor, quant_type: ScalarType, group_size: int
         res_list[i] = res_list[i].to(w.device)
 
     return res_list
+
 
 def marlin_make_workspace(
     device: torch.device, max_blocks_per_sm: int = 1
@@ -488,7 +504,7 @@ def test(
 
     if size_k % group_size != 0:
         return
-    
+
     print(
         f"Testing Gptq Marlin Gemm on {InfiniDeviceNames[device]} with M-K-N:({size_m, size_k, size_n}), group_size:{group_size}, dtype:{InfiniDtypeNames[dtype]}"
     )
@@ -509,28 +525,63 @@ def test(
         marlin_zp = None
         marlin_s2 = None
     output_ref = torch.matmul(a_input.torch_tensor(), w_ref)
-    b = TestTensor(marlin_q_w.shape, marlin_q_w.stride(), InfiniDtype.I32, device, mode="manual", set_tensor=marlin_q_w)
+    b = TestTensor(
+        marlin_q_w.shape,
+        marlin_q_w.stride(),
+        InfiniDtype.I32,
+        device,
+        mode="manual",
+        set_tensor=marlin_q_w,
+    )
     c = TestTensor(output_ref.shape, None, dtype, device)
-    b_scales = TestTensor(marlin_s.shape, marlin_s.stride(), dtype, device, mode="manual", set_tensor=marlin_s)
+    b_scales = TestTensor(
+        marlin_s.shape,
+        marlin_s.stride(),
+        dtype,
+        device,
+        mode="manual",
+        set_tensor=marlin_s,
+    )
     global_scale = None
     if marlin_zp is not None:
-        b_zeros = TestTensor(marlin_zp.shape, marlin_zp.stride(), InfiniDtype.I32, device, mode="manual", set_tensor=marlin_zp)
+        b_zeros = TestTensor(
+            marlin_zp.shape,
+            marlin_zp.stride(),
+            InfiniDtype.I32,
+            device,
+            mode="manual",
+            set_tensor=marlin_zp,
+        )
     else:
         b_zeros = None
     if g_idx is not None:
-        b_g_idx = TestTensor(g_idx.shape, g_idx.stride(), InfiniDtype.I32, device, mode="manual", set_tensor=g_idx)
+        b_g_idx = TestTensor(
+            g_idx.shape,
+            g_idx.stride(),
+            InfiniDtype.I32,
+            device,
+            mode="manual",
+            set_tensor=g_idx,
+        )
     else:
         b_g_idx = None
     if sort_indices is not None:
-        perm = TestTensor(sort_indices.shape, sort_indices.stride(), InfiniDtype.I32, device, mode="manual", set_tensor=sort_indices)
+        perm = TestTensor(
+            sort_indices.shape,
+            sort_indices.stride(),
+            InfiniDtype.I32,
+            device,
+            mode="manual",
+            set_tensor=sort_indices,
+        )
     else:
         perm = None
-    
-    is_k_full=True
-    use_atomic_add=False
-    use_fp32_reduce=False
-    is_zp_float=False
-    
+
+    is_k_full = True
+    use_atomic_add = False
+    use_fp32_reduce = False
+    is_zp_float = False
+
     if sync is not None:
         sync()
 
@@ -554,7 +605,7 @@ def test(
     for tensor in [c, a_input, b, b_scales, global_scale, b_zeros, b_g_idx, perm]:
         if tensor is not None:
             tensor.destroy_desc()
-    
+
     workspace_size = c_uint64(0)
     check_error(
         LIBINFINIOP.infiniopGetGptqMarlinGemmWorkspaceSize(
@@ -577,17 +628,16 @@ def test(
                 b_zeros.data() if b_zeros is not None else None,
                 b_g_idx.data() if b_g_idx is not None else None,
                 perm.data() if perm is not None else None,
-                quant_type.id, 
-                is_k_full, 
-                use_atomic_add, 
-                use_fp32_reduce, 
-                is_zp_float, 
+                quant_type.id,
+                is_k_full,
+                use_atomic_add,
+                use_fp32_reduce,
+                is_zp_float,
                 None,
             )
         )
 
     lib_gptq_marlin_gemm()
-
 
     max_diff = torch.mean(torch.abs(c.actual_tensor() - output_ref)) / torch.mean(
         torch.abs(output_ref)
@@ -603,7 +653,11 @@ def test(
             NUM_ITERATIONS,
         )
         profile_operation(
-            "    lib", lambda: lib_gptq_marlin_gemm(), device, NUM_PRERUN, NUM_ITERATIONS
+            "    lib",
+            lambda: lib_gptq_marlin_gemm(),
+            device,
+            NUM_PRERUN,
+            NUM_ITERATIONS,
         )
 
     check_error(LIBINFINIOP.infiniopDestroyGptqMarlinGemmDescriptor(descriptor))
