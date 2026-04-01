@@ -13,13 +13,13 @@
 
 namespace device::marlin {
 
-__global__ void MarlinDefault(MARLIN_KERNEL_PARAMS){};
+INFINIOP_CUDA_KERNEL MarlinDefault(MARLIN_KERNEL_PARAMS){};
 
 using MarlinFuncPtr = void (*)(MARLIN_KERNEL_PARAMS);
 
 #if defined(__CUDA_ARCH__) && __CUDA_ARCH__ < 800
 
-__global__ void permute_cols_kernel(
+INFINIOP_CUDA_KERNEL permute_cols_kernel(
     int4 const *__restrict__ a_int4_ptr,
     int const *__restrict__ perm_int_ptr,
     int4 *__restrict__ out_int4_ptr,
@@ -32,7 +32,7 @@ __global__ void permute_cols_kernel(
 
 // For a given "a" of size [M,K] performs a permutation of the K columns based
 // on the given "perm" indices.
-__global__ void permute_cols_kernel(
+INFINIOP_CUDA_KERNEL permute_cols_kernel(
     int4 const *__restrict__ a_int4_ptr,
     int const *__restrict__ perm_int_ptr,
     int4 *__restrict__ out_int4_ptr,
