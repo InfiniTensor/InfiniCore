@@ -13,6 +13,17 @@ local FLASH_ATTN_ROOT = get_config("flash-attn")
 
 local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
 
+
+function parse_sgl_cuda_arch(arch)
+    
+    local num = arch:match("sm_(%d+)")
+    if not num then
+        return nil
+    end
+
+    return tonumber(num) * 10
+end
+
 target("infiniop-nvidia")
     set_kind("static")
     add_deps("infini-utils")
@@ -64,6 +75,15 @@ target("infiniop-nvidia")
     add_cuflags("-Xcompiler=-Wno-error=deprecated-declarations", "-Xcompiler=-Wno-error=unused-function")
 
     local arch_opt = get_config("cuda_arch")
+    if arch_opt then
+        local sgl_arch = parse_sgl_cuda_arch(arch_opt)
+        if sgl_arch then
+            add_defines("SGL_CUDA_ARCH=" .. sgl_arch)
+            print("SGL_CUDA_ARCH =", sgl_arch)
+        else
+            print("Invalid cuda_arch:", arch_opt)
+        end
+    end
     if arch_opt and type(arch_opt) == "string" then
         for _, arch in ipairs(arch_opt:split(",")) do
             arch = arch:trim()
