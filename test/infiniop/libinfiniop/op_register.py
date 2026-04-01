@@ -4,7 +4,7 @@ from .structs import (
     infiniopOperatorDescriptor_t,
 )
 
-from ctypes import c_int32, c_void_p, c_size_t, POINTER, c_float, c_double, c_uint64, c_bool
+from ctypes import c_int32, c_void_p, c_size_t, POINTER, c_float, c_double, c_int64, c_bool
 
 class OpRegister:
     registry = []
@@ -456,8 +456,172 @@ def logsoftmax_(lib):
 
 
 @OpRegister.operator
-def conv_(lib):
-    pass
+def log10_(lib):
+    lib.infiniopCreateLog10Descriptor.restype = c_int32
+    lib.infiniopCreateLog10Descriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetLog10WorkspaceSize.restype = c_int32
+    lib.infiniopGetLog10WorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopLog10.restype = c_int32
+    lib.infiniopLog10.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyLog10Descriptor.restype = c_int32
+    lib.infiniopDestroyLog10Descriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
+def log1p_(lib):
+    lib.infiniopCreateLog1pDescriptor.restype = c_int32
+    lib.infiniopCreateLog1pDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetLog1pWorkspaceSize.restype = c_int32
+    lib.infiniopGetLog1pWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopLog1p.restype = c_int32
+    lib.infiniopLog1p.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyLog1pDescriptor.restype = c_int32
+    lib.infiniopDestroyLog1pDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
+def histc_(lib):
+    lib.infiniopCreateHistcDescriptor.restype = c_int32
+    lib.infiniopCreateHistcDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_int64,
+        c_double,
+        c_double,
+    ]
+
+    lib.infiniopGetHistcWorkspaceSize.restype = c_int32
+    lib.infiniopGetHistcWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopHistc.restype = c_int32
+    lib.infiniopHistc.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyHistcDescriptor.restype = c_int32
+    lib.infiniopDestroyHistcDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
+def dot_(lib):
+    lib.infiniopCreateDotDescriptor.restype = c_int32
+    lib.infiniopCreateDotDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetDotWorkspaceSize.restype = c_int32
+    lib.infiniopGetDotWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopDot.restype = c_int32
+    lib.infiniopDot.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyDotDescriptor.restype = c_int32
+    lib.infiniopDestroyDotDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
+def avg_pool3d_(lib):
+    lib.infiniopCreateAvgPool3dDescriptor.restype = c_int32
+    lib.infiniopCreateAvgPool3dDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_void_p,  # kernel_size
+        c_void_p,  # stride (nullable)
+        c_void_p,  # padding (nullable)
+    ]
+
+    lib.infiniopGetAvgPool3dWorkspaceSize.restype = c_int32
+    lib.infiniopGetAvgPool3dWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopAvgPool3d.restype = c_int32
+    lib.infiniopAvgPool3d.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyAvgPool3dDescriptor.restype = c_int32
+    lib.infiniopDestroyAvgPool3dDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
 
 
 @OpRegister.operator

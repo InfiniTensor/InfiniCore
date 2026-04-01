@@ -188,8 +188,35 @@ class TestTensor(CTensor):
     def update_torch_tensor(self, new_tensor: torch.Tensor):
         self._torch_tensor = new_tensor
 
-    def update_torch_tensor(self, new_tensor: torch.Tensor):
-        self._torch_tensor = new_tensor
+    def set_tensor(self, new_tensor: torch.Tensor):
+        """
+        Replace the logical tensor values while preserving the descriptor's
+        declared shape/strides. This keeps reference (torch_tensor) and
+        backing storage (actual_tensor) consistent for strided tensors.
+        """
+        t = new_tensor.to(to_torch_dtype(self.dt)).to(torch_device_map[self.device])
+
+        # The logical tensor used for reference computations follows the
+        # "torch view" shape derived from (shape, strides).
+        torch_shape = []
+        torch_strides = [] if self.strides is not None else None
+        for i in range(len(self.shape)):
+            if self.strides is not None and self.strides[i] == 0:
+                torch_shape.append(1)
+                torch_strides.append(1)
+            elif self.strides is not None and self.strides[i] != 0:
+                torch_shape.append(self.shape[i])
+                torch_strides.append(self.strides[i])
+            else:
+                torch_shape.append(self.shape[i])
+
+        assert list(t.shape) == torch_shape
+
+        self._torch_tensor = t
+        if self.strides is not None:
+            self._data_tensor = rearrange_tensor(self._torch_tensor, torch_strides)
+        else:
+            self._data_tensor = self._torch_tensor.clone()
 
 
 def to_torch_dtype(dt: InfiniDtype, compatability_mode=False):
