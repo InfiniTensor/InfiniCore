@@ -1,7 +1,6 @@
-#include "avg_pool3d_moore.h"
 #include "../../../../utils.h"
-// MOORE uses CUDA-compatible API, so we can reuse NVIDIA implementation
-// by including the NVIDIA source and adapting stream types
+#include "../../../devices/moore/moore_common.h"
+#include "avg_pool3d_moore.h"
 
 namespace op::avg_pool3d::moore {
 

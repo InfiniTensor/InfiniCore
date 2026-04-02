@@ -70,9 +70,7 @@ utils::Result<AvgPool3dInfo> AvgPool3dInfo::create(
     }
 
     // Calculate output dimensions. Guard against unsigned underflow when kernel > input + 2*pad.
-    if (pad_d > (std::numeric_limits<size_t>::max() - input_d) / 2 ||
-        pad_h > (std::numeric_limits<size_t>::max() - input_h) / 2 ||
-        pad_w > (std::numeric_limits<size_t>::max() - input_w) / 2) {
+    if (pad_d > (std::numeric_limits<size_t>::max() - input_d) / 2 || pad_h > (std::numeric_limits<size_t>::max() - input_h) / 2 || pad_w > (std::numeric_limits<size_t>::max() - input_w) / 2) {
         return INFINI_STATUS_BAD_PARAM;
     }
     size_t effective_d = input_d + 2 * pad_d;
@@ -87,8 +85,7 @@ utils::Result<AvgPool3dInfo> AvgPool3dInfo::create(
     size_t output_w = (effective_w - kernel_w) / stride_w + 1;
 
     // Verify output shape
-    if (y_shape[0] != batch || y_shape[1] != channels ||
-        y_shape[2] != output_d || y_shape[3] != output_h || y_shape[4] != output_w) {
+    if (y_shape[0] != batch || y_shape[1] != channels || y_shape[2] != output_d || y_shape[3] != output_h || y_shape[4] != output_w) {
         return INFINI_STATUS_BAD_TENSOR_SHAPE;
     }
 
@@ -177,15 +174,9 @@ void avg_pool3d_impl(
                         Tacc sum = Tacc(0);
 
                         // Calculate input window
-                        ptrdiff_t id_start =
-                            static_cast<ptrdiff_t>(od) * static_cast<ptrdiff_t>(info.stride_d) -
-                            static_cast<ptrdiff_t>(info.pad_d);
-                        ptrdiff_t ih_start =
-                            static_cast<ptrdiff_t>(oh) * static_cast<ptrdiff_t>(info.stride_h) -
-                            static_cast<ptrdiff_t>(info.pad_h);
-                        ptrdiff_t iw_start =
-                            static_cast<ptrdiff_t>(ow) * static_cast<ptrdiff_t>(info.stride_w) -
-                            static_cast<ptrdiff_t>(info.pad_w);
+                        ptrdiff_t id_start = static_cast<ptrdiff_t>(od) * static_cast<ptrdiff_t>(info.stride_d) - static_cast<ptrdiff_t>(info.pad_d);
+                        ptrdiff_t ih_start = static_cast<ptrdiff_t>(oh) * static_cast<ptrdiff_t>(info.stride_h) - static_cast<ptrdiff_t>(info.pad_h);
+                        ptrdiff_t iw_start = static_cast<ptrdiff_t>(ow) * static_cast<ptrdiff_t>(info.stride_w) - static_cast<ptrdiff_t>(info.pad_w);
 
                         for (size_t kd = 0; kd < info.kernel_d; ++kd) {
                             for (size_t kh = 0; kh < info.kernel_h; ++kh) {
@@ -195,25 +186,15 @@ void avg_pool3d_impl(
                                     ptrdiff_t iw = iw_start + static_cast<ptrdiff_t>(kw);
 
                                     // Check bounds (accounting for padding)
-                                    if (id >= 0 && id < static_cast<ptrdiff_t>(info.input_d) &&
-                                        ih >= 0 && ih < static_cast<ptrdiff_t>(info.input_h) &&
-                                        iw >= 0 && iw < static_cast<ptrdiff_t>(info.input_w)) {
-                                        size_t x_idx = b * info.input_strides[0] +
-                                                      c * info.input_strides[1] +
-                                                      static_cast<size_t>(id) * info.input_strides[2] +
-                                                      static_cast<size_t>(ih) * info.input_strides[3] +
-                                                      static_cast<size_t>(iw) * info.input_strides[4];
+                                    if (id >= 0 && id < static_cast<ptrdiff_t>(info.input_d) && ih >= 0 && ih < static_cast<ptrdiff_t>(info.input_h) && iw >= 0 && iw < static_cast<ptrdiff_t>(info.input_w)) {
+                                        size_t x_idx = b * info.input_strides[0] + c * info.input_strides[1] + static_cast<size_t>(id) * info.input_strides[2] + static_cast<size_t>(ih) * info.input_strides[3] + static_cast<size_t>(iw) * info.input_strides[4];
                                         sum += utils::cast<Tacc>(x[x_idx]);
                                     }
                                 }
                             }
                         }
 
-                        size_t y_idx = b * info.output_strides[0] +
-                                      c * info.output_strides[1] +
-                                      od * info.output_strides[2] +
-                                      oh * info.output_strides[3] +
-                                      ow * info.output_strides[4];
+                        size_t y_idx = b * info.output_strides[0] + c * info.output_strides[1] + od * info.output_strides[2] + oh * info.output_strides[3] + ow * info.output_strides[4];
                         // Match torch.nn.functional.avg_pool3d default behavior (count_include_pad=True):
                         // padding contributes zeros but still counts in the divisor.
                         y[y_idx] = utils::cast<T>(sum * inv_kernel_size);

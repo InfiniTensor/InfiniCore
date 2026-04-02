@@ -15,7 +15,7 @@
 #include "moore/avg_pool3d_moore.h"
 #endif
 
-__C infiniStatus_t infiniopCreateAvgPool3dDescriptor(
+__INFINI_C infiniStatus_t infiniopCreateAvgPool3dDescriptor(
     infiniopHandle_t handle,
     infiniopAvgPool3dDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t y_desc,
@@ -24,15 +24,15 @@ __C infiniStatus_t infiniopCreateAvgPool3dDescriptor(
     void *stride,
     void *padding) {
 
-#define CREATE(CASE, NAMESPACE)                                                     \
-    case CASE:                                                                      \
-        return op::avg_pool3d::NAMESPACE::Descriptor::create(                      \
-            handle,                                                                 \
-            reinterpret_cast<op::avg_pool3d::NAMESPACE::Descriptor **>(desc_ptr),  \
-            y_desc,                                                                 \
-            x_desc,                                                                 \
-            kernel_size,                                                            \
-            stride,                                                                 \
+#define CREATE(CASE, NAMESPACE)                                                   \
+    case CASE:                                                                    \
+        return op::avg_pool3d::NAMESPACE::Descriptor::create(                     \
+            handle,                                                               \
+            reinterpret_cast<op::avg_pool3d::NAMESPACE::Descriptor **>(desc_ptr), \
+            y_desc,                                                               \
+            x_desc,                                                               \
+            kernel_size,                                                          \
+            stride,                                                               \
             padding)
 
     switch (handle->device) {
@@ -60,10 +60,10 @@ __C infiniStatus_t infiniopCreateAvgPool3dDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetAvgPool3dWorkspaceSize(infiniopAvgPool3dDescriptor_t desc, size_t *size) {
+__INFINI_C infiniStatus_t infiniopGetAvgPool3dWorkspaceSize(infiniopAvgPool3dDescriptor_t desc, size_t *size) {
 
-#define GET(CASE, NAMESPACE)                                                                        \
-    case CASE:                                                                                      \
+#define GET(CASE, NAMESPACE)                                                                      \
+    case CASE:                                                                                    \
         *size = reinterpret_cast<op::avg_pool3d::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
         return INFINI_STATUS_SUCCESS;
 
@@ -91,7 +91,7 @@ __C infiniStatus_t infiniopGetAvgPool3dWorkspaceSize(infiniopAvgPool3dDescriptor
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
-__C infiniStatus_t infiniopAvgPool3d(
+__INFINI_C infiniStatus_t infiniopAvgPool3d(
     infiniopAvgPool3dDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -99,9 +99,9 @@ __C infiniStatus_t infiniopAvgPool3d(
     const void *x,
     void *stream) {
 
-#define CALCULATE(CASE, NAMESPACE)                                                      \
-    case CASE:                                                                          \
-        return reinterpret_cast<const op::avg_pool3d::NAMESPACE::Descriptor *>(desc)   \
+#define CALCULATE(CASE, NAMESPACE)                                                   \
+    case CASE:                                                                       \
+        return reinterpret_cast<const op::avg_pool3d::NAMESPACE::Descriptor *>(desc) \
             ->calculate(workspace, workspace_size, y, x, stream)
 
     switch (desc->device_type) {
@@ -129,12 +129,12 @@ __C infiniStatus_t infiniopAvgPool3d(
 #undef CALCULATE
 }
 
-__C infiniStatus_t
+__INFINI_C infiniStatus_t
 infiniopDestroyAvgPool3dDescriptor(infiniopAvgPool3dDescriptor_t desc) {
 
-#define DELETE(CASE, NAMESPACE)                                                          \
-    case CASE:                                                                           \
-        delete reinterpret_cast<const op::avg_pool3d::NAMESPACE::Descriptor *>(desc);   \
+#define DELETE(CASE, NAMESPACE)                                                       \
+    case CASE:                                                                        \
+        delete reinterpret_cast<const op::avg_pool3d::NAMESPACE::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS;
 
     switch (desc->device_type) {

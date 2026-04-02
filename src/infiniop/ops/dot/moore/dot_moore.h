@@ -3,7 +3,6 @@
 
 #include "../../../operator.h"
 #include "../../../tensor.h"
-#include "../../../devices/moore/moore_common.h"
 
 namespace op::dot::moore {
 

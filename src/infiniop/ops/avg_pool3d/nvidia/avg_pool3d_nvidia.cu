@@ -1,5 +1,5 @@
-#include "avg_pool3d_nvidia.cuh"
 #include "../../../../utils.h"
+#include "avg_pool3d_nvidia.cuh"
 #include <cudnn.h>
 #include <limits>
 
@@ -16,9 +16,15 @@ struct Descriptor::Opaque {
         : internal(internal_ptr) {}
 
     ~Opaque() {
-        if (x_desc) cudnnDestroyTensorDescriptor(x_desc);
-        if (y_desc) cudnnDestroyTensorDescriptor(y_desc);
-        if (pool_desc) cudnnDestroyPoolingDescriptor(pool_desc);
+        if (x_desc) {
+            cudnnDestroyTensorDescriptor(x_desc);
+        }
+        if (y_desc) {
+            cudnnDestroyTensorDescriptor(y_desc);
+        }
+        if (pool_desc) {
+            cudnnDestroyPoolingDescriptor(pool_desc);
+        }
     }
 };
 
@@ -162,23 +168,22 @@ infiniStatus_t Descriptor::calculate(
 
     auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
     return _opaque->internal->useCudnn(cuda_stream, [&](cudnnHandle_t cudnn_handle) {
-
-    const void *alpha = nullptr;
-    const void *beta = nullptr;
-    if (_dtype == INFINI_DTYPE_F32) {
-        static const float alpha_val = 1.0f, beta_val = 0.0f;
-        alpha = &alpha_val;
-        beta = &beta_val;
-    } else if (_dtype == INFINI_DTYPE_F64) {
-        static const double alpha_val = 1.0, beta_val = 0.0;
-        alpha = &alpha_val;
-        beta = &beta_val;
-    } else {
-        // For F16/BF16, use float alpha/beta
-        static const float alpha_val = 1.0f, beta_val = 0.0f;
-        alpha = &alpha_val;
-        beta = &beta_val;
-    }
+        const void *alpha = nullptr;
+        const void *beta = nullptr;
+        if (_dtype == INFINI_DTYPE_F32) {
+            static const float alpha_val = 1.0f, beta_val = 0.0f;
+            alpha = &alpha_val;
+            beta = &beta_val;
+        } else if (_dtype == INFINI_DTYPE_F64) {
+            static const double alpha_val = 1.0, beta_val = 0.0;
+            alpha = &alpha_val;
+            beta = &beta_val;
+        } else {
+            // For F16/BF16, use float alpha/beta
+            static const float alpha_val = 1.0f, beta_val = 0.0f;
+            alpha = &alpha_val;
+            beta = &beta_val;
+        }
 
         CHECK_CUDNN(cudnnPoolingForward(
             cudnn_handle,

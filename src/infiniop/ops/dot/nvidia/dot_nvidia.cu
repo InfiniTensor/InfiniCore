@@ -1,7 +1,9 @@
-#include "dot_nvidia.cuh"
-#include "../cuda/kernel.cuh"
-#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 #include "../../../../utils.h"
+#include "../../../devices/nvidia/nvidia_common.cuh"
+#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
+
+#include "../cuda/kernel.cuh"
+#include "dot_nvidia.cuh"
 
 namespace op::dot::nvidia {
 
@@ -71,46 +73,44 @@ infiniStatus_t Descriptor::calculate(
     auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
     constexpr unsigned int BLOCK_SIZE = 256;
 
-    // Initialize result to zero
     switch (_dtype) {
-    case INFINI_DTYPE_F16: {
-        float *result_f = nullptr;
-        CHECK_CUDA(cudaMallocAsync(&result_f, sizeof(float), cuda_stream));
-        CHECK_CUDA(cudaMemsetAsync(result_f, 0, sizeof(float), cuda_stream));
-        cuda::dot_kernel<BLOCK_SIZE, half, float><<<1, BLOCK_SIZE, 0, cuda_stream>>>(
-            result_f, reinterpret_cast<const half *>(a), reinterpret_cast<const half *>(b),
-            _n, _a_stride, _b_stride);
-        store_half_from_f32<<<1, 1, 0, cuda_stream>>>(reinterpret_cast<half *>(y), result_f);
-        CHECK_CUDA(cudaFreeAsync(result_f, cuda_stream));
+
+    case INFINI_DTYPE_F32:
+        cuda::dot_kernel<BLOCK_SIZE, float, float, float>
+            <<<1, BLOCK_SIZE, 0, cuda_stream>>>(
+                reinterpret_cast<float *>(y),
+                reinterpret_cast<const float *>(a),
+                reinterpret_cast<const float *>(b),
+                _n, _a_stride, _b_stride);
         break;
-    }
-    case INFINI_DTYPE_BF16: {
-        float *result_f = nullptr;
-        CHECK_CUDA(cudaMallocAsync(&result_f, sizeof(float), cuda_stream));
-        CHECK_CUDA(cudaMemsetAsync(result_f, 0, sizeof(float), cuda_stream));
-        cuda::dot_kernel<BLOCK_SIZE, cuda_bfloat16, float><<<1, BLOCK_SIZE, 0, cuda_stream>>>(
-            result_f, reinterpret_cast<const cuda_bfloat16 *>(a), reinterpret_cast<const cuda_bfloat16 *>(b),
-            _n, _a_stride, _b_stride);
-        store_bf16_from_f32<<<1, 1, 0, cuda_stream>>>(reinterpret_cast<cuda_bfloat16 *>(y), result_f);
-        CHECK_CUDA(cudaFreeAsync(result_f, cuda_stream));
+
+    case INFINI_DTYPE_F64:
+        cuda::dot_kernel<BLOCK_SIZE, double, double, double>
+            <<<1, BLOCK_SIZE, 0, cuda_stream>>>(
+                reinterpret_cast<double *>(y),
+                reinterpret_cast<const double *>(a),
+                reinterpret_cast<const double *>(b),
+                _n, _a_stride, _b_stride);
         break;
-    }
-    case INFINI_DTYPE_F32: {
-        float *result_f = reinterpret_cast<float *>(y);
-        CHECK_CUDA(cudaMemsetAsync(result_f, 0, sizeof(float), cuda_stream));
-        cuda::dot_kernel<BLOCK_SIZE, float, float><<<1, BLOCK_SIZE, 0, cuda_stream>>>(
-            result_f, reinterpret_cast<const float *>(a), reinterpret_cast<const float *>(b),
-            _n, _a_stride, _b_stride);
+
+    case INFINI_DTYPE_F16:
+        cuda::dot_kernel<BLOCK_SIZE, half, half, float>
+            <<<1, BLOCK_SIZE, 0, cuda_stream>>>(
+                reinterpret_cast<half *>(y),
+                reinterpret_cast<const half *>(a),
+                reinterpret_cast<const half *>(b),
+                _n, _a_stride, _b_stride);
         break;
-    }
-    case INFINI_DTYPE_F64: {
-        double *result_d = reinterpret_cast<double *>(y);
-        CHECK_CUDA(cudaMemsetAsync(result_d, 0, sizeof(double), cuda_stream));
-        cuda::dot_kernel<BLOCK_SIZE, double, double><<<1, BLOCK_SIZE, 0, cuda_stream>>>(
-            result_d, reinterpret_cast<const double *>(a), reinterpret_cast<const double *>(b),
-            _n, _a_stride, _b_stride);
+
+    case INFINI_DTYPE_BF16:
+        cuda::dot_kernel<BLOCK_SIZE, cuda_bfloat16, cuda_bfloat16, float>
+            <<<1, BLOCK_SIZE, 0, cuda_stream>>>(
+                reinterpret_cast<cuda_bfloat16 *>(y),
+                reinterpret_cast<const cuda_bfloat16 *>(a),
+                reinterpret_cast<const cuda_bfloat16 *>(b),
+                _n, _a_stride, _b_stride);
         break;
-    }
+
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }

@@ -15,7 +15,7 @@
 #include "moore/log1p_moore.h"
 #endif
 
-__C infiniStatus_t infiniopCreateLog1pDescriptor(
+__INFINI_C infiniStatus_t infiniopCreateLog1pDescriptor(
     infiniopHandle_t handle,
     infiniopLog1pDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t y_desc,
@@ -54,7 +54,7 @@ __C infiniStatus_t infiniopCreateLog1pDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetLog1pWorkspaceSize(infiniopLog1pDescriptor_t desc, size_t *size) {
+__INFINI_C infiniStatus_t infiniopGetLog1pWorkspaceSize(infiniopLog1pDescriptor_t desc, size_t *size) {
 
 #define GET(CASE, NAMESPACE)                                                                 \
     case CASE:                                                                               \
@@ -85,7 +85,7 @@ __C infiniStatus_t infiniopGetLog1pWorkspaceSize(infiniopLog1pDescriptor_t desc,
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
-__C infiniStatus_t infiniopLog1p(
+__INFINI_C infiniStatus_t infiniopLog1p(
     infiniopLog1pDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -123,7 +123,7 @@ __C infiniStatus_t infiniopLog1p(
 #undef CALCULATE
 }
 
-__C infiniStatus_t
+__INFINI_C infiniStatus_t
 infiniopDestroyLog1pDescriptor(infiniopLog1pDescriptor_t desc) {
 
 #define DELETE(CASE, NAMESPACE)                                                  \

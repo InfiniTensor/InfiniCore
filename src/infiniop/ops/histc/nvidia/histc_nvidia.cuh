@@ -1,9 +1,9 @@
 #ifndef __HISTC_NVIDIA_H__
 #define __HISTC_NVIDIA_H__
 
+#include "../../../devices/nvidia/nvidia_common.cuh"
 #include "../../../operator.h"
 #include "../../../tensor.h"
-#include "../../../devices/nvidia/nvidia_common.cuh"
 
 namespace op::histc::nvidia {
 

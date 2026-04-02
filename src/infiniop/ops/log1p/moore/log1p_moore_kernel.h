@@ -2,8 +2,6 @@
 #define __LOG1P_MOORE_KERNEL_H__
 
 #include <cmath>
-#include <cuda_bf16.h>
-#include <cuda_fp16.h>
 #include <type_traits>
 
 namespace op::log1p::moore {
@@ -29,7 +27,7 @@ public:
         } else if constexpr (std::is_same_v<T, float>) {
             return log1pf(x);
         } else { // double
-            return log1p(x);
+            return ::log1p(x);
         }
     }
 } Log1pOp;

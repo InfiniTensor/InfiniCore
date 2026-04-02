@@ -3,7 +3,6 @@
 
 #include "../../../operator.h"
 #include "../../../tensor.h"
-#include "../../../devices/metax/metax_common.h"
 
 namespace op::dot::metax {
 

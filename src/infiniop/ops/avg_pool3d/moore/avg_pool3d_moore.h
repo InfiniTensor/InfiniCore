@@ -3,9 +3,7 @@
 
 #include "../../../operator.h"
 #include "../../../tensor.h"
-#include "../../../devices/moore/moore_common.h"
-#include "../../../devices/moore/moore_handle.h"
-#include <mudnn.h>
+#include <memory>
 
 namespace op::avg_pool3d::moore {
 

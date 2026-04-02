@@ -61,8 +61,10 @@
 #define hcdnnTensorDescriptor_t mcdnnTensorDescriptor_t
 #define hcdnnStatus_t mcdnnStatus_t
 #define hcdnnSetTensor4dDescriptor mcdnnSetTensor4dDescriptor
+#define hcdnnSetTensorNdDescriptor mcdnnSetTensorNdDescriptor
 #define hcdnnSetStream mcdnnSetStream
 #define hcdnnSetPooling2dDescriptor mcdnnSetPooling2dDescriptor
+#define hcdnnSetPoolingNdDescriptor mcdnnSetPoolingNdDescriptor
 #define hcdnnPoolingMode_t mcdnnPoolingMode_t
 #define hcdnnPoolingForward mcdnnPoolingForward
 #define hcdnnPoolingDescriptor_t mcdnnPoolingDescriptor_t

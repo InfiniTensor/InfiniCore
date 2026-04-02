@@ -1,10 +1,10 @@
 #ifndef __AVG_POOL3D_NVIDIA_H__
 #define __AVG_POOL3D_NVIDIA_H__
 
-#include "../../../operator.h"
-#include "../../../tensor.h"
 #include "../../../devices/nvidia/nvidia_common.cuh"
 #include "../../../devices/nvidia/nvidia_handle.cuh"
+#include "../../../operator.h"
+#include "../../../tensor.h"
 #include <cudnn.h>
 
 namespace op::avg_pool3d::nvidia {
