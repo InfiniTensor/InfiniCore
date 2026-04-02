@@ -15,7 +15,7 @@
 #include "moore/histc_moore.h"
 #endif
 
-__C infiniStatus_t infiniopCreateHistcDescriptor(
+__INFINI_C infiniStatus_t infiniopCreateHistcDescriptor(
     infiniopHandle_t handle,
     infiniopHistcDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t y_desc,
@@ -24,15 +24,15 @@ __C infiniStatus_t infiniopCreateHistcDescriptor(
     double min_val,
     double max_val) {
 
-#define CREATE(CASE, NAMESPACE)                                             \
-    case CASE:                                                              \
-        return op::histc::NAMESPACE::Descriptor::create(                   \
-            handle,                                                         \
+#define CREATE(CASE, NAMESPACE)                                              \
+    case CASE:                                                               \
+        return op::histc::NAMESPACE::Descriptor::create(                     \
+            handle,                                                          \
             reinterpret_cast<op::histc::NAMESPACE::Descriptor **>(desc_ptr), \
-            y_desc,                                                         \
-            x_desc,                                                         \
-            bins,                                                           \
-            min_val,                                                        \
+            y_desc,                                                          \
+            x_desc,                                                          \
+            bins,                                                            \
+            min_val,                                                         \
             max_val)
 
     switch (handle->device) {
@@ -60,7 +60,7 @@ __C infiniStatus_t infiniopCreateHistcDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetHistcWorkspaceSize(infiniopHistcDescriptor_t desc, size_t *size) {
+__INFINI_C infiniStatus_t infiniopGetHistcWorkspaceSize(infiniopHistcDescriptor_t desc, size_t *size) {
 
 #define GET(CASE, NAMESPACE)                                                                 \
     case CASE:                                                                               \
@@ -91,7 +91,7 @@ __C infiniStatus_t infiniopGetHistcWorkspaceSize(infiniopHistcDescriptor_t desc,
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
-__C infiniStatus_t infiniopHistc(
+__INFINI_C infiniStatus_t infiniopHistc(
     infiniopHistcDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -99,7 +99,7 @@ __C infiniStatus_t infiniopHistc(
     const void *x,
     void *stream) {
 
-#define CALCULATE(CASE, NAMESPACE)                                             \
+#define CALCULATE(CASE, NAMESPACE)                                              \
     case CASE:                                                                  \
         return reinterpret_cast<const op::histc::NAMESPACE::Descriptor *>(desc) \
             ->calculate(workspace, workspace_size, y, x, stream)
@@ -129,10 +129,10 @@ __C infiniStatus_t infiniopHistc(
 #undef CALCULATE
 }
 
-__C infiniStatus_t
+__INFINI_C infiniStatus_t
 infiniopDestroyHistcDescriptor(infiniopHistcDescriptor_t desc) {
 
-#define DELETE(CASE, NAMESPACE)                                                 \
+#define DELETE(CASE, NAMESPACE)                                                  \
     case CASE:                                                                   \
         delete reinterpret_cast<const op::histc::NAMESPACE::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS;

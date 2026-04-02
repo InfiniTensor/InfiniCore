@@ -3,14 +3,7 @@
 
 #include "../../../operator.h"
 #include "../../../tensor.h"
-#include "../../../devices/metax/metax_common.h"
-#include "../../../devices/metax/metax_handle.h"
-
-#ifdef ENABLE_METAX_MC_API
-#include <mcdnn/mcdnn.h>
-#else
-#include <hcdnn/hcdnn.h>
-#endif
+#include <memory>
 
 namespace op::avg_pool3d::metax {
 

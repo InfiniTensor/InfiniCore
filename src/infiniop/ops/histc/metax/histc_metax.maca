@@ -1,8 +1,9 @@
-#include "histc_metax.h"
-#include "../cuda/kernel.cuh"
 #include "../../../../utils.h"
-#include <cuda_bf16.h>
-#include <cuda_fp16.h>
+#include "../../../devices/metax/metax_common.h"
+#include "../../../devices/metax/metax_kernel_common.h"
+
+#include "../cuda/kernel.cuh"
+#include "histc_metax.h"
 
 namespace op::histc::metax {
 

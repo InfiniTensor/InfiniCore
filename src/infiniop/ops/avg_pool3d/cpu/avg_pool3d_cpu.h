@@ -1,9 +1,9 @@
 #ifndef __AVG_POOL3D_CPU_H__
 #define __AVG_POOL3D_CPU_H__
 
+#include "../../../devices/cpu/common_cpu.h"
 #include "../../../operator.h"
 #include "../../../tensor.h"
-#include "../../../devices/cpu/common_cpu.h"
 #include <vector>
 
 namespace op::avg_pool3d::cpu {

@@ -1,9 +1,9 @@
 #ifndef __DOT_NVIDIA_H__
 #define __DOT_NVIDIA_H__
 
+#include "../../../devices/nvidia/nvidia_common.cuh"
 #include "../../../operator.h"
 #include "../../../tensor.h"
-#include "../../../devices/nvidia/nvidia_common.cuh"
 #include <cuda_runtime.h>
 
 namespace op::dot::nvidia {

@@ -2,8 +2,6 @@
 #define __LOG10_MOORE_KERNEL_H__
 
 #include <cmath>
-#include <cuda_bf16.h>
-#include <cuda_fp16.h>
 #include <type_traits>
 
 namespace op::log10::moore {
@@ -29,7 +27,7 @@ public:
         } else if constexpr (std::is_same_v<T, float>) {
             return log10f(x);
         } else { // double
-            return log10(x);
+            return ::log10(x);
         }
     }
 } Log10Op;

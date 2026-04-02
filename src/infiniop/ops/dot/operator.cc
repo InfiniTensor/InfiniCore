@@ -15,20 +15,20 @@
 #include "moore/dot_moore.h"
 #endif
 
-__C infiniStatus_t infiniopCreateDotDescriptor(
+__INFINI_C infiniStatus_t infiniopCreateDotDescriptor(
     infiniopHandle_t handle,
     infiniopDotDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t y_desc,
     infiniopTensorDescriptor_t a_desc,
     infiniopTensorDescriptor_t b_desc) {
 
-#define CREATE(CASE, NAMESPACE)                                             \
-    case CASE:                                                              \
+#define CREATE(CASE, NAMESPACE)                                            \
+    case CASE:                                                             \
         return op::dot::NAMESPACE::Descriptor::create(                     \
-            handle,                                                         \
+            handle,                                                        \
             reinterpret_cast<op::dot::NAMESPACE::Descriptor **>(desc_ptr), \
-            y_desc,                                                         \
-            a_desc,                                                         \
+            y_desc,                                                        \
+            a_desc,                                                        \
             b_desc)
 
     switch (handle->device) {
@@ -56,10 +56,10 @@ __C infiniStatus_t infiniopCreateDotDescriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetDotWorkspaceSize(infiniopDotDescriptor_t desc, size_t *size) {
+__INFINI_C infiniStatus_t infiniopGetDotWorkspaceSize(infiniopDotDescriptor_t desc, size_t *size) {
 
-#define GET(CASE, NAMESPACE)                                                                 \
-    case CASE:                                                                               \
+#define GET(CASE, NAMESPACE)                                                               \
+    case CASE:                                                                             \
         *size = reinterpret_cast<op::dot::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
         return INFINI_STATUS_SUCCESS;
 
@@ -87,7 +87,7 @@ __C infiniStatus_t infiniopGetDotWorkspaceSize(infiniopDotDescriptor_t desc, siz
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
-__C infiniStatus_t infiniopDot(
+__INFINI_C infiniStatus_t infiniopDot(
     infiniopDotDescriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -96,8 +96,8 @@ __C infiniStatus_t infiniopDot(
     const void *b,
     void *stream) {
 
-#define CALCULATE(CASE, NAMESPACE)                                             \
-    case CASE:                                                                 \
+#define CALCULATE(CASE, NAMESPACE)                                            \
+    case CASE:                                                                \
         return reinterpret_cast<const op::dot::NAMESPACE::Descriptor *>(desc) \
             ->calculate(workspace, workspace_size, y, a, b, stream)
 
@@ -126,11 +126,11 @@ __C infiniStatus_t infiniopDot(
 #undef CALCULATE
 }
 
-__C infiniStatus_t
+__INFINI_C infiniStatus_t
 infiniopDestroyDotDescriptor(infiniopDotDescriptor_t desc) {
 
-#define DELETE(CASE, NAMESPACE)                                                 \
-    case CASE:                                                                  \
+#define DELETE(CASE, NAMESPACE)                                                \
+    case CASE:                                                                 \
         delete reinterpret_cast<const op::dot::NAMESPACE::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS;
 

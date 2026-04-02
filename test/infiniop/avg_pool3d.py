@@ -25,7 +25,7 @@ from libinfiniop import (
 # Test cases format: (x_shape, x_stride_or_None, kernel_size, stride_or_None, padding)
 _TEST_CASES = [
     ((1, 2, 8, 8, 8), None, (2, 2, 2), None, (0, 0, 0)),
-    ((2, 3, 7, 9, 5), (756, 252, 36, 4, 1), (3, 3, 3), (2, 2, 1), (1, 1, 0)),
+    ((2, 3, 7, 9, 5), None, (3, 3, 3), (2, 2, 1), (1, 1, 0)),
     ((2, 1, 9, 11, 7), (693, 77, 77, 7, 1), (3, 2, 3), None, (1, 0, 1)),
 ]
 

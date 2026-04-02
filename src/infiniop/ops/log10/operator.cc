@@ -15,7 +15,7 @@
 #include "moore/log10_moore.h"
 #endif
 
-__C infiniStatus_t infiniopCreateLog10Descriptor(
+__INFINI_C infiniStatus_t infiniopCreateLog10Descriptor(
     infiniopHandle_t handle,
     infiniopLog10Descriptor_t *desc_ptr,
     infiniopTensorDescriptor_t y_desc,
@@ -54,7 +54,7 @@ __C infiniStatus_t infiniopCreateLog10Descriptor(
 #undef CREATE
 }
 
-__C infiniStatus_t infiniopGetLog10WorkspaceSize(infiniopLog10Descriptor_t desc, size_t *size) {
+__INFINI_C infiniStatus_t infiniopGetLog10WorkspaceSize(infiniopLog10Descriptor_t desc, size_t *size) {
 
 #define GET(CASE, NAMESPACE)                                                                 \
     case CASE:                                                                               \
@@ -85,7 +85,7 @@ __C infiniStatus_t infiniopGetLog10WorkspaceSize(infiniopLog10Descriptor_t desc,
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
-__C infiniStatus_t infiniopLog10(
+__INFINI_C infiniStatus_t infiniopLog10(
     infiniopLog10Descriptor_t desc,
     void *workspace,
     size_t workspace_size,
@@ -123,7 +123,7 @@ __C infiniStatus_t infiniopLog10(
 #undef CALCULATE
 }
 
-__C infiniStatus_t
+__INFINI_C infiniStatus_t
 infiniopDestroyLog10Descriptor(infiniopLog10Descriptor_t desc) {
 
 #define DELETE(CASE, NAMESPACE)                                                  \

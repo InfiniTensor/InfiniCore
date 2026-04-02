@@ -1,3 +1,5 @@
+#ifndef __INFINIOP_MOORE_COMMON_H__
+#define __INFINIOP_MOORE_COMMON_H__
 #include "../../../utils.h"
 #include "../pool.h"
 #include "moore_handle.h"
@@ -42,3 +44,4 @@ public:
 };
 
 } // namespace device::moore
+#endif

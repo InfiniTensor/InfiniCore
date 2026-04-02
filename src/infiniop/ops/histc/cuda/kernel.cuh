@@ -1,7 +1,4 @@
 #pragma once
-#include <cuda_runtime.h>
-#include <cuda_bf16.h>
-#include <cuda_fp16.h>
 #include <type_traits>
 
 namespace op::cuda {
@@ -16,8 +13,7 @@ __global__ void histc_kernel(
     double min_val,
     double max_val) {
 
-    size_t idx = static_cast<size_t>(blockIdx.x) * static_cast<size_t>(blockDim.x) +
-                 static_cast<size_t>(threadIdx.x);
+    size_t idx = static_cast<size_t>(blockIdx.x) * static_cast<size_t>(blockDim.x) + static_cast<size_t>(threadIdx.x);
     size_t stride = static_cast<size_t>(blockDim.x) * static_cast<size_t>(gridDim.x);
     size_t input_stride_u = static_cast<size_t>(input_stride);
 
