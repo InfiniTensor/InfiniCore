@@ -47,6 +47,8 @@ indexToOffset(
 }
 } // namespace device::metax
 
+using device::metax::indexToOffset;
+
 __forceinline__ __device__ float
 exp_(const float val) {
     return expf(val);

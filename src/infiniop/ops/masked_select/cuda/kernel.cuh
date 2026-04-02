@@ -11,7 +11,7 @@ INFINIOP_CUDA_KERNEL maskedSelectGetMarkScanOnceKernel(
     size_t tid = threadIdx.x;
     size_t index = blockDim.x * blockIdx.x + threadIdx.x;
     if (index < total_elements) {
-        size_t mask_offset = device::nvidia::indexToOffset(index, ndim, shape, mask_strides);
+        size_t mask_offset = indexToOffset(index, ndim, shape, mask_strides);
         smem[tid] = mask[mask_offset];
     } else {
         smem[tid] = 0;
@@ -99,8 +99,8 @@ INFINIOP_CUDA_KERNEL maskedSelectGetDataKernel(
         return;
     }
 
-    size_t input_offset = device::nvidia::indexToOffset(index, ndim, shape, input_strides);
-    size_t mask_offset = device::nvidia::indexToOffset(index, ndim, shape, mask_strides);
+    size_t input_offset = indexToOffset(index, ndim, shape, input_strides);
+    size_t mask_offset = indexToOffset(index, ndim, shape, mask_strides);
 
     if (mask[mask_offset]) {
         data[scan_result[index] - 1] = input[input_offset];

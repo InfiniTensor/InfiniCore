@@ -37,6 +37,8 @@ indexToOffset(
 }
 } // namespace device::moore
 
+using device::moore::indexToOffset;
+
 __forceinline__ __device__ float
 exp_(const float val) {
     return expf(val);

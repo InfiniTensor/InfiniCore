@@ -1,20 +1,6 @@
 #ifndef __SUM_CUDA_H__
 #define __SUM_CUDA_H__
 
-__forceinline__ __device__ __host__ size_t
-indexToOffset(
-    size_t flat_index,
-    size_t ndim,
-    const size_t *shape,
-    const ptrdiff_t *strides) {
-    size_t res = 0;
-    for (size_t i = ndim; i-- > 0;) {
-        res += (flat_index % shape[i]) * strides[i];
-        flat_index /= shape[i];
-    }
-    return res;
-}
-
 template <size_t BLOCK_SIZE, typename Tdata, typename Tcompute>
 __global__ void sumAllKernel(
     Tcompute *output,

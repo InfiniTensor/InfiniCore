@@ -64,9 +64,8 @@ class OpTest(BaseOperatorTest):
     def torch_operator(self, *args, **kwargs):
         return torch.block_diag(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
-    #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.block_diag(*args, **kwargs)
+    def infinicore_operator(self, *args, **kwargs):
+        return infinicore.block_diag(*args, **kwargs)
 
 
 def main():

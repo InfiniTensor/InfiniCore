@@ -50,6 +50,8 @@ indexToOffset(
 }
 } // namespace device::nvidia
 
+using device::nvidia::indexToOffset;
+
 __forceinline__ __device__ float
 exp_(const float val) {
     return expf(val);
