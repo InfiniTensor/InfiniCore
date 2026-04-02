@@ -1,3 +1,4 @@
+#pragma once
 #define INFINIOP_METAX_KERNEL __global__ void
 
 #ifdef ENABLE_METAX_MC_API

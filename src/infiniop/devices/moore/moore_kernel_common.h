@@ -1,3 +1,5 @@
+#ifndef __INFINIOP_MOORE_KERNEL_COMMON_H__
+#define __INFINIOP_MOORE_KERNEL_COMMON_H__
 #define INFINIOP_MOORE_KERNEL __global__ void
 
 #include <musa_bf16.h>
@@ -70,3 +72,4 @@ exp_(const __mt_bfloat16 x) {
     float f_result = expf(f_val);
     return __float2bfloat16(f_result);
 }
+#endif
