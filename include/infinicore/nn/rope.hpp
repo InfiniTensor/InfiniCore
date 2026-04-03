@@ -4,6 +4,7 @@
 #include "../tensor.hpp"
 #include "module.hpp"
 #include <memory>
+#include <cmath>
 
 namespace infinicore::nn {
 
