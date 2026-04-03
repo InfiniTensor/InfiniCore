@@ -1,5 +1,80 @@
 
 local MACA_ROOT = os.getenv("MACA_PATH") or os.getenv("MACA_HOME") or os.getenv("MACA_ROOT")
+local FLASH_ATTN_ROOT = get_config("flash-attn")
+
+-- MetaX flash-attn (pip `flash_attn_2_cuda`) may append an extra trailing argument
+-- (`flash_attn_mars_ext_`) depending on the underlying HPCC/MetaX stack version.
+do
+    -- Intentionally empty: HPCC version parsing is deferred to `before_build`
+    -- on `infinicore_cpp_api` where `os.iorunv` is available in this xmake sandbox.
+end
+
+-- Set numeric HPCC version macro for flash-attn signature/call compatibility.
+-- Must be done before compiling `infinicore_cpp_api` sources.
+target("infinicore_cpp_api")
+    before_build(function (target)
+        if not has_config("metax-gpu") then
+            return
+        end
+        if not (get_config("flash-attn") and get_config("flash-attn") ~= "") then
+            return
+        end
+
+        local version_txt = "/opt/hpcc/Version.txt"
+        if os.isfile(version_txt) then
+            local content = os.iorunv("cat", {version_txt}) or ""
+            content = content:trim()
+            -- Example: `Version:2.32.0.6`
+            local hpcc_major_str = content:match("Version:(%d+)") or content:match("^(%d+)")
+            if hpcc_major_str and hpcc_major_str ~= "" then
+                local hpcc_major = tonumber(hpcc_major_str)
+                if hpcc_major then
+                    local define = "INFINICORE_HPCC_VERSION_MAJOR=" .. tostring(hpcc_major)
+                    -- `defines` is the logical flag list for the target,
+                    -- but we also pass `-D...` directly to ensure it reaches compilation.
+                    target:add("defines", define)
+                    target:add("cxflags", "-D" .. define)
+                    target:add("cxxflags", "-D" .. define)
+                end
+            end
+        end
+    end)
+target_end()
+
+-- Resolve MetaX flash-attn .so path.
+-- `xmake.lua` calls `_metax_flash_attn_cuda_so_path()` during `infinicore_cpp_api`
+-- linking, so this helper must live here (and must be global, not `local`).
+local FLASH_ATTN_METAX_CUDA_SO_CONTAINER_DEFAULT =
+    "/opt/conda/lib/python3.10/site-packages/flash_attn_2_cuda.cpython-310-aarch64-linux-gnu.so"
+
+function _metax_flash_attn_cuda_so_path()
+    -- Highest priority: override the exact `.so` file to link.
+    local env_path = os.getenv("FLASH_ATTN_2_CUDA_SO")
+    if env_path and env_path ~= "" then
+        env_path = env_path:trim()
+        if os.isfile(env_path) then
+            return env_path
+        end
+        print(string.format("warning: metax+flash-attn: FLASH_ATTN_2_CUDA_SO is not a file: %s, fallback to container/default path", env_path))
+    end
+
+    -- Second priority: allow overriding the "expected" container path via env.
+    local container_path = os.getenv("FLASH_ATTN_METAX_CUDA_SO_CONTAINER")
+    if not container_path or container_path == "" then
+        container_path = FLASH_ATTN_METAX_CUDA_SO_CONTAINER_DEFAULT
+    end
+
+    if not os.isfile(container_path) then
+        print(
+            string.format(
+                "warning: metax+flash-attn: expected %s; install flash-attn in conda env, or export FLASH_ATTN_2_CUDA_SO.",
+                container_path
+            )
+        )
+    end
+    return container_path
+end
+
 add_includedirs(MACA_ROOT .. "/include")
 add_linkdirs(MACA_ROOT .. "/lib")
 if has_config("use-mc") then
@@ -57,12 +132,33 @@ target("infiniop-metax")
         add_includedirs(MACA_ROOT .. "/include/mcr")
         add_files("../build/ninetoothed/*.c", "../build/ninetoothed/*.cpp", {
             cxflags = {
-                "-include stdlib.h", 
-                "-Wno-return-type", 
+                "-include stdlib.h",
+                "-Wno-return-type",
                 "-Wno-implicit-function-declaration",
                 "-Wno-builtin-declaration-mismatch"
             }
         })
+    end
+target_end()
+
+target("flash-attn-metax")
+    set_kind("phony")
+    set_default(false)
+
+    if FLASH_ATTN_ROOT and FLASH_ATTN_ROOT ~= "" then
+        before_build(function (target)
+            local TORCH_DIR = os.iorunv("python", {"-c", "import torch, os; print(os.path.dirname(torch.__file__))"}):trim()
+            local PYTHON_INCLUDE = os.iorunv("python", {"-c", "import sysconfig; print(sysconfig.get_paths()['include'])"}):trim()
+            local PYTHON_LIB_DIR = os.iorunv("python", {"-c", "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))"}):trim()
+
+            -- Validate build/runtime env in container and keep these paths available for downstream linking.
+            target:add("includedirs", TORCH_DIR .. "/include", TORCH_DIR .. "/include/torch/csrc/api/include", PYTHON_INCLUDE, {public = false})
+            target:add("linkdirs", TORCH_DIR .. "/lib", PYTHON_LIB_DIR, {public = false})
+        end)
+    else
+        before_build(function (target)
+            print("Flash Attention not available, skipping flash-attn-metax integration")
+        end)
     end
 target_end()
 

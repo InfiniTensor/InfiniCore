@@ -2,7 +2,12 @@
 #pragma once
 #include "aten_adaptor.hpp"
 
+// NVIDIA flash-attn-nvidia.so uses namespace flash. The pip/MetaX flash_attn_2_cuda extension
+// exports the same entry points at global scope (no namespace), matching FLASH_NAMESPACE builds
+// where the namespace is empty.
+#if !defined(ENABLE_METAX_API)
 namespace flash {
+#endif
 std::vector<at::Tensor>
 mha_fwd(at::Tensor &q,                            // batch_size x seqlen_q x num_heads x round_multiple(head_size, 8)
         const at::Tensor &k,                      // batch_size x seqlen_k x num_heads_k x round_multiple(head_size, 8)
@@ -39,7 +44,13 @@ mha_varlen_fwd(at::Tensor &q,                               // total_q x num_hea
                int window_size_right,
                const float softcap,
                const bool return_softmax,
-               std::optional<at::Generator> gen_);
+               std::optional<at::Generator> gen_
+#if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
+               // MetaX/Mars `flash_attn_2_cuda` (e.g. 2.6.x+mars) appends this argument vs upstream Dao-AILab flash-attn.
+               ,
+               std::optional<at::Tensor> &flash_attn_mars_ext_
+#endif
+    );
 
 std::vector<at::Tensor>
 mha_bwd(const at::Tensor &dout,                   // batch_size x seqlen_q x num_heads, x multiple_of(head_size_og, 8)
@@ -108,7 +119,15 @@ mha_fwd_kvcache(at::Tensor &q,                                     // batch_size
                 int window_size_right,
                 const float softcap,
                 bool is_rotary_interleaved, // if true, rotary combines indices 0 & 1, else indices 0 & rotary_dim / 2
-                int num_splits);
+                int num_splits
+#if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
+                // MetaX/Mars `flash_attn_2_cuda` (e.g. 2.6.x+mars) appends this argument vs upstream Dao-AILab flash-attn.
+                ,
+                std::optional<at::Tensor> &flash_attn_mars_ext_
+#endif
+    );
 
+#if !defined(ENABLE_METAX_API)
 } // namespace flash
+#endif
 #endif // ENABLE_FLASH_ATTN
