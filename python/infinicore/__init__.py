@@ -57,6 +57,11 @@ from infinicore.ops.binary_cross_entropy_with_logits import (
     binary_cross_entropy_with_logits,
 )
 from infinicore.ops.cdist import cdist
+from infinicore.ops.gla_attention import gla_attention
+from infinicore.ops.infllmv2_attention import infllmv2_varlen, infllmv2_kvcache
+from infinicore.ops.simple_gla_attention import simple_gla_attention
+from infinicore.ops.simple_gla_decode_step import simple_gla_decode_step
+from infinicore.ops.simple_gla_prefill import simple_gla_prefill
 from infinicore.ops.cross_entropy import cross_entropy
 from infinicore.ops.equal import equal
 from infinicore.ops.kv_caching import kv_caching
@@ -141,6 +146,12 @@ __all__ = [
     "attention",
     "binary_cross_entropy_with_logits",
     "cdist",
+    "gla_attention",
+    "infllmv2_varlen",
+    "infllmv2_kvcache",
+    "simple_gla_attention",
+    "simple_gla_decode_step",
+    "simple_gla_prefill",
     "kv_caching",
     "matmul",
     "equal",

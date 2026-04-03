@@ -16,6 +16,11 @@
 #include "ops/embedding.hpp"
 #include "ops/equal.hpp"
 #include "ops/flash_attention.hpp"
+#include "ops/gla_attention.hpp"
+#include "ops/infllmv2_attention.hpp"
+#include "ops/simple_gla_attention.hpp"
+#include "ops/simple_gla_decode_step.hpp"
+#include "ops/simple_gla_prefill.hpp"
 #include "ops/hardswish.hpp"
 #include "ops/hardtanh.hpp"
 #include "ops/kv_caching.hpp"
@@ -51,6 +56,11 @@ inline void bind(py::module &m) {
     bind_attention(m);
     bind_causal_softmax(m);
     bind_flash_attention(m);
+    bind_gla_attention(m);
+    bind_infllmv2_attention(m);
+    bind_simple_gla_attention(m);
+    bind_simple_gla_decode_step(m);
+    bind_simple_gla_prefill(m);
     bind_kv_caching(m);
     bind_linear(m);
     bind_matmul(m);

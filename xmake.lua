@@ -1,5 +1,8 @@
 add_rules("mode.debug", "mode.release")
-add_requires("boost", {configs = {stacktrace = true}})
+-- In CI/docker or non-interactive shells, run xmake with -y (e.g. xmake clean -y) to avoid hanging on package prompts.
+if is_mode("debug") then
+    add_requires("boost", {configs = {stacktrace = true}})
+end
 add_requires("pybind11")
 
 -- Define color codes
@@ -55,6 +58,10 @@ option_end()
 if has_config("nv-gpu") then
     add_defines("ENABLE_NVIDIA_API")
     includes("xmake/nvidia.lua")
+    -- Ensure CUDA toolkit headers (e.g. cuda_runtime_api.h) are visible to
+    -- C++ sources that include ATen CUDA wrappers like CUDAContextLight.h.
+    local cuda_dir = get_config("cuda") or os.getenv("CUDA_HOME") or os.getenv("CUDA_ROOT") or "/usr/local/cuda"
+    add_includedirs(path.join(cuda_dir, "include"), { public = true })
 end
 
 option("cudnn")
@@ -242,11 +249,23 @@ option_end()
 
 if has_config("aten") then
     add_defines("ENABLE_ATEN")
-    if get_config("flash-attn") ~= false then
+    -- Only enable FlashAttention integration when a non-empty path is provided.
+    local flash_attn_cfg = get_config("flash-attn")
+    if flash_attn_cfg ~= nil and flash_attn_cfg ~= "" and flash_attn_cfg ~= false then
         add_defines("ENABLE_FLASH_ATTN")
     end
 end
 
+-- InfLLM-V2 direct kernels (requires aten; link against infllmv2_cuda_impl .so)
+option("infllmv2")
+    set_default("")
+    set_showmenu(true)
+    set_description("Path to InfLLM-V2 build dir or .so. Enables ENABLE_INFLLMV2; requires aten.")
+option_end()
+
+if has_config("aten") and get_config("infllmv2") ~= "" then
+    add_defines("ENABLE_INFLLMV2")
+end
 
 -- cuda graph
 option("graph")
@@ -495,6 +514,25 @@ target("infinicore_cpp_api")
             )
         end
 
+        -- InfLLM-V2: link against .so (pass dir or full path; use linkdirs + -l:filename so NEEDED is set at runtime)
+        local infllmv2 = get_config("infllmv2")
+        if infllmv2 and infllmv2 ~= "" then
+            local so_path = infllmv2
+            if path.extension(infllmv2) ~= ".so" then
+                local found = os.files(path.join(infllmv2, "*.so"))
+                if found and #found > 0 then
+                    so_path = found[1]
+                end
+            end
+            if so_path and path.extension(so_path) == ".so" then
+                local abs = path.absolute(so_path)
+                local so_dir = path.directory(abs)
+                local so_name = path.filename(abs)
+                target:add("linkdirs", so_dir, { public = true })
+                target:add("ldflags", "-l:" .. so_name, { public = true })
+                target:add("ldflags", "-Wl,-rpath," .. so_dir, { public = true })
+            end
+        end
     end)
 
     -- Add InfiniCore C++ source files (needed for RoPE and other nn modules)
@@ -519,8 +557,8 @@ target("infinicore_cpp_api")
 target_end()
 
 target("_infinicore")
-    add_packages("boost")
     if is_mode("debug") then
+        add_packages("boost")
         add_defines("BOOST_STACKTRACE_USE_BACKTRACE")
         add_links("backtrace")
     else
@@ -544,6 +582,17 @@ target("_infinicore")
     add_files("src/infinicore/pybind11/**.cc")
 
     set_installdir("python/infinicore")
+    after_build(function (target)
+        -- Copy built .so to python/infinicore/lib/ so the package loads it (e.g. editable install / PYTHONPATH)
+        local targetfile = target:targetfile()
+        if targetfile and os.isfile(targetfile) then
+            local libdir = path.join(os.projectdir(), "python", "infinicore", "lib")
+            if not os.isdir(libdir) then
+                os.mkdir(libdir)
+            end
+            os.cp(targetfile, path.join(libdir, path.filename(targetfile)))
+        end
+    end)
 target_end()
 
 option("editable")

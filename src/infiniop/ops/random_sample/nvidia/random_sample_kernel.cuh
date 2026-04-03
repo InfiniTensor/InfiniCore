@@ -16,21 +16,10 @@ static cudaError argMax_(
     void *workspace_ptr,
     size_t &workspace_len,
     cudaStream_t stream) {
-#if CUDART_VERSION >= 11000 && !defined(ENABLE_QY_API) && !defined(ENABLE_HYGON_API)
-    // New interface: separate value and index outputs
-    T *max_value = &kv_pair->value;
-    int *max_index = &kv_pair->key;
-    return cub::DeviceReduce::ArgMax(
-        workspace_ptr, workspace_len,
-        logits, max_value, max_index, n,
-        stream);
-#else
-    // Old interface
     return cub::DeviceReduce::ArgMax(
         workspace_ptr, workspace_len,
         logits, kv_pair, n,
         stream);
-#endif
 }
 
 template <class Tval, class Tidx>

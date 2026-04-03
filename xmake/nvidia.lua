@@ -48,10 +48,10 @@ target("infiniop-nvidia")
             add_linkdirs(CUDNN_ROOT .. "\\lib\\x64")
         end
     else
-        add_cuflags("-Xcompiler=-Wall", "-Xcompiler=-Werror")
-        add_cuflags("-Xcompiler=-fPIC")
-        add_cuflags("--extended-lambda")
-        add_culdflags("-Xcompiler=-fPIC")
+        add_cuflags("-Xcompiler=-Wall", "-Xcompiler=-Werror", {force = true})
+        add_cuflags("-Xcompiler=-fPIC", {force = true})
+        add_cuflags("--extended-lambda", {force = true})
+        add_culdflags("-Xcompiler=-fPIC", {force = true})
         add_cxflags("-fPIC")
         add_cxxflags("-fPIC")
         add_cflags("-fPIC")
@@ -61,14 +61,17 @@ target("infiniop-nvidia")
         end
     end
 
-    add_cuflags("-Xcompiler=-Wno-error=deprecated-declarations", "-Xcompiler=-Wno-error=unused-function")
+    add_cuflags("-Xcompiler=-Wno-error=deprecated-declarations", "-Xcompiler=-Wno-error=unused-function", {force = true})
 
     local arch_opt = get_config("cuda_arch")
     if arch_opt and type(arch_opt) == "string" then
         for _, arch in ipairs(arch_opt:split(",")) do
             arch = arch:trim()
             local compute = arch:gsub("sm_", "compute_")
-            add_cuflags("-gencode=arch=" .. compute .. ",code=" .. arch)
+            local gencode = "-gencode=arch=" .. compute .. ",code=" .. arch
+            -- NVCC compile + device-link must both get gencode.
+            add_cuflags(gencode, {force = true})
+            add_culdflags(gencode, {force = true})
         end
     else
         add_cugencodes("native")
@@ -91,12 +94,26 @@ target("infinirt-nvidia")
     set_toolchains("cuda")
     add_links("cudart")
 
+    -- ensure we emit SASS for the desired arch (avoid PTX too new for driver)
+    local arch_opt2 = get_config("cuda_arch")
+    if arch_opt2 and type(arch_opt2) == "string" then
+        for _, arch in ipairs(arch_opt2:split(",")) do
+            arch = arch:trim()
+            local compute = arch:gsub("sm_", "compute_")
+            local gencode = "-gencode=arch=" .. compute .. ",code=" .. arch
+            add_cuflags(gencode, {force = true})
+            add_culdflags(gencode, {force = true})
+        end
+    else
+        add_cugencodes("native")
+    end
+
     if is_plat("windows") then
         add_cuflags("-Xcompiler=/utf-8", "--expt-relaxed-constexpr", "--allow-unsupported-compiler")
         add_cxxflags("/FS")
     else
-        add_cuflags("-Xcompiler=-fPIC")
-        add_culdflags("-Xcompiler=-fPIC")
+        add_cuflags("-Xcompiler=-fPIC", {force = true})
+        add_culdflags("-Xcompiler=-fPIC", {force = true})
         add_cxflags("-fPIC")
         add_cxxflags("-fPIC")
     end
@@ -115,8 +132,8 @@ target("infiniccl-nvidia")
         add_links("cudart")
 
         if not is_plat("windows") then
-            add_cuflags("-Xcompiler=-fPIC")
-            add_culdflags("-Xcompiler=-fPIC")
+            add_cuflags("-Xcompiler=-fPIC", {force = true})
+            add_culdflags("-Xcompiler=-fPIC", {force = true})
             add_cxflags("-fPIC")
             add_cxxflags("-fPIC")
 
@@ -173,7 +190,7 @@ target("flash-attn-nvidia")
         
         -- Compile options
         add_cxflags("-fPIC", {force = true})
-        add_cuflags("-Xcompiler=-fPIC")
+        add_cuflags("-Xcompiler=-fPIC", {force = true})
         add_cuflags("--forward-unknown-to-host-compiler --expt-relaxed-constexpr --use_fast_math", {force = true})
         set_values("cuda.rdc", false)
     else

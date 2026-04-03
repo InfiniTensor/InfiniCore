@@ -5,6 +5,8 @@
 #include "../cuda/embedding_kernel.cuh"
 #include "embedding_nvidia.cuh"
 #include <cuda_runtime.h>
+#include <cstdio>
+#include <cstdlib>
 
 template <typename T, typename IndexType>
 INFINIOP_CUDA_KERNEL embeddingKernel(
@@ -56,6 +58,14 @@ INFINIOP_CUDA_KERNEL embeddingKernel(
             } else {
                 // Fallback to scalar copy with __ldg
                 copyScalar<T, IndexType>(dst, src, embedding_dim);
+            }
+        } else {
+            // Important for correctness debugging:
+            // If indices are out of range, write zeros instead of leaving output
+            // uninitialized (which can manifest as NaNs in later layers).
+            T *dst = output + idx * embedding_dim;
+            for (size_t i = 0; i < embedding_dim; ++i) {
+                dst[i] = T(0);
             }
         }
     }
@@ -215,7 +225,20 @@ infiniStatus_t Descriptor::calculate(
     // Check for kernel launch errors
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
+        std::fprintf(stderr, "infiniopEmbedding launch failed: %s\n", cudaGetErrorString(err));
+        std::fflush(stderr);
         return INFINI_STATUS_INTERNAL_ERROR;
+    }
+
+    // Optional debug sync to surface runtime errors (misaligned, illegal access, etc.)
+    const char *debug_env = std::getenv("INFINIOP_DEBUG_EMBEDDING");
+    if (debug_env != nullptr && debug_env[0] != '\0' && debug_env[0] != '0') {
+        err = cudaStreamSynchronize(cuda_stream);
+        if (err != cudaSuccess) {
+            std::fprintf(stderr, "infiniopEmbedding stream sync failed: %s\n", cudaGetErrorString(err));
+            std::fflush(stderr);
+            return INFINI_STATUS_INTERNAL_ERROR;
+        }
     }
 
     return INFINI_STATUS_SUCCESS;
