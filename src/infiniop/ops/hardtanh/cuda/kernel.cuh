@@ -1,6 +1,15 @@
 #ifndef __HARDTANH_CUDA_H__
 #define __HARDTANH_CUDA_H__
 
+#if defined(ENABLE_METAX_API)
+#include <hcr/hc_runtime_api.h>
+#elif defined(__MACACC__)
+#include <maca_bfloat16.h>
+#include <maca_fp16.h>
+#else
+#include <cuda_bf16.h>
+#include <cuda_fp16.h>
+#endif
 #include <type_traits>
 
 namespace op::hardtanh::cuda {

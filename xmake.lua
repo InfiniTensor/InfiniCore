@@ -167,6 +167,8 @@ option_end()
 
 if has_config("metax-gpu") then
     add_defines("ENABLE_METAX_API")
+    -- Container torch build expects this for ATen headers on hpcc.
+    add_defines("USE_HPCC")
     if has_config("use-mc") then
         add_defines("ENABLE_METAX_MC_API")
     end
@@ -235,14 +237,14 @@ option_end()
 
 -- Flash-Attn
 option("flash-attn")
-    set_default("")
+    set_default(nil)
     set_showmenu(true)
     set_description("Path to flash-attention repo. If not set, flash-attention will not used.")
 option_end()
 
 if has_config("aten") then
     add_defines("ENABLE_ATEN")
-    if get_config("flash-attn") ~= false then
+    if get_config("flash-attn") and get_config("flash-attn") ~= "" then
         add_defines("ENABLE_FLASH_ATTN")
     end
 end
@@ -257,6 +259,7 @@ option_end()
 if has_config("graph") then
     add_defines("USE_INFINIRT_GRAPH")
 end
+
 
 -- InfiniCCL
 option("ccl")
@@ -460,24 +463,29 @@ target("infinicore_cpp_api")
     add_linkdirs(INFINI_ROOT.."/lib")
     add_links("infiniop", "infinirt", "infiniccl")
 
-    if get_config("flash-attn") ~= "" and get_config("flash-attn") ~= nil then
+    if get_config("flash-attn") and get_config("flash-attn") ~= "" then
         add_installfiles("(builddir)/$(plat)/$(arch)/$(mode)/flash-attn*.so", {prefixdir = "lib"})
         if has_config("nv-gpu") then
             add_deps("flash-attn-nvidia")
         end
-        if has_config("qy-gpu") then
-            add_deps("flash-attn-qy")
+        if has_config("metax-gpu") then
+            add_deps("flash-attn-metax")
         end
     end
 
-    if get_config("flash-attn") and get_config("flash-attn") ~= "" and has_config("qy-gpu") then
-        local flash_so_qy = _qy_flash_attn_cuda_so_path()
-        local flash_dir_qy = path.directory(flash_so_qy)
-        local flash_name_qy = path.filename(flash_so_qy)
+    -- MetaX: link pip-built flash_attn_2_cuda*.so.
+    -- The `.so` path resolver lives in `xmake/metax.lua` and reads:
+    -- - `FLASH_ATTN_2_CUDA_SO` (exact `.so` override)
+    -- - `FLASH_ATTN_METAX_CUDA_SO_CONTAINER` (override expected container path)
+    -- Path is fixed at target definition time (before_link sandbox has no os.iorunv in xmake 3.x).
+    if get_config("flash-attn") and get_config("flash-attn") ~= "" and has_config("metax-gpu") then
+        local flash_so_metax = _metax_flash_attn_cuda_so_path()
+        local flash_dir_metax = path.directory(flash_so_metax)
+        local flash_name_metax = path.filename(flash_so_metax)
         before_link(function (target)
             target:add(
                 "shflags",
-                "-Wl,--no-as-needed -L" .. flash_dir_qy .. " -l:" .. flash_name_qy .. " -Wl,-rpath," .. flash_dir_qy,
+                "-Wl,--no-as-needed -L" .. flash_dir_metax .. " -l:" .. flash_name_metax .. " -Wl,-rpath," .. flash_dir_metax,
                 {force = true}
             )
         end)

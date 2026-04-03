@@ -1,10 +1,22 @@
 #include "equal_metax.h"
 
 #include "../../../elementwise/metax/elementwise_metax.h"
-
-#include "../cuda/kernel.cuh"
+#include <type_traits>
 
 namespace op::equal::metax {
+
+struct EqualOp {
+    static constexpr size_t num_inputs = 2;
+
+    template <typename Tout, typename Tin0, typename Tin1>
+    __device__ __forceinline__ bool operator()(const Tin0 &a, const Tin1 &b) const {
+        if constexpr (std::is_same_v<Tin0, Tin1>) {
+            return static_cast<Tout>(a == b);
+        } else {
+            return false;
+        }
+    }
+};
 
 Descriptor::~Descriptor() = default;
 
@@ -50,17 +62,17 @@ infiniStatus_t Descriptor::calculate(
 
     switch (_dtype) {
     case INFINI_DTYPE_F16:
-        return _device_info->calculate<256, cuda::EqualOp, bool, half, half>(_info, workspace, output, inputs, stream);
+        return _device_info->calculate<256, EqualOp, bool, half, half>(_info, workspace, output, inputs, stream);
     case INFINI_DTYPE_BF16:
-        return _device_info->calculate<256, cuda::EqualOp, bool, cuda_bfloat16, cuda_bfloat16>(_info, workspace, output, inputs, stream);
+        return _device_info->calculate<256, EqualOp, bool, cuda_bfloat16, cuda_bfloat16>(_info, workspace, output, inputs, stream);
     case INFINI_DTYPE_F32:
-        return _device_info->calculate<256, cuda::EqualOp, bool, float, float>(_info, workspace, output, inputs, stream);
+        return _device_info->calculate<256, EqualOp, bool, float, float>(_info, workspace, output, inputs, stream);
     case INFINI_DTYPE_I32:
-        return _device_info->calculate<256, cuda::EqualOp, bool, int32_t, int32_t>(_info, workspace, output, inputs, stream);
+        return _device_info->calculate<256, EqualOp, bool, int32_t, int32_t>(_info, workspace, output, inputs, stream);
     case INFINI_DTYPE_I64:
-        return _device_info->calculate<256, cuda::EqualOp, bool, int64_t, int64_t>(_info, workspace, output, inputs, stream);
+        return _device_info->calculate<256, EqualOp, bool, int64_t, int64_t>(_info, workspace, output, inputs, stream);
     case INFINI_DTYPE_F64:
-        return _device_info->calculate<256, cuda::EqualOp, bool, double, double>(_info, workspace, output, inputs, stream);
+        return _device_info->calculate<256, EqualOp, bool, double, double>(_info, workspace, output, inputs, stream);
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
