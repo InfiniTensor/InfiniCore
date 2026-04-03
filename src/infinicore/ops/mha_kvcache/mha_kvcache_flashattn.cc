@@ -52,17 +52,22 @@ void run(void *planned_meta) {
 #endif
     auto *p = reinterpret_cast<PlannedMeta *>(planned_meta);
 
-    // FlashAttention kernels expect standard dense layout (contiguous last dimension).
+    // Paged KV caches must be contiguous for flash-attn; avoid extra copies for q/metadata when already dense.
     auto out_at = infinicore::adaptor::to_aten_tensor(p->out);
     const bool out_need_copy_back = !out_at.is_contiguous();
     auto out_tensor = out_need_copy_back ? out_at.contiguous() : out_at;
-    auto q = infinicore::adaptor::to_aten_tensor(p->q).contiguous();
+    auto q = infinicore::adaptor::to_aten_tensor(p->q);
+#if defined(ENABLE_NVIDIA_API)
+    auto k_cache = infinicore::adaptor::to_aten_tensor(p->k_cache);
+    auto v_cache = infinicore::adaptor::to_aten_tensor(p->v_cache);
+#elif defined(ENABLE_QY_API) || defined(ENABLE_METAX_API)
     auto k_cache = infinicore::adaptor::to_aten_tensor(p->k_cache).contiguous();
     auto v_cache = infinicore::adaptor::to_aten_tensor(p->v_cache).contiguous();
-    auto seqlens_k = std::optional<const at::Tensor>(infinicore::adaptor::to_aten_tensor(p->seqlens_k).contiguous());
-    auto block_table = std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(p->block_table).contiguous());
+#endif
+    auto seqlens_k = std::optional<const at::Tensor>(infinicore::adaptor::to_aten_tensor(p->seqlens_k));
+    auto block_table = std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(p->block_table));
     auto alibi_slopes = p->alibi_slopes
-                          ? std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(*p->alibi_slopes).contiguous())
+                          ? std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(*p->alibi_slopes))
                           : std::nullopt;
 
     std::optional<const at::Tensor> k_new = std::nullopt;
