@@ -67,21 +67,21 @@ struct VarlenFlashPrepared {
 
 VarlenFlashPrepared prepare_varlen_flash_tensors(PlannedMeta *p) {
     VarlenFlashPrepared t;
-    // FlashAttention kernels expect standard dense layout (contiguous last dimension).
-    t.q = infinicore::adaptor::to_aten_tensor(p->q).contiguous();
+    // Varlen flash-attn: keep k/v contiguous for dense/paged layout; avoid extra copies for q/metadata when already dense.
+    t.q = infinicore::adaptor::to_aten_tensor(p->q);
     t.k = infinicore::adaptor::to_aten_tensor(p->k).contiguous();
     t.v = infinicore::adaptor::to_aten_tensor(p->v).contiguous();
     t.out_at = infinicore::adaptor::to_aten_tensor(p->out);
     t.out_need_copy_back = !t.out_at.is_contiguous();
     t.out_work = t.out_need_copy_back ? t.out_at.contiguous() : t.out_at;
     t.out_opt = std::optional<at::Tensor>(t.out_work);
-    t.cu_seqlens_q = infinicore::adaptor::to_aten_tensor(p->cum_seqlens_q).contiguous();
-    t.cu_seqlens_kv = infinicore::adaptor::to_aten_tensor(p->cum_seqlens_k).contiguous();
-    t.block_table = std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(p->block_table).contiguous());
+    t.cu_seqlens_q = infinicore::adaptor::to_aten_tensor(p->cum_seqlens_q);
+    t.cu_seqlens_kv = infinicore::adaptor::to_aten_tensor(p->cum_seqlens_k);
+    t.block_table = std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(p->block_table));
     t.max_seqlen_q = p->max_seqlen_q;
     t.max_seqlen_k = p->max_seqlen_k;
     t.alibi_slopes = p->alibi_slopes
-                       ? std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(*p->alibi_slopes).contiguous())
+                       ? std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(*p->alibi_slopes))
                        : std::nullopt;
     t.scale = p->scale;
     return t;
@@ -107,53 +107,34 @@ void run_flashattn_varlen_metax(PlannedMeta *p) {
     // depending on the HPCC/MetaX stack version.
 #if defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
     std::optional<at::Tensor> flash_attn_mars_ext = std::nullopt;
-    ::mha_varlen_fwd(
-        t.q,
-        t.k,
-        t.v,
-        t.out_opt,
-        t.cu_seqlens_q,
-        t.cu_seqlens_kv,
-        seqused_k,
-        leftpad_k,
-        t.block_table,
-        t.alibi_slopes,
-        t.max_seqlen_q,
-        t.max_seqlen_k,
-        0.0,
-        t.scale,
-        false,
-        true,
-        -1,
-        -1,
-        0.0,
-        false,
-        std::nullopt,
-        flash_attn_mars_ext);
-#else
-    ::mha_varlen_fwd(
-        t.q,
-        t.k,
-        t.v,
-        t.out_opt,
-        t.cu_seqlens_q,
-        t.cu_seqlens_kv,
-        seqused_k,
-        leftpad_k,
-        t.block_table,
-        t.alibi_slopes,
-        t.max_seqlen_q,
-        t.max_seqlen_k,
-        0.0,
-        t.scale,
-        false,
-        true,
-        -1,
-        -1,
-        0.0,
-        false,
-        std::nullopt);
 #endif
+    ::mha_varlen_fwd(
+        t.q,
+        t.k,
+        t.v,
+        t.out_opt,
+        t.cu_seqlens_q,
+        t.cu_seqlens_kv,
+        seqused_k,
+        leftpad_k,
+        t.block_table,
+        t.alibi_slopes,
+        t.max_seqlen_q,
+        t.max_seqlen_k,
+        0.0,
+        t.scale,
+        false,
+        true,
+        -1,
+        -1,
+        0.0,
+        false,
+        std::nullopt
+#if defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
+        ,
+        flash_attn_mars_ext
+#endif
+    );
     copy_varlen_flash_output_back(t);
 }
 #endif
