@@ -7,6 +7,7 @@
 
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
 #include <c10/cuda/CUDAStream.h>
+#include <c10/cuda/CUDAGuard.h>
 #endif
 
 #ifdef ENABLE_NVIDIA_API

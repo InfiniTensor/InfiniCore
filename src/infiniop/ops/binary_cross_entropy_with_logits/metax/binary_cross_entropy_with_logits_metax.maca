@@ -1,8 +1,9 @@
 #include "../../../devices/metax/metax_common.h"
 #include "../../../devices/metax/metax_handle.h"
 #include "../../../devices/metax/metax_kernel_common.h"
+
 #include "binary_cross_entropy_with_logits_metax.h"
-#include <hc_runtime.h>
+
 #include <type_traits>
 
 namespace op::bce_with_logits::metax {

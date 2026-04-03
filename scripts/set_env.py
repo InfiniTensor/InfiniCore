@@ -2,25 +2,15 @@ import os
 import platform
 
 
-def _maca_root_from_env():
-    return (
-        os.environ.get("MACA_PATH")
-        or os.environ.get("MACA_HOME")
-        or os.environ.get("MACA_ROOT")
-        or ""
-    ).strip()
-
-
-def metax_hpc_compiler_include_dirs():
-    """Directories needed so g++ finds cuda_runtime_api.h (cu-bridge) when compiling against PyTorch c10/cuda headers on MetaX/HPCC."""
-    maca = _maca_root_from_env()
-    if not maca:
-        return []
-    return [
-        os.path.join(maca, "tools", "cu-bridge", "include"),
-        os.path.join(maca, "include", "hcr"),
-        os.path.join(maca, "include"),
-    ]
+def _hpcc_toolkit_root() -> str:
+    """HPCC/MACA install root (cu-bridge, headers). Env vars first; else common container path."""
+    for key in ("MACA_PATH", "MACA_HOME", "MACA_ROOT"):
+        v = os.environ.get(key, "").strip()
+        if v:
+            return v
+    if os.path.isdir("/opt/hpcc"):
+        return "/opt/hpcc"
+    return ""
 
 
 def _prepend_path_var(name, prefixes):
@@ -32,14 +22,16 @@ def _prepend_path_var(name, prefixes):
     os.environ[name] = f"{chunk}:{cur}" if cur else chunk
 
 
-def ensure_metax_hpc_compiler_includes():
-    """
-    Prepend HPCC/cu-bridge includes to CPATH, CPLUS_INCLUDE_PATH, and C_INCLUDE_PATH.
-    g++ uses CPLUS_INCLUDE_PATH for .cc files; C_INCLUDE_PATH alone is not enough.
-    """
-    dirs = metax_hpc_compiler_include_dirs()
-    if not dirs:
+def ensure_aten_torch_compiler_includes() -> None:
+    """If HPCC root is known, prepend cu-bridge + HPCC headers for g++ compiling ATen .cc (c10/cuda)."""
+    root = _hpcc_toolkit_root()
+    if not root:
         return
+    dirs = [
+        os.path.join(root, "tools", "cu-bridge", "include"),
+        os.path.join(root, "include", "hcr"),
+        os.path.join(root, "include"),
+    ]
     for var in ("CPATH", "CPLUS_INCLUDE_PATH", "C_INCLUDE_PATH"):
         _prepend_path_var(var, dirs)
 
@@ -69,12 +61,20 @@ def _truthy_flag_value(v: str) -> bool:
     return v in ("y", "yes", "true", "1", "on")
 
 
-def xmake_flags_need_metax_aten_torch_includes(flags: str) -> bool:
-    """True when install.py-style args enable MetaX GPU and ATen (PyTorch) together."""
+# xmake.lua GPU / accelerator backends (any of these + aten may compile C++ against torch+cuda-style headers).
+_XMAKE_GPU_BACKEND_KEYS = frozenset(
+    {
+        "metax-gpu",
+    }
+)
+
+
+def xmake_flags_need_aten_torch_compiler_includes(flags: str) -> bool:
+    """True when ATen is enabled with any GPU/accelerator backend (install.py / xmake f ...)."""
     d = _parse_xmake_cli_flag_values(flags)
-    return _truthy_flag_value(d.get("metax-gpu", "n")) and _truthy_flag_value(
-        d.get("aten", "n")
-    )
+    if not _truthy_flag_value(d.get("aten", "n")):
+        return False
+    return any(_truthy_flag_value(d.get(k, "n")) for k in _XMAKE_GPU_BACKEND_KEYS)
 
 
 def set_env():

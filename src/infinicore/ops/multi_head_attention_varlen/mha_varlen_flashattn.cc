@@ -81,8 +81,8 @@ VarlenFlashPrepared prepare_varlen_flash_tensors(PlannedMeta *p) {
     t.max_seqlen_q = p->max_seqlen_q;
     t.max_seqlen_k = p->max_seqlen_k;
     t.alibi_slopes = p->alibi_slopes
-                         ? std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(*p->alibi_slopes).contiguous())
-                         : std::nullopt;
+                       ? std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(*p->alibi_slopes).contiguous())
+                       : std::nullopt;
     t.scale = p->scale;
     return t;
 }
