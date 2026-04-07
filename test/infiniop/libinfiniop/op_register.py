@@ -13,6 +13,7 @@ from ctypes import (
     c_double,
     c_int64,
     c_bool,
+    c_int64,
 )
 
 
@@ -1312,6 +1313,45 @@ def per_tensor_dequant_int8_(lib):
         infiniopOperatorDescriptor_t,
     ]
 
+
+@OpRegister.operator
+def gptq_qyblas_gemm_(lib):
+    lib.infiniopCreateGptqQyblasGemmDescriptor.restype = c_int32
+    lib.infiniopCreateGptqQyblasGemmDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetGptqQyblasGemmWorkspaceSize.restype = c_int32
+    lib.infiniopGetGptqQyblasGemmWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopGptqQyblasGemm.restype = c_int32
+    lib.infiniopGptqQyblasGemm.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_int64,
+        c_int64,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyGptqQyblasGemmDescriptor.restype = c_int32
+    lib.infiniopDestroyGptqQyblasGemmDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
 
 @OpRegister.operator
 def softplus_(lib):
