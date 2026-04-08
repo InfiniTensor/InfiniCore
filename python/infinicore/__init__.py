@@ -90,6 +90,7 @@ from infinicore.ops.fmod import fmod
 from infinicore.ops.hypot import hypot
 from infinicore.ops.index_add import index_add
 from infinicore.ops.index_copy import index_copy
+from infinicore.ops.infllmv2_attention import infllmv2_kvcache, infllmv2_varlen
 from infinicore.ops.inner import inner
 from infinicore.ops.kron import kron
 from infinicore.ops.kthvalue import kthvalue
@@ -121,6 +122,9 @@ from infinicore.ops.rotmg import rotmg
 from infinicore.ops.scal import scal
 from infinicore.ops.scatter import scatter
 from infinicore.ops.sinh import sinh
+from infinicore.ops.simple_gla_attention import simple_gla_attention
+from infinicore.ops.simple_gla_decode_step import simple_gla_decode_step
+from infinicore.ops.simple_gla_prefill import simple_gla_prefill
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.sum import sum
 from infinicore.ops.swap import swap
@@ -211,6 +215,11 @@ __all__ = [
     "block_diag",
     "kron",
     "bitwise_right_shift",
+    "infllmv2_varlen",
+    "infllmv2_kvcache",
+    "simple_gla_attention",
+    "simple_gla_decode_step",
+    "simple_gla_prefill",
     "kv_caching",
     "asinh",
     "baddbmm",
