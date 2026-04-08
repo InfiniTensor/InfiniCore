@@ -6,7 +6,7 @@
 
 namespace op::asinh::nvidia {
 
-ELEMENTWISE_NVIDIA_IMPL_UNARY(asinh)
+Descriptor::~Descriptor() = default;
 
 infiniStatus_t Descriptor::create(
     infiniopHandle_t handle_,

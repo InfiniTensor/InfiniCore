@@ -3,7 +3,7 @@
 
 namespace op::atanh::cpu {
 
-ELEMENTWISE_CPU_IMPL_UNARY(atanh)
+Descriptor::~Descriptor() = default;
 
 infiniStatus_t Descriptor::create(
     infiniopHandle_t handle_,

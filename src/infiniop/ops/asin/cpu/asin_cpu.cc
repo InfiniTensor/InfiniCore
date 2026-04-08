@@ -3,7 +3,7 @@
 
 namespace op::asin::cpu {
 
-ELEMENTWISE_CPU_IMPL_UNARY(asin)
+Descriptor::~Descriptor() = default;
 
 infiniStatus_t Descriptor::create(
     infiniopHandle_t handle_,

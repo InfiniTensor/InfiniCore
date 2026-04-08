@@ -3,7 +3,7 @@
 
 namespace op::tan::cpu {
 
-ELEMENTWISE_CPU_IMPL_UNARY(tan)
+Descriptor::~Descriptor() = default;
 
 infiniStatus_t Descriptor::create(
     infiniopHandle_t handle_,

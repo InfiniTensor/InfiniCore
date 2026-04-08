@@ -3,7 +3,7 @@
 
 namespace op::acos::cpu {
 
-ELEMENTWISE_CPU_IMPL_UNARY(acos)
+Descriptor::~Descriptor() = default;
 
 infiniStatus_t Descriptor::create(
     infiniopHandle_t handle_,
