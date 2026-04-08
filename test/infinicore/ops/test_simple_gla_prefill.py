@@ -16,10 +16,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
 
-from infllmv2_loader import preload_infllmv2_if_available
-
-preload_infllmv2_if_available()
-
 import infinicore
 
 from framework import (
@@ -153,4 +149,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
