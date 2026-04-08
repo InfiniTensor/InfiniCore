@@ -575,9 +575,11 @@ target("infinicore_cpp_api")
             local abs = path.absolute(resolved_infllmv2)
             local so_dir = path.directory(abs)
             local so_name = path.filename(abs)
-            target:add("linkdirs", so_dir, { public = true })
-            target:add("ldflags", "-l:" .. so_name, { public = true })
-            target:add("ldflags", "-Wl,-rpath," .. so_dir, { public = true })
+            -- IMPORTANT: ensure `infinicore_cpp_api` gets a DT_NEEDED on infllm_v2 .so.
+            -- Using `shflags` (not `ldflags`) and `--no-as-needed` avoids the linker
+            -- dropping the dependency and leaving runtime undefined symbols
+            -- (e.g. `mha_varlen_fwd`) that would otherwise require LD_PRELOAD/ctypes preload.
+            target:add("shflags", "-Wl,--no-as-needed -L" .. so_dir .. " -l:" .. so_name .. " -Wl,-rpath," .. so_dir, { public = true })
         end
     end)
 
