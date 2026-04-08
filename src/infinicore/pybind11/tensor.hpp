@@ -1,5 +1,7 @@
 #pragma once
 
+#include <cstdint>
+
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
 
@@ -36,7 +38,43 @@ inline void bind(py::module &m) {
         .def("permute", [](const Tensor &tensor, const Shape &dims) { return tensor->permute(dims); })
         .def("view", [](const Tensor &tensor, const Shape &shape) { return tensor->view(shape); })
         .def("unsqueeze", [](const Tensor &tensor, std::size_t dim) { return tensor->unsqueeze(dim); })
-        .def("squeeze", [](const Tensor &tensor, std::size_t dim) { return tensor->squeeze(dim); });
+        .def("squeeze", [](const Tensor &tensor, std::size_t dim) { return tensor->squeeze(dim); })
+
+        // Fast in-place scalar writes for tiny CPU metadata tensors (decode loops, etc.).
+        .def(
+            "write_i32",
+            [](Tensor &tensor, std::size_t linear_index, std::int32_t value) {
+                if (tensor->dtype() != DataType::I32) {
+                    throw py::value_error("write_i32: dtype must be I32");
+                }
+                if (!tensor->is_contiguous()) {
+                    throw py::value_error("write_i32: tensor must be contiguous");
+                }
+                if (linear_index >= static_cast<std::size_t>(tensor->numel())) {
+                    throw py::index_error("write_i32: linear_index out of range");
+                }
+                auto *base = reinterpret_cast<std::int32_t *>(tensor->data());
+                base[linear_index] = value;
+            },
+            py::arg("linear_index"),
+            py::arg("value"))
+        .def(
+            "write_i64",
+            [](Tensor &tensor, std::size_t linear_index, std::int64_t value) {
+                if (tensor->dtype() != DataType::I64) {
+                    throw py::value_error("write_i64: dtype must be I64");
+                }
+                if (!tensor->is_contiguous()) {
+                    throw py::value_error("write_i64: tensor must be contiguous");
+                }
+                if (linear_index >= static_cast<std::size_t>(tensor->numel())) {
+                    throw py::index_error("write_i64: linear_index out of range");
+                }
+                auto *base = reinterpret_cast<std::int64_t *>(tensor->data());
+                base[linear_index] = value;
+            },
+            py::arg("linear_index"),
+            py::arg("value"));
 
     m.def("empty", &Tensor::empty,
           py::arg("shape"),

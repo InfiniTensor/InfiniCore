@@ -5,6 +5,7 @@
 #include "../../utils.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <infinirt.h>
 #include <stdexcept>
 
@@ -72,6 +73,13 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
             block->frozen = pinned_mode_;
             block->in_use = true;
 
+            if (std::getenv("INFINICORE_DEBUG_ALLOC") != nullptr) {
+                infiniDevice_t dev;
+                int dev_id;
+                infinirtGetDevice(&dev, &dev_id);
+                spdlog::warn("PinnableBlockAllocator cudaMalloc request: requested={} aligned={} class={} device={} id={}",
+                             size, size, cls.block_size, static_cast<int>(dev), dev_id);
+            }
             INFINICORE_CHECK_ERROR(infinirtMalloc(&block->ptr, block->size));
 
             all_blocks_[block->ptr] = block;
@@ -97,6 +105,13 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
     block->frozen = pinned_mode_;
     block->in_use = true;
 
+    if (std::getenv("INFINICORE_DEBUG_ALLOC") != nullptr) {
+        infiniDevice_t dev;
+        int dev_id;
+        infinirtGetDevice(&dev, &dev_id);
+        spdlog::warn("PinnableBlockAllocator cudaMalloc request (large): requested={} aligned={} device={} id={}",
+                     size, size, static_cast<int>(dev), dev_id);
+    }
     INFINICORE_CHECK_ERROR(infinirtMalloc(&block->ptr, block->size));
 
     large_blocks_.push_back(block);

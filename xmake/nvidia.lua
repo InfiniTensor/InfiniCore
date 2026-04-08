@@ -68,7 +68,10 @@ target("infiniop-nvidia")
         for _, arch in ipairs(arch_opt:split(",")) do
             arch = arch:trim()
             local compute = arch:gsub("sm_", "compute_")
-            add_cuflags("-gencode=arch=" .. compute .. ",code=" .. arch)
+            local gencode = "-gencode=arch=" .. compute .. ",code=" .. arch
+            -- NVCC compile + device-link must both get gencode.
+            add_cuflags(gencode, {force = true})
+            add_culdflags(gencode, {force = true})
         end
     else
         add_cugencodes("native")
@@ -151,7 +154,7 @@ target("flash-attn-nvidia")
             local PYTHON_INCLUDE = os.iorunv("python", {"-c", "import sysconfig; print(sysconfig.get_paths()['include'])"}):trim()
             local PYTHON_LIB_DIR = os.iorunv("python", {"-c", "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))"}):trim()
             local LIB_PYTHON = os.iorunv("python", {"-c", "import glob,sysconfig,os;print(glob.glob(os.path.join(sysconfig.get_config_var('LIBDIR'),'libpython*.so'))[0])"}):trim()
-            
+
             -- Include dirs (needed for both device and host)
             target:add("includedirs", FLASH_ATTN_ROOT .. "/csrc/flash_attn/src", {public = false})
             target:add("includedirs", TORCH_DIR .. "/include/torch/csrc/api/include", {public = false})
@@ -167,14 +170,14 @@ target("flash-attn-nvidia")
 
         add_files(FLASH_ATTN_ROOT .. "/csrc/flash_attn/flash_api.cpp")
         add_files(FLASH_ATTN_ROOT .. "/csrc/flash_attn/src/*.cu")
-        
+
         -- Link options
-        add_ldflags("-Wl,--no-undefined", {force = true})
-        
+        add_ldflags("-Wl,--no-undefined")
+
         -- Compile options
-        add_cxflags("-fPIC", {force = true})
+        add_cxflags("-fPIC")
         add_cuflags("-Xcompiler=-fPIC")
-        add_cuflags("--forward-unknown-to-host-compiler --expt-relaxed-constexpr --use_fast_math", {force = true})
+        add_cuflags("--forward-unknown-to-host-compiler --expt-relaxed-constexpr --use_fast_math")
         set_values("cuda.rdc", false)
     else
         -- If flash-attn is not available, just create an empty target

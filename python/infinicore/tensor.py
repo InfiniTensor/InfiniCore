@@ -80,6 +80,14 @@ class Tensor:
     def copy_(self, src):
         self._underlying.copy_(src._underlying)
 
+    def write_i32(self, linear_index, value):
+        """Write one int32 element at a contiguous linear index (metadata fast path)."""
+        self._underlying.write_i32(linear_index, int(value))
+
+    def write_i64(self, linear_index, value):
+        """Write one int64 element at a contiguous linear index (metadata fast path)."""
+        self._underlying.write_i64(linear_index, int(value))
+
     def to(self, *args, **kwargs):
         return Tensor(
             self._underlying.to(*tuple(arg._underlying for arg in args), **kwargs)

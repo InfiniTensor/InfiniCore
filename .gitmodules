@@ -5,3 +5,7 @@
 	path = third_party/nlohmann_json
 	url = https://github.com/nlohmann/json.git
 	branch = master
+[submodule "third_party/infllmv2_cuda_impl"]
+	path = third_party/infllmv2_cuda_impl
+	url = https://github.com/Ceng23333/infllmv2_cuda_impl.git
+	branch = minicpm_sala_patches
