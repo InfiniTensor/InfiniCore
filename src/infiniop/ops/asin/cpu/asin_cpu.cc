@@ -1,4 +1,5 @@
 #include "asin_cpu.h"
+#include "../../../elementwise/cpu/elementwise_cpu_impl.h"
 
 namespace op::asin::cpu {
 

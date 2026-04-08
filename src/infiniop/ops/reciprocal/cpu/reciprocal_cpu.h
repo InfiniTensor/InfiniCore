@@ -2,6 +2,7 @@
 #define __RECIPROCAL_CPU_H__
 
 #include "../../../elementwise/cpu/elementwise_cpu.h"
+#include "../../../elementwise/unary.h"
 
 ELEMENTWISE_DESCRIPTOR(reciprocal, cpu)
 

@@ -1,4 +1,4 @@
-#include "../../../elementwise/nvidia/elementwise_nvidia.cuh"
+#include "../../../elementwise/nvidia/elementwise_nvidia_impl.cuh"
 
 #include "../cuda/kernel.cuh"
 #include "acos_nvidia.cuh"

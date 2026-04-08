@@ -1,6 +1,5 @@
-#include "../../operator.h"
-#include "../../handle.h"
-#include "infiniop/ops/asin.h"
+#include "../../operator_impl.h"
+#include "infiniop/ops/unary_ops_api.h"
 
 #ifdef ENABLE_CPU_API
 #include "cpu/asin_cpu.h"

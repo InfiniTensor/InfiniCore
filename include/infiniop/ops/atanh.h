@@ -1,7 +1,7 @@
 #ifndef __INFINIOP_Atanh_API_H__
 #define __INFINIOP_Atanh_API_H__
 
-#include "../operator_descriptor.h"
+#include "unary_op_api.h"
 
 typedef struct InfiniopDescriptor *infiniopAtanhDescriptor_t;
 
