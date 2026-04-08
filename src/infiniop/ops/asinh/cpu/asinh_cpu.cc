@@ -3,7 +3,7 @@
 
 namespace op::asinh::cpu {
 
-ELEMENTWISE_CPU_IMPL_UNARY(asinh)
+Descriptor::~Descriptor() = default;
 
 infiniStatus_t Descriptor::create(
     infiniopHandle_t handle_,
@@ -36,13 +36,13 @@ infiniStatus_t Descriptor::calculate(
 
     switch (_dtype) {
     case INFINI_DTYPE_F16:
-        return _device_info->calculate<AsinhOp, fp16_t>(_info, output, inputs, stream);
+        return _device_info->calculate<Op, fp16_t>(_info, output, inputs, stream);
     case INFINI_DTYPE_F32:
-        return _device_info->calculate<AsinhOp, float>(_info, output, inputs, stream);
+        return _device_info->calculate<Op, float>(_info, output, inputs, stream);
     case INFINI_DTYPE_F64:
-        return _device_info->calculate<AsinhOp, double>(_info, output, inputs, stream);
+        return _device_info->calculate<Op, double>(_info, output, inputs, stream);
     case INFINI_DTYPE_BF16:
-        return _device_info->calculate<AsinhOp, bf16_t>(_info, output, inputs, stream);
+        return _device_info->calculate<Op, bf16_t>(_info, output, inputs, stream);
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }

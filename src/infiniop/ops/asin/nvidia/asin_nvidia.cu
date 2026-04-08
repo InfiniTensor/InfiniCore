@@ -5,7 +5,7 @@
 
 namespace op::asin::nvidia {
 
-ELEMENTWISE_NVIDIA_IMPL_UNARY(asin)
+Descriptor::~Descriptor() = default;
 
 infiniStatus_t
 Descriptor::create(infiniopHandle_t handle_, Descriptor **desc_ptr,

@@ -5,7 +5,7 @@
 
 namespace op::reciprocal::nvidia {
 
-ELEMENTWISE_NVIDIA_IMPL_UNARY(reciprocal)
+Descriptor::~Descriptor() = default;
 
 infiniStatus_t Descriptor::create(
     infiniopHandle_t handle_,

@@ -5,7 +5,7 @@
 
 namespace op::tan::nvidia {
 
-ELEMENTWISE_NVIDIA_IMPL_UNARY(tan)
+Descriptor::~Descriptor() = default;
 
 infiniStatus_t Descriptor::create(
     infiniopHandle_t handle_,

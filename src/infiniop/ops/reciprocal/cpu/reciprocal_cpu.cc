@@ -3,7 +3,7 @@
 
 namespace op::reciprocal::cpu {
 
-ELEMENTWISE_CPU_IMPL_UNARY(reciprocal)
+Descriptor::~Descriptor() = default;
 
 infiniStatus_t Descriptor::create(
     infiniopHandle_t handle_,

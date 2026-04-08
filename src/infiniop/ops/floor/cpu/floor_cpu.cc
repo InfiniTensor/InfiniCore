@@ -5,7 +5,7 @@
 // 【修改点 2】命名空间必须是 floor，否则 operator.cc 找不到定义
 namespace op::floor::cpu {
 
-ELEMENTWISE_CPU_IMPL_UNARY(floor)
+Descriptor::~Descriptor() = default;
 
 infiniStatus_t Descriptor::create(
     infiniopHandle_t handle_,
