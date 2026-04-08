@@ -125,7 +125,7 @@
     BINARY_OP_IMPL_DESTROY_CASE(OP_NAME, MOORE, moore)
 
 #define BINARY_OP_IMPL(OP_NAME, OP_NAME_UPPER)                           \
-    __C infiniStatus_t infiniopCreate##OP_NAME_UPPER##Descriptor(        \
+    __INFINI_C infiniStatus_t infiniopCreate##OP_NAME_UPPER##Descriptor(        \
         infiniopHandle_t handle,                                         \
         infiniop##OP_NAME_UPPER##Descriptor_t *desc_ptr,                 \
         infiniopTensorDescriptor_t c_desc,                               \
@@ -137,7 +137,7 @@
             return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;              \
         }                                                                \
     }                                                                    \
-    __C infiniStatus_t infiniopGet##OP_NAME_UPPER##WorkspaceSize(        \
+    __INFINI_C infiniStatus_t infiniopGet##OP_NAME_UPPER##WorkspaceSize(        \
         infiniop##OP_NAME_UPPER##Descriptor_t desc,                      \
         size_t *size) {                                                  \
         switch (desc->device_type) {                                     \
@@ -147,7 +147,7 @@
         }                                                                \
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;                  \
     }                                                                    \
-    __C infiniStatus_t infiniop##OP_NAME_UPPER(                          \
+    __INFINI_C infiniStatus_t infiniop##OP_NAME_UPPER(                          \
         infiniop##OP_NAME_UPPER##Descriptor_t desc,                      \
         void *workspace,                                                 \
         size_t workspace_size,                                           \
@@ -161,7 +161,7 @@
             return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;              \
         }                                                                \
     }                                                                    \
-    __C infiniStatus_t infiniopDestroy##OP_NAME_UPPER##Descriptor(       \
+    __INFINI_C infiniStatus_t infiniopDestroy##OP_NAME_UPPER##Descriptor(       \
         infiniop##OP_NAME_UPPER##Descriptor_t desc) {                    \
         switch (desc->device_type) {                                     \
             BINARY_OP_IMPL_DESTROY_CASES(OP_NAME)                        \
@@ -242,7 +242,7 @@
     UNARY_OP_IMPL_DESTROY_CASE(OP_NAME, MOORE, moore)
 
 #define UNARY_OP_IMPL(OP_NAME, OP_NAME_UPPER)                      \
-    __C infiniStatus_t infiniopCreate##OP_NAME_UPPER##Descriptor(  \
+    __INFINI_C infiniStatus_t infiniopCreate##OP_NAME_UPPER##Descriptor(  \
         infiniopHandle_t handle,                                   \
         infiniop##OP_NAME_UPPER##Descriptor_t *desc_ptr,           \
         infiniopTensorDescriptor_t y_desc,                         \
@@ -253,7 +253,7 @@
             return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;        \
         }                                                          \
     }                                                              \
-    __C infiniStatus_t infiniopGet##OP_NAME_UPPER##WorkspaceSize(  \
+    __INFINI_C infiniStatus_t infiniopGet##OP_NAME_UPPER##WorkspaceSize(  \
         infiniop##OP_NAME_UPPER##Descriptor_t desc,                \
         size_t *size) {                                            \
         switch (desc->device_type) {                               \
@@ -263,7 +263,7 @@
         }                                                          \
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;            \
     }                                                              \
-    __C infiniStatus_t infiniop##OP_NAME_UPPER(                    \
+    __INFINI_C infiniStatus_t infiniop##OP_NAME_UPPER(                    \
         infiniop##OP_NAME_UPPER##Descriptor_t desc,                \
         void *workspace,                                           \
         size_t workspace_size,                                     \
@@ -276,7 +276,7 @@
             return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;        \
         }                                                          \
     }                                                              \
-    __C infiniStatus_t infiniopDestroy##OP_NAME_UPPER##Descriptor( \
+    __INFINI_C infiniStatus_t infiniopDestroy##OP_NAME_UPPER##Descriptor( \
         infiniop##OP_NAME_UPPER##Descriptor_t desc) {              \
         switch (desc->device_type) {                               \
             UNARY_OP_IMPL_DESTROY_CASES(OP_NAME)                   \

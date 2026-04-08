@@ -24,17 +24,17 @@
                                                                               \
     typedef struct InfiniopDescriptor *infiniop##OP_NAME_UPPER##Descriptor_t; \
                                                                               \
-    __C __export infiniStatus_t infiniopCreate##OP_NAME_UPPER##Descriptor(  \
+    __INFINI_C __export infiniStatus_t infiniopCreate##OP_NAME_UPPER##Descriptor(  \
         infiniopHandle_t handle,                                             \
         infiniop##OP_NAME_UPPER##Descriptor_t *desc_ptr,                    \
         infiniopTensorDescriptor_t y,                                         \
         infiniopTensorDescriptor_t x);                                        \
                                                                               \
-    __C __export infiniStatus_t infiniopGet##OP_NAME_UPPER##WorkspaceSize(  \
+    __INFINI_C __export infiniStatus_t infiniopGet##OP_NAME_UPPER##WorkspaceSize(  \
         infiniop##OP_NAME_UPPER##Descriptor_t desc,                         \
         size_t *size);                                                        \
                                                                               \
-    __C __export infiniStatus_t infiniop##OP_NAME_UPPER(                    \
+    __INFINI_C __export infiniStatus_t infiniop##OP_NAME_UPPER(                    \
         infiniop##OP_NAME_UPPER##Descriptor_t desc,                         \
         void *workspace,                                                     \
         size_t workspace_size,                                               \
@@ -42,7 +42,7 @@
         const void *x,                                                       \
         void *stream);                                                        \
                                                                               \
-    __C __export infiniStatus_t infiniopDestroy##OP_NAME_UPPER##Descriptor( \
+    __INFINI_C __export infiniStatus_t infiniopDestroy##OP_NAME_UPPER##Descriptor( \
         infiniop##OP_NAME_UPPER##Descriptor_t desc);
 
 #endif // __INFINIOP_UNARY_OP_API_H__
