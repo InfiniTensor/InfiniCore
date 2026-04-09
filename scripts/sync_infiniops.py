@@ -78,7 +78,11 @@ def sync_operator(op_name, generated_dir, dry_run=False, verbose=False):
     gen_header = generated_dir / "include" / f"{op_name}.h"
     gen_source = generated_dir / "src" / op_name / "operator.cc"
     dst_header = INFINICORE_INCLUDE_OPS / f"{op_name}.h"
-    dst_source = INFINICORE_SRC_OPS / op_name / "operator.cc"
+    # Use .cu extension so NVIDIA builds compile with nvcc (InfiniOps NVIDIA
+    # headers include .cuh files that require CUDA compilation).
+    dst_source = INFINICORE_SRC_OPS / op_name / "operator.cu"
+    # Remove old .cc to prevent duplicate definitions.
+    old_cc = INFINICORE_SRC_OPS / op_name / "operator.cc"
 
     if not gen_header.exists():
         print(f"  Warning: generated header not found: {gen_header}", file=sys.stderr)
@@ -97,7 +101,7 @@ def sync_operator(op_name, generated_dir, dry_run=False, verbose=False):
 
     if verbose or dry_run:
         header_label = f"include/infiniop/ops/{op_name}.h"
-        source_label = f"src/infiniop/ops/{op_name}/operator.cc"
+        source_label = f"src/infiniop/ops/{op_name}/operator.cu"
         header_changed = show_diff(dst_header, new_header, header_label)
         source_changed = show_diff(dst_source, new_source, source_label)
 
@@ -113,14 +117,18 @@ def sync_operator(op_name, generated_dir, dry_run=False, verbose=False):
 
     shutil.copy2(gen_header, dst_header)
     shutil.copy2(gen_source, dst_source)
+
+    if old_cc.exists():
+        old_cc.unlink()
+
     print(f"  {op_name}: synced")
 
     return True
 
 
 def verify_compilation(op_name, infiniops_root):
-    """Syntax-check the replaced `operator.cc` compiles with the right include paths."""
-    source = INFINICORE_SRC_OPS / op_name / "operator.cc"
+    """Syntax-check the replaced `operator.cu` compiles with the right include paths."""
+    source = INFINICORE_SRC_OPS / op_name / "operator.cu"
     cmd = [
         "g++", "-std=c++17", "-fsyntax-only",
         f"-I{INFINICORE_ROOT / 'include'}",
