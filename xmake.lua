@@ -269,6 +269,13 @@ if has_config("ccl") then
     add_defines("ENABLE_CCL")
 end
 
+-- InfiniOps
+option("infiniops")
+    set_default("")
+    set_showmenu(true)
+    set_description("Path to InfiniOps project root. If set, operator dispatch files are generated from InfiniOps.")
+option_end()
+
 target("infini-utils")
     set_kind("static")
     on_install(function (target) end)
@@ -383,8 +390,17 @@ target("infiniop")
         add_deps("infiniop-hygon")
     end
     set_languages("cxx17")
+    if get_config("infiniops") and get_config("infiniops") ~= "" then
+        add_includedirs(get_config("infiniops") .. "/src")
+        add_files(get_config("infiniops") .. "/src/*.cc")
+    end
     add_files("src/infiniop/devices/handle.cc")
     add_files("src/infiniop/ops/*/operator.cc", "src/infiniop/ops/*/*/operator.cc")
+    if not has_config("nv-gpu") then
+        -- On non-NVIDIA builds, compile InfiniOps-synced .cu files as plain C++
+        -- (CUDA includes are guarded by #ifdef ENABLE_NVIDIA_API).
+        add_files("src/infiniop/ops/*/operator.cu", {force = {languages = "cxx17"}})
+    end
     add_files("src/infiniop/*.cc")
 
     set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))

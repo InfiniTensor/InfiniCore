@@ -61,7 +61,7 @@ target("infiniop-nvidia")
         end
     end
 
-    add_cuflags("-Xcompiler=-Wno-error=deprecated-declarations", "-Xcompiler=-Wno-error=unused-function")
+    add_cuflags("-Xcompiler=-Wno-error=deprecated-declarations", "-Xcompiler=-Wno-error=unused-function", "-Xcompiler=-Wno-error=unused-but-set-variable")
 
     local arch_opt = get_config("cuda_arch")
     if arch_opt and type(arch_opt) == "string" then
@@ -75,7 +75,13 @@ target("infiniop-nvidia")
     end
 
     set_languages("cxx17")
+    if get_config("infiniops") and get_config("infiniops") ~= "" then
+        add_includedirs(get_config("infiniops") .. "/src")
+    end
     add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu", "../src/infiniop/ops/*/*/nvidia/*.cu")
+    -- InfiniOps-synced operator files use .cu extension because their NVIDIA
+    -- includes contain CUDA syntax (.cuh headers).
+    add_files("../src/infiniop/ops/*/operator.cu")
 
     if has_config("ninetoothed") then
         add_files("../build/ninetoothed/*.c", "../build/ninetoothed/*.cpp")
