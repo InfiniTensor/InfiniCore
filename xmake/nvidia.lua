@@ -63,12 +63,17 @@ target("infiniop-nvidia")
 
     add_cuflags("-Xcompiler=-Wno-error=deprecated-declarations", "-Xcompiler=-Wno-error=unused-function")
 
+    -- xmake 3 may surface option values as non-string types; coerce so we do not fall back to "native".
     local arch_opt = get_config("cuda_arch")
-    if arch_opt and type(arch_opt) == "string" then
-        for _, arch in ipairs(arch_opt:split(",")) do
+    local arch_str = arch_opt and tostring(arch_opt):gsub("^%s+", ""):gsub("%s+$", "") or ""
+    if arch_str ~= "" and arch_str ~= "nil" then
+        for _, arch in ipairs(arch_str:split(",")) do
             arch = arch:trim()
             local compute = arch:gsub("sm_", "compute_")
-            add_cuflags("-gencode=arch=" .. compute .. ",code=" .. arch)
+            local gencode = "-gencode=arch=" .. compute .. ",code=" .. arch
+            add_cuflags(gencode)
+            -- Separate nvcc device-link step must use the same arch or linked GPU code defaults wrong.
+            add_culdflags(gencode)
         end
     else
         add_cugencodes("native")
@@ -99,6 +104,20 @@ target("infinirt-nvidia")
         add_culdflags("-Xcompiler=-fPIC")
         add_cxflags("-fPIC")
         add_cxxflags("-fPIC")
+    end
+
+    local arch_opt_rt = get_config("cuda_arch")
+    local arch_str_rt = arch_opt_rt and tostring(arch_opt_rt):gsub("^%s+", ""):gsub("%s+$", "") or ""
+    if arch_str_rt ~= "" and arch_str_rt ~= "nil" then
+        for _, arch in ipairs(arch_str_rt:split(",")) do
+            arch = arch:trim()
+            local compute = arch:gsub("sm_", "compute_")
+            local gencode = "-gencode=arch=" .. compute .. ",code=" .. arch
+            add_cuflags(gencode)
+            add_culdflags(gencode)
+        end
+    else
+        add_cugencodes("native")
     end
 
     set_languages("cxx17")

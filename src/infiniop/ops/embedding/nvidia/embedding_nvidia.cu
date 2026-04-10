@@ -4,6 +4,7 @@
 #include "../../../tensor.h"
 #include "../cuda/embedding_kernel.cuh"
 #include "embedding_nvidia.cuh"
+#include <cstdio>
 #include <cuda_runtime.h>
 
 template <typename T, typename IndexType>
@@ -212,9 +213,9 @@ infiniStatus_t Descriptor::calculate(
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
 
-    // Check for kernel launch errors
     cudaError_t err = cudaGetLastError();
     if (err != cudaSuccess) {
+        fprintf(stderr, "[infiniop embedding nvidia] cudaGetLastError: %s\n", cudaGetErrorString(err));
         return INFINI_STATUS_INTERNAL_ERROR;
     }
 

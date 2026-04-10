@@ -54,6 +54,8 @@ option_end()
 
 if has_config("nv-gpu") then
     add_defines("ENABLE_NVIDIA_API")
+    local cuda_home = os.getenv("CUDA_HOME") or "/usr/local/cuda"
+    add_includedirs(path.join(cuda_home, "include"))
     includes("xmake/nvidia.lua")
 end
 
