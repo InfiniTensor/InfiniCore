@@ -392,7 +392,10 @@ target("infiniop")
     set_languages("cxx17")
     if get_config("infiniops") and get_config("infiniops") ~= "" then
         add_includedirs(get_config("infiniops") .. "/src")
-        add_files(get_config("infiniops") .. "/src/*.cc")
+        add_includedirs(get_config("infiniops") .. "/generated/include")
+        add_linkdirs(get_config("infiniops") .. "/build/src")
+        add_links("infiniops")
+        add_rpathdirs(get_config("infiniops") .. "/build/src")
     end
     add_files("src/infiniop/devices/handle.cc")
     add_files("src/infiniop/ops/*/operator.cc", "src/infiniop/ops/*/*/operator.cc")

@@ -45,6 +45,7 @@ target("infiniop-nvidia")
         local infiniops_path = config.get("infiniops")
         if infiniops_path and infiniops_path ~= "" then
             target:add("includedirs", infiniops_path .. "/src")
+            target:add("includedirs", infiniops_path .. "/generated/include")
             local cu_files = os.files(path.join(os.projectdir(), "src/infiniop/ops/*/operator.cu"))
             if #cu_files == 0 then
                 local devices = {"cpu", "nvidia"}
