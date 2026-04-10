@@ -4,25 +4,13 @@ Uses the InfiniCore test framework (BaseOperatorTest, TestCase, GenericTestRunne
 Runs only when InfiniCore is built with ENABLE_INFLLMV2 and linked to the infllmv2 .so;
 otherwise tests are skipped so CI without the .so still passes.
 
-Shapes (small varlen/kvcache):
-- Varlen: q/k/v unpadded; cu_seqlens_q, cu_seqlens_k [batch+1]; output [total_q, nheads, head_dim].
-- Kvcache: q [batch, seqlen_q, nheads, head_dim], k/v_cache, cache_lens [batch]; output same as q.
+Run (from InfiniCore dir):
+  python test/infinicore/run.py --ops infllmv2_attention --nvidia
 
-Run (from InfiniCore dir). Set INFLLMV2_SO_DIR to the directory containing the .so, e.g.:
-  INFLLMV2_SO_DIR="<repo>/sglang/3rdparty/infllmv2_cuda_impl/build/lib.linux-x86_64-cpython-312/infllm_v2"
-  (Build that .so first: cd sglang/3rdparty/infllmv2_cuda_impl && python setup.py install)
-
-  PYTHONPATH=<repo>/InfiniLM/python:<repo>/InfiniCore/test/infinicore:<repo>/InfiniCore/python \
-  LD_LIBRARY_PATH=/root/.infini/lib:${INFLLMV2_SO_DIR}:$LD_LIBRARY_PATH \
-  python test/infinicore/ops/test_infllmv2_attention.py --nvidia
-
-If libinfinicore_cpp_api.so still reports undefined symbol mha_varlen_fwd, ensure `InfiniLM/python` is on
-`PYTHONPATH` so this test can `preload_infllmv2_if_available()` before `import infinicore`, or preload manually:
-  LD_PRELOAD=${INFLLMV2_SO_DIR}/C.cpython-312-x86_64-linux-gnu.so python test/... --nvidia
-  (Use the actual .so filename in that directory; adjust cpython-312 for your Python version.)
-
-  pytest: pytest test/infinicore/ops/test_infllmv2_attention.py -v --nvidia
+Direct:
+  python test/infinicore/ops/infllmv2_attention.py --nvidia
 """
+
 import sys
 import os
 
@@ -49,28 +37,32 @@ INFLLMV2_AVAILABLE = infllmv2_varlen is not None and infllmv2_kvcache is not Non
 
 
 def _print_metrics(name, out_infinicore):
-    """Print shape, L2 norm, and max abs for a test output (when test passed)."""
     out_t = convert_infinicore_to_torch(out_infinicore)
     l2 = float(out_t.norm())
     max_abs = float(out_t.abs().max())
-    print(f"  {name}: shape={list(out_infinicore.shape)} L2={l2:.4f} max_abs={max_abs:.4f}")
+    print(
+        f"  {name}: shape={list(out_infinicore.shape)} L2={l2:.4f} max_abs={max_abs:.4f}"
+    )
 
 
 def _make_varlen_test_case():
-    """One test case: varlen, 2 batches, 4 tokens each (total_q=8, total_k=8)."""
     total_q, nheads, head_dim = 8, 2, 8
     total_k, nheads_k = 8, 2
-    scale = 1.0 / (head_dim ** 0.5)
+    scale = 1.0 / (head_dim**0.5)
     q_spec = TensorSpec.from_tensor((total_q, nheads, head_dim), None, infinicore.float16)
     k_spec = TensorSpec.from_tensor((total_k, nheads_k, head_dim), None, infinicore.float16)
     v_spec = TensorSpec.from_tensor((total_k, nheads_k, head_dim), None, infinicore.float16)
     cu_q_spec = TensorSpec.from_tensor(
-        (3,), None, infinicore.int32,
+        (3,),
+        None,
+        infinicore.int32,
         init_mode=TensorInitializer.MANUAL,
         set_tensor=torch.tensor([0, 4, 8], dtype=torch.int32),
     )
     cu_k_spec = TensorSpec.from_tensor(
-        (3,), None, infinicore.int32,
+        (3,),
+        None,
+        infinicore.int32,
         init_mode=TensorInitializer.MANUAL,
         set_tensor=torch.tensor([0, 4, 8], dtype=torch.int32),
     )
@@ -91,20 +83,29 @@ def _make_varlen_test_case():
 
 
 def _make_varlen_test_case_bf16():
-    """Varlen BF16: same shapes as FP16 case."""
     total_q, nheads, head_dim = 8, 2, 8
     total_k, nheads_k = 8, 2
-    scale = 1.0 / (head_dim ** 0.5)
-    q_spec = TensorSpec.from_tensor((total_q, nheads, head_dim), None, infinicore.bfloat16)
-    k_spec = TensorSpec.from_tensor((total_k, nheads_k, head_dim), None, infinicore.bfloat16)
-    v_spec = TensorSpec.from_tensor((total_k, nheads_k, head_dim), None, infinicore.bfloat16)
+    scale = 1.0 / (head_dim**0.5)
+    q_spec = TensorSpec.from_tensor(
+        (total_q, nheads, head_dim), None, infinicore.bfloat16
+    )
+    k_spec = TensorSpec.from_tensor(
+        (total_k, nheads_k, head_dim), None, infinicore.bfloat16
+    )
+    v_spec = TensorSpec.from_tensor(
+        (total_k, nheads_k, head_dim), None, infinicore.bfloat16
+    )
     cu_q_spec = TensorSpec.from_tensor(
-        (3,), None, infinicore.int32,
+        (3,),
+        None,
+        infinicore.int32,
         init_mode=TensorInitializer.MANUAL,
         set_tensor=torch.tensor([0, 4, 8], dtype=torch.int32),
     )
     cu_k_spec = TensorSpec.from_tensor(
-        (3,), None, infinicore.int32,
+        (3,),
+        None,
+        infinicore.int32,
         init_mode=TensorInitializer.MANUAL,
         set_tensor=torch.tensor([0, 4, 8], dtype=torch.int32),
     )
@@ -125,20 +126,23 @@ def _make_varlen_test_case_bf16():
 
 
 def _make_varlen_test_case_localwindow():
-    """Varlen local-window: causal=false, window_size_left>0, window_size_right=0."""
     total_q, nheads, head_dim = 8, 2, 8
     total_k, nheads_k = 8, 2
-    scale = 1.0 / (head_dim ** 0.5)
+    scale = 1.0 / (head_dim**0.5)
     q_spec = TensorSpec.from_tensor((total_q, nheads, head_dim), None, infinicore.float16)
     k_spec = TensorSpec.from_tensor((total_k, nheads_k, head_dim), None, infinicore.float16)
     v_spec = TensorSpec.from_tensor((total_k, nheads_k, head_dim), None, infinicore.float16)
     cu_q_spec = TensorSpec.from_tensor(
-        (3,), None, infinicore.int32,
+        (3,),
+        None,
+        infinicore.int32,
         init_mode=TensorInitializer.MANUAL,
         set_tensor=torch.tensor([0, 4, 8], dtype=torch.int32),
     )
     cu_k_spec = TensorSpec.from_tensor(
-        (3,), None, infinicore.int32,
+        (3,),
+        None,
+        infinicore.int32,
         init_mode=TensorInitializer.MANUAL,
         set_tensor=torch.tensor([0, 4, 8], dtype=torch.int32),
     )
@@ -148,7 +152,6 @@ def _make_varlen_test_case_localwindow():
             "max_seqlen_q": 4,
             "max_seqlen_k": 4,
             "scale": scale,
-            # Local-window semantics should activate with these settings.
             "causal": False,
             "window_size_left": 2,
             "window_size_right": 0,
@@ -162,20 +165,23 @@ def _make_varlen_test_case_localwindow():
 
 
 def _make_varlen_test_case_localwindow_left0():
-    """Varlen local-window (most restrictive): causal=false, window_size_left=0, window_size_right=0."""
     total_q, nheads, head_dim = 8, 2, 8
     total_k, nheads_k = 8, 2
-    scale = 1.0 / (head_dim ** 0.5)
+    scale = 1.0 / (head_dim**0.5)
     q_spec = TensorSpec.from_tensor((total_q, nheads, head_dim), None, infinicore.float16)
     k_spec = TensorSpec.from_tensor((total_k, nheads_k, head_dim), None, infinicore.float16)
     v_spec = TensorSpec.from_tensor((total_k, nheads_k, head_dim), None, infinicore.float16)
     cu_q_spec = TensorSpec.from_tensor(
-        (3,), None, infinicore.int32,
+        (3,),
+        None,
+        infinicore.int32,
         init_mode=TensorInitializer.MANUAL,
         set_tensor=torch.tensor([0, 4, 8], dtype=torch.int32),
     )
     cu_k_spec = TensorSpec.from_tensor(
-        (3,), None, infinicore.int32,
+        (3,),
+        None,
+        infinicore.int32,
         init_mode=TensorInitializer.MANUAL,
         set_tensor=torch.tensor([0, 4, 8], dtype=torch.int32),
     )
@@ -185,7 +191,6 @@ def _make_varlen_test_case_localwindow_left0():
             "max_seqlen_q": 4,
             "max_seqlen_k": 4,
             "scale": scale,
-            # Local-window semantics should activate with these settings.
             "causal": False,
             "window_size_left": 0,
             "window_size_right": 0,
@@ -199,20 +204,23 @@ def _make_varlen_test_case_localwindow_left0():
 
 
 def _make_varlen_test_case_localwindow_left3():
-    """Varlen local-window: causal=false, window_size_left=3, window_size_right=0."""
     total_q, nheads, head_dim = 8, 2, 8
     total_k, nheads_k = 8, 2
-    scale = 1.0 / (head_dim ** 0.5)
+    scale = 1.0 / (head_dim**0.5)
     q_spec = TensorSpec.from_tensor((total_q, nheads, head_dim), None, infinicore.float16)
     k_spec = TensorSpec.from_tensor((total_k, nheads_k, head_dim), None, infinicore.float16)
     v_spec = TensorSpec.from_tensor((total_k, nheads_k, head_dim), None, infinicore.float16)
     cu_q_spec = TensorSpec.from_tensor(
-        (3,), None, infinicore.int32,
+        (3,),
+        None,
+        infinicore.int32,
         init_mode=TensorInitializer.MANUAL,
         set_tensor=torch.tensor([0, 4, 8], dtype=torch.int32),
     )
     cu_k_spec = TensorSpec.from_tensor(
-        (3,), None, infinicore.int32,
+        (3,),
+        None,
+        infinicore.int32,
         init_mode=TensorInitializer.MANUAL,
         set_tensor=torch.tensor([0, 4, 8], dtype=torch.int32),
     )
@@ -222,7 +230,6 @@ def _make_varlen_test_case_localwindow_left3():
             "max_seqlen_q": 4,
             "max_seqlen_k": 4,
             "scale": scale,
-            # Local-window semantics should activate with these settings.
             "causal": False,
             "window_size_left": 3,
             "window_size_right": 0,
@@ -236,15 +243,22 @@ def _make_varlen_test_case_localwindow_left3():
 
 
 def _make_kvcache_test_case():
-    """One test case: kvcache decode, 1 batch, 1 query token, cache len 4."""
     batch, seqlen_q, nheads, head_dim = 1, 1, 2, 8
     cache_len = 4
-    scale = 1.0 / (head_dim ** 0.5)
-    q_spec = TensorSpec.from_tensor((batch, seqlen_q, nheads, head_dim), None, infinicore.float16)
-    k_cache_spec = TensorSpec.from_tensor((batch, cache_len, nheads, head_dim), None, infinicore.float16)
-    v_cache_spec = TensorSpec.from_tensor((batch, cache_len, nheads, head_dim), None, infinicore.float16)
+    scale = 1.0 / (head_dim**0.5)
+    q_spec = TensorSpec.from_tensor(
+        (batch, seqlen_q, nheads, head_dim), None, infinicore.float16
+    )
+    k_cache_spec = TensorSpec.from_tensor(
+        (batch, cache_len, nheads, head_dim), None, infinicore.float16
+    )
+    v_cache_spec = TensorSpec.from_tensor(
+        (batch, cache_len, nheads, head_dim), None, infinicore.float16
+    )
     cache_lens_spec = TensorSpec.from_tensor(
-        (batch,), None, infinicore.int32,
+        (batch,),
+        None,
+        infinicore.int32,
         init_mode=TensorInitializer.MANUAL,
         set_tensor=torch.tensor([cache_len], dtype=torch.int32),
     )
@@ -263,15 +277,22 @@ def _make_kvcache_test_case():
 
 
 def _make_kvcache_test_case_localwindow():
-    """Kvcache local-window: causal=false, window_size_left>0, window_size_right=0."""
     batch, seqlen_q, nheads, head_dim = 1, 1, 2, 8
     cache_len = 4
-    scale = 1.0 / (head_dim ** 0.5)
-    q_spec = TensorSpec.from_tensor((batch, seqlen_q, nheads, head_dim), None, infinicore.float16)
-    k_cache_spec = TensorSpec.from_tensor((batch, cache_len, nheads, head_dim), None, infinicore.float16)
-    v_cache_spec = TensorSpec.from_tensor((batch, cache_len, nheads, head_dim), None, infinicore.float16)
+    scale = 1.0 / (head_dim**0.5)
+    q_spec = TensorSpec.from_tensor(
+        (batch, seqlen_q, nheads, head_dim), None, infinicore.float16
+    )
+    k_cache_spec = TensorSpec.from_tensor(
+        (batch, cache_len, nheads, head_dim), None, infinicore.float16
+    )
+    v_cache_spec = TensorSpec.from_tensor(
+        (batch, cache_len, nheads, head_dim), None, infinicore.float16
+    )
     cache_lens_spec = TensorSpec.from_tensor(
-        (batch,), None, infinicore.int32,
+        (batch,),
+        None,
+        infinicore.int32,
         init_mode=TensorInitializer.MANUAL,
         set_tensor=torch.tensor([cache_len], dtype=torch.int32),
     )
@@ -292,15 +313,22 @@ def _make_kvcache_test_case_localwindow():
 
 
 def _make_kvcache_test_case_localwindow_left0():
-    """Kvcache local-window (most restrictive): causal=false, window_size_left=0, window_size_right=0."""
     batch, seqlen_q, nheads, head_dim = 1, 1, 2, 8
     cache_len = 4
-    scale = 1.0 / (head_dim ** 0.5)
-    q_spec = TensorSpec.from_tensor((batch, seqlen_q, nheads, head_dim), None, infinicore.float16)
-    k_cache_spec = TensorSpec.from_tensor((batch, cache_len, nheads, head_dim), None, infinicore.float16)
-    v_cache_spec = TensorSpec.from_tensor((batch, cache_len, nheads, head_dim), None, infinicore.float16)
+    scale = 1.0 / (head_dim**0.5)
+    q_spec = TensorSpec.from_tensor(
+        (batch, seqlen_q, nheads, head_dim), None, infinicore.float16
+    )
+    k_cache_spec = TensorSpec.from_tensor(
+        (batch, cache_len, nheads, head_dim), None, infinicore.float16
+    )
+    v_cache_spec = TensorSpec.from_tensor(
+        (batch, cache_len, nheads, head_dim), None, infinicore.float16
+    )
     cache_lens_spec = TensorSpec.from_tensor(
-        (batch,), None, infinicore.int32,
+        (batch,),
+        None,
+        infinicore.int32,
         init_mode=TensorInitializer.MANUAL,
         set_tensor=torch.tensor([cache_len], dtype=torch.int32),
     )
@@ -321,15 +349,22 @@ def _make_kvcache_test_case_localwindow_left0():
 
 
 def _make_kvcache_test_case_bf16():
-    """One test case: kvcache BF16 decode, 1 batch, 1 query token, cache len 4."""
     batch, seqlen_q, nheads, head_dim = 1, 1, 2, 8
     cache_len = 4
-    scale = 1.0 / (head_dim ** 0.5)
-    q_spec = TensorSpec.from_tensor((batch, seqlen_q, nheads, head_dim), None, infinicore.bfloat16)
-    k_cache_spec = TensorSpec.from_tensor((batch, cache_len, nheads, head_dim), None, infinicore.bfloat16)
-    v_cache_spec = TensorSpec.from_tensor((batch, cache_len, nheads, head_dim), None, infinicore.bfloat16)
+    scale = 1.0 / (head_dim**0.5)
+    q_spec = TensorSpec.from_tensor(
+        (batch, seqlen_q, nheads, head_dim), None, infinicore.bfloat16
+    )
+    k_cache_spec = TensorSpec.from_tensor(
+        (batch, cache_len, nheads, head_dim), None, infinicore.bfloat16
+    )
+    v_cache_spec = TensorSpec.from_tensor(
+        (batch, cache_len, nheads, head_dim), None, infinicore.bfloat16
+    )
     cache_lens_spec = TensorSpec.from_tensor(
-        (batch,), None, infinicore.int32,
+        (batch,),
+        None,
+        infinicore.int32,
         init_mode=TensorInitializer.MANUAL,
         set_tensor=torch.tensor([cache_len], dtype=torch.int32),
     )
@@ -348,8 +383,6 @@ def _make_kvcache_test_case_bf16():
 
 
 class InfLLMV2AttentionTest(BaseOperatorTest):
-    """InfiniCore-only test for InfLLM-V2 attention (varlen + kvcache)."""
-
     def __init__(self):
         super().__init__("InfLLMV2Attention")
 
@@ -369,16 +402,14 @@ class InfLLMV2AttentionTest(BaseOperatorTest):
         ]
 
     def torch_operator(self, *args, **kwargs):
-        raise NotImplementedError("InfLLM-V2 has no PyTorch reference in this test (InfiniCore-only)")
+        raise NotImplementedError(
+            "InfLLM-V2 has no PyTorch reference in this test (InfiniCore-only)"
+        )
 
     def infinicore_operator(self, *args, **kwargs):
-        """Not used: run_test overrides and calls infllmv2_* directly."""
         raise NotImplementedError("InfLLM-V2 uses run_test override (InfiniCore-only)")
 
     def run_test(self, device, test_case, config):
-        """
-        InfiniCore-only run: execute infinicore op, validate shape and no NaN, print metrics.
-        """
         test_result = CaseResult(
             success=False,
             return_code=-1,
@@ -388,23 +419,26 @@ class InfLLMV2AttentionTest(BaseOperatorTest):
 
         if not INFLLMV2_AVAILABLE:
             test_result.return_code = -2
-            test_result.error_message = "infllmv2_varlen/infllmv2_kvcache not available (build without ENABLE_INFLLMV2?)"
+            test_result.error_message = (
+                "infllmv2_varlen/infllmv2_kvcache not available (build without ENABLE_INFLLMV2?)"
+            )
             return test_result
 
-        # Prepare inputs (kwargs may contain _expected_out_shape)
         inputs, kwargs = self.prepare_pytorch_inputs_and_kwargs(test_case, device)
         expected_shape = kwargs.pop("_expected_out_shape", None)
         infini_inputs, infini_kwargs, _ = self.prepare_infinicore_inputs_and_kwargs(
             inputs, kwargs, test_case.comparison_target
         )
 
-        # Dispatch varlen vs kvcache by number of inputs
         if len(infini_inputs) == 5:
             window_size_left = infini_kwargs.get("window_size_left", -1)
             window_size_right = infini_kwargs.get("window_size_right", -1)
             out = infllmv2_varlen(
-                infini_inputs[0], infini_inputs[1], infini_inputs[2],
-                infini_inputs[3], infini_inputs[4],
+                infini_inputs[0],
+                infini_inputs[1],
+                infini_inputs[2],
+                infini_inputs[3],
+                infini_inputs[4],
                 max_seqlen_q=infini_kwargs["max_seqlen_q"],
                 max_seqlen_k=infini_kwargs["max_seqlen_k"],
                 scale=infini_kwargs["scale"],
@@ -417,7 +451,10 @@ class InfLLMV2AttentionTest(BaseOperatorTest):
             window_size_left = infini_kwargs.get("window_size_left", -1)
             window_size_right = infini_kwargs.get("window_size_right", -1)
             out = infllmv2_kvcache(
-                infini_inputs[0], infini_inputs[1], infini_inputs[2], infini_inputs[3],
+                infini_inputs[0],
+                infini_inputs[1],
+                infini_inputs[2],
+                infini_inputs[3],
                 scale=infini_kwargs["scale"],
                 causal=infini_kwargs["causal"],
                 window_size_left=window_size_left,
@@ -436,7 +473,9 @@ class InfLLMV2AttentionTest(BaseOperatorTest):
 
         shape = out.shape
         if expected_shape is not None and tuple(shape) != tuple(expected_shape):
-            test_result.error_message = f"Shape mismatch: got {list(shape)}, expected {list(expected_shape)}"
+            test_result.error_message = (
+                f"Shape mismatch: got {list(shape)}, expected {list(expected_shape)}"
+            )
             return test_result
 
         out_t = convert_infinicore_to_torch(out)
@@ -451,13 +490,14 @@ class InfLLMV2AttentionTest(BaseOperatorTest):
 
 
 def main():
-    """Run tests when executed as script (e.g. python test_infllmv2_attention.py --nvidia)."""
     args = get_args()
     if not args.nvidia:
         print("InfLLM-V2 ops require CUDA; use --nvidia to run on GPU.")
         sys.exit(0)
     if not INFLLMV2_AVAILABLE:
-        print("infllmv2_varlen / infllmv2_kvcache not available. Build InfiniCore with --aten=y --infllmv2=...")
+        print(
+            "infllmv2_varlen / infllmv2_kvcache not available. Build InfiniCore with --aten=y --infllmv2=..."
+        )
         sys.exit(0)
 
     runner = GenericTestRunner(InfLLMV2AttentionTest)
@@ -466,3 +506,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

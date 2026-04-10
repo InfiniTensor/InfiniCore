@@ -11,7 +11,8 @@ _native_infllmv2_kvcache = getattr(_infinicore, "infllmv2_kvcache", None)
 
 _MISSING_MSG = (
     "infllmv2_varlen / infllmv2_kvcache not found in _infinicore. "
-    "Build InfiniCore with: xmake config --aten=y --infllmv2=/path/to/infllmv2_cuda_impl/build/... then xmake"
+    "Build InfiniCore with: xmake f --aten=y --infllmv2=y (auto-detect under third_party/infllmv2_cuda_impl) "
+    "or --infllmv2=/abs/path/to/libinfllm_v2.so (recommended), then xmake build/install."
 )
 
 
