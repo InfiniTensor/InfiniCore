@@ -256,17 +256,32 @@ if has_config("aten") then
     end
 end
 
--- InfLLM-V2 direct kernels (requires aten; link against infllmv2_cuda_impl .so)
+-- InfLLM-V2 direct kernels (requires aten; link against infllm_v2 shared library)
+--
+-- Policy: InfLLM-V2 is optional and must be checked out/built by the user.
+-- We do NOT auto-run `git submodule update` or `python setup.py install` from xmake.
+--
+-- Usage:
+--   - auto-detect (if you manually checked out to third_party/infllmv2_cuda_impl):
+--       xmake f --aten=y --infllmv2=y
+--   - or specify a path (recommended; works without any checkout under this repo):
+--       xmake f --aten=y --infllmv2=/abs/path/to/libinfllm_v2.so
+--       xmake f --aten=y --infllmv2=/abs/path/to/infllmv2_cuda_impl   # will auto-detect under build/lib.*/
 option("infllmv2")
-    set_default(false)
+    set_default("")
     set_showmenu(true)
-    set_description("Enable InfLLM-V2 support (auto-detect infllm_v2 .so). Requires --aten=y.")
+    set_description("Enable InfLLM-V2 support. Value: 'y' (auto-detect under third_party/infllmv2_cuda_impl) or a path to libinfllm_v2.so / infllmv2_cuda_impl root. Requires --aten=y.")
 option_end()
 
-if has_config("infllmv2") then
+local function _infllmv2_enabled()
+    local cfg = get_config("infllmv2")
+    return cfg ~= nil and cfg ~= "" and cfg ~= false
+end
+
+if _infllmv2_enabled() then
     -- Fail fast: C++ code is gated on ENABLE_INFLLMV2 && ENABLE_ATEN.
     if not has_config("aten") then
-        error("--infllmv2=y requires --aten=y")
+        error("--infllmv2 requires --aten=y")
     end
 end
 
@@ -532,12 +547,12 @@ target("infinicore_cpp_api")
             )
         end
 
-        -- InfLLM-V2: auto-detect + link infllm_v2 .so
+        -- InfLLM-V2: locate + link infllm_v2 .so
         local resolved_infllmv2 = nil
-        if has_config("infllmv2") then
-            local infllmv2_root = path.join(os.projectdir(), "third_party", "infllmv2_cuda_impl")
+        if _infllmv2_enabled() then
+            local infllmv2_cfg = get_config("infllmv2")
 
-            local function detect_infllmv2_so()
+            local function detect_infllmv2_so(infllmv2_root)
                 local candidates = os.files(path.join(infllmv2_root, "build", "lib.*", "infllm_v2", "*.so"))
                 if candidates and #candidates > 0 then
                     table.sort(candidates)
@@ -546,25 +561,48 @@ target("infinicore_cpp_api")
                 return nil
             end
 
-            resolved_infllmv2 = detect_infllmv2_so()
-            if not resolved_infllmv2 then
-                print(YELLOW .. "[InfLLM-V2] infllm_v2 .so not found; running auto-build..." .. NC)
-                os.iorunv("bash", {
-                    "-lc",
-                    "cd '" .. infllmv2_root .. "' && git submodule update --init --recursive && python setup.py install"
-                })
-                resolved_infllmv2 = detect_infllmv2_so()
+            local function is_truthy_enable(v)
+                if v == true then
+                    return true
+                end
+                if type(v) == "string" then
+                    local s = v:lower()
+                    return s == "y" or s == "yes" or s == "true" or s == "1" or s == "on"
+                end
+                return false
+            end
+
+            -- 1) If user passed a file path (libinfllm_v2.so / *.so), use it directly.
+            if type(infllmv2_cfg) == "string" and infllmv2_cfg ~= "" and os.isfile(infllmv2_cfg) then
+                resolved_infllmv2 = infllmv2_cfg
+            end
+
+            -- 2) If user passed a directory, try to auto-detect under it.
+            if not resolved_infllmv2 and type(infllmv2_cfg) == "string" and infllmv2_cfg ~= "" and os.isdir(infllmv2_cfg) then
+                resolved_infllmv2 = detect_infllmv2_so(infllmv2_cfg)
+            end
+
+            -- 3) If user passed y/true, try the conventional in-tree location (if present).
+            if not resolved_infllmv2 and is_truthy_enable(infllmv2_cfg) then
+                local infllmv2_root = path.join(os.projectdir(), "third_party", "infllmv2_cuda_impl")
+                if os.isdir(infllmv2_root) then
+                    resolved_infllmv2 = detect_infllmv2_so(infllmv2_root)
+                end
             end
 
             if not resolved_infllmv2 then
+                local default_root = path.join(os.projectdir(), "third_party", "infllmv2_cuda_impl")
                 error(
-                    "[InfLLM-V2] infllm_v2 .so still missing after auto-build. " ..
-                    "Run manually:\n" ..
-                    "  cd " .. infllmv2_root .. "\n" ..
-                    "  git submodule update --init --recursive\n" ..
-                    "  python setup.py install\n" ..
-                    "Then re-run:\n" ..
-                    "  xmake config --aten=y --infllmv2=y && xmake"
+                    "[InfLLM-V2] Cannot find built InfLLM-V2 shared library (infllm_v2/*.so).\n" ..
+                    "You must build it first, then point xmake to it.\n\n" ..
+                    "Options:\n" ..
+                    "  (A) Pass a direct .so path:\n" ..
+                    "      xmake f --aten=y --infllmv2=/abs/path/to/libinfllm_v2.so -cv\n" ..
+                    "  (B) Pass an infllmv2_cuda_impl root directory (auto-detects build/lib.*/infllm_v2/*.so):\n" ..
+                    "      xmake f --aten=y --infllmv2=/abs/path/to/infllmv2_cuda_impl -cv\n" ..
+                    "  (C) If you checked it out under this repo:\n" ..
+                    "      " .. default_root .. "\n" ..
+                    "      xmake f --aten=y --infllmv2=y -cv\n"
                 )
             end
 
@@ -631,8 +669,9 @@ target("_infinicore")
     add_files("src/infinicore/pybind11/**.cc")
 
     set_installdir("python/infinicore")
-    after_build(function (target)
-        -- Copy built .so to python/infinicore/lib/ so the package loads it (e.g. editable install / PYTHONPATH)
+    on_install(function (target)
+        -- Make the in-tree Python package usable after `xmake install _infinicore`.
+        -- (Reviewer request: keep install logic in install phase, not after_build.)
         local targetfile = target:targetfile()
         if targetfile and os.isfile(targetfile) then
             local libdir = path.join(os.projectdir(), "python", "infinicore", "lib")

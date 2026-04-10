@@ -6,9 +6,10 @@ outputs to simple_gla_attention on [B,T,H,D] and a PyTorch recurrent reference.
 Optional cross-check against FLA naive_recurrent_simple_gla when flash-linear-attention is installed.
 
 Run (from InfiniCore dir):
-  PYTHONPATH=<InfiniLM/python>:<InfiniCore/test/infinicore>:<InfiniCore/python> \\
-  LD_LIBRARY_PATH=/root/.infini/lib:${LD_LIBRARY_PATH:-} \\
-  python test/infinicore/ops/test_simple_gla_decode_recurrent.py --nvidia
+  python test/infinicore/run.py --ops simple_gla_decode_recurrent --nvidia
+
+Direct:
+  python test/infinicore/ops/simple_gla_decode_recurrent.py --nvidia
 """
 
 import os
@@ -29,14 +30,16 @@ from framework import (
 )
 from framework.devices import torch_device_map
 from framework.results import CaseResult
-from framework.utils.tensor_utils import convert_infinicore_to_torch, infinicore_tensor_from_torch
+from framework.utils.tensor_utils import (
+    convert_infinicore_to_torch,
+    infinicore_tensor_from_torch,
+)
 
 
 SIMPLE_GLA_DECODE_STEP_AVAILABLE = hasattr(infinicore, "simple_gla_decode_step")
 
 
 def _torch_simple_gla_recurrent_ref(q, k, v, g_gamma, scale: float) -> torch.Tensor:
-    """Reference recurrence (HF LightningAttention Simple GLA; matches InfiniLM/InfiniCore math)."""
     dtype = q.dtype
     qf = q.transpose(1, 2).float()
     kf = k.transpose(1, 2).float()
@@ -58,7 +61,6 @@ def _torch_simple_gla_recurrent_ref(q, k, v, g_gamma, scale: float) -> torch.Ten
 
 
 def _optional_fla_output(q, k, v, g_gamma, scale: float):
-    """Best-effort FLA naive recurrent; returns None if package or API missing."""
     try:
         from fla.ops.simple_gla import naive_recurrent_simple_gla
     except Exception:
@@ -92,7 +94,9 @@ def _make_case(dtype: str, *, B=2, T=16, H=8, D=64):
         kwargs={"scale": scale, "_dtype": dtype, "_shape": (B, T, H, D)},
         output_spec=None,
         comparison_target=None,
-        tolerance={"atol": 5e-2, "rtol": 5e-2} if dtype == "bf16" else {"atol": 2e-2, "rtol": 2e-2},
+        tolerance={"atol": 5e-2, "rtol": 5e-2}
+        if dtype == "bf16"
+        else {"atol": 2e-2, "rtol": 2e-2},
         description=f"simple_gla_decode_step loop vs ref ({dtype}) B={B} T={T} H={H} D={D}",
     )
 
@@ -122,7 +126,7 @@ class SimpleGLADecodeRecurrentTest(BaseOperatorTest):
 
         if not SIMPLE_GLA_DECODE_STEP_AVAILABLE:
             tr.return_code = -2
-            tr.error_message = "infinicore.simple_gla_decode_step not available (pybind not built?)"
+            tr.error_message = "simple_gla_decode_step not available (pybind not built?)"
             return tr
 
         torch.manual_seed(0)
@@ -131,8 +135,8 @@ class SimpleGLADecodeRecurrentTest(BaseOperatorTest):
 
         inputs, kwargs = self.prepare_pytorch_inputs_and_kwargs(test_case, device)
         scale = float(kwargs["scale"])
-        assert len(inputs) == 4, "q, k, v, g_gamma"
-        for i, t in enumerate(inputs):
+
+        for t in inputs:
             if not t.is_floating_point():
                 continue
             with torch.no_grad():
@@ -146,7 +150,9 @@ class SimpleGLADecodeRecurrentTest(BaseOperatorTest):
 
         ref_loop = _torch_simple_gla_recurrent_ref(q, k, v, g_gamma, scale).float()
 
-        infini_inputs, _, _ = self.prepare_infinicore_inputs_and_kwargs(inputs, {"scale": scale}, None)
+        infini_inputs, _, _ = self.prepare_infinicore_inputs_and_kwargs(
+            inputs, {"scale": scale}, None
+        )
         q_ic, k_ic, v_ic, g_ic = infini_inputs
 
         full_out = infinicore.simple_gla_attention(q_ic, k_ic, v_ic, g_ic, scale=scale)
@@ -168,7 +174,7 @@ class SimpleGLADecodeRecurrentTest(BaseOperatorTest):
         if not torch.isfinite(stacked).all():
             tr.error_message = "decode loop produced NaN/Inf"
             return tr
-        if not torch.isfinite(ref_loop.float()).all():
+        if not torch.isfinite(ref_loop).all():
             tr.error_message = "torch reference produced NaN/Inf"
             return tr
 
@@ -178,14 +184,18 @@ class SimpleGLADecodeRecurrentTest(BaseOperatorTest):
             d = (a - b).abs()
             print(f"  {name}: max_abs={float(d.max()):.6f} mean_abs={float(d.mean()):.6f}")
 
-        _diff_line("decode_steps vs torch_ref", stacked, ref_loop.float())
-        if not torch.allclose(stacked, ref_loop.float(), atol=float(tol["atol"]), rtol=float(tol["rtol"])):
-            d = (stacked - ref_loop.float()).abs()
+        _diff_line("decode_steps vs torch_ref", stacked, ref_loop)
+        if not torch.allclose(
+            stacked, ref_loop, atol=float(tol["atol"]), rtol=float(tol["rtol"])
+        ):
+            d = (stacked - ref_loop).abs()
             tr.error_message = f"vs torch ref: max_abs={float(d.max()):.6f}"
             return tr
 
         _diff_line("decode_steps vs simple_gla_attention", stacked, full_t)
-        if not torch.allclose(stacked, full_t, atol=float(tol["atol"]), rtol=float(tol["rtol"])):
+        if not torch.allclose(
+            stacked, full_t, atol=float(tol["atol"]), rtol=float(tol["rtol"])
+        ):
             d = (stacked - full_t).abs()
             tr.error_message = f"vs simple_gla_attention: max_abs={float(d.max()):.6f}"
             return tr
@@ -194,7 +204,9 @@ class SimpleGLADecodeRecurrentTest(BaseOperatorTest):
         if fla_o is not None:
             fla_f = fla_o.float()
             _diff_line("decode_steps vs fla naive", stacked, fla_f)
-            if not torch.allclose(stacked, fla_f, atol=float(tol["atol"]), rtol=float(tol["rtol"])):
+            if not torch.allclose(
+                stacked, fla_f, atol=float(tol["atol"]), rtol=float(tol["rtol"])
+            ):
                 d = (stacked - fla_f).abs()
                 tr.error_message = f"vs FLA: max_abs={float(d.max()):.6f}"
                 return tr
@@ -222,3 +234,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

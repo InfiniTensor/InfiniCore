@@ -6,7 +6,10 @@ simple_gla_attention reference. Covers head_dim=64 (naive fused path) and
 head_dim=128 (chunked/tiled path for MiniCPM-SALA).
 
 Run (from InfiniCore dir):
-  PYTHONPATH=<InfiniLM/python>:<InfiniCore/python> LD_LIBRARY_PATH=/root/.infini/lib python test/infinicore/ops/test_simple_gla_prefill.py --nvidia
+  python test/infinicore/run.py --ops simple_gla_prefill --nvidia
+
+Direct:
+  python test/infinicore/ops/simple_gla_prefill.py --nvidia
 """
 
 import os
@@ -22,7 +25,6 @@ from framework import (
     BaseOperatorTest,
     TestCase,
     TensorSpec,
-    TensorInitializer,
     GenericTestRunner,
     get_args,
 )
@@ -37,7 +39,6 @@ def _make_case(dtype: str, *, B=1, T=32, H=8, D=64):
     dt = infinicore.bfloat16 if dtype == "bf16" else infinicore.float16
     scale = 1.0 / (D**0.5)
 
-    # q/k/v: [B,T,H,D] ; g_gamma: [H] F32
     q = TensorSpec.from_tensor((B, T, H, D), None, dt)
     k = TensorSpec.from_tensor((B, T, H, D), None, dt)
     v = TensorSpec.from_tensor((B, T, H, D), None, dt)
@@ -48,7 +49,9 @@ def _make_case(dtype: str, *, B=1, T=32, H=8, D=64):
         kwargs={"scale": scale, "_dtype": dtype, "_shape": (B, T, H, D)},
         output_spec=None,
         comparison_target=None,
-        tolerance={"atol": 5e-2, "rtol": 5e-2} if dtype == "bf16" else {"atol": 2e-2, "rtol": 2e-2},
+        tolerance={"atol": 5e-2, "rtol": 5e-2}
+        if dtype == "bf16"
+        else {"atol": 2e-2, "rtol": 2e-2},
         description=f"simple_gla_prefill vs simple_gla_attention ({dtype}) B={B} T={T} H={H} D={D}",
     )
 
@@ -78,26 +81,25 @@ class SimpleGLAPrefillTest(BaseOperatorTest):
 
         if not SIMPLE_GLA_PREFILL_AVAILABLE:
             tr.return_code = -2
-            tr.error_message = "infinicore.simple_gla_prefill not available (pybind not built?)"
+            tr.error_message = "simple_gla_prefill not available (pybind not built?)"
             return tr
 
         torch.manual_seed(0)
         inputs, kwargs = self.prepare_pytorch_inputs_and_kwargs(test_case, device)
         scale = float(kwargs["scale"])
-        # Use well-scaled inputs so the GLA recurrence stays finite (avoids FP16 overflow/NaN).
-        # q,k,v: small values so k^T v and state S do not explode; g_gamma: negative decay.
-        assert len(inputs) == 4, "q, k, v, g_gamma"
-        for i, t in enumerate(inputs):
+
+        for t in inputs:
             if not t.is_floating_point():
                 continue
             with torch.no_grad():
                 if t.dim() == 1:
-                    # g_gamma [H]: decay per head, negative so exp(g_gamma) in (0, 1)
                     t.uniform_(-1.2, -0.05)
                 else:
-                    # q, k, v [B,T,H,D]: keep recurrence bounded
                     t.uniform_(-0.1, 0.1)
-        infini_inputs, infini_kwargs, _ = self.prepare_infinicore_inputs_and_kwargs(inputs, {"scale": scale}, None)
+
+        infini_inputs, _, _ = self.prepare_infinicore_inputs_and_kwargs(
+            inputs, {"scale": scale}, None
+        )
 
         q, k, v, g_gamma = infini_inputs
 
@@ -125,8 +127,12 @@ class SimpleGLAPrefillTest(BaseOperatorTest):
         print(f"  diff max_abs={max_abs:.6f} mean_abs={mean_abs:.6f}")
 
         tol = test_case.tolerance or {"atol": 2e-2, "rtol": 2e-2}
-        if not torch.allclose(t_new, t_ref, atol=float(tol["atol"]), rtol=float(tol["rtol"])):
-            tr.error_message = f"mismatch: max_abs={max_abs:.6f}, atol={tol['atol']} rtol={tol['rtol']}"
+        if not torch.allclose(
+            t_new, t_ref, atol=float(tol["atol"]), rtol=float(tol["rtol"])
+        ):
+            tr.error_message = (
+                f"mismatch: max_abs={max_abs:.6f}, atol={tol['atol']} rtol={tol['rtol']}"
+            )
             return tr
 
         tr.success = True
@@ -149,3 +155,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
