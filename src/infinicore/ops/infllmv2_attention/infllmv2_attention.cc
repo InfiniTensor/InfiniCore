@@ -384,17 +384,17 @@ InfllmV2AttentionVarlen::InfllmV2AttentionVarlen(Tensor out,
 }
 
 void InfllmV2AttentionVarlen::execute(Tensor out,
-                                     const Tensor &q,
-                                     const Tensor &k,
-                                     const Tensor &v,
-                                     const Tensor &cu_seqlens_q,
-                                     const Tensor &cu_seqlens_k,
-                                     int max_seqlen_q,
-                                     int max_seqlen_k,
-                                     float scale,
-                                     bool causal,
-                                     int window_size_left,
-                                     int window_size_right) {
+                                      const Tensor &q,
+                                      const Tensor &k,
+                                      const Tensor &v,
+                                      const Tensor &cu_seqlens_q,
+                                      const Tensor &cu_seqlens_k,
+                                      int max_seqlen_q,
+                                      int max_seqlen_k,
+                                      float scale,
+                                      bool causal,
+                                      int window_size_left,
+                                      int window_size_right) {
     INFINICORE_GRAPH_OP_RECORD_OR_RUN(
         InfllmV2AttentionVarlen,
         out, q, k, v, cu_seqlens_q, cu_seqlens_k, max_seqlen_q, max_seqlen_k, scale, causal, window_size_left, window_size_right);
@@ -491,14 +491,14 @@ InfllmV2AttentionKVCache::InfllmV2AttentionKVCache(Tensor out,
 }
 
 void InfllmV2AttentionKVCache::execute(Tensor out,
-                                      const Tensor &q,
-                                      const Tensor &k_cache,
-                                      const Tensor &v_cache,
-                                      const Tensor &cache_lens,
-                                      float scale,
-                                      bool causal,
-                                      int window_size_left,
-                                      int window_size_right) {
+                                       const Tensor &q,
+                                       const Tensor &k_cache,
+                                       const Tensor &v_cache,
+                                       const Tensor &cache_lens,
+                                       float scale,
+                                       bool causal,
+                                       int window_size_left,
+                                       int window_size_right) {
     INFINICORE_GRAPH_OP_RECORD_OR_RUN(
         InfllmV2AttentionKVCache,
         out, q, k_cache, v_cache, cache_lens, scale, causal, window_size_left, window_size_right);
@@ -585,16 +585,16 @@ InfllmV2AttentionKVCacheUpdate::InfllmV2AttentionKVCacheUpdate(Tensor out,
 }
 
 void InfllmV2AttentionKVCacheUpdate::execute(Tensor out,
-                                            const Tensor &q,
-                                            const Tensor &k_cache,
-                                            const Tensor &v_cache,
-                                            const Tensor &k_new,
-                                            const Tensor &v_new,
-                                            const Tensor &cache_lens,
-                                            float scale,
-                                            bool causal,
-                                            int window_size_left,
-                                            int window_size_right) {
+                                             const Tensor &q,
+                                             const Tensor &k_cache,
+                                             const Tensor &v_cache,
+                                             const Tensor &k_new,
+                                             const Tensor &v_new,
+                                             const Tensor &cache_lens,
+                                             float scale,
+                                             bool causal,
+                                             int window_size_left,
+                                             int window_size_right) {
     INFINICORE_GRAPH_OP_RECORD_OR_RUN(
         InfllmV2AttentionKVCacheUpdate,
         out, q, k_cache, v_cache, k_new, v_new, cache_lens, scale, causal, window_size_left, window_size_right);
