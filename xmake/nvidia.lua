@@ -39,7 +39,7 @@ target("infiniop-nvidia")
             target:add("links", "cuda")
         end
 
-        -- InfiniOps integration: run sync to generate operator .cu files,
+        -- InfiniOps integration: run sync to generate operator `.cu` files,
         -- then add them for compilation.
         import("core.project.config")
         local infiniops_path = config.get("infiniops")

@@ -400,8 +400,8 @@ target("infiniop")
     add_files("src/infiniop/devices/handle.cc")
     add_files("src/infiniop/ops/*/operator.cc", "src/infiniop/ops/*/*/operator.cc")
     if not has_config("nv-gpu") then
-        -- On non-NVIDIA builds, compile InfiniOps-synced .cu files as plain C++
-        -- (NVIDIA includes are guarded by #ifdef ENABLE_NVIDIA_API).
+        -- On non-NVIDIA builds, compile InfiniOps-synced `.cu` files as plain C++
+        -- (NVIDIA includes are guarded by `#ifdef ENABLE_NVIDIA_API`).
         add_files("src/infiniop/ops/*/operator.cu", {force = {languages = "cxx17"}})
     end
     add_files("src/infiniop/*.cc")
@@ -410,7 +410,7 @@ target("infiniop")
         import("core.project.config")
         local infiniops_path = config.get("infiniops")
         if infiniops_path and infiniops_path ~= "" and not has_config("nv-gpu") then
-            -- CPU-only build: run sync here (NVIDIA builds sync via infiniop-nvidia).
+            -- CPU-only build: run sync here (NVIDIA builds sync via `infiniop-nvidia`).
             os.execv("python", {"scripts/sync_infiniops.py", infiniops_path, "--devices", "cpu"})
         end
     end)

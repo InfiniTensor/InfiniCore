@@ -78,8 +78,8 @@ def sync_operator(op_name, generated_dir, dry_run=False, verbose=False):
     gen_header = generated_dir / "include" / f"{op_name}.h"
     gen_source = generated_dir / "src" / op_name / "operator.cc"
     dst_header = INFINICORE_INCLUDE_OPS / f"{op_name}.h"
-    # Use .cu extension so nvcc compiles these files (InfiniOps NVIDIA
-    # headers include .cuh files with CUDA syntax).
+    # Use `.cu` extension so `nvcc` compiles these files (InfiniOps NVIDIA
+    # headers include `.cuh` files with CUDA syntax).
     dst_source = INFINICORE_SRC_OPS / op_name / "operator.cu"
 
     if not gen_header.exists():
@@ -116,13 +116,13 @@ def sync_operator(op_name, generated_dir, dry_run=False, verbose=False):
     shutil.copy2(gen_header, dst_header)
     shutil.copy2(gen_source, dst_source)
 
-    # Replace the original operator.cc with an empty stub to prevent
-    # duplicate symbol definitions (the .cu file provides all symbols).
+    # Replace the original `operator.cc` with an empty stub to prevent
+    # duplicate symbol definitions (the `.cu` file provides all symbols).
     old_cc = INFINICORE_SRC_OPS / op_name / "operator.cc"
 
     if old_cc.exists():
         old_cc.write_text(
-            "// This operator is provided by InfiniOps (see operator.cu).\n"
+            "// This operator is provided by InfiniOps (see `operator.cu`).\n"
         )
 
     print(f"  {op_name}: synced")
