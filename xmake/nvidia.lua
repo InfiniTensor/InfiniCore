@@ -38,6 +38,23 @@ target("infiniop-nvidia")
             target:add("linkdirs", path.directory(path.directory(nvcc_path)) .. "/lib64/stubs")
             target:add("links", "cuda")
         end
+
+        -- InfiniOps integration: run sync to generate operator .cu files,
+        -- then add them for compilation.
+        import("core.project.config")
+        local infiniops_path = config.get("infiniops")
+        if infiniops_path and infiniops_path ~= "" then
+            target:add("includedirs", infiniops_path .. "/src")
+            local cu_files = os.files(path.join(os.projectdir(), "src/infiniop/ops/*/operator.cu"))
+            if #cu_files == 0 then
+                local devices = {"cpu", "nvidia"}
+                os.execv("python", {"scripts/sync_infiniops.py", infiniops_path, "--devices", table.unpack(devices)})
+                cu_files = os.files(path.join(os.projectdir(), "src/infiniop/ops/*/operator.cu"))
+            end
+            for _, f in ipairs(cu_files) do
+                target:add("files", f)
+            end
+        end
     end)
 
     if is_plat("windows") then
@@ -75,13 +92,7 @@ target("infiniop-nvidia")
     end
 
     set_languages("cxx17")
-    if get_config("infiniops") and get_config("infiniops") ~= "" then
-        add_includedirs(get_config("infiniops") .. "/src")
-    end
     add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu", "../src/infiniop/ops/*/*/nvidia/*.cu")
-    -- InfiniOps-synced operator files use .cu extension because their NVIDIA
-    -- includes contain CUDA syntax (.cuh headers).
-    add_files("../src/infiniop/ops/*/operator.cu")
 
     if has_config("ninetoothed") then
         add_files("../build/ninetoothed/*.c", "../build/ninetoothed/*.cpp")
