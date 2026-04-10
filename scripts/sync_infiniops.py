@@ -41,7 +41,10 @@ def run_generator(infiniops_root, devices):
     generated_dir = infiniops_root / "generated"
 
     if not generated_dir.exists():
-        print(f"Error: expected output directory {generated_dir} not found", file=sys.stderr)
+        print(
+            f"Error: expected output directory {generated_dir} not found",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     return generated_dir
@@ -134,7 +137,9 @@ def verify_compilation(op_name, infiniops_root):
     """Syntax-check the replaced `operator.cu` compiles with the right include paths."""
     source = INFINICORE_SRC_OPS / op_name / "operator.cu"
     cmd = [
-        "g++", "-std=c++17", "-fsyntax-only",
+        "g++",
+        "-std=c++17",
+        "-fsyntax-only",
         f"-I{INFINICORE_ROOT / 'include'}",
         f"-I{infiniops_root / 'src'}",
         str(source),
@@ -188,7 +193,8 @@ def main():
         help="Syntax-check each replaced file after syncing.",
     )
     parser.add_argument(
-        "--verbose", "-v",
+        "--verbose",
+        "-v",
         action="store_true",
         help="Show diffs even when not in dry-run mode.",
     )
@@ -227,13 +233,18 @@ def main():
 
     # Step 3: Sync files.
     action = "Previewing" if args.dry_run else "Syncing"
-    print(f"\n=== {action} {len(ops_to_sync)} operator(s): {', '.join(ops_to_sync)} ===")
+    print(
+        f"\n=== {action} {len(ops_to_sync)} operator(s): {', '.join(ops_to_sync)} ==="
+    )
 
     synced = []
 
     for op_name in ops_to_sync:
         changed = sync_operator(
-            op_name, generated_dir, dry_run=args.dry_run, verbose=args.verbose,
+            op_name,
+            generated_dir,
+            dry_run=args.dry_run,
+            verbose=args.verbose,
         )
 
         if changed and not args.dry_run:
@@ -253,7 +264,8 @@ def main():
 
         if failures:
             print(
-                f"\nCompilation failed for: {', '.join(failures)}", file=sys.stderr,
+                f"\nCompilation failed for: {', '.join(failures)}",
+                file=sys.stderr,
             )
             sys.exit(1)
 
