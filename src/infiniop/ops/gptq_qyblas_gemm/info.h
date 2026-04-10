@@ -12,7 +12,7 @@ class GptqQyblasGemmInfo {
     GptqQyblasGemmInfo() = default;
 
 public:
-    infiniDtype_t dtype, weight_dtype, scales_dtype, zeros_dtype, out_dtype;
+    infiniDtype_t dtype, weight_dtype, scales_dtype, zeros_dtype;
     size_t M, K, N, scales_size_0, scales_size_1;
     ptrdiff_t lda, ldb, result_ld;
     bool transpose_mat_1, transpose_mat_2, transpose_result;
@@ -27,13 +27,13 @@ public:
         auto dtype = a_desc->dtype();
 
         CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_BF16);
+        CHECK_DTYPE(dtype, out_desc->dtype());
 
         const infiniDtype_t weight_dtype = b_desc->dtype();
         CHECK_DTYPE(weight_dtype, INFINI_DTYPE_F8, INFINI_DTYPE_U8, INFINI_DTYPE_I8);
 
         const infiniDtype_t scales_dtype = b_scales_desc->dtype();
         const infiniDtype_t zeros_dtype = b_zeros_desc->dtype();
-        const infiniDtype_t out_dtype = out_desc->dtype();
 
         size_t M = out_desc->shape()[0];
         size_t N = out_desc->shape()[1];
@@ -80,7 +80,7 @@ public:
         ptrdiff_t result_ld = out_desc->strides()[transpose_result ? 1 : 0];
 
         return utils::Result<GptqQyblasGemmInfo>(GptqQyblasGemmInfo{
-            dtype, weight_dtype, scales_dtype, zeros_dtype, out_dtype,
+            dtype, weight_dtype, scales_dtype, zeros_dtype,
             M, K, N, scales_size_0, scales_size_1,
             lda, ldb, result_ld,
             transpose_mat_1, transpose_mat_2, transpose_result});

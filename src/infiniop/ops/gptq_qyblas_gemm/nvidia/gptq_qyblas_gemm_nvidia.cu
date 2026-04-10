@@ -1,3 +1,4 @@
+#if defined ENABLE_QY_API
 #include "../../../devices/nvidia/nvidia_handle.cuh"
 #include "dlblas_ext.h"
 #include "gptq_qyblas_gemm_nvidia.cuh"
@@ -93,16 +94,7 @@ infiniStatus_t Descriptor::calculate(void *workspace,
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
 
-    switch (_info.out_dtype) {
-    case INFINI_DTYPE_F16:
-        kernel_Ctype_ = CUDA_R_16F;
-        break;
-    case INFINI_DTYPE_BF16:
-        kernel_Ctype_ = CUDA_R_16BF;
-        break;
-    default:
-        return INFINI_STATUS_BAD_TENSOR_DTYPE;
-    }
+    kernel_Ctype_ = kernel_Atype_;
 
     switch (_info.scales_dtype) {
     case INFINI_DTYPE_F32:
@@ -178,12 +170,6 @@ infiniStatus_t Descriptor::calculate(void *workspace,
 
     cublasOperation_t transa = transpose_mat_2 ? CUBLAS_OP_T : CUBLAS_OP_N;
     cublasOperation_t transb = transpose_mat_1 ? CUBLAS_OP_T : CUBLAS_OP_N;
-    printf("a=%s, b=%s, c=%s\n",
-           _info.transpose_mat_1 ? "true" : "false",
-           _info.transpose_mat_2 ? "true" : "false",
-           _info.transpose_result ? "true" : "false");
-    printf("M-K-N:[%ld, %ld, %ld], lda-ldb-ldc:[%ld, %ld, %ld]\n", M, K, N, lda, ldb, result_ld);
-    printf("quant type:%ld, bit:%ld, block_shape:%d\n", quant_type, bit, extParameters.a_group_size_m);
 
     if (_info.dtype == INFINI_DTYPE_F16 || _info.dtype == INFINI_DTYPE_BF16) {
         CHECK_STATUS(_opaque->internal->useCublas(
@@ -221,3 +207,4 @@ infiniStatus_t Descriptor::calculate(void *workspace,
 }
 
 } // namespace op::gptq_qyblas_gemm::nvidia
+#endif

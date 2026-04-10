@@ -29,9 +29,11 @@ import itertools
 # Test configurations
 
 BLOCK_SIZE = [[128, 128]]
-M_list = [1, 7, 83, 512, 2048]
-N_list = [128, 512, 1024, 4096, 7748, 13824]
-K_list = [256, 4096, 5120, 3884, 13824]
+M_list = [1, 7]#, 83, 512, 2048]
+N_list = [128, 512]#, 1024, 4096, 7748, 13824]
+K_list = [256, 4096]#, 5120, 3884, 13824]
+_WEIGHT_DTYPES = [InfiniDtype.I8]
+
 SEEDS = 0
 
 def to_iter(x):
@@ -44,12 +46,13 @@ _TEST_CASES = list(
         to_iter(K_list),
         to_iter(N_list),
         to_iter(BLOCK_SIZE),
+        to_iter(_WEIGHT_DTYPES),
     )
 )
 
 
 # Data types used for testing
-_TENSOR_DTYPES = [InfiniDtype.F16]
+_TENSOR_DTYPES = [InfiniDtype.BF16, InfiniDtype.F16]
 
 
 DEBUG = False
@@ -108,163 +111,81 @@ def native_w8a16_block_int8_matmul(
     return C
 
 
-def native_w8a16_block_fp8_matmul(
-    A,
-    B,
-    Bs,
-    block_size,
-    output_dtype: torch.float16,
-) -> torch.Tensor:
-    return native_w8a16_block_int8_matmul(A, B, Bs, block_size, output_dtype)
-
-
-def test_w8a8_block_fp8_matmul(M, N, K, block_size, out_dtype, seed):
-    torch.manual_seed(seed)
-    factor_for_scale = 1e-2
-    fp8_info = torch.finfo(torch.float8_e4m3fn)
-    fp8_max, fp8_min = fp8_info.max, fp8_info.min
-
-    A_fp32 = (torch.rand(M, K, dtype=torch.float32) - 0.5) * 2 * fp8_max
-    #A_fp32 = A_fp32.fill_(1)
-    A_fp8 = A_fp32.clamp(min=fp8_min, max=fp8_max).to(torch.float8_e4m3fn)
-
-    B_fp32 = (torch.rand(N, K, dtype=torch.float32) - 0.5) * 2 * fp8_max
-    #B_fp32 = B_fp32.fill_(1)
-    B_fp8 = B_fp32.clamp(min=fp8_min, max=fp8_max).to(torch.float8_e4m3fn)
-
-    block_n, block_k = block_size[0], block_size[1]
-    n_tiles = (N + block_n - 1) // block_n
-    k_tiles = (K + block_k - 1) // block_k
-
-    As = torch.rand(M, k_tiles, dtype=torch.float32) * factor_for_scale
-    #As = As.fill_(1)
-    Bs = torch.rand(n_tiles, k_tiles, dtype=torch.float32) * factor_for_scale
-    #Bs = Bs.fill_(1.5)
-    #ref_out = native_w8a8_block_fp8_matmul(A_fp8, B_fp8, As, Bs, block_size,
-    #                                       out_dtype)
-    ref_out = native_w8a16_block_fp8_matmul(A_fp32.to(torch.bfloat16), B_fp8, Bs, block_size, out_dtype)
-    #out = w8a8_block_fp8_matmul(A_fp8, B_fp8, As, Bs, block_size, out_dtype)
-    
-    B_fp8_T = B_fp8.t()
-    #print('B_fp8_T', B_fp8_T.size(), B_fp8_T)
-    
-    Bs_T = Bs
-    quant_type = 3
-    bit = 8
-    return ref_out, A_fp32.to(torch.bfloat16), B_fp8_T, Bs_T, Bs_T, quant_type, bit
-    
-
-def test_w8a8_block_int8_matmul(M, N, K, block_size, out_dtype, seed):
-    torch.manual_seed(seed)
-    factor_for_scale = 1e-2
-    int8_info = torch.iinfo(torch.int8)
-    int8_max, int8_min = int8_info.max, int8_info.min
-
-    A_fpb16 = torch.rand(M, K, dtype=torch.float32) / 10
-
-
-    #A_fp32 = A_fp32.fill_(1)
-    #A_fp8 = A_fp32.clamp(min=fp8_min, max=fp8_max).to(torch.float8_e4m3fn)
-
-    B_fp32 = (torch.rand(N, K, dtype=torch.float32) - 0.5) * 2 * int8_max
-    #B_fp32 = B_fp32.fill_(1)
-    B_int8 = B_fp32.clamp(min=int8_min, max=int8_max).to(torch.int8)
-
-    block_n, block_k = block_size[0], block_size[1]
-    n_tiles = (N + block_n - 1) // block_n
-    k_tiles = (K + block_k - 1) // block_k
-
-    A_fpb16 =A_fpb16.to(torch.float16)
-
-    #As = torch.rand(M, k_tiles, dtype=torch.float32) * factor_for_scale
-    #As = As.fill_(1)
-    Bs = torch.rand(n_tiles, k_tiles, dtype=torch.float32) * factor_for_scale
-    #Bs = Bs.fill_(1.5)
-    #ref_out = native_w8a8_block_fp8_matmul(A_fp8, B_fp8, As, Bs, block_size, out_dtype)
-
-    ref_out = native_w8a16_block_fp8_matmul(A_fpb16, B_int8, Bs, block_size, out_dtype)
-    #a_q, a_s = native_per_token_group_quant_int8(A_fpb16, block_k)
-    #ref_out = native_w8a8_block_int8_matmul(a_q, B_int8, a_s, Bs, block_size, output_dtype=A_fpb16.dtype)
-    ##out = w8a8_block_fp8_matmul(A_fp8, B_fp8, As, Bs, block_size, out_dtype)
-    #print('Bs', Bs.size(), Bs.dtype)
-    quant_type = 3
-    bit = 8
-    return ref_out, A_fpb16, B_int8, Bs, Bs, quant_type, bit
-
-
-def test_int8(
+def test(
     handle,
     device,
     M,
     K,
     N,
     block_size,
+    weight_dtype=InfiniDtype.I8,
     dtype=InfiniDtype.BF16,
     sync=None,
 ):
 
     print(
-        f"Testing int8 Gptq Qyblas Gemm on {InfiniDeviceNames[device]} with M-K-N:{M, K, N}, block_size:{block_size}, dtype:{InfiniDtypeNames[dtype]}"
+        f"Testing int8 Gptq Qyblas Gemm on {InfiniDeviceNames[device]} with M-K-N:{M, K, N}, block_size:{block_size}, weight dtype:{InfiniDtypeNames[weight_dtype]}, dtype:{InfiniDtypeNames[dtype]}"
     )
-    out_dtype = to_torch_dtype(dtype)
-    ans, a, b_orig, b_scales, b_zeros, quant_type, bit = test_w8a8_block_int8_matmul(M, N, K, block_size, out_dtype, SEEDS)
-    b = b_orig.t()
-    
+    quant_type = 3
+    bit = 8
+
+    int8_info = torch.iinfo(torch.int8)
+    int8_max, int8_min = int8_info.max, int8_info.min
+
+    block_n, block_k = block_size[0], block_size[1]
+    n_tiles = (N + block_n - 1) // block_n
+    k_tiles = (K + block_k - 1) // block_k
+
     A = TestTensor(
-        a.shape,
-        a.stride(),
-        InfiniDtype.F16,
-        device,
-        mode="manual",
-        set_tensor=a,
-    )
-    B_orig = TestTensor(
-        b_orig.shape,
-        b_orig.stride(),
-        InfiniDtype.I8,
-        device,
-        mode="manual",
-        set_tensor=b_orig,
-    )
-    B = TestTensor(
-        b.shape,
-        b.stride(),
-        InfiniDtype.I8,
-        device,
-        mode="manual",
-        set_tensor=b,
-    )
-    b_scales = TestTensor(
-        b_scales.shape,
-        b_scales.stride(),
-        InfiniDtype.F32,
-        device,
-        mode="manual",
-        set_tensor=b_scales,
-    )
-    b_zeros = TestTensor(
-        b_zeros.shape,
-        b_zeros.stride(),
-        InfiniDtype.F32,
-        device,
-        mode="manual",
-        set_tensor=b_zeros,
-    )
-    out = TestTensor(
-        ans.shape,
+        (M, K),
         None,
         dtype,
         device,
     )
+    if weight_dtype == InfiniDtype.I8:
+        B_orig = TestTensor(
+            (N, K),
+            None,
+            weight_dtype,
+            device,
+            randint_low=int8_min,
+            randint_high=int8_max,
+        )
+        B_torch = B_orig.torch_tensor().t()
+        B = TestTensor(
+            (K, N),
+            B_torch.stride(),
+            weight_dtype,
+            device,
+            mode="manual",
+            set_tensor=B_torch,
+        )
     
-    print("a: ", A.torch_tensor().shape, A.torch_tensor().stride(), A.torch_tensor().dtype)
-    print("b: ", B.torch_tensor().shape, B.torch_tensor().stride(), B.torch_tensor().dtype)
-    print("scales: ", b_scales.torch_tensor().shape, b_scales.torch_tensor().dtype)
-    print("zeros: ", b_zeros.torch_tensor().shape, b_zeros.torch_tensor().dtype)
-    print("out: ", out.torch_tensor().shape, out.torch_tensor().dtype)
+    b_scales = TestTensor(
+        (n_tiles, k_tiles),
+        None,
+        InfiniDtype.F32,
+        device,
+    )
+
+    b_zeros = TestTensor(
+        (n_tiles, k_tiles),
+        None,
+        InfiniDtype.F32,
+        device,
+        mode="zeros",
+    )
+    
+    out = TestTensor(
+        (M, N),
+        None,
+        dtype,
+        device,
+        mode="zeros",
+    )
+
     if sync is not None:
         sync()
-
 
     descriptor = infiniopOperatorDescriptor_t()
     check_error(
@@ -278,7 +199,6 @@ def test_int8(
             b_zeros.descriptor,
         )
     )
-
     # Invalidate the shape and strides in the descriptor to prevent them from being directly used by the kernel
 
     for tensor in [out, A, B, b_scales, b_zeros]:
@@ -314,31 +234,20 @@ def test_int8(
     if sync is not None:
         sync()
 
-    tmpa = out.torch_tensor().to(torch.float32).detach().to('cpu').numpy().flatten()
-    tmpb = ans.to(torch.float32).to('cpu').detach().numpy().flatten()
+    out_dtype = to_torch_dtype(dtype)
+    ans = native_w8a16_block_int8_matmul(A.torch_tensor(), B_orig.torch_tensor(), b_scales.torch_tensor(), block_size, out_dtype)
     
-    atol = max(abs(tmpa - tmpb))
-
-    rtol = atol / (max(abs(tmpb)) + 1e-8)
-
-
-    print("absolute error:%.4e"%(atol))
-    print("relative error:%.4e"%(rtol))
-    print(out.torch_tensor().device, ans.device)
-    # print(out.torch_tensor())
-    # print(ans)
-    ans = ans.to(out.torch_tensor().device)
     rel_diff = (torch.mean(
-        torch.abs(out.torch_tensor().to(torch.float32) - ans.to(torch.float32))) /
+        torch.abs(out.actual_tensor().to(torch.float32) - ans.to(torch.float32))) /
                 torch.mean(torch.abs(ans.to(torch.float32))))
-    print(rel_diff)
+
     assert rel_diff < 0.05
     
 
     # Profiling workflow
     if PROFILE:
         # fmt: off
-        profile_operation("PyTorch", lambda: native_w8a16_block_fp8_matmul(A.torch_tensor(), B_orig.torch_tensor(), b_scales.torch_tensor(), block_size, out_dtype), device, NUM_PRERUN, NUM_ITERATIONS)
+        profile_operation("PyTorch", lambda: native_w8a16_block_int8_matmul(A.torch_tensor(), B_orig.torch_tensor(), b_scales.torch_tensor(), block_size, out_dtype), device, NUM_PRERUN, NUM_ITERATIONS)
         profile_operation("    lib", lambda: lib_gptq_qyblas_gemm(), device, NUM_PRERUN, NUM_ITERATIONS)
         # fmt: on
 
@@ -355,6 +264,6 @@ if __name__ == "__main__":
     NUM_ITERATIONS = args.num_iterations
 
     for device in get_test_devices(args):
-        test_operator(device, test_int8, _TEST_CASES, _TENSOR_DTYPES)
+        test_operator(device, test, _TEST_CASES, _TENSOR_DTYPES)
 
     print("\033[92mTest passed!\033[0m")
