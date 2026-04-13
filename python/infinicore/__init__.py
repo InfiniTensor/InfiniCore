@@ -121,10 +121,10 @@ from infinicore.ops.rotm import rotm
 from infinicore.ops.rotmg import rotmg
 from infinicore.ops.scal import scal
 from infinicore.ops.scatter import scatter
-from infinicore.ops.sinh import sinh
 from infinicore.ops.simple_gla_attention import simple_gla_attention
 from infinicore.ops.simple_gla_decode_step import simple_gla_decode_step
 from infinicore.ops.simple_gla_prefill import simple_gla_prefill
+from infinicore.ops.sinh import sinh
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.sum import sum
 from infinicore.ops.swap import swap
