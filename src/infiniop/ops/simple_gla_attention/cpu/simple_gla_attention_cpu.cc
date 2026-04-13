@@ -1,7 +1,7 @@
 #include "simple_gla_attention_cpu.h"
+#include "../../../../utils.h"
 #include "../../../handle.h"
 #include "../../../tensor.h"
-#include "../../../../utils.h"
 
 #include <cmath>
 #include <vector>
