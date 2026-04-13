@@ -16,11 +16,11 @@ __INFINI_C infiniStatus_t infiniopCreateSimpleGLAAttentionDescriptor(
     infiniopTensorDescriptor_t v_desc,
     infiniopTensorDescriptor_t g_gamma_desc) {
 
-#define CREATE_CPU(CASE)                                                                                    \
-    case CASE:                                                                                              \
-        return op::simple_gla_attention::cpu::Descriptor::create(                                             \
-            handle,                                                                                           \
-            reinterpret_cast<op::simple_gla_attention::cpu::Descriptor **>(desc_ptr),                       \
+#define CREATE_CPU(CASE)                                                              \
+    case CASE:                                                                        \
+        return op::simple_gla_attention::cpu::Descriptor::create(                     \
+            handle,                                                                   \
+            reinterpret_cast<op::simple_gla_attention::cpu::Descriptor **>(desc_ptr), \
             out_desc, q_desc, k_desc, v_desc, g_gamma_desc)
 
     switch (handle->device) {
@@ -51,9 +51,9 @@ __INFINI_C infiniStatus_t infiniopGetSimpleGLAAttentionWorkspaceSize(
     infiniopSimpleGLAAttentionDescriptor_t desc,
     size_t *size) {
 
-#define WS_CPU(CASE)                                                                                        \
-    case CASE:                                                                                              \
-        *size = reinterpret_cast<op::simple_gla_attention::cpu::Descriptor *>(desc)->workspaceSize();       \
+#define WS_CPU(CASE)                                                                                  \
+    case CASE:                                                                                        \
+        *size = reinterpret_cast<op::simple_gla_attention::cpu::Descriptor *>(desc)->workspaceSize(); \
         return INFINI_STATUS_SUCCESS
 
     switch (desc->device_type) {
@@ -86,9 +86,9 @@ __INFINI_C infiniStatus_t infiniopSimpleGLAAttention(
     float scale,
     void *stream) {
 
-#define CALC_CPU(CASE)                                                                                      \
-    case CASE:                                                                                              \
-        return reinterpret_cast<op::simple_gla_attention::cpu::Descriptor *>(desc)                            \
+#define CALC_CPU(CASE)                                                             \
+    case CASE:                                                                     \
+        return reinterpret_cast<op::simple_gla_attention::cpu::Descriptor *>(desc) \
             ->calculate(workspace, workspace_size, out, q, k, v, g_gamma, scale, stream)
 
     switch (desc->device_type) {
@@ -121,9 +121,9 @@ __INFINI_C infiniStatus_t infiniopSimpleGLAAttention(
 __INFINI_C infiniStatus_t infiniopDestroySimpleGLAAttentionDescriptor(
     infiniopSimpleGLAAttentionDescriptor_t desc) {
 
-#define DESTROY_CPU(CASE)                                                                                   \
-    case CASE:                                                                                              \
-        delete reinterpret_cast<op::simple_gla_attention::cpu::Descriptor *>(desc);                           \
+#define DESTROY_CPU(CASE)                                                           \
+    case CASE:                                                                      \
+        delete reinterpret_cast<op::simple_gla_attention::cpu::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS
 
     switch (desc->device_type) {
