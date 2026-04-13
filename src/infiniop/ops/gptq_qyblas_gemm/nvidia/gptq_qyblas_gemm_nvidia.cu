@@ -118,30 +118,15 @@ infiniStatus_t Descriptor::calculate(void *workspace,
 
     bool transpose_mat_1 = _info.transpose_mat_1;
     bool transpose_mat_2 = _info.transpose_mat_2;
-    int64_t M;
-    int64_t N;
-    int64_t lda;
-    int64_t ldb;
-    cublasOperation_t transa;
-    cublasOperation_t transb;
 
-    if (transpose_mat_2) {
-        M = static_cast<int64_t>(_info.N);
-        N = static_cast<int64_t>(_info.M);
-        lda = (bit == 4 ? static_cast<int64_t>(_info.ldb) * 2 : static_cast<int64_t>(_info.ldb));
-        ldb = static_cast<int64_t>(_info.lda);
-        std::swap(a, b);
-        std::swap(kernel_Atype_, kernel_Btype_);
-        transa = transpose_mat_2 ? CUBLAS_OP_T : CUBLAS_OP_N;
-        transb = transpose_mat_1 ? CUBLAS_OP_T : CUBLAS_OP_N;
-    } else {
-        M = static_cast<int64_t>(_info.M);
-        N = static_cast<int64_t>(_info.N);
-        lda = static_cast<int64_t>(_info.lda);
-        ldb = static_cast<int64_t>(_info.ldb);
-        transa = transpose_mat_1 ? CUBLAS_OP_T : CUBLAS_OP_N;
-        transb = transpose_mat_2 ? CUBLAS_OP_T : CUBLAS_OP_N;
-    }
+    int64_t M = static_cast<int64_t>(_info.M);
+    int64_t N = static_cast<int64_t>(_info.N);
+    int64_t lda = static_cast<int64_t>(_info.lda);
+    int64_t ldb = ((bit == 4 && transpose_mat_2) ? 2 * static_cast<int64_t>(_info.ldb) : static_cast<int64_t>(_info.ldb));
+
+    cublasOperation_t transa = transpose_mat_2 ? CUBLAS_OP_T : CUBLAS_OP_N;
+    cublasOperation_t transb = transpose_mat_1 ? CUBLAS_OP_T : CUBLAS_OP_N;
+
     int64_t scales_size_0 = static_cast<int64_t>(_info.scales_size_0);
     int64_t scales_size_1 = static_cast<int64_t>(_info.scales_size_1);
 
@@ -150,7 +135,7 @@ infiniStatus_t Descriptor::calculate(void *workspace,
     dlblasExtQuantParametersV2_t extParameters;
 
     if (quant_type == 0) {
-        extParameters.a_group_size_m = M / scales_size_1;
+        extParameters.a_group_size_m = N / scales_size_1;
         extParameters.a_group_size_k = K / scales_size_0;
         extParameters.a_zeropoints_type = kernel_Ztype_;
         extParameters.a_zeropoints = b_zeros;
@@ -166,13 +151,13 @@ infiniStatus_t Descriptor::calculate(void *workspace,
     } else if (quant_type == 2 || quant_type == 3) {
         // calculate block_shape according weight/scales shape
         int block_shape = 128;
-        while ((M + block_shape - 1) / block_shape < scales_size_0) {
+        while ((N + block_shape - 1) / block_shape < scales_size_0) {
             block_shape /= 2;
             if (block_shape < 32) {
                 fprintf(stderr,
                         "INTERNAL ASSERT FAILED: block_shape >= 32\n"
                         "Invalid fp blockwise linear arguments. Weight: [%d, %d]. Scales: [%d, %d].\n",
-                        (int)M, (int)K, (int)scales_size_0, (int)scales_size_1);
+                        (int)N, (int)K, (int)scales_size_0, (int)scales_size_1);
                 abort();
             }
         }
@@ -187,7 +172,12 @@ infiniStatus_t Descriptor::calculate(void *workspace,
         extParameters.a_zeropoints = nullptr;
         extParameters.a_scales = b_scales;
     }
-
+    printf("a=%s, b=%s, c=%s\n",
+           _info.transpose_mat_1 ? "true" : "false",
+           _info.transpose_mat_2 ? "true" : "false",
+           _info.transpose_result ? "true" : "false");
+    printf("M-K-N:[%ld, %ld, %ld], lda-ldb-ldc:[%ld, %ld, %ld]\n", M, K, N, lda, ldb, result_ld);
+    printf("quant type:%ld, bit:%ld\n", quant_type, bit);
     if (_info.dtype == INFINI_DTYPE_F16 || _info.dtype == INFINI_DTYPE_BF16) {
         CHECK_STATUS(_opaque->internal->useCublas(
             (cudaStream_t)stream,
@@ -196,16 +186,16 @@ infiniStatus_t Descriptor::calculate(void *workspace,
                     dlblasGemmExV2(handle,
                                    transa,
                                    transb,
-                                   M,
                                    N,
+                                   M,
                                    K,
                                    &alpha,
-                                   a,
-                                   kernel_Atype_,
-                                   lda,
                                    b,
                                    kernel_Btype_,
                                    ldb,
+                                   a,
+                                   kernel_Atype_,
+                                   lda,
                                    &beta,
                                    out,
                                    kernel_Ctype_,

@@ -29,9 +29,12 @@ import itertools
 # Test configurations
 
 BLOCK_SIZE = [[128, 128]]
-M_list = [1, 7]#, 83, 512, 2048]
-N_list = [128, 512]#, 1024, 4096, 7748, 13824]
-K_list = [256, 4096]#, 5120, 3884, 13824]
+# M_list = [1, 7]#, 83, 512, 2048]
+# N_list = [128, 512]#, 1024, 4096, 7748, 13824]
+# K_list = [256, 4096]#, 5120, 3884, 13824]
+M_list = 32768
+K_list = 3584
+N_list = 4608
 _WEIGHT_DTYPES = [InfiniDtype.I8]
 
 SEEDS = 0
@@ -429,8 +432,8 @@ if __name__ == "__main__":
     NUM_PRERUN = args.num_prerun
     NUM_ITERATIONS = args.num_iterations
 
-    # for device in get_test_devices(args):
-    #     test_operator(device, test, _TEST_CASES, _TENSOR_DTYPES)
+    for device in get_test_devices(args):
+        test_operator(device, test, _TEST_CASES, _TENSOR_DTYPES)
     for device in get_test_devices(args):
         test_operator(device, test_w4, _TEST_CASES_W4, _TENSOR_DTYPES_W4)
 
