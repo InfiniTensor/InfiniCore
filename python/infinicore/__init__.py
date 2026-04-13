@@ -108,10 +108,10 @@ from infinicore.ops.paged_caching import paged_caching
 from infinicore.ops.rearrange import rearrange
 from infinicore.ops.reciprocal import reciprocal
 from infinicore.ops.scatter import scatter
-from infinicore.ops.sinh import sinh
 from infinicore.ops.simple_gla_attention import simple_gla_attention
 from infinicore.ops.simple_gla_decode_step import simple_gla_decode_step
 from infinicore.ops.simple_gla_prefill import simple_gla_prefill
+from infinicore.ops.sinh import sinh
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.sum import sum
 from infinicore.ops.take import take
