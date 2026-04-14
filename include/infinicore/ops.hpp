@@ -14,6 +14,7 @@
 #include "ops/binary_cross_entropy_with_logits.hpp"
 #include "ops/causal_softmax.hpp"
 #include "ops/cdist.hpp"
+#include "ops/convert_to_f32.hpp"
 #include "ops/cross_entropy.hpp"
 #include "ops/embedding.hpp"
 #include "ops/flash_attention.hpp"

@@ -13,6 +13,23 @@ local FLASH_ATTN_ROOT = get_config("flash-attn")
 
 local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
 
+-- Device link (devlink) must use the same -gencode as compilation; otherwise xmake's
+-- *_gpucode step falls back to nvcc defaults (e.g. sm_75) and final shared libs won't match cuda_arch.
+local function add_nvcc_arch_flags_for_target()
+    local arch_opt = get_config("cuda_arch")
+    if arch_opt and type(arch_opt) == "string" then
+        for _, arch in ipairs(arch_opt:split(",")) do
+            arch = arch:trim()
+            local compute = arch:gsub("sm_", "compute_")
+            local g = "-gencode=arch=" .. compute .. ",code=" .. arch
+            add_cuflags(g)
+            add_culdflags(g)
+        end
+    else
+        add_cugencodes("native")
+    end
+end
+
 target("infiniop-nvidia")
     set_kind("static")
     add_deps("infini-utils")
@@ -63,16 +80,7 @@ target("infiniop-nvidia")
 
     add_cuflags("-Xcompiler=-Wno-error=deprecated-declarations", "-Xcompiler=-Wno-error=unused-function")
 
-    local arch_opt = get_config("cuda_arch")
-    if arch_opt and type(arch_opt) == "string" then
-        for _, arch in ipairs(arch_opt:split(",")) do
-            arch = arch:trim()
-            local compute = arch:gsub("sm_", "compute_")
-            add_cuflags("-gencode=arch=" .. compute .. ",code=" .. arch)
-        end
-    else
-        add_cugencodes("native")
-    end
+    add_nvcc_arch_flags_for_target()
 
     set_languages("cxx17")
     add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu", "../src/infiniop/ops/*/*/nvidia/*.cu")
@@ -101,8 +109,15 @@ target("infinirt-nvidia")
         add_cxxflags("-fPIC")
     end
 
+    add_nvcc_arch_flags_for_target()
+
     set_languages("cxx17")
     add_files("../src/infinirt/cuda/*.cu")
+
+    -- xmake may omit host -fPIC for some .cu toolchains; shared libinfinirt.so needs PIC relocations.
+    if not is_plat("windows") then
+        add_cuflags("-Xcompiler=-fPIC", {force = true})
+    end
 target_end()
 
 target("infiniccl-nvidia")
@@ -119,6 +134,8 @@ target("infiniccl-nvidia")
             add_culdflags("-Xcompiler=-fPIC")
             add_cxflags("-fPIC")
             add_cxxflags("-fPIC")
+
+            add_nvcc_arch_flags_for_target()
 
             local nccl_root = os.getenv("NCCL_ROOT")
             if nccl_root then
@@ -151,7 +168,7 @@ target("flash-attn-nvidia")
             local PYTHON_INCLUDE = os.iorunv("python", {"-c", "import sysconfig; print(sysconfig.get_paths()['include'])"}):trim()
             local PYTHON_LIB_DIR = os.iorunv("python", {"-c", "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))"}):trim()
             local LIB_PYTHON = os.iorunv("python", {"-c", "import glob,sysconfig,os;print(glob.glob(os.path.join(sysconfig.get_config_var('LIBDIR'),'libpython*.so'))[0])"}):trim()
-            
+
             -- Include dirs (needed for both device and host)
             target:add("includedirs", FLASH_ATTN_ROOT .. "/csrc/flash_attn/src", {public = false})
             target:add("includedirs", TORCH_DIR .. "/include/torch/csrc/api/include", {public = false})
@@ -167,10 +184,10 @@ target("flash-attn-nvidia")
 
         add_files(FLASH_ATTN_ROOT .. "/csrc/flash_attn/flash_api.cpp")
         add_files(FLASH_ATTN_ROOT .. "/csrc/flash_attn/src/*.cu")
-        
+
         -- Link options
         add_ldflags("-Wl,--no-undefined", {force = true})
-        
+
         -- Compile options
         add_cxflags("-fPIC", {force = true})
         add_cuflags("-Xcompiler=-fPIC")

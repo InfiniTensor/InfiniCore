@@ -26,6 +26,7 @@
 #include "infiniop/ops/cdist.h"
 #include "infiniop/ops/clip.h"
 #include "infiniop/ops/conv.h"
+#include "infiniop/ops/convert_to_f32.h"
 #include "infiniop/ops/cross_entropy.h"
 #include "infiniop/ops/dequant/per_tensor_dequant_int8.h"
 #include "infiniop/ops/dequantize_awq.h"

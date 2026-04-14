@@ -69,6 +69,7 @@ from infinicore.ops.block_diag import block_diag
 from infinicore.ops.broadcast_to import broadcast_to
 from infinicore.ops.cat import cat
 from infinicore.ops.cdist import cdist
+from infinicore.ops.convert_to_f32 import convert_to_f32
 from infinicore.ops.cross_entropy import cross_entropy
 from infinicore.ops.diff import diff
 from infinicore.ops.digamma import digamma
@@ -216,6 +217,7 @@ __all__ = [
     "unsqueeze",
     "rearrange",
     "cross_entropy",
+    "convert_to_f32",
     "tan",
     "empty",
     "empty_like",

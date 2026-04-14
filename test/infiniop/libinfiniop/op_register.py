@@ -409,6 +409,35 @@ def clip_(lib):
 
 
 @OpRegister.operator
+def convert_to_f32_(lib):
+    lib.infiniopCreateConvertToF32Descriptor.restype = c_int32
+    lib.infiniopCreateConvertToF32Descriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+    lib.infiniopGetConvertToF32WorkspaceSize.restype = c_int32
+    lib.infiniopGetConvertToF32WorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopConvertToF32.restype = c_int32
+    lib.infiniopConvertToF32.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyConvertToF32Descriptor.restype = c_int32
+    lib.infiniopDestroyConvertToF32Descriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def cross_entropy_(lib):
     lib.infiniopCreateCrossEntropyDescriptor.restype = c_int32
     lib.infiniopCreateCrossEntropyDescriptor.argtypes = [
