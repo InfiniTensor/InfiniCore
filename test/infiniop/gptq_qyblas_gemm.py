@@ -21,6 +21,8 @@ from libinfiniop import (
 )
 from enum import Enum, auto
 import itertools
+from libinfiniop.scalar_type import scalar_types, ScalarType
+from typing import TYPE_CHECKING, Dict, List, Mapping, Optional, Tuple, Union
 
 # ==============================================================================
 #  Configuration (Internal Use Only)
@@ -51,20 +53,27 @@ _TEST_CASES = list(
     )
 )
 
-
-_TEST_CASES_W4 = [(32768, 3584, 4608, 128, InfiniDtype.U8),]
+_TEST_CASES_BIT = [
+    # M , K, N, group_size, bit
+    (128, 128, 128, 128, 4),
+    (32768, 3584, 4608, 128, 4),
+    (32768, 3584, 4608, 128, 8),
+]
 
 
 # Data types used for testing
 _TENSOR_DTYPES = [InfiniDtype.BF16, InfiniDtype.F16]
 
-_TENSOR_DTYPES_W4 = [InfiniDtype.F16]
+_TENSOR_DTYPES_BIT = [InfiniDtype.BF16, InfiniDtype.F16]
 
 
 DEBUG = False
 PROFILE = False
 NUM_PRERUN = 10
 NUM_ITERATIONS = 1000
+
+SUPPORTED_GPTQ_QUANT_TYPES = [scalar_types.uint4b8, scalar_types.uint8b128]
+SUPPORTED_GROUP_SIZES = [-1, 32, 64, 128]
 
 
 def native_w8a16_block_int8_matmul(
@@ -117,97 +126,145 @@ def native_w8a16_block_int8_matmul(
     return C
 
 
-def awq_dequantize(qweight, scales, qzeros, split_k_iters=0, thx=0, thy=0, group_size=128):
-    """
-    支持多种shape的高性能AWQ反量化，适配CUDA/CPU。
-    qweight: [IC, OC // 8] int32
-    scales:  [IC // group_size, OC] float16/float32
-    qzeros:  [IC // group_size, OC // 8] int32
-    返回: [IC, OC] float16
-    """
-    IC, OC_packed = qweight.shape
-    OC = scales.shape[1]
-    num_groups = IC // group_size
-    assert OC == OC_packed * 8, f"OC mismatch: {OC} vs {OC_packed*8}"
-    assert scales.shape[0] == num_groups, f"scales shape[0] {scales.shape[0]} != num_groups {num_groups}"
-    assert qzeros.shape == (num_groups, OC_packed), f"qzeros shape {qzeros.shape} != ({num_groups}, {OC_packed})"
+def _gguf_quantize_weights(w: torch.Tensor,
+                     quant_type: ScalarType,
+                     group_size: Optional[int],
+                     zero_points: bool = False,
+                     ref_zero_points_after_scales: bool = False,
+                     need_weight_ref: bool = True):
+    assert quant_type.is_integer(), \
+        "Floating point quantization may work but has not been tested"
+    assert not zero_points or group_size is not None, \
+        "to have group zero points, group_size must be provided "\
+        "(-1 group_size is channelwise)"
 
-    device = qweight.device
-    dtype = torch.float16
+    orig_device = w.device
+    orig_type = w.dtype
+    size_k, size_n = w.shape
 
-    # 生成shift和mask
-    shifts = torch.arange(8, device=device, dtype=torch.int32) * 4  # [8]
-    mask = 0xF
+    assert w.is_floating_point(), "w must be float"
 
-    # 展开权重和零点
-    qweight_expand = qweight.unsqueeze(-1)  # [IC, OC_packed, 1]
-    w_4bit = torch.bitwise_and(torch.bitwise_right_shift(qweight_expand, shifts), mask)  # [IC, OC_packed, 8]
+    if group_size == -1:
+        group_size = size_k
 
-    group_idx = torch.arange(IC, device=device) // group_size  # [IC]
-    qzeros_expand = qzeros[group_idx]  # [IC, OC_packed]
-    qzeros_expand = qzeros_expand.unsqueeze(-1)
-    z_4bit = torch.bitwise_and(torch.bitwise_right_shift(qzeros_expand, shifts), mask)  # [IC, OC_packed, 8]
-    qzeros_fp16 = z_4bit.to(torch.float16).reshape(IC, OC)  # 修正shape为[IC, OC]
-    qweight_uint8 = w_4bit.to(torch.uint8)
+    # Reshape to [groupsize, -1]
+    if group_size is not None and group_size < size_k:
+        w = w.reshape((-1, group_size, size_n))
+        w = w.permute(1, 0, 2)
+        w = w.reshape((group_size, -1))
 
-    # 计算scale
-    scales_expand = scales[group_idx]  # [IC, OC]
-    scales_expand = scales_expand.view(IC, OC_packed, 8)
+    # Compute scale for each group
+    max_val = torch.max(w, 0, keepdim=True).values
+    min_val = torch.min(w, 0, keepdim=True).values
 
-    # 反量化
-    out = (w_4bit - z_4bit).to(dtype) * scales_expand.to(dtype)  # [IC, OC_packed, 8]
-    out = out.reshape(IC, OC)
-    return out, qzeros_fp16, qweight_uint8
+    max_q_val = quant_type.max()
+    min_q_val = quant_type.min()
 
+    w_s = torch.Tensor([1.0]).to(w.device)  # unscaled case
+    maybe_w_zp = None
+    if group_size is not None:
+        if zero_points:
+            assert not quant_type.is_signed() and quant_type.max() > 0
+            w_s = (max_val - min_val).clamp(min=1e-5) / quant_type.max()
+            maybe_w_zp = torch.round(torch.abs(min_val / w_s)) \
+                .clamp(min_q_val, max_q_val).int()
+        else:
+            # If the bias is such that there are no possible negative/positive
+            #  values, set the max value to inf to avoid divide by 0
+            w_s = torch.max(
+                abs(max_val / (max_q_val if max_q_val != 0 else torch.inf)),
+                abs(min_val / (min_q_val if min_q_val != 0 else torch.inf)))
 
-def convert_awq_tensor(tensor, tensor_type):
-    # convert awq qweight/qzeros to a standard format (assume int4)
-    # qweight: (k, n // pack_factor_bit32) -> (n, k // pack_factor_bit8)
-    # qzeros: (k // group_size, n // pack_factor_bit32) ->
-    #         (n // pack_factor_bit8, k // group_size)
-    # pack_factor_bit32 = 32 // weight_bits
-    # pack_factor_bit8 = 8 // weight_bits
+    # Quantize
+    w_q = torch.round(w / w_s).int() + (maybe_w_zp if zero_points else 0)
+    w_q = torch.clamp(w_q, min_q_val, max_q_val)
 
-    # 0. suppose origin shape (a, b), dtype int32
-    # 1. convert to uint8, shape (a, b) -> (a, 4 * b)
-    size0 = tensor.size(0)
-    tensor = tensor.view(torch.uint8)
+    # Compute ref (dequantized)
+    # For some kernels (namely Machete) the zero-points are applied after the
+    # scales are applied, for this case computing the reference in similar way
+    # allows us to use tighter error tolerances in our unit tests.
+    if need_weight_ref:
+        if ref_zero_points_after_scales and maybe_w_zp is not None:
+            w_ref = w_q.to(orig_type) * w_s - maybe_w_zp.to(orig_type) * w_s
+        else:
+            w_ref = (w_q - (maybe_w_zp if zero_points else 0)).to(orig_type) * w_s
 
-    # 2. unpack to uint4 (only when weight_bits == 4)
-    #    shape (a, 4 * b) -> (a, 4 * b, 2)
-    shifter = torch.tensor([0, 4],
-                            dtype=torch.uint8,
-                            device=tensor.device)
-    tensor = (tensor[:, :, None] >> shifter) & 0xF
+    if quant_type.has_bias():
+        w_q += quant_type.bias
 
-    # 3. change order, see
-    # https://github.com/casper-hansen/AutoAWQ/blob/v0.2.8/awq/utils/quant_utils.py
-    # shape -> (a, 4 * b * pack_factor_bit8)
-    reverse_awq_pack_order = [0, 4, 1, 5, 2, 6, 3, 7]
-    tensor = tensor.view(-1, 8)[:, reverse_awq_pack_order]
-    tensor = tensor.view(size0, -1)
+    # Restore original shapes
+    if group_size is not None and group_size < size_k:
 
-    # 4. transpose, shape -> (4 * b * pack_factor_bit8, a)
-    tensor = tensor.T.contiguous()
+        def reshape_w(w):
+            w = w.reshape((group_size, -1, size_n))
+            w = w.permute(1, 0, 2)
+            w = w.reshape((size_k, size_n)).contiguous()
+            return w
 
-    # 5. repack (only when weight_bits == 4)
-    # qweight shape -> (4 * b * pack_factor_bit8, a // pack_factor_bit8)
-    # qzeros shape -> (4 * b, a)
+        w_q = reshape_w(w_q)
+        if need_weight_ref:
+            w_ref = reshape_w(w_ref)
+        w_s = w_s.reshape((-1, size_n)).contiguous()
 
-    if tensor_type == "qweight":
-        tensor = tensor[:, 1::2] * 16 + tensor[:, ::2]
-    elif tensor_type == "qzeros":
-        tensor = tensor[1::2, :] * 16 + tensor[::2, :]
-    return tensor
+    if maybe_w_zp is not None:
+        maybe_w_zp = maybe_w_zp.reshape((-1, size_n)).contiguous()
+        maybe_w_zp = maybe_w_zp.to(device=orig_device)
 
-def unpack_4bit_qweight(qweight):
-    # qweight: [1280, 7680] uint8
-    low = qweight & 0xF
-    high = (qweight >> 4) & 0xF
-    unpacked = torch.empty(qweight.shape[0] * 2, qweight.shape[1], dtype=torch.uint8, device=qweight.device)
-    unpacked[0::2, :] = low
-    unpacked[1::2, :] = high
-    return unpacked  # [2560, 7680]
+    return (
+        w_ref.to(device=orig_device) if need_weight_ref else None,
+        w_q.to(device=orig_device),
+        w_s if group_size is not None else None,
+        maybe_w_zp,
+    )
+
+def gguf_quantize_weights(w: torch.Tensor,
+                          group_size: int,
+                          zero_points: bool = False,
+                          need_weight_ref: bool = False,
+                          bits: int = 4,
+                          ref_zero_points_after_scales: bool = False,
+                          params_dtype: torch.dtype = torch.float16):
+    size_k, _ = w.shape
+
+    assert w.is_floating_point(), "w must be float"
+    assert group_size in SUPPORTED_GROUP_SIZES + [
+        size_k
+    ], f"Unsupported groupsize = {group_size}"
+
+    w_ref, w_q, w_s, w_z = _gguf_quantize_weights(w, quant_type=scalar_types.uint4 if bits == 4 else scalar_types.uint8,
+                                          group_size=group_size,
+                                          zero_points=zero_points,
+                                          need_weight_ref=need_weight_ref,
+                                          ref_zero_points_after_scales=ref_zero_points_after_scales)
+
+    if zero_points:
+        w_z = w_z.to(params_dtype)
+
+    w_q = w_q.to(torch.uint8)
+
+    return w_ref, w_q, w_s, w_z
+
+def gguf_linear_quantize_weights(w: torch.Tensor,
+                          group_size: int,
+                          zero_points: bool = False,
+                          need_weight_ref: bool = False,
+                          bits: int =4,
+                          params_dtype: torch.dtype = torch.float16):
+    w_ref, w_q, w_s, w_z = gguf_quantize_weights(
+        w=w,
+        group_size=group_size,
+        zero_points=zero_points,
+        need_weight_ref=need_weight_ref,
+        bits=bits,
+        ref_zero_points_after_scales=False,
+        params_dtype=params_dtype,
+    )
+
+    if bits == 4:
+        w_q = (w_q[:,1::2] << 4) | w_q[:, ::2]
+        w_q = w_q.reshape(w_q.shape[0]//2, -1) # This step is to match the parameters of the dlblasGemmExV2
+
+    return w_ref, w_q, w_s, w_z
 
 
 
@@ -356,20 +413,20 @@ def test(
     check_error(LIBINFINIOP.infiniopDestroyGptqQyblasGemmDescriptor(descriptor))
 
 
-def test_w4(
+def test_bit(
     handle,
     device,
     M,
     K,
     N,
     group_size,
-    weight_dtype=InfiniDtype.I8,
+    bit,
     dtype=InfiniDtype.BF16,
     sync=None,
 ):
 
     print(
-        f"Testing w4 Gptq Qyblas Gemm on {InfiniDeviceNames[device]} with M-K-N:{M, K, N}, group_size:{group_size}, weight dtype:{InfiniDtypeNames[weight_dtype]}, dtype:{InfiniDtypeNames[dtype]}"
+        f"Testing Gptq Qyblas Gemm on {InfiniDeviceNames[device]} with M-K-N:{M, K, N}, group_size:{group_size}, bit:{bit}, dtype:{InfiniDtypeNames[dtype]}"
     )
     quant_type = 0
     bit = 4
@@ -382,34 +439,45 @@ def test_w4(
         dtype,
         device,
     )
-    if weight_dtype == InfiniDtype.I8:
-        _info = torch.iinfo(torch.int8)
-    elif weight_dtype == InfiniDtype.U8:
-        _info = torch.iinfo(torch.uint8)
-    elif weight_dtype == InfiniDtype.F8:
-        _info = torch.iinfo(float8_e4m3fn)
-
-    B = TestTensor(
-        (K // 2, N),
-        None,
-        weight_dtype,
-        device,
-        randint_low=_info.min,
-        randint_high=_info.max,
-    )
-    
-    b_scales = TestTensor(
-        (k_tiles, N),
+    B_orig = TestTensor(
+        (K, N),
         None,
         dtype,
         device,
+    )
+    w_ref, w_q, w_s, w_z = gguf_linear_quantize_weights(B_orig.torch_tensor(),
+                                                 group_size=group_size,
+                                                 zero_points=True,
+                                                 need_weight_ref=True,
+                                                 bits=bit,
+                                                 params_dtype=to_torch_dtype(dtype))                                           
+    
+    B = TestTensor(
+        w_q.shape,
+        w_q.stride(),
+        InfiniDtype.U8,
+        device,
+        mode="manual",
+        set_tensor=w_q,
+    )
+
+    
+    b_scales = TestTensor(
+        w_s.shape,
+        w_s.stride(),
+        dtype,
+        device,
+        mode="manual",
+        set_tensor=w_s,
     )
 
     b_zeros = TestTensor(
-        (k_tiles, N),
-        None,
+        w_z.shape,
+        w_z.stride(),
         dtype,
         device,
+        mode="manual",
+        set_tensor=w_z,
     )
     
     out = TestTensor(
@@ -470,20 +538,22 @@ def test_w4(
     if sync is not None:
         sync()
     
-    # weight = awq_dequantize(B_orig.torch_tensor(), b_scales.torch_tensor(), zeros_orig.torch_tensor(), group_size=group_size)[0]
-    # ans = torch.matmul(A.torch_tensor(), weight)
-    
-    # rel_diff = (torch.mean(
-    #     torch.abs(out.actual_tensor().to(torch.float32) - ans.to(torch.float32))) /
-    #             torch.mean(torch.abs(ans.to(torch.float32))))
-    # print(rel_diff)
-    # assert rel_diff < 0.05
+    atol, rtol = 2e-2, 2e-2
+    if bit == 8:
+        atol, rtol = 2e-2, 0
+    else:
+        atol, rtol = 2e-2, 2e-2
+    ans = torch.matmul(A.torch_tensor(), w_ref.to(A.torch_tensor().device))
+    if DEBUG:
+        debug(out.actual_tensor(), ans, atol=atol, rtol=rtol)
+
+    assert torch.allclose(out.actual_tensor(), ans, atol=atol, rtol=rtol)
     
 
     # Profiling workflow
     if PROFILE:
         # fmt: off
-        profile_operation("PyTorch", lambda: torch.matmul(A.torch_tensor(), weight), device, NUM_PRERUN, NUM_ITERATIONS)
+        profile_operation("PyTorch", lambda: torch.matmul(A.torch_tensor(), w_ref.to(A.torch_tensor().device)), device, NUM_PRERUN, NUM_ITERATIONS)
         profile_operation("    lib", lambda: lib_gptq_qyblas_gemm(), device, NUM_PRERUN, NUM_ITERATIONS)
         # fmt: on
 
@@ -502,6 +572,6 @@ if __name__ == "__main__":
     for device in get_test_devices(args):
         test_operator(device, test, _TEST_CASES, _TENSOR_DTYPES)
     for device in get_test_devices(args):
-        test_operator(device, test_w4, _TEST_CASES_W4, _TENSOR_DTYPES_W4)
+        test_operator(device, test_bit, _TEST_CASES_BIT, _TENSOR_DTYPES_BIT)
 
     print("\033[92mTest passed!\033[0m")
