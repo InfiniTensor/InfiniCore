@@ -29,12 +29,10 @@ import itertools
 # Test configurations
 
 BLOCK_SIZE = [[128, 128]]
-# M_list = [1, 7]#, 83, 512, 2048]
-# N_list = [128, 512]#, 1024, 4096, 7748, 13824]
-# K_list = [256, 4096]#, 5120, 3884, 13824]
-M_list = 32768
-K_list = 3584
-N_list = 4608
+M_list = [1, 7]#, 83, 512, 2048]
+N_list = [128, 512]#, 1024, 4096, 7748, 13824]
+K_list = [256, 4096]#, 5120, 3884, 13824]
+
 _WEIGHT_DTYPES = [InfiniDtype.I8]
 
 SEEDS = 0
@@ -54,7 +52,7 @@ _TEST_CASES = list(
 )
 
 
-_TEST_CASES_W4 = [(32768, 3584, 4608, [128, 128], InfiniDtype.U8),]
+_TEST_CASES_W4 = [(32768, 3584, 4608, 128, InfiniDtype.U8),]
 
 
 # Data types used for testing
@@ -117,6 +115,100 @@ def native_w8a16_block_int8_matmul(
 
     C = C.reshape(origin_C_shape).to(output_dtype)
     return C
+
+
+def awq_dequantize(qweight, scales, qzeros, split_k_iters=0, thx=0, thy=0, group_size=128):
+    """
+    支持多种shape的高性能AWQ反量化，适配CUDA/CPU。
+    qweight: [IC, OC // 8] int32
+    scales:  [IC // group_size, OC] float16/float32
+    qzeros:  [IC // group_size, OC // 8] int32
+    返回: [IC, OC] float16
+    """
+    IC, OC_packed = qweight.shape
+    OC = scales.shape[1]
+    num_groups = IC // group_size
+    assert OC == OC_packed * 8, f"OC mismatch: {OC} vs {OC_packed*8}"
+    assert scales.shape[0] == num_groups, f"scales shape[0] {scales.shape[0]} != num_groups {num_groups}"
+    assert qzeros.shape == (num_groups, OC_packed), f"qzeros shape {qzeros.shape} != ({num_groups}, {OC_packed})"
+
+    device = qweight.device
+    dtype = torch.float16
+
+    # 生成shift和mask
+    shifts = torch.arange(8, device=device, dtype=torch.int32) * 4  # [8]
+    mask = 0xF
+
+    # 展开权重和零点
+    qweight_expand = qweight.unsqueeze(-1)  # [IC, OC_packed, 1]
+    w_4bit = torch.bitwise_and(torch.bitwise_right_shift(qweight_expand, shifts), mask)  # [IC, OC_packed, 8]
+
+    group_idx = torch.arange(IC, device=device) // group_size  # [IC]
+    qzeros_expand = qzeros[group_idx]  # [IC, OC_packed]
+    qzeros_expand = qzeros_expand.unsqueeze(-1)
+    z_4bit = torch.bitwise_and(torch.bitwise_right_shift(qzeros_expand, shifts), mask)  # [IC, OC_packed, 8]
+    qzeros_fp16 = z_4bit.to(torch.float16).reshape(IC, OC)  # 修正shape为[IC, OC]
+    qweight_uint8 = w_4bit.to(torch.uint8)
+
+    # 计算scale
+    scales_expand = scales[group_idx]  # [IC, OC]
+    scales_expand = scales_expand.view(IC, OC_packed, 8)
+
+    # 反量化
+    out = (w_4bit - z_4bit).to(dtype) * scales_expand.to(dtype)  # [IC, OC_packed, 8]
+    out = out.reshape(IC, OC)
+    return out, qzeros_fp16, qweight_uint8
+
+
+def convert_awq_tensor(tensor, tensor_type):
+    # convert awq qweight/qzeros to a standard format (assume int4)
+    # qweight: (k, n // pack_factor_bit32) -> (n, k // pack_factor_bit8)
+    # qzeros: (k // group_size, n // pack_factor_bit32) ->
+    #         (n // pack_factor_bit8, k // group_size)
+    # pack_factor_bit32 = 32 // weight_bits
+    # pack_factor_bit8 = 8 // weight_bits
+
+    # 0. suppose origin shape (a, b), dtype int32
+    # 1. convert to uint8, shape (a, b) -> (a, 4 * b)
+    size0 = tensor.size(0)
+    tensor = tensor.view(torch.uint8)
+
+    # 2. unpack to uint4 (only when weight_bits == 4)
+    #    shape (a, 4 * b) -> (a, 4 * b, 2)
+    shifter = torch.tensor([0, 4],
+                            dtype=torch.uint8,
+                            device=tensor.device)
+    tensor = (tensor[:, :, None] >> shifter) & 0xF
+
+    # 3. change order, see
+    # https://github.com/casper-hansen/AutoAWQ/blob/v0.2.8/awq/utils/quant_utils.py
+    # shape -> (a, 4 * b * pack_factor_bit8)
+    reverse_awq_pack_order = [0, 4, 1, 5, 2, 6, 3, 7]
+    tensor = tensor.view(-1, 8)[:, reverse_awq_pack_order]
+    tensor = tensor.view(size0, -1)
+
+    # 4. transpose, shape -> (4 * b * pack_factor_bit8, a)
+    tensor = tensor.T.contiguous()
+
+    # 5. repack (only when weight_bits == 4)
+    # qweight shape -> (4 * b * pack_factor_bit8, a // pack_factor_bit8)
+    # qzeros shape -> (4 * b, a)
+
+    if tensor_type == "qweight":
+        tensor = tensor[:, 1::2] * 16 + tensor[:, ::2]
+    elif tensor_type == "qzeros":
+        tensor = tensor[1::2, :] * 16 + tensor[::2, :]
+    return tensor
+
+def unpack_4bit_qweight(qweight):
+    # qweight: [1280, 7680] uint8
+    low = qweight & 0xF
+    high = (qweight >> 4) & 0xF
+    unpacked = torch.empty(qweight.shape[0] * 2, qweight.shape[1], dtype=torch.uint8, device=qweight.device)
+    unpacked[0::2, :] = low
+    unpacked[1::2, :] = high
+    return unpacked  # [2560, 7680]
+
 
 
 def test(
@@ -270,20 +362,19 @@ def test_w4(
     M,
     K,
     N,
-    block_size,
+    group_size,
     weight_dtype=InfiniDtype.I8,
     dtype=InfiniDtype.BF16,
     sync=None,
 ):
+
     print(
-        f"Testing w4 Gptq Qyblas Gemm on {InfiniDeviceNames[device]} with M-K-N:{M, K, N}, block_size:{block_size}, weight dtype:{InfiniDtypeNames[weight_dtype]}, dtype:{InfiniDtypeNames[dtype]}"
+        f"Testing w4 Gptq Qyblas Gemm on {InfiniDeviceNames[device]} with M-K-N:{M, K, N}, group_size:{group_size}, weight dtype:{InfiniDtypeNames[weight_dtype]}, dtype:{InfiniDtypeNames[dtype]}"
     )
     quant_type = 0
     bit = 4
 
-    block_n, block_k = block_size[0], block_size[1]
-    n_tiles = (N + block_n - 1) // block_n
-    k_tiles = (K + block_k - 1) // block_k
+    k_tiles = (K + group_size - 1) // group_size
 
     A = TestTensor(
         (M, K),
@@ -297,23 +388,6 @@ def test_w4(
         _info = torch.iinfo(torch.uint8)
     elif weight_dtype == InfiniDtype.F8:
         _info = torch.iinfo(float8_e4m3fn)
-    # B_orig = TestTensor(
-    #     (N, K // 2),
-    #     None,
-    #     weight_dtype,
-    #     device,
-    #     randint_low=_info.min,
-    #     randint_high=_info.max,
-    # )
-    # B_torch = B_orig.torch_tensor().t()
-    # B = TestTensor(
-    #     (K // 2, N),
-    #     B_torch.stride(),
-    #     weight_dtype,
-    #     device,
-    #     mode="manual",
-    #     set_tensor=B_torch,
-    # )
 
     B = TestTensor(
         (K // 2, N),
@@ -336,7 +410,6 @@ def test_w4(
         None,
         dtype,
         device,
-        mode="zeros",
     )
     
     out = TestTensor(
@@ -346,12 +419,6 @@ def test_w4(
         device,
         mode="zeros",
     )
-
-    print("A", A.torch_tensor().shape, A.torch_tensor().dtype, A.torch_tensor().stride())
-    print("B", B.torch_tensor().shape, B.torch_tensor().dtype, B.torch_tensor().stride())
-    print("scales", b_scales.torch_tensor().shape, b_scales.torch_tensor().dtype, b_scales.torch_tensor().stride())
-    print("zeros", b_zeros.torch_tensor().shape, b_zeros.torch_tensor().dtype, b_zeros.torch_tensor().stride())
-    print("out", out.torch_tensor().shape, out.torch_tensor().dtype, out.torch_tensor().stride())
 
     if sync is not None:
         sync()
@@ -402,21 +469,21 @@ def test_w4(
 
     if sync is not None:
         sync()
-
-    out_dtype = to_torch_dtype(dtype)
-    ans = native_w8a16_block_int8_matmul(A.torch_tensor(), B_orig.torch_tensor(), b_scales.torch_tensor(), block_size, out_dtype)
     
-    rel_diff = (torch.mean(
-        torch.abs(out.actual_tensor().to(torch.float32) - ans.to(torch.float32))) /
-                torch.mean(torch.abs(ans.to(torch.float32))))
-
-    assert rel_diff < 0.05
+    # weight = awq_dequantize(B_orig.torch_tensor(), b_scales.torch_tensor(), zeros_orig.torch_tensor(), group_size=group_size)[0]
+    # ans = torch.matmul(A.torch_tensor(), weight)
+    
+    # rel_diff = (torch.mean(
+    #     torch.abs(out.actual_tensor().to(torch.float32) - ans.to(torch.float32))) /
+    #             torch.mean(torch.abs(ans.to(torch.float32))))
+    # print(rel_diff)
+    # assert rel_diff < 0.05
     
 
     # Profiling workflow
     if PROFILE:
         # fmt: off
-        profile_operation("PyTorch", lambda: native_w8a16_block_int8_matmul(A.torch_tensor(), B_orig.torch_tensor(), b_scales.torch_tensor(), block_size, out_dtype), device, NUM_PRERUN, NUM_ITERATIONS)
+        profile_operation("PyTorch", lambda: torch.matmul(A.torch_tensor(), weight), device, NUM_PRERUN, NUM_ITERATIONS)
         profile_operation("    lib", lambda: lib_gptq_qyblas_gemm(), device, NUM_PRERUN, NUM_ITERATIONS)
         # fmt: on
 

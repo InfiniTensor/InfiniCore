@@ -3,6 +3,36 @@
 #include "dlblas_ext.h"
 #include "gptq_qyblas_gemm_nvidia.cuh"
 
+inline cudaDataType_t ScalarTypeToCudaDataType(
+    infiniDtype_t scalar_type) {
+    switch (scalar_type) {
+    case INFINI_DTYPE_U8:
+        return CUDA_R_8U;
+    case INFINI_DTYPE_I8:
+        return CUDA_R_8I;
+    case INFINI_DTYPE_I32:
+        return CUDA_R_32I;
+    case INFINI_DTYPE_F16:
+        return CUDA_R_16F;
+    case INFINI_DTYPE_F32:
+        return CUDA_R_32F;
+    case INFINI_DTYPE_F64:
+        return CUDA_R_64F;
+    case INFINI_DTYPE_I16:
+        return CUDA_R_16I;
+    case INFINI_DTYPE_I64:
+        return CUDA_R_64I;
+    case INFINI_DTYPE_BF16:
+        return CUDA_R_16BF;
+    case INFINI_DTYPE_F8:
+        return (cudaDataType_t)CUDA_R_8F_E4M3;
+    default:
+        fprintf(stderr,
+                "Cannot convert ScalarType %d\n",
+                (int)scalar_type);
+        abort();
+    }
+}
 namespace op::gptq_qyblas_gemm::nvidia {
 
 struct Descriptor::Opaque {
@@ -47,17 +77,14 @@ infiniStatus_t Descriptor::calculate(void *workspace,
 
     cudaDataType_t computeType_ = (cudaDataType_t)CUDA_R_32F;
     cudaDataType_t kernel_Atype_, kernel_Btype_, kernel_Ctype_, kernel_Stype_, kernel_Ztype_;
-
-    switch (_info.dtype) {
-    case INFINI_DTYPE_F16:
-        kernel_Atype_ = CUDA_R_16F;
-        break;
-    case INFINI_DTYPE_BF16:
-        kernel_Atype_ = CUDA_R_16BF;
-        break;
-    default:
-        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    auto dtype = _info.dtype;
+    auto weight_dtype = _info.weight_dtype;
+    if (_info.transpose_result) {
+        std::swap(a, b);
+        std::swap(dtype, weight_dtype);
     }
+    kernel_Atype_ = ScalarTypeToCudaDataType(dtype);
+    kernel_Btype_ = ScalarTypeToCudaDataType(weight_dtype);
 
     if (quant_type == 0) {
         if (8 == bit) {
@@ -66,66 +93,21 @@ infiniStatus_t Descriptor::calculate(void *workspace,
 
         if (4 == bit) {
             kernel_Atype_ = (cudaDataType_t)CUDA_R_4U;
+            K = K * 2;
         }
     }
 
-    switch (_info.weight_dtype) {
-    case INFINI_DTYPE_F8:
-        kernel_Btype_ = (cudaDataType_t)CUDA_R_8F_E4M3;
-        break;
-    case INFINI_DTYPE_U8:
-        kernel_Btype_ = CUDA_R_8U;
-        break;
-    case INFINI_DTYPE_I8:
-        kernel_Btype_ = CUDA_R_8I;
-        break;
-    default:
-        return INFINI_STATUS_BAD_TENSOR_DTYPE;
-    }
-
-    kernel_Ctype_ = kernel_Atype_;
-
-    switch (_info.scales_dtype) {
-    case INFINI_DTYPE_F32:
-        kernel_Stype_ = CUDA_R_32F;
-        break;
-    case INFINI_DTYPE_F16:
-        kernel_Stype_ = CUDA_R_16F;
-        break;
-    case INFINI_DTYPE_BF16:
-        kernel_Stype_ = CUDA_R_16BF;
-        break;
-    default:
-        return INFINI_STATUS_BAD_TENSOR_DTYPE;
-    }
-
-    switch (_info.zeros_dtype) {
-    case INFINI_DTYPE_F32:
-        kernel_Ztype_ = CUDA_R_32F;
-        break;
-    case INFINI_DTYPE_F16:
-        kernel_Ztype_ = CUDA_R_16F;
-        break;
-    case INFINI_DTYPE_BF16:
-        kernel_Ztype_ = CUDA_R_16BF;
-        break;
-    default:
-        return INFINI_STATUS_BAD_TENSOR_DTYPE;
-    }
+    kernel_Ctype_ = ScalarTypeToCudaDataType(_info.out_dtype);
+    kernel_Stype_ = ScalarTypeToCudaDataType(_info.scales_dtype);
+    kernel_Ztype_ = ScalarTypeToCudaDataType(_info.zeros_dtype);
 
     float alpha = 1.0f;
     float beta = 0.0f;
 
-    bool transpose_mat_1 = _info.transpose_mat_1;
-    bool transpose_mat_2 = _info.transpose_mat_2;
-
     int64_t M = static_cast<int64_t>(_info.M);
     int64_t N = static_cast<int64_t>(_info.N);
     int64_t lda = static_cast<int64_t>(_info.lda);
-    int64_t ldb = ((bit == 4 && transpose_mat_2) ? 2 * static_cast<int64_t>(_info.ldb) : static_cast<int64_t>(_info.ldb));
-
-    cublasOperation_t transa = transpose_mat_2 ? CUBLAS_OP_T : CUBLAS_OP_N;
-    cublasOperation_t transb = transpose_mat_1 ? CUBLAS_OP_T : CUBLAS_OP_N;
+    int64_t ldb = static_cast<int64_t>(_info.ldb);
 
     int64_t scales_size_0 = static_cast<int64_t>(_info.scales_size_0);
     int64_t scales_size_1 = static_cast<int64_t>(_info.scales_size_1);
@@ -135,7 +117,7 @@ infiniStatus_t Descriptor::calculate(void *workspace,
     dlblasExtQuantParametersV2_t extParameters;
 
     if (quant_type == 0) {
-        extParameters.a_group_size_m = N / scales_size_1;
+        extParameters.a_group_size_m = M / scales_size_1;
         extParameters.a_group_size_k = K / scales_size_0;
         extParameters.a_zeropoints_type = kernel_Ztype_;
         extParameters.a_zeropoints = b_zeros;
@@ -151,13 +133,13 @@ infiniStatus_t Descriptor::calculate(void *workspace,
     } else if (quant_type == 2 || quant_type == 3) {
         // calculate block_shape according weight/scales shape
         int block_shape = 128;
-        while ((N + block_shape - 1) / block_shape < scales_size_0) {
+        while ((M + block_shape - 1) / block_shape < scales_size_0) {
             block_shape /= 2;
             if (block_shape < 32) {
                 fprintf(stderr,
                         "INTERNAL ASSERT FAILED: block_shape >= 32\n"
                         "Invalid fp blockwise linear arguments. Weight: [%d, %d]. Scales: [%d, %d].\n",
-                        (int)N, (int)K, (int)scales_size_0, (int)scales_size_1);
+                        (int)M, (int)K, (int)scales_size_0, (int)scales_size_1);
                 abort();
             }
         }
@@ -172,12 +154,11 @@ infiniStatus_t Descriptor::calculate(void *workspace,
         extParameters.a_zeropoints = nullptr;
         extParameters.a_scales = b_scales;
     }
-    printf("a=%s, b=%s, c=%s\n",
-           _info.transpose_mat_1 ? "true" : "false",
-           _info.transpose_mat_2 ? "true" : "false",
-           _info.transpose_result ? "true" : "false");
-    printf("M-K-N:[%ld, %ld, %ld], lda-ldb-ldc:[%ld, %ld, %ld]\n", M, K, N, lda, ldb, result_ld);
-    printf("quant type:%ld, bit:%ld\n", quant_type, bit);
+    bool transpose_mat_1 = _info.transa == 't';
+    bool transpose_mat_2 = _info.transb == 't';
+    cublasOperation_t transa = transpose_mat_1 ? CUBLAS_OP_T : CUBLAS_OP_N;
+    cublasOperation_t transb = transpose_mat_2 ? CUBLAS_OP_T : CUBLAS_OP_N;
+
     if (_info.dtype == INFINI_DTYPE_F16 || _info.dtype == INFINI_DTYPE_BF16) {
         CHECK_STATUS(_opaque->internal->useCublas(
             (cudaStream_t)stream,
@@ -186,16 +167,16 @@ infiniStatus_t Descriptor::calculate(void *workspace,
                     dlblasGemmExV2(handle,
                                    transa,
                                    transb,
-                                   N,
                                    M,
+                                   N,
                                    K,
                                    &alpha,
-                                   b,
-                                   kernel_Btype_,
-                                   ldb,
                                    a,
                                    kernel_Atype_,
                                    lda,
+                                   b,
+                                   kernel_Btype_,
+                                   ldb,
                                    &beta,
                                    out,
                                    kernel_Ctype_,
