@@ -1314,6 +1314,48 @@ def per_tensor_dequant_int8_(lib):
 
 
 @OpRegister.operator
+def gptq_gemm_(lib):
+    lib.infiniopCreateGptqGemmDescriptor.restype = c_int32
+    lib.infiniopCreateGptqGemmDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_bool,
+        c_int32,
+    ]
+
+    lib.infiniopGetGptqGemmWorkspaceSize.restype = c_int32
+    lib.infiniopGetGptqGemmWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopGptqGemm.restype = c_int32
+    lib.infiniopGptqGemm.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyGptqGemmDescriptor.restype = c_int32
+    lib.infiniopDestroyGptqGemmDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def softplus_(lib):
     lib.infiniopCreateSoftplusDescriptor.restype = c_int32
     lib.infiniopCreateSoftplusDescriptor.argtypes = [
