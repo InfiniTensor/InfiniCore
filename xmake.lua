@@ -394,7 +394,7 @@ target("infiniop")
         add_includedirs(get_config("infiniops") .. "/src")
         add_includedirs(get_config("infiniops") .. "/generated/include")
         add_linkdirs(get_config("infiniops") .. "/build/src")
-        add_links("infiniops")
+        add_shflags("-Wl,--no-as-needed,-linfiniops,--as-needed", {force = true})
         add_rpathdirs(get_config("infiniops") .. "/build/src")
     end
     add_files("src/infiniop/devices/handle.cc")
