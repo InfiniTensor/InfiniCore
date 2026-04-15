@@ -509,6 +509,12 @@ target("infinicore_cpp_api")
             )
         end
 
+        -- ATen headers include <cuda_runtime_api.h>; ensure CUDA include dir is present.
+        if has_config("nv-gpu") then
+            local CUDA_DIR = get_config("cuda") or "/usr/local/cuda"
+            target:add("includedirs", path.join(CUDA_DIR, "include"), { public = true })
+        end
+
     end)
 
     -- Add InfiniCore C++ source files (needed for RoPE and other nn modules)
@@ -555,6 +561,22 @@ target("_infinicore")
 
     add_linkdirs(INFINI_ROOT.."/lib")
     add_links("infiniop", "infinirt", "infiniccl")
+
+    before_build(function (target)
+        if has_config("aten") then
+            local outdata = os.iorunv("python", {"-c", "import torch, os; print(os.path.dirname(torch.__file__))"}):trim()
+            local TORCH_DIR = outdata
+            target:add("includedirs", path.join(TORCH_DIR, "include"), path.join(TORCH_DIR, "include/torch/csrc/api/include"))
+            target:add("linkdirs", path.join(TORCH_DIR, "lib"))
+            target:add("links", "torch", "c10", "torch_cuda", "c10_cuda")
+        end
+
+        -- ATen headers include <cuda_runtime_api.h>; ensure CUDA include dir is present.
+        if has_config("nv-gpu") then
+            local CUDA_DIR = get_config("cuda") or "/usr/local/cuda"
+            target:add("includedirs", path.join(CUDA_DIR, "include"))
+        end
+    end)
 
     add_files("src/infinicore/pybind11/**.cc")
 

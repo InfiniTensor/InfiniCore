@@ -40,7 +40,9 @@ void linear_(Tensor out,
         N *= input_shape[i];
     }
 
-    // linear transformation
+    // Linear uses GEMM (cublasGemmStridedBatchedEx). For decode N==1, cuBLAS may still dispatch to
+    // an internal GEMV-style path (see nsys `gemvx`). Prefer higher-level fusion (e.g. fused QKV /
+    // fused gate-up) so one larger GEMM replaces several N==1 calls.
     Tensor out_view = out->view({N, out_features});
     // Add bias
     float alpha = 1.0f;

@@ -182,17 +182,55 @@ def strided_from_blob(data_ptr, size, strides, *, dtype=None, device=None):
 
 
 def from_torch(torch_tensor) -> Tensor:
+    # If InfiniCore was built with the ATen bridge enabled, enforce stream ordering from
+    # torch -> InfiniCore so subsequent InfiniCore kernels see torch-produced values.
+    bridge = getattr(_infinicore, "_bridge_from_torch", None)
+    if bridge is not None:
+        try:
+            # Avoid importing torch unconditionally for CPU-only environments/tests.
+            import torch  # noqa: F401
+
+            if getattr(torch_tensor, "is_cuda", False) and torch_tensor.is_cuda:
+                bridge(torch_tensor)
+        except Exception:
+            # Best-effort: if torch isn't importable here, fall back to legacy behavior.
+            pass
+
     infini_type = to_infinicore_dtype(torch_tensor.dtype)
     infini_device = infinicore.device(torch_tensor.device.type, 0)
-    return Tensor(
-        _infinicore.from_blob(
+    if torch_tensor.is_contiguous():
+        underlying = _infinicore.from_blob(
             torch_tensor.data_ptr(),
             list(torch_tensor.shape),
             dtype=infini_type._underlying,
             device=infini_device._underlying,
-        ),
-        _torch_ref=torch_tensor,
-    )
+        )
+    else:
+        underlying = _infinicore.strided_from_blob(
+            torch_tensor.data_ptr(),
+            list(torch_tensor.shape),
+            list(torch_tensor.stride()),
+            dtype=infini_type._underlying,
+            device=infini_device._underlying,
+        )
+    return Tensor(underlying, _torch_ref=torch_tensor)
+
+
+def to_torch(tensor: Tensor):
+    """Zero-copy InfiniCore tensor as a ``torch.Tensor`` view (CUDA/CPU), when built with ``--aten=y``.
+
+    The returned tensor aliases InfiniCore storage; keep the InfiniCore tensor alive while using the
+    torch view (this function stores a back-reference on ``tensor._torch_ref``).
+    """
+    fn = getattr(_infinicore, "_tensor_as_torch", None)
+    if fn is None:
+        raise RuntimeError(
+            "infinicore.to_torch requires InfiniCore built with aten enabled "
+            "(e.g. install.py / xmake with --aten=y)."
+        )
+    out = fn(tensor._underlying)
+    tensor._torch_ref = out
+    return out
 
 
 def from_numpy(

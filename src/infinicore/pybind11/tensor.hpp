@@ -5,6 +5,15 @@
 
 #include "infinicore.hpp"
 
+#ifdef ENABLE_ATEN
+#include "infinicore/adaptor/aten_adaptor.hpp"
+#include <torch/extension.h>
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API)
+#include <cuda_runtime.h>
+#include <ATen/cuda/CUDAContext.h>
+#endif
+#endif
+
 namespace py = pybind11;
 
 namespace infinicore::tensor {
@@ -71,6 +80,52 @@ inline void bind(py::module &m) {
             return Tensor{infinicore::Tensor::strided_from_blob(reinterpret_cast<void *>(raw_ptr), shape, strides, dtype, device)};
         },
         pybind11::arg("raw_ptr"), pybind11::arg("shape"), pybind11::arg("strides"), pybind11::arg("dtype"), pybind11::arg("device"));
+
+#ifdef ENABLE_ATEN
+    m.def(
+        "_tensor_as_torch",
+        [](const infinicore::Tensor &tensor) -> torch::Tensor {
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API)
+            if (tensor->device().getType() == infinicore::Device::Type::NVIDIA
+                || tensor->device().getType() == infinicore::Device::Type::QY) {
+                // Stream bridge (InfiniCore -> torch):
+                // Record an event on the InfiniCore context stream, then make the *current* torch
+                // stream wait on it. This avoids a full-device/stream synchronize while preserving
+                // correctness for the returned aliasing view.
+                cudaStream_t ic_stream = cudaStream_t(infinicore::context::getStream());
+                cudaStream_t torch_stream = at::cuda::getCurrentCUDAStream().stream();
+                cudaEvent_t ev{};
+                cudaEventCreateWithFlags(&ev, cudaEventDisableTiming);
+                cudaEventRecord(ev, ic_stream);
+                cudaStreamWaitEvent(torch_stream, ev, 0);
+                cudaEventDestroy(ev);
+            }
+#endif
+            return infinicore::adaptor::to_aten_tensor(tensor);
+        },
+        py::arg("tensor"));
+
+    m.def(
+        "_bridge_from_torch",
+        [](const torch::Tensor &tensor) {
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API)
+            if (tensor.is_cuda()) {
+                // Stream bridge (torch -> InfiniCore):
+                // Record on current torch stream, then make InfiniCore context stream wait.
+                cudaStream_t torch_stream = at::cuda::getCurrentCUDAStream().stream();
+                cudaStream_t ic_stream = cudaStream_t(infinicore::context::getStream());
+                cudaEvent_t ev{};
+                cudaEventCreateWithFlags(&ev, cudaEventDisableTiming);
+                cudaEventRecord(ev, torch_stream);
+                cudaStreamWaitEvent(ic_stream, ev, 0);
+                cudaEventDestroy(ev);
+            }
+#else
+            (void)tensor;
+#endif
+        },
+        py::arg("tensor"));
+#endif
 }
 
 } // namespace infinicore::tensor
