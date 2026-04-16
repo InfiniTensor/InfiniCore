@@ -6,6 +6,7 @@ import infinicore.device
 import infinicore.dtype
 from infinicore.lib import _infinicore
 
+from ._tensor_str import _str
 from .utils import (
     infinicore_to_numpy_dtype,
     numpy_to_infinicore_dtype,
@@ -129,6 +130,9 @@ class Tensor:
 
     def narrow(self, dim, start, length):
         return infinicore.narrow(self, dim, start, length)
+
+    def __repr__(self):
+        return _str(self)
 
 
 def empty(size, *, dtype=None, device=None, pin_memory=False):

@@ -7,6 +7,7 @@ with contextlib.suppress(ImportError):
 
 import infinicore.context as context
 import infinicore.nn as nn
+from infinicore._tensor_str import printoptions, set_printoptions
 
 # Import context functions
 from infinicore.context import (
@@ -252,6 +253,8 @@ __all__ = [
     "var",
     "topk",
     "all",
+    "set_printoptions",
+    "printoptions",
 ]
 
 use_ntops = False
