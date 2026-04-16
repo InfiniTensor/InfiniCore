@@ -362,6 +362,9 @@ target("infiniop")
         add_files("build/.objs/infiniop-qy/rules/qy.cuda/src/infiniop/ops/*/nvidia/*.cu.o", {public = true})
         add_files("build/.objs/infiniop-qy/rules/qy.cuda/src/infiniop/ops/*/*/nvidia/*.cu.o", {public = true})
         add_files("build/.objs/infiniop-qy/rules/qy.cuda/src/infiniop/devices/nvidia/*.cu.o", {public = true})
+        add_files("build/.objs/infiniop-qy/rules/qy.cuda/src/infiniop/ops/*/qy/*.cu.o", {public = true})
+        add_files("build/.objs/infiniop-qy/rules/qy.cuda/src/infiniop/ops/*/*/qy/*.cu.o", {public = true})
+        add_files("build/.objs/infiniop-qy/rules/qy.cuda/src/infiniop/devices/qy/*.cu.o", {public = true})
     end
 
     if has_config("cambricon-mlu") then

@@ -34,6 +34,7 @@ public:
     Tensor bias() const { return bias_; }
     Tensor weight_scale() const { return weight_scale_; }
     Tensor weight_zeros() const { return weight_zeros_; }
+    Tensor gidx() const { return gidx_; }
 
     std::shared_ptr<infinicore::quantization::BaseQuantization> get_quantization() const { return quantization_; }
 
@@ -44,6 +45,8 @@ protected:
 
     INFINICORE_NN_PARAMETER(weight_scale);
     INFINICORE_NN_PARAMETER(weight_zeros);
+
+    INFINICORE_NN_PARAMETER(gidx);
 
 protected:
     // Helper method for common forward computation

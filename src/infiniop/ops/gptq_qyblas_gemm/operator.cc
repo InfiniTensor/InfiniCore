@@ -31,6 +31,7 @@ __INFINI_C infiniStatus_t infiniopCreateGptqQyblasGemmDescriptor(
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
+#undef CREATE
 }
 
 __INFINI_C infiniStatus_t infiniopGetGptqQyblasGemmWorkspaceSize(
@@ -50,6 +51,7 @@ __INFINI_C infiniStatus_t infiniopGetGptqQyblasGemmWorkspaceSize(
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
+#undef GET
 }
 
 __INFINI_C infiniStatus_t infiniopGptqQyblasGemm(
@@ -78,6 +80,7 @@ __INFINI_C infiniStatus_t infiniopGptqQyblasGemm(
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
+#undef CALCULATE
 }
 
 __INFINI_C infiniStatus_t infiniopDestroyGptqQyblasGemmDescriptor(
@@ -96,4 +99,5 @@ __INFINI_C infiniStatus_t infiniopDestroyGptqQyblasGemmDescriptor(
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
+#undef DELETE
 }

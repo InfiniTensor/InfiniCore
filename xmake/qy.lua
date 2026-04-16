@@ -142,6 +142,7 @@ target("infiniop-qy")
 
     set_languages("cxx17")
     add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu", "../src/infiniop/ops/*/*/nvidia/*.cu")
+    add_files("../src/infiniop/devices/qy/*.cu", "../src/infiniop/ops/*/qy/*.cu", "../src/infiniop/ops/*/*/qy/*.cu")
 
     if has_config("ninetoothed") then
         add_files("../build/ninetoothed/*.c", "../build/ninetoothed/*.cpp")

@@ -5,7 +5,7 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/gemm_cpu.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API) || defined(ENABLE_ALI_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API) || defined(ENABLE_ALI_API)
 #include "nvidia/gemm_nvidia.cuh"
 #endif
 #ifdef ENABLE_CAMBRICON_API
@@ -23,7 +23,9 @@
 #ifdef ENABLE_KUNLUN_API
 #include "kunlun/gemm_kunlun.h"
 #endif
-
+#ifdef ENABLE_QY_API
+#include "qy/gemm_qy.cuh"
+#endif
 __INFINI_C infiniStatus_t infiniopCreateGemmDescriptor(
     infiniopHandle_t handle,
     infiniopGemmDescriptor_t *desc_ptr,
@@ -55,7 +57,7 @@ __INFINI_C infiniStatus_t infiniopCreateGemmDescriptor(
         CREATE(INFINI_DEVICE_ALI, nvidia);
 #endif
 #ifdef ENABLE_QY_API
-        CREATE(INFINI_DEVICE_QY, nvidia);
+        CREATE(INFINI_DEVICE_QY, qy);
 #endif
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia);
@@ -109,7 +111,7 @@ infiniopGetGemmWorkspaceSize(
         GET(INFINI_DEVICE_ALI, nvidia);
 #endif
 #ifdef ENABLE_QY_API
-        GET(INFINI_DEVICE_QY, nvidia);
+        GET(INFINI_DEVICE_QY, qy);
 #endif
 #ifdef ENABLE_HYGON_API
         GET(INFINI_DEVICE_HYGON, nvidia);
@@ -170,7 +172,7 @@ __INFINI_C infiniStatus_t infiniopGemm(
         CALCULATE(INFINI_DEVICE_ALI, nvidia);
 #endif
 #ifdef ENABLE_QY_API
-        CALCULATE(INFINI_DEVICE_QY, nvidia);
+        CALCULATE(INFINI_DEVICE_QY, qy);
 #endif
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia);
@@ -221,7 +223,7 @@ infiniopDestroyGemmDescriptor(infiniopGemmDescriptor_t desc) {
         DELETE(INFINI_DEVICE_ALI, nvidia);
 #endif
 #ifdef ENABLE_QY_API
-        DELETE(INFINI_DEVICE_QY, nvidia);
+        DELETE(INFINI_DEVICE_QY, qy);
 #endif
 #ifdef ENABLE_HYGON_API
         DELETE(INFINI_DEVICE_HYGON, nvidia);
