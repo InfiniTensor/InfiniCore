@@ -14,9 +14,9 @@ local FLASH_ATTN_ROOT = get_config("flash-attn")
 local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
 
 target("infiniop-nvidia")
-    set_kind("static")
+    set_kind("shared")
     add_deps("infini-utils")
-    on_install(function (target) end)
+    set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
 
     set_policy("build.cuda.devlink", true)
     set_toolchains("cuda")
@@ -101,9 +101,9 @@ target("infiniop-nvidia")
 target_end()
 
 target("infinirt-nvidia")
-    set_kind("static")
+    set_kind("shared")
     add_deps("infini-utils")
-    on_install(function (target) end)
+    set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
 
     set_policy("build.cuda.devlink", true)
     set_toolchains("cuda")
@@ -124,9 +124,9 @@ target("infinirt-nvidia")
 target_end()
 
 target("infiniccl-nvidia")
-    set_kind("static")
+    set_kind("shared")
     add_deps("infinirt")
-    on_install(function (target) end)
+    set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
     if has_config("ccl") then
         set_policy("build.cuda.devlink", true)
         set_toolchains("cuda")
@@ -202,6 +202,6 @@ target("flash-attn-nvidia")
         on_build(function (target) end)
     end
 
-    on_install(function (target) end)
+    set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
 
 target_end()
