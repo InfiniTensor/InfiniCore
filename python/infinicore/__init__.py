@@ -83,7 +83,10 @@ from infinicore.ops.fmod import fmod
 from infinicore.ops.hypot import hypot
 from infinicore.ops.index_add import index_add
 from infinicore.ops.index_copy import index_copy
-from infinicore.ops.infllmv2_attention import infllmv2_kvcache, infllmv2_varlen
+from infinicore.ops.infllmv2_attention import (
+    infllmv2_attention_kvcache,
+    infllmv2_attention_varlen,
+)
 from infinicore.ops.inner import inner
 from infinicore.ops.kron import kron
 from infinicore.ops.kthvalue import kthvalue
@@ -195,8 +198,8 @@ __all__ = [
     "block_diag",
     "kron",
     "bitwise_right_shift",
-    "infllmv2_varlen",
-    "infllmv2_kvcache",
+    "infllmv2_attention_varlen",
+    "infllmv2_attention_kvcache",
     "simple_gla_attention",
     "simple_gla_decode_step",
     "simple_gla_prefill",

@@ -15,10 +15,6 @@
 #include "../../utils.hpp"
 
 #if defined(ENABLE_INFLLMV2) && defined(ENABLE_ATEN)
-#include <sstream>
-#endif
-
-#if defined(ENABLE_INFLLMV2) && defined(ENABLE_ATEN)
 #include "infinicore/adaptor/aten_adaptor.hpp"
 #include "infinicore/adaptor/infllmv2_api.hpp"
 #ifdef ENABLE_NVIDIA_API
@@ -38,71 +34,18 @@ INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(InfllmV2AttentionKVCache);
 INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(InfllmV2AttentionKVCacheUpdate);
 
 namespace {
-#if defined(ENABLE_INFLLMV2) && defined(ENABLE_ATEN)
-inline std::string int_list_to_string(const c10::ArrayRef<int64_t> &xs) {
-    std::ostringstream oss;
-    oss << "[";
-    for (size_t i = 0; i < xs.size(); ++i) {
-        if (i) {
-            oss << ", ";
-        }
-        oss << xs[i];
-    }
-    oss << "]";
-    return oss.str();
-}
-
-inline void maybe_log_kvcache_inputs(const char *op_name,
-                                     const at::Tensor &q,
-                                     const at::Tensor &kcache,
-                                     const at::Tensor &vcache,
-                                     const at::Tensor &seqlens_k,
-                                     bool causal,
-                                     float scale) {
-    const char *flag = std::getenv("INFINICORE_INFLLMV2_DUMP_ATEN");
-    if (!flag || flag[0] == '\0' || flag[0] == '0') {
-        return;
-    }
-    try {
-        auto cpu_lens = seqlens_k.to(at::kCPU);
-        int32_t len0 = cpu_lens.numel() > 0 ? cpu_lens.data_ptr<int32_t>()[0] : -1;
-        SPDLOG_INFO(
-            "[infllmv2][{}] q={} kcache={} vcache={} seqlens_k={} seqlens0={} causal={} scale={} q_stride={} k_stride={} v_stride={}",
-            op_name,
-            int_list_to_string(q.sizes()),
-            int_list_to_string(kcache.sizes()),
-            int_list_to_string(vcache.sizes()),
-            int_list_to_string(seqlens_k.sizes()),
-            len0,
-            causal ? 1 : 0,
-            scale,
-            int_list_to_string(q.strides()),
-            int_list_to_string(kcache.strides()),
-            int_list_to_string(vcache.strides()));
-    } catch (...) {
-    }
-}
-#else
-inline void maybe_log_kvcache_inputs(const char * /*op_name*/,
-                                     ...) {
-    // no-op when ATen is not enabled
-}
-#endif
-} // namespace
-
-namespace {
-void infllmv2_varlen_impl(Tensor out,
-                          const Tensor &q,
-                          const Tensor &k,
-                          const Tensor &v,
-                          const Tensor &cu_seqlens_q,
-                          const Tensor &cu_seqlens_k,
-                          int max_seqlen_q,
-                          int max_seqlen_k,
-                          float scale,
-                          bool causal,
-                          int window_size_left,
-                          int window_size_right) {
+void infllmv2_attention_varlen_impl(Tensor out,
+                                    const Tensor &q,
+                                    const Tensor &k,
+                                    const Tensor &v,
+                                    const Tensor &cu_seqlens_q,
+                                    const Tensor &cu_seqlens_k,
+                                    int max_seqlen_q,
+                                    int max_seqlen_k,
+                                    float scale,
+                                    bool causal,
+                                    int window_size_left,
+                                    int window_size_right) {
     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(out, q, k, v, cu_seqlens_q, cu_seqlens_k);
 
 #if defined(ENABLE_INFLLMV2) && defined(ENABLE_ATEN)
@@ -187,15 +130,15 @@ void infllmv2_varlen_impl(Tensor out,
 #endif
 }
 
-void infllmv2_kvcache_impl(Tensor out,
-                           const Tensor &q,
-                           const Tensor &k_cache,
-                           const Tensor &v_cache,
-                           const Tensor &cache_lens,
-                           float scale,
-                           bool causal,
-                           int window_size_left,
-                           int window_size_right) {
+void infllmv2_attention_kvcache_impl(Tensor out,
+                                     const Tensor &q,
+                                     const Tensor &k_cache,
+                                     const Tensor &v_cache,
+                                     const Tensor &cache_lens,
+                                     float scale,
+                                     bool causal,
+                                     int window_size_left,
+                                     int window_size_right) {
     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(out, q, k_cache, v_cache, cache_lens);
 
 #if defined(ENABLE_INFLLMV2) && defined(ENABLE_ATEN)
@@ -217,8 +160,6 @@ void infllmv2_kvcache_impl(Tensor out,
     c10::optional<at::Tensor> block_table = c10::nullopt;
     c10::optional<at::Tensor> alibi_slopes = c10::nullopt;
     c10::optional<at::Tensor> blockmask_ = c10::nullopt;
-
-    maybe_log_kvcache_inputs("kvcache", q_at, kcache_at, vcache_at, seqlens_k_at.value(), causal, scale);
 
     // Let FlashAttn/InfLLM-v2 allocate output internally. Passing an explicit out_ tensor
     // can interact badly with internal q reshapes in the seqlen_q==1 GQA fast path.
@@ -280,17 +221,17 @@ void infllmv2_kvcache_impl(Tensor out,
 #endif
 }
 
-void infllmv2_kvcache_update_impl(Tensor out,
-                                  const Tensor &q,
-                                  const Tensor &k_cache,
-                                  const Tensor &v_cache,
-                                  const Tensor &k_new,
-                                  const Tensor &v_new,
-                                  const Tensor &cache_lens,
-                                  float scale,
-                                  bool causal,
-                                  int window_size_left,
-                                  int window_size_right) {
+void infllmv2_attention_kvcache_update_impl(Tensor out,
+                                            const Tensor &q,
+                                            const Tensor &k_cache,
+                                            const Tensor &v_cache,
+                                            const Tensor &k_new,
+                                            const Tensor &v_new,
+                                            const Tensor &cache_lens,
+                                            float scale,
+                                            bool causal,
+                                            int window_size_left,
+                                            int window_size_right) {
     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(out, q, k_cache, v_cache, k_new, v_new, cache_lens);
 
 #if defined(ENABLE_INFLLMV2) && defined(ENABLE_ATEN)
@@ -314,8 +255,6 @@ void infllmv2_kvcache_update_impl(Tensor out,
     c10::optional<at::Tensor> block_table = c10::nullopt;
     c10::optional<at::Tensor> alibi_slopes = c10::nullopt;
     c10::optional<at::Tensor> blockmask_ = c10::nullopt;
-
-    maybe_log_kvcache_inputs("kvcache_update", q_at, kcache_at, vcache_at, seqlens_k_at.value(), causal, scale);
 
     c10::optional<at::Tensor> out_kernel_opt = c10::nullopt;
     auto outs = mha_fwd_kvcache(
@@ -348,7 +287,7 @@ void infllmv2_kvcache_update_impl(Tensor out,
     (void)v_new;
     // FlashAttn adaptor path currently doesn't support in-place cache update in this wrapper.
     // Fall back to normal kvcache (expects cache already updated by caller).
-    infllmv2_kvcache_impl(out, q, k_cache, v_cache, cache_lens, scale, causal, window_size_left, window_size_right);
+    infllmv2_attention_kvcache_impl(out, q, k_cache, v_cache, cache_lens, scale, causal, window_size_left, window_size_right);
     return;
 #else
     (void)k_cache;
@@ -364,6 +303,7 @@ void infllmv2_kvcache_update_impl(Tensor out,
         "InfLLM-V2 kvcache_update attention requires ENABLE_INFLLMV2+ENABLE_ATEN build");
 #endif
 }
+
 } // namespace
 
 InfllmV2AttentionVarlen::InfllmV2AttentionVarlen(Tensor out,
@@ -411,12 +351,14 @@ struct VarlenPlanned {
 };
 void run_varlen_typed(void *planned_meta) {
     auto *p = reinterpret_cast<VarlenPlanned *>(planned_meta);
-    infllmv2_varlen_impl(p->out, p->q, p->k, p->v, p->cu_q, p->cu_k, p->max_q, p->max_k, p->scale, p->causal, p->wleft, p->wright);
+    infllmv2_attention_varlen_impl(p->out, p->q, p->k, p->v, p->cu_q, p->cu_k, p->max_q, p->max_k, p->scale, p->causal, p->wleft, p->wright);
 }
+
 void cleanup_varlen(void **planned_meta_ptr) {
     delete *reinterpret_cast<VarlenPlanned **>(planned_meta_ptr);
     *planned_meta_ptr = nullptr;
 }
+
 void *plan_varlen_typed(Tensor out,
                         const Tensor &q,
                         const Tensor &k,
@@ -433,6 +375,7 @@ void *plan_varlen_typed(Tensor out,
                              graph::GraphTensor(cu_seqlens_q), graph::GraphTensor(cu_seqlens_k),
                              max_seqlen_q, max_seqlen_k, scale, causal, window_size_left, window_size_right};
 }
+
 static bool registered_infllmv2_attention_varlen = []() {
     InfllmV2AttentionVarlen::plan_dispatcher().registerAll(&plan_varlen_typed, false);
     InfllmV2AttentionVarlen::run_dispatcher().registerAll(&run_varlen_typed, false);
@@ -441,18 +384,18 @@ static bool registered_infllmv2_attention_varlen = []() {
 }();
 } // namespace
 
-void infllmv2_varlen_(Tensor out,
-                      const Tensor &q,
-                      const Tensor &k,
-                      const Tensor &v,
-                      const Tensor &cu_seqlens_q,
-                      const Tensor &cu_seqlens_k,
-                      int max_seqlen_q,
-                      int max_seqlen_k,
-                      float scale,
-                      bool causal,
-                      int window_size_left,
-                      int window_size_right) {
+void infllmv2_attention_varlen_(Tensor out,
+                                const Tensor &q,
+                                const Tensor &k,
+                                const Tensor &v,
+                                const Tensor &cu_seqlens_q,
+                                const Tensor &cu_seqlens_k,
+                                int max_seqlen_q,
+                                int max_seqlen_k,
+                                float scale,
+                                bool causal,
+                                int window_size_left,
+                                int window_size_right) {
     InfllmV2AttentionVarlen::execute(
         out, q, k, v, cu_seqlens_q, cu_seqlens_k,
         max_seqlen_q, max_seqlen_k,
@@ -460,19 +403,19 @@ void infllmv2_varlen_(Tensor out,
         window_size_left, window_size_right);
 }
 
-Tensor infllmv2_varlen(const Tensor &q,
-                       const Tensor &k,
-                       const Tensor &v,
-                       const Tensor &cu_seqlens_q,
-                       const Tensor &cu_seqlens_k,
-                       int max_seqlen_q,
-                       int max_seqlen_k,
-                       float scale,
-                       bool causal,
-                       int window_size_left,
-                       int window_size_right) {
+Tensor infllmv2_attention_varlen(const Tensor &q,
+                                 const Tensor &k,
+                                 const Tensor &v,
+                                 const Tensor &cu_seqlens_q,
+                                 const Tensor &cu_seqlens_k,
+                                 int max_seqlen_q,
+                                 int max_seqlen_k,
+                                 float scale,
+                                 bool causal,
+                                 int window_size_left,
+                                 int window_size_right) {
     auto out = Tensor::empty(q->shape(), q->dtype(), q->device());
-    infllmv2_varlen_(out, q, k, v, cu_seqlens_q, cu_seqlens_k, max_seqlen_q, max_seqlen_k, scale, causal, window_size_left, window_size_right);
+    infllmv2_attention_varlen_(out, q, k, v, cu_seqlens_q, cu_seqlens_k, max_seqlen_q, max_seqlen_k, scale, causal, window_size_left, window_size_right);
     return out;
 }
 
@@ -524,14 +467,17 @@ void *plan_kvcache(Tensor out,
                               graph::GraphTensor(v_cache), graph::GraphTensor(cache_lens),
                               scale, causal, window_size_left, window_size_right};
 }
+
 void run_kvcache(void *planned_meta) {
     auto *p = reinterpret_cast<KVCachePlanned *>(planned_meta);
-    infllmv2_kvcache_impl(p->out, p->q, p->k, p->v, p->lens, p->scale, p->causal, p->wleft, p->wright);
+    infllmv2_attention_kvcache_impl(p->out, p->q, p->k, p->v, p->lens, p->scale, p->causal, p->wleft, p->wright);
 }
+
 void cleanup_kvcache(void **planned_meta_ptr) {
     delete *reinterpret_cast<KVCachePlanned **>(planned_meta_ptr);
     *planned_meta_ptr = nullptr;
 }
+
 static bool registered_infllmv2_attention_kvcache = []() {
     InfllmV2AttentionKVCache::plan_dispatcher().registerAll(&plan_kvcache, false);
     InfllmV2AttentionKVCache::run_dispatcher().registerAll(&run_kvcache, false);
@@ -540,31 +486,31 @@ static bool registered_infllmv2_attention_kvcache = []() {
 }();
 } // namespace
 
-void infllmv2_kvcache_(Tensor out,
-                       const Tensor &q,
-                       const Tensor &k_cache,
-                       const Tensor &v_cache,
-                       const Tensor &cache_lens,
-                       float scale,
-                       bool causal,
-                       int window_size_left,
-                       int window_size_right) {
+void infllmv2_attention_kvcache_(Tensor out,
+                                 const Tensor &q,
+                                 const Tensor &k_cache,
+                                 const Tensor &v_cache,
+                                 const Tensor &cache_lens,
+                                 float scale,
+                                 bool causal,
+                                 int window_size_left,
+                                 int window_size_right) {
     InfllmV2AttentionKVCache::execute(
         out, q, k_cache, v_cache, cache_lens,
         scale, causal,
         window_size_left, window_size_right);
 }
 
-Tensor infllmv2_kvcache(const Tensor &q,
-                        const Tensor &k_cache,
-                        const Tensor &v_cache,
-                        const Tensor &cache_lens,
-                        float scale,
-                        bool causal,
-                        int window_size_left,
-                        int window_size_right) {
+Tensor infllmv2_attention_kvcache(const Tensor &q,
+                                  const Tensor &k_cache,
+                                  const Tensor &v_cache,
+                                  const Tensor &cache_lens,
+                                  float scale,
+                                  bool causal,
+                                  int window_size_left,
+                                  int window_size_right) {
     auto out = Tensor::empty(q->shape(), q->dtype(), q->device());
-    infllmv2_kvcache_(out, q, k_cache, v_cache, cache_lens, scale, causal, window_size_left, window_size_right);
+    infllmv2_attention_kvcache_(out, q, k_cache, v_cache, cache_lens, scale, causal, window_size_left, window_size_right);
     return out;
 }
 
@@ -624,14 +570,17 @@ void *plan_kvcache_update(Tensor out,
                                     graph::GraphTensor(cache_lens),
                                     scale, causal, window_size_left, window_size_right};
 }
+
 void run_kvcache_update(void *planned_meta) {
     auto *p = reinterpret_cast<KVCacheUpdatePlanned *>(planned_meta);
-    infllmv2_kvcache_update_impl(p->out, p->q, p->k, p->v, p->knew, p->vnew, p->lens, p->scale, p->causal, p->wleft, p->wright);
+    infllmv2_attention_kvcache_update_impl(p->out, p->q, p->k, p->v, p->knew, p->vnew, p->lens, p->scale, p->causal, p->wleft, p->wright);
 }
+
 void cleanup_kvcache_update(void **planned_meta_ptr) {
     delete *reinterpret_cast<KVCacheUpdatePlanned **>(planned_meta_ptr);
     *planned_meta_ptr = nullptr;
 }
+
 static bool registered_infllmv2_attention_kvcache_update = []() {
     InfllmV2AttentionKVCacheUpdate::plan_dispatcher().registerAll(&plan_kvcache_update, false);
     InfllmV2AttentionKVCacheUpdate::run_dispatcher().registerAll(&run_kvcache_update, false);
@@ -640,35 +589,35 @@ static bool registered_infllmv2_attention_kvcache_update = []() {
 }();
 } // namespace
 
-void infllmv2_kvcache_update_(Tensor out,
-                              const Tensor &q,
-                              const Tensor &k_cache,
-                              const Tensor &v_cache,
-                              const Tensor &k_new,
-                              const Tensor &v_new,
-                              const Tensor &cache_lens,
-                              float scale,
-                              bool causal,
-                              int window_size_left,
-                              int window_size_right) {
+void infllmv2_attention_kvcache_update_(Tensor out,
+                                        const Tensor &q,
+                                        const Tensor &k_cache,
+                                        const Tensor &v_cache,
+                                        const Tensor &k_new,
+                                        const Tensor &v_new,
+                                        const Tensor &cache_lens,
+                                        float scale,
+                                        bool causal,
+                                        int window_size_left,
+                                        int window_size_right) {
     InfllmV2AttentionKVCacheUpdate::execute(
         out, q, k_cache, v_cache, k_new, v_new, cache_lens,
         scale, causal,
         window_size_left, window_size_right);
 }
 
-Tensor infllmv2_kvcache_update(const Tensor &q,
-                               const Tensor &k_cache,
-                               const Tensor &v_cache,
-                               const Tensor &k_new,
-                               const Tensor &v_new,
-                               const Tensor &cache_lens,
-                               float scale,
-                               bool causal,
-                               int window_size_left,
-                               int window_size_right) {
+Tensor infllmv2_attention_kvcache_update(const Tensor &q,
+                                         const Tensor &k_cache,
+                                         const Tensor &v_cache,
+                                         const Tensor &k_new,
+                                         const Tensor &v_new,
+                                         const Tensor &cache_lens,
+                                         float scale,
+                                         bool causal,
+                                         int window_size_left,
+                                         int window_size_right) {
     auto out = Tensor::empty(q->shape(), q->dtype(), q->device());
-    infllmv2_kvcache_update_(out, q, k_cache, v_cache, k_new, v_new, cache_lens, scale, causal, window_size_left, window_size_right);
+    infllmv2_attention_kvcache_update_(out, q, k_cache, v_cache, k_new, v_new, cache_lens, scale, causal, window_size_left, window_size_right);
     return out;
 }
 
