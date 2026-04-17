@@ -15,22 +15,17 @@ __INFINI_C infiniStatus_t infiniopCreateSimpleGLAPrefillDescriptor(
     infiniopTensorDescriptor_t v_desc,
     infiniopTensorDescriptor_t g_gamma_desc) {
 
-#define CREATE_CUDA(CASE, NAMESPACE)                                                           \
-    case CASE:                                                                                 \
-        return op::simple_gla_prefill_cuda::NAMESPACE::Descriptor::create(                     \
-            handle,                                                                            \
-            reinterpret_cast<op::simple_gla_prefill_cuda::NAMESPACE::Descriptor **>(desc_ptr), \
-            out_desc, q_desc, k_desc, v_desc, g_gamma_desc)
-
     switch (handle->device) {
 #ifdef ENABLE_NVIDIA_API
-        CREATE_CUDA(INFINI_DEVICE_NVIDIA, nvidia);
+    case INFINI_DEVICE_NVIDIA:
+        return op::simple_gla_prefill_cuda::nvidia::Descriptor::create(
+            handle,
+            reinterpret_cast<op::simple_gla_prefill_cuda::nvidia::Descriptor **>(desc_ptr),
+            out_desc, q_desc, k_desc, v_desc, g_gamma_desc);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
-
-#undef CREATE_CUDA
 }
 
 __INFINI_C infiniStatus_t infiniopGetSimpleGLAPrefillWorkspaceSize(

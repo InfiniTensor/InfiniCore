@@ -1,5 +1,5 @@
 """
-Operator unit tests for InfiniCore InfLLM-V2 attention ops: infllmv2_varlen and infllmv2_kvcache.
+Operator unit tests for InfiniCore InfLLM-V2 attention ops: infllmv2_attention_varlen and infllmv2_attention_kvcache.
 Uses the InfiniCore test framework (BaseOperatorTest, TestCase, GenericTestRunner).
 Runs only when InfiniCore is built with ENABLE_INFLLMV2 and linked to the infllmv2 .so;
 otherwise tests are skipped so CI without the .so still passes.
@@ -31,9 +31,11 @@ from framework.results import CaseResult
 from framework.utils.tensor_utils import convert_infinicore_to_torch
 
 # Check for InfLLM-V2 ops; skip entire module if not built
-infllmv2_varlen = getattr(infinicore, "infllmv2_varlen", None)
-infllmv2_kvcache = getattr(infinicore, "infllmv2_kvcache", None)
-INFLLMV2_AVAILABLE = infllmv2_varlen is not None and infllmv2_kvcache is not None
+infllmv2_attention_varlen = getattr(infinicore, "infllmv2_attention_varlen", None)
+infllmv2_attention_kvcache = getattr(infinicore, "infllmv2_attention_kvcache", None)
+INFLLMV2_AVAILABLE = (
+    infllmv2_attention_varlen is not None and infllmv2_attention_kvcache is not None
+)
 
 
 def _print_metrics(name, out_infinicore):
@@ -49,9 +51,15 @@ def _make_varlen_test_case():
     total_q, nheads, head_dim = 8, 2, 8
     total_k, nheads_k = 8, 2
     scale = 1.0 / (head_dim**0.5)
-    q_spec = TensorSpec.from_tensor((total_q, nheads, head_dim), None, infinicore.float16)
-    k_spec = TensorSpec.from_tensor((total_k, nheads_k, head_dim), None, infinicore.float16)
-    v_spec = TensorSpec.from_tensor((total_k, nheads_k, head_dim), None, infinicore.float16)
+    q_spec = TensorSpec.from_tensor(
+        (total_q, nheads, head_dim), None, infinicore.float16
+    )
+    k_spec = TensorSpec.from_tensor(
+        (total_k, nheads_k, head_dim), None, infinicore.float16
+    )
+    v_spec = TensorSpec.from_tensor(
+        (total_k, nheads_k, head_dim), None, infinicore.float16
+    )
     cu_q_spec = TensorSpec.from_tensor(
         (3,),
         None,
@@ -129,9 +137,15 @@ def _make_varlen_test_case_localwindow():
     total_q, nheads, head_dim = 8, 2, 8
     total_k, nheads_k = 8, 2
     scale = 1.0 / (head_dim**0.5)
-    q_spec = TensorSpec.from_tensor((total_q, nheads, head_dim), None, infinicore.float16)
-    k_spec = TensorSpec.from_tensor((total_k, nheads_k, head_dim), None, infinicore.float16)
-    v_spec = TensorSpec.from_tensor((total_k, nheads_k, head_dim), None, infinicore.float16)
+    q_spec = TensorSpec.from_tensor(
+        (total_q, nheads, head_dim), None, infinicore.float16
+    )
+    k_spec = TensorSpec.from_tensor(
+        (total_k, nheads_k, head_dim), None, infinicore.float16
+    )
+    v_spec = TensorSpec.from_tensor(
+        (total_k, nheads_k, head_dim), None, infinicore.float16
+    )
     cu_q_spec = TensorSpec.from_tensor(
         (3,),
         None,
@@ -168,9 +182,15 @@ def _make_varlen_test_case_localwindow_left0():
     total_q, nheads, head_dim = 8, 2, 8
     total_k, nheads_k = 8, 2
     scale = 1.0 / (head_dim**0.5)
-    q_spec = TensorSpec.from_tensor((total_q, nheads, head_dim), None, infinicore.float16)
-    k_spec = TensorSpec.from_tensor((total_k, nheads_k, head_dim), None, infinicore.float16)
-    v_spec = TensorSpec.from_tensor((total_k, nheads_k, head_dim), None, infinicore.float16)
+    q_spec = TensorSpec.from_tensor(
+        (total_q, nheads, head_dim), None, infinicore.float16
+    )
+    k_spec = TensorSpec.from_tensor(
+        (total_k, nheads_k, head_dim), None, infinicore.float16
+    )
+    v_spec = TensorSpec.from_tensor(
+        (total_k, nheads_k, head_dim), None, infinicore.float16
+    )
     cu_q_spec = TensorSpec.from_tensor(
         (3,),
         None,
@@ -207,9 +227,15 @@ def _make_varlen_test_case_localwindow_left3():
     total_q, nheads, head_dim = 8, 2, 8
     total_k, nheads_k = 8, 2
     scale = 1.0 / (head_dim**0.5)
-    q_spec = TensorSpec.from_tensor((total_q, nheads, head_dim), None, infinicore.float16)
-    k_spec = TensorSpec.from_tensor((total_k, nheads_k, head_dim), None, infinicore.float16)
-    v_spec = TensorSpec.from_tensor((total_k, nheads_k, head_dim), None, infinicore.float16)
+    q_spec = TensorSpec.from_tensor(
+        (total_q, nheads, head_dim), None, infinicore.float16
+    )
+    k_spec = TensorSpec.from_tensor(
+        (total_k, nheads_k, head_dim), None, infinicore.float16
+    )
+    v_spec = TensorSpec.from_tensor(
+        (total_k, nheads_k, head_dim), None, infinicore.float16
+    )
     cu_q_spec = TensorSpec.from_tensor(
         (3,),
         None,
@@ -419,9 +445,7 @@ class InfLLMV2AttentionTest(BaseOperatorTest):
 
         if not INFLLMV2_AVAILABLE:
             test_result.return_code = -2
-            test_result.error_message = (
-                "infllmv2_varlen/infllmv2_kvcache not available (build without ENABLE_INFLLMV2?)"
-            )
+            test_result.error_message = "infllmv2_attention_varlen/infllmv2_attention_kvcache not available (build without ENABLE_INFLLMV2?)"
             return test_result
 
         inputs, kwargs = self.prepare_pytorch_inputs_and_kwargs(test_case, device)
@@ -433,7 +457,7 @@ class InfLLMV2AttentionTest(BaseOperatorTest):
         if len(infini_inputs) == 5:
             window_size_left = infini_kwargs.get("window_size_left", -1)
             window_size_right = infini_kwargs.get("window_size_right", -1)
-            out = infllmv2_varlen(
+            out = infllmv2_attention_varlen(
                 infini_inputs[0],
                 infini_inputs[1],
                 infini_inputs[2],
@@ -450,7 +474,7 @@ class InfLLMV2AttentionTest(BaseOperatorTest):
         elif len(infini_inputs) == 4:
             window_size_left = infini_kwargs.get("window_size_left", -1)
             window_size_right = infini_kwargs.get("window_size_right", -1)
-            out = infllmv2_kvcache(
+            out = infllmv2_attention_kvcache(
                 infini_inputs[0],
                 infini_inputs[1],
                 infini_inputs[2],
@@ -462,7 +486,9 @@ class InfLLMV2AttentionTest(BaseOperatorTest):
             )
             name = "kvcache"
         else:
-            test_result.error_message = f"Unexpected number of inputs: {len(infini_inputs)}"
+            test_result.error_message = (
+                f"Unexpected number of inputs: {len(infini_inputs)}"
+            )
             return test_result
 
         infinicore.sync_stream()
@@ -496,7 +522,7 @@ def main():
         sys.exit(0)
     if not INFLLMV2_AVAILABLE:
         print(
-            "infllmv2_varlen / infllmv2_kvcache not available. Build InfiniCore with --aten=y --infllmv2=..."
+            "infllmv2_attention_varlen / infllmv2_attention_kvcache not available. Build InfiniCore with --aten=y --infllmv2=..."
         )
         sys.exit(0)
 
@@ -506,4 +532,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
