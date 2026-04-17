@@ -2,6 +2,7 @@
 
 #include "../tensor.hpp"
 
+#include <cstdint>
 #include <optional>
 #include <type_traits>
 
@@ -28,6 +29,9 @@ inline void hash_combine(size_t &seed, Tensor tensor) {
     for (Stride stride : tensor->strides()) {
         hash_combine(seed, static_cast<size_t>(stride));
     }
+    // Storage offset is not part of shape/strides but must differ across `narrow` views that share
+    // the same meta; include the resolved base pointer for InfiniOP / graph plan cache keys.
+    hash_combine(seed, static_cast<size_t>(reinterpret_cast<uintptr_t>(tensor->data())));
 }
 
 // Specialization for optional
