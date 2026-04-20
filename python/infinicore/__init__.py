@@ -128,6 +128,7 @@ from infinicore.tensor import (
     ones,
     strided_empty,
     strided_from_blob,
+    tensor,
     zeros,
 )
 
@@ -246,6 +247,7 @@ __all__ = [
     "broadcast_to",
     "strided_empty",
     "strided_from_blob",
+    "tensor",
     "zeros",
     "sum",
     "var_mean",
