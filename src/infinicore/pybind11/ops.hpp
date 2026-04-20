@@ -49,6 +49,7 @@
 #include "ops/hypot.hpp"
 #include "ops/index_add.hpp"
 #include "ops/index_copy.hpp"
+#include "ops/infllmv2_attention.hpp"
 #include "ops/inner.hpp"
 #include "ops/interpolate.hpp"
 #include "ops/kron.hpp"
@@ -87,6 +88,9 @@
 #include "ops/selu.hpp"
 #include "ops/silu.hpp"
 #include "ops/silu_and_mul.hpp"
+#include "ops/simple_gla_attention.hpp"
+#include "ops/simple_gla_decode_step.hpp"
+#include "ops/simple_gla_prefill.hpp"
 #include "ops/sinh.hpp"
 #include "ops/smooth_l1_loss.hpp"
 #include "ops/softplus.hpp"
@@ -136,6 +140,10 @@ inline void bind(py::module &m) {
     bind_dist(m);
     bind_flash_attention(m);
     bind_hinge_embedding_loss(m);
+    bind_infllmv2_attention(m);
+    bind_simple_gla_attention(m);
+    bind_simple_gla_decode_step(m);
+    bind_simple_gla_prefill(m);
     bind_kv_caching(m);
     bind_fmod(m);
     bind_fmin(m);

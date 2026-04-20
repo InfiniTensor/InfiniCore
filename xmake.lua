@@ -1,5 +1,8 @@
 add_rules("mode.debug", "mode.release")
-add_requires("boost", {configs = {stacktrace = true}})
+-- In CI/docker or non-interactive shells, run xmake with -y (e.g. xmake clean -y) to avoid hanging on package prompts.
+if is_mode("debug") then
+    add_requires("boost", {configs = {stacktrace = true}})
+end
 add_requires("pybind11")
 
 -- Define color codes
@@ -55,6 +58,10 @@ option_end()
 if has_config("nv-gpu") then
     add_defines("ENABLE_NVIDIA_API")
     includes("xmake/nvidia.lua")
+    -- Ensure CUDA toolkit headers (e.g. cuda_runtime_api.h) are visible to
+    -- C++ sources that include ATen CUDA wrappers like CUDAContextLight.h.
+    local cuda_dir = get_config("cuda") or os.getenv("CUDA_HOME") or os.getenv("CUDA_ROOT") or "/usr/local/cuda"
+    add_includedirs(path.join(cuda_dir, "include"), { public = true })
 end
 
 option("cudnn")
@@ -73,7 +80,7 @@ option("cutlass")
     set_description("Whether to compile cutlass for Nvidia GPU")
 option_end()
 
-if has_config("cutlass") then 
+if has_config("cutlass") then
     add_defines("ENABLE_CUTLASS_API")
 end
 
@@ -242,8 +249,39 @@ option_end()
 
 if has_config("aten") then
     add_defines("ENABLE_ATEN")
-    if get_config("flash-attn") ~= false then
+    -- Only enable FlashAttention integration when a non-empty path is provided.
+    local flash_attn_cfg = get_config("flash-attn")
+    if flash_attn_cfg ~= nil and flash_attn_cfg ~= "" and flash_attn_cfg ~= false then
         add_defines("ENABLE_FLASH_ATTN")
+    end
+end
+
+-- InfLLM-V2 direct kernels (requires aten; link against infllm_v2 shared library)
+--
+-- Policy: InfLLM-V2 is optional and must be checked out/built by the user.
+-- We do NOT auto-run `git submodule update` or `python setup.py install` from xmake.
+--
+-- Usage:
+--   - auto-detect (if you manually checked out to third_party/infllmv2_cuda_impl):
+--       xmake f --aten=y --infllmv2=y
+--   - or specify a path (recommended; works without any checkout under this repo):
+--       xmake f --aten=y --infllmv2=/abs/path/to/libinfllm_v2.so
+--       xmake f --aten=y --infllmv2=/abs/path/to/infllmv2_cuda_impl   # will auto-detect under build/lib.*/
+option("infllmv2")
+    set_default("")
+    set_showmenu(true)
+    set_description("Enable InfLLM-V2 support. Value: 'y' (auto-detect under third_party/infllmv2_cuda_impl) or a path to libinfllm_v2.so / infllmv2_cuda_impl root. Requires --aten=y.")
+option_end()
+
+local function _infllmv2_enabled()
+    local cfg = get_config("infllmv2")
+    return cfg ~= nil and cfg ~= "" and cfg ~= false
+end
+
+if _infllmv2_enabled() then
+    -- Fail fast: C++ code is gated on ENABLE_INFLLMV2 && ENABLE_ATEN.
+    if not has_config("aten") then
+        error("--infllmv2 requires --aten=y")
     end
 end
 
@@ -492,11 +530,11 @@ target("infinicore_cpp_api")
             local TORCH_DIR = outdata
 
             target:add(
-                "includedirs", 
-                path.join(TORCH_DIR, "include"), 
+                "includedirs",
+                path.join(TORCH_DIR, "include"),
                 path.join(TORCH_DIR, "include/torch/csrc/api/include"),
                 { public = true })
-            
+
             target:add(
                 "linkdirs",
                 path.join(TORCH_DIR, "lib"),
@@ -512,6 +550,78 @@ target("infinicore_cpp_api")
             )
         end
 
+        -- InfLLM-V2: locate + link infllm_v2 .so
+        local resolved_infllmv2 = nil
+        if _infllmv2_enabled() then
+            local infllmv2_cfg = get_config("infllmv2")
+
+            local function detect_infllmv2_so(infllmv2_root)
+                local candidates = os.files(path.join(infllmv2_root, "build", "lib.*", "infllm_v2", "*.so"))
+                if candidates and #candidates > 0 then
+                    table.sort(candidates)
+                    return candidates[1]
+                end
+                return nil
+            end
+
+            local function is_truthy_enable(v)
+                if v == true then
+                    return true
+                end
+                if type(v) == "string" then
+                    local s = v:lower()
+                    return s == "y" or s == "yes" or s == "true" or s == "1" or s == "on"
+                end
+                return false
+            end
+
+            -- 1) If user passed a file path (libinfllm_v2.so / *.so), use it directly.
+            if type(infllmv2_cfg) == "string" and infllmv2_cfg ~= "" and os.isfile(infllmv2_cfg) then
+                resolved_infllmv2 = infllmv2_cfg
+            end
+
+            -- 2) If user passed a directory, try to auto-detect under it.
+            if not resolved_infllmv2 and type(infllmv2_cfg) == "string" and infllmv2_cfg ~= "" and os.isdir(infllmv2_cfg) then
+                resolved_infllmv2 = detect_infllmv2_so(infllmv2_cfg)
+            end
+
+            -- 3) If user passed y/true, try the conventional in-tree location (if present).
+            if not resolved_infllmv2 and is_truthy_enable(infllmv2_cfg) then
+                local infllmv2_root = path.join(os.projectdir(), "third_party", "infllmv2_cuda_impl")
+                if os.isdir(infllmv2_root) then
+                    resolved_infllmv2 = detect_infllmv2_so(infllmv2_root)
+                end
+            end
+
+            if not resolved_infllmv2 then
+                local default_root = path.join(os.projectdir(), "third_party", "infllmv2_cuda_impl")
+                error(
+                    "[InfLLM-V2] Cannot find built InfLLM-V2 shared library (infllm_v2/*.so).\n" ..
+                    "You must build it first, then point xmake to it.\n\n" ..
+                    "Options:\n" ..
+                    "  (A) Pass a direct .so path:\n" ..
+                    "      xmake f --aten=y --infllmv2=/abs/path/to/libinfllm_v2.so -cv\n" ..
+                    "  (B) Pass an infllmv2_cuda_impl root directory (auto-detects build/lib.*/infllm_v2/*.so):\n" ..
+                    "      xmake f --aten=y --infllmv2=/abs/path/to/infllmv2_cuda_impl -cv\n" ..
+                    "  (C) If you checked it out under this repo:\n" ..
+                    "      " .. default_root .. "\n" ..
+                    "      xmake f --aten=y --infllmv2=y -cv\n"
+                )
+            end
+
+            if has_config("aten") then
+                target:add("defines", "ENABLE_INFLLMV2")
+            end
+
+            local abs = path.absolute(resolved_infllmv2)
+            local so_dir = path.directory(abs)
+            local so_name = path.filename(abs)
+            -- IMPORTANT: ensure `infinicore_cpp_api` gets a DT_NEEDED on infllm_v2 .so.
+            -- Using `shflags` (not `ldflags`) and `--no-as-needed` avoids the linker
+            -- dropping the dependency and leaving runtime undefined symbols
+            -- (e.g. `mha_varlen_fwd`) that would otherwise require LD_PRELOAD/ctypes preload.
+            target:add("shflags", "-Wl,--no-as-needed -L" .. so_dir .. " -l:" .. so_name .. " -Wl,-rpath," .. so_dir, { public = true })
+        end
     end)
 
     -- Add InfiniCore C++ source files (needed for RoPE and other nn modules)
@@ -537,8 +647,8 @@ target("infinicore_cpp_api")
 target_end()
 
 target("_infinicore")
-    add_packages("boost")
     if is_mode("debug") then
+        add_packages("boost")
         add_defines("BOOST_STACKTRACE_USE_BACKTRACE")
         add_links("backtrace")
     else
@@ -562,6 +672,18 @@ target("_infinicore")
     add_files("src/infinicore/pybind11/**.cc")
 
     set_installdir("python/infinicore")
+    on_install(function (target)
+        -- Make the in-tree Python package usable after `xmake install _infinicore`.
+        -- (Reviewer request: keep install logic in install phase, not after_build.)
+        local targetfile = target:targetfile()
+        if targetfile and os.isfile(targetfile) then
+            local libdir = path.join(os.projectdir(), "python", "infinicore", "lib")
+            if not os.isdir(libdir) then
+                os.mkdir(libdir)
+            end
+            os.cp(targetfile, path.join(libdir, path.filename(targetfile)))
+        end
+    end)
 target_end()
 
 option("editable")

@@ -3,6 +3,7 @@
 #include "../utils.hpp"
 #include "infinicore/context/context.hpp"
 #include "infinicore/dtype.hpp"
+#include "infinicore/ops/zeros.hpp"
 
 #include <spdlog/spdlog.h>
 
@@ -242,8 +243,9 @@ std::shared_ptr<TensorImpl> TensorImpl::zeros(const Shape &shape,
                                               const DataType &dtype,
                                               const Device &device,
                                               bool pin_memory) {
-    // TODO: Implement this.
-    return empty(shape, dtype, device, pin_memory);
+    auto impl = empty(shape, dtype, device, pin_memory);
+    infinicore::op::zeros_(Tensor(impl));
+    return impl;
 }
 std::shared_ptr<TensorImpl> TensorImpl::ones(const Shape &shape,
                                              const DataType &dtype,

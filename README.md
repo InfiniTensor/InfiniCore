@@ -39,7 +39,7 @@ API 定义以及使用方式详见 [`InfiniCore文档`](https://github.com/Infin
 
 ### 一、克隆项目
 
-由于仓库中含有子模块，所以在克隆时请添加 `--recursive` 或 `--recurse-submodules`，如：
+由于仓库中含有子模块（如 `spdlog` / `nlohmann_json`），所以在克隆时请添加 `--recursive` 或 `--recurse-submodules`，如：
 
 ```shell
 git clone --recursive https://github.com/InfiniTensor/InfiniCore.git
@@ -50,6 +50,10 @@ git clone --recursive https://github.com/InfiniTensor/InfiniCore.git
 ```shell
 git submodule update --init --recursive
 ```
+
+> 注：InfLLM-V2 CUDA kernels（`infllmv2_cuda_impl`）为**可选依赖**，不会随仓库子模块默认拉取。
+> 如需启用 `--infllmv2`（见下文），请自行在任意目录克隆/编译该项目，并将生成的 `infllm_v2/*.so` 路径传给 xmake；
+> 或者将其手动放到 `InfiniCore/third_party/infllmv2_cuda_impl` 后再使用 `--infllmv2=y` 走自动探测。
 
 配置`INFINI_ROOT` 和 `LD_LIBRARY_PATH` 环境变量。  
 默认`INFINI_ROOT`为`$HOME/.infini`，可以使用以下命令自动配置：
@@ -108,6 +112,8 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
 | `--ninetoothed=[y\|n]`   | 是否编译九齿实现                 | n
 | `--ccl=[y\|n]`           | 是否编译 InfiniCCL 通信库接口实现 | n
 | `--graph=[y\|n]`         | 是否编译 cuda graph 接口实现      | n
+| `--aten=[y\|n]`          | 是否链接 ATen / PyTorch（用于部分算子/对比测试） | n
+| `--infllmv2=[y\|PATH]`   | **可选**：启用 InfLLM-V2 attention（需 `--aten=y`）。值为 `y`（探测 `third_party/infllmv2_cuda_impl`）或指向 `libinfllm_v2.so` / `infllmv2_cuda_impl` 根目录 | (空)
 
 ##### 手动安装底层库
 
@@ -173,6 +179,64 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
   # flash attenion库会伴随infinicore_cpp_api一同编译安装
 
   ```
+
+##### 试验功能 -- 使用 InfLLM-V2 CUDA kernels（可选）
+
+InfLLM-V2 的 varlen/kvcache attention 需要额外的 CUDA kernels（`infllm_v2/*.so`）。该依赖为**可选**，需要你自行克隆并编译。
+
+如果你希望将 `infllmv2_cuda_impl` 放在本仓库 `third_party/` 下（但不作为子模块管理），可以按以下方式拉取并编译，然后使用 `--infllmv2=y` 让 xmake 自动探测：
+
+```bash
+cd InfiniCore
+
+# Core submodules only (InfLLM-v2 不作为子模块强制拉取)
+git submodule sync third_party/spdlog third_party/nlohmann_json
+git submodule update --init third_party/spdlog third_party/nlohmann_json
+
+# Fetch InfLLM-v2 into third_party if missing (NOT a git submodule).
+INFLLMV2_DIR="$PWD/third_party/infllmv2_cuda_impl"
+if [ ! -d "$INFLLMV2_DIR/.git" ]; then
+  rm -rf "$INFLLMV2_DIR"
+  git clone --depth 1 -b minicpm_sala_patches --recurse-submodules \
+    https://github.com/Ceng23333/infllmv2_cuda_impl.git "$INFLLMV2_DIR"
+fi
+
+cd "$INFLLMV2_DIR"
+git submodule update --init --recursive
+python3 setup.py install
+
+cd ..
+python3 scripts/install.py --root --nv-gpu=y --cuda_arch=sm_80 --aten=y --infllmv2=y --ccl=y
+xmake build -r _infinicore
+xmake install _infinicore
+
+export PYTHONPATH="$PWD/test/infinicore:$PWD/python:${PYTHONPATH:-}"
+python3 "$PWD/test/infinicore/ops/infllmv2_attention.py" --nvidia
+python3 "$PWD/test/infinicore/ops/simple_gla_prefill.py" --nvidia
+python3 "$PWD/test/infinicore/ops/simple_gla_decode_recurrent.py" --nvidia
+```
+
+1. 构建 `infllmv2_cuda_impl`（示例，路径可自定义）：
+
+```shell
+git clone <your infllmv2_cuda_impl repo url> /abs/path/to/infllmv2_cuda_impl
+cd /abs/path/to/infllmv2_cuda_impl
+python setup.py install
+```
+
+2. 配置并编译 InfiniCore（需要 `--aten=y`）：
+
+```shell
+# 方式 A：直接给 .so 的绝对路径（推荐，更明确）
+xmake f --nv-gpu=y --aten=y --infllmv2=/abs/path/to/libinfllm_v2.so -cv
+xmake build && xmake install
+
+# 方式 B：给 infllmv2_cuda_impl 根目录（会探测 build/lib.*/infllm_v2/*.so）
+xmake f --nv-gpu=y --aten=y --infllmv2=/abs/path/to/infllmv2_cuda_impl -cv
+xmake build && xmake install
+```
+
+运行时需要能找到该 `libinfllm_v2.so`（例如它的目录已在 rpath / `LD_LIBRARY_PATH` 中）。本项目在链接时会尝试写入 rpath 到对应目录，因此通常无需 `LD_PRELOAD`。
 
 2. 编译安装
 
