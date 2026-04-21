@@ -1352,8 +1352,8 @@ def gptq_qyblas_gemm_(lib):
     lib.infiniopDestroyGptqQyblasGemmDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
-    
-    
+
+
 @OpRegister.operator
 def awq_marlin_gemm_(lib):
     lib.infiniopCreateAwqMarlinGemmDescriptor.restype = c_int32
@@ -1405,6 +1405,7 @@ def awq_marlin_gemm_(lib):
     lib.infiniopDestroyAwqMarlinGemmDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
+
 
 @OpRegister.operator
 def softplus_(lib):

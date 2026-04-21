@@ -306,4 +306,3 @@ def generate_new_kernels():
 if __name__ == "__main__":
     remove_old_kernels()
     generate_new_kernels()
-

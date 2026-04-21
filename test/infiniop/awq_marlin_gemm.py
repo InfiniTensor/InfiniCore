@@ -46,6 +46,7 @@ NUM_ITERATIONS = 1000
 def rand_data(shape, dtype, device):
     return torch.randn(shape, dtype=dtype, device=device)
 
+
 def get_scale_perms():
     scale_perm: list[int] = []
     for i in range(8):
@@ -55,11 +56,13 @@ def get_scale_perms():
         scale_perm_single.extend([2 * i + j for j in [0, 1, 8, 9, 16, 17, 24, 25]])
     return scale_perm, scale_perm_single
 
+
 def marlin_permute_bias(s: torch.Tensor) -> torch.Tensor:
     origin_shape = s.shape
     _, scale_perm_single = get_scale_perms()
     s = s.reshape((-1, len(scale_perm_single)))[:, scale_perm_single]
     return s.reshape(*origin_shape).contiguous()
+
 
 def quantize_weights(
     w: torch.Tensor,
@@ -68,9 +71,9 @@ def quantize_weights(
     zero_points: bool = False,
     ref_zero_points_after_scales: bool = False,
 ):
-    assert quant_type.is_integer(), (
-        "Floating point quantization may work but has not been tested"
-    )
+    assert (
+        quant_type.is_integer()
+    ), "Floating point quantization may work but has not been tested"
     assert not zero_points or group_size is not None, (
         "to have group zero points, group_size must be provided "
         "(-1 group_size is channelwise)"
@@ -155,8 +158,10 @@ def quantize_weights(
         maybe_w_zp,
     )
 
+
 SUPPORTED_GPTQ_QUANT_TYPES = [scalar_types.uint4b8, scalar_types.uint8b128]
 SUPPORTED_GROUP_SIZES = [-1, 32, 64, 128]
+
 
 def permute_rows(
     q_w: torch.Tensor,
@@ -198,12 +203,12 @@ def gptq_quantize_weights(
     size_k, _ = w.shape
 
     assert w.is_floating_point(), "w must be float"
-    assert quant_type in SUPPORTED_GPTQ_QUANT_TYPES, (
-        f"Unsupported gptq type = {quant_type}"
-    )
-    assert group_size in SUPPORTED_GROUP_SIZES + [size_k], (
-        f"Unsupported groupsize = {group_size}"
-    )
+    assert (
+        quant_type in SUPPORTED_GPTQ_QUANT_TYPES
+    ), f"Unsupported gptq type = {quant_type}"
+    assert group_size in SUPPORTED_GROUP_SIZES + [
+        size_k
+    ], f"Unsupported groupsize = {group_size}"
 
     w_ref, w_q, w_s, _ = quantize_weights(w, quant_type, group_size)
 
@@ -211,15 +216,17 @@ def gptq_quantize_weights(
     g_idx = torch.empty(0, dtype=torch.int, device=w.device)
     rand_perm = torch.empty(0, dtype=torch.int, device=w.device)
     if act_order:
-        assert group_size < size_k, (
-            "For act_order, groupsize = {} must be less than size_k = {}".format(
-                group_size, size_k
-            )
+        assert (
+            group_size < size_k
+        ), "For act_order, groupsize = {} must be less than size_k = {}".format(
+            group_size, size_k
         )
 
         w_ref, w_q, g_idx, rand_perm = permute_rows(w_q, w_ref, group_size, test_perm)
 
     return w_ref, w_q, w_s, g_idx, rand_perm
+
+
 def sort_weights(q_w: torch.Tensor, g_idx: torch.Tensor):
     orig_device = q_w.device
 
@@ -233,6 +240,7 @@ def sort_weights(q_w: torch.Tensor, g_idx: torch.Tensor):
         g_idx.to(device=orig_device),
         sort_indices.to(device=orig_device),
     )
+
 
 def get_weight_perm(num_bits: int, is_a_8bit: bool = False):
     perm_list: list[int] = []
@@ -288,10 +296,12 @@ def get_weight_perm(num_bits: int, is_a_8bit: bool = False):
     perm = torch.from_numpy(perm)
     return perm
 
+
 GPTQ_MARLIN_TILE = 16
 GPTQ_MARLIN_MIN_THREAD_N = 64
 GPTQ_MARLIN_MIN_THREAD_K = 128
 GPTQ_MARLIN_MAX_PARALLEL = 16
+
 
 def marlin_permute_weights(
     q_w, size_k, size_n, perm, tile=GPTQ_MARLIN_TILE, is_a_8bit=False
@@ -312,6 +322,8 @@ def marlin_permute_weights(
     q_w = q_w.reshape((-1, perm.numel()))[:, perm].reshape(q_w.shape)
 
     return q_w
+
+
 def get_pack_factor(num_bits):
     assert 32 % num_bits == 0, f"Unsupported num_bits = {num_bits}"
     return 32 // num_bits
@@ -335,6 +347,7 @@ def marlin_weights(q_w, size_k, size_n, num_bits, perm, is_a_8bit=False):
 
     return q_packed
 
+
 def marlin_permute_scales(
     s: torch.Tensor, size_k: int, size_n: int, group_size: int, is_a_8bit: bool = False
 ) -> torch.Tensor:
@@ -346,7 +359,8 @@ def marlin_permute_scales(
     s = s.reshape((-1, size_n)).contiguous()
 
     return s
-    
+
+
 def marlin_quantize(
     w: torch.Tensor,
     quant_type: ScalarType,
@@ -394,24 +408,28 @@ def marlin_quantize(
 
     return res_list
 
+
 def marlin_make_empty_g_idx(device: torch.device) -> torch.Tensor:
     return torch.nn.Parameter(
         torch.empty(0, dtype=torch.int, device=device), requires_grad=False
     )
-    
+
+
 def compute_max_diff(output, output_ref):
     return torch.mean(torch.abs(output - output_ref)) / torch.mean(
         torch.abs(output_ref)
     )
-    
+
+
 def awq_marlin_gemm_torch(a_input, w_ref, b_bias):
     if b_bias == None:
         return torch.matmul(a_input, w_ref)
     else:
         return torch.matmul(a_input, w_ref) + b_bias.view(1, -1)
 
-    
-def test_marlin_gemm_subset_input(handle,
+
+def test_marlin_gemm_subset_input(
+    handle,
     device,
     size_m,
     size_k,
@@ -427,8 +445,10 @@ def test_marlin_gemm_subset_input(handle,
     big_m = size_m * 2
     big_k = size_k * 2
     test_dtype = to_torch_dtype(dtype)
-    
-    a_input = torch.randn((big_m, big_k), dtype=test_dtype)[8 : size_m + 8, 8 : size_k + 8]
+
+    a_input = torch.randn((big_m, big_k), dtype=test_dtype)[
+        8 : size_m + 8, 8 : size_k + 8
+    ]
     A = TestTensor(
         a_input.shape,
         a_input.stride(),
@@ -444,7 +464,7 @@ def test_marlin_gemm_subset_input(handle,
     )
 
     marlin_zp = marlin_make_empty_g_idx(marlin_s.device)
-    
+
     ans = awq_marlin_gemm_torch(A.torch_tensor(), w_ref, None)
     # print("w", w_ref.shape, w_ref.dtype, w_ref.stride())
     # print("b", marlin_q_w.shape, marlin_q_w.dtype, marlin_q_w.stride())
@@ -453,7 +473,7 @@ def test_marlin_gemm_subset_input(handle,
     # print("perm", sort_indices.shape, sort_indices.dtype, sort_indices.stride())
     # print("g_idx", marlin_zp)
     output = TestTensor(ans.shape, None, dtype, device, mode="zeros")
-    
+
     B = TestTensor(
         marlin_q_w.shape,
         marlin_q_w.stride(),
@@ -506,11 +526,11 @@ def test_marlin_gemm_subset_input(handle,
         )
     else:
         perm = None
-    is_k_full=True
-    use_atomic_add=False
-    use_fp32_reduce=True
-    is_zp_float=False
-    
+    is_k_full = True
+    use_atomic_add = False
+    use_fp32_reduce = True
+    is_zp_float = False
+
     if sync is not None:
         sync()
 
@@ -533,7 +553,18 @@ def test_marlin_gemm_subset_input(handle,
     )
 
     # Invalidate descriptors (same pattern as other tests)
-    for tensor in [output, A, B, b_bias, b_scales, a_scales, global_scales, b_zeros, b_g_idx, perm]:
+    for tensor in [
+        output,
+        A,
+        B,
+        b_bias,
+        b_scales,
+        a_scales,
+        global_scales,
+        b_zeros,
+        b_g_idx,
+        perm,
+    ]:
         if tensor is not None:
             tensor.destroy_desc()
 
@@ -571,10 +602,10 @@ def test_marlin_gemm_subset_input(handle,
         )
 
     lib_awq_marlin_gemm()
-    
+
     max_diff = compute_max_diff(output.actual_tensor(), ans)
     assert max_diff < 0.04
-    
+
     if PROFILE:
         profile_operation(
             "PyTorch",
@@ -592,9 +623,10 @@ def test_marlin_gemm_subset_input(handle,
         )
 
     check_error(LIBINFINIOP.infiniopDestroyAwqMarlinGemmDescriptor(descriptor))
-    
-    
-def test_marlin_gemm_with_bias(handle,
+
+
+def test_marlin_gemm_with_bias(
+    handle,
     device,
     size_m,
     size_k,
@@ -609,10 +641,10 @@ def test_marlin_gemm_with_bias(handle,
     )
 
     test_dtype = to_torch_dtype(dtype)
-    
+
     A = TestTensor((size_m, size_k), None, dtype, device)
     b_weight = TestTensor((size_k, size_n), None, dtype, device)
-    b_bias = TestTensor((size_n, ), None, dtype, device)
+    b_bias = TestTensor((size_n,), None, dtype, device)
 
     marlin_bias = marlin_permute_bias(b_bias.torch_tensor())
     w_ref, marlin_q_w, marlin_s, g_idx, sort_indices, _ = marlin_quantize(
@@ -620,7 +652,7 @@ def test_marlin_gemm_with_bias(handle,
     )
 
     marlin_zp = marlin_make_empty_g_idx(marlin_s.device)
-    
+
     ans = awq_marlin_gemm_torch(A.torch_tensor(), w_ref, b_bias.torch_tensor())
     # print("w", w_ref.shape, w_ref.dtype, w_ref.stride())
     # print("b", marlin_q_w.shape, marlin_q_w.dtype, marlin_q_w.stride())
@@ -629,7 +661,7 @@ def test_marlin_gemm_with_bias(handle,
     # print("perm", sort_indices.shape, sort_indices.dtype, sort_indices.stride())
     # print("g_idx", marlin_zp)
     output = TestTensor(ans.shape, None, dtype, device, mode="zeros")
-    
+
     B = TestTensor(
         marlin_q_w.shape,
         marlin_q_w.stride(),
@@ -638,7 +670,7 @@ def test_marlin_gemm_with_bias(handle,
         mode="manual",
         set_tensor=marlin_q_w,
     )
-    
+
     b_scales = TestTensor(
         marlin_s.shape,
         marlin_s.stride(),
@@ -682,11 +714,11 @@ def test_marlin_gemm_with_bias(handle,
         )
     else:
         perm = None
-    is_k_full=True
-    use_atomic_add=False
-    use_fp32_reduce=True
-    is_zp_float=False
-    
+    is_k_full = True
+    use_atomic_add = False
+    use_fp32_reduce = True
+    is_zp_float = False
+
     if sync is not None:
         sync()
 
@@ -709,7 +741,18 @@ def test_marlin_gemm_with_bias(handle,
     )
 
     # Invalidate descriptors (same pattern as other tests)
-    for tensor in [output, A, B, b_bias, b_scales, a_scales, global_scales, b_zeros, b_g_idx, perm]:
+    for tensor in [
+        output,
+        A,
+        B,
+        b_bias,
+        b_scales,
+        a_scales,
+        global_scales,
+        b_zeros,
+        b_g_idx,
+        perm,
+    ]:
         if tensor is not None:
             tensor.destroy_desc()
 
@@ -747,14 +790,16 @@ def test_marlin_gemm_with_bias(handle,
         )
 
     lib_awq_marlin_gemm()
-    
+
     max_diff = compute_max_diff(output.actual_tensor(), ans)
     assert max_diff < 0.04
-    
+
     if PROFILE:
         profile_operation(
             "PyTorch",
-            lambda: awq_marlin_gemm_torch(A.torch_tensor(), w_ref, b_bias.torch_tensor()),
+            lambda: awq_marlin_gemm_torch(
+                A.torch_tensor(), w_ref, b_bias.torch_tensor()
+            ),
             device,
             NUM_PRERUN,
             NUM_ITERATIONS,
@@ -767,9 +812,7 @@ def test_marlin_gemm_with_bias(handle,
             NUM_ITERATIONS,
         )
 
-    check_error(LIBINFINIOP.infiniopDestroyAwqMarlinGemmDescriptor(descriptor))  
-    
-    
+    check_error(LIBINFINIOP.infiniopDestroyAwqMarlinGemmDescriptor(descriptor))
 
 
 if __name__ == "__main__":
@@ -781,7 +824,14 @@ if __name__ == "__main__":
     NUM_ITERATIONS = args.num_iterations
 
     for device in get_test_devices(args):
-        test_operator(device, test_marlin_gemm_subset_input, _TEST_CASES_SUBSET_INPUT, _TENSOR_DTYPES)
-        test_operator(device, test_marlin_gemm_with_bias, _TEST_CASES_WITH_BIAS, _TENSOR_DTYPES)
+        test_operator(
+            device,
+            test_marlin_gemm_subset_input,
+            _TEST_CASES_SUBSET_INPUT,
+            _TENSOR_DTYPES,
+        )
+        test_operator(
+            device, test_marlin_gemm_with_bias, _TEST_CASES_WITH_BIAS, _TENSOR_DTYPES
+        )
 
     print("\033[92mTest passed!\033[0m")
