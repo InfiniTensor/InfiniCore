@@ -52,8 +52,74 @@ target("infiniop-nvidia")
             target:add("links", "cuda")
         end
 
-        -- CUDA arch: explicit --cuda_arch > nvidia-smi auto-detect > native
-        if not apply_cuda_arch_flags(function(flag) target:add("cuflags", flag) end) then
+        -- Auto-detect CUDA arch when no explicit --cuda_arch
+        local arch_opt = get_config("cuda_arch")
+        local script_path = path.join(
+            os.projectdir(),
+            "src/infiniop/ops/awq_marlin_gemm/nvidia/generate_kernels.py"
+        )
+
+        local header_path = path.join(
+            os.projectdir(),
+            "src/infiniop/ops/awq_marlin_gemm/nvidia/kernel_selector.h"
+        )
+
+        local cuda_arch_num = nil
+
+        if arch_opt and type(arch_opt) == "string" then
+            cuda_arch_num = arch_opt:match("sm_(%d+)")
+        end
+
+        local generate_arch =
+            cuda_arch_num and (tonumber(cuda_arch_num) / 10) or 8.0
+
+        if not os.isfile(header_path) then
+
+            print("")
+            print("🔧 First-time generating AWQ Marlin kernels (arch: "
+                .. tostring(generate_arch) .. ")")
+
+            -- save current directory
+            local oldir = os.curdir()
+
+            -- switch cwd to script directory
+            os.cd(path.directory(script_path))
+
+            -- IMPORTANT:
+            -- try = true prevents xmake abort
+            local ok, errors = os.execv(
+                "python",
+                {
+                    script_path,
+                    tostring(generate_arch)
+                },
+                {
+                    try = true
+                }
+            )
+
+            -- restore cwd
+            os.cd(oldir)
+
+            if not ok then
+                print("⚠️ generate_kernels.py returned non-zero exit code")
+                if errors then
+                    print(errors)
+                end
+            end
+
+            
+        end
+
+        print("header_path = " .. header_path)
+        print("exists = " .. tostring(os.isfile(header_path)))
+
+        if os.isfile(header_path) then
+            print("✅ AWQ Marlin kernels generated successfully!")
+        else
+            raise("❌ Failed to generate AWQ Marlin kernels: header missing!")
+        end
+        if not arch_opt or type(arch_opt) ~= "string" then
             local ok, sm_str = os.iorunv("nvidia-smi", {"--query-gpu=compute_cap", "--format=csv,noheader,nounits"})
             if ok and sm_str then
                 local major, minor = sm_str:match("(%d+)%.(%d+)")
