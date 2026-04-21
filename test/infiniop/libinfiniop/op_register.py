@@ -1352,6 +1352,59 @@ def gptq_qyblas_gemm_(lib):
     lib.infiniopDestroyGptqQyblasGemmDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
+    
+    
+@OpRegister.operator
+def awq_marlin_gemm_(lib):
+    lib.infiniopCreateAwqMarlinGemmDescriptor.restype = c_int32
+    lib.infiniopCreateAwqMarlinGemmDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetAwqMarlinGemmWorkspaceSize.restype = c_int32
+    lib.infiniopGetAwqMarlinGemmWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopAwqMarlinGemm.restype = c_int32
+    lib.infiniopAwqMarlinGemm.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_int64,
+        c_bool,
+        c_bool,
+        c_bool,
+        c_bool,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyAwqMarlinGemmDescriptor.restype = c_int32
+    lib.infiniopDestroyAwqMarlinGemmDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
 
 @OpRegister.operator
 def softplus_(lib):
