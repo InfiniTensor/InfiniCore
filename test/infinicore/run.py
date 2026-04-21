@@ -280,7 +280,7 @@ def main():
             )
 
         if bench:
-            print(f"Benchmark mode: {args.bench.upper()} timing")
+            print(f"Benchmark mode: {bench.upper()} timing")
 
         # 3. Initialize and Execute
         test_manager = TestManager(
