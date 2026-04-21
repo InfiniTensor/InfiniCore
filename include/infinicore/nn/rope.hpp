@@ -120,6 +120,11 @@ public:
     Algo algo() const { return algo_; }
     DataType dtype() const { return dtype_; }
 
+    // Accessors for the pre-computed sin/cos cache tables.
+    // Shape: `[max_seq_len, head_dim / 2]`, dtype: `dtype()`.
+    Tensor sin_cache() const { return sin_cache_; }
+    Tensor cos_cache() const { return cos_cache_; }
+
     // String representation
     std::string extra_repr() const;
 
