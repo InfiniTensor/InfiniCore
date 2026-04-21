@@ -387,6 +387,15 @@ target("infiniop")
     add_files("src/infiniop/ops/*/operator.cc", "src/infiniop/ops/*/*/operator.cc")
     add_files("src/infiniop/*.cc")
 
+    -- Some common headers (e.g. src/infiniop/devices/nvidia/nvidia_handle.cuh) include <cublas_v2.h>.
+    -- Ensure the CUDA include dir is present for this target as well.
+    before_build(function (target)
+        if has_config("nv-gpu") then
+            local CUDA_DIR = get_config("cuda") or "/usr/local/cuda"
+            target:add("includedirs", path.join(CUDA_DIR, "include"), { public = true })
+        end
+    end)
+
     set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
     add_installfiles("include/infiniop/(**/*.h)", {prefixdir = "include/infiniop"})
     add_installfiles("include/infiniop/*.h", {prefixdir = "include/infiniop"})

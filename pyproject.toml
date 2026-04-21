@@ -9,6 +9,11 @@ description = "InfiniCore 是一个跨平台统一编程工具集，为不同芯
 readme = "README.md"
 dependencies = []
 requires-python = ">=3.8"
+
+[project.optional-dependencies]
+# Same interpreter as InfiniCore built with ``--aten=y`` (see vllm_kernel_reuse_evaluation.md).
+vllm = ["vllm==0.19.0"]
+
 classifiers = [
     "Programming Language :: Python :: 3",
     "License :: OSI Approved :: MIT License",

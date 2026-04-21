@@ -1,4 +1,5 @@
 import ctypes
+import glob
 import os
 from typing import Iterable, List
 
@@ -96,6 +97,43 @@ def preload_device(device_type: str) -> None:
     # etc.
 
 
+def preload_flash_attn_for_cpp_api() -> None:
+    """
+    Best-effort load of flash-attn's CUDA extension with RTLD_GLOBAL.
+
+    ``libinfinicore_cpp_api.so`` (aten builds) may reference flash-attn symbols;
+    loading via ``LD_PRELOAD`` breaks unrelated subprocesses (e.g. vLLM/Triton).
+    """
+    if os.environ.get("INFINICORE_DISABLE_FLASH_ATTN_RTLD_GLOBAL", "") == "1":
+        return
+    if os.environ.get("INFINILM_DISABLE_FLASH_ATTN_RTLD_GLOBAL", "") == "1":
+        return
+
+    candidates: List[str] = []
+    try:
+        import flash_attn
+
+        base = os.path.dirname(flash_attn.__file__)
+        parent = os.path.dirname(base)
+        candidates.extend(glob.glob(os.path.join(parent, "flash_attn_2_cuda*.so")))
+        candidates.extend(glob.glob(os.path.join(base, "flash_attn_2_cuda*.so")))
+    except ImportError:
+        pass
+
+    # Typical wheel layout (image / CI); last resort after package discovery
+    candidates.append(
+        "/usr/local/lib/python3.12/dist-packages/flash_attn_2_cuda.cpython-312-x86_64-linux-gnu.so"
+    )
+
+    for fa in candidates:
+        if fa and os.path.isfile(fa):
+            try:
+                ctypes.CDLL(fa, mode=ctypes.RTLD_GLOBAL)
+                return
+            except OSError:
+                continue
+
+
 def preload() -> None:
     """
     Universal preload function that loops through device types and preloads when required.
@@ -103,6 +141,8 @@ def preload() -> None:
     This function detects available device types and preloads their runtime libraries
     if the environment indicates they are needed.
     """
+    preload_flash_attn_for_cpp_api()
+
     # Device types that may require preload
     device_types = [
         "METAX",  # HPCC/METAX
