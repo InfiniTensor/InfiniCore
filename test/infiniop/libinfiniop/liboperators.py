@@ -42,8 +42,8 @@ def open_lib():
         libop_path = find_library_in_ld_path("bin", "infiniop.dll")
         librt_path = find_library_in_ld_path("bin", "infinirt.dll")
     elif system_name == "Linux":
-        libop_path = find_library_in_ld_path("lib", "libinfiniop.so")
-        librt_path = find_library_in_ld_path("lib", "libinfinirt.so")
+        libop_path = find_library_in_ld_path("lib/lib", "libinfiniop.so")
+        librt_path = find_library_in_ld_path("lib/lib", "libinfinirt.so")
 
     assert (
         libop_path is not None
