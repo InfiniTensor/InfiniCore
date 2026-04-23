@@ -1,6 +1,7 @@
 #include "infinicore/ops/flash_attention.hpp"
 
 #include "../../utils.hpp"
+#include "infinicore/context/context.hpp"
 
 namespace infinicore::op {
 
