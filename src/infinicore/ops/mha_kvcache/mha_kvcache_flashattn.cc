@@ -4,6 +4,18 @@
 
 #include <stdexcept>
 
+#ifdef ENABLE_FLASH_ATTN
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
+#include <c10/cuda/CUDAGuard.h>
+#endif
+#endif
+
+#if defined(ENABLE_METAX_API)
+#define INFINICORE_FLASH_OP(name) ::name
+#else
+#define INFINICORE_FLASH_OP(name) flash::name
+#endif
+
 namespace infinicore::op::mha_kvcache_impl::flashattn {
 
 struct PlannedMeta {
@@ -33,17 +45,24 @@ void *plan(Tensor out,
 
 void run(void *planned_meta) {
 #ifdef ENABLE_FLASH_ATTN
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
     c10::cuda::CUDAStreamGuard guard(infinicore::adaptor::get_cuda_stream());
+#endif
     auto *p = reinterpret_cast<PlannedMeta *>(planned_meta);
 
-    auto out_tensor = infinicore::adaptor::to_aten_tensor(p->out);
+    // Paged KV caches must be contiguous for flash-attn; avoid extra copies for q/metadata when already dense.
+    const bool out_need_copy_back = !p->out->is_contiguous();
+    Tensor out_work = out_need_copy_back ? p->out->contiguous() : Tensor(p->out);
+    auto out_tensor = infinicore::adaptor::to_aten_tensor(out_work);
     auto q = infinicore::adaptor::to_aten_tensor(p->q);
 #if defined(ENABLE_NVIDIA_API)
     auto k_cache = infinicore::adaptor::to_aten_tensor(p->k_cache);
     auto v_cache = infinicore::adaptor::to_aten_tensor(p->v_cache);
-#elif defined(ENABLE_QY_API)
-    auto k_cache = infinicore::adaptor::to_aten_tensor(p->k_cache).contiguous();
-    auto v_cache = infinicore::adaptor::to_aten_tensor(p->v_cache).contiguous();
+#elif defined(ENABLE_QY_API) || defined(ENABLE_METAX_API)
+    Tensor k_cache_work = p->k_cache->contiguous();
+    Tensor v_cache_work = p->v_cache->contiguous();
+    auto k_cache = infinicore::adaptor::to_aten_tensor(k_cache_work);
+    auto v_cache = infinicore::adaptor::to_aten_tensor(v_cache_work);
 #endif
     auto seqlens_k = std::optional<const at::Tensor>(infinicore::adaptor::to_aten_tensor(p->seqlens_k));
     auto block_table = std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(p->block_table));
@@ -65,7 +84,11 @@ void run(void *planned_meta) {
     auto out = use_dynamic_out ? std::optional<at::Tensor>(std::nullopt)
                                : std::optional<at::Tensor>(out_tensor);
 
-    auto result = flash::mha_fwd_kvcache(
+#if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
+    std::optional<at::Tensor> flash_attn_mars_ext = std::nullopt;
+#endif
+
+    auto result = INFINICORE_FLASH_OP(mha_fwd_kvcache)(
         q,
         k_cache,
         v_cache,
@@ -85,10 +108,18 @@ void run(void *planned_meta) {
         -1,
         0.0f,
         false,
-        0);
+        0
+#if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
+        ,
+        flash_attn_mars_ext
+#endif
+    );
 
     if (use_dynamic_out) {
         out_tensor.copy_(result[0]);
+    }
+    if (out_need_copy_back) {
+        p->out->copy_from(out_work);
     }
 #else
     throw std::runtime_error("FlashAttention is not enabled in this build");
