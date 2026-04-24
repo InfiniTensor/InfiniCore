@@ -152,11 +152,7 @@ void run(void *planned_meta) {
 
 #if defined(ENABLE_METAX_API)
     run_flashattn_varlen_metax(p);
-    return;
-#endif
-
-    // Original InfiniCore path (NVIDIA + xmake flash-attn-nvidia). MetaX is handled above.
-#if defined(ENABLE_NVIDIA_API)
+#else
     c10::cuda::CUDAStreamGuard guard(infinicore::adaptor::get_cuda_stream());
 
     auto q = infinicore::adaptor::to_aten_tensor(p->q);
@@ -195,8 +191,6 @@ void run(void *planned_meta) {
         0.0,
         false,
         std::nullopt);
-#else
-    throw std::runtime_error("FlashAttention varlen: no supported GPU backend in this build");
 #endif
 
 #else
