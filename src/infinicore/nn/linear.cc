@@ -78,7 +78,7 @@ Tensor BaseLinear::compute_linear(Tensor &input) const {
         Tensor weight_tensor = static_cast<const Tensor &>(weight_);
         std::optional<Tensor> bias_opt = has_bias_ ? std::make_optional<Tensor>(static_cast<const Tensor &>(bias_)) : std::nullopt;
 
-        auto output = infinicore::op::linear(input_contiguous->contiguous(), weight_tensor->contiguous(), bias_opt);
+        auto output = infinicore::op::linear(input_contiguous->contiguous(), weight_tensor->contiguous(), bias_opt, alpha_);
         return output;
     }
     }
