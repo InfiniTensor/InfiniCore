@@ -52,9 +52,16 @@ def set_env_for_metax_gpu(
         dirs = [
             os.path.join(root, "tools", "cu-bridge", "include"),
             os.path.join(root, "include", "hcr"),
+            # cu-bridge cuComplex.h includes "hcComplex.h" from HPCC include/common
+            os.path.join(root, "include", "common"),
+            # cu-bridge cusparse wrapper includes "hcsparse.h" under include/hcsparse
+            os.path.join(root, "include", "hcsparse"),
+            # cu-bridge cublasLt wrapper includes "hcblasLt.h" under include/hcblas
+            os.path.join(root, "include", "hcblas"),
+            # cu-bridge cusolver wrapper includes "hcsolver_common.h" under include/hcsolver
+            os.path.join(root, "include", "hcsolver"),
             os.path.join(root, "include"),
         ]
         for var in ("CPATH", "CPLUS_INCLUDE_PATH", "C_INCLUDE_PATH"):
             _prepend_path_var(var, dirs)
         return
-
