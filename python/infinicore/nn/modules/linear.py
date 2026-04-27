@@ -45,6 +45,7 @@ class Linear(Module):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
+        self._alpha = 1.0
         self.weight = Parameter(
             infinicore.empty([out_features, in_features], **factory_kwargs)
         )
@@ -55,7 +56,15 @@ class Linear(Module):
             self.register_parameter("bias", None)
 
     def forward(self, input: Tensor) -> Tensor:
-        return F.linear(input, self.weight, self.bias)
+        return F.linear(input, self.weight, self.bias, alpha=self._alpha)
 
     def extra_repr(self) -> str:
         return f"in_features={self.in_features}, out_features={self.out_features}, bias={self.bias is not None}"
+
+    @property
+    def alpha(self) -> float:
+        return self._alpha
+
+    @alpha.setter
+    def alpha(self, value: float):
+        self._alpha = value

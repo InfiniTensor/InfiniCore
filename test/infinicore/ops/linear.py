@@ -26,6 +26,13 @@ _TEST_CASES_DATA = [
     (None, 1, 2048, 5632, True, None, None, None),
 ]
 
+# Alpha test cases: (bs, n, in_features, out_features, bias, input_strides, weight_strides, out_strides, alpha)
+_ALPHA_TEST_CASES_DATA = [
+    (2, 5, 256, 512, True, None, None, None, 2.5),
+    (2, 5, 256, 512, False, None, None, None, 0.5),
+    (1, 10, 256, 512, True, None, None, None, 0.0),
+]
+
 # Tolerance configuration
 _TOLERANCE_MAP = {
     infinicore.float16: {"atol": 0, "rtol": 1e-2},
@@ -109,6 +116,40 @@ def parse_test_cases():
                     )
                 )
 
+    # Alpha test cases
+    for data in _ALPHA_TEST_CASES_DATA:
+        bs = data[0]
+        n, in_features, out_features = data[1], data[2], data[3]
+        bias = data[4]
+        input_strides = data[5] if len(data) > 5 else None
+        weight_strides = data[6] if len(data) > 6 else None
+        out_strides = data[7] if len(data) > 7 else None
+        alpha = data[8]
+
+        if bs is None:
+            input_shape = (n, in_features)
+        else:
+            input_shape = (bs, n, in_features)
+        weight_shape = (out_features, in_features)
+        bias_shape = (out_features,) if bias else None
+
+        for dtype in _TENSOR_DTYPES:
+            tolerance = _TOLERANCE_MAP.get(dtype, {"atol": 0, "rtol": 1e-3})
+            input_spec = TensorSpec.from_tensor(input_shape, input_strides, dtype)
+            weight_spec = TensorSpec.from_tensor(weight_shape, weight_strides, dtype)
+            bias_spec = TensorSpec.from_tensor(bias_shape, None, dtype) if bias_shape else None
+
+            test_cases.append(
+                TestCase(
+                    inputs=[input_spec, weight_spec, bias_spec],
+                    kwargs={"alpha": alpha},
+                    output_spec=None,
+                    comparison_target=None,
+                    tolerance=tolerance,
+                    description=f"Linear - ALPHA={alpha}",
+                )
+            )
+
     return test_cases
 
 
@@ -123,6 +164,19 @@ class OpTest(BaseOperatorTest):
 
     def torch_operator(self, *args, **kwargs):
         """PyTorch linear implementation"""
+        alpha = kwargs.pop("alpha", 1.0)
+        if alpha != 1.0:
+            input_tensor = args[0]
+            weight = args[1]
+            bias = args[2] if len(args) > 2 else None
+            out = kwargs.get("out")
+            matmul_result = torch.nn.functional.linear(input_tensor, weight)
+            bias_value = bias if bias is not None else 0
+            result = alpha * matmul_result + bias_value
+            if out is not None:
+                out.copy_(result)
+                return out
+            return result
         return torch.nn.functional.linear(*args, **kwargs)
 
     def infinicore_operator(self, *args, **kwargs):

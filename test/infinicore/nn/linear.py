@@ -30,6 +30,13 @@ _TEST_CASES_DATA = [
     ((10, 5, 1024), (3072, 1024), (3072,), False),
 ]
 
+# Alpha test cases: (x_shape, weight_shape, bias_shape, bias, alpha)
+_ALPHA_TEST_CASES_DATA = [
+    ((2, 5, 256), (512, 256), (512,), True, 2.5),
+    ((2, 5, 256), (512, 256), (512,), False, 0.5),
+    ((1, 1024), (3072, 1024), (3072,), True, 1.0),
+]
+
 # Tolerance configuration
 _TOLERANCE_MAP = {
     infinicore.float16: {"atol": 0, "rtol": 1e-2},
@@ -71,6 +78,25 @@ def parse_test_cases():
                     comparison_target=None,
                     tolerance=tolerance,
                     description=f"nn.Linear - OUT_OF_PLACE",
+                )
+            )
+
+    # Alpha test cases
+    for x_shape, weight_shape, bias_shape, has_bias, alpha in _ALPHA_TEST_CASES_DATA:
+        for dtype in _TENSOR_DTYPES:
+            tolerance = _TOLERANCE_MAP.get(dtype, {"atol": 0, "rtol": 1e-3})
+            x_spec = TensorSpec.from_tensor(x_shape, None, dtype, name="x")
+            weight_spec = TensorSpec.from_tensor(weight_shape, None, dtype, name="weight")
+            bias_spec = TensorSpec.from_tensor(bias_shape, None, dtype, name="bias")
+
+            test_cases.append(
+                TestCase(
+                    inputs=[x_spec, weight_spec, bias_spec],
+                    kwargs={"has_bias": has_bias, "alpha": alpha},
+                    output_spec=None,
+                    comparison_target=None,
+                    tolerance=tolerance,
+                    description=f"nn.Linear - ALPHA={alpha}",
                 )
             )
 
@@ -123,7 +149,7 @@ class OpTest(BaseOperatorTest):
     def get_test_cases(self):
         return parse_test_cases()
 
-    def torch_operator(self, x, weight, bias, has_bias):
+    def torch_operator(self, x, weight, bias, has_bias, alpha=None):
         """PyTorch nn.Linear implementation"""
         out_features, in_features = weight.shape
         params_dict = {"l.weight": weight}
@@ -141,9 +167,13 @@ class OpTest(BaseOperatorTest):
 
         with torch.no_grad():
             y = model(x)
+        if alpha is not None:
+            # alpha scales only matmul, not bias: alpha * (x @ W^T) + b
+            y_matmul = torch.nn.functional.linear(x, weight)
+            y = alpha * y_matmul + (bias if has_bias else 0)
         return y
 
-    def infinicore_operator(self, x, weight, bias, has_bias):
+    def infinicore_operator(self, x, weight, bias, has_bias, alpha=None):
         """InfiniCore nn.Linear implementation"""
 
         out_features, in_features = weight.shape
@@ -158,6 +188,8 @@ class OpTest(BaseOperatorTest):
             device=weight.device,
             dtype=weight.dtype,
         )
+        if alpha is not None:
+            model.l.alpha = alpha
         model.load_state_dict(params_dict)
 
         y = model(x)
