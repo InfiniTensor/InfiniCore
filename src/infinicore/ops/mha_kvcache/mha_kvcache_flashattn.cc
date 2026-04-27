@@ -55,10 +55,10 @@ void run(void *planned_meta) {
     Tensor out_work = out_need_copy_back ? p->out->contiguous() : Tensor(p->out);
     auto out_tensor = infinicore::adaptor::to_aten_tensor(out_work);
     auto q = infinicore::adaptor::to_aten_tensor(p->q);
-#if defined(ENABLE_NVIDIA_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API)
     auto k_cache = infinicore::adaptor::to_aten_tensor(p->k_cache);
     auto v_cache = infinicore::adaptor::to_aten_tensor(p->v_cache);
-#elif defined(ENABLE_QY_API) || defined(ENABLE_METAX_API)
+#elif defined(ENABLE_QY_API)
     Tensor k_cache_work = p->k_cache->contiguous();
     Tensor v_cache_work = p->v_cache->contiguous();
     auto k_cache = infinicore::adaptor::to_aten_tensor(k_cache_work);
