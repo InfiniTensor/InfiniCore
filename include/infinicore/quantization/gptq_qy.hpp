@@ -83,9 +83,6 @@ inline std::vector<uint16_t> float_to_fp16_bits(const std::vector<float> &values
 }
 } // anonymous namespace
 
-// ============================================================================
-// GPTQ_QY Class (最终修复版)
-// ============================================================================
 namespace infinicore::quantization {
 
 class GPTQ_QY : public BaseQuantization {
@@ -123,9 +120,6 @@ public:
         const int bits = weight_bits();
         const int values_per_int32 = 32 / bits;
 
-        // --------------------------------------------------------------------
-        // 1. qweight 转换（保持不变）
-        // --------------------------------------------------------------------
         {
             const auto &shape = original_qweight->shape();
             assert(shape.size() == 2);
@@ -148,9 +142,6 @@ public:
                 target_device);
         }
 
-        // --------------------------------------------------------------------
-        // 2. qzeros 转换（保持 int32 -> fp32 -> fp16 逻辑）
-        // --------------------------------------------------------------------
         {
             const auto &shape = original_qzeros->shape();
             assert(shape.size() == 2);
@@ -167,24 +158,15 @@ public:
                 target_device);
         }
 
-        // --------------------------------------------------------------------
-        // 3. scales 转换（核心修复：如果输入已是 FP16，直接内存拷贝）
-        // --------------------------------------------------------------------
         {
             auto scales_cpu = original_scales->to(Device::Type::CPU);
             size_t num_elements = scales_cpu->numel();
             const void *raw_data = scales_cpu->data();
 
             std::vector<uint16_t> scales_fp16(num_elements);
-
-            // 关键：根据输入 dtype 决定处理方式
             if (scales_cpu->dtype() == DataType::F16) {
-                // 输入已经是 FP16，直接 memcpy，不做任何转换！
-                // spdlog::info("Scales is already FP16, performing direct memory copy");
                 std::memcpy(scales_fp16.data(), raw_data, num_elements * sizeof(uint16_t));
             } else if (scales_cpu->dtype() == DataType::F32) {
-                // 输入是 FP32，才需要转换
-                // spdlog::info("Scales is FP32, converting to FP16");
                 std::vector<float> scales_fp32(num_elements);
                 std::memcpy(scales_fp32.data(), raw_data, num_elements * sizeof(float));
                 scales_fp16 = ::float_to_fp16_bits(scales_fp32);
@@ -201,19 +183,15 @@ public:
                 target_device);
         }
 
-        // --------------------------------------------------------------------
-        // 4. g_idx 处理
-        // --------------------------------------------------------------------
         if (g_idx->numel() > 0) {
             g_idx_ = g_idx->to(target_device);
         }
 
         converted_ = true;
-        // spdlog::info("GPTQ_QY conversion completed successfully");
     }
 
     void release_buffers() {
-        converted_weight_ = Tensor(); // 赋值为空 Tensor，释放显存
+        converted_weight_ = Tensor();
         converted_zeros_ = Tensor();
         converted_scales_ = Tensor();
         g_idx_ = Tensor();
@@ -226,16 +204,12 @@ public:
             return;
         }
 
-        // 1. 执行转换（只读传入的原始数据）
         convert_from_gptq_w4a16(weight, zeros, scales, g_idx, target_device);
 
-        // 2. 转移所有权（Move 语义：converted_weight_ 的 impl_ 指针会置为 nullptr）
-        //    原 weight/zeros/scales 持有的旧 shared_ptr 会被自动析构，释放显存
         weight = std::move(converted_weight_);
         zeros = std::move(converted_zeros_);
         scales = std::move(converted_scales_);
 
-        // 3. 清理内部状态
         converted_ = false;
         spdlog::debug("GPTQ_QY: Ownership transferred, internal buffers cleared.");
     }

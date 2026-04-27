@@ -6,7 +6,6 @@
 #include "infinicore/ops/linear_w4a16_awq.hpp"
 #include "infinicore/ops/linear_w4a16_gptq_qy.hpp"
 #include "infinicore/ops/linear_w8a8i8.hpp"
-#include <iostream>
 #include <optional>
 #include <spdlog/spdlog.h>
 
@@ -130,22 +129,6 @@ void BaseLinear::process_weights_after_loading() {
         assert(quantization_->get_quant_scheme() == infinicore::quantization::QuantScheme::GPTQ_W4A16_QY);
     }
 }
-// void BaseLinear::process_weights_after_loading() {
-//     if (quantization_->get_quant_scheme() == infinicore::quantization::QuantScheme::GPTQ_W4A16 && device_.getType() == Device::Type::QY) {
-
-//         // 1. 创建目标量化器
-//         auto config = quantization_->get_config();
-//         auto gptq_qy = std::make_shared<infinicore::quantization::GPTQ_QY>(config);
-
-//         // 2. 🚀 一行完成：转换 + 所有权转移 + 旧显存释放
-//         gptq_qy->convert_and_take_ownership(weight_, weight_zeros_, weight_scale_, gidx_, device_);
-
-//         // 3. 替换量化策略对象
-//         quantization_ = std::move(gptq_qy);
-
-//         assert(quantization_->get_quant_scheme() == infinicore::quantization::QuantScheme::GPTQ_W4A16_QY);
-//     }
-// }
 } // namespace infinicore::nn
 
 namespace infinicore::nn {
