@@ -6,7 +6,8 @@ namespace infinicore::op {
 
 Tensor linear(Tensor input,
               Tensor weight,
-              std::optional<Tensor> bias) {
+              std::optional<Tensor> bias,
+              float alpha) {
 
     Size ndim = input->ndim();
     Size out_features = weight->shape()[0];
@@ -17,14 +18,15 @@ Tensor linear(Tensor input,
     auto out = Tensor::empty(output_shape, input->dtype(), input->device());
 
     // Inplace Calculate
-    linear_(out, input, weight, bias);
+    linear_(out, input, weight, bias, alpha);
     return out;
 }
 
 void linear_(Tensor out,
              Tensor input,
              Tensor weight,
-             std::optional<Tensor> bias) {
+             std::optional<Tensor> bias,
+             float alpha) {
 
     auto weight_shape = weight->shape();
     Size out_features = weight_shape[0];
@@ -43,7 +45,6 @@ void linear_(Tensor out,
     // linear transformation
     Tensor out_view = out->view({N, out_features});
     // Add bias
-    float alpha = 1.0f;
     float beta = 0.0f;
     if (bias.has_value()) {
         rearrange_(out_view,

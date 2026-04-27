@@ -10,25 +10,27 @@ namespace infinicore::ops {
 
 Tensor py_linear(Tensor input,
                  Tensor weight,
-                 pybind11::object bias) {
+                 pybind11::object bias,
+                 float alpha = 1.0f) {
     std::optional<Tensor> bias_tensor = std::nullopt;
     if (!bias.is_none()) {
         bias_tensor = bias.cast<Tensor>();
     }
-    return op::linear(input, weight, bias_tensor);
+    return op::linear(input, weight, bias_tensor, alpha);
 }
 
 void py_linear_(Tensor out,
                 Tensor input,
                 Tensor weight,
-                pybind11::object bias) {
+                pybind11::object bias,
+                float alpha = 1.0f) {
 
     std::optional<Tensor> bias_tensor = std::nullopt;
     if (!bias.is_none()) {
         bias_tensor = bias.cast<Tensor>();
     }
 
-    op::linear_(out, input, weight, bias_tensor);
+    op::linear_(out, input, weight, bias_tensor, alpha);
 }
 
 inline void bind_linear(py::module &m) {
@@ -38,7 +40,8 @@ inline void bind_linear(py::module &m) {
           py::arg("input"),
           py::arg("weight"),
           py::arg("bias") = py::none(),
-          R"doc(Applies a linear transformation to the incoming data: y=xA^T+b.)doc");
+          py::arg("alpha") = 1.0f,
+          R"doc(Applies a linear transformation to the incoming data: y=alpha*xA^T+b.)doc");
 
     m.def("linear_",
           &ops::py_linear_,
@@ -46,7 +49,8 @@ inline void bind_linear(py::module &m) {
           py::arg("input"),
           py::arg("weight"),
           py::arg("bias") = py::none(),
-          R"doc(In-place, applies a linear transformation to the incoming data: y=xA^T+b.)doc");
+          py::arg("alpha") = 1.0f,
+          R"doc(In-place, applies a linear transformation to the incoming data: y=alpha*xA^T+b.)doc");
 }
 
 } // namespace infinicore::ops

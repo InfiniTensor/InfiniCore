@@ -4,8 +4,15 @@ from infinicore.tensor import Tensor
 __all__ = ["linear"]
 
 
-def linear(input: Tensor, weight: Tensor, bias=None, *, out=None) -> Tensor:
-    r"""Applies a linear transformation to the incoming data: y=xA^T+b."""
+def linear(
+    input: Tensor,
+    weight: Tensor,
+    bias=None,
+    *,
+    alpha: float = 1.0,
+    out=None,
+) -> Tensor:
+    r"""Applies a linear transformation to the incoming data: y=alpha*xA^T+b."""
 
     if out is None:
         return Tensor(
@@ -13,6 +20,7 @@ def linear(input: Tensor, weight: Tensor, bias=None, *, out=None) -> Tensor:
                 input._underlying,
                 weight._underlying,
                 None if bias is None else bias._underlying,
+                alpha,
             )
         )
 
@@ -21,5 +29,6 @@ def linear(input: Tensor, weight: Tensor, bias=None, *, out=None) -> Tensor:
         input._underlying,
         weight._underlying,
         None if bias is None else bias._underlying,
+        alpha,
     )
     return out
