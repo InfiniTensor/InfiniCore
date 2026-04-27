@@ -160,6 +160,8 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
   ```shell
 
   # 在third_party目录拉取cutlass和flash attn库的源码(不需要--recursive)
+      ## flash-attention commit: 10846960ca0793b993446f6dbaf696479c127a9d
+      ## cutlass commit: 087c84df83d254b5fb295a7a408f1a1d554085cf
 
   # 设置cutlass路径的环境变量CUTLASS_ROOT(部分环境可选)
       export CUTLASS_ROOT=<path-to>/InfiniCore/third_party/cutlass
