@@ -80,15 +80,15 @@ void run(void *planned_meta) {
     auto block_table = std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(p->block_table));
     auto max_seqlen_q = p->max_seqlen_q;
     auto max_seqlen_k = p->max_seqlen_k;
-    auto alibi_slopes =
-        p->alibi_slopes ? std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(*p->alibi_slopes)) : std::nullopt;
+    auto alibi_slopes = p->alibi_slopes ? std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(*p->alibi_slopes)) : std::nullopt;
     auto scale = p->scale;
 
 #if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
     std::optional<at::Tensor> flash_attn_mars_ext = std::nullopt;
 #endif
 
-    INFINICORE_FLASH_OP(mha_varlen_fwd)(
+    INFINICORE_FLASH_OP(mha_varlen_fwd)
+    (
         q,
         k,
         v,
