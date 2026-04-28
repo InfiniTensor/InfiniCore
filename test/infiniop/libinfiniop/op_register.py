@@ -2321,3 +2321,37 @@ def blas_copy_(lib):
     lib.infiniopDestroyBlasCopyDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
+
+
+@OpRegister.operator
+def blas_dot_(lib):
+    lib.infiniopCreateBlasDotDescriptor.restype = c_int32
+    lib.infiniopCreateBlasDotDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetBlasDotWorkspaceSize.restype = c_int32
+    lib.infiniopGetBlasDotWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopBlasDot.restype = c_int32
+    lib.infiniopBlasDot.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyBlasDotDescriptor.restype = c_int32
+    lib.infiniopDestroyBlasDotDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]

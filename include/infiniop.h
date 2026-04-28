@@ -25,6 +25,7 @@
 #include "infiniop/ops/blas_amax.h"
 #include "infiniop/ops/blas_amin.h"
 #include "infiniop/ops/blas_copy.h"
+#include "infiniop/ops/blas_dot.h"
 #include "infiniop/ops/block_diag.h"
 #include "infiniop/ops/broadcast_to.h"
 #include "infiniop/ops/causal_softmax.h"
