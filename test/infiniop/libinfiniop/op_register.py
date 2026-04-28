@@ -2289,3 +2289,35 @@ def axpy_(lib):
     lib.infiniopDestroyAxpyDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
+
+
+@OpRegister.operator
+def blas_copy_(lib):
+    lib.infiniopCreateBlasCopyDescriptor.restype = c_int32
+    lib.infiniopCreateBlasCopyDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetBlasCopyWorkspaceSize.restype = c_int32
+    lib.infiniopGetBlasCopyWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopBlasCopy.restype = c_int32
+    lib.infiniopBlasCopy.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyBlasCopyDescriptor.restype = c_int32
+    lib.infiniopDestroyBlasCopyDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
