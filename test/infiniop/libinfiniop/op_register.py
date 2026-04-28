@@ -2531,3 +2531,35 @@ def rotmg_(lib):
     lib.infiniopDestroyRotmgDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
+
+
+@OpRegister.operator
+def scal_(lib):
+    lib.infiniopCreateScalDescriptor.restype = c_int32
+    lib.infiniopCreateScalDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetScalWorkspaceSize.restype = c_int32
+    lib.infiniopGetScalWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopScal.restype = c_int32
+    lib.infiniopScal.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyScalDescriptor.restype = c_int32
+    lib.infiniopDestroyScalDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
