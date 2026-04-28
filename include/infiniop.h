@@ -20,6 +20,7 @@
 #include "infiniop/ops/attention.h"
 #include "infiniop/ops/avg_pool1d.h"
 #include "infiniop/ops/avg_pool3d.h"
+#include "infiniop/ops/axpy.h"
 #include "infiniop/ops/binary_cross_entropy_with_logits.h"
 #include "infiniop/ops/blas_amax.h"
 #include "infiniop/ops/blas_amin.h"
