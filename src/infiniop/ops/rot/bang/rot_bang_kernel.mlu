@@ -1,0 +1,102 @@
+#include "../../../devices/bang/common_bang.h"
+
+__nram__ char nram_buffer[NRAM_MAX_SIZE];
+
+template <typename Tdata>
+__mlu_global__ void rotKernelContiguous(
+    size_t n,
+    Tdata *x,
+    Tdata *y,
+    const Tdata *c,
+    const Tdata *s) {
+
+    Tdata *nram_align = (Tdata *)(((size_t)nram_buffer + ALIGN_SIZE - 1) & ~(ALIGN_SIZE - 1));
+
+    size_t nram_usable = NRAM_MAX_SIZE - ((char *)nram_align - nram_buffer);
+    size_t max_chunk_elements = nram_usable / (4 * sizeof(Tdata));
+
+    int align_elements = ALIGN_SIZE / sizeof(Tdata);
+    if (align_elements == 0) {
+        align_elements = 1;
+    }
+    max_chunk_elements = (max_chunk_elements / align_elements) * align_elements;
+
+    Tdata *nram_x = nram_align;
+    Tdata *nram_y = nram_align + max_chunk_elements;
+    Tdata *nram_x_out = nram_align + 2 * max_chunk_elements;
+    Tdata *nram_y_out = nram_align + 3 * max_chunk_elements;
+
+    int elements_per_core = n / taskDim;
+    int remain = n % taskDim;
+    int core_elements = elements_per_core + (taskId < remain ? 1 : 0);
+    int core_offset = taskId < remain ? taskId * core_elements : taskId * elements_per_core + remain;
+
+    if (core_elements <= 0) {
+        return;
+    }
+
+    int chunks = core_elements / max_chunk_elements;
+    int chunk_rem = core_elements % max_chunk_elements;
+
+    for (int ck = 0; ck < chunks; ck++) {
+        size_t current_offset = core_offset + ck * max_chunk_elements;
+        __memcpy(nram_x, x + current_offset, max_chunk_elements * sizeof(Tdata), GDRAM2NRAM);
+        __memcpy(nram_y, y + current_offset, max_chunk_elements * sizeof(Tdata), GDRAM2NRAM);
+
+        __bang_mul_scalar(nram_x_out, nram_x, c[0], max_chunk_elements);
+        __bang_mul_scalar(nram_y_out, nram_y, s[0], max_chunk_elements);
+        __bang_add(nram_x_out, nram_x_out, nram_y_out, max_chunk_elements);
+
+        __memcpy(x + current_offset, nram_x_out, max_chunk_elements * sizeof(Tdata), NRAM2GDRAM);
+
+        __bang_mul_scalar(nram_y_out, nram_y, c[0], max_chunk_elements);
+        __bang_mul_scalar(nram_x_out, nram_x, s[0], max_chunk_elements);
+        __bang_sub(nram_y_out, nram_y_out, nram_x_out, max_chunk_elements);
+
+        __memcpy(y + current_offset, nram_y_out, max_chunk_elements * sizeof(Tdata), NRAM2GDRAM);
+    }
+
+    if (chunk_rem > 0) {
+        size_t current_offset = core_offset + chunks * max_chunk_elements;
+        __memcpy(nram_x, x + current_offset, chunk_rem * sizeof(Tdata), GDRAM2NRAM);
+        __memcpy(nram_y, y + current_offset, chunk_rem * sizeof(Tdata), GDRAM2NRAM);
+
+        __bang_mul_scalar(nram_x_out, nram_x, c[0], chunk_rem);
+        __bang_mul_scalar(nram_y_out, nram_y, s[0], chunk_rem);
+        __bang_add(nram_x_out, nram_x_out, nram_y_out, chunk_rem);
+
+        __memcpy(x + current_offset, nram_x_out, chunk_rem * sizeof(Tdata), NRAM2GDRAM);
+
+        __bang_mul_scalar(nram_y_out, nram_y, c[0], chunk_rem);
+        __bang_mul_scalar(nram_x_out, nram_x, s[0], chunk_rem);
+        __bang_sub(nram_y_out, nram_y_out, nram_x_out, chunk_rem);
+
+        __memcpy(y + current_offset, nram_y_out, chunk_rem * sizeof(Tdata), NRAM2GDRAM);
+    }
+}
+
+template <typename Tdata>
+__mlu_global__ void rotKernelStrided(
+    size_t n,
+    Tdata *x,
+    size_t incx,
+    Tdata *y,
+    size_t incy,
+    const Tdata *c,
+    const Tdata *s) {
+
+    int elements_per_core = n / taskDim;
+    int remain = n % taskDim;
+    int actual_tasks = elements_per_core + (taskId < remain ? 1 : 0);
+    int start_idx = taskId < remain ? taskId * actual_tasks : taskId * elements_per_core + remain;
+
+    for (int i = start_idx; i < start_idx + actual_tasks; ++i) {
+        size_t x_idx = i * incx;
+        size_t y_idx = i * incy;
+        Tdata x_val = x[x_idx];
+        Tdata y_val = y[y_idx];
+
+        x[x_idx] = c[0] * x_val + s[0] * y_val;
+        y[y_idx] = c[0] * y_val - s[0] * x_val;
+    }
+}

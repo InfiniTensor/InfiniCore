@@ -2387,3 +2387,39 @@ def nrm2_(lib):
     lib.infiniopDestroyNrm2Descriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
+
+
+@OpRegister.operator
+def rot_(lib):
+    lib.infiniopCreateRotDescriptor.restype = c_int32
+    lib.infiniopCreateRotDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetRotWorkspaceSize.restype = c_int32
+    lib.infiniopGetRotWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopRot.restype = c_int32
+    lib.infiniopRot.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyRotDescriptor.restype = c_int32
+    lib.infiniopDestroyRotDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]

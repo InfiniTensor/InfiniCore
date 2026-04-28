@@ -100,6 +100,7 @@
 #include "infiniop/ops/relu.h"
 #include "infiniop/ops/rms_norm.h"
 #include "infiniop/ops/rope.h"
+#include "infiniop/ops/rot.h"
 #include "infiniop/ops/scatter.h"
 #include "infiniop/ops/selu.h"
 #include "infiniop/ops/sigmoid.h"

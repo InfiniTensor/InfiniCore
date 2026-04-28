@@ -133,6 +133,8 @@
 #define hcblasDdot mcblasDdot
 #define hcblasSnrm2 mcblasSnrm2
 #define hcblasDnrm2 mcblasDnrm2
+#define hcblasSrot mcblasSrot
+#define hcblasDrot mcblasDrot
 #define HCBLAS_STATUS_SUCCESS MCBLAS_STATUS_SUCCESS
 #define HCBLAS_OP_T MCBLAS_OP_T
 #define HCBLAS_OP_N MCBLAS_OP_N
