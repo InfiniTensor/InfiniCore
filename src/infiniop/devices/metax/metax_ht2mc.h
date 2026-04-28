@@ -143,6 +143,8 @@
 #define hcblasDrotmg mcblasDrotmg
 #define hcblasSscal mcblasSscal
 #define hcblasDscal mcblasDscal
+#define hcblasSswap mcblasSswap
+#define hcblasDswap mcblasDswap
 #define HCBLAS_STATUS_SUCCESS MCBLAS_STATUS_SUCCESS
 #define HCBLAS_OP_T MCBLAS_OP_T
 #define HCBLAS_OP_N MCBLAS_OP_N

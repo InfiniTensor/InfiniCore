@@ -2563,3 +2563,35 @@ def scal_(lib):
     lib.infiniopDestroyScalDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
+
+
+@OpRegister.operator
+def swap_(lib):
+    lib.infiniopCreateSwapDescriptor.restype = c_int32
+    lib.infiniopCreateSwapDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetSwapWorkspaceSize.restype = c_int32
+    lib.infiniopGetSwapWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopSwap.restype = c_int32
+    lib.infiniopSwap.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroySwapDescriptor.restype = c_int32
+    lib.infiniopDestroySwapDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
