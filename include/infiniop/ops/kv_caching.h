@@ -17,14 +17,14 @@ __INFINI_C __export infiniStatus_t infiniopCreateKVCachingDescriptor(
 __INFINI_C __export infiniStatus_t infiniopGetKVCachingWorkspaceSize(infiniopKVCachingDescriptor_t desc, size_t *size);
 
 __INFINI_C __export infiniStatus_t infiniopKVCaching(infiniopKVCachingDescriptor_t desc,
-                                              void *workspace,
-                                              size_t workspace_size,
-                                              void *k_cache,
-                                              void *v_cache,
-                                              const void *k,
-                                              const void *v,
-                                              const void *past_kv_lengths,
-                                              void *stream);
+                                                     void *workspace,
+                                                     size_t workspace_size,
+                                                     void *k_cache,
+                                                     void *v_cache,
+                                                     const void *k,
+                                                     const void *v,
+                                                     const void *past_kv_lengths,
+                                                     void *stream);
 
 __INFINI_C __export infiniStatus_t infiniopDestroyKVCachingDescriptor(infiniopKVCachingDescriptor_t desc);
 

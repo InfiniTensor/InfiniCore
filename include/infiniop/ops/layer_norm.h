@@ -19,15 +19,15 @@ __INFINI_C __export infiniStatus_t infiniopCreateLayerNormDescriptor(
 __INFINI_C __export infiniStatus_t infiniopGetLayerNormWorkspaceSize(infiniopLayerNormDescriptor_t desc, size_t *size);
 
 __INFINI_C __export infiniStatus_t infiniopLayerNorm(infiniopLayerNormDescriptor_t desc,
-                                              void *workspace,
-                                              size_t workspace_size,
-                                              void *output,
-                                              void *input_standardization,
-                                              void *input_std_deviation,
-                                              const void *input,
-                                              const void *weight,
-                                              const void *bias,
-                                              void *stream);
+                                                     void *workspace,
+                                                     size_t workspace_size,
+                                                     void *output,
+                                                     void *input_standardization,
+                                                     void *input_std_deviation,
+                                                     const void *input,
+                                                     const void *weight,
+                                                     const void *bias,
+                                                     void *stream);
 
 __INFINI_C __export infiniStatus_t infiniopDestroyLayerNormDescriptor(infiniopLayerNormDescriptor_t desc);
 

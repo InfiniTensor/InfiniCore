@@ -6,20 +6,20 @@
 typedef struct InfiniopDescriptor *infiniopSwiGLUDescriptor_t;
 
 __INFINI_C __export infiniStatus_t infiniopCreateSwiGLUDescriptor(infiniopHandle_t handle,
-                                                           infiniopSwiGLUDescriptor_t *desc_ptr,
-                                                           infiniopTensorDescriptor_t c_desc,
-                                                           infiniopTensorDescriptor_t a_desc,
-                                                           infiniopTensorDescriptor_t b_desc);
+                                                                  infiniopSwiGLUDescriptor_t *desc_ptr,
+                                                                  infiniopTensorDescriptor_t c_desc,
+                                                                  infiniopTensorDescriptor_t a_desc,
+                                                                  infiniopTensorDescriptor_t b_desc);
 
 __INFINI_C __export infiniStatus_t infiniopGetSwiGLUWorkspaceSize(infiniopSwiGLUDescriptor_t desc, size_t *size);
 
 __INFINI_C __export infiniStatus_t infiniopSwiGLU(infiniopSwiGLUDescriptor_t desc,
-                                           void *workspace,
-                                           size_t workspace_size,
-                                           void *c,
-                                           void const *a,
-                                           void const *b,
-                                           void *stream);
+                                                  void *workspace,
+                                                  size_t workspace_size,
+                                                  void *c,
+                                                  void const *a,
+                                                  void const *b,
+                                                  void *stream);
 
 __INFINI_C __export infiniStatus_t infiniopDestroySwiGLUDescriptor(infiniopSwiGLUDescriptor_t desc);
 

@@ -53,8 +53,9 @@ target("infiniop-iluvatar")
 
     -- set_languages("cxx17") 天数似乎不能用这个配置
     add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")
-    -- skip scaled_mm, adapt it later
-    -- remove_files("../src/infiniop/ops/scaled_mm/nvidia/*.cu")
+    -- skip gaussian_nll_loss and hinge_embedding_loss and adapt them later
+    remove_files("../src/infiniop/ops/gaussian_nll_loss/nvidia/*.cu")
+    remove_files("../src/infiniop/ops/hinge_embedding_loss/nvidia/*.cu")
 
     add_files("../src/infiniop/ops/*/iluvatar/*.cu")
 

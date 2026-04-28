@@ -23,4 +23,3 @@ __INFINI_C __export infiniStatus_t infiniopDestroyEmbeddingDescriptor(
     infiniopEmbeddingDescriptor_t desc);
 
 #endif
-

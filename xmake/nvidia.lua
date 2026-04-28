@@ -49,9 +49,9 @@ target("infiniop-nvidia")
         end
     else
         add_cuflags("-Xcompiler=-Wall", "-Xcompiler=-Werror")
-        add_cuflags("-Xcompiler=-fPIC")
+        add_cuflags("-Xcompiler=-fPIC", {force = true})
         add_cuflags("--extended-lambda")
-        add_culdflags("-Xcompiler=-fPIC")
+        add_culdflags("-Xcompiler=-fPIC", {force = true})
         add_cxflags("-fPIC")
         add_cxxflags("-fPIC")
         add_cflags("-fPIC")
@@ -95,8 +95,8 @@ target("infinirt-nvidia")
         add_cuflags("-Xcompiler=/utf-8", "--expt-relaxed-constexpr", "--allow-unsupported-compiler")
         add_cxxflags("/FS")
     else
-        add_cuflags("-Xcompiler=-fPIC")
-        add_culdflags("-Xcompiler=-fPIC")
+        add_cuflags("-Xcompiler=-fPIC", {force = true})
+        add_culdflags("-Xcompiler=-fPIC", {force = true})
         add_cxflags("-fPIC")
         add_cxxflags("-fPIC")
     end

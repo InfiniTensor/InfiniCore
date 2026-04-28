@@ -6,15 +6,15 @@
 typedef struct InfiniopDescriptor *infiniopConvDescriptor_t;
 
 __INFINI_C __export infiniStatus_t infiniopCreateConvDescriptor(infiniopHandle_t handle,
-                                                         infiniopConvDescriptor_t *desc_ptr,
-                                                         infiniopTensorDescriptor_t y_desc,
-                                                         infiniopTensorDescriptor_t x_desc,
-                                                         infiniopTensorDescriptor_t w_desc,
-                                                         infiniopTensorDescriptor_t b_desc,
-                                                         void *pads,
-                                                         void *strides,
-                                                         void *dilations,
-                                                         size_t n);
+                                                                infiniopConvDescriptor_t *desc_ptr,
+                                                                infiniopTensorDescriptor_t y_desc,
+                                                                infiniopTensorDescriptor_t x_desc,
+                                                                infiniopTensorDescriptor_t w_desc,
+                                                                infiniopTensorDescriptor_t b_desc,
+                                                                void *pads,
+                                                                void *strides,
+                                                                void *dilations,
+                                                                size_t n);
 
 __INFINI_C __export infiniStatus_t infiniopGetConvWorkspaceSize(infiniopConvDescriptor_t desc, size_t *size);
 

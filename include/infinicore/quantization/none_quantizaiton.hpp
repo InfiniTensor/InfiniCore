@@ -9,7 +9,7 @@ class NoneQuantization : public BaseQuantization {
     // information and support multiple quantization schemes.
 public:
     explicit NoneQuantization(const nlohmann::json &quant_config)
-        : BaseQuantization(quant_config) {};
+        : BaseQuantization(quant_config){};
 
     infinicore::quantization::QuantScheme
     get_quant_scheme() const override {

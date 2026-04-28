@@ -22,14 +22,14 @@ namespace infinicore::op {
 
 INFINICORE_GRAPH_OP_CLASS(
     MhaKVCache,
-    Tensor,           // out
-    const Tensor &,   // q
-    const Tensor &,   // k_cache
-    const Tensor &,   // v_cache
-    const Tensor &,   // seqlens_k
-    const Tensor &,   // block_table
-    std::optional<Tensor>,  // alibi_slopes
-    float);           // scale
+    Tensor,                // out
+    const Tensor &,        // q
+    const Tensor &,        // k_cache
+    const Tensor &,        // v_cache
+    const Tensor &,        // seqlens_k
+    const Tensor &,        // block_table
+    std::optional<Tensor>, // alibi_slopes
+    float);                // scale
 
 Tensor mha_kvcache(const Tensor &q,
                    const Tensor &k_cache,

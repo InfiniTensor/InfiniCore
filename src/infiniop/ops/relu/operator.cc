@@ -5,7 +5,7 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/relu_cpu.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_ALI_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_ALI_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/relu_nvidia.cuh"
 #endif
 #ifdef ENABLE_METAX_API
@@ -42,6 +42,9 @@ __INFINI_C infiniStatus_t infiniopCreateReluDescriptor(
 #ifdef ENABLE_QY_API
         CREATE(INFINI_DEVICE_QY, nvidia);
 #endif
+#ifdef ENABLE_HYGON_API
+        CREATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
 #ifdef ENABLE_METAX_API
 #ifdef ENABLE_NINETOOTHED
         CREATE(INFINI_DEVICE_METAX, metax);
@@ -77,6 +80,9 @@ __INFINI_C infiniStatus_t infiniopGetReluWorkspaceSize(infiniopReluDescriptor_t 
 #endif
 #ifdef ENABLE_QY_API
         GET(INFINI_DEVICE_QY, nvidia)
+#endif
+#ifdef ENABLE_HYGON_API
+        GET(INFINI_DEVICE_HYGON, nvidia)
 #endif
 #ifdef ENABLE_METAX_API
 #ifdef ENABLE_NINETOOTHED
@@ -122,6 +128,9 @@ __INFINI_C infiniStatus_t infiniopRelu(
 #ifdef ENABLE_QY_API
         CALCULATE(INFINI_DEVICE_QY, nvidia);
 #endif
+#ifdef ENABLE_HYGON_API
+        CALCULATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
 #ifdef ENABLE_METAX_API
 #ifdef ENABLE_NINETOOTHED
         CALCULATE(INFINI_DEVICE_METAX, metax);
@@ -159,6 +168,9 @@ infiniopDestroyReluDescriptor(infiniopReluDescriptor_t desc) {
 #endif
 #ifdef ENABLE_QY_API
         DELETE(INFINI_DEVICE_QY, nvidia);
+#endif
+#ifdef ENABLE_HYGON_API
+        DELETE(INFINI_DEVICE_HYGON, nvidia);
 #endif
 #ifdef ENABLE_METAX_API
 #ifdef ENABLE_NINETOOTHED

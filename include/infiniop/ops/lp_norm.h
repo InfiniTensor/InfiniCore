@@ -17,11 +17,11 @@ __INFINI_C __export infiniStatus_t infiniopCreateLPNormDescriptor(
 __INFINI_C __export infiniStatus_t infiniopGetLPNormWorkspaceSize(infiniopLPNormDescriptor_t desc, size_t *size);
 
 __INFINI_C __export infiniStatus_t infiniopLPNorm(infiniopLPNormDescriptor_t desc,
-                                           void *workspace,
-                                           size_t workspace_size,
-                                           void *output,
-                                           const void *input,
-                                           void *stream);
+                                                  void *workspace,
+                                                  size_t workspace_size,
+                                                  void *output,
+                                                  const void *input,
+                                                  void *stream);
 
 __INFINI_C __export infiniStatus_t infiniopDestroyLPNormDescriptor(infiniopLPNormDescriptor_t desc);
 

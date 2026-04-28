@@ -6,18 +6,18 @@
 typedef struct InfiniopDescriptor *infiniopZerosDescriptor_t;
 
 __INFINI_C __export infiniStatus_t infiniopCreateZerosDescriptor(infiniopHandle_t handle,
-                                                          infiniopZerosDescriptor_t *desc_ptr,
-                                                          infiniopTensorDescriptor_t y,
-                                                          infiniopTensorDescriptor_t x);
+                                                                 infiniopZerosDescriptor_t *desc_ptr,
+                                                                 infiniopTensorDescriptor_t y,
+                                                                 infiniopTensorDescriptor_t x);
 
 __INFINI_C __export infiniStatus_t infiniopGetZerosWorkspaceSize(infiniopZerosDescriptor_t desc, size_t *size);
 
 __INFINI_C __export infiniStatus_t infiniopZeros(infiniopZerosDescriptor_t desc,
-                                          void *workspace,
-                                          size_t workspace_size,
-                                          void *y,
-                                          const void *x,
-                                          void *stream);
+                                                 void *workspace,
+                                                 size_t workspace_size,
+                                                 void *y,
+                                                 const void *x,
+                                                 void *stream);
 
 __INFINI_C __export infiniStatus_t infiniopDestroyZerosDescriptor(infiniopZerosDescriptor_t desc);
 

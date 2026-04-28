@@ -1,7 +1,7 @@
 #pragma once
 
-#include "module.hpp"
 #include "../ops.hpp"
+#include "module.hpp"
 #include <optional>
 
 namespace infinicore::nn {
@@ -78,10 +78,10 @@ protected:
     INFINICORE_NN_PARAMETER(weight);
 
 private:
-    size_t num_embeddings_;   // Vocabulary size
-    size_t embedding_dim_;    // Embedding dimension
-    std::optional<int64_t> padding_idx_;  // Optional padding index
-    DataType dtype_;           // Data type for embedding weights
+    size_t num_embeddings_;              // Vocabulary size
+    size_t embedding_dim_;               // Embedding dimension
+    std::optional<int64_t> padding_idx_; // Optional padding index
+    DataType dtype_;                     // Data type for embedding weights
 };
 
 } // namespace infinicore::nn

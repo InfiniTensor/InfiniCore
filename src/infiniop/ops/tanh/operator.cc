@@ -5,7 +5,7 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/tanh_cpu.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_ALI_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_ALI_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/tanh_nvidia.cuh"
 #endif
 // #ifdef ENABLE_METAX_API
@@ -43,7 +43,9 @@ __INFINI_C infiniStatus_t infiniopCreateTanhDescriptor(
 #ifdef ENABLE_ALI_API
         CREATE(INFINI_DEVICE_ALI, nvidia);
 #endif
-
+#ifdef ENABLE_HYGON_API
+        CREATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
         // #ifdef ENABLE_METAX_API
         //         CREATE(INFINI_DEVICE_METAX, metax);
         // #endif
@@ -78,7 +80,9 @@ __INFINI_C infiniStatus_t infiniopGetTanhWorkspaceSize(infiniopTanhDescriptor_t 
 #ifdef ENABLE_ALI_API
         GET(INFINI_DEVICE_ALI, nvidia);
 #endif
-
+#ifdef ENABLE_HYGON_API
+        GET(INFINI_DEVICE_HYGON, nvidia);
+#endif
         // #ifdef ENABLE_METAX_API
         //         GET(INFINI_DEVICE_METAX, metax);
         // #endif
@@ -120,7 +124,9 @@ __INFINI_C infiniStatus_t infiniopTanh(
 #ifdef ENABLE_ALI_API
         CALCULATE(INFINI_DEVICE_ALI, nvidia);
 #endif
-
+#ifdef ENABLE_HYGON_API
+        CALCULATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
         // #ifdef ENABLE_METAX_API
         //         CALCULATE(INFINI_DEVICE_METAX, metax);
         // #endif
@@ -157,7 +163,9 @@ infiniopDestroyTanhDescriptor(infiniopTanhDescriptor_t desc) {
 #ifdef ENABLE_ALI_API
         DELETE(INFINI_DEVICE_ALI, nvidia);
 #endif
-
+#ifdef ENABLE_HYGON_API
+        DELETE(INFINI_DEVICE_HYGON, nvidia);
+#endif
         // #ifdef ENABLE_METAX_API
         //         DELETE(INFINI_DEVICE_METAX, metax);
         // #endif

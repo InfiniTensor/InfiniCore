@@ -18,14 +18,14 @@ __INFINI_C __export infiniStatus_t infiniopCreateAddRMSNormDescriptor(
 __INFINI_C __export infiniStatus_t infiniopGetAddRMSNormWorkspaceSize(infiniopAddRMSNormDescriptor_t desc, size_t *size);
 
 __INFINI_C __export infiniStatus_t infiniopAddRMSNorm(infiniopAddRMSNormDescriptor_t desc,
-                                                void *workspace,
-                                                size_t workspace_size,
-                                                void *y,
-                                                void *residual_out,
-                                                const void *a,
-                                                const void *b,
-                                                const void *weight,
-                                                void *stream);
+                                                      void *workspace,
+                                                      size_t workspace_size,
+                                                      void *y,
+                                                      void *residual_out,
+                                                      const void *a,
+                                                      const void *b,
+                                                      const void *weight,
+                                                      void *stream);
 
 __INFINI_C __export infiniStatus_t infiniopDestroyAddRMSNormDescriptor(infiniopAddRMSNormDescriptor_t desc);
 
