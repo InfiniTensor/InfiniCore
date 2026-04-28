@@ -1,0 +1,76 @@
+#include "../../../devices/bang/common_bang.h"
+
+#include <limits>
+#include <type_traits>
+
+template <typename Tdata>
+__mlu_func__ float rotgToCompute(Tdata value) {
+    if constexpr (std::is_same_v<Tdata, half>) {
+        return __half2float(value);
+    } else if constexpr (std::is_same_v<Tdata, bfloat16_t>) {
+        return __bfloat162float(value);
+    } else {
+        return static_cast<float>(value);
+    }
+}
+
+template <typename Tdata>
+__mlu_func__ Tdata rotgFromCompute(float value) {
+    if constexpr (std::is_same_v<Tdata, half>) {
+        return __float2half(value);
+    } else if constexpr (std::is_same_v<Tdata, bfloat16_t>) {
+        return __float2bfloat16(value);
+    } else {
+        return static_cast<Tdata>(value);
+    }
+}
+
+template <typename Tdata>
+__mlu_global__ void rotgKernel(
+    Tdata *x,
+    Tdata *y,
+    Tdata *c,
+    Tdata *s) {
+
+    const float zero = 0.0f;
+    const float one = 1.0f;
+    const float safmin = std::numeric_limits<float>::min();
+    const float safmax = std::numeric_limits<float>::max();
+
+    const float x_val = rotgToCompute(*x);
+    const float y_val = rotgToCompute(*y);
+
+    const float xnorm = std::fabs(x_val);
+    const float ynorm = std::fabs(y_val);
+
+    if (ynorm == zero) {
+        *c = rotgFromCompute<Tdata>(one);
+        *s = rotgFromCompute<Tdata>(zero);
+        *y = rotgFromCompute<Tdata>(zero);
+    } else if (xnorm == zero) {
+        *c = rotgFromCompute<Tdata>(zero);
+        *s = rotgFromCompute<Tdata>(one);
+        *x = rotgFromCompute<Tdata>(y_val);
+        *y = rotgFromCompute<Tdata>(one);
+    } else {
+        const float scl = std::min(safmax, std::max(safmin, std::max(xnorm, ynorm)));
+        const float sigma = xnorm > ynorm ? std::copysign(one, x_val) : std::copysign(one, y_val);
+        const float r = sigma * (scl * std::sqrt((x_val / scl) * (x_val / scl) + (y_val / scl) * (y_val / scl)));
+        const float c_val = x_val / r;
+        const float s_val = y_val / r;
+
+        float z;
+        if (xnorm > ynorm) {
+            z = s_val;
+        } else if (c_val != zero) {
+            z = one / c_val;
+        } else {
+            z = one;
+        }
+
+        *x = rotgFromCompute<Tdata>(r);
+        *y = rotgFromCompute<Tdata>(z);
+        *c = rotgFromCompute<Tdata>(c_val);
+        *s = rotgFromCompute<Tdata>(s_val);
+    }
+}
