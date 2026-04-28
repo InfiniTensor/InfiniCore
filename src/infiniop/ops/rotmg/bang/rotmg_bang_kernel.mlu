@@ -1,0 +1,156 @@
+#include "../../../devices/bang/common_bang.h"
+
+#include <cmath>
+#include <type_traits>
+
+template <typename Tdata>
+__mlu_global__ void rotmgKernel(
+    Tdata *d1,
+    Tdata *d2,
+    Tdata *x1,
+    const Tdata *y1,
+    Tdata *param) {
+
+    using Tcompute = std::conditional_t<std::is_same_v<Tdata, double>, double, float>;
+
+    const Tcompute zero = static_cast<Tcompute>(0.0f);
+    const Tcompute one = static_cast<Tcompute>(1.0f);
+    const Tcompute two = static_cast<Tcompute>(2.0f);
+    const Tcompute gam = static_cast<Tcompute>(4096.0f);
+    const Tcompute gamsq = static_cast<Tcompute>(1.67772e7f);
+    const Tcompute rgamsq = static_cast<Tcompute>(5.96046e-8f);
+
+    Tcompute d1_val = static_cast<Tcompute>(*d1);
+    Tcompute d2_val = static_cast<Tcompute>(*d2);
+    Tcompute x1_val = static_cast<Tcompute>(*x1);
+    const Tcompute y1_val = static_cast<Tcompute>(*y1);
+
+    Tcompute sflag = zero;
+    Tcompute sh11 = zero;
+    Tcompute sh12 = zero;
+    Tcompute sh21 = zero;
+    Tcompute sh22 = zero;
+
+    if (d1_val < zero) {
+        sflag = -one;
+        d1_val = zero;
+        d2_val = zero;
+        x1_val = zero;
+    } else {
+        const Tcompute sp2 = d2_val * y1_val;
+        if (sp2 == zero) {
+            param[0] = static_cast<Tdata>(-two);
+            return;
+        }
+
+        const Tcompute sp1 = d1_val * x1_val;
+        const Tcompute sq2 = sp2 * y1_val;
+        const Tcompute sq1 = sp1 * x1_val;
+
+        if (std::fabs(sq1) > std::fabs(sq2)) {
+            sh21 = -y1_val / x1_val;
+            sh12 = sp2 / sp1;
+            const Tcompute su = one - sh12 * sh21;
+
+            if (su > zero) {
+                sflag = zero;
+                d1_val = d1_val / su;
+                d2_val = d2_val / su;
+                x1_val = x1_val * su;
+            } else {
+                sflag = -one;
+                sh11 = zero;
+                sh12 = zero;
+                sh21 = zero;
+                sh22 = zero;
+                d1_val = zero;
+                d2_val = zero;
+                x1_val = zero;
+            }
+        } else {
+            if (sq2 < zero) {
+                sflag = -one;
+                d1_val = zero;
+                d2_val = zero;
+                x1_val = zero;
+            } else {
+                sflag = one;
+                sh11 = sp1 / sp2;
+                sh22 = x1_val / y1_val;
+                const Tcompute su = one + sh11 * sh22;
+                const Tcompute stemp = d2_val / su;
+                d2_val = d1_val / su;
+                d1_val = stemp;
+                x1_val = y1_val * su;
+            }
+        }
+
+        if (d1_val != zero) {
+            while (d1_val <= rgamsq || d1_val >= gamsq) {
+                if (sflag == zero) {
+                    sh11 = one;
+                    sh22 = one;
+                    sflag = -one;
+                } else {
+                    sh21 = -one;
+                    sh12 = one;
+                    sflag = -one;
+                }
+
+                if (d1_val <= rgamsq) {
+                    d1_val = d1_val * gam * gam;
+                    x1_val = x1_val / gam;
+                    sh11 = sh11 / gam;
+                    sh12 = sh12 / gam;
+                } else {
+                    d1_val = d1_val / (gam * gam);
+                    x1_val = x1_val * gam;
+                    sh11 = sh11 * gam;
+                    sh12 = sh12 * gam;
+                }
+            }
+        }
+
+        if (d2_val != zero) {
+            while (std::fabs(d2_val) <= rgamsq || std::fabs(d2_val) >= gamsq) {
+                if (sflag == zero) {
+                    sh11 = one;
+                    sh22 = one;
+                    sflag = -one;
+                } else {
+                    sh21 = -one;
+                    sh12 = one;
+                    sflag = -one;
+                }
+
+                if (std::fabs(d2_val) <= rgamsq) {
+                    d2_val = d2_val * gam * gam;
+                    sh21 = sh21 / gam;
+                    sh22 = sh22 / gam;
+                } else {
+                    d2_val = d2_val / (gam * gam);
+                    sh21 = sh21 * gam;
+                    sh22 = sh22 * gam;
+                }
+            }
+        }
+    }
+
+    if (sflag < zero) {
+        param[1] = static_cast<Tdata>(sh11);
+        param[2] = static_cast<Tdata>(sh21);
+        param[3] = static_cast<Tdata>(sh12);
+        param[4] = static_cast<Tdata>(sh22);
+    } else if (sflag == zero) {
+        param[2] = static_cast<Tdata>(sh21);
+        param[3] = static_cast<Tdata>(sh12);
+    } else {
+        param[1] = static_cast<Tdata>(sh11);
+        param[4] = static_cast<Tdata>(sh22);
+    }
+
+    param[0] = static_cast<Tdata>(sflag);
+    *d1 = static_cast<Tdata>(d1_val);
+    *d2 = static_cast<Tdata>(d2_val);
+    *x1 = static_cast<Tdata>(x1_val);
+}

@@ -1,0 +1,95 @@
+#include "../../../devices/bang/common_bang.h"
+#include "rotmg_bang.h"
+#include "rotmg_bang_kernel.mlu"
+
+namespace op::rotmg::bang {
+
+Descriptor::~Descriptor() = default;
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t d1_desc,
+    infiniopTensorDescriptor_t d2_desc,
+    infiniopTensorDescriptor_t x1_desc,
+    infiniopTensorDescriptor_t y1_desc,
+    infiniopTensorDescriptor_t param_desc) {
+
+    auto handle = reinterpret_cast<device::bang::Handle *>(handle_);
+    auto info = RotmgInfo::createRotmgInfo(d1_desc, d2_desc, x1_desc, y1_desc, param_desc);
+    CHECK_RESULT(info);
+
+    *desc_ptr = new Descriptor(
+        info.take(),
+        0,
+        nullptr,
+        handle->device,
+        handle->device_id);
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+template <typename Tdata>
+infiniStatus_t calculateRotmg(
+    Tdata *d1,
+    Tdata *d2,
+    Tdata *x1,
+    const Tdata *y1,
+    Tdata *param,
+    cnrtQueue_t queue) {
+
+    cnrtDim3_t k_dim;
+    cnrtFunctionType_t k_type;
+    k_dim.x = 1;
+    k_dim.y = 1;
+    k_dim.z = 1;
+    k_type = cnrtFuncTypeBlock;
+
+    rotmgKernel<<<k_dim, k_type, queue>>>(
+        d1,
+        d2,
+        x1,
+        y1,
+        param);
+
+    cnrtQueueSync(queue);
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+#define CALCULATE_ROTMG(TDATA)        \
+    calculateRotmg((TDATA *)d1,       \
+                   (TDATA *)d2,       \
+                   (TDATA *)x1,       \
+                   (const TDATA *)y1, \
+                   (TDATA *)param,    \
+                   (cnrtQueue_t)stream)
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *d1,
+    void *d2,
+    void *x1,
+    const void *y1,
+    void *param,
+    void *stream) const {
+
+    (void)workspace;
+    (void)workspace_size;
+
+    switch (_info.getDtype()) {
+    case INFINI_DTYPE_F16:
+        return CALCULATE_ROTMG(half);
+    case INFINI_DTYPE_F32:
+        return CALCULATE_ROTMG(float);
+    case INFINI_DTYPE_BF16:
+        return CALCULATE_ROTMG(bfloat16_t);
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+}
+
+#undef CALCULATE_ROTMG
+
+} // namespace op::rotmg::bang

@@ -139,6 +139,8 @@
 #define hcblasDrotg mcblasDrotg
 #define hcblasSrotm mcblasSrotm
 #define hcblasDrotm mcblasDrotm
+#define hcblasSrotmg mcblasSrotmg
+#define hcblasDrotmg mcblasDrotmg
 #define HCBLAS_STATUS_SUCCESS MCBLAS_STATUS_SUCCESS
 #define HCBLAS_OP_T MCBLAS_OP_T
 #define HCBLAS_OP_N MCBLAS_OP_N

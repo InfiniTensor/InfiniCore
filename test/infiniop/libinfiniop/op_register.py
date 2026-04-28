@@ -2493,3 +2493,41 @@ def rotm_(lib):
     lib.infiniopDestroyRotmDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
+
+
+@OpRegister.operator
+def rotmg_(lib):
+    lib.infiniopCreateRotmgDescriptor.restype = c_int32
+    lib.infiniopCreateRotmgDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetRotmgWorkspaceSize.restype = c_int32
+    lib.infiniopGetRotmgWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopRotmg.restype = c_int32
+    lib.infiniopRotmg.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyRotmgDescriptor.restype = c_int32
+    lib.infiniopDestroyRotmgDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
