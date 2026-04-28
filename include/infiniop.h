@@ -84,6 +84,7 @@
 #include "infiniop/ops/matrix_power.h"
 #include "infiniop/ops/mul.h"
 #include "infiniop/ops/multi_margin_loss.h"
+#include "infiniop/ops/nrm2.h"
 #include "infiniop/ops/ones.h"
 #include "infiniop/ops/pad.h"
 #include "infiniop/ops/paged_attention.h"

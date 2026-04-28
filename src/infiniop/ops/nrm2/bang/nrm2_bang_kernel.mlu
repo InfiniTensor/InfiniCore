@@ -1,0 +1,166 @@
+#include "../../../devices/bang/common_bang.h"
+#include "nrm2_bang.h"
+
+#include <type_traits>
+
+__nram__ char nram_buffer[NRAM_MAX_SIZE];
+
+template <typename Tdata>
+__mlu_device__ void nrm2ToCompute(float *dst, const Tdata *src, size_t size) {
+    if constexpr (std::is_same_v<Tdata, half>) {
+        __bang_half2float(dst, src, size);
+    } else if constexpr (std::is_same_v<Tdata, bfloat16_t>) {
+        __bang_bfloat162float(dst, src, size);
+    } else {
+        __memcpy(dst, src, size * sizeof(float), NRAM2NRAM);
+    }
+}
+
+template <typename Tdata>
+__mlu_device__ void nrm2StoreResult(Tdata *result, Tdata *nram_result, float *nram_compute, float value) {
+    nram_compute[0] = value;
+    if constexpr (std::is_same_v<Tdata, half>) {
+        __bang_float2half(nram_result, nram_compute, 1);
+        result[0] = nram_result[0];
+    } else if constexpr (std::is_same_v<Tdata, bfloat16_t>) {
+        __bang_float2bfloat16(nram_result, nram_compute, 1);
+        result[0] = nram_result[0];
+    } else {
+        result[0] = nram_compute[0];
+    }
+}
+
+template <typename Tdata>
+__mlu_global__ void Nrm2KernelContiguous(
+    size_t n,
+    const Tdata *x,
+    Tdata *result) {
+    __mlu_shared__ float shared_partial_sum[4];
+
+    Tdata *nram_x = (Tdata *)(((size_t)nram_buffer + ALIGN_SIZE - 1) & ~(ALIGN_SIZE - 1));
+
+    size_t nram_usable = NRAM_MAX_SIZE - ((char *)nram_x - nram_buffer);
+    size_t max_chunk_elements = (nram_usable - ALIGN_SIZE) / (sizeof(Tdata) + sizeof(float));
+
+    int align_elements = ALIGN_SIZE / sizeof(Tdata);
+    if (align_elements == 0) {
+        align_elements = 1;
+    }
+    max_chunk_elements = (max_chunk_elements / align_elements) * align_elements;
+    float *nram_compute = (float *)(((size_t)(nram_x + max_chunk_elements) + ALIGN_SIZE - 1) & ~(ALIGN_SIZE - 1));
+
+    int elements_per_core = n / taskDim;
+    int remain = n % taskDim;
+    int core_elements = elements_per_core + (taskId < remain ? 1 : 0);
+    int core_offset = taskId < remain ? taskId * core_elements : taskId * elements_per_core + remain;
+
+    int chunks = core_elements / max_chunk_elements;
+    int chunk_rem = core_elements % max_chunk_elements;
+
+    float partial_sum = 0.0f;
+
+    for (int c = 0; c < chunks; c++) {
+        size_t current_offset = core_offset + c * max_chunk_elements;
+        __memcpy(nram_x, x + current_offset, max_chunk_elements * sizeof(Tdata), GDRAM2NRAM);
+
+        nrm2ToCompute(nram_compute, nram_x, max_chunk_elements);
+        __bang_square(nram_compute, nram_compute, max_chunk_elements);
+
+        partial_sum += __bang_sum(nram_compute, max_chunk_elements);
+    }
+
+    if (chunk_rem > 0) {
+        size_t current_offset = core_offset + chunks * max_chunk_elements;
+
+        __memcpy(nram_x, x + current_offset, chunk_rem * sizeof(Tdata), GDRAM2NRAM);
+
+        nrm2ToCompute(nram_compute, nram_x, chunk_rem);
+        __bang_square(nram_compute, nram_compute, chunk_rem);
+
+        partial_sum += __bang_sum(nram_compute, chunk_rem);
+    }
+
+    shared_partial_sum[coreId] = partial_sum;
+
+    __sync_cluster();
+
+    if (coreId == 0) {
+        float cluster_sum = 0.0f;
+
+        for (int i = 0; i < coreDim; i++) {
+            cluster_sum += shared_partial_sum[i];
+        }
+
+        nrm2StoreResult(result, nram_x, nram_compute, std::sqrt(cluster_sum));
+    }
+}
+
+template <typename Tdata>
+__mlu_global__ void Nrm2KernelStrided(
+    size_t n,
+    const Tdata *x,
+    size_t incx,
+    Tdata *result) {
+    __mlu_shared__ float shared_partial_sum[4];
+
+    Tdata *nram_x = (Tdata *)(((size_t)nram_buffer + ALIGN_SIZE - 1) & ~(ALIGN_SIZE - 1));
+
+    size_t nram_usable = NRAM_MAX_SIZE - ((char *)nram_x - nram_buffer);
+    size_t max_chunk_elements = (nram_usable - ALIGN_SIZE) / (sizeof(Tdata) + sizeof(float));
+
+    int align_elements = ALIGN_SIZE / sizeof(Tdata);
+    if (align_elements == 0) {
+        align_elements = 1;
+    }
+    max_chunk_elements = (max_chunk_elements / align_elements) * align_elements;
+    float *nram_compute = (float *)(((size_t)(nram_x + max_chunk_elements) + ALIGN_SIZE - 1) & ~(ALIGN_SIZE - 1));
+
+    int elements_per_core = n / taskDim;
+    int remain = n % taskDim;
+    int actual_tasks = elements_per_core + (taskId < remain ? 1 : 0);
+    int start_idx = taskId < remain ? taskId * actual_tasks : taskId * elements_per_core + remain;
+
+    float partial_sum = 0.0f;
+
+    int chunks = actual_tasks / max_chunk_elements;
+    int chunk_rem = actual_tasks % max_chunk_elements;
+
+    for (int c = 0; c < chunks; c++) {
+        int current_elements = max_chunk_elements;
+        int current_start = start_idx + c * max_chunk_elements;
+        for (int i = 0; i < current_elements; ++i) {
+            nram_x[i] = x[(current_start + i) * incx];
+        }
+
+        nrm2ToCompute(nram_compute, nram_x, current_elements);
+        __bang_square(nram_compute, nram_compute, current_elements);
+
+        partial_sum += __bang_sum(nram_compute, current_elements);
+    }
+
+    if (chunk_rem > 0) {
+        int current_start = start_idx + chunks * max_chunk_elements;
+        for (int i = 0; i < chunk_rem; ++i) {
+            nram_x[i] = x[(current_start + i) * incx];
+        }
+
+        nrm2ToCompute(nram_compute, nram_x, chunk_rem);
+        __bang_square(nram_compute, nram_compute, chunk_rem);
+
+        partial_sum += __bang_sum(nram_compute, chunk_rem);
+    }
+
+    shared_partial_sum[coreId] = partial_sum;
+
+    __sync_cluster();
+
+    if (coreId == 0) {
+        float cluster_sum = 0.0f;
+
+        for (int i = 0; i < coreDim; i++) {
+            cluster_sum += shared_partial_sum[i];
+        }
+
+        nrm2StoreResult(result, nram_x, nram_compute, std::sqrt(cluster_sum));
+    }
+}

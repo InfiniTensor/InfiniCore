@@ -2355,3 +2355,35 @@ def blas_dot_(lib):
     lib.infiniopDestroyBlasDotDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
+
+
+@OpRegister.operator
+def nrm2_(lib):
+    lib.infiniopCreateNrm2Descriptor.restype = c_int32
+    lib.infiniopCreateNrm2Descriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetNrm2WorkspaceSize.restype = c_int32
+    lib.infiniopGetNrm2WorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopNrm2.restype = c_int32
+    lib.infiniopNrm2.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyNrm2Descriptor.restype = c_int32
+    lib.infiniopDestroyNrm2Descriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
