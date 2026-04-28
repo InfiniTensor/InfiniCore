@@ -8,3 +8,4 @@
 [submodule ".ci"]
 	path = .ci
 	url = git@github.com:InfiniTensor/ci.git
+	branch = infiniCore_ci
