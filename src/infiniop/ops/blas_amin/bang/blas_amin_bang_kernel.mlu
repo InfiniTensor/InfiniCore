@@ -1,0 +1,133 @@
+#include "../../../devices/bang/common_bang.h"
+#include "blas_amin_bang.h"
+
+__nram__ char nram_buffer[NRAM_MAX_SIZE];
+
+template <typename Tdata>
+__mlu_global__ void blasAminKernelContiguous(
+    size_t n,
+    const Tdata *x,
+    int *result) {
+
+    __mlu_shared__ int shared_min_index[4];
+    __mlu_shared__ Tdata shared_min_value[4];
+
+    Tdata *nram_x = (Tdata *)(((size_t)nram_buffer + ALIGN_SIZE - 1) & ~(ALIGN_SIZE - 1));
+
+    size_t nram_usable = NRAM_MAX_SIZE - ((char *)nram_x - nram_buffer);
+    size_t max_chunk_elements = nram_usable / sizeof(Tdata);
+
+    int align_elements = ALIGN_SIZE / sizeof(Tdata);
+    if (align_elements == 0) {
+        align_elements = 1;
+    }
+    max_chunk_elements = (max_chunk_elements / align_elements) * align_elements;
+
+    int elements_per_core = n / taskDim;
+    int remain = n % taskDim;
+    int core_elements = elements_per_core + (taskId < remain ? 1 : 0);
+    int core_offset = taskId < remain ? taskId * core_elements : taskId * elements_per_core + remain;
+
+    int chunks = core_elements / max_chunk_elements;
+    int chunk_rem = core_elements % max_chunk_elements;
+
+    int min_index = -1;
+    Tdata min_value = static_cast<Tdata>(0);
+    bool initialized = false;
+
+    for (int c = 0; c < chunks; c++) {
+        size_t current_offset = core_offset + c * max_chunk_elements;
+        __memcpy(nram_x, x + current_offset, max_chunk_elements * sizeof(Tdata), GDRAM2NRAM);
+
+        __bang_abs(nram_x, nram_x, max_chunk_elements);
+
+        for (int i = 0; i < max_chunk_elements; i++) {
+            Tdata abs_val = nram_x[i];
+            if (!initialized || abs_val < min_value) {
+                min_value = abs_val;
+                min_index = current_offset + i;
+                initialized = true;
+            }
+        }
+    }
+
+    if (chunk_rem > 0) {
+        size_t current_offset = core_offset + chunks * max_chunk_elements;
+
+        __memcpy(nram_x, x + current_offset, chunk_rem * sizeof(Tdata), GDRAM2NRAM);
+
+        __bang_abs(nram_x, nram_x, chunk_rem);
+
+        for (int i = 0; i < chunk_rem; i++) {
+            Tdata abs_val = nram_x[i];
+            if (!initialized || abs_val < min_value) {
+                min_value = abs_val;
+                min_index = current_offset + i;
+                initialized = true;
+            }
+        }
+    }
+
+    shared_min_index[coreId] = min_index;
+    shared_min_value[coreId] = min_value;
+
+    __sync_cluster();
+
+    if (coreId == 0) {
+        for (int i = 1; i < coreDim; i++) {
+            if (shared_min_index[i] >= 0 && shared_min_value[i] < min_value) {
+                min_value = shared_min_value[i];
+                min_index = shared_min_index[i];
+            }
+        }
+
+        result[0] = min_index + 1; // Convert to 1-based index
+    }
+}
+
+template <typename Tdata>
+__mlu_global__ void blasAminKernelStrided(
+    size_t n,
+    const Tdata *x,
+    size_t incx,
+    int *result) {
+
+    __mlu_shared__ int shared_min_index[4];
+    __mlu_shared__ Tdata shared_min_value[4];
+
+    int elements_per_core = n / taskDim;
+    int remain = n % taskDim;
+    int actual_tasks = elements_per_core + (taskId < remain ? 1 : 0);
+    int start_idx = taskId < remain ? taskId * actual_tasks : taskId * elements_per_core + remain;
+
+    int min_index = -1;
+    Tdata min_value = static_cast<Tdata>(0);
+    bool initialized = false;
+
+    for (int i = start_idx; i < start_idx + actual_tasks; ++i) {
+        size_t offset = i * incx;
+        Tdata abs_val = x[offset] > static_cast<Tdata>(0) ? x[offset] : -x[offset];
+
+        if (!initialized || abs_val < min_value) {
+            min_value = abs_val;
+            min_index = i;
+            initialized = true;
+        }
+    }
+
+    shared_min_index[coreId] = min_index;
+    shared_min_value[coreId] = min_value;
+
+    __sync_cluster();
+
+    if (coreId == 0) {
+        for (int i = 1; i < coreDim; i++) {
+            if (shared_min_index[i] >= 0 && shared_min_value[i] < min_value) {
+                min_value = shared_min_value[i];
+                min_index = shared_min_index[i];
+            }
+        }
+
+        result[0] = min_index + 1; // Convert to 1-based index
+    }
+}

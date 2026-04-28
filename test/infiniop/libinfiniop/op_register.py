@@ -2159,3 +2159,67 @@ def fused_ffn_(lib):
     lib.infiniopDestroyFusedFFNDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
+
+
+@OpRegister.operator
+def blas_amax_(lib):
+    lib.infiniopCreateBlasAmaxDescriptor.restype = c_int32
+    lib.infiniopCreateBlasAmaxDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetBlasAmaxWorkspaceSize.restype = c_int32
+    lib.infiniopGetBlasAmaxWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopBlasAmax.restype = c_int32
+    lib.infiniopBlasAmax.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyBlasAmaxDescriptor.restype = c_int32
+    lib.infiniopDestroyBlasAmaxDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
+def blas_amin_(lib):
+    lib.infiniopCreateBlasAminDescriptor.restype = c_int32
+    lib.infiniopCreateBlasAminDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetBlasAminWorkspaceSize.restype = c_int32
+    lib.infiniopGetBlasAminWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopBlasAmin.restype = c_int32
+    lib.infiniopBlasAmin.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyBlasAminDescriptor.restype = c_int32
+    lib.infiniopDestroyBlasAminDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]

@@ -20,6 +20,8 @@
 #include "infiniop/ops/avg_pool1d.h"
 #include "infiniop/ops/avg_pool3d.h"
 #include "infiniop/ops/binary_cross_entropy_with_logits.h"
+#include "infiniop/ops/blas_amax.h"
+#include "infiniop/ops/blas_amin.h"
 #include "infiniop/ops/block_diag.h"
 #include "infiniop/ops/broadcast_to.h"
 #include "infiniop/ops/causal_softmax.h"

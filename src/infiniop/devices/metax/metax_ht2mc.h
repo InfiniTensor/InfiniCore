@@ -118,6 +118,11 @@
 #define hcblasGemmEx mcblasGemmEx
 #define hcblasCreate mcblasCreate
 #define hcblasComputeType_t mcblasComputeType_t
+#define hcblasSetPointerMode mcblasSetPointerMode
+#define hcblasIsamax mcblasIsamax
+#define hcblasIdamax mcblasIdamax
+#define hcblasIsamin mcblasIsamin
+#define hcblasIdamin mcblasIdamin
 #define HCBLAS_STATUS_SUCCESS MCBLAS_STATUS_SUCCESS
 #define HCBLAS_OP_T MCBLAS_OP_T
 #define HCBLAS_OP_N MCBLAS_OP_N
@@ -125,6 +130,8 @@
 #define HCBLAS_GEMM_DEFAULT MCBLAS_GEMM_DEFAULT
 #define HCBLAS_COMPUTE_32F_FAST_TF32 MCBLAS_COMPUTE_32F_FAST_TF32
 #define HCBLAS_COMPUTE_32F MCBLAS_COMPUTE_32F
+#define HCBLAS_POINTER_MODE_DEVICE MCBLAS_POINTER_MODE_DEVICE
+#define HCBLAS_POINTER_MODE_HOST MCBLAS_POINTER_MODE_HOST
 #define __hpcc_fp8_e4m3 __maca_fp8_e4m3
 #define __hpcc_bfloat16 __maca_bfloat16
 #endif

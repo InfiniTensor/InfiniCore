@@ -1,0 +1,103 @@
+#include "blas_amax_cpu.h"
+#include "../../../devices/cpu/common_cpu.h"
+
+namespace op::blas_amax::cpu {
+
+Descriptor::~Descriptor() = default;
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t x_desc,
+    infiniopTensorDescriptor_t result_desc) {
+
+    auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
+    auto info = BlasAmaxInfo::createBlasAmaxInfo(x_desc, result_desc);
+    CHECK_RESULT(info);
+
+    // Create descriptor
+    *desc_ptr = new Descriptor(
+        info.take(),
+        0,
+        nullptr,
+        handle->device,
+        handle->device_id);
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+template <typename Tdata>
+infiniStatus_t calculateBlasAmax(
+    const BlasAmaxInfo &info,
+    const Tdata *x,
+    int *result) {
+
+    const ptrdiff_t size = info.getSize();
+    const ptrdiff_t incx = info.getIncx();
+
+    if (size < 1 || incx == 0) {
+        result[0] = 0;
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    int max_index = 0;
+    if constexpr (std::is_same<Tdata, fp16_t>::value || std::is_same<Tdata, bf16_t>::value) {
+        float max_value = std::abs(utils::cast<float>(x[0]));
+
+        for (ptrdiff_t i = 1; i < size; ++i) {
+            float current_value = std::abs(utils::cast<float>(x[i * incx]));
+            if (current_value > max_value) {
+                max_value = current_value;
+                max_index = i;
+            }
+        }
+    } else {
+        Tdata max_value = std::abs(x[0]);
+
+        for (ptrdiff_t i = 1; i < size; ++i) {
+            Tdata current_value = std::abs(x[i * incx]);
+            if (current_value > max_value) {
+                max_value = current_value;
+                max_index = i;
+            }
+        }
+    }
+
+    result[0] = utils::cast<int>(max_index) + 1;
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+#define CALCULATE_BLAS_AMAX(TDATA)      \
+    calculateBlasAmax(_info,            \
+                      (const TDATA *)x, \
+                      (int *)result)
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    const void *x,
+    void *result,
+    void *stream) const {
+
+    (void)workspace;
+    (void)workspace_size;
+    (void)stream;
+
+    switch (_info.getDtype()) {
+    case INFINI_DTYPE_F16:
+        return CALCULATE_BLAS_AMAX(fp16_t);
+    case INFINI_DTYPE_F32:
+        return CALCULATE_BLAS_AMAX(float);
+    case INFINI_DTYPE_F64:
+        return CALCULATE_BLAS_AMAX(double);
+    case INFINI_DTYPE_BF16:
+        return CALCULATE_BLAS_AMAX(bf16_t);
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+}
+
+#undef CALCULATE_BLAS_AMAX
+
+} // namespace op::blas_amax::cpu
