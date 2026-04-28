@@ -1,0 +1,183 @@
+#include "../../../devices/bang/common_bang.h"
+
+__nram__ char nram_buffer[NRAM_MAX_SIZE];
+
+template <typename Tdata>
+__mlu_global__ void rotmKernelContiguous(
+    size_t n,
+    Tdata *x,
+    Tdata *y,
+    const Tdata *param) {
+
+    const Tdata flag = param[0];
+    if (n == 0 || (flag + static_cast<Tdata>(2) == static_cast<Tdata>(0))) {
+        return;
+    }
+
+    Tdata h11 = static_cast<Tdata>(0);
+    Tdata h12 = static_cast<Tdata>(0);
+    Tdata h21 = static_cast<Tdata>(0);
+    Tdata h22 = static_cast<Tdata>(0);
+
+    if (flag < static_cast<Tdata>(0)) {
+        h11 = param[1];
+        h12 = param[3];
+        h21 = param[2];
+        h22 = param[4];
+    } else if (flag == static_cast<Tdata>(0)) {
+        h12 = param[3];
+        h21 = param[2];
+    } else {
+        h11 = param[1];
+        h22 = param[4];
+    }
+
+    Tdata *nram_align = (Tdata *)(((size_t)nram_buffer + ALIGN_SIZE - 1) & ~(ALIGN_SIZE - 1));
+
+    size_t nram_usable = NRAM_MAX_SIZE - ((char *)nram_align - nram_buffer);
+    size_t max_chunk_elements = nram_usable / (4 * sizeof(Tdata));
+
+    int align_elements = ALIGN_SIZE / sizeof(Tdata);
+    if (align_elements == 0) {
+        align_elements = 1;
+    }
+    max_chunk_elements = (max_chunk_elements / align_elements) * align_elements;
+
+    Tdata *nram_x = nram_align;
+    Tdata *nram_y = nram_align + max_chunk_elements;
+    Tdata *nram_x_out = nram_align + 2 * max_chunk_elements;
+    Tdata *nram_y_out = nram_align + 3 * max_chunk_elements;
+
+    int elements_per_core = n / taskDim;
+    int remain = n % taskDim;
+    int core_elements = elements_per_core + (taskId < remain ? 1 : 0);
+    int core_offset = taskId < remain ? taskId * core_elements : taskId * elements_per_core + remain;
+
+    if (core_elements <= 0) {
+        return;
+    }
+
+    int chunks = core_elements / max_chunk_elements;
+    int chunk_rem = core_elements % max_chunk_elements;
+
+    for (int c = 0; c < chunks; c++) {
+        size_t current_offset = core_offset + c * max_chunk_elements;
+        __memcpy(nram_x, x + current_offset, max_chunk_elements * sizeof(Tdata), GDRAM2NRAM);
+        __memcpy(nram_y, y + current_offset, max_chunk_elements * sizeof(Tdata), GDRAM2NRAM);
+
+        if (flag < static_cast<Tdata>(0)) {
+            __bang_mul_scalar(nram_x_out, nram_x, h11, max_chunk_elements);
+            __bang_mul_scalar(nram_y_out, nram_y, h12, max_chunk_elements);
+            __bang_add(nram_x_out, nram_x_out, nram_y_out, max_chunk_elements);
+
+            __bang_mul_scalar(nram_y_out, nram_x, h21, max_chunk_elements);
+            __bang_mul_scalar(nram_y, nram_y, h22, max_chunk_elements);
+            __bang_add(nram_y_out, nram_y_out, nram_y, max_chunk_elements);
+        } else if (flag == static_cast<Tdata>(0)) {
+            __bang_mul_scalar(nram_x_out, nram_y, h12, max_chunk_elements);
+            __bang_add(nram_x_out, nram_x, nram_x_out, max_chunk_elements);
+
+            __bang_mul_scalar(nram_y_out, nram_x, h21, max_chunk_elements);
+            __bang_add(nram_y_out, nram_y_out, nram_y, max_chunk_elements);
+        } else {
+            __bang_mul_scalar(nram_x_out, nram_x, h11, max_chunk_elements);
+            __bang_add(nram_x_out, nram_x_out, nram_y, max_chunk_elements);
+
+            __bang_mul_scalar(nram_y_out, nram_y, h22, max_chunk_elements);
+            __bang_sub(nram_y_out, nram_y_out, nram_x, max_chunk_elements);
+        }
+
+        __memcpy(x + current_offset, nram_x_out, max_chunk_elements * sizeof(Tdata), NRAM2GDRAM);
+        __memcpy(y + current_offset, nram_y_out, max_chunk_elements * sizeof(Tdata), NRAM2GDRAM);
+    }
+
+    if (chunk_rem > 0) {
+        size_t current_offset = core_offset + chunks * max_chunk_elements;
+        __memcpy(nram_x, x + current_offset, chunk_rem * sizeof(Tdata), GDRAM2NRAM);
+        __memcpy(nram_y, y + current_offset, chunk_rem * sizeof(Tdata), GDRAM2NRAM);
+
+        if (flag < static_cast<Tdata>(0)) {
+            __bang_mul_scalar(nram_x_out, nram_x, h11, chunk_rem);
+            __bang_mul_scalar(nram_y_out, nram_y, h12, chunk_rem);
+            __bang_add(nram_x_out, nram_x_out, nram_y_out, chunk_rem);
+
+            __bang_mul_scalar(nram_y_out, nram_x, h21, chunk_rem);
+            __bang_mul_scalar(nram_y, nram_y, h22, chunk_rem);
+            __bang_add(nram_y_out, nram_y_out, nram_y, chunk_rem);
+        } else if (flag == static_cast<Tdata>(0)) {
+            __bang_mul_scalar(nram_x_out, nram_y, h12, chunk_rem);
+            __bang_add(nram_x_out, nram_x, nram_x_out, chunk_rem);
+
+            __bang_mul_scalar(nram_y_out, nram_x, h21, chunk_rem);
+            __bang_add(nram_y_out, nram_y_out, nram_y, chunk_rem);
+        } else {
+            __bang_mul_scalar(nram_x_out, nram_x, h11, chunk_rem);
+            __bang_add(nram_x_out, nram_x_out, nram_y, chunk_rem);
+
+            __bang_mul_scalar(nram_y_out, nram_y, h22, chunk_rem);
+            __bang_sub(nram_y_out, nram_y_out, nram_x, chunk_rem);
+        }
+
+        __memcpy(x + current_offset, nram_x_out, chunk_rem * sizeof(Tdata), NRAM2GDRAM);
+        __memcpy(y + current_offset, nram_y_out, chunk_rem * sizeof(Tdata), NRAM2GDRAM);
+    }
+}
+
+template <typename Tdata>
+__mlu_global__ void rotmKernelStrided(
+    size_t n,
+    Tdata *x,
+    size_t incx,
+    Tdata *y,
+    size_t incy,
+    const Tdata *param) {
+
+    const Tdata flag = param[0];
+    if (n == 0 || (flag + static_cast<Tdata>(2) == static_cast<Tdata>(0))) {
+        return;
+    }
+
+    Tdata h11 = static_cast<Tdata>(0);
+    Tdata h12 = static_cast<Tdata>(0);
+    Tdata h21 = static_cast<Tdata>(0);
+    Tdata h22 = static_cast<Tdata>(0);
+
+    if (flag < static_cast<Tdata>(0)) {
+        h11 = param[1];
+        h12 = param[3];
+        h21 = param[2];
+        h22 = param[4];
+    } else if (flag == static_cast<Tdata>(0)) {
+        h12 = param[3];
+        h21 = param[2];
+    } else {
+        h11 = param[1];
+        h22 = param[4];
+    }
+
+    const size_t task = taskId;
+    const size_t tasks = taskDim;
+    const size_t per_task = n / tasks;
+    const size_t remain = n % tasks;
+    const size_t begin = task < remain ? task * (per_task + 1) : task * per_task + remain;
+    const size_t count = per_task + (task < remain ? 1 : 0);
+
+    for (size_t i = 0; i < count; ++i) {
+        const size_t index = begin + i;
+        const size_t x_idx = index * incx;
+        const size_t y_idx = index * incy;
+        const Tdata w = x[x_idx];
+        const Tdata z = y[y_idx];
+
+        if (flag < static_cast<Tdata>(0)) {
+            x[x_idx] = w * h11 + z * h12;
+            y[y_idx] = w * h21 + z * h22;
+        } else if (flag == static_cast<Tdata>(0)) {
+            x[x_idx] = w + z * h12;
+            y[y_idx] = w * h21 + z;
+        } else {
+            x[x_idx] = w * h11 + z;
+            y[y_idx] = -w + h22 * z;
+        }
+    }
+}
