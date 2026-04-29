@@ -169,6 +169,11 @@ if has_config("metax-gpu") then
     add_defines("ENABLE_METAX_API")
     if has_config("use-mc") then
         add_defines("ENABLE_METAX_MC_API")
+        -- MACA torch build expects USE_MACA for ATen headers (e.g. C10_WARP_SIZE).
+        add_defines("USE_MACA")
+    else
+        -- HPCC torch build expects this for ATen headers on hpcc.
+        add_defines("USE_HPCC")
     end
     includes("xmake/metax.lua")
 end
@@ -235,14 +240,14 @@ option_end()
 
 -- Flash-Attn
 option("flash-attn")
-    set_default("")
+    set_default(nil)
     set_showmenu(true)
     set_description("Path to flash-attention repo. If not set, flash-attention will not used.")
 option_end()
 
 if has_config("aten") then
     add_defines("ENABLE_ATEN")
-    if get_config("flash-attn") ~= false then
+    if get_config("flash-attn") and get_config("flash-attn") ~= "" then
         add_defines("ENABLE_FLASH_ATTN")
     end
 end
@@ -257,6 +262,7 @@ option_end()
 if has_config("graph") then
     add_defines("USE_INFINIRT_GRAPH")
 end
+
 
 -- InfiniCCL
 option("ccl")
@@ -463,30 +469,48 @@ target("infinicore_cpp_api")
     add_linkdirs(INFINI_ROOT.."/lib")
     add_links("infiniop", "infinirt", "infiniccl")
 
-    if get_config("flash-attn") ~= "" and get_config("flash-attn") ~= nil then
+    if get_config("flash-attn") and get_config("flash-attn") ~= "" then
         add_installfiles("(builddir)/$(plat)/$(arch)/$(mode)/flash-attn*.so", {prefixdir = "lib"})
         if has_config("nv-gpu") then
             add_deps("flash-attn-nvidia")
+        end
+        if has_config("metax-gpu") then
+            add_deps("flash-attn-metax")
         end
         if has_config("qy-gpu") then
             add_deps("flash-attn-qy")
         end
     end
 
-    if get_config("flash-attn") and get_config("flash-attn") ~= "" and has_config("qy-gpu") then
-        local flash_so_qy = _qy_flash_attn_cuda_so_path()
-        local flash_dir_qy = path.directory(flash_so_qy)
-        local flash_name_qy = path.filename(flash_so_qy)
-        before_link(function (target)
-            target:add(
-                "shflags",
-                "-Wl,--no-as-needed -L" .. flash_dir_qy .. " -l:" .. flash_name_qy .. " -Wl,-rpath," .. flash_dir_qy,
-                {force = true}
-            )
-        end)
-    end
+    -- Flash pip `.so` link flags: `before_link` runs in an xmake sandbox that cannot see helpers
+    -- from other included scripts; MetaX and QY each register their own hook in `xmake/metax.lua`
+    -- and `xmake/qy.lua`.
 
     before_build(function (target)
+        -- MetaX + flash-attn: `flash_attn_2_cuda` may use a different `mha_fwd_kvcache` ABI
+        -- depending on the underlying stack version. When building with MACA (`--use-mc=y`),
+        -- the version file is typically `/opt/maca/Version.txt` (HPCC uses `/opt/hpcc/Version.txt`).
+        if has_config("metax-gpu") and get_config("flash-attn") and get_config("flash-attn") ~= "" then
+            local version_txt = "/opt/hpcc/Version.txt"
+            if not os.isfile(version_txt) and has_config("use-mc") then
+                version_txt = "/opt/maca/Version.txt"
+            end
+            if os.isfile(version_txt) then
+                local content = os.iorunv("cat", {version_txt}) or ""
+                content = content:trim()
+                local major_str = content:match("Version:(%d+)") or content:match("^(%d+)")
+                if major_str and major_str ~= "" then
+                    local major = tonumber(major_str)
+                    if major then
+                        local define = "INFINICORE_HPCC_VERSION_MAJOR=" .. tostring(major)
+                        target:add("defines", define)
+                        target:add("cxflags", "-D" .. define)
+                        target:add("cxxflags", "-D" .. define)
+                    end
+                end
+            end
+        end
+
         if has_config("aten") then
             local outdata = os.iorunv("python", {"-c", "import torch, os; print(os.path.dirname(torch.__file__))"}):trim()
             local TORCH_DIR = outdata
@@ -537,7 +561,6 @@ target("infinicore_cpp_api")
 target_end()
 
 target("_infinicore")
-    add_packages("boost")
     if is_mode("debug") then
         add_defines("BOOST_STACKTRACE_USE_BACKTRACE")
         add_links("backtrace")

@@ -4,6 +4,12 @@
 
 #include <stdexcept>
 
+#ifdef ENABLE_FLASH_ATTN
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
+#include <c10/cuda/CUDAGuard.h>
+#endif
+#endif
+
 namespace infinicore::op::mha_varlen_impl::flashattn {
 
 struct PlannedMeta {
@@ -39,6 +45,20 @@ void *plan(Tensor out,
         scale};
 }
 
+namespace {
+
+#ifdef ENABLE_FLASH_ATTN
+// MetaX/hpcc pip `flash_attn_2_cuda` exports `mha_varlen_fwd` at global scope (no namespace),
+// while NVIDIA `flash-attn-nvidia.so` uses `flash::mha_varlen_fwd`.
+#if defined(ENABLE_METAX_API)
+#define INFINICORE_FLASH_OP(name) ::name
+#else
+#define INFINICORE_FLASH_OP(name) flash::name
+#endif
+
+#endif // ENABLE_FLASH_ATTN
+} // namespace
+
 void run(void *planned_meta) {
 #ifdef ENABLE_FLASH_ATTN
     c10::cuda::CUDAStreamGuard guard(infinicore::adaptor::get_cuda_stream());
@@ -47,7 +67,12 @@ void run(void *planned_meta) {
     auto q = infinicore::adaptor::to_aten_tensor(p->q);
     auto k = infinicore::adaptor::to_aten_tensor(p->k);
     auto v = infinicore::adaptor::to_aten_tensor(p->v);
-    auto out = std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(p->out));
+
+    const bool out_need_copy_back = !p->out->is_contiguous();
+    Tensor out_work_ic = out_need_copy_back ? p->out->contiguous() : Tensor(p->out);
+    auto out_work = infinicore::adaptor::to_aten_tensor(out_work_ic);
+    auto out = std::optional<at::Tensor>(out_work);
+
     auto cu_seqlens_q = infinicore::adaptor::to_aten_tensor(p->cum_seqlens_q);
     auto cu_seqlens_kv = infinicore::adaptor::to_aten_tensor(p->cum_seqlens_k);
     std::optional<at::Tensor> seqused_k = std::nullopt;
@@ -58,7 +83,12 @@ void run(void *planned_meta) {
     auto alibi_slopes = p->alibi_slopes ? std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(*p->alibi_slopes)) : std::nullopt;
     auto scale = p->scale;
 
-    flash::mha_varlen_fwd(
+#if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
+    std::optional<at::Tensor> flash_attn_mars_ext = std::nullopt;
+#endif
+
+    INFINICORE_FLASH_OP(mha_varlen_fwd)
+    (
         q,
         k,
         v,
@@ -79,7 +109,17 @@ void run(void *planned_meta) {
         -1,
         0.0,
         false,
-        std::nullopt);
+        std::nullopt
+#if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
+        ,
+        flash_attn_mars_ext
+#endif
+    );
+
+    if (out_need_copy_back) {
+        p->out->copy_from(out_work_ic);
+    }
+
 #else
     throw std::runtime_error("FlashAttention is not enabled in this build");
 #endif

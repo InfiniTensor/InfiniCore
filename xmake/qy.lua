@@ -219,3 +219,18 @@ target("flash-attn-qy")
         end)
     end
 target_end()
+
+if FLASH_ATTN_ROOT and FLASH_ATTN_ROOT ~= "" then
+    target("infinicore_cpp_api")
+        before_link(function (target)
+            local flash_so_qy = _qy_flash_attn_cuda_so_path()
+            local flash_dir_qy = path.directory(flash_so_qy)
+            local flash_name_qy = path.filename(flash_so_qy)
+            target:add(
+                "shflags",
+                "-Wl,--no-as-needed -L" .. flash_dir_qy .. " -l:" .. flash_name_qy .. " -Wl,-rpath," .. flash_dir_qy,
+                {force = true}
+            )
+        end)
+    target_end()
+end
