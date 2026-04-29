@@ -36,25 +36,33 @@ inline void bind(py::module &m) {
         .def("permute", [](const Tensor &tensor, const Shape &dims) { return tensor->permute(dims); })
         .def("view", [](const Tensor &tensor, const Shape &shape) { return tensor->view(shape); })
         .def("unsqueeze", [](const Tensor &tensor, std::size_t dim) { return tensor->unsqueeze(dim); })
-        .def("squeeze", [](const Tensor &tensor, std::size_t dim) { return tensor->squeeze(dim); });
+        .def("squeeze", [](const Tensor &tensor, std::size_t dim) { return tensor->squeeze(dim); })
+        .def("reset", static_cast<void (Tensor::*)() noexcept>(&Tensor::reset))
+        .def("use_count", &Tensor::use_count);
 
-    m.def("empty", &Tensor::empty,
+    using EmptyFuncType = Tensor (*)(const Shape &, const DataType &, const Device &, bool);
+    using StridedEmptyFuncType = Tensor (*)(const Shape &, const Strides &, const DataType &, const Device &, bool);
+
+    m.def("empty", static_cast<EmptyFuncType>(&Tensor::empty),
           py::arg("shape"),
           py::arg("dtype"),
           py::arg("device"),
           py::arg("pin_memory") = false);
-    m.def("strided_empty", &Tensor::strided_empty,
+
+    m.def("strided_empty", static_cast<StridedEmptyFuncType>(&Tensor::strided_empty),
           py::arg("shape"),
           py::arg("strides"),
           py::arg("dtype"),
           py::arg("device"),
           py::arg("pin_memory") = false);
-    m.def("zeros", &Tensor::zeros,
+
+    m.def("zeros", static_cast<EmptyFuncType>(&Tensor::zeros),
           py::arg("shape"),
           py::arg("dtype"),
           py::arg("device"),
           py::arg("pin_memory") = false);
-    m.def("ones", &Tensor::ones,
+
+    m.def("ones", static_cast<EmptyFuncType>(&Tensor::ones),
           py::arg("shape"),
           py::arg("dtype"),
           py::arg("device"),

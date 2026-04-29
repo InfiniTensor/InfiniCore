@@ -13,6 +13,8 @@ class Module {
 public:
     Module() = default;
 
+    virtual ~Module() = default;
+
     const std::unordered_map<std::string, Parameter> &state_dict() const;
 
     void load_state_dict(const std::unordered_map<std::string, Tensor> &_state_dict);
@@ -22,6 +24,8 @@ public:
     void load_parameter_(const std::string &name, const Tensor &param);
 
     void load_parameter_from_blob(const std::string &name, const void *data);
+
+    std::unordered_map<std::string, Module *> modules_dict() const;
 
 protected:
     Tensor register_parameter(const std::string &name, Parameter param);
@@ -83,6 +87,7 @@ protected:
 private:
     void load_state_dict_recursively(const std::unordered_map<std::string, Tensor> &_state_dict, const std::string &prefix = "");
     void collect_all_parameters(std::unordered_map<std::string, Parameter> &all_params, const std::string &prefix = "") const;
+    void collect_all_modules(std::unordered_map<std::string, Module *> &out, const std::string &prefix) const;
 };
 
 // ============================================================================

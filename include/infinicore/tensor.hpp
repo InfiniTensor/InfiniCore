@@ -75,6 +75,22 @@ public:
                                     const DataType &dtype,
                                     const Device &device);
 
+    void reset() noexcept {
+        impl_.reset();
+    }
+
+    void reset(std::shared_ptr<TensorImpl> new_impl) noexcept {
+        impl_ = std::move(new_impl);
+    }
+
+    bool empty() const noexcept {
+        return impl_ == nullptr;
+    }
+
+    size_t use_count() const noexcept {
+        return impl_ ? impl_.use_count() : 0;
+    }
+
     Tensor() = default;
     Tensor(const Tensor &) = default;
     Tensor(Tensor &&) = default;

@@ -101,4 +101,23 @@ void Module::collect_all_parameters(std::unordered_map<std::string, Parameter> &
     }
 }
 
+std::unordered_map<std::string, Module *> Module::modules_dict() const {
+    std::unordered_map<std::string, Module *> result;
+    collect_all_modules(result, "");
+    return result;
+}
+
+void Module::collect_all_modules(std::unordered_map<std::string, Module *> &out, const std::string &prefix) const {
+    // 记录当前模块（跳过根节点的空前缀，可按需改为 "root"）
+    if (!prefix.empty()) {
+        out[prefix] = const_cast<Module *>(this);
+    }
+
+    // 递归遍历子模块
+    for (const auto &[name, sub] : submodules_) {
+        std::string sub_prefix = prefix.empty() ? name : prefix + "." + name;
+        sub->collect_all_modules(out, sub_prefix);
+    }
+}
+
 } // namespace infinicore::nn

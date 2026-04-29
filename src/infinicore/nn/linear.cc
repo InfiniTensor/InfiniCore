@@ -67,6 +67,9 @@ Tensor BaseLinear::compute_linear(Tensor &input) const {
         }
         return output;
     }
+    case infinicore::quantization::QuantScheme::GPTQ_W4A16: {
+        throw std::runtime_error("GPTQ_W4A16 quantization scheme is not yet supported in forward pass");
+    }
     default: {
         // Ensure input is contiguous before creating views (required for matmul)
         // This prevents hanging when input tensor has non-contiguous memory layout
@@ -82,6 +85,7 @@ Tensor BaseLinear::compute_linear(Tensor &input) const {
         return output;
     }
     }
+
 } // namespace infinicore::nn
 
 Tensor BaseLinear::forward(Tensor &input) const {
@@ -97,6 +101,34 @@ Tensor BaseLinear::forward(Tensor &input, Tensor &residual) const {
     return output;
 }
 
+void BaseLinear::process_weights_after_loading() {
+    if (quantization_->get_quant_scheme() == infinicore::quantization::QuantScheme::GPTQ_W4A16) {
+
+        auto config = quantization_->get_config();
+        auto gptq_qy = std::make_shared<infinicore::quantization::GPTQ_QY>(config);
+        quantization_ = gptq_qy;
+
+        {
+            auto orig_weight = weight_;
+            auto orig_zeros = weight_zeros_;
+            auto orig_scales = weight_scale_;
+
+            gptq_qy->convert_from_gptq_w4a16(
+                orig_weight, orig_zeros, orig_scales, gidx_, device_);
+        }
+
+        weight_.reset();
+        weight_zeros_.reset();
+        weight_scale_.reset();
+
+        weight_ = gptq_qy->get_converted_weight();
+        weight_zeros_ = gptq_qy->get_converted_zeros();
+        weight_scale_ = gptq_qy->get_converted_scales();
+        gptq_qy->release_buffers();
+
+        assert(quantization_->get_quant_scheme() == infinicore::quantization::QuantScheme::GPTQ_W4A16_QY);
+    }
+}
 } // namespace infinicore::nn
 
 namespace infinicore::nn {
@@ -162,6 +194,22 @@ Linear::Linear(size_t in_features, size_t out_features,
         weight_scale_ = infinicore::nn::Parameter({in_features / 128, out_features}, dtype_, device);
         this->register_parameter("scales", weight_scale_);
 
+        gidx_ = infinicore::nn::Parameter({in_features}, infinicore::DataType::I32, device);
+        this->register_parameter("g_idx", gidx_);
+        if (bias) {
+            INFINICORE_NN_PARAMETER_INIT(bias, ({out_features}, dtype_, device));
+        } else {
+            bias_ = Parameter();
+        }
+        break;
+    }
+    case infinicore::quantization::QuantScheme::GPTQ_W4A16: {
+        weight_ = infinicore::nn::Parameter({in_features / 8, out_features}, infinicore::DataType::I32, device);
+        this->register_parameter("qweight", weight_);
+        weight_zeros_ = infinicore::nn::Parameter({in_features / 128, out_features / 8}, infinicore::DataType::I32, device);
+        this->register_parameter("qzeros", weight_zeros_);
+        weight_scale_ = infinicore::nn::Parameter({in_features / 128, out_features}, dtype_, device);
+        this->register_parameter("scales", weight_scale_);
         gidx_ = infinicore::nn::Parameter({in_features}, infinicore::DataType::I32, device);
         this->register_parameter("g_idx", gidx_);
         if (bias) {
@@ -299,6 +347,27 @@ ColumnParallelLinear::ColumnParallelLinear(size_t in_features, size_t out_featur
         }
         break;
     }
+    case infinicore::quantization::QuantScheme::GPTQ_W4A16: {
+        auto gptq_ptr = std::static_pointer_cast<infinicore::quantization::GPTQ>(this->quantization_);
+        int group_size = gptq_ptr->get_group_size();
+        int packing_num = gptq_ptr->get_packing_num();
+        weight_ = infinicore::nn::Parameter({in_features / 8, out_features}, infinicore::DataType::I32, device, 1, tp_rank_, tp_size_);
+        this->register_parameter("qweight", weight_);
+        weight_zeros_ = infinicore::nn::Parameter({in_features / group_size, out_features / 8}, infinicore::DataType::I32, device, 1, tp_rank_, tp_size_);
+        this->register_parameter("qzeros", weight_zeros_);
+        weight_scale_ = infinicore::nn::Parameter({in_features / group_size, out_features}, dtype_, device, 1, tp_rank_, tp_size_);
+        this->register_parameter("scales", weight_scale_);
+        gidx_ = infinicore::nn::Parameter({in_features},
+                                          infinicore::DataType::I32,
+                                          device, 0, tp_rank_, tp_size_);
+        this->register_parameter("g_idx", gidx_);
+        if (bias) {
+            INFINICORE_NN_PARAMETER_INIT(bias, ({out_features}, dtype_, device, 0, tp_rank_, tp_size_));
+        } else {
+            bias_ = Parameter();
+        }
+        break;
+    }
     default: {
         // Initialize parameters using macro
         INFINICORE_NN_PARAMETER_INIT(weight, ({out_features, in_features}, dtype_, device,
@@ -421,6 +490,30 @@ RowParallelLinear::RowParallelLinear(size_t in_features, size_t out_features, st
         weight_ = infinicore::nn::Parameter({in_features / 2, out_features}, infinicore::DataType::U8, device, 0, tp_rank_, tp_size_);
         this->register_parameter("qweight", weight_);
         weight_zeros_ = infinicore::nn::Parameter({in_features / group_size, out_features}, dtype_, device, 0, tp_rank_, tp_size_);
+        this->register_parameter("qzeros", weight_zeros_);
+        weight_scale_ = infinicore::nn::Parameter({in_features / group_size, out_features}, dtype_, device, 0, tp_rank_, tp_size_);
+        this->register_parameter("scales", weight_scale_);
+
+        gidx_ = infinicore::nn::Parameter({in_features},
+                                          infinicore::DataType::I32,
+                                          device, 0, tp_rank_, tp_size_);
+        this->register_parameter("g_idx", gidx_);
+        if (bias && (0 == tp_rank_)) {
+            INFINICORE_NN_PARAMETER_INIT(bias, ({out_features}, dtype_, device, 0, 0, 1));
+        } else {
+            bias_ = Parameter();
+        }
+        break;
+    }
+    case infinicore::quantization::QuantScheme::GPTQ_W4A16: {
+
+        auto gptq_ptr = std::static_pointer_cast<infinicore::quantization::GPTQ>(this->quantization_);
+        int group_size = gptq_ptr->get_group_size();
+        int packing_num = gptq_ptr->get_packing_num();
+
+        weight_ = infinicore::nn::Parameter({in_features / 8, out_features}, infinicore::DataType::I32, device, 0, tp_rank_, tp_size_);
+        this->register_parameter("qweight", weight_);
+        weight_zeros_ = infinicore::nn::Parameter({in_features / group_size, out_features / 8}, infinicore::DataType::I32, device, 0, tp_rank_, tp_size_);
         this->register_parameter("qzeros", weight_zeros_);
         weight_scale_ = infinicore::nn::Parameter({in_features / group_size, out_features}, dtype_, device, 0, tp_rank_, tp_size_);
         this->register_parameter("scales", weight_scale_);

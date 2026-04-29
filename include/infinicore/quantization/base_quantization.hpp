@@ -9,6 +9,8 @@ public:
     explicit BaseQuantization(const nlohmann::json &quant_config) : quant_config_(quant_config) {};
     virtual ~BaseQuantization() = default;
 
+    const nlohmann::json &get_config() const { return quant_config_; }
+
     virtual infinicore::quantization::QuantScheme get_quant_scheme() const = 0;
     template <typename T>
     T get(const std::string &key) const {
