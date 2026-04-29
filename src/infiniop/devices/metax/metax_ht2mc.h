@@ -1,6 +1,7 @@
 #ifdef ENABLE_METAX_MC_API
 #define hpccDataType macaDataType
 #define HPCC_R_32F MACA_R_32F
+#define HPCC_R_64F MACA_R_64F
 #define HPCC_R_16F MACA_R_16F
 #define HPCC_R_16BF MACA_R_16BF
 #define hpcc_bfloat162 maca_bfloat162
@@ -125,24 +126,19 @@
 #define hcblasIdamin mcblasIdamin
 #define hcblasSasum mcblasSasum
 #define hcblasDasum mcblasDasum
-#define hcblasSaxpy mcblasSaxpy
-#define hcblasDaxpy mcblasDaxpy
+#define hcblasAxpyEx mcblasAxpyEx
 #define hcblasScopy mcblasScopy
 #define hcblasDcopy mcblasDcopy
-#define hcblasSdot mcblasSdot
-#define hcblasDdot mcblasDdot
-#define hcblasSnrm2 mcblasSnrm2
-#define hcblasDnrm2 mcblasDnrm2
-#define hcblasSrot mcblasSrot
-#define hcblasDrot mcblasDrot
+#define hcblasDotEx mcblasDotEx
+#define hcblasNrm2Ex mcblasNrm2Ex
+#define hcblasRotEx mcblasRotEx
 #define hcblasSrotg mcblasSrotg
 #define hcblasDrotg mcblasDrotg
 #define hcblasSrotm mcblasSrotm
 #define hcblasDrotm mcblasDrotm
 #define hcblasSrotmg mcblasSrotmg
 #define hcblasDrotmg mcblasDrotmg
-#define hcblasSscal mcblasSscal
-#define hcblasDscal mcblasDscal
+#define hcblasScalEx mcblasScalEx
 #define hcblasSswap mcblasSswap
 #define hcblasDswap mcblasDswap
 #define HCBLAS_STATUS_SUCCESS MCBLAS_STATUS_SUCCESS

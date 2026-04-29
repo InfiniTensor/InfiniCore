@@ -49,21 +49,58 @@ infiniStatus_t Descriptor::calculate(
     const ptrdiff_t incy = _info.getIncy();
     const infiniDtype_t data_type = _info.getDtype();
 
+    hpccDataType alpha_type, x_type, y_type;
+    hpccDataType execution_type;
+
+    switch (data_type) {
+    case INFINI_DTYPE_F16:
+        alpha_type = x_type = y_type = HPCC_R_16F;
+        execution_type = HPCC_R_32F;
+        break;
+    case INFINI_DTYPE_BF16:
+        alpha_type = x_type = y_type = HPCC_R_16BF;
+        execution_type = HPCC_R_32F;
+        break;
+    case INFINI_DTYPE_F32:
+        alpha_type = x_type = y_type = HPCC_R_32F;
+        execution_type = HPCC_R_32F;
+        break;
+    case INFINI_DTYPE_F64:
+        alpha_type = x_type = y_type = HPCC_R_64F;
+        execution_type = HPCC_R_64F;
+        break;
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
     CHECK_STATUS(_opaque->internal->useMcblas(
         (hcStream_t)stream,
         [&](hcblasHandle_t handle) {
             CHECK_MCBLAS(hcblasSetPointerMode(handle, HCBLAS_POINTER_MODE_DEVICE));
 
-            switch (data_type) {
-            case INFINI_DTYPE_F32:
-                CHECK_MCBLAS(hcblasSaxpy(handle, size, (const float *)alpha, (const float *)x, incx, (float *)y, incy));
-                break;
-            case INFINI_DTYPE_F64:
-                CHECK_MCBLAS(hcblasDaxpy(handle, size, (const double *)alpha, (const double *)x, incx, (double *)y, incy));
-                break;
-            default:
-                return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
-            }
+            // switch (data_type) {
+            // case INFINI_DTYPE_F32:
+            //     CHECK_MCBLAS(hcblasSaxpy(handle, size, (const float *)alpha, (const float *)x, incx, (float *)y, incy));
+            //     break;
+            // case INFINI_DTYPE_F64:
+            //     CHECK_MCBLAS(hcblasDaxpy(handle, size, (const double *)alpha, (const double *)x, incx, (double *)y, incy));
+            //     break;
+            // default:
+            //     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+            // }
+
+            hcblasAxpyEx(
+                handle,
+                size,
+                alpha,
+                alpha_type,
+                x,
+                x_type,
+                incx,
+                y,
+                y_type,
+                incy,
+                execution_type);
 
             return INFINI_STATUS_SUCCESS;
         }));

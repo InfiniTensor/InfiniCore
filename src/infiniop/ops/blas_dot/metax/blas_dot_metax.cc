@@ -49,21 +49,47 @@ infiniStatus_t Descriptor::calculate(
     const ptrdiff_t incy = _info.getIncy();
     const infiniDtype_t data_type = _info.getDtype();
 
+    hpccDataType x_type, y_type, result_type;
+    hpccDataType execution_type;
+
+    switch (data_type) {
+    case INFINI_DTYPE_F16:
+        x_type = y_type = result_type = HPCC_R_16F;
+        execution_type = HPCC_R_32F;
+        break;
+    case INFINI_DTYPE_BF16:
+        x_type = y_type = result_type = HPCC_R_16BF;
+        execution_type = HPCC_R_32F;
+        break;
+    case INFINI_DTYPE_F32:
+        x_type = y_type = result_type = HPCC_R_32F;
+        execution_type = HPCC_R_32F;
+        break;
+    case INFINI_DTYPE_F64:
+        x_type = y_type = result_type = HPCC_R_64F;
+        execution_type = HPCC_R_64F;
+        break;
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
     CHECK_STATUS(_opaque->internal->useMcblas(
         (hcStream_t)stream,
         [&](hcblasHandle_t handle) {
             CHECK_MCBLAS(hcblasSetPointerMode(handle, HCBLAS_POINTER_MODE_DEVICE));
 
-            switch (data_type) {
-            case INFINI_DTYPE_F32:
-                CHECK_MCBLAS(hcblasSdot(handle, size, (const float *)x, incx, (const float *)y, incy, (float *)result));
-                break;
-            case INFINI_DTYPE_F64:
-                CHECK_MCBLAS(hcblasDdot(handle, size, (const double *)x, incx, (const double *)y, incy, (double *)result));
-                break;
-            default:
-                return INFINI_STATUS_BAD_TENSOR_DTYPE;
-            }
+            CHECK_MCBLAS(hcblasDotEx(
+                handle,
+                size,
+                x,
+                x_type,
+                incx,
+                y,
+                y_type,
+                incy,
+                result,
+                result_type,
+                execution_type));
 
             return INFINI_STATUS_SUCCESS;
         }));

@@ -46,21 +46,44 @@ infiniStatus_t Descriptor::calculate(
     const ptrdiff_t incx = _info.getIncx();
     const infiniDtype_t data_type = _info.getDtype();
 
+    hpccDataType alpha_type, x_type;
+    hpccDataType execution_type;
+
+    switch (data_type) {
+    case INFINI_DTYPE_F16:
+        alpha_type = x_type = HPCC_R_16F;
+        execution_type = HPCC_R_32F;
+        break;
+    case INFINI_DTYPE_BF16:
+        alpha_type = x_type = HPCC_R_16BF;
+        execution_type = HPCC_R_32F;
+        break;
+    case INFINI_DTYPE_F32:
+        alpha_type = x_type = HPCC_R_32F;
+        execution_type = HPCC_R_32F;
+        break;
+    case INFINI_DTYPE_F64:
+        alpha_type = x_type = HPCC_R_64F;
+        execution_type = HPCC_R_64F;
+        break;
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
     CHECK_STATUS(_opaque->internal->useMcblas(
         (hcStream_t)stream,
         [&](hcblasHandle_t handle) {
             CHECK_MCBLAS(hcblasSetPointerMode(handle, HCBLAS_POINTER_MODE_DEVICE));
 
-            switch (data_type) {
-            case INFINI_DTYPE_F32:
-                CHECK_MCBLAS(hcblasSscal(handle, size, (const float *)alpha, (float *)x, incx));
-                break;
-            case INFINI_DTYPE_F64:
-                CHECK_MCBLAS(hcblasDscal(handle, size, (const double *)alpha, (double *)x, incx));
-                break;
-            default:
-                return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
-            }
+            CHECK_MCBLAS(hcblasScalEx(
+                handle,
+                size,
+                alpha,
+                alpha_type,
+                x,
+                x_type,
+                incx,
+                execution_type));
 
             return INFINI_STATUS_SUCCESS;
         }));

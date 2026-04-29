@@ -33,10 +33,10 @@ _TEST_CASES = [
 ]
 
 _TENSOR_DTYPES = [
-    # InfiniDtype.F16,
+    InfiniDtype.F16,
     InfiniDtype.F32,
     # InfiniDtype.F64,
-    # InfiniDtype.BF16,
+    InfiniDtype.BF16,
 ]
 
 _TOLERANCE_MAP = {
