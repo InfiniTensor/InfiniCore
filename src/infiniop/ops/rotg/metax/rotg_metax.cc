@@ -21,11 +21,11 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t s_desc) {
 
     auto handle = reinterpret_cast<device::metax::Handle *>(handle_);
-    auto info = RotgInfo::createRotgInfo(x_desc, y_desc, c_desc, s_desc);
-    CHECK_RESULT(info);
+    auto result = RotgInfo::createRotgInfo(x_desc, y_desc, c_desc, s_desc);
+    CHECK_RESULT(result);
 
     *desc_ptr = new Descriptor(
-        info.take(),
+        result.take(),
         0,
         new Opaque{handle->internal()},
         handle->device,
@@ -46,7 +46,7 @@ infiniStatus_t Descriptor::calculate(
     (void)workspace;
     (void)workspace_size;
 
-    const infiniDtype_t data_type = _info.getDtype();
+    const infiniDtype_t data_type = _info.data_type;
 
     CHECK_STATUS(_opaque->internal->useMcblas(
         (hcStream_t)stream,

@@ -13,11 +13,11 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t result_desc) {
 
     auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
-    auto info = BlasDotInfo::createBlasDotInfo(x_desc, y_desc, result_desc);
-    CHECK_RESULT(info);
+    auto result = BlasDotInfo::createBlasDotInfo(x_desc, y_desc, result_desc);
+    CHECK_RESULT(result);
 
     *desc_ptr = new Descriptor(
-        info.take(),
+        result.take(),
         0,
         nullptr,
         handle->device,
@@ -33,9 +33,9 @@ infiniStatus_t calculateBlasDot(
     const Tdata *y,
     Tdata *result) {
 
-    const ptrdiff_t n = info.getSize();
-    const ptrdiff_t incx = info.getIncx();
-    const ptrdiff_t incy = info.getIncy();
+    const ptrdiff_t n = info.n;
+    const ptrdiff_t incx = info.incx;
+    const ptrdiff_t incy = info.incy;
 
     ptrdiff_t ix = (incx < 0) ? (1 - n) * incx : 0;
     ptrdiff_t iy = (incy < 0) ? (1 - n) * incy : 0;
@@ -83,7 +83,7 @@ infiniStatus_t Descriptor::calculate(
     (void)workspace_size;
     (void)stream;
 
-    switch (_info.getDtype()) {
+    switch (_info.data_type) {
     case INFINI_DTYPE_F16:
         return CALCULATE_BLAS_DOT(fp16_t);
     case INFINI_DTYPE_F32:

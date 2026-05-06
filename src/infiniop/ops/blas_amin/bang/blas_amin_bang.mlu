@@ -13,12 +13,12 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t result_desc) {
 
     auto handle = reinterpret_cast<device::bang::Handle *>(handle_);
-    auto info = BlasAminInfo::createBlasAminInfo(x_desc, result_desc);
-    CHECK_RESULT(info);
+    auto result = BlasAminInfo::createBlasAminInfo(x_desc, result_desc);
+    CHECK_RESULT(result);
 
     // Create descriptor
     *desc_ptr = new Descriptor(
-        info.take(),
+        result.take(),
         0,
         nullptr,
         handle->device,
@@ -34,8 +34,8 @@ infiniStatus_t calculateBlasAmin(
     int *result,
     cnrtQueue_t queue) {
 
-    const size_t size = info.getSize();
-    const ptrdiff_t incx = info.getIncx();
+    const size_t size = info.n;
+    const ptrdiff_t incx = info.incx;
 
     cnrtDim3_t k_dim;
     cnrtFunctionType_t k_type;
@@ -79,7 +79,7 @@ infiniStatus_t Descriptor::calculate(
     (void)workspace;
     (void)workspace_size;
 
-    switch (_info.getDtype()) {
+    switch (_info.data_type) {
     case INFINI_DTYPE_F16:
         return CALCULATE_BLAS_AMIN(half);
     case INFINI_DTYPE_F32:

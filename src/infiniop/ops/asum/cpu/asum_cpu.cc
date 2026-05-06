@@ -12,11 +12,11 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t result_desc) {
 
     auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
-    auto info = AsumInfo::createAsumInfo(x_desc, result_desc);
-    CHECK_RESULT(info);
+    auto result = AsumInfo::createAsumInfo(x_desc, result_desc);
+    CHECK_RESULT(result);
 
     *desc_ptr = new Descriptor(
-        info.take(),
+        result.take(),
         0,
         nullptr,
         handle->device,
@@ -31,13 +31,13 @@ infiniStatus_t calculateAsum(
     const Tdata *x,
     Tdata *result) {
 
-    const ptrdiff_t size = info.getSize();
-    const ptrdiff_t incx = info.getIncx();
+    const ptrdiff_t n = info.n;
+    const ptrdiff_t incx = info.incx;
 
     if constexpr (std::is_same<Tdata, fp16_t>::value || std::is_same<Tdata, bf16_t>::value) {
         float total_sum = 0.0;
 
-        for (ptrdiff_t i = 0; i < size; ++i) {
+        for (ptrdiff_t i = 0; i < n; ++i) {
             total_sum += std::abs(utils::cast<float>(x[i * incx]));
         }
 
@@ -45,7 +45,7 @@ infiniStatus_t calculateAsum(
     } else {
         Tdata total_sum = 0.0;
 
-        for (ptrdiff_t i = 0; i < size; ++i) {
+        for (ptrdiff_t i = 0; i < n; ++i) {
             total_sum += std::abs(x[i * incx]);
         }
 
@@ -70,7 +70,7 @@ infiniStatus_t Descriptor::calculate(
     (void)workspace;
     (void)workspace_size;
 
-    switch (_info.getDtype()) {
+    switch (_info.data_type) {
     case INFINI_DTYPE_F16:
         return CALCULATE_ASUM(fp16_t);
     case INFINI_DTYPE_BF16:

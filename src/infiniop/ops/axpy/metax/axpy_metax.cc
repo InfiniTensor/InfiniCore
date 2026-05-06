@@ -20,11 +20,11 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t y_desc) {
 
     auto handle = reinterpret_cast<device::metax::Handle *>(handle_);
-    auto info = AxpyInfo::createAxpyInfo(alpha_desc, x_desc, y_desc);
-    CHECK_RESULT(info);
+    auto result = AxpyInfo::createAxpyInfo(alpha_desc, x_desc, y_desc);
+    CHECK_RESULT(result);
 
     *desc_ptr = new Descriptor(
-        info.take(),
+        result.take(),
         0,
         new Opaque{handle->internal()},
         handle->device,
@@ -44,10 +44,10 @@ infiniStatus_t Descriptor::calculate(
     (void)workspace;
     (void)workspace_size;
 
-    const size_t size = _info.getSize();
-    const ptrdiff_t incx = _info.getIncx();
-    const ptrdiff_t incy = _info.getIncy();
-    const infiniDtype_t data_type = _info.getDtype();
+    const size_t size = _info.n;
+    const ptrdiff_t incx = _info.incx;
+    const ptrdiff_t incy = _info.incy;
+    const infiniDtype_t data_type = _info.data_type;
 
     hpccDataType alpha_type, x_type, y_type;
     hpccDataType execution_type;
@@ -76,20 +76,11 @@ infiniStatus_t Descriptor::calculate(
     CHECK_STATUS(_opaque->internal->useMcblas(
         (hcStream_t)stream,
         [&](hcblasHandle_t handle) {
-            CHECK_MCBLAS(hcblasSetPointerMode(handle, HCBLAS_POINTER_MODE_DEVICE));
+            CHECK_MCBLAS(hcblasSetPointerMode(
+                handle,
+                HCBLAS_POINTER_MODE_DEVICE));
 
-            // switch (data_type) {
-            // case INFINI_DTYPE_F32:
-            //     CHECK_MCBLAS(hcblasSaxpy(handle, size, (const float *)alpha, (const float *)x, incx, (float *)y, incy));
-            //     break;
-            // case INFINI_DTYPE_F64:
-            //     CHECK_MCBLAS(hcblasDaxpy(handle, size, (const double *)alpha, (const double *)x, incx, (double *)y, incy));
-            //     break;
-            // default:
-            //     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
-            // }
-
-            hcblasAxpyEx(
+            CHECK_MCBLAS(hcblasAxpyEx(
                 handle,
                 size,
                 alpha,
@@ -100,7 +91,7 @@ infiniStatus_t Descriptor::calculate(
                 y,
                 y_type,
                 incy,
-                execution_type);
+                execution_type));
 
             return INFINI_STATUS_SUCCESS;
         }));

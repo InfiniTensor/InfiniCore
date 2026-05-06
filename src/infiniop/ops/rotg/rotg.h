@@ -1,10 +1,8 @@
 #ifndef __ROTG_H__
 #define __ROTG_H__
 
-#include "../../../utils.h"
 #include "../../operator.h"
-#include "../../tensor.h"
-#include "infiniop/ops/rotg.h"
+#include "info.h"
 
 #define DESCRIPTOR(NAMESPACE)                                    \
                                                                  \
@@ -49,43 +47,5 @@
             void *stream) const;                                 \
     };                                                           \
     }
-
-class RotgInfo {
-private:
-    infiniDtype_t _dtype;
-
-    explicit RotgInfo(infiniDtype_t dtype) : _dtype(dtype) {}
-
-public:
-    inline infiniDtype_t getDtype() const { return _dtype; }
-
-    using ResultType = utils::Result<RotgInfo>;
-
-    static ResultType createRotgInfo(
-        infiniopTensorDescriptor_t x_desc,
-        infiniopTensorDescriptor_t y_desc,
-        infiniopTensorDescriptor_t c_desc,
-        infiniopTensorDescriptor_t s_desc) {
-
-        CHECK_OR_RETURN(x_desc != nullptr, INFINI_STATUS_NULL_POINTER);
-        CHECK_OR_RETURN(y_desc != nullptr, INFINI_STATUS_NULL_POINTER);
-        CHECK_OR_RETURN(c_desc != nullptr, INFINI_STATUS_NULL_POINTER);
-        CHECK_OR_RETURN(s_desc != nullptr, INFINI_STATUS_NULL_POINTER);
-
-        auto dtype = x_desc->dtype();
-
-        CHECK_OR_RETURN(y_desc->dtype() == dtype, INFINI_STATUS_BAD_TENSOR_DTYPE);
-        CHECK_OR_RETURN(c_desc->dtype() == dtype, INFINI_STATUS_BAD_TENSOR_DTYPE);
-        CHECK_OR_RETURN(s_desc->dtype() == dtype, INFINI_STATUS_BAD_TENSOR_DTYPE);
-        CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_BF16, INFINI_DTYPE_F32, INFINI_DTYPE_F64);
-        CHECK_OR_RETURN(x_desc->numel() == 1, INFINI_STATUS_BAD_TENSOR_SHAPE);
-        CHECK_OR_RETURN(y_desc->numel() == 1, INFINI_STATUS_BAD_TENSOR_SHAPE);
-        CHECK_OR_RETURN(c_desc->numel() == 1, INFINI_STATUS_BAD_TENSOR_SHAPE);
-        CHECK_OR_RETURN(s_desc->numel() == 1, INFINI_STATUS_BAD_TENSOR_SHAPE);
-
-        RotgInfo info(dtype);
-        return ResultType(std::move(info));
-    }
-};
 
 #endif // __ROTG_H__

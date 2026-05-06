@@ -12,12 +12,12 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t result_desc) {
 
     auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
-    auto info = BlasAmaxInfo::createBlasAmaxInfo(x_desc, result_desc);
-    CHECK_RESULT(info);
+    auto result = BlasAmaxInfo::createBlasAmaxInfo(x_desc, result_desc);
+    CHECK_RESULT(result);
 
     // Create descriptor
     *desc_ptr = new Descriptor(
-        info.take(),
+        result.take(),
         0,
         nullptr,
         handle->device,
@@ -32,8 +32,8 @@ infiniStatus_t calculateBlasAmax(
     const Tdata *x,
     int *result) {
 
-    const ptrdiff_t size = info.getSize();
-    const ptrdiff_t incx = info.getIncx();
+    const ptrdiff_t size = info.n;
+    const ptrdiff_t incx = info.incx;
 
     if (size < 1 || incx == 0) {
         result[0] = 0;
@@ -84,7 +84,7 @@ infiniStatus_t Descriptor::calculate(
     (void)workspace_size;
     (void)stream;
 
-    switch (_info.getDtype()) {
+    switch (_info.data_type) {
     case INFINI_DTYPE_F16:
         return CALCULATE_BLAS_AMAX(fp16_t);
     case INFINI_DTYPE_F32:

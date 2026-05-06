@@ -14,11 +14,11 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t s_desc) {
 
     auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
-    auto info = RotInfo::createRotInfo(x_desc, y_desc, c_desc, s_desc);
-    CHECK_RESULT(info);
+    auto result = RotInfo::createRotInfo(x_desc, y_desc, c_desc, s_desc);
+    CHECK_RESULT(result);
 
     *desc_ptr = new Descriptor(
-        info.take(),
+        result.take(),
         0,
         nullptr,
         handle->device,
@@ -40,9 +40,9 @@ infiniStatus_t calculateRot(
     const Tcompute c_val = utils::cast<Tcompute>(c[0]);
     const Tcompute s_val = utils::cast<Tcompute>(s[0]);
 
-    const ptrdiff_t size = static_cast<ptrdiff_t>(info.getSize());
-    const ptrdiff_t incx = info.getIncx();
-    const ptrdiff_t incy = info.getIncy();
+    const ptrdiff_t size = static_cast<ptrdiff_t>(info.n);
+    const ptrdiff_t incx = info.incx;
+    const ptrdiff_t incy = info.incy;
 
     if (size <= 0) {
         return INFINI_STATUS_SUCCESS;
@@ -85,7 +85,7 @@ infiniStatus_t Descriptor::calculate(
     (void)workspace_size;
     (void)stream;
 
-    switch (_info.getDtype()) {
+    switch (_info.data_type) {
     case INFINI_DTYPE_F16:
         return CALCULATE_ROT(fp16_t);
     case INFINI_DTYPE_F32:

@@ -19,11 +19,11 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t result_desc) {
 
     auto handle = reinterpret_cast<device::metax::Handle *>(handle_);
-    auto info = AsumInfo::createAsumInfo(x_desc, result_desc);
-    CHECK_RESULT(info);
+    auto result = AsumInfo::createAsumInfo(x_desc, result_desc);
+    CHECK_RESULT(result);
 
     *desc_ptr = new Descriptor(
-        info.take(),
+        result.take(),
         0,
         new Opaque{handle->internal()},
         handle->device,
@@ -42,9 +42,9 @@ infiniStatus_t Descriptor::calculate(
     (void)workspace;
     (void)workspace_size;
 
-    const size_t size = _info.getSize();
-    const ptrdiff_t incx = _info.getIncx();
-    const infiniDtype_t data_type = _info.getDtype();
+    const size_t n = _info.n;
+    const ptrdiff_t incx = _info.incx;
+    const infiniDtype_t data_type = _info.data_type;
 
     CHECK_STATUS(_opaque->internal->useMcblas(
         (hcStream_t)stream,
@@ -53,10 +53,10 @@ infiniStatus_t Descriptor::calculate(
 
             switch (data_type) {
             case INFINI_DTYPE_F32:
-                CHECK_MCBLAS(hcblasSasum(handle, size, (const float *)x, incx, (float *)result));
+                CHECK_MCBLAS(hcblasSasum(handle, n, (const float *)x, incx, (float *)result));
                 break;
             case INFINI_DTYPE_F64:
-                CHECK_MCBLAS(hcblasDasum(handle, size, (const double *)x, incx, (double *)result));
+                CHECK_MCBLAS(hcblasDasum(handle, n, (const double *)x, incx, (double *)result));
                 break;
             default:
                 return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

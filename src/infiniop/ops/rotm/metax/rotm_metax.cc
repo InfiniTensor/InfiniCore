@@ -20,11 +20,11 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t param_desc) {
 
     auto handle = reinterpret_cast<device::metax::Handle *>(handle_);
-    auto info = RotmInfo::createRotmInfo(x_desc, y_desc, param_desc);
-    CHECK_RESULT(info);
+    auto result = RotmInfo::createRotmInfo(x_desc, y_desc, param_desc);
+    CHECK_RESULT(result);
 
     *desc_ptr = new Descriptor(
-        info.take(),
+        result.take(),
         0,
         new Opaque{handle->internal()},
         handle->device,
@@ -44,10 +44,10 @@ infiniStatus_t Descriptor::calculate(
     (void)workspace;
     (void)workspace_size;
 
-    const size_t size = _info.getSize();
-    const ptrdiff_t incx = _info.getIncx();
-    const ptrdiff_t incy = _info.getIncy();
-    const infiniDtype_t data_type = _info.getDtype();
+    const size_t size = _info.n;
+    const ptrdiff_t incx = _info.incx;
+    const ptrdiff_t incy = _info.incy;
+    const infiniDtype_t data_type = _info.data_type;
 
     CHECK_STATUS(_opaque->internal->useMcblas(
         (hcStream_t)stream,

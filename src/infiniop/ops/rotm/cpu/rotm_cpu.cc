@@ -13,11 +13,11 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t param_desc) {
 
     auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
-    auto info = RotmInfo::createRotmInfo(x_desc, y_desc, param_desc);
-    CHECK_RESULT(info);
+    auto result = RotmInfo::createRotmInfo(x_desc, y_desc, param_desc);
+    CHECK_RESULT(result);
 
     *desc_ptr = new Descriptor(
-        info.take(),
+        result.take(),
         0,
         nullptr,
         handle->device,
@@ -40,13 +40,13 @@ infiniStatus_t calculateRotm(
 
     Tcompute sflag = utils::cast<Tcompute>(param[0]);
 
-    if (info.getSize() == 0 || (sflag + two == zero)) {
+    if (info.n == 0 || (sflag + two == zero)) {
         return INFINI_STATUS_SUCCESS;
     }
 
-    const ptrdiff_t size = static_cast<ptrdiff_t>(info.getSize());
-    const ptrdiff_t incx = info.getIncx();
-    const ptrdiff_t incy = info.getIncy();
+    const ptrdiff_t size = static_cast<ptrdiff_t>(info.n);
+    const ptrdiff_t incx = info.incx;
+    const ptrdiff_t incy = info.incy;
     const ptrdiff_t kx = incx >= 0 ? 0 : (size - 1) * (-incx);
     const ptrdiff_t ky = incy >= 0 ? 0 : (size - 1) * (-incy);
 
@@ -150,7 +150,7 @@ infiniStatus_t Descriptor::calculate(
     (void)workspace_size;
     (void)stream;
 
-    switch (_info.getDtype()) {
+    switch (_info.data_type) {
     case INFINI_DTYPE_F16:
         return CALCULATE_ROTM(fp16_t);
     case INFINI_DTYPE_BF16:

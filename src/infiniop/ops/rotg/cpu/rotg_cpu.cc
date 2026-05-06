@@ -16,11 +16,11 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t s_desc) {
 
     auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
-    auto info = RotgInfo::createRotgInfo(x_desc, y_desc, c_desc, s_desc);
-    CHECK_RESULT(info);
+    auto result = RotgInfo::createRotgInfo(x_desc, y_desc, c_desc, s_desc);
+    CHECK_RESULT(result);
 
     *desc_ptr = new Descriptor(
-        info.take(),
+        result.take(),
         0,
         nullptr,
         handle->device,
@@ -102,7 +102,7 @@ infiniStatus_t Descriptor::calculate(
     (void)workspace_size;
     (void)stream;
 
-    switch (_info.getDtype()) {
+    switch (_info.data_type) {
     case INFINI_DTYPE_F16:
         return CALCULATE_ROTG(fp16_t);
     case INFINI_DTYPE_F32:

@@ -15,12 +15,12 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t result_desc) {
 
     auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
-    auto info = Nrm2Info::createNrm2Info(x_desc, result_desc);
-    CHECK_RESULT(info);
+    auto result = Nrm2Info::createNrm2Info(x_desc, result_desc);
+    CHECK_RESULT(result);
 
     // Create descriptor
     *desc_ptr = new Descriptor(
-        info.take(),
+        result.take(),
         0,
         nullptr,
         handle->device,
@@ -37,8 +37,8 @@ infiniStatus_t calculateNrm2(
 
     using Tcompute = std::conditional_t<std::is_same_v<Tdata, double>, double, float>;
 
-    const ptrdiff_t n = info.getSize();
-    const ptrdiff_t incx = info.getIncx();
+    const ptrdiff_t n = info.n;
+    const ptrdiff_t incx = info.incx;
 
     // Blue's scaling constants (float vs double)
     constexpr Tcompute tsml = [] {
@@ -145,7 +145,7 @@ infiniStatus_t Descriptor::calculate(
     (void)workspace_size;
     (void)stream;
 
-    switch (_info.getDtype()) {
+    switch (_info.data_type) {
     case INFINI_DTYPE_F16:
         return CALCULATE_NRM2(fp16_t);
     case INFINI_DTYPE_F32:

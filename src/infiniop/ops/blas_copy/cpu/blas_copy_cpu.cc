@@ -12,11 +12,11 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t y_desc) {
 
     auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
-    auto info = BlasCopyInfo::createBlasCopyInfo(x_desc, y_desc);
-    CHECK_RESULT(info);
+    auto result = BlasCopyInfo::createBlasCopyInfo(x_desc, y_desc);
+    CHECK_RESULT(result);
 
     *desc_ptr = new Descriptor(
-        info.take(),
+        result.take(),
         0,
         nullptr,
         handle->device,
@@ -31,11 +31,11 @@ infiniStatus_t calculateBlasCopy(
     const Tdata *x,
     Tdata *y) {
 
-    const ptrdiff_t size = info.getSize();
+    const ptrdiff_t size = info.n;
 
     for (ptrdiff_t i = 0; i < size; ++i) {
-        size_t x_idx = i * info.getIncx();
-        size_t y_idx = i * info.getIncy();
+        size_t x_idx = i * info.incx;
+        size_t y_idx = i * info.incy;
         y[y_idx] = x[x_idx];
     }
 
@@ -58,7 +58,7 @@ infiniStatus_t Descriptor::calculate(
     (void)workspace_size;
     (void)stream;
 
-    switch (_info.getDtype()) {
+    switch (_info.data_type) {
     case INFINI_DTYPE_F16:
         return CALCULATE_BLAS_COPY(fp16_t);
     case INFINI_DTYPE_F32:

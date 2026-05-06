@@ -1,10 +1,8 @@
 #ifndef __ROTMG_H__
 #define __ROTMG_H__
 
-#include "../../../utils.h"
 #include "../../operator.h"
-#include "../../tensor.h"
-#include "infiniop/ops/rotmg.h"
+#include "info.h"
 
 #define DESCRIPTOR(NAMESPACE)                                    \
                                                                  \
@@ -51,50 +49,5 @@
             void *stream) const;                                 \
     };                                                           \
     }
-
-class RotmgInfo {
-private:
-    infiniDtype_t _dtype;
-
-    explicit RotmgInfo(infiniDtype_t dtype) : _dtype(dtype) {}
-
-public:
-    inline infiniDtype_t getDtype() const { return _dtype; }
-
-    using ResultType = utils::Result<RotmgInfo>;
-
-    static ResultType createRotmgInfo(
-        infiniopTensorDescriptor_t d1_desc,
-        infiniopTensorDescriptor_t d2_desc,
-        infiniopTensorDescriptor_t x1_desc,
-        infiniopTensorDescriptor_t y1_desc,
-        infiniopTensorDescriptor_t param_desc) {
-
-        CHECK_OR_RETURN(d1_desc != nullptr, INFINI_STATUS_NULL_POINTER);
-        CHECK_OR_RETURN(d2_desc != nullptr, INFINI_STATUS_NULL_POINTER);
-        CHECK_OR_RETURN(x1_desc != nullptr, INFINI_STATUS_NULL_POINTER);
-        CHECK_OR_RETURN(y1_desc != nullptr, INFINI_STATUS_NULL_POINTER);
-        CHECK_OR_RETURN(param_desc != nullptr, INFINI_STATUS_NULL_POINTER);
-
-        auto dtype = d1_desc->dtype();
-
-        CHECK_OR_RETURN(d2_desc->dtype() == dtype, INFINI_STATUS_BAD_TENSOR_DTYPE);
-        CHECK_OR_RETURN(x1_desc->dtype() == dtype, INFINI_STATUS_BAD_TENSOR_DTYPE);
-        CHECK_OR_RETURN(y1_desc->dtype() == dtype, INFINI_STATUS_BAD_TENSOR_DTYPE);
-        CHECK_OR_RETURN(param_desc->dtype() == dtype, INFINI_STATUS_BAD_TENSOR_DTYPE);
-        CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_BF16, INFINI_DTYPE_F32, INFINI_DTYPE_F64);
-        CHECK_OR_RETURN(param_desc->ndim() == 1, INFINI_STATUS_BAD_TENSOR_SHAPE);
-
-        CHECK_OR_RETURN(d1_desc->numel() == 1, INFINI_STATUS_BAD_TENSOR_SHAPE);
-        CHECK_OR_RETURN(d2_desc->numel() == 1, INFINI_STATUS_BAD_TENSOR_SHAPE);
-        CHECK_OR_RETURN(x1_desc->numel() == 1, INFINI_STATUS_BAD_TENSOR_SHAPE);
-        CHECK_OR_RETURN(y1_desc->numel() == 1, INFINI_STATUS_BAD_TENSOR_SHAPE);
-        CHECK_OR_RETURN(param_desc->numel() == 5, INFINI_STATUS_BAD_TENSOR_SHAPE);
-        CHECK_OR_RETURN(param_desc->stride(0) == 1, INFINI_STATUS_BAD_TENSOR_STRIDES);
-
-        RotmgInfo info(dtype);
-        return ResultType(std::move(info));
-    }
-};
 
 #endif // __ROTMG_H__

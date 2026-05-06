@@ -12,11 +12,11 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t y_desc) {
 
     auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
-    auto info = SwapInfo::createSwapInfo(x_desc, y_desc);
-    CHECK_RESULT(info);
+    auto result = SwapInfo::createSwapInfo(x_desc, y_desc);
+    CHECK_RESULT(result);
 
     *desc_ptr = new Descriptor(
-        info.take(),
+        result.take(),
         0,
         nullptr,
         handle->device,
@@ -31,9 +31,9 @@ infiniStatus_t calculateSwap(
     Tdata *x,
     Tdata *y) {
 
-    const ptrdiff_t size = info.getSize();
-    const ptrdiff_t incx = info.getIncx();
-    const ptrdiff_t incy = info.getIncy();
+    const ptrdiff_t size = info.n;
+    const ptrdiff_t incx = info.incx;
+    const ptrdiff_t incy = info.incy;
 
 #pragma omp parallel for if (size > 1024)
     for (ptrdiff_t i = 0; i < size; ++i) {
@@ -63,7 +63,7 @@ infiniStatus_t Descriptor::calculate(
     (void)workspace_size;
     (void)stream;
 
-    switch (_info.getDtype()) {
+    switch (_info.data_type) {
     case INFINI_DTYPE_F16:
         return CALCULATE_SWAP(fp16_t);
     case INFINI_DTYPE_BF16:

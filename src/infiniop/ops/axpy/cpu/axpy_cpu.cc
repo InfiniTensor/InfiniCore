@@ -13,11 +13,11 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t y_desc) {
 
     auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
-    auto info = AxpyInfo::createAxpyInfo(alpha_desc, x_desc, y_desc);
-    CHECK_RESULT(info);
+    auto result = AxpyInfo::createAxpyInfo(alpha_desc, x_desc, y_desc);
+    CHECK_RESULT(result);
 
     *desc_ptr = new Descriptor(
-        info.take(),
+        result.take(),
         0,
         nullptr,
         handle->device,
@@ -33,9 +33,9 @@ infiniStatus_t calculateAxpy(
     const Tdata *x,
     Tdata *y) {
 
-    const ptrdiff_t size = info.getSize();
-    const ptrdiff_t incx = info.getIncx();
-    const ptrdiff_t incy = info.getIncy();
+    const ptrdiff_t size = info.n;
+    const ptrdiff_t incx = info.incx;
+    const ptrdiff_t incy = info.incy;
 
     if constexpr (std::is_same<Tdata, fp16_t>::value || std::is_same<Tdata, bf16_t>::value) {
         const float alpha_f = utils::cast<float>(alpha[0]);
@@ -72,7 +72,7 @@ infiniStatus_t Descriptor::calculate(
     (void)workspace_size;
     (void)stream;
 
-    switch (_info.getDtype()) {
+    switch (_info.data_type) {
     case INFINI_DTYPE_F16:
         return CALCULATE_AXPY(fp16_t);
     case INFINI_DTYPE_F32:

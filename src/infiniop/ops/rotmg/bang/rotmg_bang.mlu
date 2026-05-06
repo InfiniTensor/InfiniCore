@@ -16,11 +16,11 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t param_desc) {
 
     auto handle = reinterpret_cast<device::bang::Handle *>(handle_);
-    auto info = RotmgInfo::createRotmgInfo(d1_desc, d2_desc, x1_desc, y1_desc, param_desc);
-    CHECK_RESULT(info);
+    auto result = RotmgInfo::createRotmgInfo(d1_desc, d2_desc, x1_desc, y1_desc, param_desc);
+    CHECK_RESULT(result);
 
     *desc_ptr = new Descriptor(
-        info.take(),
+        result.take(),
         0,
         nullptr,
         handle->device,
@@ -78,7 +78,7 @@ infiniStatus_t Descriptor::calculate(
     (void)workspace;
     (void)workspace_size;
 
-    switch (_info.getDtype()) {
+    switch (_info.data_type) {
     case INFINI_DTYPE_F16:
         return CALCULATE_ROTMG(half);
     case INFINI_DTYPE_F32:

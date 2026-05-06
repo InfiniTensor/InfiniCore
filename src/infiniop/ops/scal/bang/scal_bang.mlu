@@ -13,11 +13,11 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t x_desc) {
 
     auto handle = reinterpret_cast<device::bang::Handle *>(handle_);
-    auto info = ScalInfo::createScalInfo(alpha_desc, x_desc);
-    CHECK_RESULT(info);
+    auto result = ScalInfo::createScalInfo(alpha_desc, x_desc);
+    CHECK_RESULT(result);
 
     *desc_ptr = new Descriptor(
-        info.take(),
+        result.take(),
         0,
         nullptr,
         handle->device,
@@ -41,17 +41,17 @@ infiniStatus_t calculateScal(
     k_dim.z = 1;
     k_type = cnrtFuncTypeUnion1;
 
-    if (info.getIncx() == 1) {
+    if (info.incx == 1) {
         scalKernelContiguous<<<k_dim, k_type, queue>>>(
-            info.getSize(),
+            info.n,
             alpha,
             x);
     } else {
         scalKernelStrided<<<k_dim, k_type, queue>>>(
-            info.getSize(),
+            info.n,
             alpha,
             x,
-            info.getIncx());
+            info.incx);
     }
 
     cnrtQueueSync(queue);
@@ -75,7 +75,7 @@ infiniStatus_t Descriptor::calculate(
     (void)workspace;
     (void)workspace_size;
 
-    switch (_info.getDtype()) {
+    switch (_info.data_type) {
     case INFINI_DTYPE_F16:
         return CALCULATE_SCAL(half);
     case INFINI_DTYPE_F32:

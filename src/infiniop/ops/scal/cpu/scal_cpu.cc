@@ -12,11 +12,11 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t x_desc) {
 
     auto handle = reinterpret_cast<device::cpu::Handle *>(handle_);
-    auto info = ScalInfo::createScalInfo(alpha_desc, x_desc);
-    CHECK_RESULT(info);
+    auto result = ScalInfo::createScalInfo(alpha_desc, x_desc);
+    CHECK_RESULT(result);
 
     *desc_ptr = new Descriptor(
-        info.take(),
+        result.take(),
         0,
         nullptr,
         handle->device,
@@ -31,8 +31,8 @@ infiniStatus_t calculateScal(
     const Tdata *alpha,
     Tdata *x) {
 
-    const ptrdiff_t size = info.getSize();
-    const ptrdiff_t incx = info.getIncx();
+    const ptrdiff_t size = info.n;
+    const ptrdiff_t incx = info.incx;
 
     for (ptrdiff_t i = 0; i < size; ++i) {
         const ptrdiff_t idx = i * incx;
@@ -62,7 +62,7 @@ infiniStatus_t Descriptor::calculate(
     (void)workspace;
     (void)workspace_size;
 
-    switch (_info.getDtype()) {
+    switch (_info.data_type) {
     case INFINI_DTYPE_F16:
         return CALCULATE_SCAL(fp16_t);
     case INFINI_DTYPE_F32:
