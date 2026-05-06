@@ -114,6 +114,10 @@ from infinicore.ops.paged_attention_prefill import paged_attention_prefill
 from infinicore.ops.paged_caching import paged_caching
 from infinicore.ops.rearrange import rearrange
 from infinicore.ops.reciprocal import reciprocal
+from infinicore.ops.rot import rot
+from infinicore.ops.rotg import rotg
+from infinicore.ops.rotm import rotm
+from infinicore.ops.rotmg import rotmg
 from infinicore.ops.scal import scal
 from infinicore.ops.scatter import scatter
 from infinicore.ops.sinh import sinh
@@ -247,6 +251,10 @@ __all__ = [
     "float_power",
     "flipud",
     "scatter",
+    "rot",
+    "rotg",
+    "rotm",
+    "rotmg",
     "scal",
     "logcumsumexp",
     "logical_not",

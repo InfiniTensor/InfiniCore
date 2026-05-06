@@ -90,6 +90,10 @@
 #include "ops/relu6.hpp"
 #include "ops/rms_norm.hpp"
 #include "ops/rope.hpp"
+#include "ops/rot.hpp"
+#include "ops/rotg.hpp"
+#include "ops/rotm.hpp"
+#include "ops/rotmg.hpp"
 #include "ops/scal.hpp"
 #include "ops/scatter.hpp"
 #include "ops/selu.hpp"
@@ -201,6 +205,10 @@ inline void bind(py::module &m) {
     bind_vander(m);
     bind_unfold(m);
     bind_rope(m);
+    bind_rot(m);
+    bind_rotg(m);
+    bind_rotm(m);
+    bind_rotmg(m);
     bind_floor_divide(m);
     bind_float_power(m);
     bind_flipud(m);
