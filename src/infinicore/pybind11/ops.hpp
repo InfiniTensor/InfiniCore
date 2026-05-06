@@ -16,6 +16,7 @@
 #include "ops/argwhere.hpp"
 #include "ops/asin.hpp"
 #include "ops/asinh.hpp"
+#include "ops/asum.hpp"
 #include "ops/atanh.hpp"
 #include "ops/attention.hpp"
 #include "ops/avg_pool1d.hpp"
@@ -23,6 +24,9 @@
 #include "ops/bilinear.hpp"
 #include "ops/binary_cross_entropy_with_logits.hpp"
 #include "ops/bitwise_right_shift.hpp"
+#include "ops/blas_amax.hpp"
+#include "ops/blas_amin.hpp"
+#include "ops/blas_dot.hpp"
 #include "ops/block_diag.hpp"
 #include "ops/broadcast_to.hpp"
 #include "ops/cat.hpp"
@@ -72,6 +76,7 @@
 #include "ops/mha_varlen.hpp"
 #include "ops/mul.hpp"
 #include "ops/multi_margin_loss.hpp"
+#include "ops/nrm2.hpp"
 #include "ops/pad.hpp"
 #include "ops/paged_attention.hpp"
 #include "ops/paged_attention_prefill.hpp"
@@ -127,8 +132,12 @@ inline void bind(py::module &m) {
     bind_adaptive_avg_pool1d(m);
     bind_attention(m);
     bind_asinh(m);
+    bind_asum(m);
     bind_baddbmm(m);
     bind_bilinear(m);
+    bind_blas_amax(m);
+    bind_blas_amin(m);
+    bind_blas_dot(m);
     bind_block_diag(m);
     bind_bitwise_right_shift(m);
     bind_causal_softmax(m);
@@ -153,6 +162,7 @@ inline void bind(py::module &m) {
     bind_matmul(m);
     bind_kron(m);
     bind_mul(m);
+    bind_nrm2(m);
     bind_mha_kvcache(m);
     bind_mha_varlen(m);
     bind_hardswish(m);

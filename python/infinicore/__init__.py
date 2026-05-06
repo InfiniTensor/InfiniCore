@@ -58,10 +58,14 @@ from infinicore.ops.all import all
 from infinicore.ops.argwhere import argwhere
 from infinicore.ops.asin import asin
 from infinicore.ops.asinh import asinh
+from infinicore.ops.asum import asum
 from infinicore.ops.atanh import atanh
 from infinicore.ops.attention import attention
 from infinicore.ops.baddbmm import baddbmm
 from infinicore.ops.bilinear import bilinear
+from infinicore.ops.blas_amax import blas_amax
+from infinicore.ops.blas_amin import blas_amin
+from infinicore.ops.blas_dot import blas_dot
 from infinicore.ops.binary_cross_entropy_with_logits import (
     binary_cross_entropy_with_logits,
 )
@@ -102,6 +106,7 @@ from infinicore.ops.mha_kvcache import mha_kvcache
 from infinicore.ops.mha_varlen import mha_varlen
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
+from infinicore.ops.nrm2 import nrm2
 from infinicore.ops.paged_attention import paged_attention
 from infinicore.ops.paged_attention_prefill import paged_attention_prefill
 from infinicore.ops.paged_caching import paged_caching
@@ -185,6 +190,10 @@ __all__ = [
     "add_rms_norm",
     "argwhere",
     "asin",
+    "asum",
+    "blas_amax",
+    "blas_amin",
+    "blas_dot",
     "acos",
     "addbmm",
     "floor",
@@ -210,6 +219,7 @@ __all__ = [
     "dist",
     "logdet",
     "narrow",
+    "nrm2",
     "ldexp",
     "lerp",
     "kthvalue",
