@@ -20,12 +20,14 @@
 #include "ops/atanh.hpp"
 #include "ops/attention.hpp"
 #include "ops/avg_pool1d.hpp"
+#include "ops/axpy.hpp"
 #include "ops/baddbmm.hpp"
 #include "ops/bilinear.hpp"
 #include "ops/binary_cross_entropy_with_logits.hpp"
 #include "ops/bitwise_right_shift.hpp"
 #include "ops/blas_amax.hpp"
 #include "ops/blas_amin.hpp"
+#include "ops/blas_copy.hpp"
 #include "ops/blas_dot.hpp"
 #include "ops/block_diag.hpp"
 #include "ops/broadcast_to.hpp"
@@ -88,6 +90,7 @@
 #include "ops/relu6.hpp"
 #include "ops/rms_norm.hpp"
 #include "ops/rope.hpp"
+#include "ops/scal.hpp"
 #include "ops/scatter.hpp"
 #include "ops/selu.hpp"
 #include "ops/silu.hpp"
@@ -97,6 +100,7 @@
 #include "ops/softplus.hpp"
 #include "ops/softsign.hpp"
 #include "ops/sum.hpp"
+#include "ops/swap.hpp"
 #include "ops/swiglu.hpp"
 #include "ops/take.hpp"
 #include "ops/tan.hpp"
@@ -133,10 +137,12 @@ inline void bind(py::module &m) {
     bind_attention(m);
     bind_asinh(m);
     bind_asum(m);
+    bind_axpy(m);
     bind_baddbmm(m);
     bind_bilinear(m);
     bind_blas_amax(m);
     bind_blas_amin(m);
+    bind_blas_copy(m);
     bind_blas_dot(m);
     bind_block_diag(m);
     bind_bitwise_right_shift(m);
@@ -200,6 +206,7 @@ inline void bind(py::module &m) {
     bind_flipud(m);
     bind_multi_margin_loss(m);
     bind_scatter(m);
+    bind_scal(m);
     bind_broadcast_to(m);
     bind_softplus(m);
     bind_softsign(m);
@@ -227,6 +234,7 @@ inline void bind(py::module &m) {
     bind_lerp(m);
     bind_triplet_margin_loss(m);
     bind_selu(m);
+    bind_swap(m);
     bind_sinh(m);
     bind_layer_norm(m);
     bind_topksoftmax(m);
