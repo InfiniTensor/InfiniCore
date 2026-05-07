@@ -80,6 +80,9 @@ class TestRunner:
             print(f"Testing {test_type} on {InfiniDeviceNames[device]}")
             print(f"{'='*60}")
 
+            # Keep InfiniCore's runtime aligned with the selected test device.
+            infinicore.set_device(infinicore.device(torch_device_map[device], 0))
+
             for test_case in self.test_cases:
                 try:
                     print(f"{test_case}")
