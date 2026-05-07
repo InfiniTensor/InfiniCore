@@ -1,56 +1,52 @@
-#include "../../utils.hpp"
-#include "infinicore/common/hash.hpp"
 #include "infinicore/ops/blas_dot.hpp"
-#include "infinicore/ops/common/cache.hpp"
-#include <infiniop.h>
+
+#include "../infiniop_impl.hpp"
 
 namespace infinicore::op::blas_dot_impl::infiniop {
 
-thread_local common::OpCache<size_t, infiniopBlasDotDescriptor_t> caches(
-    100, // capacity
-    [](infiniopBlasDotDescriptor_t &desc) {
-        if (desc != nullptr) {
-            INFINICORE_CHECK_ERROR(infiniopDestroyBlasDotDescriptor(desc));
-            desc = nullptr;
-        }
-    });
+INFINIOP_CACHABLE_DESCRIPTOR(Descriptor, BlasDot, 100);
 
-void calculate(Tensor result, Tensor x, Tensor y) {
-    size_t seed = hash_combine(result, x, y);
+struct PlannedMeta {
+    std::shared_ptr<Descriptor> descriptor;
+    graph::GraphTensor workspace, x, y, result;
+};
 
-    auto device_type = context::getDevice().getType();
-    auto device_index = context::getDevice().getIndex();
+void *plan(const Tensor &x, const Tensor &y, Tensor result) {
+    size_t seed = hash_combine(x, y, result);
 
-    auto &cache = caches.getCache(device_type, device_index);
+    INFINIOP_CACHABLE_DESCRIPTOR_GET_OR_CREATE(
+        Descriptor, descriptor, BlasDot,
+        seed,
+        x->desc(), y->desc(), result->desc());
 
-    auto desc_opt = cache.get(seed);
-    infiniopBlasDotDescriptor_t desc = nullptr;
+    INFINIOP_WORKSPACE_TENSOR(workspace, BlasDot, descriptor);
 
-    if (!desc_opt) {
-        INFINICORE_CHECK_ERROR(infiniopCreateBlasDotDescriptor(
-            context::getInfiniopHandle(result->device()), &desc,
-            x->desc(), y->desc(), result->desc()));
-        cache.put(seed, desc);
-    } else {
-        desc = *desc_opt;
-    }
-
-    size_t workspace_size = 0;
-    INFINICORE_CHECK_ERROR(infiniopGetBlasDotWorkspaceSize(desc, &workspace_size));
-    std::shared_ptr<Memory> workspace = context::allocateMemory(workspace_size);
-
-    INFINICORE_CHECK_ERROR(infiniopBlasDot(
-        desc, workspace->data(), workspace_size,
-        x->data(), y->data(), result->data(), context::getStream()));
+    return new PlannedMeta{
+        descriptor,
+        graph::GraphTensor(workspace),
+        graph::GraphTensor(x),
+        graph::GraphTensor(y),
+        graph::GraphTensor(result)};
 }
 
-static bool registered = []() {
-    BlasDot::dispatcher().registerDevice({Device::Type::CPU,
-                                          Device::Type::CAMBRICON,
-                                          Device::Type::METAX},
-                                         &calculate,
-                                         false);
-    return true;
-}();
+void run(void *planned_meta) {
+    auto planned = reinterpret_cast<PlannedMeta *>(planned_meta);
+
+    INFINICORE_CHECK_ERROR(infiniopBlasDot(
+        planned->descriptor->desc,
+        planned->workspace->data(),
+        planned->workspace->numel(),
+        planned->x->data(),
+        planned->y->data(),
+        planned->result->data(),
+        context::getStream()));
+}
+
+void cleanup(void **planned_meta_ptr) {
+    delete *reinterpret_cast<PlannedMeta **>(planned_meta_ptr);
+    *planned_meta_ptr = nullptr;
+}
+
+INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(BlasDot, &plan, &run, &cleanup);
 
 } // namespace infinicore::op::blas_dot_impl::infiniop

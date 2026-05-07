@@ -10,7 +10,7 @@ namespace infinicore::ops {
 
 inline void bind_axpy(py::module &m) {
     m.def("axpy_",
-          py::overload_cast<Tensor, Tensor, Tensor>(&op::axpy_),
+          &op::axpy_,
           py::arg("alpha"),
           py::arg("x"),
           py::arg("y"),

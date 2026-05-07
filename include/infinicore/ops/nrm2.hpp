@@ -1,18 +1,14 @@
 #pragma once
 
 #include "../device.hpp"
+#include "../graph/graph.hpp"
 #include "common/op.hpp"
 
 namespace infinicore::op {
 
-class Nrm2 {
-public:
-    using schema = void (*)(Tensor, Tensor);
-    static void execute(Tensor result, Tensor x);
-    static common::OpDispatcher<schema> &dispatcher();
-};
+INFINICORE_GRAPH_OP_CLASS(Nrm2, const Tensor &, Tensor);
 
-Tensor nrm2(Tensor x);
-void nrm2_(Tensor result, Tensor x);
+Tensor nrm2(const Tensor &x);
+void nrm2_(const Tensor &x, Tensor result);
 
 } // namespace infinicore::op

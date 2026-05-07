@@ -10,9 +10,9 @@ namespace infinicore::ops {
 
 inline void bind_scal(py::module &m) {
     m.def("scal_",
-          py::overload_cast<Tensor, Tensor>(&op::scal_),
-          py::arg("x"),
+          &op::scal_,
           py::arg("alpha"),
+          py::arg("x"),
           R"doc(In-place BLAS level-1 scal, updating x.)doc");
 }
 

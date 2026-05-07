@@ -1,56 +1,52 @@
-#include "../../utils.hpp"
-#include "infinicore/common/hash.hpp"
 #include "infinicore/ops/axpy.hpp"
-#include "infinicore/ops/common/cache.hpp"
-#include <infiniop.h>
+
+#include "../infiniop_impl.hpp"
 
 namespace infinicore::op::axpy_impl::infiniop {
 
-thread_local common::OpCache<size_t, infiniopAxpyDescriptor_t> caches(
-    100, // capacity
-    [](infiniopAxpyDescriptor_t &desc) {
-        if (desc != nullptr) {
-            INFINICORE_CHECK_ERROR(infiniopDestroyAxpyDescriptor(desc));
-            desc = nullptr;
-        }
-    });
+INFINIOP_CACHABLE_DESCRIPTOR(Descriptor, Axpy, 100);
 
-void calculate(Tensor alpha, Tensor x, Tensor y) {
-    size_t seed = hash_combine(alpha, x, y);
+struct PlannedMeta {
+    std::shared_ptr<Descriptor> descriptor;
+    graph::GraphTensor workspace, alpha, x, y;
+};
 
-    auto device_type = context::getDevice().getType();
-    auto device_index = context::getDevice().getIndex();
+void *plan(const Tensor &alpha, const Tensor &x, Tensor y) {
+    size_t seed = hash_combine(y, alpha, x);
 
-    auto &cache = caches.getCache(device_type, device_index);
+    INFINIOP_CACHABLE_DESCRIPTOR_GET_OR_CREATE(
+        Descriptor, descriptor, Axpy,
+        seed,
+        alpha->desc(), x->desc(), y->desc());
 
-    auto desc_opt = cache.get(seed);
-    infiniopAxpyDescriptor_t desc = nullptr;
+    INFINIOP_WORKSPACE_TENSOR(workspace, Axpy, descriptor);
 
-    if (!desc_opt) {
-        INFINICORE_CHECK_ERROR(infiniopCreateAxpyDescriptor(
-            context::getInfiniopHandle(y->device()), &desc,
-            alpha->desc(), x->desc(), y->desc()));
-        cache.put(seed, desc);
-    } else {
-        desc = *desc_opt;
-    }
-
-    size_t workspace_size = 0;
-    INFINICORE_CHECK_ERROR(infiniopGetAxpyWorkspaceSize(desc, &workspace_size));
-    std::shared_ptr<Memory> workspace = context::allocateMemory(workspace_size);
-
-    INFINICORE_CHECK_ERROR(infiniopAxpy(
-        desc, workspace->data(), workspace_size,
-        alpha->data(), x->data(), y->data(), context::getStream()));
+    return new PlannedMeta{
+        descriptor,
+        graph::GraphTensor(workspace),
+        graph::GraphTensor(alpha),
+        graph::GraphTensor(x),
+        graph::GraphTensor(y)};
 }
 
-static bool registered = []() {
-    Axpy::dispatcher().registerDevice({Device::Type::CPU,
-                                       Device::Type::CAMBRICON,
-                                       Device::Type::METAX},
-                                      &calculate,
-                                      false);
-    return true;
-}();
+void run(void *planned_meta) {
+    auto planned = reinterpret_cast<PlannedMeta *>(planned_meta);
+
+    INFINICORE_CHECK_ERROR(infiniopAxpy(
+        planned->descriptor->desc,
+        planned->workspace->data(),
+        planned->workspace->numel(),
+        planned->alpha->data(),
+        planned->x->data(),
+        planned->y->data(),
+        context::getStream()));
+}
+
+void cleanup(void **planned_meta_ptr) {
+    delete *reinterpret_cast<PlannedMeta **>(planned_meta_ptr);
+    *planned_meta_ptr = nullptr;
+}
+
+INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(Axpy, &plan, &run, &cleanup);
 
 } // namespace infinicore::op::axpy_impl::infiniop

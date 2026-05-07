@@ -4,18 +4,18 @@
 
 namespace infinicore::op {
 
-common::OpDispatcher<Scal::schema> &Scal::dispatcher() {
-    static common::OpDispatcher<Scal::schema> dispatcher_;
-    return dispatcher_;
-};
+INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(Scal);
 
-void Scal::execute(Tensor alpha, Tensor x) {
+Scal::Scal(const Tensor &alpha, Tensor x) {
     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(alpha, x);
-    infinicore::context::setDevice(x->device());
-    dispatcher().lookup(x->device().getType())(alpha, x);
+    INFINICORE_GRAPH_OP_DISPATCH(x->device().getType(), alpha, x);
 }
 
-void scal_(Tensor x, Tensor alpha) {
+void Scal::execute(const Tensor &alpha, Tensor x) {
+    INFINICORE_GRAPH_OP_RECORD_OR_RUN(Scal, alpha, x);
+}
+
+void scal_(const Tensor &alpha, Tensor x) {
     Scal::execute(alpha, x);
 }
 

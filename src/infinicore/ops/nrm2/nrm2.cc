@@ -4,25 +4,25 @@
 
 namespace infinicore::op {
 
-common::OpDispatcher<Nrm2::schema> &Nrm2::dispatcher() {
-    static common::OpDispatcher<Nrm2::schema> dispatcher_;
-    return dispatcher_;
-};
+INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(Nrm2);
 
-void Nrm2::execute(Tensor result, Tensor x) {
-    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(result, x);
-    infinicore::context::setDevice(result->device());
-    dispatcher().lookup(result->device().getType())(result, x);
+Nrm2::Nrm2(const Tensor &x, Tensor result) {
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(x, result);
+    INFINICORE_GRAPH_OP_DISPATCH(result->device().getType(), x, result);
 }
 
-Tensor nrm2(Tensor x) {
+void Nrm2::execute(const Tensor &x, Tensor result) {
+    INFINICORE_GRAPH_OP_RECORD_OR_RUN(Nrm2, x, result);
+}
+
+Tensor nrm2(const Tensor &x) {
     auto result = Tensor::empty({}, x->dtype(), x->device());
-    nrm2_(result, x);
+    nrm2_(x, result);
     return result;
 }
 
-void nrm2_(Tensor result, Tensor x) {
-    Nrm2::execute(result, x);
+void nrm2_(const Tensor &x, Tensor result) {
+    Nrm2::execute(x, result);
 }
 
 } // namespace infinicore::op

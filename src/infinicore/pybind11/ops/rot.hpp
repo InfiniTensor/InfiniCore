@@ -10,7 +10,7 @@ namespace infinicore::ops {
 
 inline void bind_rot(py::module &m) {
     m.def("rot_",
-          py::overload_cast<Tensor, Tensor, Tensor, Tensor>(&op::rot_),
+          &op::rot_,
           py::arg("x"),
           py::arg("y"),
           py::arg("c"),

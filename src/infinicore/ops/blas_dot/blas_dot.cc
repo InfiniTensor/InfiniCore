@@ -4,25 +4,25 @@
 
 namespace infinicore::op {
 
-common::OpDispatcher<BlasDot::schema> &BlasDot::dispatcher() {
-    static common::OpDispatcher<BlasDot::schema> dispatcher_;
-    return dispatcher_;
-};
+INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(BlasDot);
 
-void BlasDot::execute(Tensor result, Tensor x, Tensor y) {
-    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(result, x, y);
-    infinicore::context::setDevice(result->device());
-    dispatcher().lookup(result->device().getType())(result, x, y);
+BlasDot::BlasDot(const Tensor &x, const Tensor &y, Tensor result) {
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(x, y, result);
+    INFINICORE_GRAPH_OP_DISPATCH(result->device().getType(), x, y, result);
 }
 
-Tensor blas_dot(Tensor x, Tensor y) {
+void BlasDot::execute(const Tensor &x, const Tensor &y, Tensor result) {
+    INFINICORE_GRAPH_OP_RECORD_OR_RUN(BlasDot, x, y, result);
+}
+
+Tensor blas_dot(const Tensor &x, const Tensor &y) {
     auto result = Tensor::empty({}, x->dtype(), x->device());
-    blas_dot_(result, x, y);
+    blas_dot_(x, y, result);
     return result;
 }
 
-void blas_dot_(Tensor result, Tensor x, Tensor y) {
-    BlasDot::execute(result, x, y);
+void blas_dot_(const Tensor &x, const Tensor &y, Tensor result) {
+    BlasDot::execute(x, y, result);
 }
 
 } // namespace infinicore::op

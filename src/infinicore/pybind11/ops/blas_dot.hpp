@@ -17,9 +17,9 @@ inline void bind_blas_dot(py::module &m) {
 
     m.def("blas_dot_",
           &op::blas_dot_,
-          py::arg("result"),
           py::arg("x"),
           py::arg("y"),
+          py::arg("result"),
           R"doc(In-place BLAS level-1 dot.)doc");
 }
 

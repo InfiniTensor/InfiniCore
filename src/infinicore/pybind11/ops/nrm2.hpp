@@ -16,8 +16,8 @@ inline void bind_nrm2(py::module &m) {
 
     m.def("nrm2_",
           &op::nrm2_,
-          py::arg("result"),
           py::arg("x"),
+          py::arg("result"),
           R"doc(In-place BLAS level-1 nrm2.)doc");
 }
 

@@ -4,18 +4,18 @@
 
 namespace infinicore::op {
 
-common::OpDispatcher<Rot::schema> &Rot::dispatcher() {
-    static common::OpDispatcher<Rot::schema> dispatcher_;
-    return dispatcher_;
-};
+INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(Rot);
 
-void Rot::execute(Tensor x, Tensor y, Tensor c, Tensor s) {
+Rot::Rot(Tensor x, Tensor y, const Tensor &c, const Tensor &s) {
     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(x, y, c, s);
-    infinicore::context::setDevice(x->device());
-    dispatcher().lookup(x->device().getType())(x, y, c, s);
+    INFINICORE_GRAPH_OP_DISPATCH(x->device().getType(), x, y, c, s);
 }
 
-void rot_(Tensor x, Tensor y, Tensor c, Tensor s) {
+void Rot::execute(Tensor x, Tensor y, const Tensor &c, const Tensor &s) {
+    INFINICORE_GRAPH_OP_RECORD_OR_RUN(Rot, x, y, c, s);
+}
+
+void rot_(Tensor x, Tensor y, const Tensor &c, const Tensor &s) {
     Rot::execute(x, y, c, s);
 }
 

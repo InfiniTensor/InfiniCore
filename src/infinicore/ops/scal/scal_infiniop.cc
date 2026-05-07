@@ -1,56 +1,50 @@
-#include "../../utils.hpp"
-#include "infinicore/common/hash.hpp"
-#include "infinicore/ops/common/cache.hpp"
 #include "infinicore/ops/scal.hpp"
-#include <infiniop.h>
+
+#include "../infiniop_impl.hpp"
 
 namespace infinicore::op::scal_impl::infiniop {
 
-thread_local common::OpCache<size_t, infiniopScalDescriptor_t> caches(
-    100, // capacity
-    [](infiniopScalDescriptor_t &desc) {
-        if (desc != nullptr) {
-            INFINICORE_CHECK_ERROR(infiniopDestroyScalDescriptor(desc));
-            desc = nullptr;
-        }
-    });
+INFINIOP_CACHABLE_DESCRIPTOR(Descriptor, Scal, 100);
 
-void calculate(Tensor alpha, Tensor x) {
+struct PlannedMeta {
+    std::shared_ptr<Descriptor> descriptor;
+    graph::GraphTensor workspace, alpha, x;
+};
+
+void *plan(const Tensor &alpha, Tensor x) {
     size_t seed = hash_combine(alpha, x);
 
-    auto device_type = context::getDevice().getType();
-    auto device_index = context::getDevice().getIndex();
+    INFINIOP_CACHABLE_DESCRIPTOR_GET_OR_CREATE(
+        Descriptor, descriptor, Scal,
+        seed,
+        alpha->desc(), x->desc());
 
-    auto &cache = caches.getCache(device_type, device_index);
+    INFINIOP_WORKSPACE_TENSOR(workspace, Scal, descriptor);
 
-    auto desc_opt = cache.get(seed);
-    infiniopScalDescriptor_t desc = nullptr;
-
-    if (!desc_opt) {
-        INFINICORE_CHECK_ERROR(infiniopCreateScalDescriptor(
-            context::getInfiniopHandle(x->device()), &desc,
-            alpha->desc(), x->desc()));
-        cache.put(seed, desc);
-    } else {
-        desc = *desc_opt;
-    }
-
-    size_t workspace_size = 0;
-    INFINICORE_CHECK_ERROR(infiniopGetScalWorkspaceSize(desc, &workspace_size));
-    std::shared_ptr<Memory> workspace = context::allocateMemory(workspace_size);
-
-    INFINICORE_CHECK_ERROR(infiniopScal(
-        desc, workspace->data(), workspace_size,
-        alpha->data(), x->data(), context::getStream()));
+    return new PlannedMeta{
+        descriptor,
+        graph::GraphTensor(workspace),
+        graph::GraphTensor(alpha),
+        graph::GraphTensor(x)};
 }
 
-static bool registered = []() {
-    Scal::dispatcher().registerDevice({Device::Type::CPU,
-                                       Device::Type::CAMBRICON,
-                                       Device::Type::METAX},
-                                      &calculate,
-                                      false);
-    return true;
-}();
+void run(void *planned_meta) {
+    auto planned = reinterpret_cast<PlannedMeta *>(planned_meta);
+
+    INFINICORE_CHECK_ERROR(infiniopScal(
+        planned->descriptor->desc,
+        planned->workspace->data(),
+        planned->workspace->numel(),
+        planned->alpha->data(),
+        planned->x->data(),
+        context::getStream()));
+}
+
+void cleanup(void **planned_meta_ptr) {
+    delete *reinterpret_cast<PlannedMeta **>(planned_meta_ptr);
+    *planned_meta_ptr = nullptr;
+}
+
+INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(Scal, &plan, &run, &cleanup);
 
 } // namespace infinicore::op::scal_impl::infiniop
