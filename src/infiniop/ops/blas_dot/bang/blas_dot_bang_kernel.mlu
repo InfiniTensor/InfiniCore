@@ -1,56 +1,101 @@
 #include "../../../devices/bang/common_bang.h"
 #include "blas_dot_bang.h"
 
+#include <type_traits>
+
 __nram__ char nram_buffer[NRAM_MAX_SIZE];
 
 template <typename Tdata>
+__mlu_device__ void blasDotToCompute(float *dst, const Tdata *src, int size) {
+    if constexpr (std::is_same_v<Tdata, half>) {
+        __bang_half2float(dst, src, size);
+    } else if constexpr (std::is_same_v<Tdata, bfloat16_t>) {
+        __bang_bfloat162float(dst, src, size);
+    } else {
+        __memcpy(dst, src, size * sizeof(float), NRAM2NRAM);
+    }
+}
+
+template <typename Tdata>
+__mlu_device__ float blasDotToCompute(Tdata value) {
+    if constexpr (std::is_same_v<Tdata, half>) {
+        return __half2float(value);
+    } else if constexpr (std::is_same_v<Tdata, bfloat16_t>) {
+        return __bfloat162float(value);
+    } else {
+        return static_cast<float>(value);
+    }
+}
+
+template <typename Tdata>
+__mlu_device__ void blasDotStoreResult(Tdata *result, Tdata *nram_result, float *nram_compute, float value) {
+    nram_compute[0] = value;
+    if constexpr (std::is_same_v<Tdata, half>) {
+        __bang_float2half(nram_result, nram_compute, 1);
+        result[0] = nram_result[0];
+    } else if constexpr (std::is_same_v<Tdata, bfloat16_t>) {
+        __bang_float2bfloat16(nram_result, nram_compute, 1);
+        result[0] = nram_result[0];
+    } else {
+        result[0] = nram_compute[0];
+    }
+}
+
+template <typename Tdata>
 __mlu_global__ void blasDotKernelContiguous(
-    size_t n,
+    int n,
     const Tdata *x,
     const Tdata *y,
     Tdata *result) {
-    __mlu_shared__ Tdata shared_partial_sum[4];
 
-    Tdata *nram_align = (Tdata *)(((size_t)nram_buffer + ALIGN_SIZE - 1) & ~(ALIGN_SIZE - 1));
+    __mlu_shared__ float shared_partial_sum[4];
 
-    size_t nram_usable = NRAM_MAX_SIZE - ((char *)nram_align - nram_buffer);
-    size_t max_chunk_elements = nram_usable / (2 * sizeof(Tdata));
+    char *nram_aligned = (char *)(((size_t)nram_buffer + ALIGN_SIZE - 1) & ~(ALIGN_SIZE - 1));
 
-    int align_elements = ALIGN_SIZE / sizeof(Tdata);
+    size_t nram_usable = NRAM_MAX_SIZE - (nram_aligned - nram_buffer);
+    size_t max_chunk_elements = nram_usable / (2 * sizeof(Tdata) + 2 * sizeof(float));
+
+    size_t align_elements = ALIGN_SIZE / sizeof(Tdata);
     if (align_elements == 0) {
         align_elements = 1;
     }
-    max_chunk_elements = (max_chunk_elements / align_elements) * align_elements;
+    int chunk_size = (int)((max_chunk_elements / align_elements) * align_elements);
 
-    Tdata *nram_x = nram_align;
-    Tdata *nram_y = nram_align + max_chunk_elements;
+    Tdata *nram_x = (Tdata *)nram_aligned;
+    Tdata *nram_y = nram_x + chunk_size;
+    float *nram_compute_x = (float *)(nram_y + chunk_size);
+    float *nram_compute_y = nram_compute_x + chunk_size;
 
     int elements_per_core = n / taskDim;
     int remain = n % taskDim;
     int core_elements = elements_per_core + (taskId < remain ? 1 : 0);
     int core_offset = taskId < remain ? taskId * core_elements : taskId * elements_per_core + remain;
 
-    int chunks = core_elements / max_chunk_elements;
-    int chunk_rem = core_elements % max_chunk_elements;
+    int chunks = core_elements / chunk_size;
+    int chunk_rem = core_elements % chunk_size;
 
-    Tdata partial_sum = 0;
+    float partial_sum = 0.0f;
 
     for (int c = 0; c < chunks; c++) {
-        size_t current_offset = core_offset + c * max_chunk_elements;
-        __memcpy(nram_x, x + current_offset, max_chunk_elements * sizeof(Tdata), GDRAM2NRAM);
-        __memcpy(nram_y, y + current_offset, max_chunk_elements * sizeof(Tdata), GDRAM2NRAM);
+        int current_offset = core_offset + c * chunk_size;
+        __memcpy(nram_x, x + current_offset, chunk_size * sizeof(Tdata), GDRAM2NRAM);
+        __memcpy(nram_y, y + current_offset, chunk_size * sizeof(Tdata), GDRAM2NRAM);
 
-        __bang_mul(nram_x, nram_x, nram_y, max_chunk_elements);
-        partial_sum += __bang_sum(nram_x, max_chunk_elements);
+        blasDotToCompute(nram_compute_x, nram_x, chunk_size);
+        blasDotToCompute(nram_compute_y, nram_y, chunk_size);
+        __bang_mul(nram_compute_x, nram_compute_x, nram_compute_y, chunk_size);
+        partial_sum += __bang_sum(nram_compute_x, chunk_size);
     }
 
     if (chunk_rem > 0) {
-        size_t current_offset = core_offset + chunks * max_chunk_elements;
+        int current_offset = core_offset + chunks * chunk_size;
         __memcpy(nram_x, x + current_offset, chunk_rem * sizeof(Tdata), GDRAM2NRAM);
         __memcpy(nram_y, y + current_offset, chunk_rem * sizeof(Tdata), GDRAM2NRAM);
 
-        __bang_mul(nram_x, nram_x, nram_y, chunk_rem);
-        partial_sum += __bang_sum(nram_x, chunk_rem);
+        blasDotToCompute(nram_compute_x, nram_x, chunk_rem);
+        blasDotToCompute(nram_compute_y, nram_y, chunk_rem);
+        __bang_mul(nram_compute_x, nram_compute_x, nram_compute_y, chunk_rem);
+        partial_sum += __bang_sum(nram_compute_x, chunk_rem);
     }
 
     shared_partial_sum[coreId] = partial_sum;
@@ -58,37 +103,42 @@ __mlu_global__ void blasDotKernelContiguous(
     __sync_cluster();
 
     if (coreId == 0) {
-        Tdata cluster_sum = 0;
+        float cluster_sum = 0.0f;
 
         for (int i = 0; i < coreDim; i++) {
             cluster_sum += shared_partial_sum[i];
         }
 
-        result[0] = cluster_sum;
+        blasDotStoreResult(result, nram_x, nram_compute_x, cluster_sum);
     }
 }
 
 template <typename Tdata>
 __mlu_global__ void blasDotKernelStrided(
-    size_t n,
+    int n,
     const Tdata *x,
-    ptrdiff_t incx,
+    int incx,
     const Tdata *y,
-    ptrdiff_t incy,
+    int incy,
     Tdata *result) {
-    __mlu_shared__ Tdata shared_partial_sum[4];
+    __mlu_shared__ float shared_partial_sum[4];
 
-    size_t elements_per_core = n / taskDim;
-    size_t remain = n % taskDim;
-    size_t core_elements = elements_per_core + (taskId < remain ? 1 : 0);
-    size_t start_idx = taskId < remain ? taskId * core_elements : taskId * elements_per_core + remain;
+    char *nram_aligned = (char *)(((size_t)nram_buffer + ALIGN_SIZE - 1) & ~(ALIGN_SIZE - 1));
 
-    Tdata partial_sum = 0;
-    ptrdiff_t x_offset = static_cast<ptrdiff_t>(start_idx) * incx;
-    ptrdiff_t y_offset = static_cast<ptrdiff_t>(start_idx) * incy;
+    float *nram_compute = (float *)nram_aligned;
+    Tdata *nram_result = (Tdata *)(nram_compute + 1);
 
-    for (size_t i = 0; i < core_elements; ++i) {
-        partial_sum += x[x_offset] * y[y_offset];
+    int elements_per_core = n / taskDim;
+    int remain = n % taskDim;
+    int core_elements = elements_per_core + (taskId < remain ? 1 : 0);
+    int start_idx = taskId < remain ? taskId * core_elements : taskId * elements_per_core + remain;
+
+    float partial_sum = 0.0f;
+    int x_offset = start_idx * incx;
+    int y_offset = start_idx * incy;
+
+    for (int i = 0; i < core_elements; ++i) {
+        partial_sum += blasDotToCompute(x[x_offset]) * blasDotToCompute(y[y_offset]);
         x_offset += incx;
         y_offset += incy;
     }
@@ -98,10 +148,10 @@ __mlu_global__ void blasDotKernelStrided(
     __sync_cluster();
 
     if (coreId == 0) {
-        Tdata cluster_sum = 0;
+        float cluster_sum = 0.0f;
         for (int i = 0; i < coreDim; ++i) {
             cluster_sum += shared_partial_sum[i];
         }
-        result[0] = cluster_sum;
+        blasDotStoreResult(result, nram_result, nram_compute, cluster_sum);
     }
 }

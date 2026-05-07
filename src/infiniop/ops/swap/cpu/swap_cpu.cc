@@ -31,14 +31,13 @@ infiniStatus_t calculateSwap(
     Tdata *x,
     Tdata *y) {
 
-    const ptrdiff_t size = info.n;
+    const size_t n = info.n;
     const ptrdiff_t incx = info.incx;
     const ptrdiff_t incy = info.incy;
 
-#pragma omp parallel for if (size > 1024)
-    for (ptrdiff_t i = 0; i < size; ++i) {
-        const ptrdiff_t x_idx = i * incx;
-        const ptrdiff_t y_idx = i * incy;
+    for (size_t i = 0; i < n; ++i) {
+        const ptrdiff_t x_idx = utils::cast<ptrdiff_t>(i) * incx;
+        const ptrdiff_t y_idx = utils::cast<ptrdiff_t>(i) * incy;
         Tdata temp = x[x_idx];
         x[x_idx] = y[y_idx];
         y[y_idx] = temp;

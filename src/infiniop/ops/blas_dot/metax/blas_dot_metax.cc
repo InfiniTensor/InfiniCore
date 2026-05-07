@@ -44,9 +44,9 @@ infiniStatus_t Descriptor::calculate(
     (void)workspace;
     (void)workspace_size;
 
-    const size_t size = _info.n;
-    const ptrdiff_t incx = _info.incx;
-    const ptrdiff_t incy = _info.incy;
+    const int n = utils::cast<int>(_info.n);
+    const int incx = utils::cast<int>(_info.incx);
+    const int incy = utils::cast<int>(_info.incy);
     const infiniDtype_t data_type = _info.data_type;
 
     hpccDataType x_type, y_type, result_type;
@@ -82,7 +82,7 @@ infiniStatus_t Descriptor::calculate(
 
             CHECK_MCBLAS(hcblasDotEx(
                 handle,
-                size,
+                n,
                 x,
                 x_type,
                 incx,

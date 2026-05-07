@@ -33,17 +33,17 @@ infiniStatus_t calculateBlasDot(
     const Tdata *y,
     Tdata *result) {
 
-    const ptrdiff_t n = info.n;
+    const size_t n = info.n;
     const ptrdiff_t incx = info.incx;
     const ptrdiff_t incy = info.incy;
 
-    ptrdiff_t ix = (incx < 0) ? (1 - n) * incx : 0;
-    ptrdiff_t iy = (incy < 0) ? (1 - n) * incy : 0;
+    ptrdiff_t ix = (incx < 0) ? (1 - utils::cast<ptrdiff_t>(n)) * incx : 0;
+    ptrdiff_t iy = (incy < 0) ? (1 - utils::cast<ptrdiff_t>(n)) * incy : 0;
 
     if constexpr (std::is_same<Tdata, fp16_t>::value || std::is_same<Tdata, bf16_t>::value) {
         float total = 0.0f;
 
-        for (ptrdiff_t i = 0; i < n; ++i) {
+        for (size_t i = 0; i < n; ++i) {
             total += utils::cast<float>(x[ix]) * utils::cast<float>(y[iy]);
             ix += incx;
             iy += incy;
@@ -53,7 +53,7 @@ infiniStatus_t calculateBlasDot(
     } else {
         Tdata total = utils::cast<Tdata>(0);
 
-        for (ptrdiff_t i = 0; i < n; ++i) {
+        for (size_t i = 0; i < n; ++i) {
             total += x[ix] * y[iy];
             ix += incx;
             iy += incy;

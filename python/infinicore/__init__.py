@@ -64,14 +64,14 @@ from infinicore.ops.attention import attention
 from infinicore.ops.axpy import axpy
 from infinicore.ops.baddbmm import baddbmm
 from infinicore.ops.bilinear import bilinear
-from infinicore.ops.blas_amax import blas_amax
-from infinicore.ops.blas_amin import blas_amin
-from infinicore.ops.blas_copy import blas_copy
-from infinicore.ops.blas_dot import blas_dot
 from infinicore.ops.binary_cross_entropy_with_logits import (
     binary_cross_entropy_with_logits,
 )
 from infinicore.ops.bitwise_right_shift import bitwise_right_shift
+from infinicore.ops.blas_amax import blas_amax
+from infinicore.ops.blas_amin import blas_amin
+from infinicore.ops.blas_copy import blas_copy
+from infinicore.ops.blas_dot import blas_dot
 from infinicore.ops.block_diag import block_diag
 from infinicore.ops.broadcast_to import broadcast_to
 from infinicore.ops.cat import cat
@@ -121,9 +121,9 @@ from infinicore.ops.rotmg import rotmg
 from infinicore.ops.scal import scal
 from infinicore.ops.scatter import scatter
 from infinicore.ops.sinh import sinh
-from infinicore.ops.swap import swap
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.sum import sum
+from infinicore.ops.swap import swap
 from infinicore.ops.take import take
 from infinicore.ops.tan import tan
 from infinicore.ops.topk import topk

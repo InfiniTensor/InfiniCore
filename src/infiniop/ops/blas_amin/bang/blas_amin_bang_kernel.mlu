@@ -5,43 +5,45 @@ __nram__ char nram_buffer[NRAM_MAX_SIZE];
 
 template <typename Tdata>
 __mlu_global__ void blasAminKernelContiguous(
-    size_t n,
+    int n,
     const Tdata *x,
     int *result) {
 
     __mlu_shared__ int shared_min_index[4];
     __mlu_shared__ Tdata shared_min_value[4];
 
-    Tdata *nram_x = (Tdata *)(((size_t)nram_buffer + ALIGN_SIZE - 1) & ~(ALIGN_SIZE - 1));
+    char *nram_aligned = (char *)(((size_t)nram_buffer + ALIGN_SIZE - 1) & ~(ALIGN_SIZE - 1));
 
-    size_t nram_usable = NRAM_MAX_SIZE - ((char *)nram_x - nram_buffer);
+    size_t nram_usable = NRAM_MAX_SIZE - (nram_aligned - nram_buffer);
     size_t max_chunk_elements = nram_usable / sizeof(Tdata);
 
-    int align_elements = ALIGN_SIZE / sizeof(Tdata);
+    size_t align_elements = ALIGN_SIZE / sizeof(Tdata);
     if (align_elements == 0) {
         align_elements = 1;
     }
-    max_chunk_elements = (max_chunk_elements / align_elements) * align_elements;
+    int chunk_size = (int)((max_chunk_elements / align_elements) * align_elements);
+
+    Tdata *nram_x = (Tdata *)nram_aligned;
 
     int elements_per_core = n / taskDim;
     int remain = n % taskDim;
     int core_elements = elements_per_core + (taskId < remain ? 1 : 0);
     int core_offset = taskId < remain ? taskId * core_elements : taskId * elements_per_core + remain;
 
-    int chunks = core_elements / max_chunk_elements;
-    int chunk_rem = core_elements % max_chunk_elements;
+    int chunks = core_elements / chunk_size;
+    int chunk_rem = core_elements % chunk_size;
 
     int min_index = -1;
     Tdata min_value = static_cast<Tdata>(0);
     bool initialized = false;
 
     for (int c = 0; c < chunks; c++) {
-        size_t current_offset = core_offset + c * max_chunk_elements;
-        __memcpy(nram_x, x + current_offset, max_chunk_elements * sizeof(Tdata), GDRAM2NRAM);
+        int current_offset = core_offset + c * chunk_size;
+        __memcpy(nram_x, x + current_offset, chunk_size * sizeof(Tdata), GDRAM2NRAM);
 
-        __bang_abs(nram_x, nram_x, max_chunk_elements);
+        __bang_abs(nram_x, nram_x, chunk_size);
 
-        for (int i = 0; i < max_chunk_elements; i++) {
+        for (int i = 0; i < chunk_size; i++) {
             Tdata abs_val = nram_x[i];
             if (!initialized || abs_val < min_value) {
                 min_value = abs_val;
@@ -52,7 +54,7 @@ __mlu_global__ void blasAminKernelContiguous(
     }
 
     if (chunk_rem > 0) {
-        size_t current_offset = core_offset + chunks * max_chunk_elements;
+        int current_offset = core_offset + chunks * chunk_size;
 
         __memcpy(nram_x, x + current_offset, chunk_rem * sizeof(Tdata), GDRAM2NRAM);
 
@@ -87,9 +89,9 @@ __mlu_global__ void blasAminKernelContiguous(
 
 template <typename Tdata>
 __mlu_global__ void blasAminKernelStrided(
-    size_t n,
+    int n,
     const Tdata *x,
-    size_t incx,
+    int incx,
     int *result) {
 
     __mlu_shared__ int shared_min_index[4];
@@ -105,7 +107,7 @@ __mlu_global__ void blasAminKernelStrided(
     bool initialized = false;
 
     for (int i = start_idx; i < start_idx + actual_tasks; ++i) {
-        size_t offset = i * incx;
+        int offset = i * incx;
         Tdata abs_val = x[offset] > static_cast<Tdata>(0) ? x[offset] : -x[offset];
 
         if (!initialized || abs_val < min_value) {

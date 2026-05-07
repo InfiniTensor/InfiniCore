@@ -33,6 +33,9 @@ infiniStatus_t calculateScal(
     Tdata *x,
     cnrtQueue_t queue) {
 
+    const int n = utils::cast<int>(info.n);
+    const int incx = utils::cast<int>(info.incx);
+
     cnrtDim3_t k_dim;
     cnrtFunctionType_t k_type;
 
@@ -41,17 +44,17 @@ infiniStatus_t calculateScal(
     k_dim.z = 1;
     k_type = cnrtFuncTypeUnion1;
 
-    if (info.incx == 1) {
+    if (incx == 1) {
         scalKernelContiguous<<<k_dim, k_type, queue>>>(
-            info.n,
+            n,
             alpha,
             x);
     } else {
         scalKernelStrided<<<k_dim, k_type, queue>>>(
-            info.n,
+            n,
             alpha,
             x,
-            info.incx);
+            incx);
     }
 
     cnrtQueueSync(queue);

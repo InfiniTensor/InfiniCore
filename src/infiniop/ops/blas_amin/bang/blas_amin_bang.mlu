@@ -34,8 +34,8 @@ infiniStatus_t calculateBlasAmin(
     int *result,
     cnrtQueue_t queue) {
 
-    const size_t size = info.n;
-    const ptrdiff_t incx = info.incx;
+    const int n = utils::cast<int>(info.n);
+    const int incx = utils::cast<int>(info.incx);
 
     cnrtDim3_t k_dim;
     cnrtFunctionType_t k_type;
@@ -47,12 +47,12 @@ infiniStatus_t calculateBlasAmin(
 
     if (incx == 1) {
         blasAminKernelContiguous<<<k_dim, k_type, queue>>>(
-            size,
+            n,
             x,
             result);
     } else {
         blasAminKernelStrided<<<k_dim, k_type, queue>>>(
-            size,
+            n,
             x,
             incx,
             result);

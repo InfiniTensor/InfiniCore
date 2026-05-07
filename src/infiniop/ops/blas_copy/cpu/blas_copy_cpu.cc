@@ -31,11 +31,11 @@ infiniStatus_t calculateBlasCopy(
     const Tdata *x,
     Tdata *y) {
 
-    const ptrdiff_t size = info.n;
+    const size_t n = info.n;
 
-    for (ptrdiff_t i = 0; i < size; ++i) {
-        size_t x_idx = i * info.incx;
-        size_t y_idx = i * info.incy;
+    for (size_t i = 0; i < n; ++i) {
+        ptrdiff_t x_idx = utils::cast<ptrdiff_t>(i) * info.incx;
+        ptrdiff_t y_idx = utils::cast<ptrdiff_t>(i) * info.incy;
         y[y_idx] = x[x_idx];
     }
 

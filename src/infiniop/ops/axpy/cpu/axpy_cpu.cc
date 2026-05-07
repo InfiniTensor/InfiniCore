@@ -33,21 +33,25 @@ infiniStatus_t calculateAxpy(
     const Tdata *x,
     Tdata *y) {
 
-    const ptrdiff_t size = info.n;
+    const size_t n = info.n;
     const ptrdiff_t incx = info.incx;
     const ptrdiff_t incy = info.incy;
 
     if constexpr (std::is_same<Tdata, fp16_t>::value || std::is_same<Tdata, bf16_t>::value) {
         const float alpha_f = utils::cast<float>(alpha[0]);
-        for (ptrdiff_t i = 0; i < size; ++i) {
-            const float x_f = utils::cast<float>(x[i * incx]);
-            const float y_f = utils::cast<float>(y[i * incy]);
-            y[i * incy] = utils::cast<Tdata>(alpha_f * x_f + y_f);
+        for (size_t i = 0; i < n; ++i) {
+            const ptrdiff_t x_idx = utils::cast<ptrdiff_t>(i) * incx;
+            const ptrdiff_t y_idx = utils::cast<ptrdiff_t>(i) * incy;
+            const float x_f = utils::cast<float>(x[x_idx]);
+            const float y_f = utils::cast<float>(y[y_idx]);
+            y[y_idx] = utils::cast<Tdata>(alpha_f * x_f + y_f);
         }
     } else {
         const Tdata alpha_v = alpha[0];
-        for (ptrdiff_t i = 0; i < size; ++i) {
-            y[i * incy] = alpha_v * x[i * incx] + y[i * incy];
+        for (size_t i = 0; i < n; ++i) {
+            const ptrdiff_t x_idx = utils::cast<ptrdiff_t>(i) * incx;
+            const ptrdiff_t y_idx = utils::cast<ptrdiff_t>(i) * incy;
+            y[y_idx] = alpha_v * x[x_idx] + y[y_idx];
         }
     }
 

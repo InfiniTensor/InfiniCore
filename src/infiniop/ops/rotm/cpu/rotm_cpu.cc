@@ -44,11 +44,11 @@ infiniStatus_t calculateRotm(
         return INFINI_STATUS_SUCCESS;
     }
 
-    const ptrdiff_t size = static_cast<ptrdiff_t>(info.n);
+    const size_t n = info.n;
     const ptrdiff_t incx = info.incx;
     const ptrdiff_t incy = info.incy;
-    const ptrdiff_t kx = incx >= 0 ? 0 : (size - 1) * (-incx);
-    const ptrdiff_t ky = incy >= 0 ? 0 : (size - 1) * (-incy);
+    const ptrdiff_t kx = incx >= 0 ? 0 : utils::cast<ptrdiff_t>(n - 1) * (-incx);
+    const ptrdiff_t ky = incy >= 0 ? 0 : utils::cast<ptrdiff_t>(n - 1) * (-incy);
 
     Tcompute sh11 = zero;
     Tcompute sh12 = zero;
@@ -56,7 +56,7 @@ infiniStatus_t calculateRotm(
     Tcompute sh22 = zero;
 
     if (incx == incy && incx > 0) {
-        const ptrdiff_t nsteps = size * incx;
+        const ptrdiff_t nsteps = utils::cast<ptrdiff_t>(n) * incx;
         if (sflag < zero) {
             sh11 = utils::cast<Tcompute>(param[1]);
             sh12 = utils::cast<Tcompute>(param[3]);
@@ -96,7 +96,7 @@ infiniStatus_t calculateRotm(
             sh12 = utils::cast<Tcompute>(param[3]);
             sh21 = utils::cast<Tcompute>(param[2]);
             sh22 = utils::cast<Tcompute>(param[4]);
-            for (ptrdiff_t i = 0; i < size; ++i) {
+            for (size_t i = 0; i < n; ++i) {
                 const Tcompute w = utils::cast<Tcompute>(x[ix]);
                 const Tcompute z = utils::cast<Tcompute>(y[iy]);
                 x[ix] = utils::cast<Tdata>(w * sh11 + z * sh12);
@@ -107,7 +107,7 @@ infiniStatus_t calculateRotm(
         } else if (sflag == zero) {
             sh12 = utils::cast<Tcompute>(param[3]);
             sh21 = utils::cast<Tcompute>(param[2]);
-            for (ptrdiff_t i = 0; i < size; ++i) {
+            for (size_t i = 0; i < n; ++i) {
                 const Tcompute w = utils::cast<Tcompute>(x[ix]);
                 const Tcompute z = utils::cast<Tcompute>(y[iy]);
                 x[ix] = utils::cast<Tdata>(w + z * sh12);
@@ -118,7 +118,7 @@ infiniStatus_t calculateRotm(
         } else {
             sh11 = utils::cast<Tcompute>(param[1]);
             sh22 = utils::cast<Tcompute>(param[4]);
-            for (ptrdiff_t i = 0; i < size; ++i) {
+            for (size_t i = 0; i < n; ++i) {
                 const Tcompute w = utils::cast<Tcompute>(x[ix]);
                 const Tcompute z = utils::cast<Tcompute>(y[iy]);
                 x[ix] = utils::cast<Tdata>(w * sh11 + z);

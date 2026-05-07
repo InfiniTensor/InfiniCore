@@ -4,27 +4,27 @@ __nram__ char nram_buffer[NRAM_MAX_SIZE];
 
 template <typename Tdata>
 __mlu_global__ void rotKernelContiguous(
-    size_t n,
+    int n,
     Tdata *x,
     Tdata *y,
     const Tdata *c,
     const Tdata *s) {
 
-    Tdata *nram_align = (Tdata *)(((size_t)nram_buffer + ALIGN_SIZE - 1) & ~(ALIGN_SIZE - 1));
+    char *nram_aligned = (char *)(((size_t)nram_buffer + ALIGN_SIZE - 1) & ~(ALIGN_SIZE - 1));
 
-    size_t nram_usable = NRAM_MAX_SIZE - ((char *)nram_align - nram_buffer);
+    size_t nram_usable = NRAM_MAX_SIZE - (nram_aligned - nram_buffer);
     size_t max_chunk_elements = nram_usable / (4 * sizeof(Tdata));
 
-    int align_elements = ALIGN_SIZE / sizeof(Tdata);
+    size_t align_elements = ALIGN_SIZE / sizeof(Tdata);
     if (align_elements == 0) {
         align_elements = 1;
     }
-    max_chunk_elements = (max_chunk_elements / align_elements) * align_elements;
+    int chunk_size = (int)((max_chunk_elements / align_elements) * align_elements);
 
-    Tdata *nram_x = nram_align;
-    Tdata *nram_y = nram_align + max_chunk_elements;
-    Tdata *nram_x_out = nram_align + 2 * max_chunk_elements;
-    Tdata *nram_y_out = nram_align + 3 * max_chunk_elements;
+    Tdata *nram_x = (Tdata *)nram_aligned;
+    Tdata *nram_y = nram_x + chunk_size;
+    Tdata *nram_x_out = nram_y + chunk_size;
+    Tdata *nram_y_out = nram_x_out + chunk_size;
 
     int elements_per_core = n / taskDim;
     int remain = n % taskDim;
@@ -35,29 +35,29 @@ __mlu_global__ void rotKernelContiguous(
         return;
     }
 
-    int chunks = core_elements / max_chunk_elements;
-    int chunk_rem = core_elements % max_chunk_elements;
+    int chunks = core_elements / chunk_size;
+    int chunk_rem = core_elements % chunk_size;
 
     for (int ck = 0; ck < chunks; ck++) {
-        size_t current_offset = core_offset + ck * max_chunk_elements;
-        __memcpy(nram_x, x + current_offset, max_chunk_elements * sizeof(Tdata), GDRAM2NRAM);
-        __memcpy(nram_y, y + current_offset, max_chunk_elements * sizeof(Tdata), GDRAM2NRAM);
+        int current_offset = core_offset + ck * chunk_size;
+        __memcpy(nram_x, x + current_offset, chunk_size * sizeof(Tdata), GDRAM2NRAM);
+        __memcpy(nram_y, y + current_offset, chunk_size * sizeof(Tdata), GDRAM2NRAM);
 
-        __bang_mul_scalar(nram_x_out, nram_x, c[0], max_chunk_elements);
-        __bang_mul_scalar(nram_y_out, nram_y, s[0], max_chunk_elements);
-        __bang_add(nram_x_out, nram_x_out, nram_y_out, max_chunk_elements);
+        __bang_mul_scalar(nram_x_out, nram_x, c[0], chunk_size);
+        __bang_mul_scalar(nram_y_out, nram_y, s[0], chunk_size);
+        __bang_add(nram_x_out, nram_x_out, nram_y_out, chunk_size);
 
-        __memcpy(x + current_offset, nram_x_out, max_chunk_elements * sizeof(Tdata), NRAM2GDRAM);
+        __memcpy(x + current_offset, nram_x_out, chunk_size * sizeof(Tdata), NRAM2GDRAM);
 
-        __bang_mul_scalar(nram_y_out, nram_y, c[0], max_chunk_elements);
-        __bang_mul_scalar(nram_x_out, nram_x, s[0], max_chunk_elements);
-        __bang_sub(nram_y_out, nram_y_out, nram_x_out, max_chunk_elements);
+        __bang_mul_scalar(nram_y_out, nram_y, c[0], chunk_size);
+        __bang_mul_scalar(nram_x_out, nram_x, s[0], chunk_size);
+        __bang_sub(nram_y_out, nram_y_out, nram_x_out, chunk_size);
 
-        __memcpy(y + current_offset, nram_y_out, max_chunk_elements * sizeof(Tdata), NRAM2GDRAM);
+        __memcpy(y + current_offset, nram_y_out, chunk_size * sizeof(Tdata), NRAM2GDRAM);
     }
 
     if (chunk_rem > 0) {
-        size_t current_offset = core_offset + chunks * max_chunk_elements;
+        int current_offset = core_offset + chunks * chunk_size;
         __memcpy(nram_x, x + current_offset, chunk_rem * sizeof(Tdata), GDRAM2NRAM);
         __memcpy(nram_y, y + current_offset, chunk_rem * sizeof(Tdata), GDRAM2NRAM);
 
@@ -77,11 +77,11 @@ __mlu_global__ void rotKernelContiguous(
 
 template <typename Tdata>
 __mlu_global__ void rotKernelStrided(
-    size_t n,
+    int n,
     Tdata *x,
-    size_t incx,
+    int incx,
     Tdata *y,
-    size_t incy,
+    int incy,
     const Tdata *c,
     const Tdata *s) {
 
@@ -91,8 +91,8 @@ __mlu_global__ void rotKernelStrided(
     int start_idx = taskId < remain ? taskId * actual_tasks : taskId * elements_per_core + remain;
 
     for (int i = start_idx; i < start_idx + actual_tasks; ++i) {
-        size_t x_idx = i * incx;
-        size_t y_idx = i * incy;
+        int x_idx = i * incx;
+        int y_idx = i * incy;
         Tdata x_val = x[x_idx];
         Tdata y_val = y[y_idx];
 

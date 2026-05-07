@@ -32,20 +32,21 @@ infiniStatus_t calculateBlasAmax(
     const Tdata *x,
     int *result) {
 
-    const ptrdiff_t size = info.n;
+    const size_t n = info.n;
     const ptrdiff_t incx = info.incx;
 
-    if (size < 1 || incx == 0) {
+    if (n < 1 || incx == 0) {
         result[0] = 0;
         return INFINI_STATUS_SUCCESS;
     }
 
-    int max_index = 0;
+    size_t max_index = 0;
     if constexpr (std::is_same<Tdata, fp16_t>::value || std::is_same<Tdata, bf16_t>::value) {
         float max_value = std::abs(utils::cast<float>(x[0]));
 
-        for (ptrdiff_t i = 1; i < size; ++i) {
-            float current_value = std::abs(utils::cast<float>(x[i * incx]));
+        for (size_t i = 1; i < n; ++i) {
+            const ptrdiff_t idx = utils::cast<ptrdiff_t>(i) * incx;
+            float current_value = std::abs(utils::cast<float>(x[idx]));
             if (current_value > max_value) {
                 max_value = current_value;
                 max_index = i;
@@ -54,8 +55,9 @@ infiniStatus_t calculateBlasAmax(
     } else {
         Tdata max_value = std::abs(x[0]);
 
-        for (ptrdiff_t i = 1; i < size; ++i) {
-            Tdata current_value = std::abs(x[i * incx]);
+        for (size_t i = 1; i < n; ++i) {
+            const ptrdiff_t idx = utils::cast<ptrdiff_t>(i) * incx;
+            Tdata current_value = std::abs(x[idx]);
             if (current_value > max_value) {
                 max_value = current_value;
                 max_index = i;

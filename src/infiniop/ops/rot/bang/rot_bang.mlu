@@ -37,6 +37,10 @@ infiniStatus_t calculateRot(
     const Tdata *s,
     cnrtQueue_t queue) {
 
+    const int n = utils::cast<int>(info.n);
+    const int incx = utils::cast<int>(info.incx);
+    const int incy = utils::cast<int>(info.incy);
+
     cnrtDim3_t k_dim;
     cnrtFunctionType_t k_type;
     k_dim.x = 4;
@@ -44,20 +48,20 @@ infiniStatus_t calculateRot(
     k_dim.z = 1;
     k_type = cnrtFuncTypeUnion1;
 
-    if (info.incx == 1 && info.incy == 1) {
+    if (incx == 1 && incy == 1) {
         rotKernelContiguous<<<k_dim, k_type, queue>>>(
-            info.n,
+            n,
             x,
             y,
             c,
             s);
     } else {
         rotKernelStrided<<<k_dim, k_type, queue>>>(
-            info.n,
+            n,
             x,
-            info.incx,
+            incx,
             y,
-            info.incy,
+            incy,
             c,
             s);
     }

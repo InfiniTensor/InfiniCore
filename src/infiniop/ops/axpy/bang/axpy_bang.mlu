@@ -36,9 +36,9 @@ infiniStatus_t calculateAxpy(
     Tdata *y,
     cnrtQueue_t queue) {
 
-    const size_t size = info.n;
-    const ptrdiff_t incx = info.incx;
-    const ptrdiff_t incy = info.incy;
+    const int n = utils::cast<int>(info.n);
+    const int incx = utils::cast<int>(info.incx);
+    const int incy = utils::cast<int>(info.incy);
 
     cnrtDim3_t k_dim;
     cnrtFunctionType_t k_type;
@@ -50,13 +50,13 @@ infiniStatus_t calculateAxpy(
 
     if (incx == 1 && incy == 1) {
         axpyKernelContiguous<Tdata><<<k_dim, k_type, queue>>>(
-            size,
+            n,
             alpha,
             x,
             y);
     } else {
         axpyKernelStrided<Tdata><<<k_dim, k_type, queue>>>(
-            size,
+            n,
             alpha,
             x,
             incx,

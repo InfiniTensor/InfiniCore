@@ -6,7 +6,7 @@
 __nram__ char nram_buffer[NRAM_MAX_SIZE];
 
 template <typename Tdata>
-__mlu_device__ void nrm2ToCompute(float *dst, const Tdata *src, size_t size) {
+__mlu_device__ void nrm2ToCompute(float *dst, const Tdata *src, int size) {
     if constexpr (std::is_same_v<Tdata, half>) {
         __bang_half2float(dst, src, size);
     } else if constexpr (std::is_same_v<Tdata, bfloat16_t>) {
@@ -32,45 +32,48 @@ __mlu_device__ void nrm2StoreResult(Tdata *result, Tdata *nram_result, float *nr
 
 template <typename Tdata>
 __mlu_global__ void Nrm2KernelContiguous(
-    size_t n,
+    int n,
     const Tdata *x,
     Tdata *result) {
+
     __mlu_shared__ float shared_partial_sum[4];
 
-    Tdata *nram_x = (Tdata *)(((size_t)nram_buffer + ALIGN_SIZE - 1) & ~(ALIGN_SIZE - 1));
+    char *nram_aligned = (char *)(((size_t)nram_buffer + ALIGN_SIZE - 1) & ~(ALIGN_SIZE - 1));
 
-    size_t nram_usable = NRAM_MAX_SIZE - ((char *)nram_x - nram_buffer);
-    size_t max_chunk_elements = (nram_usable - ALIGN_SIZE) / (sizeof(Tdata) + sizeof(float));
+    size_t nram_usable = NRAM_MAX_SIZE - (nram_aligned - nram_buffer);
+    size_t max_chunk_elements = nram_usable / (sizeof(Tdata) + sizeof(float));
 
-    int align_elements = ALIGN_SIZE / sizeof(Tdata);
+    size_t align_elements = ALIGN_SIZE / sizeof(Tdata);
     if (align_elements == 0) {
         align_elements = 1;
     }
-    max_chunk_elements = (max_chunk_elements / align_elements) * align_elements;
-    float *nram_compute = (float *)(((size_t)(nram_x + max_chunk_elements) + ALIGN_SIZE - 1) & ~(ALIGN_SIZE - 1));
+    int chunk_size = (int)((max_chunk_elements / align_elements) * align_elements);
+
+    Tdata *nram_x = (Tdata *)nram_aligned;
+    float *nram_compute = (float *)(nram_x + chunk_size);
 
     int elements_per_core = n / taskDim;
     int remain = n % taskDim;
     int core_elements = elements_per_core + (taskId < remain ? 1 : 0);
     int core_offset = taskId < remain ? taskId * core_elements : taskId * elements_per_core + remain;
 
-    int chunks = core_elements / max_chunk_elements;
-    int chunk_rem = core_elements % max_chunk_elements;
+    int chunks = core_elements / chunk_size;
+    int chunk_rem = core_elements % chunk_size;
 
     float partial_sum = 0.0f;
 
     for (int c = 0; c < chunks; c++) {
-        size_t current_offset = core_offset + c * max_chunk_elements;
-        __memcpy(nram_x, x + current_offset, max_chunk_elements * sizeof(Tdata), GDRAM2NRAM);
+        int current_offset = core_offset + c * chunk_size;
+        __memcpy(nram_x, x + current_offset, chunk_size * sizeof(Tdata), GDRAM2NRAM);
 
-        nrm2ToCompute(nram_compute, nram_x, max_chunk_elements);
-        __bang_square(nram_compute, nram_compute, max_chunk_elements);
+        nrm2ToCompute(nram_compute, nram_x, chunk_size);
+        __bang_square(nram_compute, nram_compute, chunk_size);
 
-        partial_sum += __bang_sum(nram_compute, max_chunk_elements);
+        partial_sum += __bang_sum(nram_compute, chunk_size);
     }
 
     if (chunk_rem > 0) {
-        size_t current_offset = core_offset + chunks * max_chunk_elements;
+        int current_offset = core_offset + chunks * chunk_size;
 
         __memcpy(nram_x, x + current_offset, chunk_rem * sizeof(Tdata), GDRAM2NRAM);
 
@@ -97,23 +100,26 @@ __mlu_global__ void Nrm2KernelContiguous(
 
 template <typename Tdata>
 __mlu_global__ void Nrm2KernelStrided(
-    size_t n,
+    int n,
     const Tdata *x,
-    size_t incx,
+    int incx,
     Tdata *result) {
+
     __mlu_shared__ float shared_partial_sum[4];
 
-    Tdata *nram_x = (Tdata *)(((size_t)nram_buffer + ALIGN_SIZE - 1) & ~(ALIGN_SIZE - 1));
+    char *nram_aligned = (char *)(((size_t)nram_buffer + ALIGN_SIZE - 1) & ~(ALIGN_SIZE - 1));
 
-    size_t nram_usable = NRAM_MAX_SIZE - ((char *)nram_x - nram_buffer);
-    size_t max_chunk_elements = (nram_usable - ALIGN_SIZE) / (sizeof(Tdata) + sizeof(float));
+    size_t nram_usable = NRAM_MAX_SIZE - (nram_aligned - nram_buffer);
+    size_t max_chunk_elements = nram_usable / (sizeof(Tdata) + sizeof(float));
 
-    int align_elements = ALIGN_SIZE / sizeof(Tdata);
+    size_t align_elements = ALIGN_SIZE / sizeof(Tdata);
     if (align_elements == 0) {
         align_elements = 1;
     }
-    max_chunk_elements = (max_chunk_elements / align_elements) * align_elements;
-    float *nram_compute = (float *)(((size_t)(nram_x + max_chunk_elements) + ALIGN_SIZE - 1) & ~(ALIGN_SIZE - 1));
+    int chunk_size = (int)((max_chunk_elements / align_elements) * align_elements);
+
+    Tdata *nram_x = (Tdata *)nram_aligned;
+    float *nram_compute = (float *)(nram_x + chunk_size);
 
     int elements_per_core = n / taskDim;
     int remain = n % taskDim;
@@ -122,12 +128,12 @@ __mlu_global__ void Nrm2KernelStrided(
 
     float partial_sum = 0.0f;
 
-    int chunks = actual_tasks / max_chunk_elements;
-    int chunk_rem = actual_tasks % max_chunk_elements;
+    int chunks = actual_tasks / chunk_size;
+    int chunk_rem = actual_tasks % chunk_size;
 
     for (int c = 0; c < chunks; c++) {
-        int current_elements = max_chunk_elements;
-        int current_start = start_idx + c * max_chunk_elements;
+        int current_elements = chunk_size;
+        int current_start = start_idx + c * chunk_size;
         for (int i = 0; i < current_elements; ++i) {
             nram_x[i] = x[(current_start + i) * incx];
         }
@@ -139,7 +145,7 @@ __mlu_global__ void Nrm2KernelStrided(
     }
 
     if (chunk_rem > 0) {
-        int current_start = start_idx + chunks * max_chunk_elements;
+        int current_start = start_idx + chunks * chunk_size;
         for (int i = 0; i < chunk_rem; ++i) {
             nram_x[i] = x[(current_start + i) * incx];
         }

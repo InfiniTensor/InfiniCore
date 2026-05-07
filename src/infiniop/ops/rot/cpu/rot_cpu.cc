@@ -40,20 +40,20 @@ infiniStatus_t calculateRot(
     const Tcompute c_val = utils::cast<Tcompute>(c[0]);
     const Tcompute s_val = utils::cast<Tcompute>(s[0]);
 
-    const ptrdiff_t size = static_cast<ptrdiff_t>(info.n);
+    const size_t n = info.n;
     const ptrdiff_t incx = info.incx;
     const ptrdiff_t incy = info.incy;
 
-    if (size <= 0) {
+    if (n == 0) {
         return INFINI_STATUS_SUCCESS;
     }
 
-    const ptrdiff_t ix = incx >= 0 ? 0 : (size - 1) * (-incx);
-    const ptrdiff_t iy = incy >= 0 ? 0 : (size - 1) * (-incy);
+    const ptrdiff_t ix = incx >= 0 ? 0 : utils::cast<ptrdiff_t>(n - 1) * (-incx);
+    const ptrdiff_t iy = incy >= 0 ? 0 : utils::cast<ptrdiff_t>(n - 1) * (-incy);
 
-    for (ptrdiff_t i = 0; i < size; ++i) {
-        const ptrdiff_t x_idx = ix + i * incx;
-        const ptrdiff_t y_idx = iy + i * incy;
+    for (size_t i = 0; i < n; ++i) {
+        const ptrdiff_t x_idx = ix + utils::cast<ptrdiff_t>(i) * incx;
+        const ptrdiff_t y_idx = iy + utils::cast<ptrdiff_t>(i) * incy;
 
         const Tcompute x_val = utils::cast<Tcompute>(x[x_idx]);
         const Tcompute y_val = utils::cast<Tcompute>(y[y_idx]);

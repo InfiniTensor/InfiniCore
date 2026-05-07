@@ -37,7 +37,7 @@ infiniStatus_t calculateNrm2(
 
     using Tcompute = std::conditional_t<std::is_same_v<Tdata, double>, double, float>;
 
-    const ptrdiff_t n = info.n;
+    const size_t n = info.n;
     const ptrdiff_t incx = info.incx;
 
     // Blue's scaling constants (float vs double)
@@ -79,9 +79,9 @@ infiniStatus_t calculateNrm2(
     Tcompute abig = Tcompute(0);
 
     // 0-based index; handle negative stride
-    ptrdiff_t ix = (incx < 0) ? (ptrdiff_t(1) - n) * incx : 0;
+    ptrdiff_t ix = (incx < 0) ? (ptrdiff_t(1) - utils::cast<ptrdiff_t>(n)) * incx : 0;
 
-    for (ptrdiff_t i = 0; i < n; ++i) {
+    for (size_t i = 0; i < n; ++i) {
         Tcompute ax = std::abs(utils::cast<Tcompute>(x[ix]));
 
         if (ax > tbig) {

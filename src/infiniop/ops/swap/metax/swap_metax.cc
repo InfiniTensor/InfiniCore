@@ -42,9 +42,9 @@ infiniStatus_t Descriptor::calculate(
     (void)workspace;
     (void)workspace_size;
 
-    const size_t size = _info.n;
-    const ptrdiff_t incx = _info.incx;
-    const ptrdiff_t incy = _info.incy;
+    const int n = utils::cast<int>(_info.n);
+    const int incx = utils::cast<int>(_info.incx);
+    const int incy = utils::cast<int>(_info.incy);
     const infiniDtype_t data_type = _info.data_type;
 
     CHECK_STATUS(_opaque->internal->useMcblas(
@@ -54,10 +54,10 @@ infiniStatus_t Descriptor::calculate(
 
             switch (data_type) {
             case INFINI_DTYPE_F32:
-                CHECK_MCBLAS(hcblasSswap(handle, size, (float *)x, incx, (float *)y, incy));
+                CHECK_MCBLAS(hcblasSswap(handle, n, (float *)x, incx, (float *)y, incy));
                 break;
             case INFINI_DTYPE_F64:
-                CHECK_MCBLAS(hcblasDswap(handle, size, (double *)x, incx, (double *)y, incy));
+                CHECK_MCBLAS(hcblasDswap(handle, n, (double *)x, incx, (double *)y, incy));
                 break;
             default:
                 return INFINI_STATUS_BAD_TENSOR_DTYPE;

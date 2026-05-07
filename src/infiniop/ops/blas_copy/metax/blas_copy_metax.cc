@@ -42,9 +42,9 @@ infiniStatus_t Descriptor::calculate(
     (void)workspace;
     (void)workspace_size;
 
-    const size_t size = _info.n;
-    const ptrdiff_t incx = _info.incx;
-    const ptrdiff_t incy = _info.incy;
+    const int n = utils::cast<int>(_info.n);
+    const int incx = utils::cast<int>(_info.incx);
+    const int incy = utils::cast<int>(_info.incy);
     const infiniDtype_t data_type = _info.data_type;
 
     CHECK_STATUS(_opaque->internal->useMcblas(
@@ -54,10 +54,10 @@ infiniStatus_t Descriptor::calculate(
 
             switch (data_type) {
             case INFINI_DTYPE_F32:
-                CHECK_MCBLAS(hcblasScopy(handle, size, (const float *)x, incx, (float *)y, incy));
+                CHECK_MCBLAS(hcblasScopy(handle, n, (const float *)x, incx, (float *)y, incy));
                 break;
             case INFINI_DTYPE_F64:
-                CHECK_MCBLAS(hcblasDcopy(handle, size, (const double *)x, incx, (double *)y, incy));
+                CHECK_MCBLAS(hcblasDcopy(handle, n, (const double *)x, incx, (double *)y, incy));
                 break;
             default:
                 return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

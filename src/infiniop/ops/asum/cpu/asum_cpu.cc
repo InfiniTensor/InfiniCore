@@ -31,22 +31,24 @@ infiniStatus_t calculateAsum(
     const Tdata *x,
     Tdata *result) {
 
-    const ptrdiff_t n = info.n;
+    const size_t n = info.n;
     const ptrdiff_t incx = info.incx;
 
     if constexpr (std::is_same<Tdata, fp16_t>::value || std::is_same<Tdata, bf16_t>::value) {
         float total_sum = 0.0;
 
-        for (ptrdiff_t i = 0; i < n; ++i) {
-            total_sum += std::abs(utils::cast<float>(x[i * incx]));
+        for (size_t i = 0; i < n; ++i) {
+            const ptrdiff_t idx = utils::cast<ptrdiff_t>(i) * incx;
+            total_sum += std::abs(utils::cast<float>(x[idx]));
         }
 
         result[0] = utils::cast<Tdata>(total_sum);
     } else {
         Tdata total_sum = 0.0;
 
-        for (ptrdiff_t i = 0; i < n; ++i) {
-            total_sum += std::abs(x[i * incx]);
+        for (size_t i = 0; i < n; ++i) {
+            const ptrdiff_t idx = utils::cast<ptrdiff_t>(i) * incx;
+            total_sum += std::abs(x[idx]);
         }
 
         result[0] = total_sum;

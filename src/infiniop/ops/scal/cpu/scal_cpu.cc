@@ -31,11 +31,11 @@ infiniStatus_t calculateScal(
     const Tdata *alpha,
     Tdata *x) {
 
-    const ptrdiff_t size = info.n;
+    const size_t n = info.n;
     const ptrdiff_t incx = info.incx;
 
-    for (ptrdiff_t i = 0; i < size; ++i) {
-        const ptrdiff_t idx = i * incx;
+    for (size_t i = 0; i < n; ++i) {
+        const ptrdiff_t idx = utils::cast<ptrdiff_t>(i) * incx;
 
         if constexpr (std::is_same_v<Tdata, fp16_t> || std::is_same_v<Tdata, bf16_t>) {
             x[idx] = utils::cast<Tdata>(utils::cast<float>(x[idx]) * utils::cast<float>(alpha[0]));
