@@ -4,25 +4,25 @@
 
 namespace infinicore::op {
 
-common::OpDispatcher<Asum::schema> &Asum::dispatcher() {
-    static common::OpDispatcher<Asum::schema> dispatcher_;
-    return dispatcher_;
-};
+INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(Asum);
 
-void Asum::execute(Tensor result, Tensor x) {
-    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(result, x);
-    infinicore::context::setDevice(result->device());
-    dispatcher().lookup(result->device().getType())(result, x);
+Asum::Asum(const Tensor &x, Tensor result) {
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(x, result);
+    INFINICORE_GRAPH_OP_DISPATCH(result->device().getType(), x, result);
 }
 
-Tensor asum(Tensor x) {
+void Asum::execute(const Tensor &x, Tensor result) {
+    INFINICORE_GRAPH_OP_RECORD_OR_RUN(Asum, x, result);
+}
+
+Tensor asum(const Tensor &x) {
     auto result = Tensor::empty({}, x->dtype(), x->device());
-    asum_(result, x);
+    asum_(x, result);
     return result;
 }
 
-void asum_(Tensor result, Tensor x) {
-    Asum::execute(result, x);
+void asum_(const Tensor &x, Tensor result) {
+    Asum::execute(x, result);
 }
 
 } // namespace infinicore::op

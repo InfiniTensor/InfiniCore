@@ -4,25 +4,25 @@
 
 namespace infinicore::op {
 
-common::OpDispatcher<BlasAmax::schema> &BlasAmax::dispatcher() {
-    static common::OpDispatcher<BlasAmax::schema> dispatcher_;
-    return dispatcher_;
-};
+INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(BlasAmax);
 
-void BlasAmax::execute(Tensor result, Tensor x) {
-    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(result, x);
-    infinicore::context::setDevice(result->device());
-    dispatcher().lookup(result->device().getType())(result, x);
+BlasAmax::BlasAmax(const Tensor &x, Tensor result) {
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(x, result);
+    INFINICORE_GRAPH_OP_DISPATCH(result->device().getType(), x, result);
 }
 
-Tensor blas_amax(Tensor x) {
+void BlasAmax::execute(const Tensor &x, Tensor result) {
+    INFINICORE_GRAPH_OP_RECORD_OR_RUN(BlasAmax, x, result);
+}
+
+Tensor blas_amax(const Tensor &x) {
     auto result = Tensor::empty({}, DataType::I32, x->device());
-    blas_amax_(result, x);
+    blas_amax_(x, result);
     return result;
 }
 
-void blas_amax_(Tensor result, Tensor x) {
-    BlasAmax::execute(result, x);
+void blas_amax_(const Tensor &x, Tensor result) {
+    BlasAmax::execute(x, result);
 }
 
 } // namespace infinicore::op

@@ -4,15 +4,15 @@
 
 namespace infinicore::op {
 
-common::OpDispatcher<Swap::schema> &Swap::dispatcher() {
-    static common::OpDispatcher<Swap::schema> dispatcher_;
-    return dispatcher_;
-};
+INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(Swap);
+
+Swap::Swap(Tensor x, Tensor y) {
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(x, y);
+    INFINICORE_GRAPH_OP_DISPATCH(x->device().getType(), x, y);
+}
 
 void Swap::execute(Tensor x, Tensor y) {
-    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(x, y);
-    infinicore::context::setDevice(x->device());
-    dispatcher().lookup(x->device().getType())(x, y);
+    INFINICORE_GRAPH_OP_RECORD_OR_RUN(Swap, x, y);
 }
 
 void swap_(Tensor x, Tensor y) {

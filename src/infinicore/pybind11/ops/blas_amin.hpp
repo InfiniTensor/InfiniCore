@@ -16,8 +16,8 @@ inline void bind_blas_amin(py::module &m) {
 
     m.def("blas_amin_",
           &op::blas_amin_,
-          py::arg("result"),
           py::arg("x"),
+          py::arg("result"),
           R"doc(In-place BLAS level-1 amin.)doc");
 }
 

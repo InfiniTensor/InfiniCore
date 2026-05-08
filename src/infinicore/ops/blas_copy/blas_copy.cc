@@ -4,18 +4,18 @@
 
 namespace infinicore::op {
 
-common::OpDispatcher<BlasCopy::schema> &BlasCopy::dispatcher() {
-    static common::OpDispatcher<BlasCopy::schema> dispatcher_;
-    return dispatcher_;
-};
+INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(BlasCopy);
 
-void BlasCopy::execute(Tensor x, Tensor y) {
+BlasCopy::BlasCopy(const Tensor &x, Tensor y) {
     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(x, y);
-    infinicore::context::setDevice(y->device());
-    dispatcher().lookup(y->device().getType())(x, y);
+    INFINICORE_GRAPH_OP_DISPATCH(y->device().getType(), x, y);
 }
 
-void blas_copy_(Tensor x, Tensor y) {
+void BlasCopy::execute(const Tensor &x, Tensor y) {
+    INFINICORE_GRAPH_OP_RECORD_OR_RUN(BlasCopy, x, y);
+}
+
+void blas_copy_(const Tensor &x, Tensor y) {
     BlasCopy::execute(x, y);
 }
 

@@ -1,18 +1,14 @@
 #pragma once
 
 #include "../device.hpp"
+#include "../graph/graph.hpp"
 #include "common/op.hpp"
 
 namespace infinicore::op {
 
-class BlasAmax {
-public:
-    using schema = void (*)(Tensor, Tensor);
-    static void execute(Tensor result, Tensor x);
-    static common::OpDispatcher<schema> &dispatcher();
-};
+INFINICORE_GRAPH_OP_CLASS(BlasAmax, const Tensor &, Tensor);
 
-Tensor blas_amax(Tensor x);
-void blas_amax_(Tensor result, Tensor x);
+Tensor blas_amax(const Tensor &x);
+void blas_amax_(const Tensor &x, Tensor result);
 
 } // namespace infinicore::op

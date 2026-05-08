@@ -16,8 +16,8 @@ inline void bind_blas_amax(py::module &m) {
 
     m.def("blas_amax_",
           &op::blas_amax_,
-          py::arg("result"),
           py::arg("x"),
+          py::arg("result"),
           R"doc(In-place BLAS level-1 amax.)doc");
 }
 

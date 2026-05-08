@@ -1,56 +1,50 @@
-#include "../../utils.hpp"
-#include "infinicore/common/hash.hpp"
 #include "infinicore/ops/blas_amin.hpp"
-#include "infinicore/ops/common/cache.hpp"
-#include <infiniop.h>
+
+#include "../infiniop_impl.hpp"
 
 namespace infinicore::op::blas_amin_impl::infiniop {
 
-thread_local common::OpCache<size_t, infiniopBlasAminDescriptor_t> caches(
-    100, // capacity
-    [](infiniopBlasAminDescriptor_t &desc) {
-        if (desc != nullptr) {
-            INFINICORE_CHECK_ERROR(infiniopDestroyBlasAminDescriptor(desc));
-            desc = nullptr;
-        }
-    });
+INFINIOP_CACHABLE_DESCRIPTOR(Descriptor, BlasAmin, 100);
 
-void calculate(Tensor result, Tensor x) {
-    size_t seed = hash_combine(result, x);
+struct PlannedMeta {
+    std::shared_ptr<Descriptor> descriptor;
+    graph::GraphTensor workspace, x, result;
+};
 
-    auto device_type = context::getDevice().getType();
-    auto device_index = context::getDevice().getIndex();
+void *plan(const Tensor &x, Tensor result) {
+    size_t seed = hash_combine(x, result);
 
-    auto &cache = caches.getCache(device_type, device_index);
+    INFINIOP_CACHABLE_DESCRIPTOR_GET_OR_CREATE(
+        Descriptor, descriptor, BlasAmin,
+        seed,
+        x->desc(), result->desc());
 
-    auto desc_opt = cache.get(seed);
-    infiniopBlasAminDescriptor_t desc = nullptr;
+    INFINIOP_WORKSPACE_TENSOR(workspace, BlasAmin, descriptor);
 
-    if (!desc_opt) {
-        INFINICORE_CHECK_ERROR(infiniopCreateBlasAminDescriptor(
-            context::getInfiniopHandle(result->device()), &desc,
-            x->desc(), result->desc()));
-        cache.put(seed, desc);
-    } else {
-        desc = *desc_opt;
-    }
-
-    size_t workspace_size = 0;
-    INFINICORE_CHECK_ERROR(infiniopGetBlasAminWorkspaceSize(desc, &workspace_size));
-    std::shared_ptr<Memory> workspace = context::allocateMemory(workspace_size);
-
-    INFINICORE_CHECK_ERROR(infiniopBlasAmin(
-        desc, workspace->data(), workspace_size,
-        x->data(), result->data(), context::getStream()));
+    return new PlannedMeta{
+        descriptor,
+        graph::GraphTensor(workspace),
+        graph::GraphTensor(x),
+        graph::GraphTensor(result)};
 }
 
-static bool registered = []() {
-    BlasAmin::dispatcher().registerDevice({Device::Type::CPU,
-                                           Device::Type::CAMBRICON,
-                                           Device::Type::METAX},
-                                          &calculate,
-                                          false);
-    return true;
-}();
+void run(void *planned_meta) {
+    auto planned = reinterpret_cast<PlannedMeta *>(planned_meta);
+
+    INFINICORE_CHECK_ERROR(infiniopBlasAmin(
+        planned->descriptor->desc,
+        planned->workspace->data(),
+        planned->workspace->numel(),
+        planned->x->data(),
+        planned->result->data(),
+        context::getStream()));
+}
+
+void cleanup(void **planned_meta_ptr) {
+    delete *reinterpret_cast<PlannedMeta **>(planned_meta_ptr);
+    *planned_meta_ptr = nullptr;
+}
+
+INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(BlasAmin, &plan, &run, &cleanup);
 
 } // namespace infinicore::op::blas_amin_impl::infiniop

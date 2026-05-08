@@ -16,8 +16,8 @@ inline void bind_asum(py::module &m) {
 
     m.def("asum_",
           &op::asum_,
-          py::arg("result"),
           py::arg("x"),
+          py::arg("result"),
           R"doc(In-place BLAS level-1 asum.)doc");
 }
 
