@@ -28,4 +28,3 @@ BraceWrapping:
   SplitEmptyFunction: true
   SplitEmptyRecord: true
   SplitEmptyNamespace: true
-InsertNewlineAtEOF: true
