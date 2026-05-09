@@ -1353,6 +1353,7 @@ def gptq_qyblas_gemm_(lib):
         infiniopOperatorDescriptor_t,
     ]
 
+
 @OpRegister.operator
 def softplus_(lib):
     lib.infiniopCreateSoftplusDescriptor.restype = c_int32
