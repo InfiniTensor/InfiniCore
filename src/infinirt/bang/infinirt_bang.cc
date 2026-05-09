@@ -172,4 +172,12 @@ infiniStatus_t graphLuanch(infinirtGraphExec_t graph_exec, infinirtStream_t stre
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
+infiniStatus_t getMemInfo(int device_id, size_t *free_bytes, size_t *total_bytes) {
+    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+}
+
+infiniStatus_t getDeviceResourceSnapshot(int device_id, infinirtDeviceResourceSnapshot_t *snapshot) {
+    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+}
+
 } // namespace infinirt::bang
