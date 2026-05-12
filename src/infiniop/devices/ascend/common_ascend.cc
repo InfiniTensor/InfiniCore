@@ -236,3 +236,24 @@ std::string aclnnTensorDescriptor::toString() {
     // 返回构建的字符串
     return oss.str();
 }
+
+aclnnScalarDescriptor::aclnnScalarDescriptor(aclDataType dtype, const void *value, size_t size) {
+    this->dataType = dtype;
+    this->size = size;
+    this->value = const_cast<void*>(value);
+    this->scalar = aclCreateScalar(this->value, this->dataType);
+}
+
+aclnnScalarDescriptor::aclnnScalarDescriptor(infiniDtype_t dtype, const void *value, size_t size) {
+    this->dataType = toAclDataType(dtype);
+    this->size = size;
+    this->value = const_cast<void*>(value);
+    this->scalar = aclCreateScalar(this->value, this->dataType);
+}
+
+aclnnScalarDescriptor::~aclnnScalarDescriptor() {
+    if (this->scalar) {
+        aclDestroyScalar(this->scalar);
+        this->scalar = nullptr;
+    }
+}
