@@ -1,5 +1,4 @@
 add_rules("mode.debug", "mode.release")
-add_requires("boost", {configs = {stacktrace = true}})
 add_requires("pybind11")
 
 -- Define color codes
@@ -70,7 +69,7 @@ end
 option("cuda_arch")
     set_showmenu(true)
     set_description("Set CUDA GPU architecture (e.g. sm_90)")
-    set_values("sm_50", "sm_60", "sm_70", "sm_75", "sm_80", "sm_86", "sm_89", "sm_90", "sm_90a")
+    set_values("sm_50", "sm_60", "sm_70", "sm_75", "sm_80", "sm_86", "sm_89", "sm_90", "sm_90a", "sm_120")
     set_category("option")
 option_end()
 
