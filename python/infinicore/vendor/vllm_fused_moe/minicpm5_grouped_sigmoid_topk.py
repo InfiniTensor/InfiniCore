@@ -4,14 +4,17 @@
 # Grouped sigmoid MoE routing aligned with vLLM's ``grouped_topk`` native path
 # (``vllm/model_executor/layers/fused_moe/router/grouped_topk_router.py``).
 # Default implementation is a vendored pure-Torch copy (no vLLM import).
-# Optional: ``INFINILM_MOE_ROUTER_ENGINE=vllm_poc`` calls upstream ``grouped_topk`` for validation.
-# Optional: ``INFINILM_USE_VLLM_GROUPED_TOPK_KERNEL=1`` uses ``vllm._custom_ops.grouped_topk`` on CUDA.
+# ``INFINILM_MOE_FUSED_STACK=upstream`` calls upstream ``grouped_topk`` for validation.
+# Optional: ``INFINILM_USE_VLLM_GROUPED_TOPK_KERNEL=1`` uses ``vllm._custom_ops.grouped_topk`` on CUDA
+# (vendor stack only; skipped when ``INFINILM_MOE_FUSED_STACK=upstream``).
 
 from __future__ import annotations
 
 import os
 
 import torch
+
+from infinicore.moe_fused_stack import resolve_moe_fused_stack
 
 from .torch_register import direct_register_custom_op, infinilm_fused_lib
 
@@ -133,6 +136,17 @@ def minicpm5_grouped_sigmoid_topk(
     router_logits = router_logits.contiguous()
     e_score_correction_bias = e_score_correction_bias.contiguous()
 
+    if resolve_moe_fused_stack() == "upstream":
+        return _grouped_topk_via_vllm_poc(
+            router_logits,
+            topk,
+            renormalize,
+            num_expert_group,
+            topk_group,
+            routed_scaling_factor,
+            e_score_correction_bias,
+        )
+
     if os.environ.get("INFINILM_USE_VLLM_GROUPED_TOPK_KERNEL", "0") == "1":
         fused = _grouped_topk_via_vllm_cuda_kernel(
             router_logits,
@@ -145,18 +159,6 @@ def minicpm5_grouped_sigmoid_topk(
         )
         if fused is not None:
             return fused[0], fused[1]
-
-    engine = os.environ.get("INFINILM_MOE_ROUTER_ENGINE", "vendor")
-    if engine == "vllm_poc":
-        return _grouped_topk_via_vllm_poc(
-            router_logits,
-            topk,
-            renormalize,
-            num_expert_group,
-            topk_group,
-            routed_scaling_factor,
-            e_score_correction_bias,
-        )
 
     return grouped_sigmoid_topk_torch_reference(
         router_logits,

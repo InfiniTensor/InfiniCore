@@ -1,8 +1,13 @@
 """
-Bridge: run vendored vLLM-derived ``fused_experts`` on ATen views of InfiniCore tensors.
+Bridge: run fused MoE experts on ATen views of InfiniCore tensors.
 
-Requires InfiniCore built with ``--aten=y``, CUDA, `triton`, and the in-repo vendor module
-``infinicore.vendor.vllm_fused_moe`` (registers ``torch.ops.infinilm.*``). No ``pip install vllm``.
+Default (**``INFINILM_MOE_FUSED_STACK=vendor``** or **``vendor_router_cpu``**): vendored vLLM-derived Triton in
+``infinicore.vendor.vllm_fused_moe`` (registers ``torch.ops.infinilm.*``).
+
+**``INFINILM_MOE_FUSED_STACK=upstream``** (``.venv-vllm``): ``fused_experts`` from
+``vllm.model_executor.layers.fused_moe.fused_moe``; falls back to the vendor path if the import fails.
+
+Requires InfiniCore built with ``--aten=y``, CUDA, and (for vendor) ``triton`` + the vendor module.
 """
 
 from __future__ import annotations
@@ -12,6 +17,7 @@ import os
 from typing import TYPE_CHECKING
 
 from infinicore.lib import _infinicore
+from infinicore.moe_fused_stack import resolve_moe_fused_stack
 from infinicore.tensor import from_torch, to_torch
 
 if TYPE_CHECKING:
@@ -24,6 +30,45 @@ def _require_aten_bridge() -> None:
             "vllm_fused_moe_bridge requires InfiniCore with ATen enabled "
             "(rebuild with --aten=y)."
         )
+
+
+_upstream_fused_import_warned: bool = False
+
+
+def _get_fused_experts_and_activation():
+    """
+    Return ``(fused_experts, activation_enum_type)`` for the effective MoE stack.
+
+    Upstream import failure falls back to vendored experts (warn once).
+    """
+    global _upstream_fused_import_warned
+    stack = resolve_moe_fused_stack()
+    if stack == "upstream":
+        try:
+            from vllm.model_executor.layers.fused_moe.activation import (  # type: ignore[import-not-found]
+                MoEActivation as _UpstreamMoEActivation,
+            )
+            from vllm.model_executor.layers.fused_moe.fused_moe import (  # type: ignore[import-not-found]
+                fused_experts as _upstream_fused_experts,
+            )
+
+            return _upstream_fused_experts, _UpstreamMoEActivation
+        except ImportError:
+            if not _upstream_fused_import_warned:
+                _upstream_fused_import_warned = True
+                print(
+                    "[infinilm] MoE: upstream fused_experts (vLLM) not importable; "
+                    "falling back to vendored Triton fused_experts",
+                    flush=True,
+                )
+    try:
+        import infinicore.vendor.vllm_fused_moe as _vmoe  # noqa: F401 — registers torch.ops.infinilm
+        from infinicore.vendor.vllm_fused_moe import MoEActivation, fused_experts
+    except ImportError as e:
+        raise RuntimeError(
+            "fused_experts_ic requires InfiniLM vendored fused MoE + Triton."
+        ) from e
+    return fused_experts, MoEActivation
 
 
 def fused_experts_ic(
@@ -48,15 +93,9 @@ def fused_experts_ic(
     """
     _require_aten_bridge()
 
-    try:
-        import torch
+    import torch
 
-        import infinicore.vendor.vllm_fused_moe as _vmoe  # noqa: F401 — registers torch.ops.infinilm
-        from infinicore.vendor.vllm_fused_moe import MoEActivation, fused_experts
-    except ImportError as e:
-        raise RuntimeError(
-            "fused_experts_ic requires InfiniLM vendored fused MoE + Triton."
-        ) from e
+    fused_experts_fn, activation_enum = _get_fused_experts_and_activation()
 
     h = to_torch(hidden_states)
     t_w1 = to_torch(w1)
@@ -74,14 +113,14 @@ def fused_experts_ic(
     if torch.cuda.is_available():
         torch.cuda.current_stream().synchronize()
 
-    out_t = fused_experts(
+    out_t = fused_experts_fn(
         h,
         t_w1,
         t_w2,
         t_tw,
         t_ids,
         inplace=inplace,
-        activation=MoEActivation.SILU,
+        activation=activation_enum.SILU,
         apply_router_weight_on_input=apply_router_weight_on_input,
     )
     return from_torch(out_t)
@@ -241,24 +280,33 @@ def verify_vllm_fused_moe_config_for_checkpoint(model_path: str, device_index: i
         return
 
     torch.cuda.set_device(device_index)
-    try:
-        import infinicore.vendor.vllm_fused_moe.envs as moe_envs
-        import infinicore.vendor.vllm_fused_moe.fused_moe as vmoe_fused
+    vmoe_fused = None
+    stack = resolve_moe_fused_stack()
+    if stack == "upstream":
+        try:
+            import vllm.model_executor.layers.fused_moe.fused_moe as vmoe_fused  # type: ignore[import-not-found]
+        except ImportError:
+            stack = "vendor"
+    if stack in ("vendor", "vendor_router_cpu"):
+        try:
+            import infinicore.vendor.vllm_fused_moe.envs as moe_envs
+            import infinicore.vendor.vllm_fused_moe.fused_moe as vmoe_fused
+        except ImportError:
+            print(
+                "[vllm_fused_moe] preflight: vendored fused_moe not importable; skip config check",
+                flush=True,
+            )
+            return
 
-        get_config_file_name = vmoe_fused.get_config_file_name
-    except ImportError:
-        print(
-            "[vllm_fused_moe] preflight: vendored fused_moe not importable; skip config check",
-            flush=True,
-        )
-        return
+    get_config_file_name = vmoe_fused.get_config_file_name
 
     json_name = get_config_file_name(E, N, None, None)
     fused_moe_dir = os.path.dirname(vmoe_fused.__file__)
     default_path = os.path.join(fused_moe_dir, "configs", json_name)
     paths = []
-    if moe_envs.VLLM_TUNED_CONFIG_FOLDER:
-        paths.append(os.path.join(moe_envs.VLLM_TUNED_CONFIG_FOLDER, json_name))
+    tuned_root = os.environ.get("INFINILM_TUNED_CONFIG_FOLDER") or os.environ.get("VLLM_TUNED_CONFIG_FOLDER")
+    if tuned_root:
+        paths.append(os.path.join(tuned_root, json_name))
     paths.append(default_path)
 
     found = next((p for p in paths if os.path.isfile(p)), None)
@@ -296,9 +344,10 @@ def warmup_vllm_fused_moe_from_checkpoint(model_path: str, device_index: int = 0
     try:
         import torch
 
-        import infinicore.vendor.vllm_fused_moe as _vmoe  # noqa: F401
-        from infinicore.vendor.vllm_fused_moe import MoEActivation, fused_experts
+        fused_experts, MoEActivation = _get_fused_experts_and_activation()
     except ImportError:
+        return
+    except RuntimeError:
         return
 
     E, N, H, topk = dims
