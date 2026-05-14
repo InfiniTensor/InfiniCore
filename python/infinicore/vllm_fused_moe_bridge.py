@@ -87,6 +87,75 @@ def fused_experts_ic(
     return from_torch(out_t)
 
 
+def grouped_sigmoid_topk_ic(
+    router_logits: Tensor,
+    e_score_correction_bias: Tensor,
+    *,
+    topk: int,
+    renormalize: bool,
+    num_expert_group: int,
+    topk_group: int,
+    routed_scaling_factor: float,
+) -> tuple[Tensor, Tensor]:
+    """
+    Grouped sigmoid + e_score_correction_bias routing on InfiniCore tensors via ``torch.ops.infinilm``.
+
+    Returns ``(topk_weights, topk_ids)`` as InfiniCore tensors (float32 weights, int32 ids), same contract
+    as vLLM ``grouped_topk`` with ``scoring_func="sigmoid"``.
+    """
+    _require_aten_bridge()
+
+    try:
+        import torch
+
+        import infinicore.vendor.vllm_fused_moe as _vmoe  # noqa: F401 — registers minicpm5_grouped_sigmoid_topk
+    except ImportError as e:
+        raise RuntimeError(
+            "grouped_sigmoid_topk_ic requires InfiniLM vendored fused MoE (infinicore.vendor.vllm_fused_moe)."
+        ) from e
+
+    rl = to_torch(router_logits)
+    bias = to_torch(e_score_correction_bias)
+    if not rl.is_contiguous():
+        rl = rl.contiguous()
+    if not bias.is_contiguous():
+        bias = bias.contiguous()
+    if torch.cuda.is_available() and rl.is_cuda:
+        torch.cuda.current_stream().synchronize()
+
+    tw, tid = torch.ops.infinilm.minicpm5_grouped_sigmoid_topk(
+        rl,
+        bias,
+        int(topk),
+        bool(renormalize),
+        int(num_expert_group),
+        int(topk_group),
+        float(routed_scaling_factor),
+    )
+    return from_torch(tw.contiguous()), from_torch(tid.contiguous())
+
+
+def grouped_sigmoid_topk_ic_cpp(
+    router_logits: Tensor,
+    e_score_correction_bias: Tensor,
+    top_k: int,
+    norm_topk_prob: bool,
+    routed_scaling_factor: float,
+    n_group: int,
+    topk_group: int,
+) -> tuple[Tensor, Tensor]:
+    """C++-friendly positional wrapper (no keyword-only args)."""
+    return grouped_sigmoid_topk_ic(
+        router_logits,
+        e_score_correction_bias,
+        topk=int(top_k),
+        renormalize=bool(norm_topk_prob),
+        num_expert_group=int(n_group),
+        topk_group=int(topk_group),
+        routed_scaling_factor=float(routed_scaling_factor),
+    )
+
+
 def _load_hf_config_json(model_path: str) -> dict:
     path = os.path.join(os.path.expanduser(model_path), "config.json")
     with open(path, encoding="utf-8") as f:
