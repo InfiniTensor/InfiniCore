@@ -11,10 +11,10 @@ dependencies = []
 requires-python = ">=3.8"
 
 [project.optional-dependencies]
-# Same interpreter as InfiniCore built with ``--aten=y`` (see vllm_kernel_reuse_evaluation.md).
+# Optional vLLM pip stack for benchmark/compare scripts only (MoE fused path is vendored in-tree).
 vllm = ["vllm==0.19.0"]
-# MiniCPM5 fused stub + jiuge: vLLM fused MoE + helper deps (flash-attn install separately; see InfiniLM/examples/FLASH_ATTN_AND_VLLM_FUSED_MOE.md).
-vllm-fused-moe = ["vllm==0.19.0", "janus>=1.0.0", "xxhash>=3.0.0"]
+# MiniCPM5 fused MoE + jiuge: Triton + helpers (flash-attn install separately; see InfiniLM/examples/FLASH_ATTN_AND_VLLM_FUSED_MOE.md).
+vllm-fused-moe = ["triton>=3.0.0", "janus>=1.0.0", "xxhash>=3.0.0"]
 
 classifiers = [
     "Programming Language :: Python :: 3",

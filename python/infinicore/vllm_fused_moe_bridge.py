@@ -1,8 +1,8 @@
 """
-Optional bridge: run vLLM ``fused_experts`` on ATen views of InfiniCore tensors.
+Bridge: run vendored vLLM-derived ``fused_experts`` on ATen views of InfiniCore tensors.
 
-Requires InfiniCore built with ``--aten=y`` and a Python environment where vLLM
-(and Triton, for the default GPU path) are installed.
+Requires InfiniCore built with ``--aten=y``, CUDA, `triton`, and the in-repo vendor module
+``infinicore.vendor.vllm_fused_moe`` (registers ``torch.ops.infinilm.*``). No ``pip install vllm``.
 """
 
 from __future__ import annotations
@@ -37,23 +37,25 @@ def fused_experts_ic(
     apply_router_weight_on_input: bool = False,
 ):
     """
-    Run vLLM fused MoE experts on InfiniCore tensors via ``to_torch`` / ``from_torch``.
+    Run fused MoE experts on InfiniCore tensors via ``to_torch`` / ``from_torch``.
 
     Weight layout matches vLLM ``FusedMoE`` / ``fused_experts``:
     ``w1`` shape ``[num_experts, 2 * intermediate_size, hidden_size]``,
     ``w2`` shape ``[num_experts, hidden_size, intermediate_size]``,
     last dimension contiguous (stride 1). ``hidden_states`` shape ``[num_tokens, hidden_size]``, contiguous.
 
-    Returns a new InfiniCore tensor (aliases the vLLM output torch tensor via ``from_torch``).
+    Returns a new InfiniCore tensor (aliases the output torch tensor via ``from_torch``).
     """
     _require_aten_bridge()
 
     try:
         import torch
-        from vllm.model_executor.layers.fused_moe import MoEActivation, fused_experts
+
+        import infinicore.vendor.vllm_fused_moe as _vmoe  # noqa: F401 — registers torch.ops.infinilm
+        from infinicore.vendor.vllm_fused_moe import MoEActivation, fused_experts
     except ImportError as e:
         raise RuntimeError(
-            "vllm_fused_moe_bridge requires vLLM to be installed in this interpreter."
+            "fused_experts_ic requires InfiniLM vendored fused MoE + Triton."
         ) from e
 
     h = to_torch(hidden_states)
@@ -144,16 +146,16 @@ def _estimated_fused_moe_warmup_bytes(
     w2 = E * H * N * es
     hs = num_tokens * H * es
     tw = num_tokens * topk * es
-    # topk_ids int32
     tid = num_tokens * topk * 4
     return w1 + w2 + hs + tw + tid
 
 
 def verify_vllm_fused_moe_config_for_checkpoint(model_path: str, device_index: int = 0) -> None:
     """
-    Log whether vLLM's bundled fused_moe JSON exists for this model's (E, N) and GPU name.
+    Log whether a tuned fused_moe JSON exists for this model's (E, N) and GPU name.
 
-    Mirrors vLLM's ``get_config_file_name`` / config search paths so messages match runtime.
+    Search order mirrors upstream vLLM: ``INFINILM_TUNED_CONFIG_FOLDER`` / ``VLLM_TUNED_CONFIG_FOLDER``,
+    then vendored ``configs/`` next to ``fused_moe.py``.
     """
     dims = _moe_dims_from_config(_load_hf_config_json(model_path))
     if dims is None:
@@ -171,23 +173,23 @@ def verify_vllm_fused_moe_config_for_checkpoint(model_path: str, device_index: i
 
     torch.cuda.set_device(device_index)
     try:
-        import vllm.envs as vllm_envs
-        import vllm.model_executor.layers.fused_moe.fused_moe as vllm_fused_moe_mod
+        import infinicore.vendor.vllm_fused_moe.envs as moe_envs
+        import infinicore.vendor.vllm_fused_moe.fused_moe as vmoe_fused
 
-        get_config_file_name = vllm_fused_moe_mod.get_config_file_name
+        get_config_file_name = vmoe_fused.get_config_file_name
     except ImportError:
         print(
-            "[vllm_fused_moe] preflight: vLLM not importable; skip fused_moe config check",
+            "[vllm_fused_moe] preflight: vendored fused_moe not importable; skip config check",
             flush=True,
         )
         return
 
     json_name = get_config_file_name(E, N, None, None)
-    fused_moe_dir = os.path.dirname(vllm_fused_moe_mod.__file__)
+    fused_moe_dir = os.path.dirname(vmoe_fused.__file__)
     default_path = os.path.join(fused_moe_dir, "configs", json_name)
     paths = []
-    if vllm_envs.VLLM_TUNED_CONFIG_FOLDER:
-        paths.append(os.path.join(vllm_envs.VLLM_TUNED_CONFIG_FOLDER, json_name))
+    if moe_envs.VLLM_TUNED_CONFIG_FOLDER:
+        paths.append(os.path.join(moe_envs.VLLM_TUNED_CONFIG_FOLDER, json_name))
     paths.append(default_path)
 
     found = next((p for p in paths if os.path.isfile(p)), None)
@@ -199,7 +201,7 @@ def verify_vllm_fused_moe_config_for_checkpoint(model_path: str, device_index: i
     else:
         print(
             "[vllm_fused_moe] preflight: no tuned fused_moe JSON for this "
-            f"(E={E}, N={N}); vLLM will use defaults (see also {default_path})",
+            f"(E={E}, N={N}); using defaults (see also {default_path})",
             flush=True,
         )
 
@@ -224,7 +226,9 @@ def warmup_vllm_fused_moe_from_checkpoint(model_path: str, device_index: int = 0
 
     try:
         import torch
-        from vllm.model_executor.layers.fused_moe import MoEActivation, fused_experts
+
+        import infinicore.vendor.vllm_fused_moe as _vmoe  # noqa: F401
+        from infinicore.vendor.vllm_fused_moe import MoEActivation, fused_experts
     except ImportError:
         return
 
@@ -236,7 +240,6 @@ def warmup_vllm_fused_moe_from_checkpoint(model_path: str, device_index: int = 0
     torch.cuda.set_device(device_index)
     device = torch.device("cuda", device_index)
 
-    # Enough tokens to exercise typical block sizes without large activation batch.
     num_tokens = min(128, max(32, topk * 8))
     est = _estimated_fused_moe_warmup_bytes(E, N, H, topk, num_tokens, torch_dtype)
     max_b = os.environ.get("INFINILM_VLLM_FUSED_WARMUP_MAX_BYTES")

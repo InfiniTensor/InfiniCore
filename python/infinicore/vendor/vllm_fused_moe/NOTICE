@@ -1,0 +1,16 @@
+This directory vendors vLLM fused MoE Triton kernels for MiniCPM / InfiniLM.
+
+Upstream: https://github.com/vllm-project/vllm (release 0.19.x)
+License: Apache-2.0 (see SPDX headers in individual files)
+
+InfiniLM changes:
+- Register torch.ops.infinilm.outplace_fused_experts (no vllm PyPI import).
+- Replace vLLM-only CUDA helpers (moe_align_block_size, moe_sum) with PyTorch.
+- Replace silu_and_mul custom op with pure torch SwiGLU.
+- Config search honors INFINILM_TUNED_CONFIG_FOLDER (and VLLM_TUNED_CONFIG_FOLDER).
+
+Tuned configs:
+``configs/`` is intentionally empty in-repo (kernel falls back to defaults). To use
+vLLM-style JSON tuning, copy ``E=...,N=...,device_name=....json`` files from upstream
+``vllm/model_executor/layers/fused_moe/configs/`` into ``configs/``, or point
+``INFINILM_TUNED_CONFIG_FOLDER`` at such a directory.

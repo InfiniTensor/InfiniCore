@@ -1,7 +1,7 @@
 """
-Operator-style test: InfiniCore ATen bridge + vLLM ``fused_experts`` vs naive PyTorch MoE.
+Operator-style test: InfiniCore ATen bridge + vendored fused MoE vs naive PyTorch MoE.
 
-Requires CUDA, InfiniCore ``--aten=y``, vLLM, and Triton (``HAS_TRITON``).
+Requires CUDA, InfiniCore ``--aten=y``, Triton, and ``infinicore.vendor.vllm_fused_moe``.
 Otherwise both operators raise ``NotImplementedError`` (skipped in the framework).
 """
 
@@ -31,11 +31,9 @@ def _bridge_deps_available() -> bool:
 
         if not _t.cuda.is_available():
             return False
-        from vllm.triton_utils import HAS_TRITON
+        import triton  # noqa: F401
 
-        if not HAS_TRITON:
-            return False
-        import vllm.model_executor.layers.fused_moe  # noqa: F401
+        import infinicore.vendor.vllm_fused_moe  # noqa: F401
     except ImportError:
         return False
     return True
@@ -121,7 +119,7 @@ class OpTest(BaseOperatorTest):
     def torch_operator(self, *args, **kwargs):
         if not _bridge_deps_available():
             raise NotImplementedError(
-                "skip: need CUDA + InfiniCore ATen + vLLM + Triton for this test"
+                "skip: need CUDA + InfiniCore ATen + Triton + vendored fused_moe for this test"
             )
         hidden, w1, w2, topk_w, topk_ids = args
         return _naive_fused_experts(hidden, w1, w2, topk_w, topk_ids)
@@ -129,7 +127,7 @@ class OpTest(BaseOperatorTest):
     def infinicore_operator(self, *args, **kwargs):
         if not _bridge_deps_available():
             raise NotImplementedError(
-                "skip: need CUDA + InfiniCore ATen + vLLM + Triton for this test"
+                "skip: need CUDA + InfiniCore ATen + Triton + vendored fused_moe for this test"
             )
         from infinicore.vllm_fused_moe_bridge import fused_experts_ic
 
