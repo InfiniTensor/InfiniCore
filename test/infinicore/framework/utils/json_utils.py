@@ -120,6 +120,7 @@ def _write_field(f, key, value, indent, sub_indent, close_comma=""):
         items = value
 
     current_len = len(indent) + len(f'"{key}": {open_char}')
+    wrapped = False  # Track if we wrapped to new line
 
     for i, item in enumerate(items):
         if is_dict:
@@ -135,8 +136,12 @@ def _write_field(f, key, value, indent, sub_indent, close_comma=""):
         if current_len + len(item_str) + len(item_comma) > 180:
             f.write(f"\n{sub_indent}")
             current_len = len(sub_indent)
+            wrapped = True
 
         f.write(f"{item_str}{item_comma}")
         current_len += len(item_str) + len(item_comma)
 
+    # Add newline before closing bracket if we wrapped
+    if wrapped:
+        f.write(f"\n{indent}")
     f.write(f"{close_char}{close_comma}\n")
