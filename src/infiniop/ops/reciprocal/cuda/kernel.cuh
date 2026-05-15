@@ -1,6 +1,8 @@
 #ifndef __RECIPROCAL_CUDA_H__
 #define __RECIPROCAL_CUDA_H__
 
+#include <type_traits>
+
 namespace op::reciprocal::cuda {
 typedef struct ReciprocalOp {
 public:
@@ -8,15 +10,16 @@ public:
     template <typename T>
     __device__ __forceinline__ T operator()(const T &x) const {
         if constexpr (std::is_same_v<T, half2>) {
-            return h2rcp(x);
+            float2 vf = __half22float2(x);
+            vf.x = 1.0f / vf.x;
+            vf.y = 1.0f / vf.y;
+            return __float22half2_rn(vf);
         } else if constexpr (std::is_same_v<T, half>) {
-            return hrcp(x);
+            return __float2half(1.0f / __half2float(x));
         } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
-            // bfloat16 does not have a direct hrcp intrinsic in some versions,
-            // often handled by converting to float or using specific bf16 intrinsics
-            return __float2bfloat16(1.0f / __bfloat162float(x));
+            return __float2bfloat16_rn(1.0f / __bfloat162float(x));
         } else if constexpr (std::is_same_v<T, float>) {
-            return __frcp_rd(x);
+            return 1.0f / x;
         } else {
             return static_cast<T>(1) / x;
         }
