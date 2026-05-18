@@ -24,6 +24,16 @@ if TYPE_CHECKING:
     from infinicore.tensor import Tensor
 
 
+def _fast_stream_handoff() -> bool:
+    """When ``INFINILM_VLLM_FUSED_FAST_STREAM_HANDOFF=1``, skip redundant pre-kernel CUDA stream syncs.
+
+    InfiniLM's C++ dispatcher already records/waits cross-stream events after
+    ``bridge_ic_stream_to_torch_stream()``; optional sync removal is for profiling
+    (see ``MOE_VENDOR_UPSTREAM_CONCURRENCY_MEMO.md``). Default remains conservative.
+    """
+    return os.environ.get("INFINILM_VLLM_FUSED_FAST_STREAM_HANDOFF", "0") == "1"
+
+
 def _require_aten_bridge() -> None:
     if getattr(_infinicore, "_tensor_as_torch", None) is None:
         raise RuntimeError(
@@ -110,7 +120,7 @@ def fused_experts_ic(
     if t_w2.stride(-1) != 1:
         t_w2 = t_w2.contiguous()
 
-    if torch.cuda.is_available():
+    if torch.cuda.is_available() and not _fast_stream_handoff():
         torch.cuda.current_stream().synchronize()
 
     out_t = fused_experts_fn(
@@ -159,7 +169,7 @@ def grouped_sigmoid_topk_ic(
         rl = rl.contiguous()
     if not bias.is_contiguous():
         bias = bias.contiguous()
-    if torch.cuda.is_available() and rl.is_cuda:
+    if torch.cuda.is_available() and rl.is_cuda and not _fast_stream_handoff():
         torch.cuda.current_stream().synchronize()
 
     tw, tid = torch.ops.infinilm.minicpm5_grouped_sigmoid_topk(

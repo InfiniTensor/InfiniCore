@@ -7,6 +7,7 @@ InfiniLM changes:
 - Register torch.ops.infinilm.outplace_fused_experts (no vllm PyPI import).
 - Replace vLLM-only CUDA helpers (moe_align_block_size, moe_sum) with PyTorch.
 - Replace silu_and_mul custom op with pure torch SwiGLU.
+- SWIGLUOAI / SWIGLUSTEP: pure Torch using vLLM ``forward_native`` semantics (defaults ``alpha=1.702``, ``limit=7.0``); not yet configurable per-checkpoint.
 - Config search honors INFINILM_TUNED_CONFIG_FOLDER (and VLLM_TUNED_CONFIG_FOLDER).
 
 Tuned configs:

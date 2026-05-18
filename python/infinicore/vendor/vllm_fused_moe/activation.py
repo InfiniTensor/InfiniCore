@@ -8,6 +8,11 @@ from enum import Enum
 import torch
 import torch.nn.functional as F
 
+# vLLM ``SwigluOAIAndMul`` / ``SwigluStepAndMul`` defaults (``activation.py``); used until
+# ``alpha``/``limit`` can be threaded through ``fused_experts`` / custom op schemas.
+_SWIGLUOAI_ALPHA: float = 1.702
+_SWIGLU_LIMIT: float = 7.0
+
 
 class MoEActivation(Enum):
     SILU = "silu"
@@ -56,8 +61,23 @@ def apply_moe_activation(
     elif activation == MoEActivation.GELU:
         gate, up = input.chunk(2, dim=-1)
         torch.mul(F.gelu(gate), up, out=output)
-    elif activation in (MoEActivation.SWIGLUOAI, MoEActivation.SWIGLUSTEP):
-        raise NotImplementedError(f"{activation} requires vLLM Triton ops in upstream.")
+    elif activation == MoEActivation.SWIGLUOAI:
+        # Pure-Torch port of vLLM ``SwigluOAIAndMul.forward_native`` / ``_swigluoai_forward_native``
+        # (interleaved last-dim halves; not ``chunk(2)``).
+        alpha, limit = _SWIGLUOAI_ALPHA, _SWIGLU_LIMIT
+        gate, up = input[..., ::2], input[..., 1::2]
+        gate = gate.clamp(min=None, max=limit)
+        up = up.clamp(min=-limit, max=limit)
+        glu = gate * torch.sigmoid(gate * alpha)
+        torch.mul(up + 1, glu, out=output)
+    elif activation == MoEActivation.SWIGLUSTEP:
+        # Pure-Torch port of vLLM ``SwigluStepAndMul.forward_native``.
+        limit = _SWIGLU_LIMIT
+        gate, up = input.chunk(2, dim=-1)
+        gate = F.silu(gate)
+        gate = gate.clamp(max=limit)
+        up = up.clamp(min=-limit, max=limit)
+        torch.mul(gate, up, out=output)
     elif activation == MoEActivation.SILU_NO_MUL:
         output.copy_(F.silu(input))
     elif activation == MoEActivation.GELU_NO_MUL:
