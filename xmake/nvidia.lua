@@ -51,6 +51,8 @@ target("infiniop-nvidia")
                     -- H100 (sm_90a): use sm_90a for cutlass 3.x
                     if sm == 90 then
                         target:add("cuflags", "-gencode=arch=compute_90a,code=sm_90a")
+                    elseif sm == 120 then
+                        table.insert(archs, "sm_120")
                     elseif sm > 90 then
                         table.insert(archs, "sm_90")
                     end
