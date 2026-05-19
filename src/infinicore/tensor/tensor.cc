@@ -5,6 +5,7 @@
 #include "infinicore/dtype.hpp"
 
 #include <spdlog/spdlog.h>
+#include <sstream>
 
 namespace {
 // Helper function to calculate contiguous strides

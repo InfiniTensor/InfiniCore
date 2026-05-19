@@ -478,6 +478,17 @@ target("infinicore_cpp_api")
         if has_config("metax-gpu") then
             add_deps("flash-attn-metax")
         end
+        if has_config("iluvatar-gpu") then
+            add_deps("flash-attn-iluvatar")
+            local flash_attn_root = get_config("flash-attn")
+            local flash_attn_files = os.files(path.join(flash_attn_root, "flash_attn_2_cuda*.so"))
+            if not flash_attn_files or #flash_attn_files == 0 then
+                raise("iluvatar+flash-attn: cannot locate flash_attn_2_cuda under " .. flash_attn_root)
+            end
+            local flash_so = flash_attn_files[1]
+            local flash_dir = path.directory(flash_so)
+            add_shflags("-Wl,--no-as-needed", flash_so, "-Wl,-rpath," .. flash_dir, {force = true})
+        end
         if has_config("qy-gpu") then
             add_deps("flash-attn-qy")
         end
@@ -515,13 +526,19 @@ target("infinicore_cpp_api")
         if has_config("aten") then
             local outdata = os.iorunv("python", {"-c", "import torch, os; print(os.path.dirname(torch.__file__))"}):trim()
             local TORCH_DIR = outdata
+            local TORCH_CXX11_ABI = os.iorunv("python", {"-c", "import torch; print(int(torch._C._GLIBCXX_USE_CXX11_ABI))"}):trim()
+            local TORCH_ABI_DEFINE = "_GLIBCXX_USE_CXX11_ABI=" .. TORCH_CXX11_ABI
+
+            target:add("defines", TORCH_ABI_DEFINE)
+            target:add("cxflags", "-D" .. TORCH_ABI_DEFINE)
+            target:add("cxxflags", "-D" .. TORCH_ABI_DEFINE)
 
             target:add(
-                "includedirs", 
-                path.join(TORCH_DIR, "include"), 
+                "includedirs",
+                path.join(TORCH_DIR, "include"),
                 path.join(TORCH_DIR, "include/torch/csrc/api/include"),
                 { public = true })
-            
+
             target:add(
                 "linkdirs",
                 path.join(TORCH_DIR, "lib"),
@@ -535,6 +552,22 @@ target("infinicore_cpp_api")
                 "c10_cuda",
                 { public = true }
             )
+
+            -- Add CUDA/CoreX runtime headers for ATen headers like c10/cuda/CUDAStream.h
+            local CUDA_HOME = os.getenv("CUDA_HOME") or os.getenv("CUDA_ROOT") or os.getenv("CUDA_PATH")
+            local COREX_HOME = os.getenv("COREX_HOME") or "/usr/local/corex"
+
+            if CUDA_HOME and os.isdir(path.join(CUDA_HOME, "include")) then
+                target:add("includedirs", path.join(CUDA_HOME, "include"), { public = true })
+            end
+
+            if COREX_HOME and os.isdir(path.join(COREX_HOME, "include")) then
+                target:add("includedirs", path.join(COREX_HOME, "include"), { public = true })
+            end
+
+            if COREX_HOME and os.isdir(path.join(COREX_HOME, "targets/x86_64-linux/include")) then
+                target:add("includedirs", path.join(COREX_HOME, "targets/x86_64-linux/include"), { public = true })
+            end
         end
 
     end)
@@ -570,6 +603,17 @@ target("_infinicore")
         add_links("backtrace")
     else
         add_defines("BOOST_STACKTRACE_USE_NOOP")
+    end
+
+    if has_config("aten") then
+        before_build(function (target)
+            local TORCH_CXX11_ABI = os.iorunv("python", {"-c", "import torch; print(int(torch._C._GLIBCXX_USE_CXX11_ABI))"}):trim()
+            local TORCH_ABI_DEFINE = "_GLIBCXX_USE_CXX11_ABI=" .. TORCH_CXX11_ABI
+
+            target:add("defines", TORCH_ABI_DEFINE)
+            target:add("cxflags", "-D" .. TORCH_ABI_DEFINE)
+            target:add("cxxflags", "-D" .. TORCH_ABI_DEFINE)
+        end)
     end
 
     set_default(false)

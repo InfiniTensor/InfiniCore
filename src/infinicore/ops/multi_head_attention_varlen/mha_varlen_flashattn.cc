@@ -5,7 +5,7 @@
 #include <stdexcept>
 
 #ifdef ENABLE_FLASH_ATTN
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API) || defined(ENABLE_ILUVATAR_API)
 #include <c10/cuda/CUDAGuard.h>
 #endif
 #endif
@@ -48,9 +48,9 @@ void *plan(Tensor out,
 namespace {
 
 #ifdef ENABLE_FLASH_ATTN
-// MetaX/hpcc pip `flash_attn_2_cuda` exports `mha_varlen_fwd` at global scope (no namespace),
+// MetaX/hpcc and Iluvatar pip `flash_attn_2_cuda` export `mha_varlen_fwd` at global scope (no namespace),
 // while NVIDIA `flash-attn-nvidia.so` uses `flash::mha_varlen_fwd`.
-#if defined(ENABLE_METAX_API)
+#if defined(ENABLE_METAX_API) || defined(ENABLE_ILUVATAR_API)
 #define INFINICORE_FLASH_OP(name) ::name
 #else
 #define INFINICORE_FLASH_OP(name) flash::name
@@ -61,7 +61,9 @@ namespace {
 
 void run(void *planned_meta) {
 #ifdef ENABLE_FLASH_ATTN
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API) || defined(ENABLE_ILUVATAR_API)
     c10::cuda::CUDAStreamGuard guard(infinicore::adaptor::get_cuda_stream());
+#endif
     auto *p = reinterpret_cast<PlannedMeta *>(planned_meta);
 
     auto q = infinicore::adaptor::to_aten_tensor(p->q);
@@ -109,6 +111,11 @@ void run(void *planned_meta) {
         -1,
         0.0,
         false,
+#if defined(ENABLE_ILUVATAR_API)
+        false,
+        0,
+        0,
+#endif
         std::nullopt
 #if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
         ,

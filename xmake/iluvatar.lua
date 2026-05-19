@@ -1,4 +1,5 @@
 local iluvatar_arch = get_config("iluvatar_arch") or "ivcore20"
+local FLASH_ATTN_ROOT = get_config("flash-attn")
 
 toolchain("iluvatar.toolchain")
     set_toolset("cc"  , "clang"  )
@@ -115,5 +116,64 @@ target("infiniccl-iluvatar")
 
         -- set_languages("cxx17") 天数似乎不能用这个配置
         add_files("../src/infiniccl/cuda/*.cu")
+    end
+target_end()
+
+local function iluvatar_flash_attn_cuda_so_path()
+    local env_path = os.getenv("FLASH_ATTN_2_CUDA_SO")
+    if env_path and env_path ~= "" then
+        env_path = env_path:trim()
+        if os.isfile(env_path) then
+            return env_path
+        end
+        print(string.format(
+            "warning: iluvatar+flash-attn: FLASH_ATTN_2_CUDA_SO is not a file: %s, fallback to default path",
+            env_path
+        ))
+    end
+
+    if FLASH_ATTN_ROOT and FLASH_ATTN_ROOT ~= "" then
+        local files = os.files(path.join(FLASH_ATTN_ROOT, "flash_attn_2_cuda*.so"))
+        if files and #files > 0 then
+            return files[1]
+        end
+    end
+
+    local container_path = os.getenv("FLASH_ATTN_ILUVATAR_CUDA_SO_CONTAINER")
+    if container_path and container_path ~= "" and os.isfile(container_path) then
+        return container_path:trim()
+    end
+
+    raise("iluvatar+flash-attn: cannot locate flash_attn_2_cuda; install it in current Python env or export FLASH_ATTN_2_CUDA_SO")
+end
+
+target("flash-attn-iluvatar")
+    set_kind("phony")
+    set_default(false)
+
+    if FLASH_ATTN_ROOT and FLASH_ATTN_ROOT ~= "" then
+        before_build(function (target)
+            local TORCH_DIR = os.iorunv("python", {
+                "-c", "import torch, os; print(os.path.dirname(torch.__file__))"
+            }):trim()
+            local PYTHON_INCLUDE = os.iorunv("python", {
+                "-c", "import sysconfig; print(sysconfig.get_paths()['include'])"
+            }):trim()
+            local PYTHON_LIB_DIR = os.iorunv("python", {
+                "-c", "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))"
+            }):trim()
+
+            target:add("includedirs",
+                TORCH_DIR .. "/include",
+                TORCH_DIR .. "/include/torch/csrc/api/include",
+                PYTHON_INCLUDE,
+                {public = false}
+            )
+            target:add("linkdirs", TORCH_DIR .. "/lib", PYTHON_LIB_DIR, {public = false})
+        end)
+    else
+        before_build(function (target)
+            print("Flash Attention not available, skipping flash-attn-iluvatar integration")
+        end)
     end
 target_end()

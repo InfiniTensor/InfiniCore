@@ -2,16 +2,15 @@
 
 #include "../utils/infini_status_string.h"
 
-#include <spdlog/cfg/env.h>
 #include <spdlog/spdlog.h>
 #include <stdexcept>
 
 inline struct SpdlogInitializer {
     SpdlogInitializer() {
-        if (!std::getenv("INFINICORE_LOG_LEVEL")) {
-            spdlog::set_level(spdlog::level::info);
+        if (const char *level = std::getenv("INFINICORE_LOG_LEVEL")) {
+            spdlog::set_level(spdlog::level::from_str(level));
         } else {
-            spdlog::cfg::load_env_levels("INFINICORE_LOG_LEVEL");
+            spdlog::set_level(spdlog::level::info);
         }
         // Set pattern for logging
         // Using SPDLOG_* macros enables source location support (%s and %#)

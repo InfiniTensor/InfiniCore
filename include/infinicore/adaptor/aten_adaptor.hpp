@@ -5,7 +5,7 @@
 
 #include <ATen/ATen.h>
 
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API) || defined(ENABLE_ILUVATAR_API)
 #include <ATen/cuda/CUDAContext.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <c10/cuda/CUDAStream.h>
@@ -31,8 +31,8 @@ inline at::ScalarType to_at_dtype(DataType dtype) {
 
 inline at::Device to_at_device(const Device &device) {
     // PyTorch ATen only exposes standard device types (e.g. kCPU/kCUDA).
-    // Treat MetaX/QY devices as CUDA devices for ATen tensor interoperability.
-    if (device.getType() == Device::Type::NVIDIA || device.getType() == Device::Type::METAX || device.getType() == Device::Type::QY) {
+    // Treat CUDA-compatible vendor devices as CUDA devices for ATen tensor interoperability.
+    if (device.getType() == Device::Type::NVIDIA || device.getType() == Device::Type::METAX || device.getType() == Device::Type::QY || device.getType() == Device::Type::ILUVATAR) {
         return at::Device(at::kCUDA, device.getIndex());
     } else if (device.getType() == Device::Type::CPU) {
         return at::Device(at::kCPU);
@@ -43,7 +43,7 @@ inline at::Device to_at_device(const Device &device) {
 
 at::Tensor to_aten_tensor(const infinicore::Tensor &t);
 
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API) || defined(ENABLE_ILUVATAR_API)
 c10::cuda::CUDAStream get_cuda_stream();
 #endif
 } // namespace infinicore::adaptor
