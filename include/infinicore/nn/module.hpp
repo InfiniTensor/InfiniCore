@@ -21,6 +21,8 @@ public:
 
     void load_parameter(const std::string &name, const Tensor &param);
 
+    void load_parameter_no_sync(const std::string &name, const Tensor &param);
+
     void load_parameter_(const std::string &name, const Tensor &param);
 
     void load_parameter_from_blob(const std::string &name, const void *data);
