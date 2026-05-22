@@ -41,7 +41,9 @@ infiniStatus_t rmsnorm(const RMSNormInfo *info, T *y, const T *x, const T *w) {
         T rms = (T)1 / std::sqrt(ss / (T)(dim) + (T)(info->epsilon));
 
         for (size_t k = 0; k < dim; k++) {
-            y_ptr[k] = x_ptr[k] * w[k] * rms;
+            // Numerical stability: compute x * rms first, then multiply by weight.
+            // This avoids inf * 0 -> NaN when rms underflows to 0 for very large x.
+            y_ptr[k] = (x_ptr[k] * rms) * w[k];
         }
     }
 
@@ -74,10 +76,10 @@ infiniStatus_t rmsnormHalfPrecision(const RMSNormInfo *info, T *y, const T *x, c
 
         for (size_t k = 0; k < dim; k++) {
             if constexpr (std::is_same<Tw, float>::value) {
-                float val = utils::cast<float>(x_ptr[k]) * w[k] * rms;
+                float val = utils::cast<float>(x_ptr[k]) * rms * w[k];
                 y_ptr[k] = utils::cast<T>(val);
             } else if constexpr (std::is_same<Tw, T>::value || std::is_same_v<Tw, fp16_t> || std::is_same_v<Tw, bf16_t>) {
-                float val = utils::cast<float>(x_ptr[k]) * utils::cast<float>(w[k]) * rms;
+                float val = utils::cast<float>(x_ptr[k]) * rms * utils::cast<float>(w[k]);
                 y_ptr[k] = utils::cast<T>(val);
             } else {
                 std::abort();

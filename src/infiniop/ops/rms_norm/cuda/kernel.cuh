@@ -33,7 +33,9 @@ __device__ void rmsnormBlock(
     __syncthreads();
 
     for (size_t i = threadIdx.x; i < dim; i += BLOCK_SIZE) {
-        y_ptr[i] = Tdata(Tcompute(x_ptr[i]) * Tcompute(w_ptr[i]) * rms);
+        // Numerical stability: compute x * rms first, then multiply by weight.
+        // This avoids inf * 0 -> NaN when rms underflows to 0 for very large x.
+        y_ptr[i] = Tdata((Tcompute(x_ptr[i]) * rms) * Tcompute(w_ptr[i]));
     }
 }
 

@@ -104,7 +104,10 @@ target("infiniop-nvidia")
         for _, arch in ipairs(arch_opt:split(",")) do
             arch = arch:trim()
             local compute = arch:gsub("sm_", "compute_")
-            add_cuflags("-gencode=arch=" .. compute .. ",code=" .. arch)
+            local gencode = "-gencode=arch=" .. compute .. ",code=" .. arch
+            -- NVCC compile + device-link must both get gencode.
+            add_cuflags(gencode, {force = true})
+            add_culdflags(gencode, {force = true})
         end
     end
 
@@ -208,9 +211,9 @@ target("flash-attn-nvidia")
         add_ldflags("-Wl,--no-undefined", {force = true})
 
         -- Compile options
-        add_cxflags("-fPIC", {force = true})
+        add_cxflags("-fPIC")
         add_cuflags("-Xcompiler=-fPIC")
-        add_cuflags("--forward-unknown-to-host-compiler --expt-relaxed-constexpr --use_fast_math", {force = true})
+        add_cuflags("--forward-unknown-to-host-compiler --expt-relaxed-constexpr --use_fast_math")
         set_values("cuda.rdc", false)
     else
         -- If flash-attn is not available, just create an empty target
