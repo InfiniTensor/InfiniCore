@@ -56,8 +56,7 @@ inline void bind(py::module &m) {
 
         // Fast in-place scalar writes for tiny CPU metadata tensors (decode loops, etc.).
         .def(
-            "write_i32",
-            [](Tensor &tensor, std::size_t linear_index, std::int32_t value) {
+            "write_i32", [](Tensor &tensor, std::size_t linear_index, std::int32_t value) {
                 if (tensor->dtype() != DataType::I32) {
                     throw py::value_error("write_i32: dtype must be I32");
                 }
@@ -70,11 +69,9 @@ inline void bind(py::module &m) {
                 auto *base = reinterpret_cast<std::int32_t *>(tensor->data());
                 base[linear_index] = value;
             },
-            py::arg("linear_index"),
-            py::arg("value"))
+            py::arg("linear_index"), py::arg("value"))
         .def(
-            "write_i64",
-            [](Tensor &tensor, std::size_t linear_index, std::int64_t value) {
+            "write_i64", [](Tensor &tensor, std::size_t linear_index, std::int64_t value) {
                 if (tensor->dtype() != DataType::I64) {
                     throw py::value_error("write_i64: dtype must be I64");
                 }
@@ -87,8 +84,7 @@ inline void bind(py::module &m) {
                 auto *base = reinterpret_cast<std::int64_t *>(tensor->data());
                 base[linear_index] = value;
             },
-            py::arg("linear_index"),
-            py::arg("value"));
+            py::arg("linear_index"), py::arg("value"));
 
     using EmptyFuncType = Tensor (*)(const Shape &, const DataType &, const Device &, bool);
     using StridedEmptyFuncType = Tensor (*)(const Shape &, const Strides &, const DataType &, const Device &, bool);
