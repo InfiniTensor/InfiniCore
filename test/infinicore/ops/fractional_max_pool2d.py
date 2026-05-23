@@ -65,9 +65,9 @@ class OpTest(BaseOperatorTest):
     def torch_operator(self, *args, **kwargs):
         return torch.nn.functional.fractional_max_pool2d(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
+    def infinicore_operator(self, *args, **kwargs):
     #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.nn.functional.fractional_max_pool2d(*args, **kwargs)
+        return infinicore.nn.functional.fractional_max_pool2d(*args, **kwargs)
 
 
 def main():
