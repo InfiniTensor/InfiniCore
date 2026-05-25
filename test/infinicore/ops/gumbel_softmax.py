@@ -76,9 +76,9 @@ class OpTest(BaseOperatorTest):
     def torch_operator(self, *args, **kwargs):
         return torch.nn.functional.gumbel_softmax(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
+    def infinicore_operator(self, *args, **kwargs):
     #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.nn.functional.gumbel_softmax(*args, **kwargs)
+        return infinicore.nn.functional.gumbel_softmax(*args, **kwargs)
 
 
 def main():

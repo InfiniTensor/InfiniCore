@@ -8,6 +8,7 @@ from .causal_softmax import causal_softmax
 from .embedding import embedding
 from .flash_attention import flash_attention
 from .gaussian_nll_loss import gaussian_nll_loss
+from .gumbel_softmax import gumbel_softmax
 from .hardswish import hardswish
 from .hardtanh import hardtanh
 from .hinge_embedding_loss import hinge_embedding_loss
@@ -43,6 +44,7 @@ __all__ = [
     "embedding",
     "flash_attention",
     "gaussian_nll_loss",
+    "gumbel_softmax",
     "interpolate",
     "linear",
     "binary_cross_entropy_with_logits",
