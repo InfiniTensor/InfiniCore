@@ -11,19 +11,19 @@ INFINIOP_CACHABLE_DESCRIPTOR(Descriptor, GptqMarlinGemm, 100);
 
 struct PlannedMeta {
     std::shared_ptr<Descriptor> descriptor;
-    graph::GraphTensor workspace, out, a, b, b_scales, global_scale, b_zeros, g_idx, perm;
+    graph::GraphTensor workspace, out, a, b, b_scales, global_scales, b_zeros, g_idx, perm;
     int64_t b_q_type_id;
     bool is_k_full, use_atomic_add, use_fp32_reduce, is_zp_float;
 };
 
-void *plan(Tensor out, const Tensor &a, const Tensor &b, Tensor &b_scales, Tensor &global_scale, Tensor &b_zeros, Tensor &g_idx, Tensor &perm, int64_t b_q_type_id, bool is_k_full, bool use_atomic_add, bool use_fp32_reduce, bool is_zp_float) {
-    size_t seed = hash_combine(out, a, b, b_scales, global_scale, b_zeros, g_idx, perm);
+void *plan(Tensor out, const Tensor &a, const Tensor &b, Tensor &b_scales, Tensor &global_scales, Tensor &b_zeros, Tensor &g_idx, Tensor &perm, int64_t b_q_type_id, bool is_k_full, bool use_atomic_add, bool use_fp32_reduce, bool is_zp_float) {
+    size_t seed = hash_combine(out, a, b, b_scales, global_scales, b_zeros, g_idx, perm);
 
     INFINIOP_CACHABLE_DESCRIPTOR_GET_OR_CREATE(
         Descriptor, descriptor, GptqMarlinGemm,
         seed,
         out->desc(), a->desc(),
-        b->desc(), b_scales->desc(), global_scale->desc(), b_zeros->desc(), g_idx->desc(), perm->desc());
+        b->desc(), b_scales->desc(), global_scales->desc(), b_zeros->desc(), g_idx->desc(), perm->desc());
 
     INFINIOP_WORKSPACE_TENSOR(workspace, GptqMarlinGemm, descriptor);
 
@@ -34,7 +34,7 @@ void *plan(Tensor out, const Tensor &a, const Tensor &b, Tensor &b_scales, Tenso
         graph::GraphTensor(a),
         graph::GraphTensor(b),
         graph::GraphTensor(b_scales),
-        graph::GraphTensor(global_scale),
+        graph::GraphTensor(global_scales),
         graph::GraphTensor(b_zeros),
         graph::GraphTensor(g_idx),
         graph::GraphTensor(perm),
@@ -56,7 +56,7 @@ void run(void *planned_meta) {
         planned->a->data(),
         planned->b->data(),
         planned->b_scales->data(),
-        planned->global_scale->data(),
+        planned->global_scales->data(),
         planned->b_zeros->data(),
         planned->g_idx->data(),
         planned->perm->data(),

@@ -23,7 +23,7 @@ public:
         infiniopTensorDescriptor_t a_desc,
         infiniopTensorDescriptor_t b_desc,
         infiniopTensorDescriptor_t b_scales_desc,
-        infiniopTensorDescriptor_t global_scale_desc,
+        infiniopTensorDescriptor_t global_scales_desc,
         infiniopTensorDescriptor_t b_zeros_desc,
         infiniopTensorDescriptor_t g_idx_desc,
         infiniopTensorDescriptor_t perm_desc) {

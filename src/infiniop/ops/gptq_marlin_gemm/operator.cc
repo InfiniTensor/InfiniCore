@@ -13,7 +13,7 @@ __INFINI_C infiniStatus_t infiniopCreateGptqMarlinGemmDescriptor(
     infiniopTensorDescriptor_t a_desc,
     infiniopTensorDescriptor_t b_desc,
     infiniopTensorDescriptor_t b_scales_desc,
-    infiniopTensorDescriptor_t global_scale_desc,
+    infiniopTensorDescriptor_t global_scales_desc,
     infiniopTensorDescriptor_t b_zeros_desc,
     infiniopTensorDescriptor_t g_idx_desc,
     infiniopTensorDescriptor_t perm_desc) {
@@ -26,7 +26,7 @@ __INFINI_C infiniStatus_t infiniopCreateGptqMarlinGemmDescriptor(
             a_desc,                                                                     \
             b_desc,                                                                     \
             b_scales_desc,                                                              \
-            global_scale_desc,                                                          \
+            global_scales_desc,                                                         \
             b_zeros_desc,                                                               \
             g_idx_desc,                                                                 \
             perm_desc)
@@ -69,7 +69,7 @@ __INFINI_C infiniStatus_t infiniopGptqMarlinGemm(
     const void *a,
     const void *b,
     void *b_scales,
-    void *global_scale,
+    void *global_scales,
     void *b_zeros,
     void *g_idx,
     void *perm,
@@ -83,7 +83,7 @@ __INFINI_C infiniStatus_t infiniopGptqMarlinGemm(
 #define CALCULATE(CASE, NAMESPACE)                                                         \
     case CASE:                                                                             \
         return reinterpret_cast<const op::gptq_marlin_gemm::NAMESPACE::Descriptor *>(desc) \
-            ->calculate(workspace, workspace_size, out, a, b, b_scales, global_scale, b_zeros, g_idx, perm, b_q_type_id, is_k_full, use_atomic_add, use_fp32_reduce, is_zp_float, stream)
+            ->calculate(workspace, workspace_size, out, a, b, b_scales, global_scales, b_zeros, g_idx, perm, b_q_type_id, is_k_full, use_atomic_add, use_fp32_reduce, is_zp_float, stream)
 
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API
