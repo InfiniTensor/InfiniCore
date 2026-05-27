@@ -781,7 +781,7 @@ template <typename scalar_t>
 void gptq_marlin_gemm(const void *a,
                       const void *b_q_weight,
                       void *b_scales,
-                      void *global_scale,
+                      void *global_scales,
                       void *b_zeros,
                       void *g_idx,
                       void *perm,
@@ -856,11 +856,11 @@ void gptq_marlin_gemm(const void *a,
             std::is_same<scalar_t, fp16_t>::value, "Computation type must be float16 (half) when using float zero points.");
     }
 
-    // int64_t global_scale_size = global_scale.size(0);
-    if (global_scale != nullptr) {
-        RuntimeCheck(b_q_type == kFE2M1f, "global_scale can only be used for float4_e2m1f.");
+    // int64_t global_scales_size = global_scales.size(0);
+    if (global_scales != nullptr) {
+        RuntimeCheck(b_q_type == kFE2M1f, "global_scales can only be used for float4_e2m1f.");
     } else {
-        RuntimeCheck(!(b_q_type == kFE2M1f), "the global_scale parameter must be passed for float4_e2m1f.");
+        RuntimeCheck(!(b_q_type == kFE2M1f), "the global_scales parameter must be passed for float4_e2m1f.");
     }
     // Derive group_size
     int group_size = -1;
@@ -906,7 +906,7 @@ void gptq_marlin_gemm(const void *a,
         c,
         c_tmp,
         b_scales,
-        global_scale,
+        global_scales,
         b_zeros,
         g_idx,
         perm,
@@ -937,7 +937,7 @@ infiniStatus_t gptq_marlin_gemm_kernel(void *c,
                                        const void *a,
                                        const void *b_q_weight,
                                        void *b_scales,
-                                       void *global_scale,
+                                       void *global_scales,
                                        void *b_zeros,
                                        void *g_idx,
                                        void *perm,
@@ -1021,7 +1021,7 @@ infiniStatus_t gptq_marlin_gemm_kernel(void *c,
         a,
         b_q_weight,
         b_scales,
-        global_scale,
+        global_scales,
         b_zeros,
         g_idx,
         perm,
@@ -1068,13 +1068,13 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t a_desc,
     infiniopTensorDescriptor_t b_desc,
     infiniopTensorDescriptor_t b_scales_desc,
-    infiniopTensorDescriptor_t global_scale_desc,
+    infiniopTensorDescriptor_t global_scales_desc,
     infiniopTensorDescriptor_t b_zeros_desc,
     infiniopTensorDescriptor_t g_idx_desc,
     infiniopTensorDescriptor_t perm_desc) {
 
     auto handle = reinterpret_cast<device::nvidia::Handle *>(handle_);
-    auto result = GptqMarlinGemmInfo::create(out_desc, a_desc, b_desc, b_scales_desc, global_scale_desc, b_zeros_desc, g_idx_desc, perm_desc);
+    auto result = GptqMarlinGemmInfo::create(out_desc, a_desc, b_desc, b_scales_desc, global_scales_desc, b_zeros_desc, g_idx_desc, perm_desc);
 
     int sms = getCudaDeviceSMCount();
     int _MAX_THREAD_N = 256;
@@ -1103,7 +1103,7 @@ Descriptor::calculate(
     const void *a,
     const void *b,
     void *b_scales,
-    void *global_scale,
+    void *global_scales,
     void *b_zeros,
     void *g_idx,
     void *perm,
@@ -1123,7 +1123,7 @@ Descriptor::calculate(
     int num_groups = _info.num_groups;
 
 #define MARLIN(TDATA) \
-    gptq_marlin_gemm_kernel<TDATA>(out, a, b, b_scales, global_scale, b_zeros, g_idx, perm, b_q_type_id, is_k_full, use_atomic_add, use_fp32_reduce, is_zp_float, M, K, N, b_q_size_1, a_stride_0, num_groups, workspace, stream)
+    gptq_marlin_gemm_kernel<TDATA>(out, a, b, b_scales, global_scales, b_zeros, g_idx, perm, b_q_type_id, is_k_full, use_atomic_add, use_fp32_reduce, is_zp_float, M, K, N, b_q_size_1, a_stride_0, num_groups, workspace, stream)
 
     if (_info.dtype == INFINI_DTYPE_F16) {
         return MARLIN(half);

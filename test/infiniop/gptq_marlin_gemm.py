@@ -542,7 +542,7 @@ def test(
         mode="manual",
         set_tensor=marlin_s,
     )
-    global_scale = None
+    global_scales = None
     if marlin_zp is not None:
         b_zeros = TestTensor(
             marlin_zp.shape,
@@ -594,7 +594,7 @@ def test(
             a_input.descriptor,
             b.descriptor,
             b_scales.descriptor,
-            global_scale.descriptor if global_scale is not None else None,
+            global_scales.descriptor if global_scales is not None else None,
             b_zeros.descriptor if b_zeros is not None else None,
             b_g_idx.descriptor if b_g_idx is not None else None,
             perm.descriptor if perm is not None else None,
@@ -602,7 +602,7 @@ def test(
     )
 
     # Invalidate descriptors (same pattern as other tests)
-    for tensor in [c, a_input, b, b_scales, global_scale, b_zeros, b_g_idx, perm]:
+    for tensor in [c, a_input, b, b_scales, global_scales, b_zeros, b_g_idx, perm]:
         if tensor is not None:
             tensor.destroy_desc()
 
@@ -624,7 +624,7 @@ def test(
                 a_input.data(),
                 b.data(),
                 b_scales.data(),
-                global_scale.data() if global_scale is not None else None,
+                global_scales.data() if global_scales is not None else None,
                 b_zeros.data() if b_zeros is not None else None,
                 b_g_idx.data() if b_g_idx is not None else None,
                 perm.data() if perm is not None else None,
