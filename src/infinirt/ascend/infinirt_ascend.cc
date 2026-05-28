@@ -118,6 +118,16 @@ infiniStatus_t freeHost(void *ptr) {
     return INFINI_STATUS_SUCCESS;
 }
 
+infiniStatus_t memsetDevice(void *ptr, int value, size_t count) {
+    CHECK_ACLRT(aclrtMemset(ptr, count, value, count));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t memsetDeviceAsync(void *ptr, int value, size_t count, infinirtStream_t stream) {
+    CHECK_ACLRT(aclrtMemsetAsync(ptr, count, value, count, (cudaStream_t)stream));
+    return INFINI_STATUS_SUCCESS;
+}
+
 aclrtMemcpyKind toAclrtMemcpyKind(infinirtMemcpyKind_t kind) {
     switch (kind) {
     case INFINIRT_MEMCPY_H2D:

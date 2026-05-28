@@ -106,6 +106,14 @@ void Runtime::memcpyD2D(void *dst, const void *src, size_t size, bool async) {
     }
 }
 
+void Runtime::setDeviceMemory(void *ptr, int value, size_t count) {
+    INFINICORE_CHECK_ERROR(infinirtMemset(ptr, value, count));
+}
+
+void Runtime::setDeviceMemoryAsync(void *ptr, int value, size_t count, infinirtStream_t stream) {
+    INFINICORE_CHECK_ERROR(infinirtMemsetAsync(ptr, value, count, stream));
+}
+
 // Timing method implementations
 infinirtEvent_t Runtime::createEvent() {
     infinirtEvent_t event;
