@@ -107,6 +107,10 @@ __INFINI_C __export infiniStatus_t infinirtMemcpyAsync(void *dst, const void *sr
 __INFINI_C __export infiniStatus_t infinirtMallocAsync(void **p_ptr, size_t size, infinirtStream_t stream);
 __INFINI_C __export infiniStatus_t infinirtFreeAsync(void *ptr, infinirtStream_t stream);
 
+// Memset
+__INFINI_C __export infiniStatus_t infinirtMemset(void *ptr, int value, size_t count);
+__INFINI_C __export infiniStatus_t infinirtMemsetAsync(void *ptr, int value, size_t count, infinirtStream_t stream);
+
 // Graph
 typedef enum {
     INFINIRT_STREAM_CAPTURE_MODE_GLOBAL = 0,

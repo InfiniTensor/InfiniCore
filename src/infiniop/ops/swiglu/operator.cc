@@ -25,7 +25,7 @@
 #include "ascend/swiglu_ascend.h"
 #endif
 #ifdef ENABLE_MOORE_API
-#include "moore/swiglu_moore.h"
+#include "moore/swiglu_moore_musa.h"
 #endif
 
 __INFINI_C infiniStatus_t infiniopCreateSwiGLUDescriptor(
@@ -94,7 +94,7 @@ __INFINI_C infiniStatus_t infiniopCreateSwiGLUDescriptor(
         CREATE(INFINI_DEVICE_ASCEND, ascend);
 #endif
 #ifdef ENABLE_MOORE_API
-        CREATE(INFINI_DEVICE_MOORE, moore);
+        CREATE_CUDA(INFINI_DEVICE_MOORE, moore);
 #endif
 
     default:
@@ -158,7 +158,7 @@ __INFINI_C infiniStatus_t infiniopGetSwiGLUWorkspaceSize(infiniopSwiGLUDescripto
         GET(INFINI_DEVICE_ASCEND, ascend);
 #endif
 #ifdef ENABLE_MOORE_API
-        GET(INFINI_DEVICE_MOORE, moore);
+        GET_CUDA(INFINI_DEVICE_MOORE, moore);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -228,7 +228,7 @@ __INFINI_C infiniStatus_t infiniopSwiGLU(
         CALCULATE(INFINI_DEVICE_ASCEND, ascend);
 #endif
 #ifdef ENABLE_MOORE_API
-        CALCULATE(INFINI_DEVICE_MOORE, moore);
+        CALCULATE_CUDA(INFINI_DEVICE_MOORE, moore);
 #endif
 
     default:
@@ -293,7 +293,7 @@ infiniopDestroySwiGLUDescriptor(infiniopSwiGLUDescriptor_t desc) {
         DELETE(INFINI_DEVICE_ASCEND, ascend)
 #endif
 #ifdef ENABLE_MOORE_API
-        DELETE(INFINI_DEVICE_MOORE, moore);
+        DELETE_CUDA(INFINI_DEVICE_MOORE, moore);
 #endif
 
     default:
