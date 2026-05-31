@@ -76,6 +76,7 @@ from infinicore.ops.block_diag import block_diag
 from infinicore.ops.broadcast_to import broadcast_to
 from infinicore.ops.cat import cat
 from infinicore.ops.cdist import cdist
+from infinicore.ops.copysign import copysign
 from infinicore.ops.cross_entropy import cross_entropy
 from infinicore.ops.diff import diff
 from infinicore.ops.digamma import digamma
@@ -95,7 +96,9 @@ from infinicore.ops.kron import kron
 from infinicore.ops.kthvalue import kthvalue
 from infinicore.ops.kv_caching import kv_caching
 from infinicore.ops.ldexp import ldexp
+from infinicore.ops.lcm import lcm
 from infinicore.ops.lerp import lerp
+from infinicore.ops.lgamma import lgamma
 from infinicore.ops.logaddexp import logaddexp
 from infinicore.ops.logaddexp2 import logaddexp2
 from infinicore.ops.logcumsumexp import logcumsumexp
@@ -108,10 +111,12 @@ from infinicore.ops.mha_kvcache import mha_kvcache
 from infinicore.ops.mha_varlen import mha_varlen
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
+from infinicore.ops.nextafter import nextafter
 from infinicore.ops.nrm2 import nrm2
 from infinicore.ops.paged_attention import paged_attention
 from infinicore.ops.paged_attention_prefill import paged_attention_prefill
 from infinicore.ops.paged_caching import paged_caching
+from infinicore.ops.rad2deg import rad2deg
 from infinicore.ops.rearrange import rearrange
 from infinicore.ops.reciprocal import reciprocal
 from infinicore.ops.rot import rot
@@ -217,6 +222,7 @@ __all__ = [
     "bilinear",
     "fmod",
     "cat",
+    "copysign",
     "inner",
     "masked_select",
     "logaddexp",
@@ -231,7 +237,9 @@ __all__ = [
     "narrow",
     "nrm2",
     "ldexp",
+    "lcm",
     "lerp",
+    "lgamma",
     "kthvalue",
     "squeeze",
     "unsqueeze",
@@ -246,6 +254,7 @@ __all__ = [
     "from_torch",
     "mha_kvcache",
     "mha_varlen",
+    "nextafter",
     "fmin",
     "floor_divide",
     "float_power",
@@ -261,6 +270,7 @@ __all__ = [
     "logical_and",
     "vander",
     "paged_caching",
+    "rad2deg",
     "paged_attention",
     "paged_attention_prefill",
     "hypot",

@@ -1,4 +1,10 @@
 local iluvatar_arch = get_config("iluvatar_arch") or "ivcore20"
+local iluvatar_warning_flags = {
+    "-Wno-error=unused-private-field",
+    "-Wno-error=unused-variable",
+    "-Wno-unused-variable",
+    "-Wno-error=pass-failed",
+}
 
 toolchain("iluvatar.toolchain")
     set_toolset("cc"  , "clang"  )
@@ -44,12 +50,12 @@ target("infiniop-iluvatar")
     add_links("cudart", "cublas", "cudnn")
 
     set_warnings("all", "error")
-    add_cuflags("-Wno-error=unused-private-field", "-Wno-error=unused-variable", "-Wno-unused-variable")
+    add_cuflags(iluvatar_warning_flags)
     add_cuflags("-fPIC", "-x", "ivcore", "-std=c++17", {force = true})
     add_cuflags("--cuda-gpu-arch=" .. iluvatar_arch, {force = true})
     add_culdflags("-fPIC")
-    add_cxflags("-fPIC", "-Wno-error=unused-variable", "-Wno-unused-variable")
-    add_cxxflags("-fPIC", "-Wno-error=unused-variable", "-Wno-unused-variable")
+    add_cxflags("-fPIC", "-Wno-error=unused-variable", "-Wno-unused-variable", "-Wno-error=pass-failed")
+    add_cxxflags("-fPIC", "-Wno-error=unused-variable", "-Wno-unused-variable", "-Wno-error=pass-failed")
 
     -- set_languages("cxx17") 天数似乎不能用这个配置
     add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")
@@ -76,6 +82,7 @@ target("infinirt-iluvatar")
     add_links("cudart")
 
     set_warnings("all", "error")
+    add_cuflags(iluvatar_warning_flags)
     add_cuflags("-fPIC", "-x", "ivcore", "-std=c++17", {force = true})
     add_cuflags("--cuda-gpu-arch=" .. iluvatar_arch, {force = true})
     add_culdflags("-fPIC")
@@ -99,6 +106,7 @@ target("infiniccl-iluvatar")
         add_links("cudart")
 
         set_warnings("all", "error")
+        add_cuflags(iluvatar_warning_flags)
         add_cuflags("-fPIC", "-x", "ivcore", "-std=c++17", {force = true})
         add_cuflags("--cuda-gpu-arch=" .. iluvatar_arch, {force = true})
         add_culdflags("-fPIC")
