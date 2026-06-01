@@ -175,17 +175,19 @@ def application_without_kv_cache(
     causal_variant,
 ):
     actual_kv_len = total_kv_len[0]
+    log2_e = 1.4426950408889634
 
     for i in range(query.shape[0]):
-        query_i = (1.4426950408889634 * scale * query[i]).to(query[i].dtype)
+        query_i = (log2_e * scale[0] * query[i]).to(ntl.float32)
+        query_pos = query[i].offsets(-2)
 
         acc = ntl.zeros((query_i.shape[-2], query_i.shape[-1]), dtype=ntl.float32)
         lse = ntl.full((query_i.shape[-2],), 1, dtype=ntl.float32)
         max = ntl.full((query_i.shape[-2],), float("-inf"), dtype=ntl.float32)
 
-        for j in range(-(-actual_kv_len // key.dtype.shape[0])):
-
-            qk = ntl.dot(query_i, ntl.trans(key[j]))
+        for j in range(ntl.cdiv(actual_kv_len, key.dtype.shape[0])):
+            key_j = key[j].to(ntl.float32)
+            qk = ntl.sum(query_i[:, None, :] * key_j[None, :, :], 2)
 
             key_pos = key[j].offsets(-2)
             qk = ntl.where(key_pos < actual_kv_len, qk, float("-inf"))
@@ -194,8 +196,6 @@ def application_without_kv_cache(
                 qk += attn_mask[j]
 
             if is_causal:
-                query_pos = query[i].offsets(-2)
-
                 if causal_variant == 2:  # CausalVariant.LOWER_RIGHT:
                     mask = (
                         query_pos[:, None] + actual_kv_len - query.source.shape[-2]
@@ -210,7 +210,8 @@ def application_without_kv_cache(
             stable_qk = ntl.exp2(qk - next_max[:, None])
 
             alpha = ntl.exp2(max - next_max)
-            acc = acc * alpha[:, None] + ntl.dot(stable_qk.to(value[i].dtype), value[j])
+            value_j = value[j].to(ntl.float32)
+            acc = acc * alpha[:, None] + ntl.sum(stable_qk[:, :, None] * value_j[None, :, :], 1)
             max = next_max
             lse = lse * alpha + ntl.sum(stable_qk, 1)
 
@@ -247,7 +248,7 @@ def premake(
     present_key, present_value, present_key_slot, present_value_slot = (
         Tensor(4, dtype=dtype) for _ in range(4)
     )
-    scale = Tensor(0, dtype=ninetoothed.float64)
+    scale = Tensor(shape=(1,), dtype=ninetoothed.float32)
     is_causal = Tensor(0, constexpr=True, value=is_causal)
     with_attn_mask = Tensor(0, constexpr=True, value=with_attn_mask)
     causal_variant = Tensor(0, constexpr=True, value=causal_variant)

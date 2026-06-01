@@ -5,6 +5,8 @@
 #include "../../../operator.h"
 #include "../../../tensor.h"
 
+#include <cuda_runtime.h>
+
 #include "../../../../../build/ninetoothed/flash_attention.h"
 #include "../../../ninetoothed/utils.h"
 
@@ -18,7 +20,7 @@ public:
                infiniopTensorDescriptor_t k_desc,
                infiniopTensorDescriptor_t v_desc,
                infiniopTensorDescriptor_t total_kv_len,
-               double scale,
+               float scale,
                char is_causal) : InfiniopDescriptor{handle->device, handle->device_id},
                                  _query_shape{q_desc->shape()},
                                  _query_strides{q_desc->strides()},
@@ -37,7 +39,7 @@ public:
     ~Descriptor() = default;
 
     size_t get_workspace_size() const {
-        return 0;
+        return sizeof(float);
     }
 
     infiniStatus_t calculate(void *workspace,
@@ -48,30 +50,42 @@ public:
                              const void *v,
                              const void *total_kv_len,
                              void *stream) const {
-        uint64_t empty_shape[4];
-        int64_t empty_strides[4];
+        uint64_t empty_shape[4]{1, 1, 1, 1};
+        int64_t empty_strides[4]{0, 0, 0, 0};
+        uint64_t scale_shape[1]{1};
+        int64_t scale_strides[1]{1};
 
         auto query{::ninetoothed::Tensor{q, _query_shape, _query_strides}};
         auto key{::ninetoothed::Tensor{k, _key_shape, _key_strides}};
         auto value{::ninetoothed::Tensor{v, _value_shape, _value_strides}};
         auto total_kv_length{::ninetoothed::Tensor{total_kv_len, _total_kv_shape, _total_kv_strides}};
 
+        if (workspace_size < sizeof(float)) {
+            return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+        }
+
+        auto copy_status = cudaMemcpyAsync(workspace, &_scale, sizeof(float), cudaMemcpyHostToDevice, reinterpret_cast<cudaStream_t>(stream));
+        if (copy_status != cudaSuccess) {
+            return INFINI_STATUS_INTERNAL_ERROR;
+        }
+
         NineToothedTensor attn_mask{nullptr, empty_shape, empty_strides};
-        NineToothedTensor is_causal;
-        NineToothedTensor scale{const_cast<double *>(&_scale), nullptr, nullptr};
+        NineToothedTensor is_causal{nullptr, nullptr, nullptr};
+        NineToothedTensor scale{workspace, scale_shape, scale_strides};
         auto output{::ninetoothed::Tensor{out, _query_shape, _output_strides}};
-        NineToothedTensor with_attn_mask;
-        NineToothedTensor causal_variant;
+        NineToothedTensor with_attn_mask{nullptr, nullptr, nullptr};
+        NineToothedTensor causal_variant{nullptr, nullptr, nullptr};
 
         const auto with_kv_cache_{0};
         const auto emb_dim_{_query_shape[3]};
         const auto is_causal_{_is_causal};
         const auto with_attn_mask_{0};
-        const auto causal_variant_{2};
+        const auto causal_variant_{_is_causal && _query_shape[2] == 1 ? 2 : 1};
         const auto dtype_{_dtype};
 
-        constexpr auto block_size_m_{256};
+        constexpr auto block_size_m_{1};
         constexpr auto block_size_n_{64};
+
 
         if (launch_flash_attention(stream,
                                    query,
@@ -105,7 +119,7 @@ public:
                                  infiniopTensorDescriptor_t k_desc,
                                  infiniopTensorDescriptor_t v_desc,
                                  infiniopTensorDescriptor_t total_kv_len,
-                                 double scale,
+                                 float scale,
                                  char is_causal) {
         *desc = new Descriptor{handle, out_desc, q_desc, k_desc, v_desc, total_kv_len, scale, is_causal};
 
@@ -137,7 +151,7 @@ private:
 
     infiniDtype_t _dtype;
 
-    double _scale;
+    float _scale;
 
     char _is_causal;
 };

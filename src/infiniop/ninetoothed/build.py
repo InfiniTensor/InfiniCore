@@ -14,7 +14,15 @@ BUILD_DIRECTORY_PATH = (
 )
 
 
-def build(premake, constexpr_param_grid, caller, op_name, output_dir):
+def build(
+    premake,
+    constexpr_param_grid,
+    caller,
+    op_name,
+    output_dir,
+    num_warps=None,
+    num_stages=None,
+):
     headers = []
     all_param_names = []
     combinations = []
@@ -27,7 +35,14 @@ def build(premake, constexpr_param_grid, caller, op_name, output_dir):
             _generate_param_value_combinations(constexpr_param_grid)
         ):
             future = executor.submit(
-                _make, premake, combination, caller, op_name, output_dir
+                _make,
+                premake,
+                combination,
+                caller,
+                op_name,
+                output_dir,
+                num_warps,
+                num_stages,
             )
 
             futures.append(future)
@@ -86,7 +101,7 @@ def build(premake, constexpr_param_grid, caller, op_name, output_dir):
     (BUILD_DIRECTORY_PATH / header_file_name).write_text(header_content)
 
 
-def _make(premake, combination, caller, op_name, output_dir):
+def _make(premake, combination, caller, op_name, output_dir, num_warps=None, num_stages=None):
     arrangement, application, tensors = premake(**combination)
 
     for param_name, param_value in combination.items():
@@ -106,6 +121,8 @@ def _make(premake, combination, caller, op_name, output_dir):
         caller=caller,
         kernel_name=kernel_name,
         output_dir=output_dir,
+        num_warps=num_warps,
+        num_stages=num_stages,
     )
 
     header = output_dir / f"{kernel_name}.h"

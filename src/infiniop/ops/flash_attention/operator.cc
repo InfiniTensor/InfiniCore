@@ -3,7 +3,7 @@
 #include "infiniop/ops/flash_attention.h"
 
 #if defined(ENABLE_NINETOOTHED)
-#if defined(ENABLE_NVIDIA_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
 #include "ninetoothed/descriptor.h"
 #endif
 #endif
@@ -18,6 +18,7 @@ __INFINI_C infiniStatus_t infiniopCreateFlashAttentionDescriptor(
     infiniopTensorDescriptor_t total_kv_len,
     float scale,
     char is_causal) {
+
 
 #define CREATE(CASE, NAMESPACE)                                                        \
     case CASE:                                                                         \
@@ -37,6 +38,9 @@ __INFINI_C infiniStatus_t infiniopCreateFlashAttentionDescriptor(
 #if defined(ENABLE_NINETOOTHED)
 #if defined(ENABLE_NVIDIA_API)
         CREATE(INFINI_DEVICE_NVIDIA, ninetoothed);
+#endif
+#if defined(ENABLE_ILUVATAR_API)
+        CREATE(INFINI_DEVICE_ILUVATAR, ninetoothed);
 #endif
 #endif
     default:
@@ -61,6 +65,9 @@ __INFINI_C infiniStatus_t infiniopGetFlashAttentionWorkspaceSize(
 #if defined(ENABLE_NVIDIA_API)
         GET_SIZE(INFINI_DEVICE_NVIDIA, ninetoothed);
 #endif
+#if defined(ENABLE_ILUVATAR_API)
+        GET_SIZE(INFINI_DEVICE_ILUVATAR, ninetoothed);
+#endif
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -80,6 +87,7 @@ __INFINI_C infiniStatus_t infiniopFlashAttention(
     const void *total_kv_len,
     void *stream) {
 
+
 #define CALCULATE(CASE, NAMESPACE)                                                        \
     case CASE:                                                                            \
         return reinterpret_cast<const op::flash_attention::NAMESPACE::Descriptor *>(desc) \
@@ -90,6 +98,9 @@ __INFINI_C infiniStatus_t infiniopFlashAttention(
 #if defined(ENABLE_NINETOOTHED)
 #if defined(ENABLE_NVIDIA_API)
         CALCULATE(INFINI_DEVICE_NVIDIA, ninetoothed);
+#endif
+#if defined(ENABLE_ILUVATAR_API)
+        CALCULATE(INFINI_DEVICE_ILUVATAR, ninetoothed);
 #endif
 #endif
     default:
@@ -112,6 +123,9 @@ __INFINI_C infiniStatus_t infiniopDestroyFlashAttentionDescriptor(
 #if defined(ENABLE_NINETOOTHED)
 #if defined(ENABLE_NVIDIA_API)
         DESTROY(INFINI_DEVICE_NVIDIA, ninetoothed);
+#endif
+#if defined(ENABLE_ILUVATAR_API)
+        DESTROY(INFINI_DEVICE_ILUVATAR, ninetoothed);
 #endif
 #endif
     default:

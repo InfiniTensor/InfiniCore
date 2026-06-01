@@ -21,7 +21,7 @@ def build():
     with_attn_mask_values = (0,)
     causal_variant_values = (CausalVariant.UPPER_LEFT, CausalVariant.LOWER_RIGHT)
     dtype_values = (ninetoothed.float16, ninetoothed.bfloat16, ninetoothed.float32)
-    block_size_m_values = (256,)
+    block_size_m_values = (1,)
     block_size_n_values = (64,)
 
     constexpr_param_grid = {
@@ -41,4 +41,6 @@ def build():
         caller="cuda",
         op_name="flash_attention",
         output_dir=infiniop.ninetoothed.build.BUILD_DIRECTORY_PATH,
+        num_warps=4,
+        num_stages=1,
     )

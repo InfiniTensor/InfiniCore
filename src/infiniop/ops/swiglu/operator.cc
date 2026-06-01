@@ -11,10 +11,10 @@
 #ifdef ENABLE_KUNLUN_API
 #include "kunlun/swiglu_kunlun.h"
 #endif
-#ifdef ENABLE_METAX_API
+#if defined(ENABLE_METAX_API) || defined(ENABLE_ILUVATAR_API)
 #if defined(ENABLE_NINETOOTHED)
 #include "ninetoothed/swiglu.h"
-#else
+#elif defined(ENABLE_METAX_API)
 #include "metax/swiglu_metax_cuda.h"
 #endif
 #endif
