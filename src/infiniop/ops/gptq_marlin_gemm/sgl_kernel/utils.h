@@ -9,6 +9,7 @@
 /// - `div_ceil` - integer ceiling division.
 /// - `dtype_bytes` - byte width of a `DLDataType`.
 /// - `irange` - Python-style integer range for range-for loops.
+/// - `PrintableDevice` - wrapper for outputting device info to streams (NVIDIA only).
 
 #pragma once
 
@@ -45,19 +46,51 @@
 #include "source_location.h"
 #endif
 
-#include "../dlpack/dlpack.h"
-#include <type_traits>
-// #include <concepts>
+#include <concepts>
 #include <cstddef>
+#include <dlpack/dlpack.h>
 #include <ostream>
-// #include <ranges>
+#include <ranges>
 #include <sstream>
+#include <type_traits>
 #include <utility>
 
 namespace host {
 
 template <typename>
 inline constexpr bool dependent_false_v = false;
+
+#if defined(ENABLE_NVIDIA_API)
+
+namespace details {
+
+/// \brief PrintableDevice wrapper for outputting device info to streams.
+struct PrintableDevice {
+    DLDevice device;
+};
+
+/// \brief Stream output operator for PrintableDevice.
+inline std::ostream &operator<<(std::ostream &os, PrintableDevice pd) {
+    int code = static_cast<int>(pd.device.device_type);
+    static const char *device_names[] = {
+        "", "cpu", "cuda", "cuda_host", "opencl", "vulkan",
+        "metal", "vpi", "rocm", "rocm_host", "ext_dev",
+        "cuda_managed", "oneapi", "webgpu", "hexagon", "maia", "trn"
+    };
+    if (code >= 0 && code <= 16) {
+        os << device_names[code];
+        if (pd.device.device_id >= 0 && code != 1 && code != 0) {
+            os << ":" << pd.device.device_id;
+        }
+    } else {
+        os << "device(" << code << "," << pd.device.device_id << ")";
+    }
+    return os;
+}
+
+} // namespace details
+
+#endif // ENABLE_NVIDIA_API
 
 /// \brief Source-location wrapper for debug/error messages.
 struct DebugInfo : public source_location_t {
@@ -175,6 +208,7 @@ inline auto dtype_bytes(DLDataType dtype) -> std::size_t {
     return static_cast<std::size_t>(dtype.bits / 8);
 }
 
+// Pure C++11 compatible irange - removes std::ranges/std::integral for older CUDA compilers
 template <typename T>
 struct IntegerRange {
     T start_;
