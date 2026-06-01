@@ -43,6 +43,18 @@ struct aclnnTensorDescriptor {
 };
 typedef aclnnTensorDescriptor *aclnnTensorDescriptor_t;
 
+struct aclnnScalarDescriptor {
+    aclDataType dataType;
+    void *value;
+    size_t size;
+    aclScalar *scalar;
+
+    aclnnScalarDescriptor(aclDataType dtype, const void *value, size_t size);
+    aclnnScalarDescriptor(infiniDtype_t dtype, const void *value, size_t size);
+    ~aclnnScalarDescriptor();
+};
+typedef aclnnScalarDescriptor *aclnnScalarDescriptor_t;
+
 aclDataType toAclDataType(infiniDtype_t dt);
 
 #define GetRecentErrMsg()                                   \

@@ -213,6 +213,14 @@ __INFINI_C infiniStatus_t infinirtFreeAsync(void *ptr, infinirtStream_t stream) 
     INFINIRT_CALL_DEVICE_API(freeAsync, (ptr, stream));
 }
 
+__INFINI_C __export infiniStatus_t infinirtMemset(void *ptr, int value, size_t count) {
+    INFINIRT_CALL_DEVICE_API(memsetDevice, (ptr, value, count));
+}
+
+__INFINI_C __export infiniStatus_t infinirtMemsetAsync(void *ptr, int value, size_t count, infinirtStream_t stream) {
+    INFINIRT_CALL_DEVICE_API(memsetDeviceAsync, (ptr, value, count, stream));
+}
+
 __INFINI_C infiniStatus_t infinirtStreamBeginCapture(infinirtStream_t stream, infinirtStreamCaptureMode_t mode) {
     INFINIRT_CALL_DEVICE_API(streamBeginCapture, (stream, mode));
 }

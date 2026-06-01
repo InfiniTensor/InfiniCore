@@ -19,6 +19,7 @@
 #define hcStreamBeginCapture mcStreamBeginCapture
 #define hcStream_t mcStream_t
 #define hcSetDevice mcSetDevice
+#define hcMemset mcMemset
 #define hcMemsetAsync mcMemsetAsync
 #define hcMemcpyKind mcMemcpyKind
 #define hcMemcpyHostToHost mcMemcpyHostToHost

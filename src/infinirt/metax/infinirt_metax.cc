@@ -205,6 +205,16 @@ infiniStatus_t freeAsync(void *ptr, infinirtStream_t stream) {
     return INFINI_STATUS_SUCCESS;
 }
 
+infiniStatus_t memsetDevice(void *ptr, int value, size_t count) {
+    CHECK_MACART(hcMemset(ptr, value, count));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t memsetDeviceAsync(void *ptr, int value, size_t count, infinirtStream_t stream) {
+    CHECK_MACART(hcMemsetAsync(ptr, value, count, (hcStream_t)stream));
+    return INFINI_STATUS_SUCCESS;
+}
+
 infiniStatus_t streamBeginCapture(infinirtStream_t stream, infinirtStreamCaptureMode_t mode) {
     hcStreamCaptureMode graph_mode;
     if (mode == INFINIRT_STREAM_CAPTURE_MODE_GLOBAL) {
