@@ -81,6 +81,8 @@ from infinicore.ops.diff import diff
 from infinicore.ops.digamma import digamma
 from infinicore.ops.dist import dist
 from infinicore.ops.equal import equal
+from infinicore.ops.flip import flip
+from infinicore.ops.fliplr import fliplr
 from infinicore.ops.flipud import flipud
 from infinicore.ops.float_power import float_power
 from infinicore.ops.floor import floor
@@ -207,6 +209,8 @@ __all__ = [
     "acos",
     "addbmm",
     "floor",
+    "flip",
+    "fliplr",
     "attention",
     "block_diag",
     "kron",

@@ -6,7 +6,8 @@ from .avg_pool1d import avg_pool1d
 from .binary_cross_entropy_with_logits import binary_cross_entropy_with_logits
 from .causal_softmax import causal_softmax
 from .embedding import embedding
-from .flash_attention import flash_attention
+from .flash_attention import flash_attention 
+from .feature_alpha_dropout import  feature_alpha_dropout
 from .gaussian_nll_loss import gaussian_nll_loss
 from .hardswish import hardswish
 from .hardtanh import hardtanh
@@ -18,7 +19,9 @@ from .linear import linear
 from .linear_w8a8i8 import linear_w8a8i8
 from .log_softmax import log_softmax
 from .multi_margin_loss import multi_margin_loss
+from .mse_loss import mse_loss
 from .pad import pad
+from .pixel_unshuffle import pixel_unshuffle
 from .prelu import prelu
 from .random_sample import random_sample
 from .relu6 import relu6
@@ -41,6 +44,7 @@ __all__ = [
     "adaptive_max_pool1d",
     "causal_softmax",
     "embedding",
+    "feature_alpha_dropout",
     "flash_attention",
     "gaussian_nll_loss",
     "interpolate",
@@ -57,6 +61,7 @@ __all__ = [
     "swiglu",
     "interpolate",
     "linear",
+    "mse_loss",
     "triplet_margin_loss",
     "upsample_bilinear",
     "interpolate",
@@ -71,6 +76,7 @@ __all__ = [
     "selu",
     "hinge_embedding_loss",
     "pad",
+    "pixel_unshuffle",
     "silu",
     "hardswish",
     "hardtanh",
