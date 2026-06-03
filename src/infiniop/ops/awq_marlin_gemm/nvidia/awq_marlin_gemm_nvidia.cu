@@ -116,6 +116,7 @@ infiniStatus_t awq_marlin_gemm_kernel(
     }
 
     int device_id = 0;
+    cudaGetDevice(&device_id);
     // thread_k: `k` size of a thread_tile in `weights` (can usually be left as
     // auto -1)
     int thread_k = -1;
@@ -300,6 +301,7 @@ infiniStatus_t Descriptor::create(
     int c_tmp_bytes = 0;
 
     int device_id = 0;
+    cudaGetDevice(&device_id);
     int sms = -1;
     cudaDeviceGetAttribute(&sms, cudaDevAttrMultiProcessorCount, device_id);
     int workspace_bytes = sms * sizeof(int64_t);

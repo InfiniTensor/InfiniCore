@@ -49,6 +49,9 @@ void *plan(Tensor c, const Tensor &a, const Tensor &b, Tensor &b_bias, Tensor &b
 
 void run(void *planned_meta) {
     auto planned = reinterpret_cast<PlannedMeta *>(planned_meta);
+    auto optional_data = [](graph::GraphTensor &tensor) -> void * {
+        return tensor->numel() == 0 ? nullptr : tensor->data();
+    };
 
     INFINICORE_CHECK_ERROR(infiniopAwqMarlinGemm(
         planned->descriptor->desc,
@@ -57,13 +60,13 @@ void run(void *planned_meta) {
         planned->c->data(),
         planned->a->data(),
         planned->b->data(),
-        planned->b_bias->data(),
+        optional_data(planned->b_bias),
         planned->b_scales->data(),
-        planned->a_scales->data(),
-        planned->global_scales->data(),
-        planned->b_zeros->data(),
-        planned->g_idx->data(),
-        planned->perm->data(),
+        optional_data(planned->a_scales),
+        optional_data(planned->global_scales),
+        optional_data(planned->b_zeros),
+        optional_data(planned->g_idx),
+        optional_data(planned->perm),
         planned->b_q_type_id,
         planned->is_k_full,
         planned->use_atomic_add,

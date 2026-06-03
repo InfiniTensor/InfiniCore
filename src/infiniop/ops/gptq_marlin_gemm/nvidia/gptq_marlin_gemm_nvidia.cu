@@ -890,6 +890,7 @@ void gptq_marlin_gemm(const void *a,
         device::marlin::min_thread_n);
 
     int device_id = 0;
+    RuntimeDeviceCheck(cudaGetDevice(&device_id));
     int sms = -1;
     RuntimeDeviceCheck(cudaDeviceGetAttribute(&sms, cudaDevAttrMultiProcessorCount, device_id));
     // RuntimeCheck(workspace.size(0) >= sms, "workspace.size(0) = ", workspace.size(0), " is below min_workspace_size = ", sms);
