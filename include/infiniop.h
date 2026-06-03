@@ -55,6 +55,7 @@
 #include "infiniop/ops/gelu.h"
 #include "infiniop/ops/gelutanh.h"
 #include "infiniop/ops/gemm.h"
+#include "infiniop/ops/gptq_marlin_gemm.h"
 #include "infiniop/ops/gptq_qyblas_gemm.h"
 #include "infiniop/ops/hardswish.h"
 #include "infiniop/ops/hardtanh.h"
