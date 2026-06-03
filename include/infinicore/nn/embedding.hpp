@@ -60,6 +60,8 @@ public:
      *   Input shape: [10] -> Output shape: [10, embedding_dim]
      */
     Tensor forward(const Tensor &indices) const;
+    
+    Tensor forward_(Tensor &output, const Tensor &indices) const;
 
     // Module information
     size_t num_embeddings() const { return num_embeddings_; }

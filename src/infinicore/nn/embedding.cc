@@ -43,13 +43,6 @@ Embedding::Embedding(size_t num_embeddings,
 }
 
 Tensor Embedding::forward(const Tensor &indices) const {
-    // TODO: Implement on-device embedding for all devices, then remove the condition and the classic approach
-    auto device_type = device_.getType();
-    if (device_type == Device::Type::NVIDIA || device_type == Device::Type::ASCEND || device_type == Device::Type::CAMBRICON || device_type == Device::Type::ILUVATAR || device_type == Device::Type::METAX || device_type == Device::Type::MOORE || device_type == Device::Type::ALI || device_type == Device::Type::QY) {
-        // Use op::embedding which supports device-side input and batch dimension
-        return op::embedding(indices->contiguous()->to(device_), weight_);
-    }
-
     // Get the shape of indices
     auto indices_shape = indices->shape();
 
@@ -58,11 +51,27 @@ Tensor Embedding::forward(const Tensor &indices) const {
     output_shape.push_back(embedding_dim_);
 
     // Create output tensor on the same device as weight
-    auto out = Tensor::empty(output_shape, weight_->dtype(), weight_->device());
+    auto output_embeds = Tensor::empty(output_shape, weight_->dtype(), weight_->device());
 
+    return this->forward_(output_embeds, indices);
+}
+
+Tensor Embedding::forward_(Tensor &output_embeds, const Tensor &indices) const {
+    // TODO: Implement on-device embedding for all devices, then remove the condition and the classic approach
+    auto device_type = device_.getType();
+    if (device_type == Device::Type::NVIDIA || device_type == Device::Type::ASCEND || device_type == Device::Type::CAMBRICON || device_type == Device::Type::ILUVATAR || device_type == Device::Type::METAX || device_type == Device::Type::MOORE || device_type == Device::Type::ALI || device_type == Device::Type::QY) {
+        // Use op::embedding which supports device-side input and batch dimension
+        op::embedding_(output_embeds, indices->contiguous()->to(device_), weight_);
+        return output_embeds;
+    }
+
+    auto out = output_embeds;
     // Flatten indices for sequential row copies
     auto cpu_device = Device(Device::Type::CPU, 0);
     auto indices_cpu = indices->to(cpu_device)->contiguous();
+
+    // Get the shape of indices
+    auto indices_shape = indices->shape();
 
     // Calculate total number of lookups
     size_t num_lookups = 1;
