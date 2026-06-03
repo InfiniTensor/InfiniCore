@@ -1,8 +1,18 @@
 #pragma once
 
-#include "infinicore.hpp"
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+
+#include "infinicore.hpp"
+
+#ifdef ENABLE_ATEN
+#include "infinicore/adaptor/aten_adaptor.hpp"
+#include <torch/extension.h>
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
+#include <cuda_runtime.h>
+#include <ATen/cuda/CUDAContext.h>
+#endif
+#endif
 
 namespace py = pybind11;
 
@@ -35,46 +45,25 @@ inline void bind(py::module &m) {
         .def("permute", [](const Tensor &tensor, const Shape &dims) { return tensor->permute(dims); })
         .def("view", [](const Tensor &tensor, const Shape &shape) { return tensor->view(shape); })
         .def("unsqueeze", [](const Tensor &tensor, std::size_t dim) { return tensor->unsqueeze(dim); })
-        .def("squeeze", [](const Tensor &tensor, std::size_t dim) { return tensor->squeeze(dim); })
-        .def("reset", static_cast<void (Tensor::*)() noexcept>(&Tensor::reset))
-        .def("use_count", &Tensor::use_count)
-        .def("__str__", [](const Tensor &tensor) {
-            std::ostringstream oss;
-            oss << tensor;
-            return oss.str();
-        })
-        .def("__repr__", [](const Tensor &tensor) {
-            std::ostringstream oss;
-            oss << tensor;
-            return oss.str();
-        })
-        .def("__bool__", [](const Tensor &tensor) {
-            return bool(tensor);
-        });
+        .def("squeeze", [](const Tensor &tensor, std::size_t dim) { return tensor->squeeze(dim); });
 
-    using EmptyFuncType = Tensor (*)(const Shape &, const DataType &, const Device &, bool);
-    using StridedEmptyFuncType = Tensor (*)(const Shape &, const Strides &, const DataType &, const Device &, bool);
-
-    m.def("empty", static_cast<EmptyFuncType>(&Tensor::empty),
+    m.def("empty", &Tensor::empty,
           py::arg("shape"),
           py::arg("dtype"),
           py::arg("device"),
           py::arg("pin_memory") = false);
-
-    m.def("strided_empty", static_cast<StridedEmptyFuncType>(&Tensor::strided_empty),
+    m.def("strided_empty", &Tensor::strided_empty,
           py::arg("shape"),
           py::arg("strides"),
           py::arg("dtype"),
           py::arg("device"),
           py::arg("pin_memory") = false);
-
-    m.def("zeros", static_cast<EmptyFuncType>(&Tensor::zeros),
+    m.def("zeros", &Tensor::zeros,
           py::arg("shape"),
           py::arg("dtype"),
           py::arg("device"),
           py::arg("pin_memory") = false);
-
-    m.def("ones", static_cast<EmptyFuncType>(&Tensor::ones),
+    m.def("ones", &Tensor::ones,
           py::arg("shape"),
           py::arg("dtype"),
           py::arg("device"),
@@ -91,6 +80,53 @@ inline void bind(py::module &m) {
             return Tensor{infinicore::Tensor::strided_from_blob(reinterpret_cast<void *>(raw_ptr), shape, strides, dtype, device)};
         },
         pybind11::arg("raw_ptr"), pybind11::arg("shape"), pybind11::arg("strides"), pybind11::arg("dtype"), pybind11::arg("device"));
+
+#ifdef ENABLE_ATEN
+    m.def(
+        "_tensor_as_torch",
+        [](const infinicore::Tensor &tensor) -> torch::Tensor {
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
+            if (tensor->device().getType() == infinicore::Device::Type::NVIDIA
+                || tensor->device().getType() == infinicore::Device::Type::METAX
+                || tensor->device().getType() == infinicore::Device::Type::QY) {
+                // Stream bridge (InfiniCore -> torch):
+                // Record an event on the InfiniCore context stream, then make the *current* torch
+                // stream wait on it. This avoids a full-device/stream synchronize while preserving
+                // correctness for the returned aliasing view.
+                cudaStream_t ic_stream = cudaStream_t(infinicore::context::getStream());
+                cudaStream_t torch_stream = at::cuda::getCurrentCUDAStream().stream();
+                cudaEvent_t ev{};
+                cudaEventCreateWithFlags(&ev, cudaEventDisableTiming);
+                cudaEventRecord(ev, ic_stream);
+                cudaStreamWaitEvent(torch_stream, ev, 0);
+                cudaEventDestroy(ev);
+            }
+#endif
+            return infinicore::adaptor::to_aten_tensor(tensor);
+        },
+        py::arg("tensor"));
+
+    m.def(
+        "_bridge_from_torch",
+        [](const torch::Tensor &tensor) {
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
+            if (tensor.is_cuda()) {
+                // Stream bridge (torch -> InfiniCore):
+                // Record on current torch stream, then make InfiniCore context stream wait.
+                cudaStream_t torch_stream = at::cuda::getCurrentCUDAStream().stream();
+                cudaStream_t ic_stream = cudaStream_t(infinicore::context::getStream());
+                cudaEvent_t ev{};
+                cudaEventCreateWithFlags(&ev, cudaEventDisableTiming);
+                cudaEventRecord(ev, torch_stream);
+                cudaStreamWaitEvent(ic_stream, ev, 0);
+                cudaEventDestroy(ev);
+            }
+#else
+            (void)tensor;
+#endif
+        },
+        py::arg("tensor"));
+#endif
 }
 
 } // namespace infinicore::tensor

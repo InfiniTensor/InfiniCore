@@ -52,14 +52,21 @@ def set_env_for_metax_gpu(
         dirs = [
             os.path.join(root, "tools", "cu-bridge", "include"),
             os.path.join(root, "include", "hcr"),
+            # cu-bridge cuda_driver_types.h includes mc_runtime_types.h from include/mcr
+            os.path.join(root, "include", "mcr"),
+            # mc_runtime_types.h includes misc/export_maca_api_begin.h
+            os.path.join(root, "include", "misc"),
             # cu-bridge cuComplex.h includes "hcComplex.h" from HPCC include/common
             os.path.join(root, "include", "common"),
-            # cu-bridge cusparse wrapper includes "hcsparse.h" under include/hcsparse
+            # cu-bridge cusparse wrapper includes "hcsparse.h" (HPCC) or "mcsparse.h" (MACA)
             os.path.join(root, "include", "hcsparse"),
-            # cu-bridge cublasLt wrapper includes "hcblasLt.h" under include/hcblas
+            os.path.join(root, "include", "mcsparse"),
+            # cu-bridge cublasLt wrapper includes "hcblasLt.h" (HPCC) or "mcblasLt.h" (MACA)
             os.path.join(root, "include", "hcblas"),
-            # cu-bridge cusolver wrapper includes "hcsolver_common.h" under include/hcsolver
+            os.path.join(root, "include", "mcblas"),
+            # cu-bridge cusolver wrapper includes "hcsolver_common.h" (HPCC) or mcsolver headers (MACA)
             os.path.join(root, "include", "hcsolver"),
+            os.path.join(root, "include", "mcsolver"),
             os.path.join(root, "include"),
         ]
         for var in ("CPATH", "CPLUS_INCLUDE_PATH", "C_INCLUDE_PATH"):

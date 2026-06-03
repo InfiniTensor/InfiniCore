@@ -142,6 +142,7 @@ from infinicore.tensor import (
     ones,
     strided_empty,
     strided_from_blob,
+    to_torch,
     zeros,
 )
 
@@ -244,6 +245,7 @@ __all__ = [
     "from_list",
     "from_numpy",
     "from_torch",
+    "to_torch",
     "mha_kvcache",
     "mha_varlen",
     "fmin",
