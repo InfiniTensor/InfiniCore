@@ -1453,6 +1453,40 @@ def awq_marlin_gemm_(lib):
 
 
 @OpRegister.operator
+def awq_marlin_repack_(lib):
+    lib.infiniopCreateAwqMarlinRepackDescriptor.restype = c_int32
+    lib.infiniopCreateAwqMarlinRepackDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_int64,
+        c_bool,
+    ]
+
+    lib.infiniopGetAwqMarlinRepackWorkspaceSize.restype = c_int32
+    lib.infiniopGetAwqMarlinRepackWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopAwqMarlinRepack.restype = c_int32
+    lib.infiniopAwqMarlinRepack.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyAwqMarlinGemmDescriptor.restype = c_int32
+    lib.infiniopDestroyAwqMarlinGemmDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def softplus_(lib):
     lib.infiniopCreateSoftplusDescriptor.restype = c_int32
     lib.infiniopCreateSoftplusDescriptor.argtypes = [
