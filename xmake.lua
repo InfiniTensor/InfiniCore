@@ -1,6 +1,5 @@
 add_rules("mode.debug", "mode.release")
 add_requires("boost", {configs = {stacktrace = true}})
-add_requires("pybind11")
 
 -- Define color codes
 local GREEN = '\27[0;32m'
@@ -54,6 +53,18 @@ option_end()
 
 if has_config("nv-gpu") then
     add_defines("ENABLE_NVIDIA_API")
+    local CUDA_ROOT = os.getenv("CUDA_ROOT") or os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH")
+    if CUDA_ROOT == nil then
+        if os.isdir("/usr/local/cuda") then
+            CUDA_ROOT = "/usr/local/cuda"
+        elseif os.isdir("/usr/local/cuda-13.0") then
+            CUDA_ROOT = "/usr/local/cuda-13.0"
+        end
+    end
+    if CUDA_ROOT ~= nil then
+        add_includedirs(CUDA_ROOT .. "/include")
+        add_includedirs(CUDA_ROOT .. "/targets/x86_64-linux/include")
+    end
     includes("xmake/nvidia.lua")
 end
 
@@ -273,8 +284,20 @@ end
 option("infiniops")
     set_default("")
     set_showmenu(true)
-    set_description("Path to InfiniOps project root. If set, operator dispatch files are generated from InfiniOps.")
+    set_description("Path to InfiniOps project root. Defaults to submodules/InfiniOps when present.")
 option_end()
+
+function get_infiniops_path()
+    local configured = get_config("infiniops")
+    if configured and configured ~= "" then
+        return path.absolute(configured)
+    end
+
+    local bundled = path.join(os.projectdir(), "submodules", "InfiniOps")
+    if os.isdir(bundled) then
+        return bundled
+    end
+end
 
 target("infini-utils")
     set_kind("static")
@@ -390,26 +413,35 @@ target("infiniop")
         add_deps("infiniop-hygon")
     end
     set_languages("cxx17")
-    if get_config("infiniops") and get_config("infiniops") ~= "" then
-        add_includedirs(get_config("infiniops") .. "/src")
-        add_includedirs(get_config("infiniops") .. "/generated/include")
-        add_linkdirs(get_config("infiniops") .. "/build/src")
+    local infiniops_path = get_infiniops_path()
+    if infiniops_path then
+        add_includedirs(infiniops_path .. "/src")
+        add_includedirs(infiniops_path .. "/generated/include")
+        add_linkdirs(infiniops_path .. "/build/src")
         add_shflags("-Wl,--no-as-needed,-linfiniops,--as-needed", {force = true})
-        add_rpathdirs(get_config("infiniops") .. "/build/src")
+        add_rpathdirs(infiniops_path .. "/build/src")
     end
     add_files("src/infiniop/devices/handle.cc")
     add_files("src/infiniop/ops/*/operator.cc", "src/infiniop/ops/*/*/operator.cc")
     if not has_config("nv-gpu") then
         -- On non-NVIDIA builds, compile InfiniOps-synced `.cu` files as plain C++
         -- (NVIDIA includes are guarded by `#ifdef ENABLE_NVIDIA_API`).
-        add_files("src/infiniop/ops/*/operator.cu", {force = {languages = "cxx17"}})
+        add_files("src/infiniop/ops/gemm/operator.cu", {force = {languages = "cxx17"}})
     end
     add_files("src/infiniop/*.cc")
 
     before_build(function (target)
         import("core.project.config")
         local infiniops_path = config.get("infiniops")
-        if infiniops_path and infiniops_path ~= "" and not has_config("nv-gpu") then
+        if infiniops_path and infiniops_path ~= "" then
+            infiniops_path = path.absolute(infiniops_path)
+        else
+            local bundled = path.join(os.projectdir(), "submodules", "InfiniOps")
+            if os.isdir(bundled) then
+                infiniops_path = bundled
+            end
+        end
+        if infiniops_path and not has_config("nv-gpu") then
             -- CPU-only build: run sync here (NVIDIA builds sync via `infiniop-nvidia`).
             os.execv("python", {"scripts/sync_infiniops.py", infiniops_path, "--devices", "cpu"})
         end

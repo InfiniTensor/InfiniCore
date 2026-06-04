@@ -1,3 +1,16 @@
+local CUDA_ROOT = os.getenv("CUDA_ROOT") or os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH")
+if CUDA_ROOT == nil then
+    if os.isdir("/usr/local/cuda") then
+        CUDA_ROOT = "/usr/local/cuda"
+    elseif os.isdir("/usr/local/cuda-13.0") then
+        CUDA_ROOT = "/usr/local/cuda-13.0"
+    end
+end
+if CUDA_ROOT ~= nil then
+    add_includedirs(CUDA_ROOT .. "/include")
+    add_includedirs(CUDA_ROOT .. "/targets/x86_64-linux/include")
+end
+
 local CUDNN_ROOT = os.getenv("CUDNN_ROOT") or os.getenv("CUDNN_HOME") or os.getenv("CUDNN_PATH")
 if CUDNN_ROOT ~= nil then
     add_includedirs(CUDNN_ROOT .. "/include")
@@ -44,13 +57,24 @@ target("infiniop-nvidia")
         import("core.project.config")
         local infiniops_path = config.get("infiniops")
         if infiniops_path and infiniops_path ~= "" then
+            infiniops_path = path.absolute(infiniops_path)
+        else
+            local bundled = path.join(os.projectdir(), "submodules", "InfiniOps")
+            if os.isdir(bundled) then
+                infiniops_path = bundled
+            end
+        end
+        if infiniops_path then
             target:add("includedirs", infiniops_path .. "/src")
             target:add("includedirs", infiniops_path .. "/generated/include")
-            local cu_files = os.files(path.join(os.projectdir(), "src/infiniop/ops/*/operator.cu"))
+            target:add("linkdirs", infiniops_path .. "/build/src")
+            target:add("shflags", "-Wl,--no-as-needed,-linfiniops,--as-needed", {force = true})
+            target:add("rpathdirs", infiniops_path .. "/build/src")
+            local cu_files = os.files(path.join(os.projectdir(), "src/infiniop/ops/gemm/operator.cu"))
             if #cu_files == 0 then
                 local devices = {"cpu", "nvidia"}
                 os.execv("python", {"scripts/sync_infiniops.py", infiniops_path, "--devices", table.unpack(devices)})
-                cu_files = os.files(path.join(os.projectdir(), "src/infiniop/ops/*/operator.cu"))
+                cu_files = os.files(path.join(os.projectdir(), "src/infiniop/ops/gemm/operator.cu"))
             end
             for _, f in ipairs(cu_files) do
                 target:add("files", f)
