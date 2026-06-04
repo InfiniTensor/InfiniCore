@@ -55,7 +55,14 @@ option_end()
 if has_config("nv-gpu") then
     add_defines("ENABLE_NVIDIA_API")
     includes("xmake/nvidia.lua")
+
+    local CUDA_ROOT = os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH") or os.getenv("CUDA_ROOT")
+    if CUDA_ROOT ~= nil then
+        add_includedirs(CUDA_ROOT .. "/include")
+        add_includedirs(CUDA_ROOT .. "/targets/x86_64-linux/include")
+    end
 end
+
 
 option("cudnn")
     set_default(true)
@@ -254,6 +261,20 @@ if has_config("graph") then
 end
 
 
+-- InfiniOps
+option("infiniops")
+    set_default(nil)
+    set_showmenu(true)
+    set_description("Path to InfiniOps build directory")
+option_end()
+
+local INFINIOPS_ROOT = path.join(os.projectdir(), "submodules", "InfiniOps")
+local INFINIOPS_BUILD_ROOT = get_config("infiniops")
+if not INFINIOPS_BUILD_ROOT or INFINIOPS_BUILD_ROOT == "" then
+    INFINIOPS_BUILD_ROOT = path.join(INFINIOPS_ROOT, "build")
+end
+local INFINIOPS_LIBDIR = path.join(INFINIOPS_BUILD_ROOT, "src")
+
 -- InfiniCCL
 option("ccl")
     set_default(false)
@@ -393,6 +414,10 @@ target("infiniop")
         add_deps("infiniop-hygon")
     end
     set_languages("cxx17")
+    add_includedirs(path.join(INFINIOPS_ROOT, "src"), {public = false})
+    add_includedirs(path.join(INFINIOPS_ROOT, "include"), {public = false})
+    add_rpathdirs(INFINIOPS_LIBDIR)
+    add_links(path.join(INFINIOPS_LIBDIR, "libinfiniops.so"))
     add_files("src/infiniop/devices/handle.cc")
     add_files("src/infiniop/ops/*/operator.cc", "src/infiniop/ops/*/*/operator.cc")
     add_files("src/infiniop/*.cc")

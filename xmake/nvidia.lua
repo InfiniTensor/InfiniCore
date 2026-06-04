@@ -3,6 +3,12 @@ if CUDNN_ROOT ~= nil then
     add_includedirs(CUDNN_ROOT .. "/include")
 end
 
+local CUDA_ROOT = os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH") or os.getenv("CUDA_ROOT")
+if CUDA_ROOT ~= nil then
+    add_includedirs(CUDA_ROOT .. "/include")
+    add_includedirs(CUDA_ROOT .. "/targets/x86_64-linux/include")
+end
+
 local CUTLASS_ROOT = os.getenv("CUTLASS_ROOT") or os.getenv("CUTLASS_HOME") or os.getenv("CUTLASS_PATH")
 
 local FLASH_ATTN_ROOT = get_config("flash-attn")
