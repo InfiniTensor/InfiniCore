@@ -1,142 +1,151 @@
-#include "../../operator.h"
 #include "../../handle.h"
+#include "../../operator.h"
+#include "../../tensor.h"
 #include "infiniop/ops/gemm.h"
 
-#ifdef ENABLE_CPU_API
-#include "cpu/gemm_cpu.h"
-#endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API) || defined(ENABLE_ALI_API)
-#include "nvidia/gemm_nvidia.cuh"
-#endif
-#ifdef ENABLE_CAMBRICON_API
-#include "bang/gemm_bang.h"
-#endif
-#ifdef ENABLE_ASCEND_API
-#include "ascend/gemm_ascend.h"
-#endif
-#ifdef ENABLE_METAX_API
-#include "metax/gemm_metax.h"
-#endif
-#ifdef ENABLE_MOORE_API
-#include "moore/gemm_moore.h"
-#endif
-#ifdef ENABLE_KUNLUN_API
-#include "kunlun/gemm_kunlun.h"
-#endif
-#ifdef ENABLE_QY_API
-#include "qy/gemm_qy.cuh"
-#endif
+#include <base/gemm.h>
+#include <config.h>
+#include <data_type.h>
+#include <device.h>
+#include <native/cpu/device_.h>
+#include <native/cuda/nvidia/device_.h>
+#include <handle.h>
+#include <operator.h>
+#include <tensor.h>
+#include <torch/ops/gemm/gemm.h>
+
+#include <optional>
+#include <vector>
+
+namespace {
+
+std::optional<infini::ops::DataType> toInfiniOpsDtype(infiniDtype_t dtype) {
+    switch (dtype) {
+    case INFINI_DTYPE_I8:
+        return infini::ops::DataType::kInt8;
+    case INFINI_DTYPE_I16:
+        return infini::ops::DataType::kInt16;
+    case INFINI_DTYPE_I32:
+        return infini::ops::DataType::kInt32;
+    case INFINI_DTYPE_I64:
+        return infini::ops::DataType::kInt64;
+    case INFINI_DTYPE_U8:
+        return infini::ops::DataType::kUInt8;
+    case INFINI_DTYPE_U16:
+        return infini::ops::DataType::kUInt16;
+    case INFINI_DTYPE_U32:
+        return infini::ops::DataType::kUInt32;
+    case INFINI_DTYPE_U64:
+        return infini::ops::DataType::kUInt64;
+    case INFINI_DTYPE_F16:
+        return infini::ops::DataType::kFloat16;
+    case INFINI_DTYPE_BF16:
+        return infini::ops::DataType::kBFloat16;
+    case INFINI_DTYPE_F32:
+        return infini::ops::DataType::kFloat32;
+    case INFINI_DTYPE_F64:
+        return infini::ops::DataType::kFloat64;
+    default:
+        return std::nullopt;
+    }
+}
+
+std::optional<infini::ops::Device::Type> toInfiniOpsDevice(infiniDevice_t device) {
+    switch (device) {
+    case INFINI_DEVICE_CPU:
+        return infini::ops::Device::Type::kCpu;
+    case INFINI_DEVICE_NVIDIA:
+        return infini::ops::Device::Type::kNvidia;
+    case INFINI_DEVICE_CAMBRICON:
+        return infini::ops::Device::Type::kCambricon;
+    case INFINI_DEVICE_ASCEND:
+        return infini::ops::Device::Type::kAscend;
+    case INFINI_DEVICE_METAX:
+        return infini::ops::Device::Type::kMetax;
+    case INFINI_DEVICE_MOORE:
+        return infini::ops::Device::Type::kMoore;
+    case INFINI_DEVICE_ILUVATAR:
+        return infini::ops::Device::Type::kIluvatar;
+    case INFINI_DEVICE_KUNLUN:
+        return infini::ops::Device::Type::kKunlun;
+    case INFINI_DEVICE_HYGON:
+        return infini::ops::Device::Type::kHygon;
+    case INFINI_DEVICE_QY:
+        return infini::ops::Device::Type::kQy;
+    default:
+        return std::nullopt;
+    }
+}
+
+struct TensorMeta {
+    std::vector<size_t> shape;
+    std::vector<ptrdiff_t> strides;
+    infini::ops::DataType dtype;
+};
+
+TensorMeta makeMeta(infiniopTensorDescriptor_t desc, infini::ops::DataType dtype) {
+    return TensorMeta{desc->shape(), desc->strides(), dtype};
+}
+
+struct InfiniOpsGemmDescriptor : InfiniopDescriptor {
+    TensorMeta c;
+    TensorMeta a;
+    TensorMeta b;
+
+    InfiniOpsGemmDescriptor(const InfiniopHandle *handle,
+                            infiniopTensorDescriptor_t c_desc,
+                            infiniopTensorDescriptor_t a_desc,
+                            infiniopTensorDescriptor_t b_desc,
+                            infini::ops::DataType c_dtype,
+                            infini::ops::DataType a_dtype,
+                            infini::ops::DataType b_dtype)
+        : c(makeMeta(c_desc, c_dtype)), a(makeMeta(a_desc, a_dtype)), b(makeMeta(b_desc, b_dtype)) {
+        device_type = handle->device;
+        device_id = handle->device_id;
+    }
+
+    infini::ops::Tensor tensor(const TensorMeta &meta, const void *data) const {
+        auto dev = toInfiniOpsDevice(device_type);
+        if (!dev.has_value()) {
+            return infini::ops::Tensor(const_cast<void *>(data), meta.shape, meta.dtype);
+        }
+        return infini::ops::Tensor(
+            const_cast<void *>(data),
+            meta.shape,
+            meta.dtype,
+            infini::ops::Device(*dev, device_id),
+            meta.strides);
+    }
+};
+
+} // namespace
+
 __INFINI_C infiniStatus_t infiniopCreateGemmDescriptor(
     infiniopHandle_t handle,
     infiniopGemmDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t c_desc,
     infiniopTensorDescriptor_t a_desc,
     infiniopTensorDescriptor_t b_desc) {
-
-#define CREATE(CASE, NAMESPACE)                                             \
-    case CASE:                                                              \
-        return op::gemm::NAMESPACE::Descriptor::create(                     \
-            handle,                                                         \
-            reinterpret_cast<op::gemm::NAMESPACE::Descriptor **>(desc_ptr), \
-            c_desc,                                                         \
-            a_desc,                                                         \
-            b_desc)
-
-    switch (handle->device) {
-
-#ifdef ENABLE_CPU_API
-        CREATE(INFINI_DEVICE_CPU, cpu);
-#endif
-#ifdef ENABLE_NVIDIA_API
-        CREATE(INFINI_DEVICE_NVIDIA, nvidia);
-#endif
-#ifdef ENABLE_ILUVATAR_API
-        CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
-#endif
-#ifdef ENABLE_ALI_API
-        CREATE(INFINI_DEVICE_ALI, nvidia);
-#endif
-#ifdef ENABLE_QY_API
-        CREATE(INFINI_DEVICE_QY, qy);
-#endif
-#ifdef ENABLE_HYGON_API
-        CREATE(INFINI_DEVICE_HYGON, nvidia);
-#endif
-#ifdef ENABLE_CAMBRICON_API
-        CREATE(INFINI_DEVICE_CAMBRICON, bang);
-#endif
-#ifdef ENABLE_ASCEND_API
-        CREATE(INFINI_DEVICE_ASCEND, ascend);
-#endif
-#ifdef ENABLE_METAX_API
-        CREATE(INFINI_DEVICE_METAX, metax);
-#endif
-#ifdef ENABLE_MOORE_API
-        CREATE(INFINI_DEVICE_MOORE, moore);
-#endif
-
-#ifdef ENABLE_KUNLUN_API
-        CREATE(INFINI_DEVICE_KUNLUN, kunlun);
-#endif
-
-    default:
+    if (!toInfiniOpsDevice(handle->device).has_value()) {
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
 
-#undef CREATE
+    auto c_dtype = toInfiniOpsDtype(c_desc->dtype());
+    auto a_dtype = toInfiniOpsDtype(a_desc->dtype());
+    auto b_dtype = toInfiniOpsDtype(b_desc->dtype());
+    if (!c_dtype.has_value() || !a_dtype.has_value() || !b_dtype.has_value()) {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
+    *desc_ptr = new InfiniOpsGemmDescriptor(handle, c_desc, a_desc, b_desc, *c_dtype, *a_dtype, *b_dtype);
+    return INFINI_STATUS_SUCCESS;
 }
 
-__INFINI_C infiniStatus_t
-infiniopGetGemmWorkspaceSize(
-    infiniopGemmDescriptor_t desc,
+__INFINI_C infiniStatus_t infiniopGetGemmWorkspaceSize(
+    infiniopGemmDescriptor_t,
     size_t *size) {
-
-#define GET(CASE, NAMESPACE)                                                                      \
-    case CASE:                                                                                    \
-        *size = reinterpret_cast<const op::gemm::NAMESPACE::Descriptor *>(desc)->workspaceSize(); \
-        return INFINI_STATUS_SUCCESS
-
-    switch (desc->device_type) {
-
-#ifdef ENABLE_CPU_API
-        GET(INFINI_DEVICE_CPU, cpu);
-#endif
-#ifdef ENABLE_NVIDIA_API
-        GET(INFINI_DEVICE_NVIDIA, nvidia);
-#endif
-#ifdef ENABLE_ILUVATAR_API
-        GET(INFINI_DEVICE_ILUVATAR, nvidia);
-#endif
-#ifdef ENABLE_ALI_API
-        GET(INFINI_DEVICE_ALI, nvidia);
-#endif
-#ifdef ENABLE_QY_API
-        GET(INFINI_DEVICE_QY, qy);
-#endif
-#ifdef ENABLE_HYGON_API
-        GET(INFINI_DEVICE_HYGON, nvidia);
-#endif
-#ifdef ENABLE_CAMBRICON_API
-        GET(INFINI_DEVICE_CAMBRICON, bang);
-#endif
-#ifdef ENABLE_ASCEND_API
-        GET(INFINI_DEVICE_ASCEND, ascend);
-#endif
-#ifdef ENABLE_METAX_API
-        GET(INFINI_DEVICE_METAX, metax);
-#endif
-#ifdef ENABLE_MOORE_API
-        GET(INFINI_DEVICE_MOORE, moore);
-#endif
-#ifdef ENABLE_KUNLUN_API
-        GET(INFINI_DEVICE_KUNLUN, kunlun);
-#endif
-
-    default:
-        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
-    }
-
-#undef GET
+    *size = 0;
+    return INFINI_STATUS_SUCCESS;
 }
 
 __INFINI_C infiniStatus_t infiniopGemm(
@@ -148,105 +157,30 @@ __INFINI_C infiniStatus_t infiniopGemm(
     float alpha,
     float beta,
     void *stream) {
+    auto gemm_desc = reinterpret_cast<const InfiniOpsGemmDescriptor *>(desc);
 
-#define CALCULATE(CASE, NAMESPACE)                                             \
-    case CASE:                                                                 \
-        return reinterpret_cast<const op::gemm::NAMESPACE::Descriptor *>(desc) \
-            ->calculate(workspace, workspace_size,                             \
-                        c, beta,                                               \
-                        a, b, alpha,                                           \
-                        stream)
+    infini::ops::Handle handle;
+    handle.set_stream(stream);
+    handle.set_workspace(workspace);
+    handle.set_workspace_size_in_bytes(workspace_size);
 
-    switch (desc->device_type) {
+    infini::ops::Config config;
+    config.set_implementation_index(2);
 
-#ifdef ENABLE_CPU_API
-        CALCULATE(INFINI_DEVICE_CPU, cpu);
-#endif
-#ifdef ENABLE_NVIDIA_API
-        CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
-#endif
-#ifdef ENABLE_ILUVATAR_API
-        CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
-#endif
-#ifdef ENABLE_ALI_API
-        CALCULATE(INFINI_DEVICE_ALI, nvidia);
-#endif
-#ifdef ENABLE_QY_API
-        CALCULATE(INFINI_DEVICE_QY, qy);
-#endif
-#ifdef ENABLE_HYGON_API
-        CALCULATE(INFINI_DEVICE_HYGON, nvidia);
-#endif
-#ifdef ENABLE_CAMBRICON_API
-        CALCULATE(INFINI_DEVICE_CAMBRICON, bang);
-#endif
-#ifdef ENABLE_ASCEND_API
-        CALCULATE(INFINI_DEVICE_ASCEND, ascend);
-#endif
-#ifdef ENABLE_METAX_API
-        CALCULATE(INFINI_DEVICE_METAX, metax);
-#endif
-#ifdef ENABLE_MOORE_API
-        CALCULATE(INFINI_DEVICE_MOORE, moore);
-#endif
-#ifdef ENABLE_KUNLUN_API
-        CALCULATE(INFINI_DEVICE_KUNLUN, kunlun);
-#endif
-
-    default:
-        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
-    }
-
-#undef CALCULATE
+    infini::ops::Operator<infini::ops::Gemm>::Call(
+        handle,
+        config,
+        gemm_desc->tensor(gemm_desc->a, a),
+        gemm_desc->tensor(gemm_desc->b, b),
+        std::optional<float>(alpha),
+        std::optional<float>(beta),
+        std::optional<int>{},
+        std::optional<int>{},
+        gemm_desc->tensor(gemm_desc->c, c));
+    return INFINI_STATUS_SUCCESS;
 }
 
-__INFINI_C infiniStatus_t
-infiniopDestroyGemmDescriptor(infiniopGemmDescriptor_t desc) {
-
-#define DELETE(CASE, NAMESPACE)                                                 \
-    case CASE:                                                                  \
-        delete reinterpret_cast<const op::gemm::NAMESPACE::Descriptor *>(desc); \
-        return INFINI_STATUS_SUCCESS;
-
-    switch (desc->device_type) {
-
-#ifdef ENABLE_CPU_API
-        DELETE(INFINI_DEVICE_CPU, cpu);
-#endif
-#ifdef ENABLE_NVIDIA_API
-        DELETE(INFINI_DEVICE_NVIDIA, nvidia);
-#endif
-#ifdef ENABLE_ILUVATAR_API
-        DELETE(INFINI_DEVICE_ILUVATAR, nvidia);
-#endif
-#ifdef ENABLE_ALI_API
-        DELETE(INFINI_DEVICE_ALI, nvidia);
-#endif
-#ifdef ENABLE_QY_API
-        DELETE(INFINI_DEVICE_QY, qy);
-#endif
-#ifdef ENABLE_HYGON_API
-        DELETE(INFINI_DEVICE_HYGON, nvidia);
-#endif
-#ifdef ENABLE_CAMBRICON_API
-        DELETE(INFINI_DEVICE_CAMBRICON, bang);
-#endif
-#ifdef ENABLE_ASCEND_API
-        DELETE(INFINI_DEVICE_ASCEND, ascend);
-#endif
-#ifdef ENABLE_METAX_API
-        DELETE(INFINI_DEVICE_METAX, metax);
-#endif
-#ifdef ENABLE_MOORE_API
-        DELETE(INFINI_DEVICE_MOORE, moore);
-#endif
-#ifdef ENABLE_KUNLUN_API
-        DELETE(INFINI_DEVICE_KUNLUN, kunlun);
-#endif
-
-    default:
-        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
-    }
-
-#undef DELETE
+__INFINI_C infiniStatus_t infiniopDestroyGemmDescriptor(infiniopGemmDescriptor_t desc) {
+    delete reinterpret_cast<const InfiniOpsGemmDescriptor *>(desc);
+    return INFINI_STATUS_SUCCESS;
 }
