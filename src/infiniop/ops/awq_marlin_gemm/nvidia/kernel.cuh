@@ -515,8 +515,15 @@ void marlin_mm(const void *A, const void *B, void *C, void *C_tmp, void *b_bias,
                                ", num_threads = ", num_threads, ", num_bits = ", num_bits);
         }
 
-        cudaFuncSetAttribute(kernel, cudaFuncAttributeMaxDynamicSharedMemorySize,
-                             max_shared_mem_new);
+        cudaStreamCaptureStatus capture_status = cudaStreamCaptureStatusNone;
+        host::RuntimeCheck(
+            cudaStreamIsCapturing(stream, &capture_status) == cudaSuccess,
+            "cudaStreamIsCapturing failed");
+        if (capture_status == cudaStreamCaptureStatusNone) {
+            host::RuntimeCheck(
+                cudaFuncSetAttribute(kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, max_shared_mem_new) == cudaSuccess,
+                "cudaFuncSetAttribute failed");
+        }
 
         bool part_use_atomic_add = use_atomic_add && div_ceil(prob_m_split, 64) * prob_n <= 2048;
 

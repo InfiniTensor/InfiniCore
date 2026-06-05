@@ -742,8 +742,12 @@ void marlin_mm(
                 num_bits);
         }
 
-        host::RuntimeDeviceCheck(
-            cudaFuncSetAttribute(kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, max_shared_mem_new));
+        cudaStreamCaptureStatus capture_status = cudaStreamCaptureStatusNone;
+        host::RuntimeDeviceCheck(cudaStreamIsCapturing(stream, &capture_status));
+        if (capture_status == cudaStreamCaptureStatusNone) {
+            host::RuntimeDeviceCheck(
+                cudaFuncSetAttribute(kernel, cudaFuncAttributeMaxDynamicSharedMemorySize, max_shared_mem_new));
+        }
 
         bool part_use_atomic_add = use_atomic_add && div_ceil(prob_m_split, 64) * prob_n <= 2048;
 
@@ -994,7 +998,7 @@ infiniStatus_t gptq_marlin_gemm_kernel(void *c,
 
     // ===================== 3. 单次 cudaMalloc 分配 =====================
     if (total_bytes > 0) {
-        cudaMemset(total_buffer, 0, total_bytes);
+        cudaMemsetAsync(total_buffer, 0, total_bytes, stream);
     }
 
     // ===================== 4. 手动切分指针（核心！） =====================

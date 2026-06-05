@@ -178,8 +178,7 @@ infiniStatus_t awq_marlin_gemm_kernel(
     const int total_bytes = c_tmp_bytes + a_tmp_bytes + workspace_bytes;
     // ===================== 3. 单次 cudaMalloc 分配 =====================
     if (total_bytes > 0) {
-
-        cudaMemset(total_buffer, 0, total_bytes);
+        cudaMemsetAsync(total_buffer, 0, total_bytes, stream);
     }
     // ===================== 4. 手动切分指针（核心！） =====================
     uint8_t *ptr = reinterpret_cast<uint8_t *>(total_buffer);
