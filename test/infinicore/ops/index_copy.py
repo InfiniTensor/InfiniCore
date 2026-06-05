@@ -37,13 +37,13 @@ def parse_test_cases():
         # index for index_copy should be 1-D with length equal to source.size(dim)
         index_len = src_shape[dim]
 
+        unique_index = torch.randperm(target_shape[dim])[:index_len].to(torch.int64)
         index_spec = TensorSpec.from_tensor(
             (index_len,),
             None,
             infinicore.int64,
-            init_mode=TensorInitializer.RANDINT,
-            low=0,
-            high=target_shape[dim],
+            init_mode=TensorInitializer.MANUAL,
+            set_tensor=unique_index,
         )
         src_spec = TensorSpec.from_tensor(src_shape, None, infinicore.float32)
 
@@ -90,7 +90,7 @@ class OpTest(BaseOperatorTest):
         return torch.index_copy(*args, **kwargs)
 
     def infinicore_operator(self, *args, **kwargs):
-         return infinicore.index_copy(*args, **kwargs)
+        return infinicore.index_copy(*args, **kwargs)
 
 
 def main():
