@@ -270,11 +270,14 @@ __device__ Tcompute softmaxSum(__global_ptr__ const Tval *probs,
 
     __shared__ Tcompute sum_;
     if (core_id() == 0) {
-        sum_ = Tcompute(0.f);
+        Tcompute zero = Tcompute(0.f);
+        __builtin_memcpy(&sum_, &zero, sizeof(Tcompute));
     }
     sync_cluster();
 
-    //__global_ptr__ Tval const *probs_ = probs;
+    // Load sum_ from shared memory to register
+    Tcompute sum_val;
+    __builtin_memcpy(&sum_val, &sum_, sizeof(Tcompute));
 
     for (int r = 0; r < sm_repeat + (sm_step > 0 ? 1 : 0); r++) {
         int read_len = (r < sm_repeat ? sm_size : sm_step);
@@ -285,27 +288,49 @@ __device__ Tcompute softmaxSum(__global_ptr__ const Tval *probs,
         sync_cluster();
 
         for (int index = core_id(); index < read_len; index += BLOCK_SIZE) {
+            // Fix: Load from shared memory to register
+            Tval x_val;
+            __builtin_memcpy(&x_val, &x_sm[index], sizeof(Tval));
+
+            Tval y_val;
             if constexpr (std::is_same_v<Tval, half>) {
-                y_sm[index] = __float2half(exp((__half2float(x_sm[index]) - float(max_value)) / temperature));
+                float x_float = __half2float(x_val);
+                float exp_val = exp((x_float - float(max_value)) / temperature);
+                y_val = __float2half(exp_val);
             } else if constexpr (std::is_same_v<Tval, bfloat16_t>) {
-                y_sm[index] = __float2bfloat16(exp((__bfloat162float(x_sm[index]) - float(max_value)) / temperature));
+                float x_float = __bfloat162float(x_val);
+                float exp_val = exp((x_float - float(max_value)) / temperature);
+                y_val = __float2bfloat16(exp_val);
             } else if constexpr (std::is_same_v<Tval, float>) {
-                y_sm[index] = exp((x_sm[index] - max_value) / temperature);
+                y_val = exp((x_val - max_value) / temperature);
             }
+
+            // Fix: Store to shared memory
+            __builtin_memcpy(&y_sm[index], &y_val, sizeof(Tval));
         }
         sync_cluster();
 
         Tcompute sum_0 = op::common_kunlun::reduce_op::sum<BLOCK_SIZE, Tval, Tcompute>(y_sm, read_len);
 
         if (core_id() == 0) {
-            sum_ = sum_ + sum_0;
+            sum_val = sum_val + sum_0;
+            // Store updated sum back to shared memory
+            __builtin_memcpy(&sum_, &sum_val, sizeof(Tcompute));
         }
         sync_cluster();
+
+        // Reload sum_val from shared memory for next iteration
+        if (core_id() == 0) {
+            __builtin_memcpy(&sum_val, &sum_, sizeof(Tcompute));
+        }
     }
 
     __global_ptr__ Tcompute *sum_global_ = sum_global;
     if (core_id() == 0) {
-        SM2GM(&sum_, sum_global_ + cluster_id(), sizeof(Tcompute));
+        // Fix: Load sum_ from shared memory to register before storing to global
+        Tcompute final_sum;
+        __builtin_memcpy(&final_sum, &sum_, sizeof(Tcompute));
+        LM2GM(&final_sum, sum_global_ + cluster_id(), sizeof(Tcompute));
     }
     sync_cluster();
 
@@ -318,11 +343,14 @@ __device__ Tcompute softmaxSum(__global_ptr__ const Tval *probs,
 
     Tcompute all_sum_0 = op::common_kunlun::reduce_op::sum<BLOCK_SIZE, Tcompute, Tcompute>(z_sm, cluster_num());
     if (core_id() == 0) {
-        all_sum = all_sum_0;
+        __builtin_memcpy(&all_sum, &all_sum_0, sizeof(Tcompute));
     }
     sync_cluster();
 
-    return all_sum;
+    // Fix: Load from shared memory to register before returning
+    Tcompute result;
+    __builtin_memcpy(&result, &all_sum, sizeof(Tcompute));
+    return result;
 }
 template <typename Tval, typename Tcompute, typename Tidx>
 __device__ void sample(__global_ptr__ Tidx *result,

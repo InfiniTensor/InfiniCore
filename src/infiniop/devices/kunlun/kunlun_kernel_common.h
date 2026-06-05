@@ -53,56 +53,65 @@ inline __device__ T atomicAdd(__shared_ptr__ T *ptr, T value) {
     T x = atomicadd(ptr, value);
     return x;
 }
-// Specialize atomicAdd for half
+
+// Specialize atomicAdd for half - Fixed address space issue
 template <>
 inline __device__ half atomicAdd<half>(__shared_ptr__ half *ptr, half value) {
     ticket_lock_mix();
-    half old = *ptr;
-    float of = __half2float(old);
+    // Load from shared memory to register first
+    half old_val;
+    __builtin_memcpy(&old_val, ptr, sizeof(half));
+    float of = __half2float(old_val);
     float vf = __half2float(value);
     float sumf = of + vf;
     half sum = __float2half_rn(sumf);
-    *ptr = sum;
+    __builtin_memcpy(ptr, &sum, sizeof(half));
     mfence_sm();
     ticket_unlock_mix();
-    return old;
+    return old_val;
 }
-// Specialize atomicAdd for bfloat16_t
+
+// Specialize atomicAdd for bfloat16_t - Fixed address space issue
 template <>
 inline __device__ bfloat16_t atomicAdd<bfloat16_t>(__shared_ptr__ bfloat16_t *ptr, bfloat16_t value) {
     ticket_lock_mix();
-    bfloat16_t old = *ptr;
-    float of = __bfloat162float(old);
+    // Load from shared memory to register first
+    bfloat16_t old_val;
+    __builtin_memcpy(&old_val, ptr, sizeof(bfloat16_t));
+    float of = __bfloat162float(old_val);
     float vf = __bfloat162float(value);
     float sumf = of + vf;
     bfloat16_t sum = __float2bfloat16_rn(sumf);
-    *ptr = sum;
+    __builtin_memcpy(ptr, &sum, sizeof(bfloat16_t));
     mfence_sm();
     ticket_unlock_mix();
-    return old;
+    return old_val;
 }
 
 /**
- * @brief atomicMax for kunlun xpu
+ * @brief atomicMax for kunlun xpu - Fixed address space issue
  * @param ptr: pointer to shared memory
  * @param value: value to compare
  */
 template <typename T>
 inline __device__ T atomicMax(__shared_ptr__ T *ptr, T value) {
     ticket_lock_mix();
-    T old = *ptr;
+    // Load from shared memory to register first
+    T old_val;
+    __builtin_memcpy(&old_val, ptr, sizeof(T));
     if constexpr (std::is_same<T, bfloat16_t>::value) {
-        float of = __bfloat162float(old);
+        float of = __bfloat162float(old_val);
         float vf = __bfloat162float(value);
         float maxf = fmax(of, vf);
-        bfloat16_t max = __float2bfloat16_rn(maxf);
-        *ptr = max;
+        bfloat16_t max_val = __float2bfloat16_rn(maxf);
+        __builtin_memcpy(ptr, &max_val, sizeof(T));
     } else {
-        *ptr = fmax(old, value);
+        T max_val = fmax(old_val, value);
+        __builtin_memcpy(ptr, &max_val, sizeof(T));
     }
     mfence_sm();
     ticket_unlock_mix();
-    return old;
+    return old_val;
 }
 
 /**
@@ -193,6 +202,30 @@ __inline__ __device__ float max(const float *data_ptr, size_t len) {
         }
     }
     return res;
+}
+
+// Helper function to load from shared memory to register (for half types)
+inline __device__ half loadFromShared(__shared_ptr__ const half *ptr) {
+    half val;
+    __builtin_memcpy(&val, ptr, sizeof(half));
+    return val;
+}
+
+// Helper function to store to shared memory from register (for half types)
+inline __device__ void storeToShared(__shared_ptr__ half *ptr, half val) {
+    __builtin_memcpy(ptr, &val, sizeof(half));
+}
+
+// Helper function to load from shared memory to register (for bfloat16 types)
+inline __device__ bfloat16_t loadFromShared(__shared_ptr__ const bfloat16_t *ptr) {
+    bfloat16_t val;
+    __builtin_memcpy(&val, ptr, sizeof(bfloat16_t));
+    return val;
+}
+
+// Helper function to store to shared memory from register (for bfloat16 types)
+inline __device__ void storeToShared(__shared_ptr__ bfloat16_t *ptr, bfloat16_t val) {
+    __builtin_memcpy(ptr, &val, sizeof(bfloat16_t));
 }
 
 } // namespace device::kunlun::kernel

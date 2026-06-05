@@ -19,15 +19,29 @@ __device__ void rmsnormBlock(
 
     __shared__ Tcompute rms;
     if (core_id() == 0) {
-        rms = Tcompute(rsqrt(ss / Tcompute(dim) + epsilon));
+        Tcompute rms_val = Tcompute(rsqrt(ss / Tcompute(dim) + epsilon));
+        __builtin_memcpy(&rms, &rms_val, sizeof(Tcompute));
     }
     sync_cluster();
 
+    // Load rms from shared memory to register
+    Tcompute rms_val;
+    __builtin_memcpy(&rms_val, &rms, sizeof(Tcompute));
+
     // Copy contiguous x, w into local mem (load from shared memory safely)
     for (size_t i = core_id(); i < dim; i += BLOCK_SIZE) {
-        Tdata xi = x[i];
-        Tweight wi = w[i];
-        y[i] = Tdata(Tcompute(xi) * Tcompute(wi) * rms);
+        // Fix: Load from shared memory to register first
+        Tdata xi;
+        __builtin_memcpy(&xi, &x[i], sizeof(Tdata));
+
+        Tweight wi;
+        __builtin_memcpy(&wi, &w[i], sizeof(Tweight));
+
+        // Compute result
+        Tdata yi = Tdata(Tcompute(xi) * Tcompute(wi) * rms_val);
+
+        // Fix: Store to shared memory
+        __builtin_memcpy(&y[i], &yi, sizeof(Tdata));
     }
     sync_cluster();
 }

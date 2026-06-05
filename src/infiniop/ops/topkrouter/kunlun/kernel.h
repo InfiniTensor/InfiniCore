@@ -67,7 +67,10 @@ __global__ void topkrouter_kernel(
     __shared__ float scores[MAX_EXPERTS];
     __shared__ float scores_with_bias_shm[MAX_EXPERTS];
     for (int32_t i = thread_idx; i < n_experts; i += BLOCK_THREADS) {
-        float v = sigmoidf_<T>(input_shm[i]);
+        // Fix: Load from shared memory to register first
+        T input_val;
+        __builtin_memcpy(&input_val, &input_shm[i], sizeof(T));
+        float v = sigmoidf_<T>(input_val);
         scores[i] = v;
         scores_with_bias_shm[i] = v + correction_bias_sm[i];
     }
@@ -159,9 +162,12 @@ __global__ void topkrouter_kernel(
 
     // Global topk and copy to GM
     if (thread_idx == 0) {
+        // Fix: Use fixed-size arrays instead of VLAs
+        constexpr int32_t MAX_LEN = MAX_EXPERTS; // GROUP_SIZE * TOPK_GROUP <= MAX_EXPERTS
+        float values[MAX_LEN];
+        int32_t indices[MAX_LEN];
         int32_t len = GROUP_SIZE * TOPK_GROUP;
-        float values[len];
-        int32_t indices[len];
+
         // COPY to LM
         __builtin_memcpy(values, values_group_select, len * sizeof(float));
         __builtin_memcpy(indices, indices_group_select, len * sizeof(int32_t));

@@ -112,20 +112,25 @@ __global__ void elementwiseKernel(
     // Cast input gm pointer type
     auto typed_inputs = reinterpret_cast<const __global_ptr__ Tdata *const __global_ptr__ *>(inputs);
 
+    // Fix: Use fixed-size arrays instead of VLAs
+    // Define maximum supported ndim (adjust as needed)
+    constexpr int MAX_NDIM = 8; // Maximum number of dimensions
+    constexpr int MAX_N = 4;    // Maximum number of inputs (adjust based on your use cases)
+
     const int BUFF_SIZE = 64;
-    // Input data cache
-    __local__ Tdata inputs_buf[N];
+    // Input data cache - using fixed size
+    __local__ Tdata inputs_buf[MAX_N];
     // Input contiguous/broadcasted flags
-    __local__ bool input_contiguous[N];
-    __local__ bool input_broadcasted[N];
-    // Input shape/strides
-    __local__ _size_t input_shapes[N * ndim];
-    __local__ _ptrdiff_t input_strides[N * ndim];
+    __local__ bool input_contiguous[MAX_N];
+    __local__ bool input_broadcasted[MAX_N];
+    // Input shape/strides - using fixed maximum sizes
+    __local__ _size_t input_shapes[MAX_N * MAX_NDIM];
+    __local__ _ptrdiff_t input_strides[MAX_N * MAX_NDIM];
     // Output shape/strides
-    __local__ _size_t output_shape[ndim];
-    __local__ _ptrdiff_t output_strides[ndim];
+    __local__ _size_t output_shape[MAX_NDIM];
+    __local__ _ptrdiff_t output_strides[MAX_NDIM];
     // Inputs gm ptr buf
-    __local__ __global_ptr__ Tdata *typed_inputs_ptr[N];
+    __local__ __global_ptr__ Tdata *typed_inputs_ptr[MAX_N];
 
     // Load from gm
     GM2LM_ASYNC(input_contiguous_gm, input_contiguous, N * sizeof(bool));
@@ -137,6 +142,12 @@ __global__ void elementwiseKernel(
     GM2LM_ASYNC(typed_inputs, typed_inputs_ptr, N * sizeof(__global_ptr__ Tdata *));
     mfence();
 
+    // Add bounds checking to prevent buffer overflow
+    if (ndim > MAX_NDIM || N > MAX_N) {
+        // Handle error or return early
+        return;
+    }
+
     int len_per_loop = min(BUFF_SIZE, roundup_div(output_size, nthreads));
 
     for (int start = thread_id * len_per_loop; start < output_size; start += nthreads * len_per_loop) {
@@ -146,8 +157,8 @@ __global__ void elementwiseKernel(
                                          ndim, output_shape, output_strides);
             InputIndexer indexer{idx, ndim, input_contiguous, input_broadcasted,
                                  input_shapes, input_strides, output_strides};
-            // Get index offset for every operand
-            int indexes[N];
+            // Fix: Use fixed-size array for indexes
+            int indexes[MAX_N];
             for (int i = 0; i < N; i++) {
                 indexes[i] = indexer(i);
             }

@@ -18,9 +18,13 @@ __device__ void causalSoftmaxBlock(
     __shared__ Tdata max_;
     Tdata max_0 = op::common_kunlun::reduce_op::max<BLOCK_SIZE, Tdata>(x, width - height + 1 + size_t(row_id));
     if (core_id() == 0) {
-        max_ = max_0;
+        __builtin_memcpy(&max_, &max_0, sizeof(Tdata));
     }
     sync_cluster();
+
+    // Load max_ from shared memory to register
+    Tdata max_val;
+    __builtin_memcpy(&max_val, &max_, sizeof(Tdata));
 
     // Elemetwise sub max for each element and apply causal softmax
     for (size_t col = core_id(); col < width; col += BLOCK_SIZE) {
@@ -30,15 +34,26 @@ __device__ void causalSoftmaxBlock(
         //          2 | * * * ... * * * |
         //  height: 3  col_id->
         if (width + size_t(row_id) >= col + height) {
+            // Fix: Load x from shared memory to register
+            Tdata x_val;
+            __builtin_memcpy(&x_val, &x[col], sizeof(Tdata));
+
+            Tdata y_val;
             if constexpr (std::is_same_v<Tdata, half>) {
-                y[col] = hexp(x[col] - max_);
+                y_val = hexp(x_val - max_val);
             } else if constexpr (std::is_same_v<Tdata, bfloat16_t>) {
-                y[col] = __float2bfloat16(exp(__bfloat162float(x[col]) - __bfloat162float(max_)));
+                float x_float = __bfloat162float(x_val);
+                float max_float = __bfloat162float(max_val);
+                y_val = __float2bfloat16(exp(x_float - max_float));
             } else {
-                y[col] = exp(x[col] - max_);
+                y_val = exp(x_val - max_val);
             }
+
+            // Fix: Store y to shared memory
+            __builtin_memcpy(&y[col], &y_val, sizeof(Tdata));
         } else {
-            y[col] = Tdata(0);
+            Tdata zero = Tdata(0);
+            __builtin_memcpy(&y[col], &zero, sizeof(Tdata));
         }
     }
     sync_cluster();
@@ -47,16 +62,29 @@ __device__ void causalSoftmaxBlock(
     __shared__ Tcompute sum_;
     Tcompute sum_0 = op::common_kunlun::reduce_op::sum<BLOCK_SIZE, Tdata, Tcompute>(y, width);
     if (core_id() == 0) {
-        sum_ = sum_0;
+        __builtin_memcpy(&sum_, &sum_0, sizeof(Tcompute));
     }
     sync_cluster();
 
+    // Load sum_ from shared memory to register
+    Tcompute sum_val;
+    __builtin_memcpy(&sum_val, &sum_, sizeof(Tcompute));
+
     // Apply softmax
     for (size_t col = core_id(); col < width; col += BLOCK_SIZE) {
-        if (sum_ != 0) {
-            y[col] = Tdata(Tcompute(y[col]) / sum_);
+        if (sum_val != 0) {
+            // Fix: Load y from shared memory to register
+            Tdata y_val;
+            __builtin_memcpy(&y_val, &y[col], sizeof(Tdata));
+
+            // Compute normalized value
+            Tdata normalized = Tdata(Tcompute(y_val) / sum_val);
+
+            // Fix: Store back to shared memory
+            __builtin_memcpy(&y[col], &normalized, sizeof(Tdata));
         } else {
-            y[col] = Tdata(0);
+            Tdata zero = Tdata(0);
+            __builtin_memcpy(&y[col], &zero, sizeof(Tdata));
         }
     }
     sync_cluster();
