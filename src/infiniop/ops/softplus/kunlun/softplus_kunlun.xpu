@@ -53,11 +53,11 @@ infiniStatus_t Descriptor::calculate(
 
     switch (_dtype) {
     case INFINI_DTYPE_F16:
-        return _device_info->calculate<8, kunlun::SoftplusOp, half, float, float>(_info, workspace, output, inputs, stream, _beta, _threshold);
+        return _device_info->calculate<8, kunlun::SoftplusOp, half, float, float>(_info, workspace, output, inputs, stream, float(_beta), float(_threshold));
     case INFINI_DTYPE_BF16:
-        return _device_info->calculate<8, kunlun::SoftplusOp, bfloat16_t, float, float>(_info, workspace, output, inputs, stream, _beta, _threshold);
+        return _device_info->calculate<8, kunlun::SoftplusOp, bfloat16_t, float, float>(_info, workspace, output, inputs, stream, float(_beta), float(_threshold));
     case INFINI_DTYPE_F32:
-        return _device_info->calculate<8, kunlun::SoftplusOp, float, float, float>(_info, workspace, output, inputs, stream, _beta, _threshold);
+        return _device_info->calculate<8, kunlun::SoftplusOp, float, float, float>(_info, workspace, output, inputs, stream, float(_beta), float(_threshold));
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }

@@ -5,3 +5,10 @@
 	path = third_party/nlohmann_json
 	url = https://github.com/nlohmann/json.git
 	branch = master
+[submodule "submodules/InfiniOps"]
+	path = submodules/InfiniOps
+	url = https://github.com/InfiniTensor/InfiniOps.git
+[submodule "submodules/InfiniCCL"]
+	path = submodules/InfiniCCL
+	url = https://github.com/InfiniTensor/InfiniCCL.git
+	branch = master

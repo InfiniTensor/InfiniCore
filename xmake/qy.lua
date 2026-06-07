@@ -35,8 +35,12 @@ end
     return container_path
 end
 
-add_includedirs("/usr/local/denglin/sdk/include", "../include")
-add_linkdirs("/usr/local/denglin/sdk/lib")
+local QY_ROOT = os.getenv("QY_ROOT") or os.getenv("QY_HOME") or os.getenv("QY_PATH")
+if QY_ROOT ~= nil then
+    add_includedirs(QY_ROOT .. "sdk/include")
+    add_linkdirs(QY_ROOT .. "/sdk/lib")
+end
+
 add_links("curt", "cublas", "cudnn")
 set_languages("cxx17")
 add_cxxflags("-std=c++17")  -- 显式设置 C++17
@@ -52,7 +56,7 @@ rule("qy.cuda")
     local qy_objfiles = {}
 
     on_load(function (target)
-        target:add("includedirs", "/usr/local/denglin/sdk/include")
+        target:add("includedirs", QY_ROOT .. "/sdk/include")
     end)
 
     after_load(function (target)
@@ -72,8 +76,8 @@ rule("qy.cuda")
         import("core.project.config")
         import("core.base.option")
 
-        local dlcc = "/usr/local/denglin/sdk/bin/dlcc"
-        local sdk_path = "/usr/local/denglin/sdk"
+        local dlcc = QY_ROOT .. "/sdk/bin/dlcc"
+        local sdk_path = QY_ROOT .. "/sdk"
         local arch = "dlgput64"
 
         
@@ -204,7 +208,7 @@ target("flash-attn-qy")
 
     if FLASH_ATTN_ROOT and FLASH_ATTN_ROOT ~= "" then
         before_build(function (target)
-            target:add("includedirs", "/usr/local/denglin/sdk/include", {public = true})
+            target:add("includedirs", QY_ROOT .. "/sdk/include", {public = true})
             local TORCH_DIR = os.iorunv("python", {"-c", "import torch, os; print(os.path.dirname(torch.__file__))"}):trim()
             local PYTHON_INCLUDE = os.iorunv("python", {"-c", "import sysconfig; print(sysconfig.get_paths()['include'])"}):trim()
             local PYTHON_LIB_DIR = os.iorunv("python", {"-c", "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))"}):trim()

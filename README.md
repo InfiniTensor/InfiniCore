@@ -146,6 +146,7 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
      xmake f --nv-gpu=true --cuda=$CUDA_HOME -cv
 
      # QY
+     # 需要指定环境变量QY_ROOT来确认库所在位置，比如说export QY_ROOT=/usr/local/XX
      xmake f --qy-gpu=true --cuda=$CUDA_HOME -cv
 
      # 寒武纪
