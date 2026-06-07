@@ -87,6 +87,7 @@ from infinicore.ops.floor import floor
 from infinicore.ops.floor_divide import floor_divide
 from infinicore.ops.fmin import fmin
 from infinicore.ops.fmod import fmod
+from infinicore.ops.frac import frac
 from infinicore.ops.hypot import hypot
 from infinicore.ops.index_add import index_add
 from infinicore.ops.index_copy import index_copy
@@ -120,6 +121,7 @@ from infinicore.ops.rotm import rotm
 from infinicore.ops.rotmg import rotmg
 from infinicore.ops.scal import scal
 from infinicore.ops.scatter import scatter
+from infinicore.ops.scatter_add import scatter_add
 from infinicore.ops.sinh import sinh
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.sum import sum
@@ -204,6 +206,7 @@ __all__ = [
     "blas_amin",
     "blas_copy",
     "blas_dot",
+    "scatter_add",
     "acos",
     "addbmm",
     "floor",
@@ -216,6 +219,7 @@ __all__ = [
     "baddbmm",
     "bilinear",
     "fmod",
+    "frac",
     "cat",
     "inner",
     "masked_select",
