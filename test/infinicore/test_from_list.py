@@ -83,11 +83,10 @@ def compare_with_torch(infinicore_tensor, expected_list, dtype=torch.float32, at
     return torch.allclose(expected_f32, torch_result, atol=atol)
 
 
-# Parameterized test data: test cases for different dimensions
+# Parameterized test data: 1D and 2D only
 _TEST_SHAPES = [
     ([1, 2, 3, 4, 5], [5], "1D"),
     ([[1, 2, 3], [4, 5, 6]], [2, 3], "2D"),
-    ([[[1, 2], [3, 4]], [[5, 6], [7, 8]]], [2, 2, 2], "3D"),
 ]
 
 
@@ -113,20 +112,30 @@ def test_from_list_basic_shapes():
 
 
 def test_from_list_float():
-    """Test converting float list to tensor"""
+    """Test converting float list to tensor with explicit float64 dtype"""
     print("=" * 50)
     print("Testing float list to tensor conversion")
-    
+
     data = [[1.0, 2.5, 3.7], [4.2, 5.9, 6.1]]
-    tensor = infinicore.from_list(data)
-    
-    # Verify dtype (should be float64, as Python float defaults to float64)
+    tensor = infinicore.from_list(data, dtype=infinicore.float64)
+
     assert tensor.dtype == infinicore.float64, f"Expected float64, got {tensor.dtype}"
-    
-    # Use unified verification method
     assert compare_with_torch(tensor, data, dtype=torch.float64), "Data mismatch"
-    
+
     print("✓ Float list test passed")
+
+
+def test_from_list_requires_dtype():
+    """Test that from_list raises TypeError when dtype is not provided"""
+    print("=" * 50)
+    print("Testing from_list requires explicit dtype")
+
+    try:
+        infinicore.from_list([1, 2, 3])
+    except TypeError:
+        print("✓ Missing dtype correctly raises TypeError")
+        return
+    raise AssertionError("Expected TypeError when dtype is omitted")
 
 
 def test_from_list_with_dtype():
@@ -147,41 +156,34 @@ def test_from_list_with_dtype():
     print("✓ Specified dtype test passed")
 
 
-def test_from_list_with_device():
-    """Test converting list to tensor with specified device"""
+def test_from_list_cpu_only():
+    """Test from_list always creates CPU tensors; use .to() for other devices"""
     print("=" * 50)
-    print("Testing list to tensor conversion with specified device")
-    
+    print("Testing from_list creates CPU tensors")
+
     data = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
-    
-    # Test CPU device
-    tensor_cpu = infinicore.from_list(data, dtype=infinicore.float32, device=infinicore.device("cpu", 0))
+
+    tensor_cpu = infinicore.from_list(data, dtype=infinicore.float32)
     assert tensor_cpu.device.type == "cpu", "Expected CPU device"
-    # Verify data correctness on CPU
     assert compare_with_torch(tensor_cpu, data, dtype=torch.float32), "CPU data mismatch"
-    
-    # Test CUDA device (if available)
+
     try:
-        # Check if CUDA is available in PyTorch
         if not torch.cuda.is_available():
-            print("⚠ CUDA not available in PyTorch, skipping CUDA test")
+            print("⚠ CUDA not available in PyTorch, skipping CUDA .to() test")
         else:
-            tensor_cuda = infinicore.from_list(data, dtype=infinicore.float32, device=infinicore.device("cuda", 0))
-            assert tensor_cuda.device.type == "cuda", "Expected CUDA device"
-            
-            # Create PyTorch CUDA tensor for comparison
+            tensor_cuda = tensor_cpu.to(infinicore.device("cuda", 0))
+            assert tensor_cuda.device.type == "cuda", "Expected CUDA device after .to()"
+
             torch_expected_cuda = torch.tensor(data, dtype=torch.float32, device="cuda:0")
             torch_result_cuda = torch.zeros_like(torch_expected_cuda)
-            
-            # Copy infinicore CUDA tensor to PyTorch CUDA tensor and compare
             _copy_infinicore_to_torch(tensor_cuda, torch_result_cuda)
             assert torch.allclose(torch_expected_cuda, torch_result_cuda), "CUDA data mismatch"
-            
-            print("✓ CUDA device test passed (device type and data correctness verified on CUDA)")
+
+            print("✓ CUDA .to() test passed")
     except Exception as e:
-        print(f"⚠ CUDA device not available, skipping CUDA test: {e}")
-    
-    print("✓ Specified device test passed")
+        print(f"⚠ CUDA device not available, skipping CUDA .to() test: {e}")
+
+    print("✓ CPU-only from_list test passed")
 
 
 def test_from_list_operations():
@@ -239,16 +241,30 @@ def test_from_list_edge_cases():
     
     # Test empty list (should raise exception)
     try:
-        infinicore.from_list([])
+        infinicore.from_list([], dtype=infinicore.float32)
         assert False, "Expected ValueError for empty list"
     except ValueError:
         pass  # Expected exception
-    
+
     # Test non-list input (should raise exception)
     try:
-        infinicore.from_list("not a list")
+        infinicore.from_list("not a list", dtype=infinicore.float32)
         assert False, "Expected TypeError for non-list input"
     except TypeError:
+        pass  # Expected exception
+
+    # Test 3D nested list (should raise exception)
+    try:
+        infinicore.from_list([[[1, 2], [3, 4]], [[5, 6], [7, 8]]], dtype=infinicore.float32)
+        assert False, "Expected ValueError for 3D list"
+    except ValueError:
+        pass  # Expected exception
+
+    # Test ragged 2D list (should raise exception)
+    try:
+        infinicore.from_list([[1, 2], [3, 4, 5]], dtype=infinicore.float32)
+        assert False, "Expected ValueError for ragged 2D list"
+    except ValueError:
         pass  # Expected exception
     
     # Test single scalar (wrapped in list)
@@ -267,7 +283,8 @@ if __name__ == "__main__":
         test_from_list_basic_shapes()
         test_from_list_float()
         test_from_list_with_dtype()
-        test_from_list_with_device()
+        test_from_list_requires_dtype()
+        test_from_list_cpu_only()
         test_from_list_operations()
         test_from_list_single_element()
         test_from_list_edge_cases()

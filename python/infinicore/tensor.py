@@ -104,6 +104,18 @@ class Tensor:
     def unsqueeze(self, dim):
         return infinicore.unsqueeze(self, dim)
 
+    def to_list(self):
+        """Convert this tensor to a (possibly nested) Python list.
+
+        The tensor is moved to CPU and made contiguous if necessary. Element
+        types map to Python ``bool`` / ``int`` / ``float`` based on the dtype.
+        A 0-dim tensor returns a bare scalar.
+
+        Returns:
+            A nested Python list (or scalar for 0-dim tensors).
+        """
+        return _infinicore.to_list(self._underlying)
+
     def debug(self, filename=None):
         """Print tensor data or save to file for debugging
 
@@ -283,7 +295,52 @@ def from_numpy(
     return result
 
 
-def from_list(data, *, dtype=None, device=None) -> Tensor:
+def from_list(data, *, dtype) -> Tensor:
+    """Convert a 1D or 2D Python list to an infinicore Tensor on CPU.
+
+    This follows a NumPy-like three-stage flow implemented in C++:
+    validate shape, allocate an empty tensor of the requested dtype, then
+    pack list elements directly into the destination buffer.
+
+    Args:
+        data: A 1D list of scalars or a 2D list of scalars.
+        dtype: Required infinicore dtype. Must be specified explicitly;
+            ``from_list`` does not infer the dtype from list elements.
+
+    Returns:
+        Tensor: A CPU infinicore tensor created from the list data.
+
+    Raises:
+        TypeError: If ``dtype`` is missing, or if input is not a list/tuple
+            or contains invalid elements.
+        ValueError: If input is empty, irregular, or deeper than 2D.
+
+    Note:
+        The result is always on CPU. Use ``tensor.to(device)`` to move it elsewhere.
+    """
+    if dtype is None:
+        raise TypeError("from_list() requires `dtype` to be specified")
+    return Tensor(_infinicore.from_list(data, dtype._underlying))
+
+
+def to_list(input) -> list:
+    """Convert an infinicore Tensor to a (possibly nested) Python list.
+
+    This is the inverse of :func:`from_list`. The tensor is moved to CPU and
+    made contiguous if necessary, then read element by element.
+
+    Args:
+        input: An infinicore Tensor.
+
+    Returns:
+        A nested Python list whose structure matches the tensor shape. Element
+        types are Python ``bool`` / ``int`` / ``float`` depending on the dtype.
+        A 0-dim tensor returns a bare scalar.
+    """
+    return _infinicore.to_list(input._underlying)
+
+
+def from_list_by_numpy(data, *, dtype=None, device=None) -> Tensor:
     """Convert a Python list to an infinicore Tensor.
 
     Args:
@@ -334,3 +391,43 @@ def from_list(data, *, dtype=None, device=None) -> Tensor:
     # Reuse from_numpy to create the tensor
     # This avoids code duplication and ensures consistent behavior
     return from_numpy(np_array, dtype=dtype, device=device)
+
+
+
+def infini_to_ctype_dtype(infini_dtype):
+    """Convert PyTorch data type to infinicore data type"""
+    import ctypes
+
+    if infini_dtype == infinicore.int32:
+        return ctypes.c_int32
+    elif infini_dtype == infinicore.float32:
+        return ctypes.c_float
+    elif infini_dtype == infinicore.int64:
+        return ctypes.c_int64
+    else:
+        raise ValueError(f"Unsupported py_dtype: {infini_dtype}")
+
+
+def infini_to_numpy(infini_tensor: "Tensor"):
+    if infini_tensor.device.type != "cpu":
+        infini_tensor_cpu = infini_tensor.to(infinicore.device("cpu", 0))
+    else:
+        infini_tensor_cpu = infini_tensor
+
+    # 获取数据指针和形状信息
+    data_ptr = infini_tensor_cpu.data_ptr()
+    num_elements = infini_tensor_cpu.numel()
+    original_shape = infini_tensor_cpu.shape
+
+    # 创建1D NumPy数组（共享内存）
+    ArrayType = infini_to_ctype_dtype(infini_tensor_cpu.dtype) * num_elements
+    array = ArrayType.from_address(data_ptr)
+    np_flat = np.ctypeslib.as_array(array)
+
+    # 重塑为原始形状
+    np_array = np_flat.reshape(original_shape)
+
+    return np.copy(np_array)
+
+
+Tensor.to_numpy = infini_to_numpy
