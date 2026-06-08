@@ -3,6 +3,18 @@
 #include <stdexcept>
 
 namespace infinicore::nn {
+namespace {
+Parameter get_state_dict_parameter(
+    const std::unordered_map<std::string, Parameter> &state_dict,
+    const std::string &name) {
+    auto it = state_dict.find(name);
+    if (it == state_dict.end()) {
+        throw std::runtime_error("Parameter '" + name + "' not found in module.");
+    }
+    return it->second;
+}
+} // namespace
+
 std::unordered_map<std::string, Parameter> Module::state_dict() const {
     std::unordered_map<std::string, Parameter> result;
     collect_all_parameters(result, "");
@@ -13,68 +25,32 @@ void Module::load_state_dict(const std::unordered_map<std::string, Tensor> &_sta
     load_state_dict_recursively(_state_dict, "");
 }
 
-bool Module::find_parameter(const std::string &name, Parameter &param) const {
-    auto direct = parameters_.find(name);
-    if (direct != parameters_.end()) {
-        param = direct->second;
-        return true;
-    }
-
-    for (const auto &[sub_name, submodule] : submodules_) {
-        const std::string prefix = sub_name + ".";
-        if (name.rfind(prefix, 0) != 0) {
-            continue;
-        }
-        if (submodule->find_parameter(name.substr(prefix.size()), param)) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
 void Module::load_parameter(const std::string &name, const Tensor &param) {
-    Parameter existing_param;
-    if (find_parameter(name, existing_param)) {
-        try {
-            existing_param.load(param);
-        } catch (const std::exception &e) {
-            throw std::runtime_error("Error loading parameter '" + name + "'. \n" + e.what());
-        }
-        return;
+    auto all_params = state_dict();
+    auto existing_param = get_state_dict_parameter(all_params, name);
+    try {
+        existing_param.load(param);
+    } catch (const std::exception &e) {
+        throw std::runtime_error("Error loading parameter '" + name + "'. \n" + e.what());
     }
-
-    // Parameter not found
-    spdlog::debug("load_parameter_: Parameter '{}' not found. Available: {} params",
-                  name, parameters_.size());
-    throw std::runtime_error("Parameter '" + name + "' not found in module.");
 }
 
 void Module::load_parameter_no_sync(const std::string &name, const Tensor &param) {
-    Parameter existing_param;
-    if (find_parameter(name, existing_param)) {
-        try {
-            existing_param.load_no_sync(param);
-        } catch (const std::exception &e) {
-            throw std::runtime_error("Error loading parameter '" + name + "'. \n" + e.what());
-        }
-        return;
+    auto all_params = state_dict();
+    auto existing_param = get_state_dict_parameter(all_params, name);
+    try {
+        existing_param.load_no_sync(param);
+    } catch (const std::exception &e) {
+        throw std::runtime_error("Error loading parameter '" + name + "'. \n" + e.what());
     }
-
-    spdlog::debug("load_parameter_no_sync: Parameter '{}' not found. Available: {} params",
-                  name, parameters_.size());
-    throw std::runtime_error("Parameter '" + name + "' not found in module.");
 }
 
 void Module::load_parameters_no_sync(const std::unordered_map<std::string, Tensor> &params) {
     auto all_params = state_dict();
     for (const auto &[name, param] : params) {
-        auto it = all_params.find(name);
-        if (it == all_params.end()) {
-            throw std::runtime_error("Parameter '" + name + "' not found in module.");
-        }
+        auto existing_param = get_state_dict_parameter(all_params, name);
         try {
-            it->second.load_no_sync(param);
+            existing_param.load_no_sync(param);
         } catch (const std::exception &e) {
             throw std::runtime_error("Error loading parameter '" + name + "'. \n" + e.what());
         }
