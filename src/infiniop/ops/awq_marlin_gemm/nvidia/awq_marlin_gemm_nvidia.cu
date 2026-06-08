@@ -66,7 +66,6 @@ infiniStatus_t awq_marlin_gemm_kernel(
         if constexpr (std::is_same<Tdata, __nv_fp8_e4m3>::value) {
             s_type_id = vllm::kFE4M3fn.id();
         } else if constexpr (std::is_same<Tdata, uint8_t>::value) {
-            printf("b_scales.scalar_type() == at::ScalarType::Float8_e8m0fnu\n");
             s_type_id = vllm::kFE8M0fnu.id();
         } else {
             host::RuntimeCheck(false,
@@ -174,12 +173,7 @@ infiniStatus_t awq_marlin_gemm_kernel(
         }
     }
 
-    int workspace_bytes = sms * sizeof(int64_t);
-    const int total_bytes = c_tmp_bytes + a_tmp_bytes + workspace_bytes;
-    // ===================== 3. 单次 cudaMalloc 分配 =====================
-    if (total_bytes > 0) {
-        cudaMemsetAsync(total_buffer, 0, total_bytes, stream);
-    }
+    int workspace_bytes = sms * sizeof(int);
     // ===================== 4. 手动切分指针（核心！） =====================
     uint8_t *ptr = reinterpret_cast<uint8_t *>(total_buffer);
     // 分配 c_tmp
@@ -226,8 +220,7 @@ infiniStatus_t awq_marlin_gemm_kernel(
 
     if (has_zp && is_zp_float) {
         if constexpr (!std::is_same<scalar_t, half>::value) {
-            printf("Computation a_type must be float16 (half) when using float zero "
-                   "points.\n");
+            host::RuntimeCheck(false, "Computation a_type must be float16 (half) when using float zero points.");
         }
     }
 
@@ -303,13 +296,15 @@ infiniStatus_t Descriptor::create(
     cudaGetDevice(&device_id);
     int sms = -1;
     cudaDeviceGetAttribute(&sms, cudaDevAttrMultiProcessorCount, device_id);
-    int workspace_bytes = sms * sizeof(int64_t);
+    int workspace_bytes = sms * sizeof(int);
     int max_m_block_size = (size_m + 16 - 1) / 16 * 16;
     max_m_block_size = min(max_m_block_size, 64);
     int max_c_tmp_size = sms * max_m_block_size * MARLIN_NAMESPACE_NAME::max_thread_n;
     c_tmp_bytes = max_c_tmp_size * sizeof(float);
 
-    a_tmp_bytes = size_m * size_k * infiniSizeOf(a_desc->dtype());
+    if (g_idx_desc->numel() > 0 && perm_desc->numel() > 0) {
+        a_tmp_bytes = size_m * size_k * infiniSizeOf(a_desc->dtype());
+    }
 
     size_t workspace_size = c_tmp_bytes + a_tmp_bytes + workspace_bytes;
 

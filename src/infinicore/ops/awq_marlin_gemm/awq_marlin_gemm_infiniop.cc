@@ -25,7 +25,9 @@ void *plan(Tensor c, const Tensor &a, const Tensor &b, Tensor &b_bias, Tensor &b
         c->desc(), a->desc(),
         b->desc(), b_bias->desc(), b_scales->desc(), a_scales->desc(), global_scales->desc(), b_zeros->desc(), g_idx->desc(), perm->desc());
 
-    INFINIOP_WORKSPACE_TENSOR(workspace, AwqMarlinGemm, descriptor);
+    size_t workspace_size = 0;
+    INFINICORE_CHECK_ERROR(infiniopGetAwqMarlinGemmWorkspaceSize(descriptor->desc, &workspace_size));
+    Tensor workspace = Tensor::zeros({workspace_size}, DataType::U8, context::getDevice());
 
     return new PlannedMeta{
         descriptor,

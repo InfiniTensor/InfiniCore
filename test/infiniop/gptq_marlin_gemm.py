@@ -22,7 +22,6 @@ from libinfiniop.scalar_type import scalar_types, ScalarType
 from typing import TYPE_CHECKING, Dict, List, Mapping, Optional, Tuple, Union
 import numpy as np
 
-
 # ==============================================================================
 #  Configuration
 # ==============================================================================

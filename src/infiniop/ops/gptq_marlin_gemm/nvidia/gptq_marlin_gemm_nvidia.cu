@@ -993,14 +993,6 @@ infiniStatus_t gptq_marlin_gemm_kernel(void *c,
     const size_t workspace_elems = (size_t)sms * max_blocks_per_sm;
     const size_t workspace_bytes = workspace_elems * sizeof(int);
 
-    // ===================== 2. 计算总内存大小 =====================
-    const size_t total_bytes = c_tmp_bytes + a_tmp_bytes + workspace_bytes;
-
-    // ===================== 3. 单次 cudaMalloc 分配 =====================
-    if (total_bytes > 0) {
-        cudaMemsetAsync(total_buffer, 0, total_bytes, stream);
-    }
-
     // ===================== 4. 手动切分指针（核心！） =====================
     uint8_t *ptr = reinterpret_cast<uint8_t *>(total_buffer);
 
@@ -1088,7 +1080,10 @@ infiniStatus_t Descriptor::create(
     max_m_block = min(max_m_block, 64);
     const size_t c_elems = (size_t)sms * max_m_block * _MAX_THREAD_N;
     size_t c_tmp_bytes = c_elems * sizeof(float);
-    size_t a_tmp_bytes = (size_t)a_desc->dim(0) * a_desc->dim(1) * infiniSizeOf(a_desc->dtype());
+    size_t a_tmp_bytes = 0;
+    if (g_idx_desc->numel() > 0 && perm_desc->numel() > 0) {
+        a_tmp_bytes = (size_t)a_desc->dim(0) * a_desc->dim(1) * infiniSizeOf(a_desc->dtype());
+    }
     const size_t workspace_elems = (size_t)sms * max_blocks_per_sm;
     const size_t workspace_bytes = workspace_elems * sizeof(int);
     size_t workspace_size = c_tmp_bytes + a_tmp_bytes + workspace_bytes;

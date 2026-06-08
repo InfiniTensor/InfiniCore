@@ -34,6 +34,7 @@ public:
 
     void syncStream();
     void syncDevice();
+    void trimMemory();
 
     std::shared_ptr<Memory> allocateMemory(size_t size);
     std::shared_ptr<Memory> allocatePinnedHostMemory(size_t size);

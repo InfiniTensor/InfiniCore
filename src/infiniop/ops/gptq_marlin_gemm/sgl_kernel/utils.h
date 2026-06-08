@@ -75,8 +75,7 @@ inline std::ostream &operator<<(std::ostream &os, PrintableDevice pd) {
     static const char *device_names[] = {
         "", "cpu", "cuda", "cuda_host", "opencl", "vulkan",
         "metal", "vpi", "rocm", "rocm_host", "ext_dev",
-        "cuda_managed", "oneapi", "webgpu", "hexagon", "maia", "trn"
-    };
+        "cuda_managed", "oneapi", "webgpu", "hexagon", "maia", "trn"};
     if (code >= 0 && code <= 16) {
         os << device_names[code];
         if (pd.device.device_id >= 0 && code != 1 && code != 0) {

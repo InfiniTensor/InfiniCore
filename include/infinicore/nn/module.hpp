@@ -18,6 +18,8 @@ public:
 
     std::unordered_map<std::string, Parameter> state_dict() const;
 
+    std::vector<std::string> state_dict_keys() const;
+
     void load_state_dict(const std::unordered_map<std::string, Tensor> &_state_dict);
 
     void load_parameter(const std::string &name, const Tensor &param);
@@ -94,6 +96,7 @@ protected:
 private:
     void load_state_dict_recursively(const std::unordered_map<std::string, Tensor> &_state_dict, const std::string &prefix = "");
     void collect_all_parameters(std::unordered_map<std::string, Parameter> &all_params, const std::string &prefix = "") const;
+    void collect_all_parameter_names(std::vector<std::string> &all_names, const std::string &prefix = "") const;
     void collect_all_modules(std::unordered_map<std::string, Module *> &out, const std::string &prefix) const;
 };
 

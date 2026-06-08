@@ -23,7 +23,6 @@ from libinfiniop.scalar_type import scalar_types, ScalarType
 from typing import TYPE_CHECKING, Dict, List, Mapping, Optional, Tuple, Union
 import numpy as np
 
-
 _TEST_CASES_SUBSET_INPUT = [
     # (size_m, size_k, size_n, group_size, quant_type)
     (32, 1024, 2048, 128, scalar_types.uint4b8),

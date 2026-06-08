@@ -117,6 +117,10 @@ void syncDevice() {
     return ContextImpl::singleton().getCurrentRuntime()->syncDevice();
 }
 
+void trimMemory() {
+    return ContextImpl::singleton().getCurrentRuntime()->trimMemory();
+}
+
 std::shared_ptr<Memory> allocateMemory(size_t size) {
     return ContextImpl::singleton().getCurrentRuntime()->allocateMemory(size);
 }
