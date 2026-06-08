@@ -13,12 +13,29 @@ void Module::load_state_dict(const std::unordered_map<std::string, Tensor> &_sta
     load_state_dict_recursively(_state_dict, "");
 }
 
+bool Module::find_parameter(const std::string &name, Parameter &param) const {
+    auto direct = parameters_.find(name);
+    if (direct != parameters_.end()) {
+        param = direct->second;
+        return true;
+    }
+
+    for (const auto &[sub_name, submodule] : submodules_) {
+        const std::string prefix = sub_name + ".";
+        if (name.rfind(prefix, 0) != 0) {
+            continue;
+        }
+        if (submodule->find_parameter(name.substr(prefix.size()), param)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void Module::load_parameter(const std::string &name, const Tensor &param) {
-    // This function only handles direct parameters (no hierarchical traversal)
-    auto all_params = state_dict();
-    auto it = all_params.find(name);
-    if (it != all_params.end()) {
-        auto existing_param = it->second;
+    Parameter existing_param;
+    if (find_parameter(name, existing_param)) {
         try {
             existing_param.load(param);
         } catch (const std::exception &e) {
@@ -34,10 +51,8 @@ void Module::load_parameter(const std::string &name, const Tensor &param) {
 }
 
 void Module::load_parameter_no_sync(const std::string &name, const Tensor &param) {
-    auto all_params = state_dict();
-    auto it = all_params.find(name);
-    if (it != all_params.end()) {
-        auto existing_param = it->second;
+    Parameter existing_param;
+    if (find_parameter(name, existing_param)) {
         try {
             existing_param.load_no_sync(param);
         } catch (const std::exception &e) {
