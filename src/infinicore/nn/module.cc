@@ -35,16 +35,6 @@ void Module::load_parameter(const std::string &name, const Tensor &param) {
     }
 }
 
-void Module::load_parameter_no_sync(const std::string &name, const Tensor &param) {
-    auto all_params = state_dict();
-    auto existing_param = get_state_dict_parameter(all_params, name);
-    try {
-        existing_param.load_no_sync(param);
-    } catch (const std::exception &e) {
-        throw std::runtime_error("Error loading parameter '" + name + "'. \n" + e.what());
-    }
-}
-
 void Module::load_parameters_no_sync(const std::unordered_map<std::string, Tensor> &params) {
     auto all_params = state_dict();
     for (const auto &[name, param] : params) {
