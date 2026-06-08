@@ -1361,6 +1361,39 @@ def gptq_marlin_gemm_(lib):
 
 
 @OpRegister.operator
+def gptq_marlin_repack_(lib):
+    lib.infiniopCreateGptqMarlinRepackDescriptor.restype = c_int32
+    lib.infiniopCreateGptqMarlinRepackDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_int64,
+        c_bool,
+    ]
+    lib.infiniopGetGptqMarlinRepackWorkspaceSize.restype = c_int32
+    lib.infiniopGetGptqMarlinRepackWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopGptqMarlinRepack.restype = c_int32
+    lib.infiniopGptqMarlinRepack.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyGptqMarlinRepackDescriptor.restype = c_int32
+    lib.infiniopDestroyGptqMarlinRepackDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def gptq_qyblas_gemm_(lib):
     lib.infiniopCreateGptqQyblasGemmDescriptor.restype = c_int32
     lib.infiniopCreateGptqQyblasGemmDescriptor.argtypes = [
