@@ -76,10 +76,6 @@ target("infiniop-nvidia")
 
         if not os.isfile(header_path) then
 
-            print("")
-            print("🔧 First-time generating AWQ Marlin kernels (arch: "
-                .. tostring(generate_arch) .. ")")
-
             -- save current directory
             local oldir = os.curdir()
 
@@ -103,7 +99,7 @@ target("infiniop-nvidia")
             os.cd(oldir)
 
             if not ok then
-                print("⚠️ generate_kernels.py returned non-zero exit code")
+                print("generate_kernels.py returned non-zero exit code")
                 if errors then
                     print(errors)
                 end
@@ -112,13 +108,10 @@ target("infiniop-nvidia")
             
         end
 
-        print("header_path = " .. header_path)
-        print("exists = " .. tostring(os.isfile(header_path)))
-
         if os.isfile(header_path) then
-            print("✅ AWQ Marlin kernels generated successfully!")
+            print("AWQ Marlin kernels generated successfully!")
         else
-            raise("❌ Failed to generate AWQ Marlin kernels: header missing!")
+            raise("Failed to generate AWQ Marlin kernels: header missing!")
         end
         if not arch_opt or type(arch_opt) ~= "string" then
             local ok, sm_str = os.iorunv("nvidia-smi", {"--query-gpu=compute_cap", "--format=csv,noheader,nounits"})
@@ -199,7 +192,6 @@ target("infiniop-nvidia")
             local sgl_arch = parse_sgl_cuda_arch(arch_opt)
             if sgl_arch then
                 add_defines("SGL_CUDA_ARCH=" .. sgl_arch)
-                print("SGL_CUDA_ARCH =", sgl_arch)
             else
                 print("Invalid cuda_arch:", arch_opt)
             end
