@@ -113,7 +113,9 @@ target("infiniop-nvidia")
         else
             raise("Failed to generate AWQ Marlin kernels: header missing!")
         end
-        if not arch_opt or type(arch_opt) ~= "string" then
+
+        -- CUDA arch: explicit --cuda_arch > nvidia-smi auto-detect > native
+        if not apply_cuda_arch_flags(function(flag) target:add("cuflags", flag) end) then
             local ok, sm_str = os.iorunv("nvidia-smi", {"--query-gpu=compute_cap", "--format=csv,noheader,nounits"})
             if ok and sm_str then
                 local major, minor = sm_str:match("(%d+)%.(%d+)")
