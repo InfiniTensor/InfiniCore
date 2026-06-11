@@ -1,5 +1,5 @@
 add_rules("mode.debug", "mode.release")
-add_requires("boost", {configs = {stacktrace = true}})
+add_requires("boost", {configs = {stacktrace = true, cmake = false}})
 add_requires("pybind11")
 
 -- Define color codes
@@ -468,6 +468,7 @@ target("infinicore_cpp_api")
     add_includedirs(INFINI_ROOT.."/include", { public = true })
 
     add_linkdirs(INFINI_ROOT.."/lib")
+    add_rpathdirs(INFINI_ROOT.."/lib")
     add_links("infiniop", "infinirt", "infiniccl")
 
     if get_config("flash-attn") and get_config("flash-attn") ~= "" then
@@ -477,6 +478,9 @@ target("infinicore_cpp_api")
         end
         if has_config("metax-gpu") then
             add_deps("flash-attn-metax")
+        end
+        if has_config("cambricon-mlu") then
+            add_deps("flash-attn-cambricon")
         end
         if has_config("qy-gpu") then
             add_deps("flash-attn-qy")
@@ -517,24 +521,44 @@ target("infinicore_cpp_api")
             local TORCH_DIR = outdata
 
             target:add(
-                "includedirs", 
-                path.join(TORCH_DIR, "include"), 
+                "includedirs",
+                path.join(TORCH_DIR, "include"),
                 path.join(TORCH_DIR, "include/torch/csrc/api/include"),
                 { public = true })
-            
+
             target:add(
                 "linkdirs",
                 path.join(TORCH_DIR, "lib"),
                 { public = true }
             )
-            target:add(
-                "links",
-                "torch",
-                "c10",
-                "torch_cuda",
-                "c10_cuda",
-                { public = true }
-            )
+            if has_config("cambricon-mlu") then
+                local TORCH_MLU_DIR = os.iorunv("python", {"-c", "import torch_mlu, os; print(os.path.dirname(torch_mlu.__file__))"}):trim()
+                target:add(
+                    "includedirs",
+                    path.join(TORCH_MLU_DIR, "csrc/include"),
+                    path.join(TORCH_MLU_DIR, "csrc/include/api/include"),
+                    { public = true }
+                )
+                target:add("linkdirs", path.join(TORCH_MLU_DIR, "csrc/lib"), { public = true })
+                target:add(
+                    "links",
+                    "torch",
+                    "c10",
+                    "torch_cpu",
+                    "torch_mlu",
+                    "torch_mlu_bangc",
+                    { public = true }
+                )
+            else
+                target:add(
+                    "links",
+                    "torch",
+                    "c10",
+                    "torch_cuda",
+                    "c10_cuda",
+                    { public = true }
+                )
+            end
         end
 
     end)
@@ -584,6 +608,7 @@ target("_infinicore")
     add_includedirs(INFINI_ROOT.."/include", { public = true })
 
     add_linkdirs(INFINI_ROOT.."/lib")
+    add_rpathdirs(INFINI_ROOT.."/lib")
     add_links("infiniop", "infinirt", "infiniccl")
 
     add_files("src/infinicore/pybind11/**.cc")

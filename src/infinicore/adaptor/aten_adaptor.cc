@@ -39,6 +39,13 @@ c10::cuda::CUDAStream get_cuda_stream() {
 }
 #endif
 
+#if defined(ENABLE_CAMBRICON_API)
+torch_mlu::MLUStream get_mlu_stream() {
+    return torch_mlu::getStreamFromExternal(
+        cnrtQueue_t(infinicore::context::getStream()), infinicore::context::getDevice().getIndex());
+}
+#endif
+
 } // namespace infinicore::adaptor
 
 #endif // ENABLE_ATEN

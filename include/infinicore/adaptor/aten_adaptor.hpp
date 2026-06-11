@@ -11,6 +11,11 @@
 #include <c10/cuda/CUDAStream.h>
 #endif
 
+#if defined(ENABLE_CAMBRICON_API)
+#include <framework/core/MLUStream.h>
+#include <framework/core/stream_guard.h>
+#endif
+
 namespace infinicore::adaptor {
 inline at::ScalarType to_at_dtype(DataType dtype) {
     switch (dtype) {
@@ -31,9 +36,11 @@ inline at::ScalarType to_at_dtype(DataType dtype) {
 
 inline at::Device to_at_device(const Device &device) {
     // PyTorch ATen only exposes standard device types (e.g. kCPU/kCUDA).
-    // Treat MetaX/QY devices as CUDA devices for ATen tensor interoperability.
+    // Treat MetaX/QY devices as CUDA devices and Cambricon MLU as PrivateUse1 for ATen interoperability.
     if (device.getType() == Device::Type::NVIDIA || device.getType() == Device::Type::METAX || device.getType() == Device::Type::QY) {
         return at::Device(at::kCUDA, device.getIndex());
+    } else if (device.getType() == Device::Type::CAMBRICON) {
+        return at::Device(c10::DeviceType::PrivateUse1, device.getIndex());
     } else if (device.getType() == Device::Type::CPU) {
         return at::Device(at::kCPU);
     } else {
@@ -45,6 +52,10 @@ at::Tensor to_aten_tensor(const infinicore::Tensor &t);
 
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
 c10::cuda::CUDAStream get_cuda_stream();
+#endif
+
+#if defined(ENABLE_CAMBRICON_API)
+torch_mlu::MLUStream get_mlu_stream();
 #endif
 } // namespace infinicore::adaptor
 

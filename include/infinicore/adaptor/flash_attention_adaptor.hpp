@@ -2,10 +2,10 @@
 #pragma once
 #include "aten_adaptor.hpp"
 
-// NVIDIA flash-attn-nvidia.so uses namespace flash. The pip/MetaX flash_attn_2_cuda extension
-// exports the same entry points at global scope (no namespace), matching FLASH_NAMESPACE builds
+// NVIDIA flash-attn-nvidia.so uses namespace flash. The pip MetaX/Cambricon extensions
+// export the same entry points at global scope (no namespace), matching FLASH_NAMESPACE builds
 // where the namespace is empty.
-#if !defined(ENABLE_METAX_API)
+#if !defined(ENABLE_METAX_API) && !defined(ENABLE_CAMBRICON_API)
 namespace flash {
 #endif
 std::vector<at::Tensor>
@@ -30,9 +30,14 @@ mha_fwd(at::Tensor &q,                            // batch_size x seqlen_q x num
 );
 
 std::vector<at::Tensor>
-mha_varlen_fwd(at::Tensor &q,                               // total_q x num_heads x head_size, total_q := \sum_{i=0}^{b} s_i
-               const at::Tensor &k,                         // total_k x num_heads_k x head_size, total_k := \sum_{i=0}^{b} s_i or num_blocks x page_block_size x num_heads_k x head_size if there's a block_table.
-               const at::Tensor &v,                         // total_k x num_heads_k x head_size, total_k := \sum_{i=0}^{b} s_i or num_blocks x page_block_size x num_heads_k x head_size if there's a block_table.
+mha_varlen_fwd(at::Tensor &q, // total_q x num_heads x head_size, total_q := \sum_{i=0}^{b} s_i
+#if defined(ENABLE_CAMBRICON_API)
+               at::Tensor &k, // Cambricon flash_attn_2_bang exports non-const k/v references.
+               at::Tensor &v,
+#else
+               const at::Tensor &k, // total_k x num_heads_k x head_size, total_k := \sum_{i=0}^{b} s_i or num_blocks x page_block_size x num_heads_k x head_size if there's a block_table.
+               const at::Tensor &v, // total_k x num_heads_k x head_size, total_k := \sum_{i=0}^{b} s_i or num_blocks x page_block_size x num_heads_k x head_size if there's a block_table.
+#endif
                std::optional<at::Tensor> &out_,             // total_q x num_heads x head_size, total_k := \sum_{i=0}^{b} s_i
                const at::Tensor &cu_seqlens_q,              // b+1
                const at::Tensor &cu_seqlens_k,              // b+1
@@ -133,7 +138,7 @@ mha_fwd_kvcache(at::Tensor &q,                                     // batch_size
 #endif
 );
 
-#if !defined(ENABLE_METAX_API)
+#if !defined(ENABLE_METAX_API) && !defined(ENABLE_CAMBRICON_API)
 } // namespace flash
 #endif
 #endif // ENABLE_FLASH_ATTN

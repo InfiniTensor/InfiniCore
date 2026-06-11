@@ -63,15 +63,28 @@ def preload_hpcc() -> None:
         _try_load(prefixes, lib)
 
 
+def preload_cambricon() -> None:
+    """Best-effort import of torch MLU so torch resolves its own shared libraries."""
+    try:
+        import torch  # noqa: F401
+    except Exception:
+        return
+
+    try:
+        import torch_mlu  # noqa: F401
+    except Exception:
+        pass
+
+
 def _should_preload_device(device_type: str) -> bool:
     """
     Check if preload is needed for a specific device type.
     """
     device_env_map = {
         "METAX": ["HPCC_PATH", "INFINICORE_PRELOAD_HPCC"],  # HPCC/METAX
+        "CAMBRICON": ["NEUWARE_HOME", "INFINICORE_PRELOAD_CAMBRICON"],
         # Add other device types here as needed:
         # "ASCEND": ["ASCEND_PATH"],
-        # "CAMBRICON": ["NEUWARE_HOME"],
     }
 
     env_vars = device_env_map.get(device_type, [])
@@ -90,6 +103,8 @@ def preload_device(device_type: str) -> None:
     """
     if device_type == "METAX":
         preload_hpcc()
+    elif device_type == "CAMBRICON":
+        preload_cambricon()
     # Add other device preload functions here as needed:
     # elif device_type == "ASCEND":
     #     preload_ascend()
@@ -106,9 +121,9 @@ def preload() -> None:
     # Device types that may require preload
     device_types = [
         "METAX",  # HPCC/METAX
+        "CAMBRICON",
         # Add other device types here as they are implemented:
         # "ASCEND",
-        # "CAMBRICON",
         # etc.
     ]
 

@@ -8,6 +8,9 @@
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
 #include <c10/cuda/CUDAGuard.h>
 #endif
+#if defined(ENABLE_CAMBRICON_API)
+#include <framework/core/stream_guard.h>
+#endif
 #endif
 
 namespace infinicore::op::mha_impl::flashattn {
@@ -40,10 +43,10 @@ void *plan(Tensor out,
 namespace {
 
 // Only support nv for now
-#if defined(ENABLE_FLASH_ATTN) && defined(ENABLE_NVIDIA_API)
+#if defined(ENABLE_FLASH_ATTN) && (defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API) || defined(ENABLE_CAMBRICON_API))
 // MetaX/hpcc pip `flash_attn_2_cuda` exports `mha_fwd` at global scope (no namespace),
 // while NVIDIA `flash-attn-nvidia.so` uses `flash::mha_fwd`.
-#if defined(ENABLE_METAX_API)
+#if defined(ENABLE_METAX_API) || defined(ENABLE_CAMBRICON_API)
 #define INFINICORE_FLASH_OP(name) ::name
 #else
 #define INFINICORE_FLASH_OP(name) flash::name
@@ -54,8 +57,12 @@ namespace {
 
 void run(void *planned_meta) {
 // Only support nv for now
-#if defined(ENABLE_FLASH_ATTN) && defined(ENABLE_NVIDIA_API)
+#if defined(ENABLE_FLASH_ATTN) && (defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API) || defined(ENABLE_CAMBRICON_API))
+#if defined(ENABLE_CAMBRICON_API)
+    torch_mlu::mlu::MLUStreamGuard guard(infinicore::adaptor::get_mlu_stream());
+#else
     c10::cuda::CUDAStreamGuard guard(infinicore::adaptor::get_cuda_stream());
+#endif
     auto *p = reinterpret_cast<PlannedMeta *>(planned_meta);
 
     auto q = infinicore::adaptor::to_aten_tensor(p->q);
