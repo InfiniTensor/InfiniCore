@@ -47,23 +47,35 @@ inline void bind(py::module &m) {
         .def("unsqueeze", [](const Tensor &tensor, std::size_t dim) { return tensor->unsqueeze(dim); })
         .def("squeeze", [](const Tensor &tensor, std::size_t dim) { return tensor->squeeze(dim); });
 
-    m.def("empty", &Tensor::empty,
+    m.def("empty",
+          [](const Shape &shape, const DataType &dtype, const Device &device, bool pin_memory) {
+              return Tensor::empty(shape, dtype, device, pin_memory);
+          },
           py::arg("shape"),
           py::arg("dtype"),
           py::arg("device"),
           py::arg("pin_memory") = false);
-    m.def("strided_empty", &Tensor::strided_empty,
+    m.def("strided_empty",
+          [](const Shape &shape, const Strides &strides, const DataType &dtype, const Device &device, bool pin_memory) {
+              return Tensor::strided_empty(shape, strides, dtype, device, pin_memory);
+          },
           py::arg("shape"),
           py::arg("strides"),
           py::arg("dtype"),
           py::arg("device"),
           py::arg("pin_memory") = false);
-    m.def("zeros", &Tensor::zeros,
+    m.def("zeros",
+          [](const Shape &shape, const DataType &dtype, const Device &device, bool pin_memory) {
+              return Tensor::zeros(shape, dtype, device, pin_memory);
+          },
           py::arg("shape"),
           py::arg("dtype"),
           py::arg("device"),
           py::arg("pin_memory") = false);
-    m.def("ones", &Tensor::ones,
+    m.def("ones",
+          [](const Shape &shape, const DataType &dtype, const Device &device, bool pin_memory) {
+              return Tensor::ones(shape, dtype, device, pin_memory);
+          },
           py::arg("shape"),
           py::arg("dtype"),
           py::arg("device"),

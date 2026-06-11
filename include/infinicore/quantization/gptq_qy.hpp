@@ -65,7 +65,6 @@ struct float16_raw {
         return static_cast<uint16_t>(sign | exp16 | mantissa16);
     }
 };
-using float16_t = float16_raw;
 #endif
 
 inline std::vector<uint16_t> float_to_fp16_bits(const std::vector<float> &values) {
