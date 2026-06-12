@@ -5,7 +5,7 @@ from infinicore.tensor import Tensor
 def avg_pool1d(
     input: Tensor,
     kernel_size: int,
-    stride: int | None = None,
+    stride: "int | None" = None,
     padding: int = 0,
     *,
     out=None,

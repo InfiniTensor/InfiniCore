@@ -4,7 +4,7 @@ from infinicore.lib import _infinicore
 from infinicore.tensor import Tensor
 
 
-def _to_int64_list(value) -> list[int]:
+def _to_int64_list(value) -> "list[int]":
     if isinstance(value, int):
         return [int(value)]
     if isinstance(value, Iterable):
@@ -12,7 +12,7 @@ def _to_int64_list(value) -> list[int]:
     raise TypeError(f"Expected int or iterable of ints, got {type(value).__name__}")
 
 
-def _to_double_list(value) -> list[float]:
+def _to_double_list(value) -> "list[float]":
     if isinstance(value, (int, float)):
         return [float(value)]
     if isinstance(value, Iterable):
@@ -53,8 +53,8 @@ def interpolate(
     mode: str = "nearest",
     align_corners=None,
 ) -> Tensor:
-    size_list: list[int] = [] if size is None else _to_int64_list(size)
-    scale_list: list[float] = (
+    size_list: "list[int]" = [] if size is None else _to_int64_list(size)
+    scale_list: "list[float]" = (
         [] if scale_factor is None else _to_double_list(scale_factor)
     )
 

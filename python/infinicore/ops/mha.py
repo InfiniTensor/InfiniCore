@@ -6,11 +6,11 @@ def mha(
     q: Tensor,
     k: Tensor,
     v: Tensor,
-    alibi_slopes: Tensor | None = None,
+    alibi_slopes: "Tensor | None" = None,
     scale: float = 1.0,
     is_causal: bool = False,
     *,
-    out: Tensor | None = None,
+    out: "Tensor | None" = None,
 ):
     if out is None:
         return Tensor(

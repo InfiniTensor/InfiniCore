@@ -3,7 +3,7 @@ from infinicore.tensor import Tensor
 
 
 def bitwise_right_shift(
-    input: Tensor, other: Tensor, *, out: Tensor | None = None
+    input: Tensor, other: Tensor, *, out: "Tensor | None" = None
 ) -> Tensor:
     if out is None:
         return Tensor(

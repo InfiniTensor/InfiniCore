@@ -8,10 +8,10 @@ def paged_attention(
     v_cache: Tensor,
     block_tables: Tensor,
     cache_lens: Tensor,
-    alibi_slopes: Tensor | None = None,
+    alibi_slopes: "Tensor | None" = None,
     scale: float = 1.0,
     *,
-    out: Tensor | None = None,
+    out: "Tensor | None" = None,
 ):
     if out is None:
         return Tensor(

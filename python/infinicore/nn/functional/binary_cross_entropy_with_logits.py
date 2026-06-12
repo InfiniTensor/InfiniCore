@@ -5,11 +5,11 @@ from infinicore.tensor import Tensor
 def binary_cross_entropy_with_logits(
     input: Tensor,
     target: Tensor,
-    weight: Tensor | None = None,
-    pos_weight: Tensor | None = None,
+    weight: "Tensor | None" = None,
+    pos_weight: "Tensor | None" = None,
     reduction: str = "mean",
     *,
-    out: Tensor | None = None,
+    out: "Tensor | None" = None,
 ) -> Tensor:
     """Binary cross entropy loss with logits.
 

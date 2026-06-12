@@ -2,7 +2,9 @@ from infinicore.lib import _infinicore
 from infinicore.tensor import Tensor
 
 
-def affine_grid(theta: Tensor, size: list[int], align_corners: bool = False) -> Tensor:
+def affine_grid(
+    theta: Tensor, size: "list[int]", align_corners: bool = False
+) -> Tensor:
     r"""Generates a 2D flow field (sampling grid), given a batch of affine matrices theta."""
 
     # 直接调用底层绑定

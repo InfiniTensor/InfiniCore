@@ -18,7 +18,7 @@ class Tensor:
     # Public attributes describing the Tensor
     _underlying: _infinicore.Tensor
     _torch_ref: "torch.Tensor"  # noqa: F821
-    shape: list[int]
+    shape: "list[int]"
     dtype: infinicore.dtype
     device: infinicore.device
 

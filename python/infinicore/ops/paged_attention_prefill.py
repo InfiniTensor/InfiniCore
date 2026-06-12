@@ -9,10 +9,10 @@ def paged_attention_prefill(
     block_tables: Tensor,
     history_lens: Tensor,
     cu_seqlens_q: Tensor,
-    alibi_slopes: Tensor | None = None,
+    alibi_slopes: "Tensor | None" = None,
     scale: float = 1.0,
     *,
-    out: Tensor | None = None,
+    out: "Tensor | None" = None,
 ):
     alibi_ptr = alibi_slopes._underlying if alibi_slopes is not None else None
 

@@ -24,12 +24,12 @@ class RMSNorm(Module):
     """
 
     __constants__ = ["normalized_shape", "eps"]
-    normalized_shape: tuple[int]
+    normalized_shape: "tuple[int]"
     eps: Optional[float]
 
     def __init__(
         self,
-        normalized_shape: Union[int, list[int]],
+        normalized_shape: "Union[int, list[int]]",
         eps=1e-6,
         elementwise_affine=True,
         device=None,

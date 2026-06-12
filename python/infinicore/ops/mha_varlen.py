@@ -11,10 +11,10 @@ def mha_varlen(
     block_table: Tensor,
     max_seqlen_q: int,
     max_seqlen_k: int,
-    alibi_slopes: Tensor | None = None,
+    alibi_slopes: "Tensor | None" = None,
     scale: float = 1.0,
     *,
-    out: Tensor | None = None,
+    out: "Tensor | None" = None,
 ):
     if out is None:
         return Tensor(
