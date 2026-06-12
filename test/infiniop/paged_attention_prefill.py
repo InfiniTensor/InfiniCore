@@ -4,6 +4,7 @@ from ctypes import c_uint64
 import torch
 from libinfiniop import (
     LIBINFINIOP,
+    InfiniDeviceEnum,
     InfiniDeviceNames,
     InfiniDtype,
     InfiniDtypeNames,
@@ -39,11 +40,12 @@ _TEST_CASES = [
     (16, 128, 128, 128, 8, 16, 4, InfiniDtype.I64),
 ]
 
-_TENSOR_DTYPES = [InfiniDtype.BF16, InfiniDtype.F16]
+_TENSOR_DTYPES = [InfiniDtype.BF16, InfiniDtype.F16, InfiniDtype.F32]
 
 _TOLERANCE_MAP = {
     InfiniDtype.F16: {"atol": 1e-2, "rtol": 1e-2},
     InfiniDtype.BF16: {"atol": 2e-2, "rtol": 2e-2},
+    InfiniDtype.F32: {"atol": 2e-3, "rtol": 2e-3},
 }
 
 DEBUG = False
@@ -141,6 +143,17 @@ def test(
         f"block:{block_size}, max_step_len:{max_step_len}, num_rounds:{num_rounds}, dtype:{InfiniDtypeNames[dtype]}, "
         f"index_dtype:{InfiniDtypeNames[index_dtype]}"
     )
+
+    if dtype == InfiniDtype.F32 and device not in (
+        InfiniDeviceEnum.NVIDIA,
+        InfiniDeviceEnum.METAX,
+        InfiniDeviceEnum.MOORE,
+        InfiniDeviceEnum.ILUVATAR,
+    ):
+        print(
+            f"Skipping F32 on {InfiniDeviceNames[device]}: backend F32 prefill is not implemented"
+        )
+        return
 
     # 1. Initialize persistent resources
     num_blocks = 8192

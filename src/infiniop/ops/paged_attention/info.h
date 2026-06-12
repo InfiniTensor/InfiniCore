@@ -47,7 +47,7 @@ public:
         float scale) {
 
         auto dtype = q_desc->dtype();
-        CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_BF16);
+        CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_BF16, INFINI_DTYPE_F32);
         if (out_desc->dtype() != dtype || k_cache_desc->dtype() != dtype || v_cache_desc->dtype() != dtype) {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
