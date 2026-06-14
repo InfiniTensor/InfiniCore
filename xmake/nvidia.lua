@@ -9,6 +9,23 @@ local FLASH_ATTN_ROOT = get_config("flash-attn")
 
 local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
 
+-- Apply -gencode from `xmake f --cuda_arch=sm_80` (comma-separated values supported).
+-- Returns true when explicit arch flags were added.
+local function apply_cuda_arch_flags(add_fn)
+    local arch_opt = get_config("cuda_arch")
+    if not arch_opt or type(arch_opt) ~= "string" or arch_opt == "" then
+        return false
+    end
+    for _, arch in ipairs(arch_opt:split(",")) do
+        arch = arch:trim()
+        if arch ~= "" then
+            local compute = arch:gsub("sm_", "compute_")
+            add_fn("-gencode=arch=" .. compute .. ",code=" .. arch)
+        end
+    end
+    return true
+end
+
 target("infiniop-nvidia")
     set_kind("static")
     add_deps("infini-utils")
@@ -35,9 +52,8 @@ target("infiniop-nvidia")
             target:add("links", "cuda")
         end
 
-        -- Auto-detect CUDA arch when no explicit --cuda_arch
-        local arch_opt = get_config("cuda_arch")
-        if not arch_opt or type(arch_opt) ~= "string" then
+        -- CUDA arch: explicit --cuda_arch > nvidia-smi auto-detect > native
+        if not apply_cuda_arch_flags(function(flag) target:add("cuflags", flag) end) then
             local ok, sm_str = os.iorunv("nvidia-smi", {"--query-gpu=compute_cap", "--format=csv,noheader,nounits"})
             if ok and sm_str then
                 local major, minor = sm_str:match("(%d+)%.(%d+)")
@@ -97,15 +113,6 @@ target("infiniop-nvidia")
     if CUTLASS_ROOT ~= nil then
         add_defines("ENABLE_CUTLASS_API")
         add_includedirs(CUTLASS_ROOT, CUTLASS_ROOT .. "/include", CUTLASS_ROOT .. "/tools/util/include")
-    end
-
-    local arch_opt = get_config("cuda_arch")
-    if arch_opt and type(arch_opt) == "string" then
-        for _, arch in ipairs(arch_opt:split(",")) do
-            arch = arch:trim()
-            local compute = arch:gsub("sm_", "compute_")
-            add_cuflags("-gencode=arch=" .. compute .. ",code=" .. arch)
-        end
     end
 
     set_languages("cxx17")
@@ -177,7 +184,12 @@ target("flash-attn-nvidia")
     set_policy("build.cuda.devlink", true)
     set_toolchains("cuda")
     add_links("cudart")
-    add_cugencodes("native")
+
+    on_load(function (target)
+        if not apply_cuda_arch_flags(function(flag) target:add("cuflags", flag) end) then
+            target:add("cugencodes", "native")
+        end
+    end)
 
     if FLASH_ATTN_ROOT and FLASH_ATTN_ROOT ~= "" then
         before_build(function (target)

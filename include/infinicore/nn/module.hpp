@@ -4,6 +4,7 @@
 #include "parameter.hpp"
 
 #include <spdlog/spdlog.h>
+#include <string>
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
@@ -15,11 +16,13 @@ public:
 
     virtual ~Module() = default;
 
-    const std::unordered_map<std::string, Parameter> &state_dict() const;
+    std::unordered_map<std::string, Parameter> state_dict() const;
 
     void load_state_dict(const std::unordered_map<std::string, Tensor> &_state_dict);
 
     void load_parameter(const std::string &name, const Tensor &param);
+
+    void load_parameters_no_sync(const std::unordered_map<std::string, Tensor> &params);
 
     void load_parameter_(const std::string &name, const Tensor &param);
 

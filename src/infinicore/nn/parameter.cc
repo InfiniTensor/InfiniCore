@@ -58,6 +58,11 @@ void Parameter::load_blob(const void *data) {
 }
 
 void Parameter::load(const Tensor &tensor) {
+    load_no_sync(tensor);
+    infinicore::context::syncStream();
+}
+
+void Parameter::load_no_sync(const Tensor &tensor) {
     if (impl_->dtype() != tensor->dtype()) {
         throw std::runtime_error("Dtype mismatch when loading tensor into parameter. Weight: " + impl_->info() + ", Tensor: " + tensor->info() + ".");
     }
@@ -97,7 +102,5 @@ void Parameter::load(const Tensor &tensor) {
 
         impl_->copy_from(tensor->narrow({{tp_dim_, offset, shard_size}}));
     }
-
-    infinicore::context::syncStream();
 }
 } // namespace infinicore::nn
