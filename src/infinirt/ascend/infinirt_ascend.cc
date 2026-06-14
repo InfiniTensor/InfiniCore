@@ -124,7 +124,7 @@ infiniStatus_t memsetDevice(void *ptr, int value, size_t count) {
 }
 
 infiniStatus_t memsetDeviceAsync(void *ptr, int value, size_t count, infinirtStream_t stream) {
-    CHECK_ACLRT(aclrtMemsetAsync(ptr, count, value, count, (cudaStream_t)stream));
+    CHECK_ACLRT(aclrtMemsetAsync(ptr, count, value, count, (aclrtStream)stream));
     return INFINI_STATUS_SUCCESS;
 }
 

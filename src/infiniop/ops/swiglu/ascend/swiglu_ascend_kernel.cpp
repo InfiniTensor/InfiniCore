@@ -1,4 +1,5 @@
 #include "../../../devices/ascend/ascend_kernel_common.h"
+#include <type_traits> // for std::is_same
 
 using namespace AscendC;
 
@@ -25,6 +26,7 @@ private:
     GlobalTensor<T> _c_gm, _a_gm, _b_gm;
     TQue<QuePosition::VECIN, BUFFER_NUM> _in_queue_a, _in_queue_b;
     TQue<QuePosition::VECOUT, BUFFER_NUM> _out_queue_c;
+    TBuf<QuePosition::VECCALC> _tempFp16_a, _tempFp16_b, _tempFp16_c;
 
     TPipe _pipe;
     float _beta_value = 1.0f;
@@ -67,6 +69,9 @@ __aicore__ inline void SwigluKernel<T>::init(GM_ADDR c, GM_ADDR a, GM_ADDR b,
     _pipe.InitBuffer(_in_queue_a, BUFFER_NUM, _copy_len * sizeof(T));
     _pipe.InitBuffer(_in_queue_b, BUFFER_NUM, _copy_len * sizeof(T));
     _pipe.InitBuffer(_out_queue_c, BUFFER_NUM, _copy_len * sizeof(T));
+    _pipe.InitBuffer(_tempFp16_a, _copy_len * sizeof(float));
+    _pipe.InitBuffer(_tempFp16_b, _copy_len * sizeof(float));
+    _pipe.InitBuffer(_tempFp16_c, _copy_len * sizeof(float));
 }
 
 template <typename T>
@@ -91,13 +96,32 @@ __aicore__ inline void SwigluKernel<T>::copyIn(size_t i) {
 
 template <typename T>
 __aicore__ inline void SwigluKernel<T>::compute(size_t i) {
-    // Deque input tensors from VECIN queue
     LocalTensor<T> aLocal = _in_queue_a.DeQue<T>();
     LocalTensor<T> bLocal = _in_queue_b.DeQue<T>();
     LocalTensor<T> cLocal = _out_queue_c.AllocTensor<T>();
-    // Call SwiGLU ascend api
-    SwiGLU<T, false>(cLocal, aLocal, bLocal, _beta_value, _copy_len);
-    // Enque result and free input
+
+    // BF16 类型特殊处理：先 cast 到 float，执行 float 版 SwiGLU，再 cast 回 BF16
+    if constexpr (std::is_same<T, bfloat16_t>::value) {
+        // 从 TBuf 获取 float 类型的临时 tensor
+        LocalTensor<float> aFloat = _tempFp16_a.Get<float>();
+        LocalTensor<float> bFloat = _tempFp16_b.Get<float>();
+        LocalTensor<float> cFloat = _tempFp16_c.Get<float>();
+
+        // BF16 -> float
+        Cast(aFloat, aLocal, AscendC::RoundMode::CAST_NONE, _copy_len);
+        Cast(bFloat, bLocal, AscendC::RoundMode::CAST_NONE, _copy_len);
+
+        // 执行 float 版本的 SwiGLU
+        SwiGLU<float, false>(cFloat, aFloat, bFloat, _beta_value, _copy_len);
+
+        // float -> BF16
+        Cast(cLocal, cFloat, AscendC::RoundMode::CAST_RINT, _copy_len);
+
+    } else {
+        // 原有的 F16/F32 逻辑
+        SwiGLU<T, false>(cLocal, aLocal, bLocal, _beta_value, _copy_len);
+    }
+
     _out_queue_c.EnQue<T>(cLocal);
     _in_queue_a.FreeTensor(aLocal);
     _in_queue_b.FreeTensor(bLocal);
@@ -149,6 +173,7 @@ __aicore__ inline void SwigluKernel<T>::process() {
 
 DEFINE_SWIGLU_KERNEL(swiglu_kernel_half, half)
 DEFINE_SWIGLU_KERNEL(swiglu_kernel_float, float)
+DEFINE_SWIGLU_KERNEL(swiglu_kernel_bf16, bfloat16_t)
 
 #undef DEFINE_SWIGLU_KERNEL
 
@@ -172,6 +197,7 @@ extern "C" infiniStatus_t swiglu_kernel_launch(
     switch (dtype) {
         LAUNCH_SWIGLU_KERNEL(INFINI_DTYPE_F16, swiglu_kernel_half)
         LAUNCH_SWIGLU_KERNEL(INFINI_DTYPE_F32, swiglu_kernel_float)
+        LAUNCH_SWIGLU_KERNEL(INFINI_DTYPE_BF16, swiglu_kernel_bf16) // 用 float kernel
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }

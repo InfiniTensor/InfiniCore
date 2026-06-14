@@ -1,0 +1,156 @@
+#include "../../../devices/bang/common_bang.h"
+#include "paged_caching_bang.h"
+
+#include <cstdint>
+
+namespace {
+
+template <typename Tdata>
+__mlu_global__ void pagedCachingKernel(
+    Tdata *k_cache,
+    Tdata *v_cache,
+    const Tdata *k,
+    const Tdata *v,
+    const int64_t *slot_mapping,
+    size_t num_tokens,
+    size_t num_kv_heads,
+    size_t head_size,
+    size_t block_size,
+    ptrdiff_t k_src_stride,
+    ptrdiff_t v_src_stride,
+    ptrdiff_t k_cache_block_stride,
+    ptrdiff_t v_cache_block_stride,
+    ptrdiff_t k_cache_head_stride,
+    ptrdiff_t v_cache_head_stride,
+    ptrdiff_t k_cache_slot_stride,
+    ptrdiff_t v_cache_slot_stride) {
+
+    const size_t task_num = taskDimX * taskDimY;
+    const size_t total = num_tokens * num_kv_heads;
+
+    for (size_t linear = taskId; linear < total; linear += task_num) {
+        const size_t token_idx = linear / num_kv_heads;
+        const size_t head_idx = linear - token_idx * num_kv_heads;
+        const int64_t slot_idx = slot_mapping[token_idx];
+        if (slot_idx < 0) {
+            continue;
+        }
+
+        const int64_t physical_block = slot_idx / static_cast<int64_t>(block_size);
+        const int64_t block_offset = slot_idx - physical_block * static_cast<int64_t>(block_size);
+
+        const Tdata *k_src = k + token_idx * k_src_stride + head_idx * head_size;
+        const Tdata *v_src = v + token_idx * v_src_stride + head_idx * head_size;
+        Tdata *k_dst = k_cache + physical_block * k_cache_block_stride
+                     + head_idx * k_cache_head_stride
+                     + block_offset * k_cache_slot_stride;
+        Tdata *v_dst = v_cache + physical_block * v_cache_block_stride
+                     + head_idx * v_cache_head_stride
+                     + block_offset * v_cache_slot_stride;
+
+        __memcpy(k_dst, k_src, head_size * sizeof(Tdata), GDRAM2GDRAM);
+        __memcpy(v_dst, v_src, head_size * sizeof(Tdata), GDRAM2GDRAM);
+    }
+}
+
+template <typename Tdata>
+infiniStatus_t launchPagedCaching(
+    cnrtQueue_t queue,
+    void *k_cache,
+    void *v_cache,
+    const void *k,
+    const void *v,
+    const void *slot_mapping,
+    const op::paged_caching::PagedCachingInfo &info,
+    int core_per_cluster,
+    int cluster_count) {
+
+    cnrtDim3_t kernel_dim;
+    kernel_dim.x = core_per_cluster;
+    kernel_dim.y = cluster_count;
+    kernel_dim.z = 1;
+
+    pagedCachingKernel<Tdata><<<kernel_dim, cnrtFuncTypeUnion1, queue>>>(
+        static_cast<Tdata *>(k_cache),
+        static_cast<Tdata *>(v_cache),
+        static_cast<const Tdata *>(k),
+        static_cast<const Tdata *>(v),
+        static_cast<const int64_t *>(slot_mapping),
+        info.num_tokens,
+        info.num_kv_heads,
+        info.head_size,
+        info.block_size,
+        info.k_src_stride,
+        info.v_src_stride,
+        info.k_cache_block_stride,
+        info.v_cache_block_stride,
+        info.k_cache_head_stride,
+        info.v_cache_head_stride,
+        info.k_cache_slot_stride,
+        info.v_cache_slot_stride);
+    cnrtQueueSync(queue);
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace
+
+namespace op::paged_caching::bang {
+
+struct Descriptor::Opaque {
+    std::shared_ptr<device::bang::Handle::Internal> internal;
+};
+
+Descriptor::~Descriptor() {
+    delete _opaque;
+}
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t k_cache_desc,
+    infiniopTensorDescriptor_t v_cache_desc,
+    infiniopTensorDescriptor_t k_desc,
+    infiniopTensorDescriptor_t v_desc,
+    infiniopTensorDescriptor_t slot_mapping_desc) {
+
+    auto handle = reinterpret_cast<device::bang::cambricon::Handle *>(handle_);
+    auto info = PagedCachingInfo::create(k_cache_desc, v_cache_desc, k_desc, v_desc, slot_mapping_desc);
+    CHECK_RESULT(info);
+
+    *desc_ptr = new Descriptor(
+        new Opaque{static_cast<device::bang::Handle *>(handle)->internal()},
+        info.take(), 0, handle->device, handle->device_id);
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *k_cache,
+    void *v_cache,
+    const void *k,
+    const void *v,
+    const void *slot_mapping,
+    void *stream) const {
+
+    (void)workspace;
+    (void)workspace_size;
+
+    auto queue = reinterpret_cast<cnrtQueue_t>(stream);
+    const int core_per_cluster = _opaque->internal->getCorePerCluster();
+    const int cluster_count = _opaque->internal->getClusterCount();
+
+    switch (_info.dtype) {
+    case INFINI_DTYPE_F16:
+        return launchPagedCaching<half>(queue, k_cache, v_cache, k, v, slot_mapping, _info, core_per_cluster, cluster_count);
+    case INFINI_DTYPE_BF16:
+        return launchPagedCaching<bfloat16_t>(queue, k_cache, v_cache, k, v, slot_mapping, _info, core_per_cluster, cluster_count);
+    case INFINI_DTYPE_F32:
+        return launchPagedCaching<float>(queue, k_cache, v_cache, k, v, slot_mapping, _info, core_per_cluster, cluster_count);
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+}
+
+} // namespace op::paged_caching::bang

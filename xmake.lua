@@ -237,7 +237,8 @@ option_end()
 
 if has_config("aten") then
     add_defines("ENABLE_ATEN")
-    if get_config("flash-attn") and get_config("flash-attn") ~= "" then
+    if get_config("flash-attn") and get_config("flash-attn") ~= ""
+       and (has_config("nv-gpu") or has_config("qy-gpu")) then
         add_defines("ENABLE_FLASH_ATTN")
     end
 end
@@ -487,6 +488,14 @@ target("infinicore_cpp_api")
     -- from other included scripts; MetaX and QY each register their own hook in `xmake/metax.lua`
     -- and `xmake/qy.lua`.
 
+    -- Moore mate: 
+    -- enable Python bridge macro for flash-attn Moore path
+    -- pybind11/embed.h for mha_kvcache branch
+    if has_config("moore-gpu") and has_config("aten") and has_config("flash-attn") then
+        add_defines("ENABLE_MOORE_MATE_FLASH_ATTN")
+        add_packages("pybind11")
+    end
+
     before_build(function (target)
         -- MetaX + flash-attn: `flash_attn_2_cuda` may use a different `mha_fwd_kvcache` ABI
         -- depending on the underlying stack version. When building with MACA (`--use-mc=y`),
@@ -527,17 +536,95 @@ target("infinicore_cpp_api")
                 path.join(TORCH_DIR, "lib"),
                 { public = true }
             )
-            target:add(
-                "links",
-                "torch",
-                "c10",
-                "torch_cuda",
-                "c10_cuda",
-                { public = true }
-            )
+
+            -- Moore mate: link torch_musa instead of torch_cuda/c10_cuda
+            if has_config("moore-gpu") then
+                target:add(
+                    "links",
+                    "torch",
+                    "torch_cpu",
+                    "torch_python",
+                    "c10",
+                    { public = true }
+                )
+
+                -- Detect torch_musa install path
+                local musa_outdata = os.iorunv("python", {"-c", "import torch_musa, os; print(os.path.dirname(torch_musa.__file__))"}):trim()
+                local TORCH_MUSA_DIR = musa_outdata
+                local MUSA_ROOT = os.getenv("MUSA_ROOT") or os.getenv("MUSA_HOME") or os.getenv("MUSA_PATH") or "/usr/local/musa"
+
+                target:add(
+                    "includedirs",
+                    path.join(MUSA_ROOT, "include"),
+                    path.directory(TORCH_MUSA_DIR),
+                    path.join(TORCH_MUSA_DIR, "include"),
+                    path.join(TORCH_MUSA_DIR, "share/generated_cuda_compatible/include"),
+                    path.join(TORCH_MUSA_DIR, "share/generated_cuda_compatible"),
+                    { public = true }
+                )
+
+                target:add(
+                    "linkdirs",
+                    path.join(TORCH_MUSA_DIR, "lib"),
+                    { public = true }
+                )
+                target:add(
+                    "links",
+                    "musa_python",
+                    "musa_kernels",
+                    { public = true }
+                )
+
+                -- libpython for pybind11::scoped_interpreter / embed
+                local pyinc = os.iorunv("python", {"-c",
+                    "import sysconfig; print(sysconfig.get_path('include'))"}):trim()
+                local pylib = os.iorunv("python", {"-c",
+                    "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))"}):trim()
+                local pyver = os.iorunv("python", {"-c",
+                    "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"}):trim()
+                target:add("includedirs", pyinc, { public = true })
+                target:add("linkdirs",    pylib, { public = true })
+                target:add("links",       "python" .. pyver, { public = true })
+
+                target:add(
+                    "shflags",
+                    "-Wl,-rpath," .. path.join(TORCH_MUSA_DIR, "lib"),
+                    "-Wl,-rpath," .. path.join(MUSA_ROOT, "lib"),
+                    "-Wl,-rpath," .. path.join(TORCH_DIR, "lib"),
+                    "-Wl,-rpath," .. pylib,
+                    { force = true }
+                )
+            else
+                target:add(
+                    "links",
+                    "torch",
+                    "c10",
+                    "torch_cuda",
+                    "c10_cuda",
+                    { public = true }
+                )
+            end
         end
 
     end)
+
+    -- Moore mate: force link torch_python to bypass --as-needed
+    if has_config("moore-gpu") and has_config("aten") and has_config("flash-attn") then
+        before_link(function (target)
+            local torch_dir = os.iorunv("python", {"-c",
+                "import torch, os; print(os.path.dirname(torch.__file__))"}):trim()
+            local torch_lib = path.join(torch_dir, "lib")
+            target:add("shflags",
+                "-Wl,--no-as-needed",
+                "-L" .. torch_lib,
+                "-ltorch_python",
+                "-ltorch_cpu",
+                "-lc10",
+                "-Wl,--as-needed",
+                "-Wl,-rpath," .. torch_lib,
+                {force = true})
+        end)
+    end
 
     -- Add InfiniCore C++ source files (needed for RoPE and other nn modules)
     add_files("src/infinicore/*.cc")

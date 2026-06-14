@@ -10,7 +10,7 @@ infiniStatus_t Descriptor::create(infiniopHandle_t handle, Descriptor **desc_ptr
     auto handle_ascend = reinterpret_cast<device::ascend::Handle *>(handle);
 
     auto dtype = c_desc->dtype();
-    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32);
+    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_BF16, INFINI_DTYPE_F32);
 
     const auto &a_desc = input_descs[0];
     const auto &b_desc = input_descs[1];

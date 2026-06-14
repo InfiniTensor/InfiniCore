@@ -19,7 +19,7 @@ infiniStatus_t Descriptor::create(
     auto result = RoPEInfo::createRoPEInfo(y_desc, x_desc, pos_desc, sin_desc, cos_desc, algo);
     CHECK_RESULT(result);
 
-    if (algo != INFINIOP_ROPE_ALGO_GPT_J) {
+    if (algo != INFINIOP_ROPE_ALGO_GPT_J && algo != INFINIOP_ROPE_ALGO_GPT_NEOX) {
         return INFINI_STATUS_NOT_IMPLEMENTED;
     }
 
@@ -37,19 +37,27 @@ infiniStatus_t Descriptor::calculate(
     const void *sin_table,
     const void *cos_table,
     void *stream) const {
-    CHECK_DTYPE(_info.data_type, INFINI_DTYPE_F32, INFINI_DTYPE_F16);
+    CHECK_DTYPE(_info.data_type, INFINI_DTYPE_F32, INFINI_DTYPE_F16, INFINI_DTYPE_BF16);
 
     auto data_type = _info.data_type;
     auto pos_type = _info.pos_type;
     auto seq_len = _info.seqlen;
     auto nhead = _info.nhead;
     auto dhead = _info.dhead;
+    auto batch = _info.batch;
+    auto algo = _info.algo;
 
     auto y_stride_seqlen = _info.y_stride_seqlen;
     auto y_stride_nhead = _info.y_stride_nhead;
+    auto y_stride_batch = _info.y_stride_batch;
     auto x_stride_seqlen = _info.x_stride_seqlen;
     auto x_stride_nhead = _info.x_stride_nhead;
+    auto x_stride_batch = _info.x_stride_batch;
 
-    return rope_kernel_launch(y, (void *)x, (void *)pos_ids, (void *)sin_table, (void *)cos_table, seq_len, nhead, dhead, data_type, pos_type, y_stride_seqlen, y_stride_nhead, x_stride_seqlen, x_stride_nhead, stream);
+    if (algo == INFINIOP_ROPE_ALGO_GPT_J) {
+        return rope_kernel_launch(y, (void *)x, (void *)pos_ids, (void *)sin_table, (void *)cos_table, seq_len, nhead, dhead, batch, data_type, pos_type, y_stride_seqlen, y_stride_nhead, y_stride_batch, x_stride_seqlen, x_stride_nhead, x_stride_batch, stream);
+    } else {
+        return rope_kernel_neox_launch(y, (void *)x, (void *)pos_ids, (void *)sin_table, (void *)cos_table, seq_len, nhead, dhead, batch, data_type, pos_type, y_stride_seqlen, y_stride_nhead, y_stride_batch, x_stride_seqlen, x_stride_nhead, x_stride_batch, stream);
+    }
 }
 } // namespace op::rope::ascend
