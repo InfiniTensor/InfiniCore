@@ -39,6 +39,13 @@ c10::cuda::CUDAStream get_cuda_stream() {
 }
 #endif
 
+#if defined(ENABLE_MOORE_API)
+c10::musa::MUSAStream get_musa_stream() {
+    return c10::musa::getStreamFromExternal(
+        musaStream_t(infinicore::context::getStream()), infinicore::context::getDevice().getIndex());
+}
+#endif
+
 } // namespace infinicore::adaptor
 
 #endif // ENABLE_ATEN

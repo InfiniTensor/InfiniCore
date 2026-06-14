@@ -46,8 +46,7 @@ def test_embedding_graph_recording():
     input_ids_device = infinicore.from_list(
         [[i % vocab_size for i in range(seq_len)] for _ in range(batch_size)],
         dtype=infinicore.int64,
-        device=device,
-    )
+    ).to(device)
 
     print(f"\n1. Input tensor information:")
     print(f"   - Shape: {input_ids_device.shape}")
@@ -235,8 +234,8 @@ def test_embedding_device_input_support():
     print("\nTest 1: Device-side input")
     try:
         input_ids_device = infinicore.from_list(
-            [[1, 2, 3, 4, 5]], dtype=infinicore.int64, device=device
-        )
+            [[1, 2, 3, 4, 5]], dtype=infinicore.int64
+        ).to(device)
         output = embedding.forward(input_ids_device)
         print(f"   ✓ Device-side input successful")
         print(f"   - Input device: {input_ids_device.device.type}")

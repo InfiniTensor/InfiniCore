@@ -96,7 +96,8 @@ protected:
 private:
     void initialize_cache();
 
-    size_t rotary_dim_;                          // Dimension of each attention head
+    size_t rotary_dim_;                          // Number of dimensions to apply rotation to (must be even).
+    size_t head_dim_;                            // Dimension of each attention head
     size_t max_seq_len_;                         // Maximum sequence length
     double theta_;                               // Base frequency for rotary embeddings
     Algo algo_;                                  // RoPE algorithm type

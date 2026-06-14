@@ -109,6 +109,10 @@ from infinicore.ops.matmul import matmul
 from infinicore.ops.mha import mha
 from infinicore.ops.mha_kvcache import mha_kvcache
 from infinicore.ops.mha_varlen import mha_varlen
+from infinicore.ops.moore_mate_flash_attn import (
+    moore_mate_flash_attn_decode,
+    moore_mate_flash_attn_prefill,
+)
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.nrm2 import nrm2
@@ -142,6 +146,7 @@ from infinicore.tensor import (
     empty_like,
     from_blob,
     from_list,
+    from_list_by_numpy,
     from_numpy,
     from_torch,
     ones,
@@ -247,6 +252,7 @@ __all__ = [
     "empty_like",
     "from_blob",
     "from_list",
+    "from_list_by_numpy",
     "from_numpy",
     "from_torch",
     "mha_kvcache",
@@ -286,6 +292,8 @@ __all__ = [
     "zeros",
     "sum",
     "var_mean",
+    "moore_mate_flash_attn_prefill",
+    "moore_mate_flash_attn_decode",
     "var",
     "topk",
     "all",

@@ -12,3 +12,9 @@
 	path = submodules/InfiniCCL
 	url = https://github.com/InfiniTensor/InfiniCCL.git
 	branch = master
+[submodule "third_party/mate"]
+	path = third_party/mate
+	url = https://github.com/MooreThreads/mate
+  branch = v0.1.3
+	ignore = untracked
+	update = none
