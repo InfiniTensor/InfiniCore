@@ -188,7 +188,7 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
   xmake f --moore-gpu=y --aten=y --flash-attn=y -cv
   ```
 
-  ##### 试验功能 -- 编译marlin相关算子
+##### 试验功能 -- 编译marlin相关算子
 
   ```shell
 
