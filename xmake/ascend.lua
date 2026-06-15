@@ -19,12 +19,68 @@ local builddir = string.format(
         get_config("arch"),
         get_config("mode")
     )
+
+local function _newer_than(filepath, timestamp)
+    if os.isfile(filepath) then
+        local mtime = os.mtime(filepath)
+        return mtime and mtime > timestamp
+    end
+    return false
+end
+
+local function _ascend_kernel_build_reason(ascend_build_dir, archive)
+    if not os.isfile(archive) then
+        return "missing libascend_kernels.a"
+    end
+
+    local archive_mtime = os.mtime(archive)
+    local explicit_inputs = {
+        path.join(ascend_build_dir, "CMakeLists.txt"),
+        path.join(ascend_build_dir, "Makefile")
+    }
+    for _, filepath in ipairs(explicit_inputs) do
+        if _newer_than(filepath, archive_mtime) then
+            return filepath
+        end
+    end
+
+    local input_patterns = {
+        path.join(os.projectdir(), "src/infiniop/devices/ascend/*.h"),
+        path.join(os.projectdir(), "src/infiniop/devices/ascend/*.hpp"),
+        path.join(os.projectdir(), "src/infiniop/devices/ascend/*.cmake"),
+        path.join(os.projectdir(), "src/infiniop/ops/*/ascend/*_kernel.cpp"),
+        path.join(os.projectdir(), "src/infiniop/ops/*/ascend/*_kernel.h"),
+        path.join(os.projectdir(), "src/infiniop/ops/*/ascend/*_kernel.hpp")
+    }
+    for _, pattern in ipairs(input_patterns) do
+        for _, filepath in ipairs(os.files(pattern)) do
+            if _newer_than(filepath, archive_mtime) then
+                return filepath
+            end
+        end
+    end
+
+    return nil
+end
+
 rule("ascend-kernels")
     before_link(function ()
         local ascend_build_dir = path.join(os.projectdir(), "src/infiniop/devices/ascend")
+        local ascend_archive = path.join(ascend_build_dir, "build/lib/libascend_kernels.a")
+        local build_reason = _ascend_kernel_build_reason(ascend_build_dir, ascend_archive)
         os.cd(ascend_build_dir)
-        os.exec("make")
-        os.cp("$(projectdir)/src/infiniop/devices/ascend/build/lib/libascend_kernels.a", builddir.."/")
+        if build_reason then
+            print("building ascend kernels: " .. build_reason)
+            local cmake_files_dir = path.join(
+                ascend_build_dir,
+                "build/ascend_kernels_preprocess-prefix/src/ascend_kernels_preprocess-build/CMakeFiles"
+            )
+            os.exec("rm -rf " .. path.join(cmake_files_dir, "aic_obj.dir") .. " " .. path.join(cmake_files_dir, "aiv_obj.dir"))
+            os.exec("make build")
+        else
+            print("ascend kernels are up to date")
+        end
+        os.cp(ascend_archive, builddir.."/")
         os.cd(os.projectdir())
 
     end)
@@ -33,7 +89,7 @@ rule("ascend-kernels")
         os.cd(ascend_build_dir)
         os.exec("make clean")
         os.cd(os.projectdir())
-        os.rm(builddir.. "/libascend_kernels.a")
+        os.exec("rm -f " .. builddir.. "/libascend_kernels.a")
 
     end)
 rule_end()
