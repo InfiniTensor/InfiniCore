@@ -30,9 +30,6 @@ public:
           finite_values_only(finite_values_only),
           nan_repr(nan_repr) {}
 
-    // -----------------------
-    // Integer
-    // -----------------------
     static constexpr ScalarType int_(uint8_t size_bits, int32_t bias = 0) {
         return ScalarType(0, size_bits - 1, true, bias);
     }
@@ -41,9 +38,6 @@ public:
         return ScalarType(0, size_bits, false, bias);
     }
 
-    // -----------------------
-    // Floating point（constexpr安全：不做检查）
-    // -----------------------
     static constexpr ScalarType float_IEEE754(uint8_t exponent,
                                               uint8_t mantissa) {
         return ScalarType(exponent, mantissa, true, 0, false, NAN_IEEE_754);
@@ -56,9 +50,6 @@ public:
                           finite_values_only, nan_repr);
     }
 
-    // -----------------------
-    // Runtime checked（可选）
-    // -----------------------
     static inline ScalarType float_checked(uint8_t exponent,
                                            uint8_t mantissa,
                                            bool finite_values_only,
@@ -207,10 +198,6 @@ public:
 
 using ScalarTypeId = ScalarType::Id;
 
-// -----------------------
-// 原始常量（完全保留）
-// -----------------------
-
 static inline constexpr auto kS4 = ScalarType::int_(4);
 static inline constexpr auto kU4 = ScalarType::uint(4);
 static inline constexpr auto kU4B8 = ScalarType::uint(4, 8);
@@ -226,8 +213,6 @@ static inline constexpr auto kFE5M2 = ScalarType::float_IEEE754(5, 2);
 static inline constexpr auto kFE8M7 = ScalarType::float_IEEE754(8, 7);
 static inline constexpr auto kFE5M10 = ScalarType::float_IEEE754(5, 10);
 
-// 🔥 关键：alias（不能丢！）
-
 static inline constexpr auto kInt4 = kS4;
 static inline constexpr auto kUint4 = kU4;
 static inline constexpr auto kUint4b8 = kU4B8;
@@ -242,7 +227,6 @@ static inline constexpr auto kFloat8_e5m2 = kFE5M2;
 static inline constexpr auto kFloat16_e8m7 = kFE8M7;
 static inline constexpr auto kFloat16_e5m10 = kFE5M10;
 
-// ⭐ 这些就是你报错缺失的
 static inline constexpr auto kHalf = kFE5M10;
 static inline constexpr auto kFloat16 = kHalf;
 static inline constexpr auto kBFloat16 = kFE8M7;

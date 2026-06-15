@@ -175,9 +175,6 @@ inline auto dtype_bytes(DLDataType dtype) -> std::size_t {
     return static_cast<std::size_t>(dtype.bits / 8);
 }
 
-// ====================== 修复开始：纯 C++11 兼容版 irange ======================
-// 移除所有 std::ranges / std::integral，完全兼容旧版 CUDA 编译器
-
 template <typename T>
 struct IntegerRange {
     T start_;
@@ -211,6 +208,5 @@ template <typename T>
 IntegerRange<T> irange(T start, T end) {
     return {start, end};
 }
-// ====================== 修复结束 ======================
 
 } // namespace host

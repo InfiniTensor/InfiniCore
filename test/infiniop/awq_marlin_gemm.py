@@ -466,12 +466,7 @@ def test_marlin_gemm_subset_input(
     marlin_zp = marlin_make_empty_g_idx(marlin_s.device)
 
     ans = awq_marlin_gemm_torch(A.torch_tensor(), w_ref, None)
-    # print("w", w_ref.shape, w_ref.dtype, w_ref.stride())
-    # print("b", marlin_q_w.shape, marlin_q_w.dtype, marlin_q_w.stride())
-    # print("b_scales", marlin_s.shape, marlin_s.dtype, marlin_s.stride())
-    # print("g_idx", g_idx.shape, g_idx.dtype, g_idx.stride())
-    # print("perm", sort_indices.shape, sort_indices.dtype, sort_indices.stride())
-    # print("g_idx", marlin_zp)
+
     output = TestTensor(ans.shape, None, dtype, device, mode="zeros")
 
     B = TestTensor(
@@ -654,12 +649,7 @@ def test_marlin_gemm_with_bias(
     marlin_zp = marlin_make_empty_g_idx(marlin_s.device)
 
     ans = awq_marlin_gemm_torch(A.torch_tensor(), w_ref, b_bias.torch_tensor())
-    # print("w", w_ref.shape, w_ref.dtype, w_ref.stride())
-    # print("b", marlin_q_w.shape, marlin_q_w.dtype, marlin_q_w.stride())
-    # print("b_scales", marlin_s.shape, marlin_s.dtype, marlin_s.stride())
-    # print("g_idx", g_idx.shape, g_idx.dtype, g_idx.stride())
-    # print("perm", sort_indices.shape, sort_indices.dtype, sort_indices.stride())
-    # print("g_idx", marlin_zp)
+
     output = TestTensor(ans.shape, None, dtype, device, mode="zeros")
 
     B = TestTensor(
