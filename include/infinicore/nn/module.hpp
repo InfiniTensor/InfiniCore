@@ -32,6 +32,10 @@ public:
 
     std::unordered_map<std::string, Module *> modules_dict() const;
 
+    virtual void process_weights_after_loading() {}
+
+    virtual void reset_runtime_state() const {}
+
     const std::unordered_map<std::string, std::shared_ptr<Module>> &children() const {
         return submodules_;
     }
