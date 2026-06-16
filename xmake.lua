@@ -54,6 +54,8 @@ option_end()
 
 if has_config("nv-gpu") then
     add_defines("ENABLE_NVIDIA_API")
+    local CUDA_ROOT = os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH") or "/usr/local/cuda"
+    add_includedirs(CUDA_ROOT .. "/include")
     includes("xmake/nvidia.lua")
 end
 
@@ -530,6 +532,12 @@ target("infinicore_cpp_api")
                 path.join(TORCH_DIR, "include"), 
                 path.join(TORCH_DIR, "include/torch/csrc/api/include"),
                 { public = true })
+
+            if has_config("nv-gpu") then
+                local CUDA_ROOT = os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH") or "/usr/local/cuda"
+                target:add("includedirs", path.join(CUDA_ROOT, "include"), { public = true })
+                target:add("linkdirs", path.join(CUDA_ROOT, "lib64"), { public = true })
+            end
             
             target:add(
                 "linkdirs",
@@ -648,6 +656,8 @@ target("infinicore_cpp_api")
     add_installfiles("include/infinicore/(**/*.hpp)",{prefixdir = "include/infinicore"})
     add_installfiles("include/infinicore.h",          {prefixdir = "include"})
     add_installfiles("include/infinicore.hpp",        {prefixdir = "include"})
+    add_installfiles("third_party/spdlog/include/(**/*.h)", {prefixdir = "include"})
+    add_installfiles("third_party/nlohmann_json/single_include/(**/*.hpp)", {prefixdir = "include"})
     after_build(function (target) print(YELLOW .. "[Congratulations!] Now you can install the libraries with \"xmake install\"" .. NC) end)
 target_end()
 

@@ -251,10 +251,10 @@ target("infiniccl-nvidia")
         add_links("cudart")
 
         if not is_plat("windows") then
-            add_cuflags("-Xcompiler=-fPIC")
-            add_culdflags("-Xcompiler=-fPIC")
-            add_cxflags("-fPIC")
-            add_cxxflags("-fPIC")
+            add_cuflags("-Xcompiler=-fPIC", {force = true})
+            add_culdflags("-Xcompiler=-fPIC", {force = true})
+            add_cxflags("-fPIC", {force = true})
+            add_cxxflags("-fPIC", {force = true})
 
             local nccl_root = os.getenv("NCCL_ROOT")
             if nccl_root then
