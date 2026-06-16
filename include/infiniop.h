@@ -34,6 +34,7 @@
 #include "infiniop/ops/clip.h"
 #include "infiniop/ops/conv.h"
 #include "infiniop/ops/cross_entropy.h"
+#include "infiniop/ops/deepseek_moe.h"
 #include "infiniop/ops/dequant/per_tensor_dequant_int8.h"
 #include "infiniop/ops/dequantize_awq.h"
 #include "infiniop/ops/dequantize_gptq.h"

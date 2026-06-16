@@ -2293,6 +2293,62 @@ def fused_ffn_(lib):
 
 
 @OpRegister.operator
+def deepseek_moe_(lib):
+    lib.infiniopCreateDeepseekMoeDescriptor.restype = c_int32
+    lib.infiniopCreateDeepseekMoeDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_size_t,
+        c_size_t,
+    ]
+
+    lib.infiniopGetDeepseekMoeWorkspaceSize.restype = c_int32
+    lib.infiniopGetDeepseekMoeWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopDeepseekMoe.restype = c_int32
+    lib.infiniopDeepseekMoe.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        POINTER(c_void_p),
+        POINTER(c_void_p),
+        POINTER(c_void_p),
+        c_void_p,
+    ]
+
+    lib.infiniopDeepseekMoeWithDevicePtrs.restype = c_int32
+    lib.infiniopDeepseekMoeWithDevicePtrs.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyDeepseekMoeDescriptor.restype = c_int32
+    lib.infiniopDestroyDeepseekMoeDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def blas_amax_(lib):
     lib.infiniopCreateBlasAmaxDescriptor.restype = c_int32
     lib.infiniopCreateBlasAmaxDescriptor.argtypes = [

@@ -120,7 +120,7 @@ public:
         //     printf("paged block size %zu\n", page_block_size);
         //     return INFINI_STATUS_BAD_TENSOR_SHAPE;
         // }
-        if (head_size != 64 && head_size != 128) {
+        if (head_size != 64 && head_size != 128 && head_size != 192) {
             // First build only targets common FA2 head dims (expand later).
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }

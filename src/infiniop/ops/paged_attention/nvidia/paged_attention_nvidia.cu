@@ -63,6 +63,33 @@ infiniStatus_t launch_decode_hd128_u32(
     ptrdiff_t v_batch_stride, ptrdiff_t v_row_stride, ptrdiff_t v_head_stride, ptrdiff_t o_stride,
     cudaStream_t stream);
 
+infiniStatus_t launch_decode_hd192_i64(
+    void *workspace, size_t workspace_size,
+    void *out, const void *q, const void *k_cache, const void *v_cache,
+    infiniDtype_t dtype, const int64_t *block_tables, const int64_t *cache_lens, const float *alibi_slopes,
+    size_t num_heads, size_t num_seqs, size_t num_kv_heads, float scale, size_t max_num_blocks_per_seq, size_t page_block_size,
+    ptrdiff_t q_stride, ptrdiff_t k_batch_stride, ptrdiff_t k_row_stride, ptrdiff_t k_head_stride,
+    ptrdiff_t v_batch_stride, ptrdiff_t v_row_stride, ptrdiff_t v_head_stride, ptrdiff_t o_stride,
+    cudaStream_t stream);
+
+infiniStatus_t launch_decode_hd192_i32(
+    void *workspace, size_t workspace_size,
+    void *out, const void *q, const void *k_cache, const void *v_cache,
+    infiniDtype_t dtype, const int32_t *block_tables, const int32_t *cache_lens, const float *alibi_slopes,
+    size_t num_heads, size_t num_seqs, size_t num_kv_heads, float scale, size_t max_num_blocks_per_seq, size_t page_block_size,
+    ptrdiff_t q_stride, ptrdiff_t k_batch_stride, ptrdiff_t k_row_stride, ptrdiff_t k_head_stride,
+    ptrdiff_t v_batch_stride, ptrdiff_t v_row_stride, ptrdiff_t v_head_stride, ptrdiff_t o_stride,
+    cudaStream_t stream);
+
+infiniStatus_t launch_decode_hd192_u32(
+    void *workspace, size_t workspace_size,
+    void *out, const void *q, const void *k_cache, const void *v_cache,
+    infiniDtype_t dtype, const uint32_t *block_tables, const uint32_t *cache_lens, const float *alibi_slopes,
+    size_t num_heads, size_t num_seqs, size_t num_kv_heads, float scale, size_t max_num_blocks_per_seq, size_t page_block_size,
+    ptrdiff_t q_stride, ptrdiff_t k_batch_stride, ptrdiff_t k_row_stride, ptrdiff_t k_head_stride,
+    ptrdiff_t v_batch_stride, ptrdiff_t v_row_stride, ptrdiff_t v_head_stride, ptrdiff_t o_stride,
+    cudaStream_t stream);
+
 struct Descriptor::Opaque {
     std::shared_ptr<device::nvidia::Handle::Internal> internal;
 };
@@ -111,7 +138,7 @@ infiniStatus_t Descriptor::calculate(
         need_workspace = (std::strcmp(env, "auto") == 0) || (std::strcmp(env, "1") == 0) || (std::strcmp(env, "true") == 0);
     } else {
         // Keep hd64 behavior unchanged, but for hd128 we default to split-kv decode, which needs workspace.
-        need_workspace = (_info.head_size == 128);
+        need_workspace = (_info.head_size == 128 || _info.head_size == 192);
     }
     if (need_workspace && workspace_size < _workspace_size) {
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
@@ -137,6 +164,16 @@ infiniStatus_t Descriptor::calculate(
                 _info.o_stride, stream);
         case 128:
             return launch_decode_hd128_i64(
+                workspace, workspace_size,
+                out, q, k_cache, v_cache, _info.dtype,
+                block_table_i64, cache_lens_i64, alibi_ptr,
+                _info.num_heads, _info.num_seqs, _info.num_kv_heads, _info.scale,
+                _info.max_num_blocks_per_seq, _info.page_block_size,
+                _info.q_stride, _info.k_batch_stride, _info.k_row_stride, _info.k_head_stride,
+                _info.v_batch_stride, _info.v_row_stride, _info.v_head_stride,
+                _info.o_stride, stream);
+        case 192:
+            return launch_decode_hd192_i64(
                 workspace, workspace_size,
                 out, q, k_cache, v_cache, _info.dtype,
                 block_table_i64, cache_lens_i64, alibi_ptr,
@@ -174,6 +211,16 @@ infiniStatus_t Descriptor::calculate(
                 _info.q_stride, _info.k_batch_stride, _info.k_row_stride, _info.k_head_stride,
                 _info.v_batch_stride, _info.v_row_stride, _info.v_head_stride,
                 _info.o_stride, stream);
+        case 192:
+            return launch_decode_hd192_i32(
+                workspace, workspace_size,
+                out, q, k_cache, v_cache, _info.dtype,
+                block_table_i32, cache_lens_i32, alibi_ptr,
+                _info.num_heads, _info.num_seqs, _info.num_kv_heads, _info.scale,
+                _info.max_num_blocks_per_seq, _info.page_block_size,
+                _info.q_stride, _info.k_batch_stride, _info.k_row_stride, _info.k_head_stride,
+                _info.v_batch_stride, _info.v_row_stride, _info.v_head_stride,
+                _info.o_stride, stream);
         default:
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
@@ -195,6 +242,16 @@ infiniStatus_t Descriptor::calculate(
                 _info.o_stride, stream);
         case 128:
             return launch_decode_hd128_u32(
+                workspace, workspace_size,
+                out, q, k_cache, v_cache, _info.dtype,
+                block_table_u32, cache_lens_u32, alibi_ptr,
+                _info.num_heads, _info.num_seqs, _info.num_kv_heads, _info.scale,
+                _info.max_num_blocks_per_seq, _info.page_block_size,
+                _info.q_stride, _info.k_batch_stride, _info.k_row_stride, _info.k_head_stride,
+                _info.v_batch_stride, _info.v_row_stride, _info.v_head_stride,
+                _info.o_stride, stream);
+        case 192:
+            return launch_decode_hd192_u32(
                 workspace, workspace_size,
                 out, q, k_cache, v_cache, _info.dtype,
                 block_table_u32, cache_lens_u32, alibi_ptr,

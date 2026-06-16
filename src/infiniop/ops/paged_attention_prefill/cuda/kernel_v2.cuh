@@ -64,7 +64,7 @@ __device__ void PagedAttentionPrefillWarpKernel(
     ptrdiff_t o_head_stride) {
 
     constexpr int kWarpSize = 32;
-    static_assert(HEAD_SIZE == 64 || HEAD_SIZE == 128, "Only head_size 64/128 supported in v0.4.");
+    static_assert(HEAD_SIZE == 64 || HEAD_SIZE == 128 || HEAD_SIZE == 192, "Only head_size 64/128/192 supported in v0.4.");
     static_assert(HEAD_SIZE % kWarpSize == 0, "HEAD_SIZE must be divisible by 32.");
     constexpr int DIMS_PER_THREAD = HEAD_SIZE / kWarpSize;
 
@@ -280,7 +280,7 @@ __global__ void PagedAttentionPrefillWarpGlobalKernel(
     ptrdiff_t o_head_stride) {
 
     constexpr int kWarpSize = 32;
-    static_assert(HEAD_SIZE == 64 || HEAD_SIZE == 128, "Only head_size 64/128 supported in v0.4.");
+    static_assert(HEAD_SIZE == 64 || HEAD_SIZE == 128 || HEAD_SIZE == 192, "Only head_size 64/128/192 supported in v0.4.");
     static_assert(HEAD_SIZE % kWarpSize == 0, "HEAD_SIZE must be divisible by 32.");
     constexpr int DIMS_PER_THREAD = HEAD_SIZE / kWarpSize;
 
@@ -615,7 +615,7 @@ __device__ void PagedAttentionPrefillWarpCtaKernel(
     ptrdiff_t o_stride,
     ptrdiff_t o_head_stride) {
 
-    static_assert(HEAD_SIZE == 64 || HEAD_SIZE == 128, "Only head_size 64/128 supported in v0.4.");
+    static_assert(HEAD_SIZE == 64 || HEAD_SIZE == 128 || HEAD_SIZE == 192, "Only head_size 64/128/192 supported in v0.4.");
     static_assert(BLOCK_M > 0 && BLOCK_M <= 16, "BLOCK_M must be small (warp-per-query design).");
     static_assert(BLOCK_N == 64 || BLOCK_N == 128, "BLOCK_N must be 64/128 in v0.4.");
 
@@ -885,7 +885,7 @@ __device__ void PagedAttentionPrefillWarpCtaKernelPipelined(
     ptrdiff_t o_stride,
     ptrdiff_t o_head_stride) {
 
-    static_assert(HEAD_SIZE == 64 || HEAD_SIZE == 128, "Only head_size 64/128 supported in v0.4.");
+    static_assert(HEAD_SIZE == 64 || HEAD_SIZE == 128 || HEAD_SIZE == 192, "Only head_size 64/128/192 supported in v0.4.");
     static_assert(BLOCK_M > 0 && BLOCK_M <= 16, "BLOCK_M must be <= 16.");
     static_assert(TOKENS_PER_TILE == 32, "Pipelined CTA kernel currently assumes TOKENS_PER_TILE == 32.");
     static_assert(STAGES >= 2 && STAGES <= 3, "STAGES must be 2 or 3.");
@@ -1332,7 +1332,7 @@ __device__ void PagedAttentionPrefillWarpCtaKernelPipelinedSplitKv(
 
     (void)max_num_blocks_per_seq;
 
-    static_assert(HEAD_SIZE == 64 || HEAD_SIZE == 128, "Only head_size 64/128 supported in v0.4.");
+    static_assert(HEAD_SIZE == 64 || HEAD_SIZE == 128 || HEAD_SIZE == 192, "Only head_size 64/128/192 supported in v0.4.");
     static_assert(BLOCK_M > 0 && BLOCK_M <= 16, "BLOCK_M must be <= 16.");
     static_assert(TOKENS_PER_TILE == 32, "Split-KV prefill assumes TOKENS_PER_TILE == 32.");
     static_assert(STAGES >= 2 && STAGES <= 3, "STAGES must be 2 or 3.");
@@ -1798,7 +1798,7 @@ __device__ void PagedAttentionPrefillWarpCtaKernelKOnly(
     ptrdiff_t o_stride,
     ptrdiff_t o_head_stride) {
 
-    static_assert(HEAD_SIZE == 64 || HEAD_SIZE == 128, "Only head_size 64/128 supported in v0.4.");
+    static_assert(HEAD_SIZE == 64 || HEAD_SIZE == 128 || HEAD_SIZE == 192, "Only head_size 64/128/192 supported in v0.4.");
     static_assert(BLOCK_M > 0 && BLOCK_M <= 16, "BLOCK_M must be <=16.");
     static_assert(BLOCK_N > 0 && BLOCK_N <= 128, "BLOCK_N must be <=128.");
 
