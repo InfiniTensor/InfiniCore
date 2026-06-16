@@ -79,11 +79,9 @@ std::shared_ptr<Memory> Runtime::allocatePinnedHostMemory(size_t size) {
 
 std::shared_ptr<Memory> Runtime::reinstantiateBlob(std::shared_ptr<Memory> blob) {
     device_memory_allocator_.get()->mark_in_use_(blob->data(), true);
-    return std::make_shared<Memory>(
-        blob->data(), blob->size(), device_,
-        [alloc = device_memory_allocator_.get()](std::byte *p) {
-            alloc->deallocate(p);
-        });
+    // Non-owning view: the source blob keeps the deleter; graph replay must not
+    // double-free the same pinned allocation (see PinnableBlockAllocator).
+    return std::make_shared<Memory>(blob->data(), blob->size(), device_, nullptr);
 }
 
 void Runtime::memcpyH2D(void *dst, const void *src, size_t size, bool async) {
