@@ -27,7 +27,11 @@ class OpRegister:
     @classmethod
     def register_lib(cls, lib):
         for op in cls.registry:
-            op(lib)
+            try:
+                op(lib)
+            except AttributeError as err:
+                if "not found in library" not in str(err):
+                    raise
 
 
 @OpRegister.operator
