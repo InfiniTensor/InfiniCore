@@ -1,6 +1,5 @@
-#include "../../operator.h"
-#include "../../handle.h"
-#include "infiniop/ops/floor.h"
+#include "../../operator_impl.h"
+#include "infiniop/ops/unary_ops_api.h"
 
 // --- 后端实现头文件 ---
 #ifdef ENABLE_CPU_API
