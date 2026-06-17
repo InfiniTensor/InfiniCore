@@ -83,9 +83,6 @@ target("infiniop-hygon")
     -- 复用NVIDIA的CUDA实现，通过HIP兼容层
     add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")
 
-    -- temporarily disble paged ops for hygon
-    remove_files("../src/infiniop/ops/paged*/nvidia/*.cu")
-
     -- Keep platform-specific or currently unregistered NVIDIA sources out of the Hygon target.
     remove_files("../src/infiniop/ops/avg_pool3d/nvidia/*.cu")
     remove_files("../src/infiniop/ops/dequant*/nvidia/*.cu")
