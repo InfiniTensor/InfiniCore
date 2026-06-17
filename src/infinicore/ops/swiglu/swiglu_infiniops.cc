@@ -1,11 +1,11 @@
-#include "infinicore/ops/gemm.hpp"
+#include "infinicore/ops/swiglu.hpp"
 
 #ifdef ENABLE_INFINIOPS_API
 #include "../infiniops_impl.hpp"
 
-#include <optional>
+#include "base/swiglu.h"
 
-namespace infinicore::op::gemm_impl::infiniops {
+namespace infinicore::op::swiglu_impl::infiniops {
 namespace {
 
 using TensorMeta = ::infinicore::op::infiniops::TensorMeta;
@@ -13,12 +13,11 @@ using TensorMeta = ::infinicore::op::infiniops::TensorMeta;
 struct PlannedMeta {
     TensorMeta c, a, b;
     graph::GraphTensor c_tensor, a_tensor, b_tensor;
-    float alpha, beta;
 };
 
 } // namespace
 
-void *plan(Tensor c, const Tensor &a, const Tensor &b, float alpha, float beta) {
+void *plan(Tensor c, const Tensor &a, const Tensor &b) {
     INFINICORE_ASSERT(c->device().getType() == Device::Type::NVIDIA);
     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(c, a, b);
 
@@ -28,9 +27,7 @@ void *plan(Tensor c, const Tensor &a, const Tensor &b, float alpha, float beta) 
         TensorMeta(b),
         graph::GraphTensor(c),
         graph::GraphTensor(a),
-        graph::GraphTensor(b),
-        alpha,
-        beta};
+        graph::GraphTensor(b)};
 }
 
 void run(void *planned_meta) {
@@ -40,15 +37,11 @@ void run(void *planned_meta) {
     handle.set_stream(context::getStream());
     infini::ops::Config config;
 
-    infini::ops::generated_dispatch::CallGemm(
+    infini::ops::generated_dispatch::CallSwiglu(
         handle,
         config,
         planned->a.tensor(planned->a_tensor),
         planned->b.tensor(planned->b_tensor),
-        std::optional<float>{planned->alpha},
-        std::optional<float>{planned->beta},
-        std::optional<int>{},
-        std::optional<int>{},
         planned->c.tensor(planned->c_tensor));
 }
 
@@ -58,11 +51,11 @@ void cleanup(void **planned_meta_ptr) {
 }
 
 static bool registered = []() {
-    Gemm::plan_dispatcher().registerDevice(Device::Type::NVIDIA, &plan);
-    Gemm::run_dispatcher().registerDevice(Device::Type::NVIDIA, &run);
-    Gemm::cleanup_dispatcher().registerDevice(Device::Type::NVIDIA, &cleanup);
+    SwiGLU::plan_dispatcher().registerDevice(Device::Type::NVIDIA, &plan);
+    SwiGLU::run_dispatcher().registerDevice(Device::Type::NVIDIA, &run);
+    SwiGLU::cleanup_dispatcher().registerDevice(Device::Type::NVIDIA, &cleanup);
     return true;
 }();
 
-} // namespace infinicore::op::gemm_impl::infiniops
+} // namespace infinicore::op::swiglu_impl::infiniops
 #endif
