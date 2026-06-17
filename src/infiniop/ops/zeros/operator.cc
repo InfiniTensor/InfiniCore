@@ -5,7 +5,7 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/zeros_cpu.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_ALI_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_ALI_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/zeros_nvidia.cuh"
 #endif
 #ifdef ENABLE_METAX_API
@@ -58,6 +58,9 @@ __INFINI_C infiniStatus_t infiniopCreateZerosDescriptor(
 #ifdef ENABLE_CAMBRICON_API
         CREATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
+#ifdef ENABLE_HYGON_API
+        CREATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -96,6 +99,9 @@ __INFINI_C infiniStatus_t infiniopGetZerosWorkspaceSize(infiniopZerosDescriptor_
 #endif
 #ifdef ENABLE_CAMBRICON_API
         GET(INFINI_DEVICE_CAMBRICON, bang);
+#endif
+#ifdef ENABLE_HYGON_API
+        GET(INFINI_DEVICE_HYGON, nvidia);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -144,6 +150,9 @@ __INFINI_C infiniStatus_t infiniopZeros(
 #ifdef ENABLE_CAMBRICON_API
         CALCULATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
+#ifdef ENABLE_HYGON_API
+        CALCULATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -184,6 +193,9 @@ infiniopDestroyZerosDescriptor(infiniopZerosDescriptor_t desc) {
 #endif
 #ifdef ENABLE_CAMBRICON_API
         DELETE(INFINI_DEVICE_CAMBRICON, bang);
+#endif
+#ifdef ENABLE_HYGON_API
+        DELETE(INFINI_DEVICE_HYGON, nvidia);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

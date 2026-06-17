@@ -5,7 +5,7 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/asinh_cpu.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/asinh_nvidia.cuh"
 #endif
 #ifdef ENABLE_METAX_API
@@ -44,6 +44,9 @@ __INFINI_C infiniStatus_t infiniopCreateAsinhDescriptor(
 #ifdef ENABLE_MOORE_API
         CREATE(INFINI_DEVICE_MOORE, moore);
 #endif
+#ifdef ENABLE_HYGON_API
+        CREATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -72,6 +75,9 @@ __INFINI_C infiniStatus_t infiniopGetAsinhWorkspaceSize(infiniopAsinhDescriptor_
 #endif
 #ifdef ENABLE_MOORE_API
         GET(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_HYGON_API
+        GET(INFINI_DEVICE_HYGON, nvidia);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -106,6 +112,9 @@ __INFINI_C infiniStatus_t infiniopAsinh(infiniopAsinhDescriptor_t desc,
 #ifdef ENABLE_MOORE_API
         CALCULATE(INFINI_DEVICE_MOORE, moore);
 #endif
+#ifdef ENABLE_HYGON_API
+        CALCULATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -133,6 +142,9 @@ __INFINI_C infiniStatus_t infiniopDestroyAsinhDescriptor(infiniopAsinhDescriptor
 #endif
 #ifdef ENABLE_MOORE_API
         DESTROY(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_HYGON_API
+        DESTROY(INFINI_DEVICE_HYGON, nvidia);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

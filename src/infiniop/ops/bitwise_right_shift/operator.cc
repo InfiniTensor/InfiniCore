@@ -5,7 +5,7 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/bitwise_right_shift_cpu.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/bitwise_right_shift_nvidia.cuh"
 #endif
 #ifdef ENABLE_METAX_API
@@ -47,6 +47,9 @@ __INFINI_C infiniStatus_t infiniopCreateBitwiseRightShiftDescriptor(
 #ifdef ENABLE_MOORE_API
         CREATE(INFINI_DEVICE_MOORE, moore);
 #endif
+#ifdef ENABLE_HYGON_API
+        CREATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -77,6 +80,9 @@ __INFINI_C infiniStatus_t infiniopGetBitwiseRightShiftWorkspaceSize(infiniopBitw
 #endif
 #ifdef ENABLE_MOORE_API
         GET(INFINI_DEVICE_MOORE, moore)
+#endif
+#ifdef ENABLE_HYGON_API
+        GET(INFINI_DEVICE_HYGON, nvidia)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -117,6 +123,9 @@ __INFINI_C infiniStatus_t infiniopBitwiseRightShift(
 #ifdef ENABLE_MOORE_API
         CALCULATE(INFINI_DEVICE_MOORE, moore);
 #endif
+#ifdef ENABLE_HYGON_API
+        CALCULATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -149,6 +158,9 @@ infiniopDestroyBitwiseRightShiftDescriptor(infiniopBitwiseRightShiftDescriptor_t
 #endif
 #ifdef ENABLE_MOORE_API
         DELETE(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_HYGON_API
+        DELETE(INFINI_DEVICE_HYGON, nvidia);
 #endif
 
     default:

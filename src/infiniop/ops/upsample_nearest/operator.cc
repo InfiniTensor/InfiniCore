@@ -6,7 +6,7 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/upsample_nearest_cpu.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/upsample_nearest_nvidia.cuh"
 #endif
 
@@ -56,6 +56,9 @@ __INFINI_C infiniStatus_t infiniopCreateUpsampleNearestDescriptor(
 #ifdef ENABLE_MOORE_API
         CREATE(INFINI_DEVICE_MOORE, moore);
 #endif
+#ifdef ENABLE_HYGON_API
+        CREATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -90,6 +93,9 @@ __INFINI_C infiniStatus_t infiniopGetUpsampleNearestWorkspaceSize(infiniopUpsamp
 #endif
 #ifdef ENABLE_MOORE_API
         GET(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_HYGON_API
+        GET(INFINI_DEVICE_HYGON, nvidia);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -132,6 +138,9 @@ __INFINI_C infiniStatus_t infiniopUpsampleNearest(
 #ifdef ENABLE_MOORE_API
         CALCULATE(INFINI_DEVICE_MOORE, moore);
 #endif
+#ifdef ENABLE_HYGON_API
+        CALCULATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -166,6 +175,9 @@ __INFINI_C infiniStatus_t infiniopDestroyUpsampleNearestDescriptor(infiniopUpsam
 #endif
 #ifdef ENABLE_MOORE_API
         DELETE(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_HYGON_API
+        DELETE(INFINI_DEVICE_HYGON, nvidia);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

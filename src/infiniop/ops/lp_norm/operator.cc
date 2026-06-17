@@ -2,7 +2,7 @@
 #include "../../handle.h"
 #include "infiniop/ops/lp_norm.h"
 
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_ALI_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_ALI_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/lp_norm_nvidia.cuh"
 #endif
 
@@ -39,6 +39,9 @@ __INFINI_C infiniStatus_t infiniopCreateLPNormDescriptor(
 #ifdef ENABLE_ALI_API
         CREATE(INFINI_DEVICE_ALI, nvidia);
 #endif
+#ifdef ENABLE_HYGON_API
+        CREATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -65,6 +68,9 @@ __INFINI_C infiniStatus_t infiniopGetLPNormWorkspaceSize(infiniopLPNormDescripto
 #endif
 #ifdef ENABLE_ALI_API
         GET(INFINI_DEVICE_ALI, nvidia);
+#endif
+#ifdef ENABLE_HYGON_API
+        GET(INFINI_DEVICE_HYGON, nvidia);
 #endif
 
     default:
@@ -106,6 +112,9 @@ __INFINI_C infiniStatus_t infiniopLPNorm(
 #ifdef ENABLE_ALI_API
         CALCULATE(INFINI_DEVICE_ALI, nvidia);
 #endif
+#ifdef ENABLE_HYGON_API
+        CALCULATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -135,6 +144,9 @@ infiniopDestroyLPNormDescriptor(infiniopLPNormDescriptor_t desc) {
 #endif
 #ifdef ENABLE_ALI_API
         DELETE(INFINI_DEVICE_ALI, nvidia);
+#endif
+#ifdef ENABLE_HYGON_API
+        DELETE(INFINI_DEVICE_HYGON, nvidia);
 #endif
 
     default:
