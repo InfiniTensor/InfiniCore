@@ -475,6 +475,34 @@ target("infinicore_c_api")
     after_build(function (target) print(YELLOW .. "[Congratulations!] Now you can install the libraries with \"xmake install\"" .. NC) end)
 target_end()
 
+target("infiniops_external")
+    set_kind("phony")
+    set_default(false)
+
+    on_build(function (target)
+        if not has_config("infiniops") then
+            return
+        end
+        local infiniops_root = path.absolute(get_config("infiniops-root") or "submodules/InfiniOps", os.projectdir())
+        local infiniops_builddir = path.join(infiniops_root, "build")
+        local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
+        local cmake_config_args = {
+            "-S", infiniops_root,
+            "-B", infiniops_builddir,
+            "-DWITH_NVIDIA=ON",
+            "-DGENERATE_OPERATOR_CALL_INSTANTIATIONS=ON",
+            "-DGENERATE_PYTHON_BINDINGS=OFF",
+            "-DCMAKE_BUILD_TYPE=Release"
+        }
+        os.execv("cmake", cmake_config_args)
+        -- The first configure regenerates operator_call_instantiations_*.cc.
+        -- Reconfigure once so CMake's globbed infiniops target sees every shard.
+        os.execv("cmake", cmake_config_args)
+        os.execv("cmake", {"--build", infiniops_builddir, "--target", "infiniops"})
+        os.execv("cmake", {"--install", infiniops_builddir, "--prefix", INFINI_ROOT})
+    end)
+target_end()
+
 target("infinicore_cpp_api")
     set_kind("shared")
     add_deps("infiniop", "infinirt", "infiniccl")
@@ -498,26 +526,13 @@ target("infinicore_cpp_api")
         if not has_config("nv-gpu") then
             raise("InfiniOps integration currently has adapters only for NVIDIA")
         end
+        add_deps("infiniops_external")
         add_defines("ENABLE_INFINIOPS_API")
-        add_includedirs(infiniops_root .. "/src", infiniops_root .. "/include", infiniops_root .. "/generated/include")
+        add_includedirs(infiniops_root .. "/src", infiniops_root .. "/include", infiniops_root .. "/generated/include", infiniops_root .. "/generated/bindings")
         add_linkdirs(infiniops_builddir .. "/src")
         add_links("infiniops")
         add_rpathdirs(infiniops_builddir .. "/src")
         add_installfiles(infiniops_builddir .. "/src/libinfiniops.so", {prefixdir = "lib"})
-        before_build(function (target)
-            import("core.base.option")
-            local infiniops_root = path.absolute(get_config("infiniops-root") or "submodules/InfiniOps", os.projectdir())
-            local infiniops_builddir = path.join(infiniops_root, "build")
-            os.execv("cmake", {
-                "-S", infiniops_root,
-                "-B", infiniops_builddir,
-                "-DWITH_NVIDIA=ON",
-                "-DGENERATE_OPERATOR_CALL_INSTANTIATIONS=ON",
-                "-DGENERATE_PYTHON_BINDINGS=OFF",
-                "-DCMAKE_BUILD_TYPE=Release"
-            })
-            os.execv("cmake", {"--build", infiniops_builddir, "--target", "infiniops"})
-        end)
     end
 
     add_linkdirs(INFINI_ROOT.."/lib")

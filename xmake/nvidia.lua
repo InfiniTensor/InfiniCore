@@ -251,8 +251,8 @@ target("infiniccl-nvidia")
         add_links("cudart")
 
         if not is_plat("windows") then
-            add_cuflags("-Xcompiler=-fPIC")
-            add_culdflags("-Xcompiler=-fPIC")
+            add_cuflags("-Xcompiler=-fPIC", {force = true})
+            add_culdflags("-Xcompiler=-fPIC", {force = true})
             add_cxflags("-fPIC")
             add_cxxflags("-fPIC")
 
