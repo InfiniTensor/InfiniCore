@@ -2034,6 +2034,7 @@ __device__ void PagedAttentionPrefillWarpCtaKernelKOnly(
 // Notes:
 // - This is a correctness-first kernel. It doesn't yet use MMA for PV (P * V) update.
 // - We keep the same grid mapping as other prefill kernels: blockIdx = (head, seq, m_block).
+#if !defined(ENABLE_HYGON_API)
 template <int kWarpSize, int kBlockN, int kHeadDim, int kDimsPerThread>
 __device__ __forceinline__ void PagedAttentionPrefillMmaScoreUpdateRow(
     int lane,
@@ -2362,6 +2363,8 @@ __device__ void PagedAttentionPrefillWarpCta8MmaHd128Kernel(
             lane, active1, m_start + row1, q_start, head_idx, out_, o_stride, o_head_stride, l1, acc1);
     }
 }
+
+#endif // !defined(ENABLE_HYGON_API)
 
 } // namespace op::paged_attention_prefill::cuda
 
