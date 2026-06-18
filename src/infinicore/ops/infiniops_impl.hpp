@@ -63,8 +63,7 @@ struct TensorMeta {
           device(toInfiniOpsDevice(tensor->device())) {}
 
     infini::ops::Tensor tensor(const void *data) const {
-        return infini::ops::Tensor(
-            const_cast<void *>(data), shape, dtype, device, strides);
+        return infini::ops::Tensor(const_cast<void *>(data), shape, dtype, device, strides);
     }
 
     infini::ops::Tensor tensor(const Tensor &tensor) const {
