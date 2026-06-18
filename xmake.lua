@@ -6,6 +6,7 @@ add_requires("pybind11")
 local GREEN = '\27[0;32m'
 local YELLOW = '\27[1;33m'
 local NC = '\27[0m'  -- No Color
+local INFINIRT_SOURCE_DIR = os.getenv("INFINIRT_SOURCE_DIR") or path.join(os.projectdir(), "../InfiniRT")
 
 set_encodings("utf-8")
 
@@ -352,6 +353,11 @@ target("infinirt")
         add_deps("infinirt-hygon")
     end
     set_languages("cxx17")
+    add_includedirs(path.join(INFINIRT_SOURCE_DIR, "src"))
+    if has_config("nv-gpu") then
+        local cuda_root = os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH") or get_config("cuda") or "/usr/local/cuda"
+        add_includedirs(cuda_root .. "/include")
+    end
     if not is_plat("windows") then
         add_cxflags("-fPIC")
         add_cxxflags("-fPIC")
@@ -359,6 +365,7 @@ target("infinirt")
     end
     set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
     add_files("src/infinirt/*.cc")
+    add_files(path.join(INFINIRT_SOURCE_DIR, "generated/src/runtime_dispatch.cc"))
     add_installfiles("include/infinirt.h", {prefixdir = "include"})
 target_end()
 

@@ -37,6 +37,9 @@ target("infinirt-cpu")
     end
 
     set_languages("cxx17")
+    local infinirt_source_dir = os.getenv("INFINIRT_SOURCE_DIR") or path.join(os.projectdir(), "../InfiniRT")
+    add_includedirs(path.join(infinirt_source_dir, "include"))
+    add_includedirs(path.join(infinirt_source_dir, "generated/include"))
     add_files("../src/infinirt/cpu/*.cc")
 target_end()
 

@@ -1,181 +1,249 @@
 #include "infinirt_cpu.h"
-#include <chrono>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
+
+#include <infini/rt.h>
 
 namespace infinirt::cpu {
+namespace {
+
+infini::rt::MemcpyKind toRtMemcpyKind(infinirtMemcpyKind_t kind) {
+    switch (kind) {
+    case INFINIRT_MEMCPY_H2H:
+        return infini::rt::MemcpyKind::kMemcpyHostToHost;
+    case INFINIRT_MEMCPY_H2D:
+        return infini::rt::MemcpyKind::kMemcpyHostToDevice;
+    case INFINIRT_MEMCPY_D2H:
+        return infini::rt::MemcpyKind::kMemcpyDeviceToHost;
+    case INFINIRT_MEMCPY_D2D:
+        return infini::rt::MemcpyKind::kMemcpyDeviceToDevice;
+    }
+    return infini::rt::MemcpyKind::kMemcpyHostToHost;
+}
+
+infiniStatus_t validateCpuDeviceId(int device_id) {
+    return device_id == 0 ? INFINI_STATUS_SUCCESS : INFINI_STATUS_DEVICE_NOT_FOUND;
+}
+
+infiniStatus_t runtimeStatus(infini::rt::Error status) {
+    return status == infini::rt::kSuccess ? INFINI_STATUS_SUCCESS : INFINI_STATUS_INTERNAL_ERROR;
+}
+
+} // namespace
+
 infiniStatus_t getDeviceCount(int *count) {
-    *count = 1;
-    return INFINI_STATUS_SUCCESS;
+    if (count == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    return runtimeStatus(infini::rt::GetDeviceCount(count));
 }
 
 infiniStatus_t setDevice(int device_id) {
-    return INFINI_STATUS_SUCCESS;
-}
-
-infiniStatus_t getMemInfo(int device_id, size_t *free_bytes, size_t *total_bytes) {
-    (void)device_id;
-    *free_bytes = 0;
-    *total_bytes = 0;
-#ifndef _WIN32
-    // Linux: report system memory info via /proc/meminfo
-    FILE *fp = fopen("/proc/meminfo", "r");
-    if (fp) {
-        char label[64];
-        size_t value;
-        while (fscanf(fp, "%63s %zu %*s", label, &value) == 2) {
-            if (strcmp(label, "MemTotal:") == 0) {
-                *total_bytes = value * 1024;
-            }
-            if (strcmp(label, "MemAvailable:") == 0) {
-                *free_bytes = value * 1024;
-            }
-        }
-        fclose(fp);
-    }
-#endif
-    if (*total_bytes == 0) {
-        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
-    }
-    return INFINI_STATUS_SUCCESS;
-}
-
-infiniStatus_t getDeviceResourceSnapshot(int device_id, infinirtDeviceResourceSnapshot_t *snapshot) {
-    memset(snapshot, 0, sizeof(*snapshot));
-    size_t free_bytes = 0, total_bytes = 0;
-    auto status = getMemInfo(device_id, &free_bytes, &total_bytes);
+    auto status = validateCpuDeviceId(device_id);
     if (status != INFINI_STATUS_SUCCESS) {
         return status;
     }
-    snapshot->total_bytes = total_bytes;
-    snapshot->free_bytes = free_bytes;
-    snapshot->used_bytes = total_bytes - free_bytes;
+    return runtimeStatus(infini::rt::SetDevice(device_id));
+}
+
+infiniStatus_t getMemInfo(int device_id, size_t *free_bytes, size_t *total_bytes) {
+    if (free_bytes == nullptr || total_bytes == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    auto status = validateCpuDeviceId(device_id);
+    if (status != INFINI_STATUS_SUCCESS) {
+        return status;
+    }
+    status = runtimeStatus(infini::rt::MemGetInfo(free_bytes, total_bytes));
+    if (status != INFINI_STATUS_SUCCESS) {
+        return status;
+    }
+    return *total_bytes == 0 ? INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED : INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t getDeviceResourceSnapshot(int device_id, infinirtDeviceResourceSnapshot_t *snapshot) {
+    if (snapshot == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    auto status = validateCpuDeviceId(device_id);
+    if (status != INFINI_STATUS_SUCCESS) {
+        return status;
+    }
+
+    *snapshot = infinirtDeviceResourceSnapshot_t{};
+    snapshot->device_type = INFINI_DEVICE_CPU;
+    snapshot->device_id = device_id;
+
+    status = getMemInfo(device_id, &snapshot->free_bytes, &snapshot->total_bytes);
+    if (status != INFINI_STATUS_SUCCESS) {
+        return status;
+    }
+    if (snapshot->total_bytes >= snapshot->free_bytes) {
+        snapshot->used_bytes = snapshot->total_bytes - snapshot->free_bytes;
+    }
     snapshot->valid_fields = INFINIRT_RESOURCE_FIELD_MEMORY_CAPACITY;
     return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t deviceSynchronize() {
-    return INFINI_STATUS_SUCCESS;
+    return runtimeStatus(infini::rt::DeviceSynchronize());
 }
 
 infiniStatus_t streamCreate(infinirtStream_t *stream_ptr) {
-    *stream_ptr = nullptr;
-    return INFINI_STATUS_SUCCESS;
+    if (stream_ptr == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    return runtimeStatus(infini::rt::StreamCreate(stream_ptr));
 }
 
 infiniStatus_t streamDestroy(infinirtStream_t stream) {
-    return INFINI_STATUS_SUCCESS;
+    return runtimeStatus(infini::rt::StreamDestroy(stream));
 }
 
 infiniStatus_t streamSynchronize(infinirtStream_t stream) {
-    return INFINI_STATUS_SUCCESS;
+    return runtimeStatus(infini::rt::StreamSynchronize(stream));
 }
 
 infiniStatus_t streamWaitEvent(infinirtStream_t stream, infinirtEvent_t event) {
-    return INFINI_STATUS_NOT_IMPLEMENTED;
+    return runtimeStatus(infini::rt::StreamWaitEvent(stream, event, 0));
 }
 
 infiniStatus_t eventCreate(infinirtEvent_t *event_ptr) {
-    // For CPU implementation, we use a simple timestamp as event
-    auto now = std::chrono::steady_clock::now();
-    auto *timestamp = new std::chrono::steady_clock::time_point(now);
-    *event_ptr = timestamp;
-    return INFINI_STATUS_SUCCESS;
+    if (event_ptr == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    return runtimeStatus(infini::rt::EventCreate(event_ptr));
 }
 
 infiniStatus_t eventCreateWithFlags(infinirtEvent_t *event_ptr, uint32_t flags) {
-    // CPU implementation ignores flags for simplicity
-    return eventCreate(event_ptr);
+    if (event_ptr == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    return runtimeStatus(infini::rt::EventCreateWithFlags(event_ptr, flags));
 }
 
 infiniStatus_t eventRecord(infinirtEvent_t event, infinirtStream_t stream) {
-    // Update the event timestamp
-    auto *timestamp = static_cast<std::chrono::steady_clock::time_point *>(event);
-    *timestamp = std::chrono::steady_clock::now();
-    return INFINI_STATUS_SUCCESS;
+    if (event == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    return runtimeStatus(infini::rt::EventRecord(event, stream));
 }
 
 infiniStatus_t eventQuery(infinirtEvent_t event, infinirtEventStatus_t *status_ptr) {
-    // CPU events are always complete immediately
-    *status_ptr = INFINIRT_EVENT_COMPLETE;
+    if (event == nullptr || status_ptr == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    auto rt_status = infini::rt::EventQuery(event);
+    *status_ptr = rt_status == infini::rt::kSuccess ? INFINIRT_EVENT_COMPLETE : INFINIRT_EVENT_NOT_READY;
     return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t eventSynchronize(infinirtEvent_t event) {
-    // CPU events are synchronized immediately
-    return INFINI_STATUS_SUCCESS;
+    if (event == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    return runtimeStatus(infini::rt::EventSynchronize(event));
 }
 
 infiniStatus_t eventDestroy(infinirtEvent_t event) {
-    auto *timestamp = static_cast<std::chrono::steady_clock::time_point *>(event);
-    delete timestamp;
-    return INFINI_STATUS_SUCCESS;
+    if (event == nullptr) {
+        return INFINI_STATUS_SUCCESS;
+    }
+    return runtimeStatus(infini::rt::EventDestroy(event));
 }
 
 infiniStatus_t eventElapsedTime(float *ms_ptr, infinirtEvent_t start, infinirtEvent_t end) {
-    auto *start_time = static_cast<std::chrono::steady_clock::time_point *>(start);
-    auto *end_time = static_cast<std::chrono::steady_clock::time_point *>(end);
-
-    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(*end_time - *start_time);
-    *ms_ptr = static_cast<float>(duration.count()) / 1000.0f; // Convert microseconds to milliseconds
-
-    return INFINI_STATUS_SUCCESS;
+    if (ms_ptr == nullptr || start == nullptr || end == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    return runtimeStatus(infini::rt::EventElapsedTime(ms_ptr, start, end));
 }
 
 infiniStatus_t mallocDevice(void **p_ptr, size_t size) {
-    *p_ptr = std::malloc(size);
-    return INFINI_STATUS_SUCCESS;
+    if (p_ptr == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    auto status = runtimeStatus(infini::rt::Malloc(p_ptr, size));
+    if (status != INFINI_STATUS_SUCCESS) {
+        return status;
+    }
+    return size != 0 && *p_ptr == nullptr ? INFINI_STATUS_INTERNAL_ERROR : INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t mallocHost(void **p_ptr, size_t size) {
-    return mallocDevice(p_ptr, size);
+    if (p_ptr == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    auto status = runtimeStatus(infini::rt::MallocHost(p_ptr, size));
+    if (status != INFINI_STATUS_SUCCESS) {
+        return status;
+    }
+    return size != 0 && *p_ptr == nullptr ? INFINI_STATUS_INTERNAL_ERROR : INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t freeDevice(void *ptr) {
-    std::free(ptr);
-    return INFINI_STATUS_SUCCESS;
+    return runtimeStatus(infini::rt::Free(ptr));
 }
 
 infiniStatus_t freeHost(void *ptr) {
-    return freeDevice(ptr);
+    return runtimeStatus(infini::rt::FreeHost(ptr));
 }
 
 infiniStatus_t memcpy(void *dst, const void *src, size_t size, infinirtMemcpyKind_t kind) {
-    std::memcpy(dst, src, size);
-    return INFINI_STATUS_SUCCESS;
+    if ((dst == nullptr || src == nullptr) && size != 0) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    return runtimeStatus(infini::rt::Memcpy(dst, src, size, toRtMemcpyKind(kind)));
 }
 
 infiniStatus_t memcpyAsync(void *dst, const void *src, size_t size, infinirtMemcpyKind_t kind, infinirtStream_t stream) {
-    return memcpy(dst, src, size, kind);
+    if ((dst == nullptr || src == nullptr) && size != 0) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    return runtimeStatus(infini::rt::MemcpyAsync(dst, src, size, toRtMemcpyKind(kind), stream));
 }
 
 infiniStatus_t mallocAsync(void **p_ptr, size_t size, infinirtStream_t stream) {
-    return mallocDevice(p_ptr, size);
+    if (p_ptr == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    auto status = runtimeStatus(infini::rt::MallocAsync(p_ptr, size, stream));
+    if (status != INFINI_STATUS_SUCCESS) {
+        return status;
+    }
+    return size != 0 && *p_ptr == nullptr ? INFINI_STATUS_INTERNAL_ERROR : INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t freeAsync(void *ptr, infinirtStream_t stream) {
-    return freeDevice(ptr);
+    return runtimeStatus(infini::rt::FreeAsync(ptr, stream));
 }
 
 infiniStatus_t memsetDevice(void *ptr, int value, size_t count) {
-    memset(ptr, value, count);
-    return INFINI_STATUS_SUCCESS;
+    if (ptr == nullptr && count != 0) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    return runtimeStatus(infini::rt::Memset(ptr, value, count));
 }
 
 infiniStatus_t memsetDeviceAsync(void *ptr, int value, size_t count, infinirtStream_t stream) {
-    return memsetDevice(ptr, value, count);
+    if (ptr == nullptr && count != 0) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    return runtimeStatus(infini::rt::MemsetAsync(ptr, value, count, stream));
 }
 
 infiniStatus_t streamBeginCapture(infinirtStream_t stream, infinirtStreamCaptureMode_t mode) {
+    (void)stream;
+    (void)mode;
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
 infiniStatus_t streamEndCapture(infinirtStream_t stream, infinirtGraph_t *graph_ptr) {
+    (void)stream;
+    (void)graph_ptr;
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
 infiniStatus_t graphDestroy(infinirtGraph_t graph) {
+    (void)graph;
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
@@ -185,14 +253,22 @@ infiniStatus_t graphInstantiate(
     infinirtGraphNode_t *node_ptr,
     char *log_buffer,
     size_t buffer_size) {
+    (void)graph_exec_ptr;
+    (void)graph;
+    (void)node_ptr;
+    (void)log_buffer;
+    (void)buffer_size;
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
 infiniStatus_t graphExecDestroy(infinirtGraphExec_t graph_exec) {
+    (void)graph_exec;
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
 infiniStatus_t graphLuanch(infinirtGraphExec_t graph_exec, infinirtStream_t stream) {
+    (void)graph_exec;
+    (void)stream;
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
