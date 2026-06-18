@@ -2782,3 +2782,88 @@ def swap_(lib):
     lib.infiniopDestroySwapDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
+
+
+@OpRegister.operator
+def recurrent_gated_delta_rule_(lib):
+    lib.infiniopCreateRecurrentGatedDeltaRuleDescriptor.restype = c_int32
+    lib.infiniopCreateRecurrentGatedDeltaRuleDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_bool,
+    ]
+    lib.infiniopGetRecurrentGatedDeltaRuleWorkspaceSize.restype = c_int32
+    lib.infiniopGetRecurrentGatedDeltaRuleWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopRecurrentGatedDeltaRule.restype = c_int32
+    lib.infiniopRecurrentGatedDeltaRule.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyRecurrentGatedDeltaRuleDescriptor.restype = c_int32
+    lib.infiniopDestroyRecurrentGatedDeltaRuleDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t
+    ]
+
+
+@OpRegister.operator
+def chunk_gated_delta_rule_(lib):
+    lib.infiniopCreateChunkGatedDeltaRuleDescriptor.restype = c_int32
+    lib.infiniopCreateChunkGatedDeltaRuleDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_void_p,
+        c_bool,
+        c_size_t,
+    ]
+    lib.infiniopGetChunkGatedDeltaRuleWorkspaceSize.restype = c_int32
+    lib.infiniopGetChunkGatedDeltaRuleWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopChunkGatedDeltaRule.restype = c_int32
+    lib.infiniopChunkGatedDeltaRule.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyChunkGatedDeltaRuleDescriptor.restype = c_int32
+    lib.infiniopDestroyChunkGatedDeltaRuleDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t
+    ]
