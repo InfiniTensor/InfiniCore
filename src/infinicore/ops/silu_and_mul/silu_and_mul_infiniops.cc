@@ -25,7 +25,7 @@ void run(void *planned_meta) {
     infini::ops::Handle handle;
     handle.set_stream(context::getStream());
     infini::ops::Config config;
-    infini::ops::generated_dispatch::CallSiluAndMulInfinilm(
+    infini::ops::SiluAndMulInfinilm::Call(
         handle, config, planned->input.tensor(planned->input_tensor), planned->output.tensor(planned->output_tensor));
 }
 

@@ -43,7 +43,7 @@ void calculate(Tensor out,
         alibi_slopes_meta.emplace(*alibi_slopes);
     }
 
-    infini::ops::generated_dispatch::CallPagedAttentionPrefillInfinilm(
+    infini::ops::PagedAttentionPrefillInfinilm::Call(
         handle,
         config,
         q_meta.tensor(q),

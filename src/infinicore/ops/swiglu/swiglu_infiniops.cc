@@ -37,7 +37,7 @@ void run(void *planned_meta) {
     handle.set_stream(context::getStream());
     infini::ops::Config config;
 
-    infini::ops::generated_dispatch::CallSwiglu(
+    infini::ops::Swiglu::Call(
         handle,
         config,
         planned->a.tensor(planned->a_tensor),

@@ -20,7 +20,7 @@ void calculate(Tensor output, Tensor input) {
 
     TensorMeta output_meta(output);
     TensorMeta input_meta(input);
-    infini::ops::generated_dispatch::CallSilu(
+    infini::ops::Silu::Call(
         handle,
         config,
         input_meta.tensor(input),

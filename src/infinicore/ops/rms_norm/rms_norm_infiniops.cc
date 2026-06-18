@@ -39,7 +39,7 @@ void run(void *planned_meta) {
     handle.set_stream(context::getStream());
     infini::ops::Config config;
 
-    infini::ops::generated_dispatch::CallRmsNorm(
+    infini::ops::RmsNorm::Call(
         handle,
         config,
         planned->x.tensor(planned->x_tensor),

@@ -40,7 +40,7 @@ void run(void *planned_meta) {
     handle.set_stream(context::getStream());
     infini::ops::Config config;
 
-    infini::ops::generated_dispatch::CallGemm(
+    infini::ops::Gemm::Call(
         handle,
         config,
         planned->a.tensor(planned->a_tensor),
