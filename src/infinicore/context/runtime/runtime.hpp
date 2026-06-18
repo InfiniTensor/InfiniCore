@@ -8,6 +8,8 @@
 
 #include <infiniop.h>
 #include <infinirt.h>
+#include <mutex>
+#include <unordered_map>
 
 namespace infinicore {
 class ContextImpl;
@@ -19,6 +21,8 @@ private:
     std::unique_ptr<PinnableBlockAllocator> device_memory_allocator_;
     std::unique_ptr<MemoryAllocator> pinned_host_memory_allocator_;
     std::unique_ptr<graph::GraphManager> graph_manager_;
+    std::mutex reinstantiated_blob_mutex_;
+    std::unordered_map<void *, std::weak_ptr<Memory>> reinstantiated_blobs_;
 
 protected:
     Runtime(Device device);

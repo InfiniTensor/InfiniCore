@@ -5,6 +5,9 @@ end
 
 local CUTLASS_ROOT = os.getenv("CUTLASS_ROOT") or os.getenv("CUTLASS_HOME") or os.getenv("CUTLASS_PATH")
 local TVM_ROOT = os.getenv("TVM_ROOT") or os.getenv("TVM_HOME") or os.getenv("TVM_PATH")
+if CUTLASS_ROOT == nil and os.isdir(path.join(os.projectdir(), "third_party/cutlass")) then
+    CUTLASS_ROOT = path.join(os.projectdir(), "third_party/cutlass")
+end
 
 local FLASH_ATTN_ROOT = get_config("flash-attn")
 

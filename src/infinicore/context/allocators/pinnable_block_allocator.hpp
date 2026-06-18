@@ -10,10 +10,11 @@ namespace infinicore {
 class PinnableBlockAllocator : public MemoryAllocator {
     // Represents a single memory block
     struct Block {
-        void *ptr = nullptr; // Device pointer
-        size_t size = 0;     // Block size in bytes
-        bool frozen = false; // True if used in pinned/graph mode
-        bool in_use = false; // Wether the block is currently in use
+        void *ptr = nullptr;  // Device pointer
+        size_t size = 0;      // Block size in bytes
+        bool frozen = false;  // True if used in pinned/graph mode
+        bool in_use = false;  // Wether the block is currently in use
+        size_t use_count = 0; // Number of Memory owners for this block
     };
 
     // A simple size-class allocator for small/medium blocks

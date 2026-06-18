@@ -24,7 +24,7 @@ public:
 
     void load_parameter(const std::string &name, const Tensor &param);
 
-    void load_parameters_no_sync(const std::unordered_map<std::string, Tensor> &params);
+    void load_parameters_no_sync(const std::unordered_map<std::string, Tensor> &params, bool strict = true);
 
     void load_parameter_(const std::string &name, const Tensor &param);
 

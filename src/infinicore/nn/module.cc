@@ -68,10 +68,17 @@ void Module::load_parameter(const std::string &name, const Tensor &param) {
     throw std::runtime_error("Parameter '" + name + "' not found in module.");
 }
 
-void Module::load_parameters_no_sync(const std::unordered_map<std::string, Tensor> &params) {
+void Module::load_parameters_no_sync(const std::unordered_map<std::string, Tensor> &params, bool strict) {
     auto all_params = state_dict();
     for (const auto &[name, param] : params) {
-        auto existing_param = get_state_dict_parameter(all_params, name);
+        auto it = all_params.find(name);
+        if (it == all_params.end()) {
+            if (strict) {
+                throw std::runtime_error("Parameter '" + name + "' not found in module.");
+            }
+            continue;
+        }
+        auto existing_param = it->second;
         try {
             existing_param.load_no_sync(param);
         } catch (const std::exception &e) {
