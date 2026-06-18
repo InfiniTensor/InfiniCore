@@ -45,7 +45,7 @@ void run(void *planned_meta) {
     infini::ops::Handle handle;
     handle.set_stream(context::getStream());
     infini::ops::Config config;
-    infini::ops::generated_dispatch::CallPagedAttentionInfinilm(
+    infini::ops::PagedAttentionInfinilm::Call(
         handle,
         config,
         planned->q.tensor(planned->q_tensor),

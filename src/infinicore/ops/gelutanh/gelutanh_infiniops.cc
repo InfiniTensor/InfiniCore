@@ -20,7 +20,7 @@ void calculate(Tensor output, Tensor input) {
 
     TensorMeta output_meta(output);
     TensorMeta input_meta(input);
-    infini::ops::generated_dispatch::CallGelutanhInfinilm(
+    infini::ops::GelutanhInfinilm::Call(
         handle,
         config,
         input_meta.tensor(input),

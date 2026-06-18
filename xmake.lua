@@ -494,6 +494,10 @@ target("infiniops_external")
             "-DGENERATE_PYTHON_BINDINGS=OFF",
             "-DCMAKE_BUILD_TYPE=Release"
         }
+        local infiniops_ops = os.getenv("INFINI_OPS_OPS")
+        if infiniops_ops and #infiniops_ops > 0 then
+            table.insert(cmake_config_args, "-DINFINI_OPS_OPS=" .. infiniops_ops)
+        end
         os.execv("cmake", cmake_config_args)
         -- The first configure regenerates operator_call_instantiations_*.cc.
         -- Reconfigure once so CMake's globbed infiniops target sees every shard.

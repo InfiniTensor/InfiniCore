@@ -20,7 +20,7 @@ void calculate(Tensor indices, Tensor logits, float random_val, float topp, int 
 
     TensorMeta indices_meta(indices);
     TensorMeta logits_meta(logits);
-    infini::ops::generated_dispatch::CallRandomSampleInfinilm(
+    infini::ops::RandomSampleInfinilm::Call(
         handle,
         config,
         logits_meta.tensor(logits),

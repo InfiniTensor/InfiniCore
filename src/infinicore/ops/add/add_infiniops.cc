@@ -35,7 +35,7 @@ void run(void *planned_meta) {
     handle.set_stream(context::getStream());
     infini::ops::Config config;
 
-    infini::ops::generated_dispatch::CallAdd(
+    infini::ops::Add::Call(
         handle,
         config,
         planned->a.tensor(planned->a_tensor),

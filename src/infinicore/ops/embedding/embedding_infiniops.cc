@@ -37,7 +37,7 @@ void run(void *planned_meta) {
     handle.set_stream(context::getStream());
     infini::ops::Config config;
 
-    infini::ops::generated_dispatch::CallEmbedding(
+    infini::ops::Embedding::Call(
         handle,
         config,
         planned->input.tensor(planned->input_tensor),

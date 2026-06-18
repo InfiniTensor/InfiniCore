@@ -48,7 +48,7 @@ void calculate(Tensor output,
         bias_meta.emplace(bias);
     }
 
-    infini::ops::generated_dispatch::CallConvInfinilm(
+    infini::ops::ConvInfinilm::Call(
         handle,
         config,
         input_meta.tensor(input),

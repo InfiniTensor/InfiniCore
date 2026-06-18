@@ -25,7 +25,7 @@ void run(void *planned_meta) {
     infini::ops::Handle handle;
     handle.set_stream(context::getStream());
     infini::ops::Config config;
-    infini::ops::generated_dispatch::CallKvCachingInfinilm(
+    infini::ops::KvCachingInfinilm::Call(
         handle,
         config,
         planned->k.tensor(planned->k_tensor),

@@ -47,7 +47,7 @@ void run(void *planned_meta) {
     infini::ops::Handle handle;
     handle.set_stream(context::getStream());
     infini::ops::Config config;
-    infini::ops::generated_dispatch::CallRotaryEmbeddingInfinilm(
+    infini::ops::RotaryEmbeddingInfinilm::Call(
         handle,
         config,
         planned->x.tensor(planned->x_tensor),
