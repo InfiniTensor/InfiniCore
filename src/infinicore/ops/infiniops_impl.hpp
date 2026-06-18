@@ -8,8 +8,8 @@
 #include "config.h"
 #include "data_type.h"
 #include "handle.h"
-#include "tensor.h"
 #include "infini/ops.h"
+#include "tensor.h"
 
 namespace infinicore::op::infiniops {
 
