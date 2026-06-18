@@ -5,3 +5,7 @@
 	path = third_party/nlohmann_json
 	url = https://github.com/nlohmann/json.git
 	branch = master
+[submodule "submodules/InfiniRT"]
+	path = submodules/InfiniRT
+	url = https://github.com/InfiniTensor/InfiniRT.git
+	branch = master
