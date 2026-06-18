@@ -5,10 +5,22 @@ from infinicore.tensor import Tensor
 
 def logical_not(input: Tensor, *, out=None) -> Tensor:
     r"""Computes the element-wise logical NOT of the given input tensors."""
-    # 1. 非CPU平台调用 ntops 实现
-    if input.device.type not in ("cpu"):
+    if input.device.type != "cpu":
         assert infinicore.use_ntops
-        return infinicore.ntops.torch.logical_not(input, out=out)
+        input_zero = infinicore.zeros(
+            input.shape, dtype=input.dtype, device=input.device
+        )
+        result = infinicore.empty(
+            input.shape, dtype=infinicore.bool, device=input.device
+        )
+
+        infinicore.ntops.torch.eq(input, input_zero, out=result)
+
+        if out is None:
+            return result
+
+        infinicore.ntops.torch.bitwise_and(result, result, out=out)
+        return out
 
     # 2. 如果没有提供 out，创建一个新的 Tensor 并返回
     if out is None:
