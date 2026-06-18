@@ -3,20 +3,19 @@
 
 namespace infinicore::op {
 
-common::OpDispatcher<BroadcastTo::schema> &BroadcastTo::dispatcher() {
-    static common::OpDispatcher<BroadcastTo::schema> dispatcher_;
-    return dispatcher_;
-};
+INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(BroadcastTo);
+
+BroadcastTo::BroadcastTo(Tensor y, Tensor x) {
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(y, x);
+    INFINICORE_GRAPH_OP_DISPATCH(y->device().getType(), y, x);
+}
 
 void BroadcastTo::execute(Tensor y, Tensor x) {
-    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(y, x);
-    infinicore::context::setDevice(y->device());
-    dispatcher().lookup(y->device().getType())(y, x);
+    INFINICORE_GRAPH_OP_RECORD_OR_RUN(BroadcastTo, y, x);
 }
 
 Tensor broadcast_to(Tensor x, const std::vector<int64_t> &shape) {
     Shape target_shape(shape.begin(), shape.end());
-
     auto y = Tensor::empty(target_shape, x->dtype(), x->device());
     broadcast_to_(y, x);
     return y;

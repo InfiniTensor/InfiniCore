@@ -22,6 +22,7 @@ infiniopHandle_t getInfiniopHandle(Device device);
 
 void syncStream();
 void syncDevice();
+void trimMemory();
 
 std::shared_ptr<Memory> allocateMemory(size_t size);
 std::shared_ptr<Memory> allocateHostMemory(size_t size);
@@ -31,6 +32,9 @@ void memcpyH2D(void *dst, const void *src, size_t size, bool async = true);
 void memcpyD2H(void *dst, const void *src, size_t size);
 void memcpyD2D(void *dst, const void *src, size_t size, bool async = true);
 void memcpyH2H(void *dst, const void *src, size_t size);
+
+void setDeviceMemory(void *ptr, int value, size_t count);
+void setDeviceMemoryAsync(void *ptr, int value, size_t count, infinirtStream_t stream);
 
 // Timing APIs for performance measurement
 infinirtEvent_t createEvent();

@@ -126,7 +126,11 @@ INFINIOP_CUDA_KERNEL elementwiseKernel(
 
         unpackInputsAndApply(
             [&](auto... Is) {
+#if defined(ENABLE_HYGON_API)
+                output[out_idx] = Op{}(typed_inputs[Is.value][indexer(Is.value)]..., args...);
+#else
                 output[out_idx] = Op{}(typed_inputs[Is.value][indexer(Is.value)]..., std::forward<Args>(args)...);
+#endif
             },
             std::make_index_sequence<N>{});
     }

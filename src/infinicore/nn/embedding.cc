@@ -45,7 +45,7 @@ Embedding::Embedding(size_t num_embeddings,
 Tensor Embedding::forward(const Tensor &indices) const {
     // TODO: Implement on-device embedding for all devices, then remove the condition and the classic approach
     auto device_type = device_.getType();
-    if (device_type == Device::Type::NVIDIA || device_type == Device::Type::ILUVATAR || device_type == Device::Type::METAX || device_type == Device::Type::MOORE || device_type == Device::Type::ALI || device_type == Device::Type::QY) {
+    if (device_type == Device::Type::NVIDIA || device_type == Device::Type::ASCEND || device_type == Device::Type::CAMBRICON || device_type == Device::Type::ILUVATAR || device_type == Device::Type::METAX || device_type == Device::Type::MOORE || device_type == Device::Type::ALI || device_type == Device::Type::QY) {
         // Use op::embedding which supports device-side input and batch dimension
         return op::embedding(indices->contiguous()->to(device_), weight_);
     }
@@ -71,10 +71,6 @@ Tensor Embedding::forward(const Tensor &indices) const {
     }
 
     const size_t row_bytes = embedding_dim_ * dsize(weight_->dtype());
-
-    // Source and destination base pointers
-    auto *weight_base = weight_->data();
-    auto *out_base = out->data();
 
     // Helper lambda to read index based on dtype with bounds checking
     auto read_index = [&](size_t i) -> int64_t {
@@ -103,6 +99,8 @@ Tensor Embedding::forward(const Tensor &indices) const {
 
     if (weight_->device().getType() == Device::Type::CPU) {
         // CPU path: memcpy row by row
+        const auto *weight_base = reinterpret_cast<const char *>(weight_->data());
+        auto *out_base = reinterpret_cast<char *>(out->data());
         for (size_t i = 0; i < num_lookups; ++i) {
             int64_t idx = read_index(i);
             if (idx < 0 || idx >= static_cast<int64_t>(num_embeddings_)) {
@@ -112,14 +110,17 @@ Tensor Embedding::forward(const Tensor &indices) const {
             std::memcpy(out_base + i * row_bytes, weight_base + idx * row_bytes, row_bytes);
         }
     } else {
-        // Device path: use stream-ordered D2D copies
+        // Device fallback: copy rows through Tensor slices so device runtimes own stride/stream handling.
+        auto flat_out = out->view({num_lookups, embedding_dim_});
         for (size_t i = 0; i < num_lookups; ++i) {
             int64_t idx = read_index(i);
             if (idx < 0 || idx >= static_cast<int64_t>(num_embeddings_)) {
                 throw std::out_of_range(
                     "Index out of range: " + std::to_string(idx) + " (num_embeddings=" + std::to_string(num_embeddings_) + ")");
             }
-            context::memcpyD2D(out_base + i * row_bytes, weight_base + idx * row_bytes, row_bytes);
+            auto dst = flat_out->narrow({{0, i, 1}});
+            auto src = weight_->narrow({{0, static_cast<size_t>(idx), 1}});
+            dst->copy_from(src);
         }
     }
 

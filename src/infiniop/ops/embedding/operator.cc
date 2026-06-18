@@ -2,11 +2,18 @@
 #include "../../handle.h"
 #include "infiniop/ops/embedding.h"
 
+#ifdef ENABLE_CAMBRICON_API
+#include "bang/embedding_bang.h"
+#endif
+
 #ifdef ENABLE_CPU_API
 #include "cpu/embedding_cpu.h"
 #endif
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API) || defined(ENABLE_ALI_API)
 #include "nvidia/embedding_nvidia.cuh"
+#endif
+#ifdef ENABLE_ASCEND_API
+#include "ascend/embedding_ascend.h"
 #endif
 #ifdef ENABLE_METAX_API
 #include "metax/embedding_metax.cuh"
@@ -51,11 +58,17 @@ __INFINI_C infiniStatus_t infiniopCreateEmbeddingDescriptor(
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_ASCEND_API
+        CREATE(INFINI_DEVICE_ASCEND, ascend);
+#endif
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_MOORE_API
         CREATE(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_CAMBRICON_API
+        CREATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
 
     default:
@@ -97,11 +110,17 @@ __INFINI_C infiniStatus_t infiniopEmbedding(
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_ASCEND_API
+        CALCULATE(INFINI_DEVICE_ASCEND, ascend);
+#endif
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_MOORE_API
         CALCULATE(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_CAMBRICON_API
+        CALCULATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
 
     default:
@@ -142,6 +161,9 @@ __INFINI_C infiniStatus_t infiniopDestroyEmbeddingDescriptor(infiniopEmbeddingDe
 #endif
 #ifdef ENABLE_MOORE_API
         DESTROY(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_CAMBRICON_API
+        DESTROY(INFINI_DEVICE_CAMBRICON, bang);
 #endif
 
     default:

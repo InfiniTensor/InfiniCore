@@ -323,11 +323,13 @@ public:
         CHECK_STATUS(setupConvolutionDescriptor(pads_arr, strides_arr, dilations_arr,
                                                 spatial_ndim_for_conv_desc, compute_type));
 
-        if (info.bias_dims_size() == 0) {
-            CHECK_STATUS(setupAlgorithmWithoutBias());
-        } else {
-            CHECK_STATUS(setupAlgorithmWithBias());
-        }
+        // @todo: improve algo setup in the future
+        // if (info.bias_dims_size() == 0) {
+        //     CHECK_STATUS(setupAlgorithmWithoutBias());
+        // } else {
+        //     CHECK_STATUS(setupAlgorithmWithBias());
+        // }
+        CHECK_STATUS(setupAlgorithmWithoutBias());
 
         return INFINI_STATUS_SUCCESS;
     }

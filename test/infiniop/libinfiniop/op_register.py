@@ -1,19 +1,18 @@
-from .structs import (
-    infiniopHandle_t,
-    infiniopTensorDescriptor_t,
-    infiniopOperatorDescriptor_t,
+from ctypes import (
+    POINTER,
+    c_bool,
+    c_double,
+    c_float,
+    c_int32,
+    c_int64,
+    c_size_t,
+    c_void_p,
 )
 
-from ctypes import (
-    c_int32,
-    c_void_p,
-    c_size_t,
-    POINTER,
-    c_float,
-    c_double,
-    c_int64,
-    c_bool,
-    c_int64,
+from .structs import (
+    infiniopHandle_t,
+    infiniopOperatorDescriptor_t,
+    infiniopTensorDescriptor_t,
 )
 
 
@@ -1315,6 +1314,52 @@ def per_tensor_dequant_int8_(lib):
 
 
 @OpRegister.operator
+def gptq_marlin_gemm_(lib):
+    lib.infiniopCreateGptqMarlinGemmDescriptor.restype = c_int32
+    lib.infiniopCreateGptqMarlinGemmDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+    lib.infiniopGetGptqMarlinGemmWorkspaceSize.restype = c_int32
+    lib.infiniopGetGptqMarlinGemmWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopGptqMarlinGemm.restype = c_int32
+    lib.infiniopGptqMarlinGemm.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_int64,
+        c_bool,
+        c_bool,
+        c_bool,
+        c_bool,
+        c_void_p,
+    ]
+    lib.infiniopDestroyGptqMarlinGemmDescriptor.restype = c_int32
+    lib.infiniopDestroyGptqMarlinGemmDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def gptq_qyblas_gemm_(lib):
     lib.infiniopCreateGptqQyblasGemmDescriptor.restype = c_int32
     lib.infiniopCreateGptqQyblasGemmDescriptor.argtypes = [
@@ -1350,6 +1395,59 @@ def gptq_qyblas_gemm_(lib):
 
     lib.infiniopDestroyGptqQyblasGemmDescriptor.restype = c_int32
     lib.infiniopDestroyGptqQyblasGemmDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
+def awq_marlin_gemm_(lib):
+    lib.infiniopCreateAwqMarlinGemmDescriptor.restype = c_int32
+    lib.infiniopCreateAwqMarlinGemmDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetAwqMarlinGemmWorkspaceSize.restype = c_int32
+    lib.infiniopGetAwqMarlinGemmWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopAwqMarlinGemm.restype = c_int32
+    lib.infiniopAwqMarlinGemm.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_int64,
+        c_bool,
+        c_bool,
+        c_bool,
+        c_bool,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyAwqMarlinGemmDescriptor.restype = c_int32
+    lib.infiniopDestroyAwqMarlinGemmDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
 
@@ -1470,6 +1568,38 @@ def gelu_(lib):
 
     lib.infiniopDestroyGeluDescriptor.restype = c_int32
     lib.infiniopDestroyGeluDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
+def gelutanh_(lib):
+    lib.infiniopCreateGeluTanhDescriptor.restype = c_int32
+    lib.infiniopCreateGeluTanhDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetGeluTanhWorkspaceSize.restype = c_int32
+    lib.infiniopGetGeluTanhWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopGeluTanh.restype = c_int32
+    lib.infiniopGeluTanh.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyGeluTanhDescriptor.restype = c_int32
+    lib.infiniopDestroyGeluTanhDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
 
@@ -2158,6 +2288,62 @@ def fused_ffn_(lib):
 
     lib.infiniopDestroyFusedFFNDescriptor.restype = c_int32
     lib.infiniopDestroyFusedFFNDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
+def deepseek_moe_(lib):
+    lib.infiniopCreateDeepseekMoeDescriptor.restype = c_int32
+    lib.infiniopCreateDeepseekMoeDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_size_t,
+        c_size_t,
+    ]
+
+    lib.infiniopGetDeepseekMoeWorkspaceSize.restype = c_int32
+    lib.infiniopGetDeepseekMoeWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopDeepseekMoe.restype = c_int32
+    lib.infiniopDeepseekMoe.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        POINTER(c_void_p),
+        POINTER(c_void_p),
+        POINTER(c_void_p),
+        c_void_p,
+    ]
+
+    lib.infiniopDeepseekMoeWithDevicePtrs.restype = c_int32
+    lib.infiniopDeepseekMoeWithDevicePtrs.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyDeepseekMoeDescriptor.restype = c_int32
+    lib.infiniopDestroyDeepseekMoeDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
 

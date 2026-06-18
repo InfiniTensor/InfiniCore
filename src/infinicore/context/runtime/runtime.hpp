@@ -34,6 +34,7 @@ public:
 
     void syncStream();
     void syncDevice();
+    void trimMemory();
 
     std::shared_ptr<Memory> allocateMemory(size_t size);
     std::shared_ptr<Memory> allocatePinnedHostMemory(size_t size);
@@ -42,6 +43,9 @@ public:
     void memcpyH2D(void *dst, const void *src, size_t size, bool async = true);
     void memcpyD2H(void *dst, const void *src, size_t size);
     void memcpyD2D(void *dst, const void *src, size_t size, bool async = true);
+
+    void setDeviceMemory(void *ptr, int value, size_t count);
+    void setDeviceMemoryAsync(void *ptr, int value, size_t count, infinirtStream_t stream);
 
     // Timing methods
     infinirtEvent_t createEvent();

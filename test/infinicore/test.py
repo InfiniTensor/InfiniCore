@@ -302,9 +302,7 @@ def func7_print_different_data_types():
         print(f"{'=' * 70}")
 
         # Create infinicore tensor
-        t_infini = infinicore.from_list(
-            test_data, dtype=dtype_obj, device=infinicore.device("cpu")
-        )
+        t_infini = infinicore.from_list(test_data, dtype=dtype_obj)
         print("\n[Infinicore] Default print options:")
         print(t_infini)
 

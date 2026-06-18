@@ -237,7 +237,8 @@ option_end()
 
 if has_config("aten") then
     add_defines("ENABLE_ATEN")
-    if get_config("flash-attn") and get_config("flash-attn") ~= "" then
+    if get_config("flash-attn") and get_config("flash-attn") ~= ""
+       and (has_config("nv-gpu") or has_config("qy-gpu")) then
         add_defines("ENABLE_FLASH_ATTN")
     end
 end
@@ -264,6 +265,19 @@ option_end()
 if has_config("ccl") then
     add_defines("ENABLE_CCL")
 end
+
+-- InfiniOps
+option("infiniops")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Whether to use InfiniOps kernels where adapters are available")
+option_end()
+
+option("infiniops-root")
+    set_default("submodules/InfiniOps")
+    set_showmenu(true)
+    set_description("Path to the InfiniOps repository used by --infiniops")
+option_end()
 
 -- Mutual Awareness Analyzer
 option("mutual-awareness")
@@ -351,6 +365,11 @@ target_end()
 target("infiniop")
     set_kind("shared")
     add_deps("infinirt")
+
+    if has_config("nv-gpu") then
+        local cuda_root = os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH") or get_config("cuda") or "/usr/local/cuda"
+        add_includedirs(cuda_root .. "/include")
+    end
 
     if has_config("cpu") then
         add_deps("infiniop-cpu")
@@ -466,6 +485,40 @@ target("infinicore_cpp_api")
 
     add_includedirs("include")
     add_includedirs(INFINI_ROOT.."/include", { public = true })
+    if has_config("nv-gpu") then
+        local cuda_root = os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH") or get_config("cuda") or "/usr/local/cuda"
+        add_includedirs(cuda_root .. "/include")
+    end
+    if has_config("infiniops") then
+        local infiniops_root = path.absolute(get_config("infiniops-root") or "submodules/InfiniOps", os.projectdir())
+        local infiniops_builddir = path.join(infiniops_root, "build")
+        if not os.isdir(infiniops_root) then
+            raise("InfiniOps root not found: " .. infiniops_root)
+        end
+        if not has_config("nv-gpu") then
+            raise("InfiniOps integration currently has adapters only for NVIDIA")
+        end
+        add_defines("ENABLE_INFINIOPS_API")
+        add_includedirs(infiniops_root .. "/src", infiniops_root .. "/include", infiniops_root .. "/generated/include")
+        add_linkdirs(infiniops_builddir .. "/src")
+        add_links("infiniops")
+        add_rpathdirs(infiniops_builddir .. "/src")
+        add_installfiles(infiniops_builddir .. "/src/libinfiniops.so", {prefixdir = "lib"})
+        before_build(function (target)
+            import("core.base.option")
+            local infiniops_root = path.absolute(get_config("infiniops-root") or "submodules/InfiniOps", os.projectdir())
+            local infiniops_builddir = path.join(infiniops_root, "build")
+            os.execv("cmake", {
+                "-S", infiniops_root,
+                "-B", infiniops_builddir,
+                "-DWITH_NVIDIA=ON",
+                "-DGENERATE_OPERATOR_CALL_INSTANTIATIONS=ON",
+                "-DGENERATE_PYTHON_BINDINGS=OFF",
+                "-DCMAKE_BUILD_TYPE=Release"
+            })
+            os.execv("cmake", {"--build", infiniops_builddir, "--target", "infiniops"})
+        end)
+    end
 
     add_linkdirs(INFINI_ROOT.."/lib")
     add_links("infiniop", "infinirt", "infiniccl")
@@ -486,6 +539,14 @@ target("infinicore_cpp_api")
     -- Flash pip `.so` link flags: `before_link` runs in an xmake sandbox that cannot see helpers
     -- from other included scripts; MetaX and QY each register their own hook in `xmake/metax.lua`
     -- and `xmake/qy.lua`.
+
+    -- Moore mate: 
+    -- enable Python bridge macro for flash-attn Moore path
+    -- pybind11/embed.h for mha_kvcache branch
+    if has_config("moore-gpu") and has_config("aten") and has_config("flash-attn") then
+        add_defines("ENABLE_MOORE_MATE_FLASH_ATTN")
+        add_packages("pybind11")
+    end
 
     before_build(function (target)
         -- MetaX + flash-attn: `flash_attn_2_cuda` may use a different `mha_fwd_kvcache` ABI
@@ -527,17 +588,95 @@ target("infinicore_cpp_api")
                 path.join(TORCH_DIR, "lib"),
                 { public = true }
             )
-            target:add(
-                "links",
-                "torch",
-                "c10",
-                "torch_cuda",
-                "c10_cuda",
-                { public = true }
-            )
+
+            -- Moore mate: link torch_musa instead of torch_cuda/c10_cuda
+            if has_config("moore-gpu") then
+                target:add(
+                    "links",
+                    "torch",
+                    "torch_cpu",
+                    "torch_python",
+                    "c10",
+                    { public = true }
+                )
+
+                -- Detect torch_musa install path
+                local musa_outdata = os.iorunv("python", {"-c", "import torch_musa, os; print(os.path.dirname(torch_musa.__file__))"}):trim()
+                local TORCH_MUSA_DIR = musa_outdata
+                local MUSA_ROOT = os.getenv("MUSA_ROOT") or os.getenv("MUSA_HOME") or os.getenv("MUSA_PATH") or "/usr/local/musa"
+
+                target:add(
+                    "includedirs",
+                    path.join(MUSA_ROOT, "include"),
+                    path.directory(TORCH_MUSA_DIR),
+                    path.join(TORCH_MUSA_DIR, "include"),
+                    path.join(TORCH_MUSA_DIR, "share/generated_cuda_compatible/include"),
+                    path.join(TORCH_MUSA_DIR, "share/generated_cuda_compatible"),
+                    { public = true }
+                )
+
+                target:add(
+                    "linkdirs",
+                    path.join(TORCH_MUSA_DIR, "lib"),
+                    { public = true }
+                )
+                target:add(
+                    "links",
+                    "musa_python",
+                    "musa_kernels",
+                    { public = true }
+                )
+
+                -- libpython for pybind11::scoped_interpreter / embed
+                local pyinc = os.iorunv("python", {"-c",
+                    "import sysconfig; print(sysconfig.get_path('include'))"}):trim()
+                local pylib = os.iorunv("python", {"-c",
+                    "import sysconfig; print(sysconfig.get_config_var('LIBDIR'))"}):trim()
+                local pyver = os.iorunv("python", {"-c",
+                    "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"}):trim()
+                target:add("includedirs", pyinc, { public = true })
+                target:add("linkdirs",    pylib, { public = true })
+                target:add("links",       "python" .. pyver, { public = true })
+
+                target:add(
+                    "shflags",
+                    "-Wl,-rpath," .. path.join(TORCH_MUSA_DIR, "lib"),
+                    "-Wl,-rpath," .. path.join(MUSA_ROOT, "lib"),
+                    "-Wl,-rpath," .. path.join(TORCH_DIR, "lib"),
+                    "-Wl,-rpath," .. pylib,
+                    { force = true }
+                )
+            else
+                target:add(
+                    "links",
+                    "torch",
+                    "c10",
+                    "torch_cuda",
+                    "c10_cuda",
+                    { public = true }
+                )
+            end
         end
 
     end)
+
+    -- Moore mate: force link torch_python to bypass --as-needed
+    if has_config("moore-gpu") and has_config("aten") and has_config("flash-attn") then
+        before_link(function (target)
+            local torch_dir = os.iorunv("python", {"-c",
+                "import torch, os; print(os.path.dirname(torch.__file__))"}):trim()
+            local torch_lib = path.join(torch_dir, "lib")
+            target:add("shflags",
+                "-Wl,--no-as-needed",
+                "-L" .. torch_lib,
+                "-ltorch_python",
+                "-ltorch_cpu",
+                "-lc10",
+                "-Wl,--as-needed",
+                "-Wl,-rpath," .. torch_lib,
+                {force = true})
+        end)
+    end
 
     -- Add InfiniCore C++ source files (needed for RoPE and other nn modules)
     add_files("src/infinicore/*.cc")
@@ -587,6 +726,18 @@ target("_infinicore")
     add_links("infiniop", "infinirt", "infiniccl")
 
     add_files("src/infinicore/pybind11/**.cc")
+
+    if has_config("infiniops") then
+        after_install(function (target)
+            local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
+            local infiniops_root = path.absolute(get_config("infiniops-root") or "submodules/InfiniOps", os.projectdir())
+            local infiniops_lib = path.join(infiniops_root, "build", "src", "libinfiniops.so")
+            os.mkdir(path.join(INFINI_ROOT, "lib"))
+            os.cp(infiniops_lib, path.join(INFINI_ROOT, "lib"))
+            os.mkdir(path.join(os.projectdir(), "python", "infinicore", "lib"))
+            os.cp(infiniops_lib, path.join(os.projectdir(), "python", "infinicore", "lib"))
+        end)
+    end
 
     set_installdir("python/infinicore")
 target_end()

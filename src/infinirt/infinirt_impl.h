@@ -34,6 +34,9 @@
     INLINE infiniStatus_t mallocAsync(void **p_ptr, size_t size, infinirtStream_t stream) IMPL;                                          \
     INLINE infiniStatus_t freeAsync(void *ptr, infinirtStream_t stream) IMPL;                                                            \
                                                                                                                                          \
+    INLINE infiniStatus_t memsetDevice(void *ptr, int value, size_t count) IMPL;                                                         \
+    INLINE infiniStatus_t memsetDeviceAsync(void *ptr, int value, size_t count, infinirtStream_t stream) IMPL;                           \
+                                                                                                                                         \
     INLINE infiniStatus_t streamBeginCapture(infinirtStream_t stream, infinirtStreamCaptureMode_t mode) IMPL;                            \
     INLINE infiniStatus_t streamEndCapture(infinirtStream_t stream, infinirtGraph_t *graph_ptr) IMPL;                                    \
     INLINE infiniStatus_t graphDestroy(infinirtGraph_t graph) IMPL;                                                                      \

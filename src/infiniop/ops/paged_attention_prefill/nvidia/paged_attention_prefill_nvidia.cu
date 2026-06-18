@@ -1,4 +1,4 @@
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ALI_API) || defined(ENABLE_ILUVATAR_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ALI_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
 #include <cuda_runtime.h>
 
 #include <cstdint>
@@ -23,10 +23,16 @@ constexpr size_t ceilDiv(size_t a, size_t b) {
 
 inline const char *default_prefill_kernel(const PagedAttentionPrefillInfo &info) {
     // Iluvatar: use warp (stable). Users can override via INFINIOP_FLASH_PREFILL_KERNEL.
-#ifdef ENABLE_ILUVATAR_API
+#if defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
     (void)info;
     return "warp";
 #endif
+    if (info.head_size == 192) {
+        return "warp";
+    }
+    if (info.head_size == 576) {
+        return "ref";
+    }
     // Heuristic auto-dispatch (v0.4):
     // - Prefer the pipelined + tile-wise softmax kernel on FA2-compatible block_size=256.
     // - Keep a conservative fallback for other shapes / older GPUs (cp.async is a no-op below SM80).
@@ -324,6 +330,7 @@ INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd128WarpCta8Pipe(
         o_stride, o_head_stride);
 }
 
+#if !defined(ENABLE_HYGON_API)
 template <typename Tindex>
 INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd128WarpCta8Mma(
     half *out,
@@ -358,6 +365,7 @@ INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd128WarpCta8Mma(
         v_batch_stride, v_row_stride, v_head_stride,
         o_stride, o_head_stride);
 }
+#endif // !defined(ENABLE_HYGON_API)
 
 template <typename Tindex, typename Tdata>
 INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd64WarpCta8Pipe(
@@ -637,6 +645,30 @@ infiniStatus_t launch_prefill_ref(
         return INFINI_STATUS_SUCCESS;
     }
 
+    if (head_size == 192) {
+        op::paged_attention_prefill::cuda::PagedAttentionPrefillReferenceKernel<Tindex, Tdata, Tcompute, 192>
+            <<<grid, block, 0, stream>>>(
+                out, q, k_cache, v_cache, block_tables, total_kv_lens, cu_seqlens_q, alibi_slopes,
+                num_heads, num_kv_heads, scale, max_num_blocks_per_seq, page_block_size,
+                block_table_batch_stride, q_stride, q_head_stride,
+                k_batch_stride, k_row_stride, k_head_stride,
+                v_batch_stride, v_row_stride, v_head_stride,
+                o_stride, o_head_stride, num_seqs);
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    if (head_size == 576) {
+        op::paged_attention_prefill::cuda::PagedAttentionPrefillReferenceKernel<Tindex, Tdata, Tcompute, 576>
+            <<<grid, block, 0, stream>>>(
+                out, q, k_cache, v_cache, block_tables, total_kv_lens, cu_seqlens_q, alibi_slopes,
+                num_heads, num_kv_heads, scale, max_num_blocks_per_seq, page_block_size,
+                block_table_batch_stride, q_stride, q_head_stride,
+                k_batch_stride, k_row_stride, k_head_stride,
+                v_batch_stride, v_row_stride, v_head_stride,
+                o_stride, o_head_stride, num_seqs);
+        return INFINI_STATUS_SUCCESS;
+    }
+
     return INFINI_STATUS_BAD_TENSOR_SHAPE;
 }
 
@@ -693,6 +725,17 @@ infiniStatus_t launch_prefill_warp(
         return INFINI_STATUS_SUCCESS;
     case 128:
         op::paged_attention_prefill::cuda::PagedAttentionPrefillWarpGlobalKernel<Tindex, Tdata, 128>
+            <<<grid, block, 0, stream>>>(
+                out, q, k_cache, v_cache, block_tables, total_kv_lens, cu_seqlens_q, alibi_slopes,
+                num_heads, num_seqs, num_kv_heads, total_q_tokens, scale, max_num_blocks_per_seq,
+                page_block_size, block_table_batch_stride,
+                q_stride, q_head_stride,
+                k_batch_stride, k_row_stride, k_head_stride,
+                v_batch_stride, v_row_stride, v_head_stride,
+                o_stride, o_head_stride);
+        return INFINI_STATUS_SUCCESS;
+    case 192:
+        op::paged_attention_prefill::cuda::PagedAttentionPrefillWarpGlobalKernel<Tindex, Tdata, 192>
             <<<grid, block, 0, stream>>>(
                 out, q, k_cache, v_cache, block_tables, total_kv_lens, cu_seqlens_q, alibi_slopes,
                 num_heads, num_seqs, num_kv_heads, total_q_tokens, scale, max_num_blocks_per_seq,
@@ -935,6 +978,17 @@ infiniStatus_t launch_prefill_warpcta8mma(
     ptrdiff_t o_stride,
     ptrdiff_t o_head_stride,
     cudaStream_t stream) {
+#if defined(ENABLE_HYGON_API)
+    return launch_prefill_warpcta8pipe<Tindex, Tdata>(
+        out, q, k_cache, v_cache, block_tables, total_kv_lens, cu_seqlens_q, alibi_slopes,
+        num_heads, num_seqs, num_kv_heads, total_q_tokens, head_size, scale,
+        max_num_blocks_per_seq, page_block_size,
+        block_table_batch_stride,
+        q_stride, q_head_stride,
+        k_batch_stride, k_row_stride, k_head_stride,
+        v_batch_stride, v_row_stride, v_head_stride,
+        o_stride, o_head_stride, stream);
+#else
 
     // Current WMMA kernel only supports fp16 + head_dim=128.
     if constexpr (!std::is_same_v<Tdata, half>) {
@@ -1016,6 +1070,7 @@ infiniStatus_t launch_prefill_warpcta8mma(
             v_batch_stride, v_row_stride, v_head_stride,
             o_stride, o_head_stride);
     return INFINI_STATUS_SUCCESS;
+#endif // defined(ENABLE_HYGON_API)
 }
 
 template <typename Tindex, typename Tdata>

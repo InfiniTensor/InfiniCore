@@ -242,9 +242,12 @@ std::shared_ptr<TensorImpl> TensorImpl::zeros(const Shape &shape,
                                               const DataType &dtype,
                                               const Device &device,
                                               bool pin_memory) {
-    // TODO: Implement this.
-    return empty(shape, dtype, device, pin_memory);
+
+    auto result = empty(shape, dtype, device, pin_memory);
+    context::setDeviceMemoryAsync(result->data(), 0, result->nbytes(), context::getStream());
+    return result;
 }
+
 std::shared_ptr<TensorImpl> TensorImpl::ones(const Shape &shape,
                                              const DataType &dtype,
                                              const Device &device,

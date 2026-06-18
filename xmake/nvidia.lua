@@ -4,10 +4,28 @@ if CUDNN_ROOT ~= nil then
 end
 
 local CUTLASS_ROOT = os.getenv("CUTLASS_ROOT") or os.getenv("CUTLASS_HOME") or os.getenv("CUTLASS_PATH")
+local TVM_ROOT = os.getenv("TVM_ROOT") or os.getenv("TVM_HOME") or os.getenv("TVM_PATH")
 
 local FLASH_ATTN_ROOT = get_config("flash-attn")
 
 local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
+
+-- Apply -gencode from `xmake f --cuda_arch=sm_80` (comma-separated values supported).
+-- Returns true when explicit arch flags were added.
+local function apply_cuda_arch_flags(add_fn)
+    local arch_opt = get_config("cuda_arch")
+    if not arch_opt or type(arch_opt) ~= "string" or arch_opt == "" then
+        return false
+    end
+    for _, arch in ipairs(arch_opt:split(",")) do
+        arch = arch:trim()
+        if arch ~= "" then
+            local compute = arch:gsub("sm_", "compute_")
+            add_fn("-gencode=arch=" .. compute .. ",code=" .. arch)
+        end
+    end
+    return true
+end
 
 target("infiniop-nvidia")
     set_kind("static")
@@ -37,7 +55,67 @@ target("infiniop-nvidia")
 
         -- Auto-detect CUDA arch when no explicit --cuda_arch
         local arch_opt = get_config("cuda_arch")
-        if not arch_opt or type(arch_opt) ~= "string" then
+        local script_path = path.join(
+            os.projectdir(),
+            "src/infiniop/ops/awq_marlin_gemm/nvidia/generate_kernels.py"
+        )
+
+        local header_path = path.join(
+            os.projectdir(),
+            "src/infiniop/ops/awq_marlin_gemm/nvidia/kernel_selector.h"
+        )
+
+        local cuda_arch_num = nil
+
+        if arch_opt and type(arch_opt) == "string" then
+            cuda_arch_num = arch_opt:match("sm_(%d+)")
+        end
+
+        local generate_arch =
+            cuda_arch_num and (tonumber(cuda_arch_num) / 10) or 8.0
+
+        if not os.isfile(header_path) then
+
+            -- save current directory
+            local oldir = os.curdir()
+
+            -- switch cwd to script directory
+            os.cd(path.directory(script_path))
+
+            -- IMPORTANT:
+            -- try = true prevents xmake abort
+            local ok, errors = os.execv(
+                "python",
+                {
+                    script_path,
+                    tostring(generate_arch)
+                },
+                {
+                    try = true
+                }
+            )
+
+            -- restore cwd
+            os.cd(oldir)
+
+            if not ok then
+                print("generate_kernels.py returned non-zero exit code")
+                if errors then
+                    print(errors)
+                end
+            end
+
+            
+        end
+
+        if os.isfile(header_path) then
+            print("AWQ Marlin kernels generated successfully!")
+        else
+            raise("Failed to generate AWQ Marlin kernels: header missing!")
+        end
+
+        -- CUDA arch: explicit --cuda_arch > nvidia-smi auto-detect > native
+        if not apply_cuda_arch_flags(function(flag) target:add("cuflags", flag) end) then
             local ok, sm_str = os.iorunv("nvidia-smi", {"--query-gpu=compute_cap", "--format=csv,noheader,nounits"})
             if ok and sm_str then
                 local major, minor = sm_str:match("(%d+)%.(%d+)")
@@ -100,6 +178,30 @@ target("infiniop-nvidia")
     end
 
     local arch_opt = get_config("cuda_arch")
+    if TVM_ROOT ~= nil then
+        add_defines("ENABLE_TVM_API")
+        add_includedirs(TVM_ROOT, TVM_ROOT .. "/include", TVM_ROOT .. "/3rdparty/dlpack/include/")
+        function parse_sgl_cuda_arch(arch)
+    
+            local num = arch:match("sm_(%d+)")
+            if not num then
+                return nil
+            end
+
+            return tonumber(num) * 10
+        end
+        if arch_opt then
+            local sgl_arch = parse_sgl_cuda_arch(arch_opt)
+            if sgl_arch then
+                add_defines("SGL_CUDA_ARCH=" .. sgl_arch)
+            else
+                print("Invalid cuda_arch:", arch_opt)
+            end
+        else
+            error("tvm complie marlin needs cuda_arch")
+        end
+    end
+    
     if arch_opt and type(arch_opt) == "string" then
         for _, arch in ipairs(arch_opt:split(",")) do
             arch = arch:trim()
@@ -177,7 +279,12 @@ target("flash-attn-nvidia")
     set_policy("build.cuda.devlink", true)
     set_toolchains("cuda")
     add_links("cudart")
-    add_cugencodes("native")
+
+    on_load(function (target)
+        if not apply_cuda_arch_flags(function(flag) target:add("cuflags", flag) end) then
+            target:add("cugencodes", "native")
+        end
+    end)
 
     if FLASH_ATTN_ROOT and FLASH_ATTN_ROOT ~= "" then
         before_build(function (target)

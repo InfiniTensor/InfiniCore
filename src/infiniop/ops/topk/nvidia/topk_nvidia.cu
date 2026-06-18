@@ -190,6 +190,10 @@ infiniStatus_t launchKernel(
     const int32_t *final_idx = sel_idx;
 
     if (sorted) {
+#ifdef ENABLE_HYGON_API
+        op::topk::cuda::sort_selected_rowwise<<<n_iteration, 1, 0, stream>>>(
+            sel_vals, sel_idx, sel_sorted_vals, sel_sorted_idx, n_iteration, k, largest);
+#else
         std::vector<int> h_offsets(n_iteration + 1);
         for (size_t i = 0; i <= n_iteration; i++) {
             h_offsets[i] = i * k;
@@ -216,6 +220,7 @@ infiniStatus_t launchKernel(
         }
         CHECK_CUDA(cudaFree(d_offsets));
         CHECK_CUDA(cudaFree(d_temp_storage));
+#endif
         final_idx = sel_sorted_idx;
     }
 

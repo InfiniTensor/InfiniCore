@@ -1,0 +1,56 @@
+#include "gelu_bang.h"
+
+LAUNCH_ELEMENTWISE_KERNEL(Gelu)
+
+namespace op::gelu::bang {
+
+typedef struct GeluOp {
+    static constexpr size_t num_inputs = 1;
+    template <typename Tdata, typename... Args>
+    static infiniStatus_t launch(Args... args) {
+        launchGeluKernel<Tdata>(args...);
+        return INFINI_STATUS_SUCCESS;
+    }
+} GeluOp;
+
+Descriptor::~Descriptor() = default;
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t out_desc,
+    std::vector<infiniopTensorDescriptor_t> input_desc_vec) {
+    auto handle = reinterpret_cast<device::bang::Handle *>(handle_);
+    auto dtype = out_desc->dtype();
+
+    const auto &input_desc = input_desc_vec.at(0);
+    CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_BF16, INFINI_DTYPE_F32);
+    CHECK_SAME_SHAPE(out_desc->shape(), input_desc->shape());
+
+    CREATE_ELEMENTWISE_BANG_DESCRIPTOR(handle, dtype, out_desc, input_desc_vec)
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *output,
+    std::vector<const void *> inputs,
+    void *queue) const {
+    if (workspace_size < _workspace_size) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+
+    switch (_dtype) {
+    case INFINI_DTYPE_F16:
+        return _device_info->calculate<GeluOp, half>(_info, workspace, output, inputs, queue);
+    case INFINI_DTYPE_BF16:
+        return _device_info->calculate<GeluOp, bfloat16_t>(_info, workspace, output, inputs, queue);
+    case INFINI_DTYPE_F32:
+        return _device_info->calculate<GeluOp, float>(_info, workspace, output, inputs, queue);
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+}
+
+} // namespace op::gelu::bang

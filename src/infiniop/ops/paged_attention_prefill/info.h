@@ -113,7 +113,7 @@ public:
         const size_t page_block_size = k_shape[2];
         const size_t num_kv_heads = k_shape[1];
 
-        if (head_size != 64 && head_size != 128) {
+        if (head_size != 64 && head_size != 128 && head_size != 192 && head_size != 576) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
         if (num_heads % num_kv_heads != 0) {

@@ -5,7 +5,7 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/hardswish_cpu.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/hardswish_nvidia.cuh"
 #endif
 #ifdef ENABLE_MOORE_API
@@ -46,6 +46,9 @@ __INFINI_C infiniStatus_t infiniopCreateHardSwishDescriptor(
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, metax);
 #endif
+#ifdef ENABLE_HYGON_API
+        CREATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -76,6 +79,9 @@ __INFINI_C infiniStatus_t infiniopGetHardSwishWorkspaceSize(infiniopHardSwishDes
 #endif
 #ifdef ENABLE_METAX_API
         GET(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_HYGON_API
+        GET(INFINI_DEVICE_HYGON, nvidia);
 #endif
 
     default:
@@ -116,6 +122,9 @@ __INFINI_C infiniStatus_t infiniopHardSwish(
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
+#ifdef ENABLE_HYGON_API
+        CALCULATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -147,6 +156,9 @@ __INFINI_C infiniStatus_t infiniopDestroyHardSwishDescriptor(infiniopHardSwishDe
 #endif
 #ifdef ENABLE_METAX_API
         DELETE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_HYGON_API
+        DELETE(INFINI_DEVICE_HYGON, nvidia);
 #endif
 
     default:

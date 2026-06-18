@@ -8,6 +8,12 @@
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/gelutanh_nvidia.cuh"
 #endif
+#ifdef ENABLE_METAX_API
+#include "metax/gelutanh_metax.h"
+#endif
+#ifdef ENABLE_MOORE_API
+#include "moore/gelutanh_moore.h"
+#endif
 
 __INFINI_C infiniStatus_t infiniopCreateGeluTanhDescriptor(
     infiniopHandle_t handle,
@@ -39,6 +45,12 @@ __INFINI_C infiniStatus_t infiniopCreateGeluTanhDescriptor(
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -68,6 +80,12 @@ __INFINI_C infiniStatus_t infiniopGetGeluTanhWorkspaceSize(infiniopGeluTanhDescr
 #endif
 #ifdef ENABLE_HYGON_API
         GET(INFINI_DEVICE_HYGON, nvidia)
+#endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax)
+#endif
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, moore)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -105,6 +123,12 @@ __INFINI_C infiniStatus_t infiniopGeluTanh(
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -134,6 +158,12 @@ __INFINI_C infiniStatus_t infiniopDestroyGeluTanhDescriptor(infiniopGeluTanhDesc
 #endif
 #ifdef ENABLE_HYGON_API
         DELETE(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        DELETE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MOORE_API
+        DELETE(INFINI_DEVICE_MOORE, moore);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

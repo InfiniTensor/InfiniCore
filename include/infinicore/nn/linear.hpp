@@ -39,7 +39,7 @@ public:
     Tensor gidx() const { return gidx_; }
 
     std::shared_ptr<infinicore::quantization::BaseQuantization> get_quantization() const { return quantization_; }
-    void process_weights_after_loading();
+    void process_weights_after_loading() override;
 
 protected:
     // Parameters

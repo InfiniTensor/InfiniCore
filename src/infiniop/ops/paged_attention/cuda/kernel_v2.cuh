@@ -157,7 +157,7 @@ __device__ void flashAttentionDecodeWarpKernel(
     const int head_idx = blockIdx.x;
     const int lane = threadIdx.x;
     constexpr int kWarpSize = 32;
-    static_assert(HEAD_SIZE == 64 || HEAD_SIZE == 128, "Only head_size 64/128 supported in v0.4.");
+    static_assert(HEAD_SIZE == 64 || HEAD_SIZE == 128 || HEAD_SIZE == 192 || HEAD_SIZE == 576, "Only head_size 64/128/192/576 supported in v0.4.");
     static_assert(HEAD_SIZE % kWarpSize == 0, "HEAD_SIZE must be divisible by 32.");
     constexpr int DIMS_PER_THREAD = HEAD_SIZE / kWarpSize;
 
@@ -366,7 +366,7 @@ __device__ void flashAttentionDecodeSplitKvWarpKernel(
     const int split_idx = static_cast<int>(blockIdx.z);
     const int lane = threadIdx.x;
     constexpr int kWarpSize = 32;
-    static_assert(HEAD_SIZE == 64 || HEAD_SIZE == 128, "Only head_size 64/128 supported in v0.4.");
+    static_assert(HEAD_SIZE == 64 || HEAD_SIZE == 128 || HEAD_SIZE == 192 || HEAD_SIZE == 576, "Only head_size 64/128/192/576 supported in v0.4.");
     static_assert(HEAD_SIZE % kWarpSize == 0, "HEAD_SIZE must be divisible by 32.");
     constexpr int DIMS_PER_THREAD = HEAD_SIZE / kWarpSize;
 
@@ -646,7 +646,7 @@ __device__ void flashAttentionDecodeSplitKvCtaKernel(
     static_assert(TOKENS_PER_TILE > 0 && TOKENS_PER_TILE <= 16, "TOKENS_PER_TILE should stay small.");
     constexpr int NUM_WARPS = CTA_THREADS / kWarpSize;
 
-    static_assert(HEAD_SIZE == 64 || HEAD_SIZE == 128, "Only head_size 64/128 supported in v0.4.");
+    static_assert(HEAD_SIZE == 64 || HEAD_SIZE == 128 || HEAD_SIZE == 192 || HEAD_SIZE == 576, "Only head_size 64/128/192/576 supported in v0.4.");
     static_assert(HEAD_SIZE % CTA_THREADS == 0, "HEAD_SIZE must be divisible by CTA_THREADS.");
     constexpr int kPack = HEAD_SIZE / CTA_THREADS; // 2 (64@32t, 128@64t) or 4 (128@32t)
     static_assert(kPack == 2 || kPack == 4, "v0.4 split-kv CTA kernel supports kPack=2/4 only.");
@@ -1096,7 +1096,7 @@ __device__ void flashAttentionDecodeCtaPipelinedKernel(
     ptrdiff_t o_stride) {
 
     constexpr int kWarpSize = 32;
-    static_assert(HEAD_SIZE == 64 || HEAD_SIZE == 128, "Only head_size 64/128 supported in v0.4.");
+    static_assert(HEAD_SIZE == 64 || HEAD_SIZE == 128 || HEAD_SIZE == 192 || HEAD_SIZE == 576, "Only head_size 64/128/192/576 supported in v0.4.");
     static_assert(HEAD_SIZE % kWarpSize == 0, "HEAD_SIZE must be divisible by 32.");
     constexpr int NUM_WARPS = HEAD_SIZE / kWarpSize;
 
