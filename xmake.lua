@@ -279,6 +279,72 @@ option("infiniops-root")
     set_description("Path to the InfiniOps repository used by --infiniops")
 option_end()
 
+option("infinirt-root")
+    set_default("")
+    set_showmenu(true)
+    set_description("Path to an installed standalone InfiniRT prefix used by --infiniops")
+option_end()
+
+local function get_standalone_infinirt_root()
+    local infinirt_root = get_config("infinirt-root")
+    if not infinirt_root or infinirt_root == "" then
+        infinirt_root = os.getenv("INFINI_RT_ROOT")
+    end
+    if infinirt_root and infinirt_root ~= "" then
+        return path.absolute(infinirt_root, os.projectdir())
+    end
+    return nil
+end
+
+local infiniops_external_built = false
+
+local function build_infiniops_external(xmake_os)
+    if not has_config("infiniops") or infiniops_external_built then
+        return
+    end
+    local infiniops_root = path.absolute(get_config("infiniops-root") or "submodules/InfiniOps", os.projectdir())
+    local infiniops_builddir = path.join(infiniops_root, "build")
+    local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
+    local infinirt_root = get_standalone_infinirt_root()
+    local cmake_config_args = {
+        "-S", infiniops_root,
+        "-B", infiniops_builddir,
+        "-DWITH_NVIDIA=ON",
+        "-DGENERATE_OPERATOR_CALL_INSTANTIATIONS=ON",
+        "-DGENERATE_PYTHON_BINDINGS=OFF",
+        "-DCMAKE_BUILD_TYPE=Release"
+    }
+    local infiniops_ops = os.getenv("INFINI_OPS_OPS")
+    if infiniops_ops and #infiniops_ops > 0 then
+        table.insert(cmake_config_args, "-DINFINI_OPS_OPS=" .. infiniops_ops)
+    end
+    if infinirt_root and infinirt_root ~= "" then
+        table.insert(cmake_config_args, "-DINFINI_RT_ROOT=" .. infinirt_root)
+    end
+    xmake_os.execv("cmake", cmake_config_args)
+    -- The first configure regenerates operator_call_instantiations_*.cc.
+    -- Reconfigure once so CMake's globbed infiniops target sees every shard.
+    xmake_os.execv("cmake", cmake_config_args)
+    xmake_os.execv("cmake", {"--build", infiniops_builddir, "--target", "infiniops"})
+    xmake_os.execv("cmake", {"--install", infiniops_builddir, "--prefix", INFINI_ROOT})
+    if infinirt_root and infinirt_root ~= "" then
+        local standalone_infinirt = path.join(infinirt_root, "lib", "libinfinirt.so")
+        if not xmake_os.isfile(standalone_infinirt) then
+            standalone_infinirt = path.join(infinirt_root, "lib64", "libinfinirt.so")
+        end
+        if not xmake_os.isfile(standalone_infinirt) then
+            raise("Standalone InfiniRT library not found under: " .. infinirt_root)
+        end
+        local infiniops_lib = path.join(INFINI_ROOT, "lib", "libinfiniops.so")
+        local private_soname = "libinfiniops_infinirt.so"
+        local private_infinirt = path.join(INFINI_ROOT, "lib", private_soname)
+        xmake_os.cp(standalone_infinirt, private_infinirt)
+        xmake_os.execv("patchelf", {"--set-soname", private_soname, private_infinirt})
+        xmake_os.execv("patchelf", {"--replace-needed", "libinfinirt.so", private_soname, infiniops_lib})
+    end
+    infiniops_external_built = true
+end
+
 -- Mutual Awareness Analyzer
 option("mutual-awareness")
     set_default(false)
@@ -480,30 +546,7 @@ target("infiniops_external")
     set_default(false)
 
     on_build(function (target)
-        if not has_config("infiniops") then
-            return
-        end
-        local infiniops_root = path.absolute(get_config("infiniops-root") or "submodules/InfiniOps", os.projectdir())
-        local infiniops_builddir = path.join(infiniops_root, "build")
-        local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
-        local cmake_config_args = {
-            "-S", infiniops_root,
-            "-B", infiniops_builddir,
-            "-DWITH_NVIDIA=ON",
-            "-DGENERATE_OPERATOR_CALL_INSTANTIATIONS=ON",
-            "-DGENERATE_PYTHON_BINDINGS=OFF",
-            "-DCMAKE_BUILD_TYPE=Release"
-        }
-        local infiniops_ops = os.getenv("INFINI_OPS_OPS")
-        if infiniops_ops and #infiniops_ops > 0 then
-            table.insert(cmake_config_args, "-DINFINI_OPS_OPS=" .. infiniops_ops)
-        end
-        os.execv("cmake", cmake_config_args)
-        -- The first configure regenerates operator_call_instantiations_*.cc.
-        -- Reconfigure once so CMake's globbed infiniops target sees every shard.
-        os.execv("cmake", cmake_config_args)
-        os.execv("cmake", {"--build", infiniops_builddir, "--target", "infiniops"})
-        os.execv("cmake", {"--install", infiniops_builddir, "--prefix", INFINI_ROOT})
+        build_infiniops_external(os)
     end)
 target_end()
 
@@ -523,20 +566,44 @@ target("infinicore_cpp_api")
     end
     if has_config("infiniops") then
         local infiniops_root = path.absolute(get_config("infiniops-root") or "submodules/InfiniOps", os.projectdir())
-        local infiniops_builddir = path.join(infiniops_root, "build")
         if not os.isdir(infiniops_root) then
             raise("InfiniOps root not found: " .. infiniops_root)
         end
         if not has_config("nv-gpu") then
             raise("InfiniOps integration currently has adapters only for NVIDIA")
         end
+        local infinirt_root = get_standalone_infinirt_root()
+        if infinirt_root and infinirt_root ~= "" then
+            add_includedirs(infinirt_root .. "/include")
+            add_linkdirs(infinirt_root .. "/lib", infinirt_root .. "/lib64")
+            add_rpathdirs(infinirt_root .. "/lib", infinirt_root .. "/lib64")
+        end
         add_deps("infiniops_external")
         add_defines("ENABLE_INFINIOPS_API")
-        add_includedirs(infiniops_root .. "/src", infiniops_root .. "/include", infiniops_root .. "/generated/include", infiniops_root .. "/generated/bindings")
-        add_linkdirs(infiniops_builddir .. "/src")
         add_links("infiniops")
-        add_rpathdirs(infiniops_builddir .. "/src")
-        add_installfiles(infiniops_builddir .. "/src/libinfiniops.so", {prefixdir = "lib"})
+        add_rpathdirs(INFINI_ROOT .. "/lib")
+        on_load(function (target)
+            build_infiniops_external(os)
+        end)
+        after_install(function (target)
+            local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
+            local infinirt_root = get_standalone_infinirt_root()
+            if infinirt_root and infinirt_root ~= "" then
+                local standalone_infinirt = path.join(infinirt_root, "lib", "libinfinirt.so")
+                if not os.isfile(standalone_infinirt) then
+                    standalone_infinirt = path.join(infinirt_root, "lib64", "libinfinirt.so")
+                end
+                if not os.isfile(standalone_infinirt) then
+                    raise("Standalone InfiniRT library not found under: " .. infinirt_root)
+                end
+                local infiniops_lib = path.join(INFINI_ROOT, "lib", "libinfiniops.so")
+                local private_soname = "libinfiniops_infinirt.so"
+                local private_infinirt = path.join(INFINI_ROOT, "lib", private_soname)
+                os.cp(standalone_infinirt, private_infinirt)
+                os.execv("patchelf", {"--set-soname", private_soname, private_infinirt})
+                os.execv("patchelf", {"--replace-needed", "libinfinirt.so", private_soname, infiniops_lib})
+            end
+        end)
     end
 
     add_linkdirs(INFINI_ROOT.."/lib")
@@ -747,14 +814,46 @@ target("_infinicore")
     add_files("src/infinicore/pybind11/**.cc")
 
     if has_config("infiniops") then
+        local infinirt_root = get_standalone_infinirt_root()
+        if infinirt_root and infinirt_root ~= "" then
+            add_includedirs(infinirt_root .. "/include")
+            add_linkdirs(infinirt_root .. "/lib", infinirt_root .. "/lib64")
+            add_rpathdirs(infinirt_root .. "/lib", infinirt_root .. "/lib64")
+        end
         after_install(function (target)
             local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
             local infiniops_root = path.absolute(get_config("infiniops-root") or "submodules/InfiniOps", os.projectdir())
-            local infiniops_lib = path.join(infiniops_root, "build", "src", "libinfiniops.so")
+            local infiniops_lib = path.join(INFINI_ROOT, "lib", "libinfiniops.so")
+            local infiniops_lib_installed = true
+            if not os.isfile(infiniops_lib) then
+                infiniops_lib = path.join(infiniops_root, "build", "src", "libinfiniops.so")
+                infiniops_lib_installed = false
+            end
+            local infinirt_root = get_standalone_infinirt_root()
+            if infinirt_root and infinirt_root ~= "" then
+                local standalone_infinirt = path.join(infinirt_root, "lib", "libinfinirt.so")
+                if not os.isfile(standalone_infinirt) then
+                    standalone_infinirt = path.join(infinirt_root, "lib64", "libinfinirt.so")
+                end
+                if not os.isfile(standalone_infinirt) then
+                    raise("Standalone InfiniRT library not found under: " .. infinirt_root)
+                end
+                local private_soname = "libinfiniops_infinirt.so"
+                local private_infinirt = path.join(INFINI_ROOT, "lib", private_soname)
+                os.cp(standalone_infinirt, private_infinirt)
+                os.execv("patchelf", {"--set-soname", private_soname, private_infinirt})
+                os.execv("patchelf", {"--replace-needed", "libinfinirt.so", private_soname, infiniops_lib})
+            end
             os.mkdir(path.join(INFINI_ROOT, "lib"))
-            os.cp(infiniops_lib, path.join(INFINI_ROOT, "lib"))
+            if not infiniops_lib_installed then
+                os.cp(infiniops_lib, path.join(INFINI_ROOT, "lib"))
+            end
             os.mkdir(path.join(os.projectdir(), "python", "infinicore", "lib"))
             os.cp(infiniops_lib, path.join(os.projectdir(), "python", "infinicore", "lib"))
+            local private_infinirt = path.join(INFINI_ROOT, "lib", "libinfiniops_infinirt.so")
+            if os.isfile(private_infinirt) then
+                os.cp(private_infinirt, path.join(os.projectdir(), "python", "infinicore", "lib"))
+            end
         end)
     end
 
