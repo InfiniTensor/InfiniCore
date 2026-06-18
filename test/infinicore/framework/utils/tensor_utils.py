@@ -1,5 +1,7 @@
 import torch
+
 import infinicore
+
 from ..datatypes import to_infinicore_dtype, to_torch_dtype
 
 # =================================================================
@@ -32,6 +34,7 @@ def clone_torch_tensor(torch_tensor):
 
 
 def infinicore_tensor_from_torch(torch_tensor):
+    synchronize_device(torch_tensor.device.type)
     infini_device = infinicore.device(torch_tensor.device.type, 0)
     if torch_tensor.is_contiguous():
         return infinicore.from_blob(
@@ -71,6 +74,8 @@ def convert_infinicore_to_torch(infini_result):
         )
     temp_tensor = infinicore_tensor_from_torch(torch_result_from_infini)
     temp_tensor.copy_(infini_result)
+    infinicore.sync_device()
+    synchronize_device(torch_result_from_infini.device.type)
     return torch_result_from_infini
 
 
