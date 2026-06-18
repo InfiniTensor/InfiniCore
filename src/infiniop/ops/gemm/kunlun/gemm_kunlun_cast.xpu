@@ -1,0 +1,91 @@
+#include "gemm_kunlun_cast.h"
+#include "../../../devices/kunlun/kunlun_kernel_common.h"
+
+namespace op::gemm::kunlun {
+
+template <typename Tin, typename Tout>
+__global__ void castMatrixKernel(
+    const Tin *src,
+    Tout *dst,
+    long long batch,
+    long long rows,
+    long long cols,
+    long long stride,
+    long long row_stride,
+    long long col_stride) {
+
+    int cid = core_id();
+    int ncores = core_num();
+    if (cid >= ncores) {
+        return;
+    }
+    int tid = ncores * cluster_id() + cid;
+    int nthreads = ncores * cluster_num();
+
+    long long matrix_elements = rows * cols;
+    long long total = batch * matrix_elements;
+
+    for (long long idx = tid; idx < total; idx += nthreads) {
+        long long batch_id = idx / matrix_elements;
+        long long rem = idx - batch_id * matrix_elements;
+        long long row = rem / cols;
+        long long col = rem - row * cols;
+        long long batch_offset = stride == 0 ? 0 : batch_id * stride;
+        long long offset = batch_offset + row * row_stride + col * col_stride;
+
+        Tin in;
+        Tout out;
+        GM2LM_ASYNC(src + offset, &in, sizeof(Tin));
+        mfence();
+        if constexpr (xpu_std::is_same<Tin, bfloat16_t>::value) {
+            out = __float2half(__bfloat162float(in));
+        } else {
+            out = __float2bfloat16(__half2float(in));
+        }
+        LM2GM_ASYNC(&out, dst + offset, sizeof(Tout));
+        mfence();
+    }
+    sync_cluster();
+}
+
+infiniStatus_t castBf16ToF16(
+    const void *src,
+    void *dst,
+    const BlasMatrix &matrix,
+    size_t batch,
+    kunlunStream_t stream) {
+
+    castMatrixKernel<bfloat16_t, half>
+        <<<12, 64, stream>>>(
+            reinterpret_cast<const bfloat16_t *>(src),
+            reinterpret_cast<half *>(dst),
+            static_cast<long long>(batch),
+            static_cast<long long>(matrix.rows),
+            static_cast<long long>(matrix.cols),
+            static_cast<long long>(matrix.stride),
+            static_cast<long long>(matrix.row_stride),
+            static_cast<long long>(matrix.col_stride));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t castF16ToBf16(
+    const void *src,
+    void *dst,
+    const BlasMatrix &matrix,
+    size_t batch,
+    kunlunStream_t stream) {
+
+    castMatrixKernel<half, bfloat16_t>
+        <<<12, 64, stream>>>(
+            reinterpret_cast<const half *>(src),
+            reinterpret_cast<bfloat16_t *>(dst),
+            static_cast<long long>(batch),
+            static_cast<long long>(matrix.rows),
+            static_cast<long long>(matrix.cols),
+            static_cast<long long>(matrix.stride),
+            static_cast<long long>(matrix.row_stride),
+            static_cast<long long>(matrix.col_stride));
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace op::gemm::kunlun

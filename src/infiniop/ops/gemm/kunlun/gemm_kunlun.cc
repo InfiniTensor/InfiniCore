@@ -1,10 +1,26 @@
 #include "gemm_kunlun.h"
 #include "../../../devices/kunlun/kunlun_common.h"
 #include "../../../devices/kunlun/kunlun_xblas.h"
+#include "gemm_kunlun_cast.h"
 
 namespace op::gemm::kunlun {
 
 typedef device::kunlun::blas::Handle::Internal HandleInternal;
+
+static size_t matrixStorageSize(const BlasMatrix &matrix, size_t batch) {
+    auto batch_offset = matrix.stride == 0 ? 0 : static_cast<ptrdiff_t>(batch - 1) * matrix.stride;
+    auto last_offset = static_cast<ptrdiff_t>(matrix.rows - 1) * matrix.row_stride
+                     + static_cast<ptrdiff_t>(matrix.cols - 1) * matrix.col_stride;
+    return static_cast<size_t>(batch_offset + last_offset + 1);
+}
+
+static size_t bf16WorkspaceSize(const MatmulInfo &info) {
+    constexpr size_t f16_size = 2;
+    return (matrixStorageSize(info.a_matrix, info.batch)
+            + matrixStorageSize(info.b_matrix, info.batch)
+            + matrixStorageSize(info.c_matrix, info.batch))
+         * f16_size;
+}
 
 struct Descriptor::Opaque {
     std::shared_ptr<HandleInternal> internal;
@@ -27,9 +43,11 @@ infiniStatus_t Descriptor::create(
 
     auto result = MatmulInfo::create(c_desc, a_desc, b_desc, MatrixLayout::COL_MAJOR);
     CHECK_RESULT(result);
+    auto info = result.take();
+    auto workspace_size = dtype == INFINI_DTYPE_BF16 ? bf16WorkspaceSize(info) : 0;
 
     *desc_ptr = new Descriptor(
-        dtype, result.take(), 0,
+        dtype, info, workspace_size,
         new Opaque{handle->internal()},
         handle->device, handle->device_id);
     return INFINI_STATUS_SUCCESS;
@@ -71,6 +89,57 @@ infiniStatus_t Descriptor::calculate(
 
     auto op_a = _info.a_matrix.row_stride == 1 ? CUBLAS_OP_N : CUBLAS_OP_T;
     auto op_b = _info.b_matrix.row_stride == 1 ? CUBLAS_OP_N : CUBLAS_OP_T;
+
+    if (_dtype == INFINI_DTYPE_BF16) {
+        if (workspace_size < _workspace_size) {
+            return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+        }
+
+        auto workspace_bytes = reinterpret_cast<char *>(workspace);
+        auto a_tmp = workspace_bytes;
+        auto b_tmp = a_tmp + matrixStorageSize(_info.a_matrix, _info.batch) * 2;
+        auto c_tmp = b_tmp + matrixStorageSize(_info.b_matrix, _info.batch) * 2;
+        auto temp_type = CUDA_R_16F;
+
+        CHECK_STATUS(castBf16ToF16(a, a_tmp, _info.a_matrix, _info.batch, (kunlunStream_t)stream));
+        CHECK_STATUS(castBf16ToF16(b, b_tmp, _info.b_matrix, _info.batch, (kunlunStream_t)stream));
+        CHECK_STATUS(castBf16ToF16(c, c_tmp, _info.c_matrix, _info.batch, (kunlunStream_t)stream));
+
+        CHECK_STATUS(_opaque->internal->useCublas(
+            (cudaStream_t)stream,
+            [&](cublasHandle_t handle) {
+                CHECK_CUBLAS(
+                    cublasGemmStridedBatchedEx(
+                        handle,
+                        op_a,
+                        op_b,
+                        static_cast<int>(_info.m),
+                        static_cast<int>(_info.n),
+                        static_cast<int>(_info.k),
+                        &alpha,
+                        a_tmp,
+                        temp_type,
+                        static_cast<int>(_info.a_matrix.ld()),
+                        _info.a_matrix.stride,
+                        b_tmp,
+                        temp_type,
+                        static_cast<int>(_info.b_matrix.ld()),
+                        _info.b_matrix.stride,
+                        &beta,
+                        c_tmp,
+                        temp_type,
+                        static_cast<int>(_info.c_matrix.ld()),
+                        _info.c_matrix.stride,
+                        static_cast<int>(_info.batch),
+                        CUBLAS_COMPUTE_32F,
+                        CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+                return INFINI_STATUS_SUCCESS;
+            }));
+
+        CHECK_STATUS(castF16ToBf16(c_tmp, c, _info.c_matrix, _info.batch, (kunlunStream_t)stream));
+        xpu_wait(stream);
+        return INFINI_STATUS_SUCCESS;
+    }
 
     CHECK_STATUS(_opaque->internal->useCublas(
         (cudaStream_t)stream,
