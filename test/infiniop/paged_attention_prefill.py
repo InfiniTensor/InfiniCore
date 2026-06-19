@@ -37,6 +37,10 @@ _TEST_CASES = [
     (8, 64, 64, 128, 8, 16, 5, InfiniDtype.I64),
     (16, 128, 128, 128, 8, 16, 4, InfiniDtype.I32),
     (16, 128, 128, 128, 8, 16, 4, InfiniDtype.I64),
+    # New DeepSeek MLA prefill cases: verify q/k head size 576 with
+    # value head size 512 for both I32 and I64 block table indices.
+    (2, 16, 1, 576, 16, 8, 2, InfiniDtype.I32, 512),
+    (2, 16, 1, 576, 16, 8, 2, InfiniDtype.I64, 512),
 ]
 
 _TENSOR_DTYPES = [InfiniDtype.BF16, InfiniDtype.F16]
@@ -84,7 +88,12 @@ def ref_paged_attention_multi_turn(
     query_new, k_cache, v_cache, block_tables, seq_lens, cum_seq_lens_q, scale
 ):
     block_size = k_cache.shape[2]
-    outputs = torch.zeros_like(query_new)
+    value_size = v_cache.shape[3]
+    outputs = torch.zeros(
+        (*query_new.shape[:-1], value_size),
+        device=query_new.device,
+        dtype=query_new.dtype,
+    )
     num_seqs = len(cum_seq_lens_q) - 1
     for i in range(num_seqs):
         num_new = cum_seq_lens_q[i + 1].item() - cum_seq_lens_q[i].item()
@@ -132,12 +141,18 @@ def test(
     max_step_len,
     num_rounds,
     index_dtype=InfiniDtype.I64,
-    dtype=InfiniDtype.F16,
-    sync=None,
+    *tail,
 ):
+    if len(tail) == 2:
+        dtype, sync = tail
+        value_size = head_size
+    elif len(tail) == 3:
+        value_size, dtype, sync = tail
+    else:
+        raise ValueError(f"Unexpected paged_attention_prefill test arguments: {tail}")
     print(
         f"Testing PagedAttentionPrefill on {InfiniDeviceNames[device]} with "
-        f"seqs:{num_seqs}, heads:{num_heads}, head_size:{head_size}, "
+        f"seqs:{num_seqs}, heads:{num_heads}, head_size:{head_size}, value_size:{value_size}, "
         f"block:{block_size}, max_step_len:{max_step_len}, num_rounds:{num_rounds}, dtype:{InfiniDtypeNames[dtype]}, "
         f"index_dtype:{InfiniDtypeNames[index_dtype]}"
     )
@@ -151,7 +166,7 @@ def test(
         (num_blocks, num_kv_heads, block_size, head_size), None, dtype, device
     )
     v_cache = TestTensor(
-        (num_blocks, num_kv_heads, block_size, head_size), None, dtype, device
+        (num_blocks, num_kv_heads, block_size, value_size), None, dtype, device
     )
 
     # Multi-turn testing loop
@@ -180,7 +195,7 @@ def test(
 
             # Simulated KV insertion
             k_new = torch.randn(cur_q_len, num_kv_heads, head_size)
-            v_new = torch.randn(cur_q_len, num_kv_heads, head_size)
+            v_new = torch.randn(cur_q_len, num_kv_heads, value_size)
             q_val = torch.randn(cur_q_len, num_heads, head_size)
             q_packed_tensors[cum_q_lens : cum_q_lens + cur_q_len] = q_val
 
@@ -200,11 +215,15 @@ def test(
 
         # 2. Wrap tensors for Infiniop
         q_new = TestTensor.from_torch(q_packed_tensors, dtype, device)
-        out = TestTensor.from_torch(q_packed_tensors, dtype, device)
+        out = TestTensor((q_total_tokens, num_heads, value_size), None, dtype, device)
         out.actual_tensor().zero_()
 
         # 3. Referencing index_dtype to set torch dtype
-        torch_idx_type = torch.int32 if index_dtype == InfiniDtype.I32 else torch.int64
+        torch_idx_type = (
+            torch.int32
+            if index_dtype in (InfiniDtype.I32, InfiniDtype.U32)
+            else torch.int64
+        )
 
         seq_lens = TestTensor.from_torch(
             torch.tensor(seq_lens_list, dtype=torch_idx_type), index_dtype, device

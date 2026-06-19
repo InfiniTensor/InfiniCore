@@ -27,6 +27,8 @@ _TEST_CASES_DATA = [
     (3, 8, 8, 128, 16, 1024, False),
     (3, 8, 8, 64, 16, 1024, False),
     (8, 64, 8, 128, 16, 2048, False),
+    # New DeepSeek MLA wrapper case: verifies decode output uses the
+    # value head size when q/k head size is 576 and value size is 512.
     (1, 16, 1, 576, 16, 32, False, 512),
 ]
 

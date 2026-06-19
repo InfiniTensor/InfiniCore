@@ -28,9 +28,9 @@ def ref_paged_caching(key_cache_pool, value_cache_pool, key, value, slot_mapping
 
     Args:
         key_cache_pool (torch.Tensor): K cache pool, shape [num_blocks, nkvh, block_size, dh]
-        value_cache_pool (torch.Tensor): V cache pool, shape [num_blocks, nkvh, block_size, dh]
+        value_cache_pool (torch.Tensor): V cache pool, shape [num_blocks, nkvh, block_size, dv]
         key (torch.Tensor): Keys, shape [ntok, nkvh, dh]
-        value (torch.Tensor): Values, shape [ntok, nkvh, dh]
+        value (torch.Tensor): Values, shape [ntok, nkvh, dv]
         slot_mapping (torch.Tensor): Slot mapping, shape [ntok]
     """
     ntok = key.shape[0]
@@ -59,11 +59,14 @@ def ref_paged_caching(key_cache_pool, value_cache_pool, key, value, slot_mapping
 #  Test Configuration (Internal Use Only)
 # ==============================================================================
 _TEST_CASES_ = [
-    # (num_seqs, max_seq_len, num_kv_heads, head_size, block_size)
+    # (num_seqs, max_seq_len, num_kv_heads, head_size, block_size[, value_size])
     (1, 128, 8, 128, 16),
     (5, 512, 40, 128, 16),
     (16, 1024, 8, 64, 32),
     (10, 1024, 40, 64, 32),
+    # New DeepSeek MLA case: verifies paged_caching writes K/V caches when
+    # the key head size and value head size differ.
+    (2, 128, 1, 576, 16, 512),
 ]
 
 # Data types for testing
@@ -91,13 +94,20 @@ def test(
     num_kv_heads,  # nkvh
     head_size,  # dh
     block_size,
-    dtype=InfiniDtype.F16,
-    sync=None,
+    *tail,
 ):
+    if len(tail) == 2:
+        dtype, sync = tail
+        value_size = head_size
+    elif len(tail) == 3:
+        value_size, dtype, sync = tail
+    else:
+        raise ValueError(f"Unexpected paged_caching test arguments: {tail}")
     print(
         f"Testing PagedCaching on {InfiniDeviceNames[device]} with "
         f"num_seqs={num_seqs}, max_seq_len={max_seq_len}, num_kv_heads={num_kv_heads}, "
-        f"head_size={head_size}, block_size={block_size}, dtype={InfiniDtypeNames[dtype]}"
+        f"head_size={head_size}, value_size={value_size}, block_size={block_size}, "
+        f"dtype={InfiniDtypeNames[dtype]}"
     )
 
     num_blocks = 4096  # A reasonably large cache pool for testing
@@ -123,15 +133,15 @@ def test(
         current_slot += length.item()
 
     # Ensure we don't exceed the total number of slots in the cache
-    assert current_slot <= num_blocks * block_size, (
-        "Not enough blocks in the cache pool for this test case"
-    )
+    assert (
+        current_slot <= num_blocks * block_size
+    ), "Not enough blocks in the cache pool for this test case"
 
     slot_mapping_torch = torch.tensor(slot_mapping_list, dtype=torch.int64)
 
     # Create input tensors based on the calculated total tokens (ntok)
     k = TestTensor((ntok, num_kv_heads, head_size), None, dtype, device)
-    v = TestTensor((ntok, num_kv_heads, head_size), None, dtype, device)
+    v = TestTensor((ntok, num_kv_heads, value_size), None, dtype, device)
     slot_mapping = TestTensor.from_torch(slot_mapping_torch, InfiniDtype.I64, device)
 
     # The cache pools are the "output" tensors for this operator
@@ -139,7 +149,7 @@ def test(
         (num_blocks, num_kv_heads, block_size, head_size), None, dtype, device
     )
     v_cache_pool = TestTensor(
-        (num_blocks, num_kv_heads, block_size, head_size), None, dtype, device
+        (num_blocks, num_kv_heads, block_size, value_size), None, dtype, device
     )
 
     # Run reference implementation

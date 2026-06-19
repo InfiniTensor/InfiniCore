@@ -23,16 +23,16 @@ constexpr size_t ceilDiv(size_t a, size_t b) {
 }
 
 inline const char *default_prefill_kernel(const PagedAttentionPrefillInfo &info) {
-    // Iluvatar: use warp (stable). Users can override via INFINIOP_FLASH_PREFILL_KERNEL.
+    if (info.head_size == 576) {
+        return "ref";
+    }
+    // Iluvatar/Hygon: use warp for the non-MLA shapes where it is the stable path.
 #if defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
     (void)info;
     return "warp";
 #endif
     if (info.head_size == 192) {
         return "warp";
-    }
-    if (info.head_size == 576) {
-        return "ref";
     }
     // Heuristic auto-dispatch (v0.4):
     // - Prefer the pipelined + tile-wise softmax kernel on FA2-compatible block_size=256.

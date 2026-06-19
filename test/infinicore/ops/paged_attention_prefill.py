@@ -22,6 +22,8 @@ _TEST_CASES_DATA = [
     (2, 8, 8, 128, 16, 32, 2),
     (4, 16, 16, 128, 8, 64, 3),
     (8, 64, 64, 128, 8, 16, 5),
+    # New DeepSeek MLA wrapper case: verifies prefill supports q/k head
+    # size 576 with value head size 512.
     (1, 16, 1, 576, 8, 8, 1, 512),
 ]
 

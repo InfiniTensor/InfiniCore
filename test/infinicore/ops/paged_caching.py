@@ -28,6 +28,8 @@ _TEST_CASES_DATA = [
     (16, 1024, 8, 64, 32, True),
     (10, 1024, 40, 64, 32, False),
     (10, 1024, 40, 64, 32, True),
+    # New DeepSeek MLA wrapper case: verifies cache writes when key and
+    # value head sizes differ.
     (1, 32, 1, 576, 16, False, 512),
 ]
 

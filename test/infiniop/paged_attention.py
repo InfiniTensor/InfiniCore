@@ -49,10 +49,13 @@ def ref_single_query_cached_kv_attention(
     query, key_cache, value_cache, block_tables, seq_lens, scale, alibi_slopes
 ):
     # Reference implementation for paged attention, iterating through each sequence.
-    output = torch.empty_like(query)
+    value_size = value_cache.shape[3]
+    output = torch.empty(
+        (*query.shape[:-1], value_size), device=query.device, dtype=query.dtype
+    )
     num_query_heads, num_kv_heads = query.shape[1], value_cache.shape[1]
     num_queries_per_kv = num_query_heads // num_kv_heads
-    head_size, block_size = value_cache.shape[3], value_cache.shape[2]
+    block_size = value_cache.shape[2]
     num_seqs = query.shape[0]
 
     for i in range(num_seqs):
@@ -81,7 +84,7 @@ def ref_single_query_cached_kv_attention(
             alibi_bias = alibi_slopes.view(-1, 1, 1) * alibi_bias.view(1, 1, -1)
 
         out = ref_masked_attention(q, keys, values, scale, alibi_bias)
-        output[i] = out.view(num_query_heads, head_size)
+        output[i] = out.view(num_query_heads, value_size)
     return output
 
 
@@ -97,6 +100,12 @@ _TEST_CASES_ = [
     (3, 8, 8, 128, 16, 1024, False),
     (3, 8, 8, 64, 16, 1024, False),
     (8, 64, 8, 128, 16, 2048, False),
+    # New DeepSeek paged decode cases: head_size=192 covers the non-MLA
+    # DeepSeek padded Q/K/V dimension, head_size=576 covers the generic
+    # large-head kernel, and value_size=512 covers the MLA K/V mismatch.
+    (1, 16, 16, 192, 16, 256, False),
+    (1, 16, 16, 576, 16, 256, False),
+    (1, 16, 1, 576, 16, 256, False, 512),
 ]
 
 # Data types for testing
@@ -125,12 +134,18 @@ def test(
     block_size,
     max_seq_len,
     use_alibi,
-    dtype=InfiniDtype.F16,
-    sync=None,
+    *tail,
 ):
+    if len(tail) == 2:
+        dtype, sync = tail
+        value_size = head_size
+    elif len(tail) == 3:
+        value_size, dtype, sync = tail
+    else:
+        raise ValueError(f"Unexpected paged_attention test arguments: {tail}")
     print(
         f"Testing PagedAttention on {InfiniDeviceNames[device]} with "
-        f"num_seqs={num_seqs}, num_heads={num_heads}, head_size={head_size}, "
+        f"num_seqs={num_seqs}, num_heads={num_heads}, head_size={head_size}, value_size={value_size}, "
         f"block_size={block_size}, dtype={InfiniDtypeNames[dtype]}, use_alibi={use_alibi}"
     )
 
@@ -140,12 +155,12 @@ def test(
 
     # Create input tensors
     q = TestTensor((num_seqs, num_heads, head_size), None, dtype, device)
-    out = TestTensor((num_seqs, num_heads, head_size), None, dtype, device)
+    out = TestTensor((num_seqs, num_heads, value_size), None, dtype, device)
     k_cache = TestTensor(
         (num_blocks, num_kv_heads, block_size, head_size), None, dtype, device
     )
     v_cache = TestTensor(
-        (num_blocks, num_kv_heads, block_size, head_size), None, dtype, device
+        (num_blocks, num_kv_heads, block_size, value_size), None, dtype, device
     )
 
     seq_lens_torch = torch.randint(1, max_seq_len, (num_seqs,), dtype=torch.int64)
