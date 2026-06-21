@@ -1,24 +1,24 @@
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import infinicore
 import torch
 from framework import (
     BaseOperatorTest,
+    GenericTestRunner,
+    TensorInitializer,
     TensorSpec,
     TestCase,
-    GenericTestRunner,
-    is_broadcast,
-    TensorInitializer,
 )
+
+import infinicore
 
 # ==============================================================================
 # Operator-specific configuration
 # ==============================================================================
 
-# Test cases format: (num_seqs, max_seq_len, num_kv_heads, head_size, block_size, permute_dim_1_2)
+# Test cases format: (num_seqs, max_seq_len, num_kv_heads, head_size, block_size, permute_dim_1_2[, value_size])
 _TEST_CASES_DATA = [
     (1, 128, 8, 128, 16, False),
     (1, 128, 8, 128, 16, True),
@@ -28,6 +28,7 @@ _TEST_CASES_DATA = [
     (16, 1024, 8, 64, 32, True),
     (10, 1024, 40, 64, 32, False),
     (10, 1024, 40, 64, 32, True),
+    (1, 32, 1, 576, 16, False, 512),
 ]
 
 # Tolerance configuration
@@ -89,14 +90,27 @@ def parse_test_cases():
     Each test case contains all necessary information for execution and validation.
     """
     test_cases = []
-    for (
-        num_seqs,
-        max_seq_len,
-        num_kv_heads,
-        head_size,
-        block_size,
-        permute_dim_1_2,
-    ) in _TEST_CASES_DATA:
+    for case in _TEST_CASES_DATA:
+        if len(case) == 6:
+            (
+                num_seqs,
+                max_seq_len,
+                num_kv_heads,
+                head_size,
+                block_size,
+                permute_dim_1_2,
+            ) = case
+            value_size = head_size
+        else:
+            (
+                num_seqs,
+                max_seq_len,
+                num_kv_heads,
+                head_size,
+                block_size,
+                permute_dim_1_2,
+                value_size,
+            ) = case
         num_blocks = 4096  # A reasonably large cache pool for testing
 
         # Create metadata: variable context lengths for each sequence in the batch
@@ -115,9 +129,9 @@ def parse_test_cases():
             current_slot += length.item()
 
         # Ensure we don't exceed the total number of slots in the cache
-        assert current_slot <= num_blocks * block_size, (
-            "Not enough blocks in the cache pool for this test case"
-        )
+        assert (
+            current_slot <= num_blocks * block_size
+        ), "Not enough blocks in the cache pool for this test case"
 
         slot_mapping = torch.tensor(slot_mapping_list, dtype=torch.int64)
 
@@ -125,12 +139,12 @@ def parse_test_cases():
         slot_mapping_shape = slot_mapping.shape
 
         k_shape = (ntok, num_kv_heads, head_size)
-        v_shape = (ntok, num_kv_heads, head_size)
+        v_shape = (ntok, num_kv_heads, value_size)
         k_cache_shape = (num_blocks, num_kv_heads, block_size, head_size)
-        v_cache_shape = (num_blocks, num_kv_heads, block_size, head_size)
+        v_cache_shape = (num_blocks, num_kv_heads, block_size, value_size)
         if permute_dim_1_2:
             k_cache_shape = (num_blocks, block_size, num_kv_heads, head_size)
-            v_cache_shape = (num_blocks, block_size, num_kv_heads, head_size)
+            v_cache_shape = (num_blocks, block_size, num_kv_heads, value_size)
 
         # Generate test cases for all data types
         for dtype in _TENSOR_DTYPES:
@@ -152,23 +166,23 @@ def parse_test_cases():
                 dtype=infinicore.int64,
             )
 
-            # In-place operation: modifies k_cache (index 2) and v_cache (index 3)
-            test_cases.append(
-                TestCase(
-                    inputs=[
-                        k_cache_spec,
-                        v_cache_spec,
-                        k_spec,
-                        v_spec,
-                        slot_mapping_spec,
-                    ],
-                    kwargs={"permute_dim_1_2": permute_dim_1_2},
-                    output_spec=None,
-                    comparison_target=0,  # Only compare k_cache
-                    tolerance=tolerance,
-                    description=f"PagedCaching",
+            for comparison_target in [0, 1] if value_size != head_size else [0]:
+                test_cases.append(
+                    TestCase(
+                        inputs=[
+                            k_cache_spec,
+                            v_cache_spec,
+                            k_spec,
+                            v_spec,
+                            slot_mapping_spec,
+                        ],
+                        kwargs={"permute_dim_1_2": permute_dim_1_2},
+                        output_spec=None,
+                        comparison_target=comparison_target,
+                        tolerance=tolerance,
+                        description="PagedCaching",
+                    )
                 )
-            )
 
     return test_cases
 

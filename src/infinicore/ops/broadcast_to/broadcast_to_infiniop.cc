@@ -1,61 +1,49 @@
-#include "../../utils.hpp"
-#include "infinicore/common/hash.hpp"
+#include "../infiniop_impl.hpp"
 #include "infinicore/ops/broadcast_to.hpp"
-#include "infinicore/ops/common/cache.hpp"
-#include <infiniop.h>
 
 namespace infinicore::op::broadcast_to_impl::infiniop {
 
-// 定义描述符缓存
-thread_local common::OpCache<size_t, infiniopBroadcastToDescriptor_t> caches(
-    100, // capacity
-    [](infiniopBroadcastToDescriptor_t &desc) {
-        if (desc != nullptr) {
-            INFINICORE_CHECK_ERROR(infiniopDestroyBroadcastToDescriptor(desc));
-            desc = nullptr;
-        }
-    });
+INFINIOP_CACHABLE_DESCRIPTOR(Descriptor, BroadcastTo, 100);
 
-void calculate(Tensor y, Tensor x) {
+struct PlannedMeta {
+    std::shared_ptr<Descriptor> descriptor;
+    graph::GraphTensor workspace, y, x;
+};
+
+void *plan(Tensor y, Tensor x) {
     size_t seed = hash_combine(y, x);
 
-    auto device = context::getDevice();
-    auto &cache = caches.getCache(device);
+    INFINIOP_CACHABLE_DESCRIPTOR_GET_OR_CREATE(
+        Descriptor, descriptor, BroadcastTo,
+        seed,
+        y->desc(), x->desc());
 
-    auto desc_opt = cache.get(seed);
-    infiniopBroadcastToDescriptor_t desc = nullptr;
+    INFINIOP_WORKSPACE_TENSOR(workspace, BroadcastTo, descriptor);
 
-    if (!desc_opt) {
-        // 2. 创建描述符
-        INFINICORE_CHECK_ERROR(infiniopCreateBroadcastToDescriptor(
-            context::getInfiniopHandle(device),
-            &desc,
-            y->desc(),
-            x->desc()));
+    return new PlannedMeta{
+        descriptor,
+        graph::GraphTensor(workspace),
+        graph::GraphTensor(y),
+        graph::GraphTensor(x)};
+}
 
-        cache.put(seed, desc);
-    } else {
-        desc = *desc_opt;
-    }
-
-    // 3. 获取 Workspace 并执行
-    size_t workspace_size = 0;
-    INFINICORE_CHECK_ERROR(infiniopGetBroadcastToWorkspaceSize(desc, &workspace_size));
-    std::shared_ptr<Memory> workspace = context::allocateMemory(workspace_size);
+void run(void *planned_meta) {
+    auto planned = reinterpret_cast<PlannedMeta *>(planned_meta);
 
     INFINICORE_CHECK_ERROR(infiniopBroadcastTo(
-        desc,
-        workspace->data(),
-        workspace_size,
-        y->data(),
-        x->data(),
+        planned->descriptor->desc,
+        planned->workspace->data(),
+        planned->workspace->numel(),
+        planned->y->data(),
+        planned->x->data(),
         context::getStream()));
 }
 
-// 4. 注册算子实现
-static bool registered = []() {
-    BroadcastTo::dispatcher().registerAll(&calculate, false);
-    return true;
-}();
+void cleanup(void **planned_meta_ptr) {
+    delete *reinterpret_cast<PlannedMeta **>(planned_meta_ptr);
+    *planned_meta_ptr = nullptr;
+}
+
+INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(BroadcastTo, &plan, &run, &cleanup);
 
 } // namespace infinicore::op::broadcast_to_impl::infiniop

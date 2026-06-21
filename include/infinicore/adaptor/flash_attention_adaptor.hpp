@@ -21,7 +21,13 @@ mha_fwd(at::Tensor &q,                            // batch_size x seqlen_q x num
         int window_size_right,
         const float softcap,
         const bool return_softmax,
-        std::optional<at::Generator> gen_);
+        std::optional<at::Generator> gen_
+#if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
+        // MetaX/Mars `flash_attn_2_cuda` (e.g. 2.6.x+mars) appends this argument vs upstream Dao-AILab flash-attn.
+        ,
+        std::optional<at::Tensor> &flash_attn_mars_ext_
+#endif
+);
 
 std::vector<at::Tensor>
 mha_varlen_fwd(at::Tensor &q,                               // total_q x num_heads x head_size, total_q := \sum_{i=0}^{b} s_i
@@ -50,7 +56,7 @@ mha_varlen_fwd(at::Tensor &q,                               // total_q x num_hea
                ,
                std::optional<at::Tensor> &flash_attn_mars_ext_
 #endif
-    );
+);
 
 std::vector<at::Tensor>
 mha_bwd(const at::Tensor &dout,                   // batch_size x seqlen_q x num_heads, x multiple_of(head_size_og, 8)
@@ -125,7 +131,7 @@ mha_fwd_kvcache(at::Tensor &q,                                     // batch_size
                 ,
                 std::optional<at::Tensor> &flash_attn_mars_ext_
 #endif
-    );
+);
 
 #if !defined(ENABLE_METAX_API)
 } // namespace flash

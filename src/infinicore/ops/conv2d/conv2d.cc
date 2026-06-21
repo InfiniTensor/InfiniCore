@@ -19,7 +19,10 @@ void Conv2d::execute(Tensor output,
                      const size_t *strides,
                      const size_t *dilations,
                      size_t n) {
-    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(output, input, weight, bias);
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(output, input, weight);
+    if (bias) {
+        INFINICORE_ASSERT_TENSORS_SAME_DEVICE(output, bias);
+    }
     infinicore::context::setDevice(output->device());
     auto device_type = output->device().getType();
     auto func = dispatcher().lookup(device_type);

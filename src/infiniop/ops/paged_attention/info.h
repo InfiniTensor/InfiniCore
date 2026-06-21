@@ -21,6 +21,7 @@ public:
     size_t num_heads;
     size_t num_kv_heads;
     size_t head_size;
+    size_t value_size;
     size_t page_block_size;
     size_t max_num_blocks_per_seq;
 
@@ -32,6 +33,7 @@ public:
     ptrdiff_t v_row_stride;
     ptrdiff_t v_head_stride;
     ptrdiff_t o_stride;
+    ptrdiff_t o_head_stride;
 
     ptrdiff_t block_table_batch_stride;
     ptrdiff_t cache_lens_stride;
@@ -110,6 +112,8 @@ public:
         const size_t num_seqs = q_shape[0];
         const size_t num_heads = q_shape[1];
         const size_t head_size = q_shape[2];
+        const size_t value_size = v_cache_desc->shape()[3];
+        const bool is_mla = (head_size == 576 && value_size == 512);
 
         const size_t num_blocks = k_shape[0];
         (void)num_blocks;
@@ -120,19 +124,25 @@ public:
         //     printf("paged block size %zu\n", page_block_size);
         //     return INFINI_STATUS_BAD_TENSOR_SHAPE;
         // }
-        if (head_size != 64 && head_size != 128) {
-            // First build only targets common FA2 head dims (expand later).
+        if (head_size != 64 && head_size != 128 && head_size != 192 && head_size != 576) {
+            // First build only targets common FA2 head dims plus DeepSeek MLA latent dim.
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
         if (num_heads % num_kv_heads != 0) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
 
-        if (v_cache_desc->shape()[0] != k_shape[0] || v_cache_desc->shape()[1] != k_shape[1] || v_cache_desc->shape()[2] != k_shape[2] || v_cache_desc->shape()[3] != k_shape[3]) {
+        if (k_shape[3] != head_size) {
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
+        if (v_cache_desc->shape()[0] != k_shape[0] || v_cache_desc->shape()[1] != k_shape[1] || v_cache_desc->shape()[2] != k_shape[2]) {
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
+        if (!is_mla && value_size != head_size) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
 
-        if (out_desc->shape()[0] != q_shape[0] || out_desc->shape()[1] != q_shape[1] || out_desc->shape()[2] != q_shape[2]) {
+        if (out_desc->shape()[0] != q_shape[0] || out_desc->shape()[1] != q_shape[1] || out_desc->shape()[2] != value_size) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
 
@@ -145,6 +155,7 @@ public:
         // Strides (in elements)
         const ptrdiff_t q_stride = q_desc->stride(0);
         const ptrdiff_t o_stride = out_desc->stride(0);
+        const ptrdiff_t o_head_stride = out_desc->stride(1);
 
         const ptrdiff_t k_batch_stride = k_cache_desc->stride(0);
         const ptrdiff_t k_row_stride = k_cache_desc->stride(2);
@@ -165,6 +176,7 @@ public:
             num_heads,
             num_kv_heads,
             head_size,
+            value_size,
             page_block_size,
             max_num_blocks_per_seq,
             q_stride,
@@ -175,6 +187,7 @@ public:
             v_row_stride,
             v_head_stride,
             o_stride,
+            o_head_stride,
             block_table_batch_stride,
             cache_lens_stride,
         });

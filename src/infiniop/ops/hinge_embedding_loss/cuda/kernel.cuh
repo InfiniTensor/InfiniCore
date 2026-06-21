@@ -140,7 +140,11 @@ __global__ void hinge_embedding_loss_finalize_kernel(
     if (mean) {
         // Match PyTorch behavior: mean reduction on an empty tensor yields NaN.
         if (n == 0) {
+#if defined(ENABLE_HYGON_API)
+            result = static_cast<Tcompute>(__builtin_nanf(""));
+#else
             result = std::numeric_limits<Tcompute>::quiet_NaN();
+#endif
         } else {
             result = result / static_cast<Tcompute>(n);
         }

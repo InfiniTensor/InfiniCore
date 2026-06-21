@@ -2,7 +2,7 @@
 
 using namespace AscendC;
 
-template <typename T>
+template <typename T, typename Tidx>
 class RandomSampleKernel {
 public:
     __aicore__ inline RandomSampleKernel() {}
@@ -11,6 +11,7 @@ public:
 
 private:
     __aicore__ inline void copyIn();
+    __aicore__ inline void copyTop1();
     __aicore__ inline void copyOut();
     __aicore__ inline void compute();
     __aicore__ inline void SoftMax(LocalTensor<T> &topkValIn,
@@ -19,11 +20,12 @@ private:
                                         LocalTensor<T> &topkValOut);
     __aicore__ inline void RandomSample(LocalTensor<T> &valIn,
                                         LocalTensor<int64_t> &Index,
-                                        LocalTensor<int64_t> &result);
+                                        LocalTensor<Tidx> &result);
 
     GlobalTensor<T> _pGM,
         _topk_valGM;
-    GlobalTensor<int64_t> _topk_idxGM, _resGM;
+    GlobalTensor<int64_t> _topk_idxGM;
+    GlobalTensor<Tidx> _resGM;
     TPipe pipe;
     TQue<QuePosition::VECIN, 1> _topk_valQue;
     TQue<QuePosition::VECIN, 1> _topk_idxQue;
@@ -50,13 +52,13 @@ private:
     int32_t _bufferLen;
 };
 
-template <typename T>
-__aicore__ inline void RandomSampleKernel<T>::init(GM_ADDR probs, GM_ADDR result, GM_ADDR topk_val_addr, GM_ADDR topk_idx_addr, float random_val, float topp, int topk, float temperature, int32_t n) {
+template <typename T, typename Tidx>
+__aicore__ inline void RandomSampleKernel<T, Tidx>::init(GM_ADDR probs, GM_ADDR result, GM_ADDR topk_val_addr, GM_ADDR topk_idx_addr, float random_val, float topp, int topk, float temperature, int32_t n) {
     _topk = topk;
     _voc = n;
     _random_val = random_val;
     _topp = topp;
-    _invTemp = 1.0f / temperature;
+    _invTemp = temperature == 0.0f ? 0.0f : 1.0f / temperature;
 
     // CumSumInfo
     _topkAligned = alignTileLen<T>(_topk, BYTE_ALIGN);
@@ -68,7 +70,7 @@ __aicore__ inline void RandomSampleKernel<T>::init(GM_ADDR probs, GM_ADDR result
     _pGM.SetGlobalBuffer(reinterpret_cast<__gm__ T *>(probs), _voc);
     _topk_valGM.SetGlobalBuffer(reinterpret_cast<__gm__ T *>(topk_val_addr), _topk);
     _topk_idxGM.SetGlobalBuffer(reinterpret_cast<__gm__ int64_t *>(topk_idx_addr), _topk);
-    _resGM.SetGlobalBuffer(reinterpret_cast<__gm__ int64_t *>(result), 1);
+    _resGM.SetGlobalBuffer(reinterpret_cast<__gm__ Tidx *>(result), 1);
 
     // Global input and output
     pipe.InitBuffer(_topk_valQue, 1, _topkAligned * sizeof(T));
@@ -82,16 +84,21 @@ __aicore__ inline void RandomSampleKernel<T>::init(GM_ADDR probs, GM_ADDR result
     pipe.InitBuffer(_inclusive_sum_OutBuf, _topkAligned * sizeof(T));
 }
 
-template <typename T>
-__aicore__ inline void RandomSampleKernel<T>::process() {
+template <typename T, typename Tidx>
+__aicore__ inline void RandomSampleKernel<T, Tidx>::process() {
+    if (_topk == 1) {
+        copyTop1();
+        copyOut();
+        return;
+    }
     copyIn();
     compute();
     copyOut();
 }
 
-template <typename T>
-__aicore__ inline void RandomSampleKernel<T>::SoftMax(LocalTensor<T> &topkValIn,
-                                                      LocalTensor<T> &softMaxOut) {
+template <typename T, typename Tidx>
+__aicore__ inline void RandomSampleKernel<T, Tidx>::SoftMax(LocalTensor<T> &topkValIn,
+                                                            LocalTensor<T> &softMaxOut) {
     float invSum = 1.0f / _sum;
     LocalTensor<T> tmpBuffer = _tmp1Buf.Get<T>();
     LocalTensor<T> tmpBuffer2 = _tmp2Buf.Get<T>();
@@ -102,19 +109,19 @@ __aicore__ inline void RandomSampleKernel<T>::SoftMax(LocalTensor<T> &topkValIn,
     Muls(softMaxOut, tmpBuffer3, static_cast<T>(invSum), _topk);
 }
 
-template <typename T>
-__aicore__ inline void RandomSampleKernel<T>::InclusiveSum(LocalTensor<T> &topkValIn,
-                                                           LocalTensor<T> &topkValOut) {
+template <typename T, typename Tidx>
+__aicore__ inline void RandomSampleKernel<T, Tidx>::InclusiveSum(LocalTensor<T> &topkValIn,
+                                                                 LocalTensor<T> &topkValOut) {
     static constexpr CumSumConfig cumSumConfig{true, false, false};
     LocalTensor<T> lastRowLocal;
     CumSum<T, cumSumConfig>(topkValOut, lastRowLocal, topkValIn,
                             {1, static_cast<uint32_t>(_topkAligned)});
 }
 
-template <typename T>
-__aicore__ inline void RandomSampleKernel<T>::RandomSample(LocalTensor<T> &valIn,
-                                                           LocalTensor<int64_t> &Index,
-                                                           LocalTensor<int64_t> &result) {
+template <typename T, typename Tidx>
+__aicore__ inline void RandomSampleKernel<T, Tidx>::RandomSample(LocalTensor<T> &valIn,
+                                                                 LocalTensor<int64_t> &Index,
+                                                                 LocalTensor<Tidx> &result) {
     int end = 0;
     for (end = 0; end < _topk; end++) {
         if (static_cast<float>(valIn(end)) >= _topp) {
@@ -130,15 +137,28 @@ __aicore__ inline void RandomSampleKernel<T>::RandomSample(LocalTensor<T> &valIn
     auto random_val = _random_val * static_cast<float>(valIn(end - 1));
     for (int i = 0; i < end; i++) {
         if (random_val < static_cast<float>(valIn(i))) {
-            result(0) = Index(i);
+            result(0) = static_cast<Tidx>(Index(i));
             return;
         }
     }
-    result(0) = Index(end - 1);
+    result(0) = static_cast<Tidx>(Index(end - 1));
 }
 
-template <typename T>
-__aicore__ inline void RandomSampleKernel<T>::copyIn() {
+template <typename T, typename Tidx>
+__aicore__ inline void RandomSampleKernel<T, Tidx>::copyTop1() {
+    LocalTensor<int64_t> topkIdxLocal = _topk_idxQue.AllocTensor<int64_t>();
+    DataCopy(topkIdxLocal, _topk_idxGM, _topkIdxAligned);
+    _topk_idxQue.EnQue(topkIdxLocal);
+
+    LocalTensor<int64_t> topkIdx = _topk_idxQue.DeQue<int64_t>();
+    LocalTensor<Tidx> resultLocal = _resQue.AllocTensor<Tidx>();
+    resultLocal(0) = static_cast<Tidx>(topkIdx(0));
+    _topk_idxQue.FreeTensor(topkIdx);
+    _resQue.EnQue(resultLocal);
+}
+
+template <typename T, typename Tidx>
+__aicore__ inline void RandomSampleKernel<T, Tidx>::copyIn() {
     LocalTensor<T> topkValLocal = _topk_valQue.AllocTensor<T>();
     LocalTensor<int64_t> topkIdxLocal = _topk_idxQue.AllocTensor<int64_t>();
     DataCopy(topkValLocal, _topk_valGM, _topkAligned);
@@ -182,8 +202,8 @@ __aicore__ inline void RandomSampleKernel<T>::copyIn() {
     _topk_idxQue.EnQue(topkIdxLocal);
 }
 
-template <typename T>
-__aicore__ inline void RandomSampleKernel<T>::compute() {
+template <typename T, typename Tidx>
+__aicore__ inline void RandomSampleKernel<T, Tidx>::compute() {
     // Get input data
     LocalTensor<T> topkValLocal = _topk_valQue.DeQue<T>();
 
@@ -197,7 +217,14 @@ __aicore__ inline void RandomSampleKernel<T>::compute() {
 
     // randomSample
     LocalTensor<int64_t> topkIdxLocal = _topk_idxQue.DeQue<int64_t>();
-    LocalTensor<int64_t> resultLocal = _resQue.AllocTensor<int64_t>();
+    LocalTensor<Tidx> resultLocal = _resQue.AllocTensor<Tidx>();
+    if (_topk == 1) {
+        resultLocal(0) = static_cast<Tidx>(topkIdxLocal(0));
+        _topk_valQue.FreeTensor(topkValLocal);
+        _topk_idxQue.FreeTensor(topkIdxLocal);
+        _resQue.EnQue(resultLocal);
+        return;
+    }
     RandomSample(inclusiveOutLocal, topkIdxLocal, resultLocal);
 
     _topk_valQue.FreeTensor(topkValLocal);
@@ -205,10 +232,11 @@ __aicore__ inline void RandomSampleKernel<T>::compute() {
     _resQue.EnQue(resultLocal);
 }
 
-template <typename T>
-__aicore__ inline void RandomSampleKernel<T>::copyOut() {
-    LocalTensor<int64_t> resLocal = _resQue.DeQue<int64_t>();
-    DataCopy(_resGM, resLocal, BYTE_ALIGN / sizeof(int64_t));
+template <typename T, typename Tidx>
+__aicore__ inline void RandomSampleKernel<T, Tidx>::copyOut() {
+    LocalTensor<Tidx> resLocal = _resQue.DeQue<Tidx>();
+    DataCopyExtParams copyParams = {1, static_cast<uint32_t>(sizeof(Tidx)), 0, 0, 0};
+    DataCopyPad(_resGM, resLocal, copyParams);
     _resQue.FreeTensor(resLocal);
 }
 
@@ -222,7 +250,22 @@ extern "C" __global__ __aicore__ void random_sample_kernel_fp16(
     int topk,
     float temperature,
     int32_t n) {
-    RandomSampleKernel<half> op;
+    RandomSampleKernel<half, int64_t> op;
+    op.init(probs, result, topk_val_addr, topk_idx_addr, random_val, topp, topk, temperature, n);
+    op.process();
+}
+
+extern "C" __global__ __aicore__ void random_sample_kernel_fp16_i32(
+    GM_ADDR probs,
+    GM_ADDR result,
+    GM_ADDR topk_val_addr,
+    GM_ADDR topk_idx_addr,
+    float random_val,
+    float topp,
+    int topk,
+    float temperature,
+    int32_t n) {
+    RandomSampleKernel<half, int32_t> op;
     op.init(probs, result, topk_val_addr, topk_idx_addr, random_val, topp, topk, temperature, n);
     op.process();
 }
@@ -237,7 +280,22 @@ extern "C" __global__ __aicore__ void random_sample_kernel_fp32(
     int topk,
     float temperature,
     int32_t n) {
-    RandomSampleKernel<float> op;
+    RandomSampleKernel<float, int64_t> op;
+    op.init(probs, result, topk_val_addr, topk_idx_addr, random_val, topp, topk, temperature, n);
+    op.process();
+}
+
+extern "C" __global__ __aicore__ void random_sample_kernel_fp32_i32(
+    GM_ADDR probs,
+    GM_ADDR result,
+    GM_ADDR topk_val_addr,
+    GM_ADDR topk_idx_addr,
+    float random_val,
+    float topp,
+    int topk,
+    float temperature,
+    int32_t n) {
+    RandomSampleKernel<float, int32_t> op;
     op.init(probs, result, topk_val_addr, topk_idx_addr, random_val, topp, topk, temperature, n);
     op.process();
 }
@@ -253,13 +311,26 @@ extern "C" infiniStatus_t random_sample_kernel_launch(
     float temperature,
     uint64_t n,
     infiniDtype_t dt_p,
+    infiniDtype_t dt_i,
     void *stream) {
     switch (dt_p) {
     case INFINI_DTYPE_F16:
-        random_sample_kernel_fp16<<<1, nullptr, stream>>>(probs, result, topk_val_addr, topk_idx_addr, random_val, topp, topk, temperature, n);
+        if (dt_i == INFINI_DTYPE_I32) {
+            random_sample_kernel_fp16_i32<<<1, nullptr, stream>>>(probs, result, topk_val_addr, topk_idx_addr, random_val, topp, topk, temperature, n);
+        } else if (dt_i == INFINI_DTYPE_I64) {
+            random_sample_kernel_fp16<<<1, nullptr, stream>>>(probs, result, topk_val_addr, topk_idx_addr, random_val, topp, topk, temperature, n);
+        } else {
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
         break;
     case INFINI_DTYPE_F32:
-        random_sample_kernel_fp32<<<1, nullptr, stream>>>(probs, result, topk_val_addr, topk_idx_addr, random_val, topp, topk, temperature, n);
+        if (dt_i == INFINI_DTYPE_I32) {
+            random_sample_kernel_fp32_i32<<<1, nullptr, stream>>>(probs, result, topk_val_addr, topk_idx_addr, random_val, topp, topk, temperature, n);
+        } else if (dt_i == INFINI_DTYPE_I64) {
+            random_sample_kernel_fp32<<<1, nullptr, stream>>>(probs, result, topk_val_addr, topk_idx_addr, random_val, topp, topk, temperature, n);
+        } else {
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
         break;
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;

@@ -32,8 +32,9 @@ __device__ void pagedCachingKernel(
     const Tdata *v_ptr,              // Pointer to the source Values, shape [ntok, nkvh, dh]
     const int64_t *slot_mapping_ptr, // Pointer to the slot mapping, shape [ntok]
     // ----- Metadata -----
-    const size_t head_size,  // Dimension of each head (dh)
-    const size_t block_size, // Number of tokens per block in the KV cache
+    const size_t head_size,   // Dimension of each key head (dh_k)
+    const size_t v_head_size, // Dimension of each value head (dh_v)
+    const size_t block_size,  // Number of tokens per block in the KV cache
     // ----- Stride Information -----
     const ptrdiff_t k_src_stride,         // Stride between tokens in the source K tensor
     const ptrdiff_t v_src_stride,         // Stride between tokens in the source V tensor
@@ -66,7 +67,7 @@ __device__ void pagedCachingKernel(
 
     // Calculate base pointers for source and destination for this specific token.
     const Tdata *k_src_head_ptr = k_ptr + token_idx * k_src_stride + head_idx * head_size;
-    const Tdata *v_src_head_ptr = v_ptr + token_idx * v_src_stride + head_idx * head_size;
+    const Tdata *v_src_head_ptr = v_ptr + token_idx * v_src_stride + head_idx * v_head_size;
 
     // Destination pointer calculation assumes a [num_blocks, block_size, num_heads, head_size] layout.
     // We point to the beginning of the memory region for this token's slot.
@@ -81,6 +82,8 @@ __device__ void pagedCachingKernel(
     //================================================================================
     for (int i = threadIdx.x; i < head_size; i += NUM_THREADS) {
         k_dst_head_ptr[i] = k_src_head_ptr[i];
+    }
+    for (int i = threadIdx.x; i < v_head_size; i += NUM_THREADS) {
         v_dst_head_ptr[i] = v_src_head_ptr[i];
     }
 }

@@ -1,18 +1,18 @@
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import infinicore
 import torch
 from framework import (
     BaseOperatorTest,
+    GenericTestRunner,
+    TensorInitializer,
     TensorSpec,
     TestCase,
-    GenericTestRunner,
-    is_broadcast,
-    TensorInitializer,
 )
+
+import infinicore
 
 # ==============================================================================
 # Operator-specific configuration
@@ -20,13 +20,14 @@ from framework import (
 
 # Test cases format:
 _TEST_CASES_DATA = [
-    # (num_seqs, num_heads, num_kv_heads, head_size, block_size, max_seq_len, use_alibi)
+    # (num_seqs, num_heads, num_kv_heads, head_size, block_size, max_seq_len, use_alibi[, value_size])
     (1, 1, 1, 128, 16, 15, False),
     (4, 40, 40, 128, 16, 1024, False),
     (6, 40, 40, 128, 16, 1024, False),
     (3, 8, 8, 128, 16, 1024, False),
     (3, 8, 8, 64, 16, 1024, False),
     (8, 64, 8, 128, 16, 2048, False),
+    (1, 16, 1, 576, 16, 32, False, 512),
 ]
 
 # Tolerance configuration
@@ -49,15 +50,29 @@ def parse_test_cases():
     Each test case contains all necessary information for execution and validation.
     """
     test_cases = []
-    for (
-        num_seqs,
-        num_heads,
-        num_kv_heads,
-        head_size,
-        block_size,
-        max_seq_len,
-        use_alibi,
-    ) in _TEST_CASES_DATA:
+    for case in _TEST_CASES_DATA:
+        if len(case) == 7:
+            (
+                num_seqs,
+                num_heads,
+                num_kv_heads,
+                head_size,
+                block_size,
+                max_seq_len,
+                use_alibi,
+            ) = case
+            value_size = head_size
+        else:
+            (
+                num_seqs,
+                num_heads,
+                num_kv_heads,
+                head_size,
+                block_size,
+                max_seq_len,
+                use_alibi,
+                value_size,
+            ) = case
         scale = 1.0 / (head_size**0.5)
 
         max_blocks_per_seq = (max_seq_len + block_size - 1) // block_size
@@ -71,7 +86,7 @@ def parse_test_cases():
 
         q_shape = (num_seqs, num_heads, head_size)
         k_cache_shape = (num_blocks, num_kv_heads, block_size, head_size)
-        v_cache_shape = (num_blocks, num_kv_heads, block_size, head_size)
+        v_cache_shape = (num_blocks, num_kv_heads, block_size, value_size)
 
         block_tables_shape = block_tables.shape
         cache_lens_shape = cache_lens_torch.shape
@@ -98,7 +113,7 @@ def parse_test_cases():
             )
 
             # Paged attention operation: returns output tensor
-            out_shape = (num_seqs, num_heads, head_size)
+            out_shape = (num_seqs, num_heads, value_size)
             out_spec = TensorSpec.from_tensor(out_shape, None, dtype)
             test_cases.append(
                 TestCase(
@@ -110,10 +125,10 @@ def parse_test_cases():
                         cache_lens_spec,
                     ],
                     kwargs={"alibi_slopes": None, "scale": scale},
-                    output_spec=None,
-                    comparison_target=0,
+                    output_spec=out_spec,
+                    comparison_target=None,
                     tolerance=tolerance,
-                    description=f"PagedAttention",
+                    description="PagedAttention",
                 )
             )
 
@@ -134,10 +149,14 @@ def ref_single_query_cached_kv_attention(
     query, key_cache, value_cache, block_tables, cache_lens, alibi_slopes, scale
 ):
     # Reference implementation for paged attention, iterating through each sequence.
-    output = torch.empty_like(query)
+    output = torch.empty(
+        (*query.shape[:-1], value_cache.shape[3]),
+        device=query.device,
+        dtype=query.dtype,
+    )
     num_query_heads, num_kv_heads = query.shape[1], value_cache.shape[1]
     num_queries_per_kv = num_query_heads // num_kv_heads
-    head_size, block_size = value_cache.shape[3], value_cache.shape[2]
+    value_size, block_size = value_cache.shape[3], value_cache.shape[2]
     num_seqs = query.shape[0]
 
     for i in range(num_seqs):
@@ -166,7 +185,7 @@ def ref_single_query_cached_kv_attention(
             alibi_bias = alibi_slopes.view(-1, 1, 1) * alibi_bias.view(1, 1, -1)
 
         out = ref_masked_attention(q, keys, values, scale, alibi_bias)
-        output[i] = out.view(num_query_heads, head_size)
+        output[i] = out.view(num_query_heads, value_size)
     return output
 
 
@@ -180,8 +199,13 @@ class OpTest(BaseOperatorTest):
         return parse_test_cases()
 
     def torch_operator(self, *args, **kwargs):
-        """PyTorch paged_caching implementation"""
-        return ref_single_query_cached_kv_attention(*args, **kwargs)
+        """PyTorch paged_attention implementation"""
+        out = kwargs.pop("out", None)
+        result = ref_single_query_cached_kv_attention(*args, **kwargs)
+        if out is not None:
+            out.copy_(result)
+            return out
+        return result
 
     def infinicore_operator(self, *args, **kwargs):
         """InfiniCore paged_attention implementation"""

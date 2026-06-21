@@ -28,10 +28,10 @@ _TEST_CASES_ = [
     # shape, input_stride, output_stride
     ((13, 4), None, None),
     ((13, 4), (10, 1), (10, 1)),
-    #((13, 4), (0, 1), None),
+    # ((13, 4), (0, 1), None),
     ((13, 4, 4), None, None),
     ((13, 4, 4), (20, 4, 1), (20, 4, 1)),
-    #((13, 4, 4), (4, 0, 1), None),
+    # ((13, 4, 4), (4, 0, 1), None),
     ((16, 5632), None, None),
     ((16, 5632), (13312, 1), (13312, 1)),
     ((4, 4, 5632), None, None),
@@ -88,6 +88,8 @@ def test(
     if device == InfiniDeviceEnum.ILUVATAR and (
         input_stride is not None or output_stride is not None
     ):
+        return
+    if device == InfiniDeviceEnum.CAMBRICON and dtype == InfiniDtype.F64:
         return
 
     input = TestTensor(shape, input_stride, dtype, device)

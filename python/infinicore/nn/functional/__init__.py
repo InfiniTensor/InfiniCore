@@ -1,3 +1,5 @@
+from infinicore.ops.conv2d import conv2d
+
 from .adaptive_avg_pool1d import adaptive_avg_pool1d
 from .adaptive_avg_pool3d import adaptive_avg_pool3d
 from .adaptive_max_pool1d import adaptive_max_pool1d
@@ -26,6 +28,7 @@ from .relu6 import relu6
 from .rms_norm import rms_norm
 from .rope import RopeAlgo, rope
 from .selu import selu
+from .sigmoid import sigmoid
 from .silu import silu
 from .silu_and_mul import silu_and_mul
 from .smooth_l1_loss import smooth_l1_loss
@@ -39,6 +42,7 @@ from .unfold import unfold
 from .upsample_bilinear import upsample_bilinear
 
 __all__ = [
+    "conv2d",
     "adaptive_max_pool1d",
     "causal_softmax",
     "embedding",
@@ -54,6 +58,7 @@ __all__ = [
     "prelu",
     "relu6",
     "rms_norm",
+    "sigmoid",
     "silu",
     "smooth_l1_loss",
     "swiglu",

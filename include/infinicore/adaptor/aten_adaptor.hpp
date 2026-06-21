@@ -11,6 +11,12 @@
 #include <c10/cuda/CUDAStream.h>
 #endif
 
+#if defined(ENABLE_MOORE_API)
+#include <c10/macros/Macros.h>
+#include <c10/musa/MUSAMacros.h>
+#include <c10/musa/MUSAStream.h>
+#endif
+
 namespace infinicore::adaptor {
 inline at::ScalarType to_at_dtype(DataType dtype) {
     switch (dtype) {
@@ -36,7 +42,13 @@ inline at::Device to_at_device(const Device &device) {
         return at::Device(at::kCUDA, device.getIndex());
     } else if (device.getType() == Device::Type::CPU) {
         return at::Device(at::kCPU);
-    } else {
+    }
+#if defined(ENABLE_MOORE_API)
+    else if (device.getType() == Device::Type::MOORE) {
+        return at::Device(at::DeviceType::PrivateUse1, device.getIndex());
+    }
+#endif
+    else {
         throw std::runtime_error("Unsupported device type for ATen");
     }
 }
@@ -46,6 +58,11 @@ at::Tensor to_aten_tensor(const infinicore::Tensor &t);
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
 c10::cuda::CUDAStream get_cuda_stream();
 #endif
+
+#if defined(ENABLE_MOORE_API)
+c10::musa::MUSAStream get_musa_stream();
+#endif
+
 } // namespace infinicore::adaptor
 
 #endif // ENABLE_ATEN

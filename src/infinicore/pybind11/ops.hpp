@@ -34,6 +34,7 @@
 #include "ops/cat.hpp"
 #include "ops/causal_softmax.hpp"
 #include "ops/cdist.hpp"
+#include "ops/conv2d.hpp"
 #include "ops/cross_entropy.hpp"
 #include "ops/diff.hpp"
 #include "ops/digamma.hpp"
@@ -74,6 +75,7 @@
 #include "ops/logical_not.hpp"
 #include "ops/masked_select.hpp"
 #include "ops/matmul.hpp"
+#include "ops/mha.hpp"
 #include "ops/mha_kvcache.hpp"
 #include "ops/mha_varlen.hpp"
 #include "ops/mul.hpp"
@@ -94,9 +96,11 @@
 #include "ops/rotg.hpp"
 #include "ops/rotm.hpp"
 #include "ops/rotmg.hpp"
+#include "ops/rwkv5_wkv.hpp"
 #include "ops/scal.hpp"
 #include "ops/scatter.hpp"
 #include "ops/selu.hpp"
+#include "ops/sigmoid.hpp"
 #include "ops/silu.hpp"
 #include "ops/silu_and_mul.hpp"
 #include "ops/sinh.hpp"
@@ -175,6 +179,7 @@ inline void bind(py::module &m) {
     bind_nrm2(m);
     bind_mha_kvcache(m);
     bind_mha_varlen(m);
+    bind_mha(m);
     bind_hardswish(m);
     bind_hardtanh(m);
     bind_gaussian_nll_loss(m);
@@ -186,6 +191,7 @@ inline void bind(py::module &m) {
     bind_prelu(m);
     bind_random_sample(m);
     bind_cross_entropy(m);
+    bind_conv2d(m);
     bind_hypot(m);
     bind_take(m);
     bind_index_copy(m);
@@ -195,6 +201,7 @@ inline void bind(py::module &m) {
     bind_relu6(m);
     bind_rms_norm(m);
     bind_avg_pool1d(m);
+    bind_sigmoid(m);
     bind_silu(m);
     bind_swiglu(m);
     bind_tan(m);
@@ -209,6 +216,7 @@ inline void bind(py::module &m) {
     bind_rotg(m);
     bind_rotm(m);
     bind_rotmg(m);
+    bind_rwkv5_wkv(m);
     bind_floor_divide(m);
     bind_float_power(m);
     bind_flipud(m);

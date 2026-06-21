@@ -27,6 +27,8 @@ public:
 
     void load(const Tensor &tensor);
 
+    void load_no_sync(const Tensor &tensor);
+
 protected:
     // Tensor parallel configs
     Size tp_dim_;         // dimension partitioned

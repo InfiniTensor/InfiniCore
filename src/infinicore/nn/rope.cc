@@ -3,6 +3,7 @@
 #include "../utils.hpp"
 #include "infinicore/ops.hpp"
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 #include <functional>
 #include <stdexcept>
@@ -12,22 +13,25 @@
 namespace infinicore::nn {
 
 RoPE::RoPE(size_t head_dim,
+           size_t rotary_dim,
            size_t max_seq_len,
            double theta,
            Algo algo,
            const DataType &dtype,
            const Device &device,
-           std::shared_ptr<ScalingConfig> scaling)
-    : head_dim_(head_dim),
+           std::shared_ptr<RopeScalingConfig> scaling)
+    : rotary_dim_(rotary_dim),
+      head_dim_(head_dim),
       max_seq_len_(max_seq_len),
       theta_(theta),
       algo_(algo),
       dtype_(dtype),
       scaling_(scaling) {
-    if (head_dim % 2 != 0) {
-        throw std::invalid_argument("head_dim must be even for RoPE, got " + std::to_string(head_dim));
+    // TODO use head_dim
+    if (rotary_dim % 2 != 0) {
+        throw std::invalid_argument("rotary_dim must be even for RoPE, got " + std::to_string(rotary_dim));
     }
-
+    assert((rotary_dim > 0) && (rotary_dim <= head_dim_));
     device_ = device;
 
     // Initialize cache tables
@@ -35,14 +39,14 @@ RoPE::RoPE(size_t head_dim,
 }
 
 void RoPE::initialize_cache() {
-    size_t cache_dim = head_dim_ / 2;
+    size_t cache_dim = rotary_dim_ / 2;
 
     // Create sin and cos cache tables: [max_seq_len, cache_dim]
     INFINICORE_NN_BUFFER_INIT(sin_cache, ({max_seq_len_, cache_dim}, dtype_, device_));
     INFINICORE_NN_BUFFER_INIT(cos_cache, ({max_seq_len_, cache_dim}, dtype_, device_));
 
     // Pre-compute sin and cos values
-    // Frequency generation always uses GPT-J style (theta^(-2j/head_dim)).
+    // Frequency generation always uses GPT-J style (theta^(-2j/rotary_dim)).
     // The rotation algorithm (algo_) controls how dimensions are paired in the kernel.
 
     // Compute on CPU first, then copy to device
@@ -53,33 +57,20 @@ void RoPE::initialize_cache() {
     std::vector<float> cos_data(max_seq_len_ * cache_dim);
 
     for (size_t pos = 0; pos < max_seq_len_; pos++) {
-        for (size_t j = 0; j < cache_dim; j++) {
-            // GPT-J style inverse frequency: theta^(-2j/head_dim)
-            // Compute directly in float to avoid double->float casting
-            float inv_freq;
-            float table_factor = 1.0f;
-            if (scaling_ == nullptr) {
-                inv_freq = 1.0f / std::pow(static_cast<float>(theta_), 2.0f * static_cast<float>(j) / static_cast<float>(head_dim_));
-            } else if (scaling_->type() == ScalingType::LONGROPE) {
-                std::shared_ptr<LongRopeConfig> lr = std::dynamic_pointer_cast<LongRopeConfig>(scaling_);
-                table_factor = lr->factor();
-                float _ext;
-                if (pos < lr->original_max_position_embeddings()) {
-                    _ext = lr->short_factor()[j];
-                } else {
-                    _ext = lr->long_factor()[j];
-                }
-                inv_freq = 1.0f / (_ext * std::pow(static_cast<float>(theta_), 2.0f * static_cast<float>(j) / static_cast<float>(head_dim_)));
-            } else {
-                inv_freq = 1.0f / std::pow(static_cast<float>(theta_), 2.0f * static_cast<float>(j) / static_cast<float>(head_dim_));
-            }
+        for (size_t dim_idx = 0; dim_idx < cache_dim; dim_idx++) {
+            // 1. Base inverse frequency (shared across all RoPE types)
+            float base_inv_freq = 1.0f / std::pow(static_cast<float>(theta_), 2.0f * static_cast<float>(dim_idx) / static_cast<float>(rotary_dim_));
 
-            // Compute angle: position * inverse_frequency
-            float angle = static_cast<float>(pos) * inv_freq;
+            // 2. Polymorphic scaling resolution
+            // Passing pre-computed base_inv_freq avoids redundant pow() calculations in subclasses
+            float freq_scale = scaling_ ? scaling_->get_freq_scale(pos, dim_idx, base_inv_freq) : 1.0f;
+            float mag_scale = scaling_ ? scaling_->get_magnitude_scale(pos, dim_idx, base_inv_freq) : 1.0f;
 
-            // Compute sin and cos directly on float
-            sin_data[pos * cache_dim + j] = std::sin(angle) * table_factor;
-            cos_data[pos * cache_dim + j] = std::cos(angle) * table_factor;
+            // 3. Compute final angle and sin/cos values
+            float angle = static_cast<float>(pos) * base_inv_freq * freq_scale;
+
+            sin_data[pos * cache_dim + dim_idx] = std::sin(angle) * mag_scale;
+            cos_data[pos * cache_dim + dim_idx] = std::cos(angle) * mag_scale;
         }
     }
 
@@ -131,23 +122,34 @@ void RoPE::initialize_cache() {
 }
 
 Tensor RoPE::forward(const Tensor &x, const Tensor &pos, bool in_place) const {
+    Tensor y;
     if (in_place) {
-        Tensor y = Tensor(x);
-        op::rope_(y, x, pos, sin_cache_, cos_cache_, algo_);
-        return y;
+        y = Tensor(x);
+    } else {
+        y = Tensor::empty(x->shape(), x->dtype(), x->device());
+        if (rotary_dim_ < head_dim_) {
+            y->copy_from(x);
+        }
     }
 
-    return op::rope(x, pos, sin_cache_, cos_cache_, algo_);
+    size_t ndim = x->ndim();
+    op::rope_(y->narrow({{ndim - 1, 0, rotary_dim_}}),
+              x->narrow({{ndim - 1, 0, rotary_dim_}}),
+              pos, sin_cache_, cos_cache_, algo_);
+    return y;
 }
 
 Tensor RoPE::forward(const Tensor &y, const Tensor &x, const Tensor &pos) const {
-    op::rope_(y, x, pos, sin_cache_, cos_cache_, algo_);
+    size_t ndim = x->ndim();
+    op::rope_(y->narrow({{ndim - 1, 0, rotary_dim_}}),
+              x->narrow({{ndim - 1, 0, rotary_dim_}}),
+              pos, sin_cache_, cos_cache_, algo_);
     return y;
 }
 
 std::string RoPE::extra_repr() const {
     std::string algo_str = (algo_ == Algo::GPT_J) ? "GPT_J" : "GPT_NEOX";
-    return "RoPE(head_dim=" + std::to_string(head_dim_) + ", max_seq_len=" + std::to_string(max_seq_len_) + ", theta=" + std::to_string(theta_) + ", algo=" + algo_str + ", dtype=" + std::to_string(static_cast<int>(dtype_)) + ")";
+    return "RoPE(head_dim=" + std::to_string(head_dim_) + ", rotary_dim=" + std::to_string(rotary_dim_) + ", max_seq_len=" + std::to_string(max_seq_len_) + ", theta=" + std::to_string(theta_) + ", algo=" + algo_str + ", dtype=" + std::to_string(static_cast<int>(dtype_)) + ")";
 }
 
 } // namespace infinicore::nn
