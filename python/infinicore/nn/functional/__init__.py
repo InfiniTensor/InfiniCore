@@ -9,6 +9,8 @@ from .binary_cross_entropy_with_logits import binary_cross_entropy_with_logits
 from .causal_softmax import causal_softmax
 from .embedding import embedding
 from .flash_attention import flash_attention
+from .fractional_max_pool2d import fractional_max_pool2d
+from .fractional_max_pool3d import fractional_max_pool3d
 from .gaussian_nll_loss import gaussian_nll_loss
 from .hardswish import hardswish
 from .hardtanh import hardtanh
@@ -36,6 +38,7 @@ from .softsign import softsign
 from .swiglu import swiglu
 from .tanhshrink import tanhshrink
 from .triplet_margin_loss import triplet_margin_loss
+from .multilabel_margin_loss import  multilabel_margin_loss
 from .triplet_margin_with_distance_loss import triplet_margin_with_distance_loss
 from .unfold import unfold
 from .upsample_bilinear import upsample_bilinear
@@ -46,6 +49,8 @@ __all__ = [
     "causal_softmax",
     "embedding",
     "flash_attention",
+    "fractional_max_pool2d",
+    "fractional_max_pool3d",
     "gaussian_nll_loss",
     "interpolate",
     "linear",
@@ -80,6 +85,7 @@ __all__ = [
     "hardswish",
     "hardtanh",
     "avg_pool1d",
+    "multilabel_margin_loss",
     "swiglu",
     "linear_w8a8i8",
     "silu_and_mul",
