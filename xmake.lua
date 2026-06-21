@@ -266,6 +266,19 @@ if has_config("ccl") then
     add_defines("ENABLE_CCL")
 end
 
+-- InfiniOps
+option("infiniops")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Whether to use InfiniOps kernels where adapters are available")
+option_end()
+
+option("infiniops-root")
+    set_default("submodules/InfiniOps")
+    set_showmenu(true)
+    set_description("Path to the InfiniOps repository used by --infiniops")
+option_end()
+
 -- Mutual Awareness Analyzer
 option("mutual-awareness")
     set_default(false)
@@ -352,6 +365,11 @@ target_end()
 target("infiniop")
     set_kind("shared")
     add_deps("infinirt")
+
+    if has_config("nv-gpu") then
+        local cuda_root = os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH") or get_config("cuda") or "/usr/local/cuda"
+        add_includedirs(cuda_root .. "/include")
+    end
 
     if has_config("cpu") then
         add_deps("infiniop-cpu")
@@ -457,6 +475,38 @@ target("infinicore_c_api")
     after_build(function (target) print(YELLOW .. "[Congratulations!] Now you can install the libraries with \"xmake install\"" .. NC) end)
 target_end()
 
+target("infiniops_external")
+    set_kind("phony")
+    set_default(false)
+
+    on_build(function (target)
+        if not has_config("infiniops") then
+            return
+        end
+        local infiniops_root = path.absolute(get_config("infiniops-root") or "submodules/InfiniOps", os.projectdir())
+        local infiniops_builddir = path.join(infiniops_root, "build")
+        local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
+        local cmake_config_args = {
+            "-S", infiniops_root,
+            "-B", infiniops_builddir,
+            "-DWITH_NVIDIA=ON",
+            "-DGENERATE_OPERATOR_CALL_INSTANTIATIONS=ON",
+            "-DGENERATE_PYTHON_BINDINGS=OFF",
+            "-DCMAKE_BUILD_TYPE=Release"
+        }
+        local infiniops_ops = os.getenv("INFINI_OPS_OPS")
+        if infiniops_ops and #infiniops_ops > 0 then
+            table.insert(cmake_config_args, "-DINFINI_OPS_OPS=" .. infiniops_ops)
+        end
+        os.execv("cmake", cmake_config_args)
+        -- The first configure regenerates operator_call_instantiations_*.cc.
+        -- Reconfigure once so CMake's globbed infiniops target sees every shard.
+        os.execv("cmake", cmake_config_args)
+        os.execv("cmake", {"--build", infiniops_builddir, "--target", "infiniops"})
+        os.execv("cmake", {"--install", infiniops_builddir, "--prefix", INFINI_ROOT})
+    end)
+target_end()
+
 target("infinicore_cpp_api")
     set_kind("shared")
     add_deps("infiniop", "infinirt", "infiniccl")
@@ -467,6 +517,27 @@ target("infinicore_cpp_api")
 
     add_includedirs("include")
     add_includedirs(INFINI_ROOT.."/include", { public = true })
+    if has_config("nv-gpu") then
+        local cuda_root = os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH") or get_config("cuda") or "/usr/local/cuda"
+        add_includedirs(cuda_root .. "/include")
+    end
+    if has_config("infiniops") then
+        local infiniops_root = path.absolute(get_config("infiniops-root") or "submodules/InfiniOps", os.projectdir())
+        local infiniops_builddir = path.join(infiniops_root, "build")
+        if not os.isdir(infiniops_root) then
+            raise("InfiniOps root not found: " .. infiniops_root)
+        end
+        if not has_config("nv-gpu") then
+            raise("InfiniOps integration currently has adapters only for NVIDIA")
+        end
+        add_deps("infiniops_external")
+        add_defines("ENABLE_INFINIOPS_API")
+        add_includedirs(infiniops_root .. "/src", infiniops_root .. "/include", infiniops_root .. "/generated/include", infiniops_root .. "/generated/bindings")
+        add_linkdirs(infiniops_builddir .. "/src")
+        add_links("infiniops")
+        add_rpathdirs(infiniops_builddir .. "/src")
+        add_installfiles(infiniops_builddir .. "/src/libinfiniops.so", {prefixdir = "lib"})
+    end
 
     add_linkdirs(INFINI_ROOT.."/lib")
     add_links("infiniop", "infinirt", "infiniccl")
@@ -674,6 +745,18 @@ target("_infinicore")
     add_links("infiniop", "infinirt", "infiniccl")
 
     add_files("src/infinicore/pybind11/**.cc")
+
+    if has_config("infiniops") then
+        after_install(function (target)
+            local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
+            local infiniops_root = path.absolute(get_config("infiniops-root") or "submodules/InfiniOps", os.projectdir())
+            local infiniops_lib = path.join(infiniops_root, "build", "src", "libinfiniops.so")
+            os.mkdir(path.join(INFINI_ROOT, "lib"))
+            os.cp(infiniops_lib, path.join(INFINI_ROOT, "lib"))
+            os.mkdir(path.join(os.projectdir(), "python", "infinicore", "lib"))
+            os.cp(infiniops_lib, path.join(os.projectdir(), "python", "infinicore", "lib"))
+        end)
+    end
 
     set_installdir("python/infinicore")
 target_end()

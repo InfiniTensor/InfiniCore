@@ -1,0 +1,31 @@
+#ifndef __GELU_BANG_INTERNAL_H__
+#define __GELU_BANG_INTERNAL_H__
+
+#include "../../../elementwise/bang/elementwise_bang_kernel.h"
+#include "bang.h"
+#include "bang_device_functions.h"
+#include <cmath>
+#include <type_traits>
+
+typedef struct GeluOp {
+public:
+    static constexpr size_t num_inputs = 1;
+    template <typename T>
+    __mlu_device__ void operator()(T *out, const T *input, const T *unused, size_t num_elements) const {
+        (void)unused;
+        constexpr float inv_sqrt2 = 0.70710678118654752440f;
+        for (size_t i = 0; i < num_elements; ++i) {
+            float x = static_cast<float>(input[i]);
+            float y = 0.5f * x * (1.0f + erff(x * inv_sqrt2));
+            out[i] = static_cast<T>(y);
+        }
+    }
+} GeluOp;
+
+LAUNCH_ELEMENTWISE_KERNEL_IMPL(Gelu, GeluOp)
+
+LAUNCH_ELEMENTWISE_KERNEL_INSTANTIATE(Gelu, half)
+LAUNCH_ELEMENTWISE_KERNEL_INSTANTIATE(Gelu, bfloat16_t)
+LAUNCH_ELEMENTWISE_KERNEL_INSTANTIATE(Gelu, float)
+
+#endif // __GELU_BANG_INTERNAL_H__

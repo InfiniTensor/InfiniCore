@@ -32,7 +32,8 @@ private:
 } // namespace
 
 struct PlannedMeta {
-    graph::GraphTensor out, q, k, v, cum_seqlens_q, cum_seqlens_k, block_table;
+    graph::GraphTensor out, q, k, v, cum_seqlens_q, cum_seqlens_k;
+    std::optional<graph::GraphTensor> block_table;
     int max_seqlen_q, max_seqlen_k;
     std::optional<graph::GraphTensor> alibi_slopes;
     float scale;
@@ -44,7 +45,7 @@ void *plan(Tensor out,
            const Tensor &v,
            const Tensor &cum_seqlens_q,
            const Tensor &cum_seqlens_k,
-           const Tensor &block_table,
+           std::optional<Tensor> block_table,
            int max_seqlen_q,
            int max_seqlen_k,
            std::optional<Tensor> alibi_slopes,
@@ -56,7 +57,7 @@ void *plan(Tensor out,
         graph::GraphTensor(v),
         graph::GraphTensor(cum_seqlens_q),
         graph::GraphTensor(cum_seqlens_k),
-        graph::GraphTensor(block_table),
+        block_table ? std::optional<graph::GraphTensor>(graph::GraphTensor(*block_table)) : std::nullopt,
         max_seqlen_q,
         max_seqlen_k,
         alibi_slopes ? std::optional<graph::GraphTensor>(graph::GraphTensor(*alibi_slopes)) : std::nullopt,
@@ -69,6 +70,10 @@ void run(void *planned_meta) {
         throw std::runtime_error(
             "[mha_varlen/moore] ALiBi not supported by mate flash_attn_varlen");
     }
+    if (!p->block_table.has_value()) {
+        throw std::runtime_error(
+            "[mha_varlen/moore] dense KV is not supported by mate flash_attn_varlen");
+    }
 
     LocalMUSAStreamGuard guard(infinicore::adaptor::get_musa_stream());
 
@@ -78,7 +83,7 @@ void run(void *planned_meta) {
     auto v_cache = infinicore::adaptor::to_aten_tensor(p->v);
     auto cu_seqlens_q = infinicore::adaptor::to_aten_tensor(p->cum_seqlens_q);
     auto cu_seqlens_k = infinicore::adaptor::to_aten_tensor(p->cum_seqlens_k);
-    auto block_table = infinicore::adaptor::to_aten_tensor(p->block_table);
+    auto block_table = infinicore::adaptor::to_aten_tensor(*p->block_table);
 
     const int64_t block_size = k_cache.size(1);
 

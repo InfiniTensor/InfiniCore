@@ -5,6 +5,20 @@
 	path = third_party/nlohmann_json
 	url = https://github.com/nlohmann/json.git
 	branch = master
+[submodule "third_party/flash-attention"]
+	path = third_party/flash-attention
+	url = https://github.com/Dao-AILab/flash-attention.git
+	ignore = untracked
+	update = none
+[submodule "third_party/cutlass"]
+	path = third_party/cutlass
+	url = https://github.com/NVIDIA/cutlass.git
+	ignore = untracked
+	update = none
+[submodule "submodules/InfiniRT"]
+	path = submodules/InfiniRT
+	url = https://github.com/InfiniTensor/InfiniRT.git
+	branch = master
 [submodule "submodules/InfiniOps"]
 	path = submodules/InfiniOps
 	url = https://github.com/InfiniTensor/InfiniOps.git

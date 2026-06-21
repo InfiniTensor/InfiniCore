@@ -1,3 +1,5 @@
+from infinicore.ops.conv2d import conv2d
+
 from .adaptive_avg_pool1d import adaptive_avg_pool1d
 from .adaptive_avg_pool3d import adaptive_avg_pool3d
 from .adaptive_max_pool1d import adaptive_max_pool1d
@@ -42,6 +44,7 @@ from .unfold import unfold
 from .upsample_bilinear import upsample_bilinear
 
 __all__ = [
+    "conv2d",
     "adaptive_max_pool1d",
     "causal_softmax",
     "embedding",

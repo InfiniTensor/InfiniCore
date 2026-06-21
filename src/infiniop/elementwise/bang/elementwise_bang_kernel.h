@@ -98,7 +98,11 @@ __mlu_device__ void launchOp(
         // 2. Execute operation
         Tdata *output_buffer = aligned_buf + N * max_batch;
         Op op;
-        op(output_buffer, input_buffers[0], input_buffers[1], curr_batch, args...);
+        if constexpr (N == 1) {
+            op(output_buffer, input_buffers[0], input_buffers[0], curr_batch, args...);
+        } else {
+            op(output_buffer, input_buffers[0], input_buffers[1], curr_batch, args...);
+        }
         __sync_compute();
 
         // 3. Write back results

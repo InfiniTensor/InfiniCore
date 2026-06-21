@@ -4,6 +4,7 @@ if CUDNN_ROOT ~= nil then
 end
 
 local CUTLASS_ROOT = os.getenv("CUTLASS_ROOT") or os.getenv("CUTLASS_HOME") or os.getenv("CUTLASS_PATH")
+local TVM_ROOT = os.getenv("TVM_ROOT") or os.getenv("TVM_HOME") or os.getenv("TVM_PATH")
 
 local FLASH_ATTN_ROOT = get_config("flash-attn")
 
@@ -50,6 +51,67 @@ target("infiniop-nvidia")
 
             target:add("linkdirs", path.directory(path.directory(nvcc_path)) .. "/lib64/stubs")
             target:add("links", "cuda")
+        end
+
+        -- Auto-detect CUDA arch when no explicit --cuda_arch
+        local arch_opt = get_config("cuda_arch")
+        local script_path = path.join(
+            os.projectdir(),
+            "src/infiniop/ops/awq_marlin_gemm/nvidia/generate_kernels.py"
+        )
+
+        local header_path = path.join(
+            os.projectdir(),
+            "src/infiniop/ops/awq_marlin_gemm/nvidia/kernel_selector.h"
+        )
+
+        local cuda_arch_num = nil
+
+        if arch_opt and type(arch_opt) == "string" then
+            cuda_arch_num = arch_opt:match("sm_(%d+)")
+        end
+
+        local generate_arch =
+            cuda_arch_num and (tonumber(cuda_arch_num) / 10) or 8.0
+
+        if not os.isfile(header_path) then
+
+            -- save current directory
+            local oldir = os.curdir()
+
+            -- switch cwd to script directory
+            os.cd(path.directory(script_path))
+
+            -- IMPORTANT:
+            -- try = true prevents xmake abort
+            local ok, errors = os.execv(
+                "python",
+                {
+                    script_path,
+                    tostring(generate_arch)
+                },
+                {
+                    try = true
+                }
+            )
+
+            -- restore cwd
+            os.cd(oldir)
+
+            if not ok then
+                print("generate_kernels.py returned non-zero exit code")
+                if errors then
+                    print(errors)
+                end
+            end
+
+            
+        end
+
+        if os.isfile(header_path) then
+            print("AWQ Marlin kernels generated successfully!")
+        else
+            raise("Failed to generate AWQ Marlin kernels: header missing!")
         end
 
         -- CUDA arch: explicit --cuda_arch > nvidia-smi auto-detect > native
@@ -115,6 +177,39 @@ target("infiniop-nvidia")
         add_includedirs(CUTLASS_ROOT, CUTLASS_ROOT .. "/include", CUTLASS_ROOT .. "/tools/util/include")
     end
 
+    local arch_opt = get_config("cuda_arch")
+    if TVM_ROOT ~= nil then
+        add_defines("ENABLE_TVM_API")
+        add_includedirs(TVM_ROOT, TVM_ROOT .. "/include", TVM_ROOT .. "/3rdparty/dlpack/include/")
+        function parse_sgl_cuda_arch(arch)
+    
+            local num = arch:match("sm_(%d+)")
+            if not num then
+                return nil
+            end
+
+            return tonumber(num) * 10
+        end
+        if arch_opt then
+            local sgl_arch = parse_sgl_cuda_arch(arch_opt)
+            if sgl_arch then
+                add_defines("SGL_CUDA_ARCH=" .. sgl_arch)
+            else
+                print("Invalid cuda_arch:", arch_opt)
+            end
+        else
+            error("tvm complie marlin needs cuda_arch")
+        end
+    end
+    
+    if arch_opt and type(arch_opt) == "string" then
+        for _, arch in ipairs(arch_opt:split(",")) do
+            arch = arch:trim()
+            local compute = arch:gsub("sm_", "compute_")
+            add_cuflags("-gencode=arch=" .. compute .. ",code=" .. arch)
+        end
+    end
+
     set_languages("cxx17")
     add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu", "../src/infiniop/ops/*/*/nvidia/*.cu")
 
@@ -156,8 +251,8 @@ target("infiniccl-nvidia")
         add_links("cudart")
 
         if not is_plat("windows") then
-            add_cuflags("-Xcompiler=-fPIC")
-            add_culdflags("-Xcompiler=-fPIC")
+            add_cuflags("-Xcompiler=-fPIC", {force = true})
+            add_culdflags("-Xcompiler=-fPIC", {force = true})
             add_cxflags("-fPIC")
             add_cxxflags("-fPIC")
 

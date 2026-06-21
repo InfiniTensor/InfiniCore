@@ -229,6 +229,40 @@ __global__ void take_remaining(const uint32_t *cur_vals, const int32_t *cur_idx,
     }
 }
 
+__global__ void sort_selected_rowwise(const uint32_t *sel_vals, const int32_t *sel_idx,
+                                      uint32_t *sorted_vals, int32_t *sorted_idx,
+                                      size_t rows, size_t k, bool largest) {
+    size_t row = blockIdx.x;
+    if (row >= rows || threadIdx.x != 0) {
+        return;
+    }
+
+    const size_t base = row * k;
+    for (size_t i = 0; i < k; ++i) {
+        sorted_vals[base + i] = sel_vals[base + i];
+        sorted_idx[base + i] = sel_idx[base + i];
+    }
+
+    for (size_t i = 0; i < k; ++i) {
+        size_t best = i;
+        for (size_t j = i + 1; j < k; ++j) {
+            bool take = largest ? (sorted_vals[base + j] > sorted_vals[base + best])
+                                : (sorted_vals[base + j] < sorted_vals[base + best]);
+            if (take) {
+                best = j;
+            }
+        }
+        if (best != i) {
+            uint32_t value = sorted_vals[base + i];
+            sorted_vals[base + i] = sorted_vals[base + best];
+            sorted_vals[base + best] = value;
+            int32_t index = sorted_idx[base + i];
+            sorted_idx[base + i] = sorted_idx[base + best];
+            sorted_idx[base + best] = index;
+        }
+    }
+}
+
 template <typename Tdata>
 __global__ void scatter_to_output(const Tdata *input, const int32_t *sel_idx, Tdata *values_out, int32_t *indices_out,
                                   size_t rows, size_t k, size_t ndim, size_t dim, const size_t *input_shape, const ptrdiff_t *input_strides,

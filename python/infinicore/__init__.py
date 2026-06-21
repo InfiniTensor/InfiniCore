@@ -76,6 +76,7 @@ from infinicore.ops.block_diag import block_diag
 from infinicore.ops.broadcast_to import broadcast_to
 from infinicore.ops.cat import cat
 from infinicore.ops.cdist import cdist
+from infinicore.ops.conv2d import conv2d
 from infinicore.ops.cross_entropy import cross_entropy
 from infinicore.ops.diff import diff
 from infinicore.ops.digamma import digamma
@@ -227,6 +228,7 @@ __all__ = [
     "bilinear",
     "fmod",
     "cat",
+    "conv2d",
     "inner",
     "masked_select",
     "logaddexp",

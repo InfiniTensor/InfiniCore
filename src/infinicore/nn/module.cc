@@ -21,18 +21,51 @@ std::unordered_map<std::string, Parameter> Module::state_dict() const {
     return result;
 }
 
+std::vector<std::string> Module::state_dict_keys() const {
+    std::vector<std::string> result;
+    collect_all_parameter_names(result, "");
+    return result;
+}
+
 void Module::load_state_dict(const std::unordered_map<std::string, Tensor> &_state_dict) {
     load_state_dict_recursively(_state_dict, "");
 }
 
 void Module::load_parameter(const std::string &name, const Tensor &param) {
-    auto all_params = state_dict();
-    auto existing_param = get_state_dict_parameter(all_params, name);
-    try {
-        existing_param.load(param);
-    } catch (const std::exception &e) {
-        throw std::runtime_error("Error loading parameter '" + name + "'. \n" + e.what());
+    auto param_it = parameters_.find(name);
+    if (param_it != parameters_.end()) {
+        try {
+            param_it->second.load(param);
+        } catch (const std::exception &e) {
+            throw std::runtime_error("Error loading parameter '" + name + "'. \n" + e.what());
+        }
+        return;
     }
+
+    std::shared_ptr<Module> matched_submodule;
+    std::string matched_prefix;
+    for (const auto &[sub_name, submodule] : submodules_) {
+        if (name.size() <= sub_name.size() || name.compare(0, sub_name.size(), sub_name) != 0 || name[sub_name.size()] != '.') {
+            continue;
+        }
+        if (sub_name.size() > matched_prefix.size()) {
+            matched_prefix = sub_name;
+            matched_submodule = submodule;
+        }
+    }
+
+    if (matched_submodule) {
+        try {
+            matched_submodule->load_parameter(name.substr(matched_prefix.size() + 1), param);
+        } catch (const std::exception &e) {
+            throw std::runtime_error("Error loading parameter '" + name + "'. \n" + e.what());
+        }
+        return;
+    }
+
+    spdlog::debug("load_parameter: Parameter '{}' not found. Available direct params={}, submodules={}",
+                  name, parameters_.size(), submodules_.size());
+    throw std::runtime_error("Parameter '" + name + "' not found in module.");
 }
 
 void Module::load_parameters_no_sync(const std::unordered_map<std::string, Tensor> &params) {
@@ -109,6 +142,17 @@ void Module::collect_all_parameters(std::unordered_map<std::string, Parameter> &
     for (const auto &[sub_name, submodule] : submodules_) {
         std::string sub_prefix = prefix.empty() ? sub_name : prefix + "." + sub_name;
         submodule->collect_all_parameters(all_params, sub_prefix);
+    }
+}
+
+void Module::collect_all_parameter_names(std::vector<std::string> &all_names, const std::string &prefix) const {
+    for (const auto &[param_name, _] : parameters_) {
+        all_names.push_back(prefix.empty() ? param_name : prefix + "." + param_name);
+    }
+
+    for (const auto &[sub_name, submodule] : submodules_) {
+        std::string sub_prefix = prefix.empty() ? sub_name : prefix + "." + sub_name;
+        submodule->collect_all_parameter_names(all_names, sub_prefix);
     }
 }
 

@@ -1,0 +1,597 @@
+#include <cuda_bf16.h>
+#include <cuda_fp16.h>
+#include <cuda_runtime.h>
+
+#include <cmath>
+#include <cstdint>
+#include <cstdlib>
+#include <cstring>
+#include <type_traits>
+
+#include "../../../devices/nvidia/nvidia_common.cuh"
+#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
+#include "../cuda/kernel_v2.cuh"
+
+namespace op::paged_attention::nvidia {
+namespace {
+constexpr int kMlaQkHeadSize = 576;
+constexpr int kMlaValueSize = 512;
+constexpr int kWarpSize = 32;
+constexpr int kQDimsPerThread = kMlaQkHeadSize / kWarpSize;
+constexpr int kVDimsPerThread = kMlaValueSize / kWarpSize;
+
+template <typename Tindex, typename Tdata>
+INFINIOP_CUDA_KERNEL flashAttentionDecodeMlaHd576V512Warp(
+    Tdata *out_,
+    const Tdata *q_,
+    const Tdata *k_cache_,
+    const Tdata *v_cache_,
+    const Tindex *block_tables_,
+    const Tindex *cache_lens_,
+    const float *alibi_slopes_,
+    size_t num_kv_heads,
+    float scale,
+    size_t max_num_blocks_per_seq,
+    size_t page_block_size,
+    ptrdiff_t q_stride,
+    ptrdiff_t k_batch_stride,
+    ptrdiff_t k_row_stride,
+    ptrdiff_t k_head_stride,
+    ptrdiff_t v_batch_stride,
+    ptrdiff_t v_row_stride,
+    ptrdiff_t v_head_stride,
+    ptrdiff_t o_stride,
+    ptrdiff_t o_head_stride) {
+
+    const int seq_idx = blockIdx.y;
+    const int head_idx = blockIdx.x;
+    const int lane = threadIdx.x;
+
+    const int seq_len = static_cast<int>(cache_lens_[seq_idx]);
+    if (seq_len <= 0) {
+        return;
+    }
+
+    const int num_heads = gridDim.x;
+    const int num_queries_per_kv = num_heads / static_cast<int>(num_kv_heads);
+    const int kv_head_idx = head_idx / num_queries_per_kv;
+
+    const float alibi_slope = (alibi_slopes_ == nullptr) ? 0.0f : alibi_slopes_[head_idx];
+    constexpr float kLog2e = 1.4426950408889634f;
+    const float scale_log2 = scale * kLog2e;
+
+    const Tindex *block_table = block_tables_ + seq_idx * static_cast<int>(max_num_blocks_per_seq);
+    const Tdata *q_ptr = q_ + seq_idx * q_stride + head_idx * kMlaQkHeadSize;
+    Tdata *out_ptr = out_ + seq_idx * o_stride + head_idx * o_head_stride;
+
+    float q_reg[kQDimsPerThread];
+    float acc[kVDimsPerThread];
+#pragma unroll
+    for (int i = 0; i < kQDimsPerThread; ++i) {
+        const int dim = lane * kQDimsPerThread + i;
+        q_reg[i] = static_cast<float>(q_ptr[dim]);
+    }
+#pragma unroll
+    for (int i = 0; i < kVDimsPerThread; ++i) {
+        acc[i] = 0.0f;
+    }
+
+#if defined(__CUDA_ARCH__)
+    float2 q_reg2[kQDimsPerThread / 2];
+    if constexpr (std::is_same_v<Tdata, half>) {
+        const int dim_base = lane * kQDimsPerThread;
+        const half2 *q2 = reinterpret_cast<const half2 *>(q_ptr + dim_base);
+#pragma unroll
+        for (int j = 0; j < kQDimsPerThread / 2; ++j) {
+            q_reg2[j] = __half22float2(q2[j]);
+        }
+    }
+    if constexpr (std::is_same_v<Tdata, __nv_bfloat16>) {
+        const int dim_base = lane * kQDimsPerThread;
+        const __nv_bfloat162 *q2 = reinterpret_cast<const __nv_bfloat162 *>(q_ptr + dim_base);
+#pragma unroll
+        for (int j = 0; j < kQDimsPerThread / 2; ++j) {
+            q_reg2[j] = __bfloat1622float2(q2[j]);
+        }
+    }
+#endif
+
+    float m = -INFINITY;
+    float l = 0.0f;
+    const int pbs = static_cast<int>(page_block_size);
+
+    int t_base = 0;
+    for (int logical_block = 0; t_base < seq_len; ++logical_block, t_base += pbs) {
+        int physical_block = 0;
+        if (lane == 0) {
+            physical_block = static_cast<int>(block_table[logical_block]);
+        }
+        physical_block = __shfl_sync(0xffffffff, physical_block, 0);
+
+        const Tdata *k_base = k_cache_ + physical_block * k_batch_stride + kv_head_idx * k_head_stride;
+        const Tdata *v_base = v_cache_ + physical_block * v_batch_stride + kv_head_idx * v_head_stride;
+        const int token_end = min(pbs, seq_len - t_base);
+        for (int token_in_block = 0; token_in_block < token_end; ++token_in_block) {
+            const int t = t_base + token_in_block;
+            const Tdata *k_ptr = k_base + token_in_block * k_row_stride;
+            const Tdata *v_ptr = v_base + token_in_block * v_row_stride;
+
+            float qk = 0.0f;
+#if defined(__CUDA_ARCH__)
+            if constexpr (std::is_same_v<Tdata, half>) {
+                const int dim_base = lane * kQDimsPerThread;
+                const half2 *k2 = reinterpret_cast<const half2 *>(k_ptr + dim_base);
+#pragma unroll
+                for (int j = 0; j < kQDimsPerThread / 2; ++j) {
+                    const float2 qf = q_reg2[j];
+                    const float2 kf = __half22float2(k2[j]);
+                    qk += qf.x * kf.x + qf.y * kf.y;
+                }
+            } else if constexpr (std::is_same_v<Tdata, __nv_bfloat16>) {
+                const int dim_base = lane * kQDimsPerThread;
+                const __nv_bfloat162 *k2 = reinterpret_cast<const __nv_bfloat162 *>(k_ptr + dim_base);
+#pragma unroll
+                for (int j = 0; j < kQDimsPerThread / 2; ++j) {
+                    const float2 qf = q_reg2[j];
+                    const float2 kf = __bfloat1622float2(k2[j]);
+                    qk += qf.x * kf.x + qf.y * kf.y;
+                }
+            } else
+#endif
+            {
+#pragma unroll
+                for (int i = 0; i < kQDimsPerThread; ++i) {
+                    const int dim = lane * kQDimsPerThread + i;
+                    qk += q_reg[i] * static_cast<float>(k_ptr[dim]);
+                }
+            }
+            qk = op::paged_attention::cuda::warpReduceSum(qk);
+
+            float alpha = 1.0f;
+            float beta = 0.0f;
+            if (lane == 0) {
+                float score = qk * scale_log2;
+                if (alibi_slope != 0.0f) {
+                    score += (alibi_slope * static_cast<float>(t - (seq_len - 1))) * kLog2e;
+                }
+                const float m_new = fmaxf(m, score);
+                alpha = exp2f(m - m_new);
+                beta = exp2f(score - m_new);
+                l = l * alpha + beta;
+                m = m_new;
+            }
+            alpha = __shfl_sync(0xffffffff, alpha, 0);
+            beta = __shfl_sync(0xffffffff, beta, 0);
+
+#if defined(__CUDA_ARCH__)
+            if constexpr (std::is_same_v<Tdata, half>) {
+                const int dim_base = lane * kVDimsPerThread;
+                const half2 *v2 = reinterpret_cast<const half2 *>(v_ptr + dim_base);
+#pragma unroll
+                for (int j = 0; j < kVDimsPerThread / 2; ++j) {
+                    const float2 vf = __half22float2(v2[j]);
+                    acc[j * 2 + 0] = acc[j * 2 + 0] * alpha + beta * vf.x;
+                    acc[j * 2 + 1] = acc[j * 2 + 1] * alpha + beta * vf.y;
+                }
+            } else if constexpr (std::is_same_v<Tdata, __nv_bfloat16>) {
+                const int dim_base = lane * kVDimsPerThread;
+                const __nv_bfloat162 *v2 = reinterpret_cast<const __nv_bfloat162 *>(v_ptr + dim_base);
+#pragma unroll
+                for (int j = 0; j < kVDimsPerThread / 2; ++j) {
+                    const float2 vf = __bfloat1622float2(v2[j]);
+                    acc[j * 2 + 0] = acc[j * 2 + 0] * alpha + beta * vf.x;
+                    acc[j * 2 + 1] = acc[j * 2 + 1] * alpha + beta * vf.y;
+                }
+            } else
+#endif
+            {
+#pragma unroll
+                for (int i = 0; i < kVDimsPerThread; ++i) {
+                    const int dim = lane * kVDimsPerThread + i;
+                    acc[i] = acc[i] * alpha + beta * static_cast<float>(v_ptr[dim]);
+                }
+            }
+        }
+    }
+
+    float inv_l = 0.0f;
+    if (lane == 0) {
+        inv_l = 1.0f / (l + 1e-6f);
+    }
+    inv_l = __shfl_sync(0xffffffff, inv_l, 0);
+
+#pragma unroll
+    for (int i = 0; i < kVDimsPerThread; ++i) {
+        const int dim = lane * kVDimsPerThread + i;
+        const float o = acc[i] * inv_l;
+        if constexpr (std::is_same_v<Tdata, half>) {
+            out_ptr[dim] = __float2half_rn(o);
+        } else if constexpr (std::is_same_v<Tdata, __nv_bfloat16>) {
+            out_ptr[dim] = __float2bfloat16_rn(o);
+        } else {
+            out_ptr[dim] = static_cast<Tdata>(o);
+        }
+    }
+}
+
+template <typename Tindex, typename Tdata>
+INFINIOP_CUDA_KERNEL flashAttentionDecodeMlaHd576V512SplitKv(
+    float *partial_acc,
+    float *partial_m,
+    float *partial_l,
+    const Tdata *q_,
+    const Tdata *k_cache_,
+    const Tdata *v_cache_,
+    const Tindex *block_tables_,
+    const Tindex *cache_lens_,
+    const float *alibi_slopes_,
+    size_t num_kv_heads,
+    float scale,
+    size_t max_num_blocks_per_seq,
+    size_t page_block_size,
+    ptrdiff_t q_stride,
+    ptrdiff_t k_batch_stride,
+    ptrdiff_t k_row_stride,
+    ptrdiff_t k_head_stride,
+    ptrdiff_t v_batch_stride,
+    ptrdiff_t v_row_stride,
+    ptrdiff_t v_head_stride,
+    int num_splits) {
+
+    const int seq_idx = blockIdx.y;
+    const int head_idx = blockIdx.x;
+    const int split_idx = static_cast<int>(blockIdx.z);
+    const int lane = threadIdx.x;
+
+    const int seq_len = static_cast<int>(cache_lens_[seq_idx]);
+    if (seq_len <= 0 || num_splits <= 0) {
+        return;
+    }
+
+    const int shard = (seq_len + num_splits - 1) / num_splits;
+    const int start = split_idx * shard;
+    const int end = min(seq_len, start + shard);
+    const int n = gridDim.y * gridDim.x;
+    const int idx = (split_idx * n + seq_idx * gridDim.x + head_idx);
+    if (start >= end) {
+        if (lane == 0) {
+            partial_m[idx] = -INFINITY;
+            partial_l[idx] = 0.0f;
+        }
+#pragma unroll
+        for (int i = 0; i < kVDimsPerThread; ++i) {
+            partial_acc[idx * kMlaValueSize + lane * kVDimsPerThread + i] = 0.0f;
+        }
+        return;
+    }
+
+    const int num_heads = gridDim.x;
+    const int num_queries_per_kv = num_heads / static_cast<int>(num_kv_heads);
+    const int kv_head_idx = head_idx / num_queries_per_kv;
+    const float alibi_slope = (alibi_slopes_ == nullptr) ? 0.0f : alibi_slopes_[head_idx];
+    constexpr float kLog2e = 1.4426950408889634f;
+    const float scale_log2 = scale * kLog2e;
+
+    const Tindex *block_table = block_tables_ + seq_idx * static_cast<int>(max_num_blocks_per_seq);
+    const Tdata *q_ptr = q_ + seq_idx * q_stride + head_idx * kMlaQkHeadSize;
+
+    float q_reg[kQDimsPerThread];
+    float acc[kVDimsPerThread];
+#pragma unroll
+    for (int i = 0; i < kQDimsPerThread; ++i) {
+        q_reg[i] = static_cast<float>(q_ptr[lane * kQDimsPerThread + i]);
+    }
+#pragma unroll
+    for (int i = 0; i < kVDimsPerThread; ++i) {
+        acc[i] = 0.0f;
+    }
+#if defined(__CUDA_ARCH__)
+    float2 q_reg2[kQDimsPerThread / 2];
+    if constexpr (std::is_same_v<Tdata, half>) {
+        const half2 *q2 = reinterpret_cast<const half2 *>(q_ptr + lane * kQDimsPerThread);
+#pragma unroll
+        for (int j = 0; j < kQDimsPerThread / 2; ++j) {
+            q_reg2[j] = __half22float2(q2[j]);
+        }
+    }
+    if constexpr (std::is_same_v<Tdata, __nv_bfloat16>) {
+        const __nv_bfloat162 *q2 = reinterpret_cast<const __nv_bfloat162 *>(q_ptr + lane * kQDimsPerThread);
+#pragma unroll
+        for (int j = 0; j < kQDimsPerThread / 2; ++j) {
+            q_reg2[j] = __bfloat1622float2(q2[j]);
+        }
+    }
+#endif
+
+    float m = -INFINITY;
+    float l = 0.0f;
+    const int pbs = static_cast<int>(page_block_size);
+    int t = start;
+    int logical_block = t / pbs;
+    int token_in_block = t - logical_block * pbs;
+    for (; t < end; ++logical_block) {
+        int physical_block = 0;
+        if (lane == 0) {
+            physical_block = static_cast<int>(block_table[logical_block]);
+        }
+        physical_block = __shfl_sync(0xffffffff, physical_block, 0);
+        const Tdata *k_base = k_cache_ + physical_block * k_batch_stride + kv_head_idx * k_head_stride;
+        const Tdata *v_base = v_cache_ + physical_block * v_batch_stride + kv_head_idx * v_head_stride;
+        const int token_end = min(pbs, end - logical_block * pbs);
+        for (; token_in_block < token_end && t < end; ++token_in_block, ++t) {
+            const Tdata *k_ptr = k_base + token_in_block * k_row_stride;
+            const Tdata *v_ptr = v_base + token_in_block * v_row_stride;
+            float qk = 0.0f;
+#if defined(__CUDA_ARCH__)
+            if constexpr (std::is_same_v<Tdata, half>) {
+                const half2 *k2 = reinterpret_cast<const half2 *>(k_ptr + lane * kQDimsPerThread);
+#pragma unroll
+                for (int j = 0; j < kQDimsPerThread / 2; ++j) {
+                    const float2 qf = q_reg2[j];
+                    const float2 kf = __half22float2(k2[j]);
+                    qk += qf.x * kf.x + qf.y * kf.y;
+                }
+            } else if constexpr (std::is_same_v<Tdata, __nv_bfloat16>) {
+                const __nv_bfloat162 *k2 = reinterpret_cast<const __nv_bfloat162 *>(k_ptr + lane * kQDimsPerThread);
+#pragma unroll
+                for (int j = 0; j < kQDimsPerThread / 2; ++j) {
+                    const float2 qf = q_reg2[j];
+                    const float2 kf = __bfloat1622float2(k2[j]);
+                    qk += qf.x * kf.x + qf.y * kf.y;
+                }
+            } else
+#endif
+            {
+#pragma unroll
+                for (int i = 0; i < kQDimsPerThread; ++i) {
+                    const int dim = lane * kQDimsPerThread + i;
+                    qk += q_reg[i] * static_cast<float>(k_ptr[dim]);
+                }
+            }
+            qk = op::paged_attention::cuda::warpReduceSum(qk);
+            float alpha = 1.0f;
+            float beta = 0.0f;
+            if (lane == 0) {
+                float score = qk * scale_log2;
+                if (alibi_slope != 0.0f) {
+                    score += (alibi_slope * static_cast<float>(t - (seq_len - 1))) * kLog2e;
+                }
+                const float m_new = fmaxf(m, score);
+                alpha = exp2f(m - m_new);
+                beta = exp2f(score - m_new);
+                l = l * alpha + beta;
+                m = m_new;
+            }
+            alpha = __shfl_sync(0xffffffff, alpha, 0);
+            beta = __shfl_sync(0xffffffff, beta, 0);
+#if defined(__CUDA_ARCH__)
+            if constexpr (std::is_same_v<Tdata, half>) {
+                const half2 *v2 = reinterpret_cast<const half2 *>(v_ptr + lane * kVDimsPerThread);
+#pragma unroll
+                for (int j = 0; j < kVDimsPerThread / 2; ++j) {
+                    const float2 vf = __half22float2(v2[j]);
+                    acc[j * 2 + 0] = acc[j * 2 + 0] * alpha + beta * vf.x;
+                    acc[j * 2 + 1] = acc[j * 2 + 1] * alpha + beta * vf.y;
+                }
+            } else if constexpr (std::is_same_v<Tdata, __nv_bfloat16>) {
+                const __nv_bfloat162 *v2 = reinterpret_cast<const __nv_bfloat162 *>(v_ptr + lane * kVDimsPerThread);
+#pragma unroll
+                for (int j = 0; j < kVDimsPerThread / 2; ++j) {
+                    const float2 vf = __bfloat1622float2(v2[j]);
+                    acc[j * 2 + 0] = acc[j * 2 + 0] * alpha + beta * vf.x;
+                    acc[j * 2 + 1] = acc[j * 2 + 1] * alpha + beta * vf.y;
+                }
+            } else
+#endif
+            {
+#pragma unroll
+                for (int i = 0; i < kVDimsPerThread; ++i) {
+                    const int dim = lane * kVDimsPerThread + i;
+                    acc[i] = acc[i] * alpha + beta * static_cast<float>(v_ptr[dim]);
+                }
+            }
+        }
+        token_in_block = 0;
+    }
+    if (lane == 0) {
+        partial_m[idx] = m;
+        partial_l[idx] = l;
+    }
+#pragma unroll
+    for (int i = 0; i < kVDimsPerThread; ++i) {
+        const int dim = lane * kVDimsPerThread + i;
+        partial_acc[idx * kMlaValueSize + dim] = acc[i];
+    }
+}
+
+template <typename Tdata>
+INFINIOP_CUDA_KERNEL flashAttentionDecodeMlaHd576V512SplitKvCombine(
+    Tdata *out_,
+    const float *partial_acc,
+    const float *partial_m,
+    const float *partial_l,
+    int num_splits,
+    ptrdiff_t o_stride,
+    ptrdiff_t o_head_stride) {
+    const int seq_idx = blockIdx.y;
+    const int head_idx = blockIdx.x;
+    const int lane = threadIdx.x;
+    const int n = gridDim.y * gridDim.x;
+    const int base = (seq_idx * gridDim.x + head_idx);
+    float m = -INFINITY;
+    if (lane == 0) {
+        for (int s = 0; s < num_splits; ++s) {
+            m = fmaxf(m, partial_m[s * n + base]);
+        }
+    }
+    m = __shfl_sync(0xffffffff, m, 0);
+    float l = 0.0f;
+    if (lane == 0) {
+        for (int s = 0; s < num_splits; ++s) {
+            const float ms = partial_m[s * n + base];
+            const float ls = partial_l[s * n + base];
+            if (ls > 0.0f) {
+                l += ls * exp2f(ms - m);
+            }
+        }
+    }
+    l = __shfl_sync(0xffffffff, l, 0);
+    const float inv_l = 1.0f / (l + 1e-6f);
+    Tdata *out_ptr = out_ + seq_idx * o_stride + head_idx * o_head_stride;
+#pragma unroll
+    for (int i = 0; i < kVDimsPerThread; ++i) {
+        const int dim = lane * kVDimsPerThread + i;
+        float acc = 0.0f;
+        for (int s = 0; s < num_splits; ++s) {
+            const float ms = partial_m[s * n + base];
+            const float w = exp2f(ms - m);
+            acc += partial_acc[(s * n + base) * kMlaValueSize + dim] * w;
+        }
+        const float o = acc * inv_l;
+        if constexpr (std::is_same_v<Tdata, half>) {
+            out_ptr[dim] = __float2half_rn(o);
+        } else if constexpr (std::is_same_v<Tdata, __nv_bfloat16>) {
+            out_ptr[dim] = __float2bfloat16_rn(o);
+        } else {
+            out_ptr[dim] = static_cast<Tdata>(o);
+        }
+    }
+}
+} // namespace
+
+template <typename Tindex>
+infiniStatus_t launch_decode_mla_hd576_v512_impl(
+    void *workspace,
+    size_t workspace_size,
+    void *out,
+    const void *q,
+    const void *k_cache,
+    const void *v_cache,
+    infiniDtype_t dtype,
+    const Tindex *block_tables,
+    const Tindex *cache_lens,
+    const float *alibi_slopes,
+    size_t num_heads,
+    size_t num_seqs,
+    size_t num_kv_heads,
+    float scale,
+    size_t max_num_blocks_per_seq,
+    size_t page_block_size,
+    ptrdiff_t q_stride,
+    ptrdiff_t k_batch_stride,
+    ptrdiff_t k_row_stride,
+    ptrdiff_t k_head_stride,
+    ptrdiff_t v_batch_stride,
+    ptrdiff_t v_row_stride,
+    ptrdiff_t v_head_stride,
+    ptrdiff_t o_stride,
+    ptrdiff_t o_head_stride,
+    cudaStream_t stream) {
+    const dim3 grid(static_cast<uint64_t>(num_heads), static_cast<uint64_t>(num_seqs), 1);
+    const dim3 block(32);
+    constexpr int kMaxSplits = 8;
+    bool use_split = true;
+    if (const char *env = std::getenv("INFINIOP_FLASH_DECODE_SPLITKV")) {
+        use_split = !(std::strcmp(env, "0") == 0 || std::strcmp(env, "false") == 0);
+    }
+    int num_splits = 4;
+    if (const char *env = std::getenv("INFINIOP_FLASH_NUM_SPLITS")) {
+        const int v = std::atoi(env);
+        if (v > 0) {
+            num_splits = v;
+        }
+    }
+    if (num_splits < 1) {
+        num_splits = 1;
+    }
+    if (num_splits > kMaxSplits) {
+        num_splits = kMaxSplits;
+    }
+    use_split = use_split && num_splits > 1;
+
+    if (use_split) {
+        const size_t n = num_seqs * num_heads;
+        const size_t acc_elems = static_cast<size_t>(num_splits) * n * kMlaValueSize;
+        const size_t m_elems = static_cast<size_t>(num_splits) * n;
+        const size_t l_elems = static_cast<size_t>(num_splits) * n;
+        const size_t needed_bytes = (acc_elems + m_elems + l_elems) * sizeof(float);
+        if (workspace == nullptr || workspace_size < needed_bytes) {
+            return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+        }
+        float *ws = static_cast<float *>(workspace);
+        float *partial_acc = ws;
+        float *partial_m = partial_acc + acc_elems;
+        float *partial_l = partial_m + m_elems;
+        const dim3 grid_split(static_cast<uint64_t>(num_heads), static_cast<uint64_t>(num_seqs), static_cast<uint64_t>(num_splits));
+        if (dtype == INFINI_DTYPE_F16) {
+            flashAttentionDecodeMlaHd576V512SplitKv<Tindex, half><<<grid_split, block, 0, stream>>>(
+                partial_acc, partial_m, partial_l, static_cast<const half *>(q), static_cast<const half *>(k_cache), static_cast<const half *>(v_cache),
+                block_tables, cache_lens, alibi_slopes, num_kv_heads, scale, max_num_blocks_per_seq, page_block_size,
+                q_stride, k_batch_stride, k_row_stride, k_head_stride, v_batch_stride, v_row_stride, v_head_stride, num_splits);
+            flashAttentionDecodeMlaHd576V512SplitKvCombine<half><<<grid, block, 0, stream>>>(
+                static_cast<half *>(out), partial_acc, partial_m, partial_l, num_splits, o_stride, o_head_stride);
+            return INFINI_STATUS_SUCCESS;
+        }
+        if (dtype == INFINI_DTYPE_BF16) {
+            flashAttentionDecodeMlaHd576V512SplitKv<Tindex, __nv_bfloat16><<<grid_split, block, 0, stream>>>(
+                partial_acc, partial_m, partial_l, static_cast<const __nv_bfloat16 *>(q), static_cast<const __nv_bfloat16 *>(k_cache), static_cast<const __nv_bfloat16 *>(v_cache),
+                block_tables, cache_lens, alibi_slopes, num_kv_heads, scale, max_num_blocks_per_seq, page_block_size,
+                q_stride, k_batch_stride, k_row_stride, k_head_stride, v_batch_stride, v_row_stride, v_head_stride, num_splits);
+            flashAttentionDecodeMlaHd576V512SplitKvCombine<__nv_bfloat16><<<grid, block, 0, stream>>>(
+                static_cast<__nv_bfloat16 *>(out), partial_acc, partial_m, partial_l, num_splits, o_stride, o_head_stride);
+            return INFINI_STATUS_SUCCESS;
+        }
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
+    if (dtype == INFINI_DTYPE_F16) {
+        flashAttentionDecodeMlaHd576V512Warp<Tindex, half><<<grid, block, 0, stream>>>(
+            static_cast<half *>(out), static_cast<const half *>(q), static_cast<const half *>(k_cache), static_cast<const half *>(v_cache),
+            block_tables, cache_lens, alibi_slopes, num_kv_heads, scale, max_num_blocks_per_seq, page_block_size,
+            q_stride, k_batch_stride, k_row_stride, k_head_stride, v_batch_stride, v_row_stride, v_head_stride, o_stride, o_head_stride);
+        return INFINI_STATUS_SUCCESS;
+    }
+    if (dtype == INFINI_DTYPE_BF16) {
+        flashAttentionDecodeMlaHd576V512Warp<Tindex, __nv_bfloat16><<<grid, block, 0, stream>>>(
+            static_cast<__nv_bfloat16 *>(out), static_cast<const __nv_bfloat16 *>(q), static_cast<const __nv_bfloat16 *>(k_cache), static_cast<const __nv_bfloat16 *>(v_cache),
+            block_tables, cache_lens, alibi_slopes, num_kv_heads, scale, max_num_blocks_per_seq, page_block_size,
+            q_stride, k_batch_stride, k_row_stride, k_head_stride, v_batch_stride, v_row_stride, v_head_stride, o_stride, o_head_stride);
+        return INFINI_STATUS_SUCCESS;
+    }
+    return INFINI_STATUS_BAD_TENSOR_DTYPE;
+}
+
+infiniStatus_t launch_decode_mla_hd576_v512_i64(
+    void *workspace, size_t workspace_size,
+    void *out, const void *q, const void *k_cache, const void *v_cache,
+    infiniDtype_t dtype, const int64_t *block_tables, const int64_t *cache_lens, const float *alibi_slopes,
+    size_t num_heads, size_t num_seqs, size_t num_kv_heads, float scale, size_t max_num_blocks_per_seq, size_t page_block_size,
+    ptrdiff_t q_stride, ptrdiff_t k_batch_stride, ptrdiff_t k_row_stride, ptrdiff_t k_head_stride,
+    ptrdiff_t v_batch_stride, ptrdiff_t v_row_stride, ptrdiff_t v_head_stride, ptrdiff_t o_stride, ptrdiff_t o_head_stride,
+    cudaStream_t stream) {
+    return launch_decode_mla_hd576_v512_impl<int64_t>(workspace, workspace_size, out, q, k_cache, v_cache, dtype, block_tables, cache_lens, alibi_slopes, num_heads, num_seqs, num_kv_heads, scale, max_num_blocks_per_seq, page_block_size, q_stride, k_batch_stride, k_row_stride, k_head_stride, v_batch_stride, v_row_stride, v_head_stride, o_stride, o_head_stride, stream);
+}
+
+infiniStatus_t launch_decode_mla_hd576_v512_i32(
+    void *workspace, size_t workspace_size,
+    void *out, const void *q, const void *k_cache, const void *v_cache,
+    infiniDtype_t dtype, const int32_t *block_tables, const int32_t *cache_lens, const float *alibi_slopes,
+    size_t num_heads, size_t num_seqs, size_t num_kv_heads, float scale, size_t max_num_blocks_per_seq, size_t page_block_size,
+    ptrdiff_t q_stride, ptrdiff_t k_batch_stride, ptrdiff_t k_row_stride, ptrdiff_t k_head_stride,
+    ptrdiff_t v_batch_stride, ptrdiff_t v_row_stride, ptrdiff_t v_head_stride, ptrdiff_t o_stride, ptrdiff_t o_head_stride,
+    cudaStream_t stream) {
+    return launch_decode_mla_hd576_v512_impl<int32_t>(workspace, workspace_size, out, q, k_cache, v_cache, dtype, block_tables, cache_lens, alibi_slopes, num_heads, num_seqs, num_kv_heads, scale, max_num_blocks_per_seq, page_block_size, q_stride, k_batch_stride, k_row_stride, k_head_stride, v_batch_stride, v_row_stride, v_head_stride, o_stride, o_head_stride, stream);
+}
+
+infiniStatus_t launch_decode_mla_hd576_v512_u32(
+    void *workspace, size_t workspace_size,
+    void *out, const void *q, const void *k_cache, const void *v_cache,
+    infiniDtype_t dtype, const uint32_t *block_tables, const uint32_t *cache_lens, const float *alibi_slopes,
+    size_t num_heads, size_t num_seqs, size_t num_kv_heads, float scale, size_t max_num_blocks_per_seq, size_t page_block_size,
+    ptrdiff_t q_stride, ptrdiff_t k_batch_stride, ptrdiff_t k_row_stride, ptrdiff_t k_head_stride,
+    ptrdiff_t v_batch_stride, ptrdiff_t v_row_stride, ptrdiff_t v_head_stride, ptrdiff_t o_stride, ptrdiff_t o_head_stride,
+    cudaStream_t stream) {
+    return launch_decode_mla_hd576_v512_impl<uint32_t>(workspace, workspace_size, out, q, k_cache, v_cache, dtype, block_tables, cache_lens, alibi_slopes, num_heads, num_seqs, num_kv_heads, scale, max_num_blocks_per_seq, page_block_size, q_stride, k_batch_stride, k_row_stride, k_head_stride, v_batch_stride, v_row_stride, v_head_stride, o_stride, o_head_stride, stream);
+}
+
+} // namespace op::paged_attention::nvidia

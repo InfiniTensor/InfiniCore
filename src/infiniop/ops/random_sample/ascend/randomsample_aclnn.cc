@@ -24,8 +24,12 @@ infiniStatus_t Descriptor::create(
     auto handle = reinterpret_cast<device::ascend::Handle *>(handle_);
     auto result = RandomSampleInfo::create(result_desc, probs_desc);
     CHECK_RESULT(result);
-    CHECK_DTYPE(result->dt_i, INFINI_DTYPE_I64);
-    auto workspace_size = probs_desc->numel() * infiniSizeOf(probs_desc->dtype()) + probs_desc->numel() * infiniSizeOf(infiniDtype_t::INFINI_DTYPE_I64);
+    CHECK_DTYPE(result->dt_i, INFINI_DTYPE_I32, INFINI_DTYPE_I64);
+    auto topk_val_dtype = (probs_desc->dtype() == INFINI_DTYPE_BF16 || probs_desc->dtype() == INFINI_DTYPE_F16)
+                            ? INFINI_DTYPE_F32
+                            : probs_desc->dtype();
+    auto workspace_size = utils::align(probs_desc->numel() * infiniSizeOf(topk_val_dtype), 32)
+                        + probs_desc->numel() * infiniSizeOf(INFINI_DTYPE_I64);
     auto tresult = new aclnnTensorDescriptor(result_desc);
     auto tprobs = new aclnnTensorDescriptor(probs_desc);
     *desc_ptr
@@ -52,6 +56,7 @@ extern "C" infiniStatus_t random_sample_kernel_launch(
     float temperature,
     uint64_t n,
     infiniDtype_t dt_p,
+    infiniDtype_t dt_i,
     void *stream);
 
 infiniStatus_t
@@ -70,38 +75,50 @@ Descriptor::calculate(
     }
     auto topk_ = topk <= (int)_info.n ? topk : (int)_info.n;
     bool dosample = topk_ > 1 && temperature != 0.0f && topp != 0.0f && random_val != 0.0f;
-    auto topk_shape = std::vector<int64_t>{dosample ? topk_ : 1};
+    auto effective_topk = dosample ? topk_ : 1;
+    auto topk_shape = std::vector<int64_t>{effective_topk};
     auto topk_stride = std::vector<int64_t>{1};
 
-    bool is_bf16 = (_info.dt_p == INFINI_DTYPE_BF16);
+    bool use_fp32_topk = (_info.dt_p == INFINI_DTYPE_BF16 || _info.dt_p == INFINI_DTYPE_F16);
 
     void *probs_for_topk = const_cast<void *>(probs);
     void *topk_val_addr = workspace;
-    void *topk_idx_addr = (void *)((uint8_t *)workspace + topk_ * infiniSizeOf(is_bf16 ? INFINI_DTYPE_F32 : _info.dt_p));
+    auto topk_val_bytes = effective_topk * infiniSizeOf(use_fp32_topk ? INFINI_DTYPE_F32 : _info.dt_p);
+    void *topk_idx_addr = (void *)((uint8_t *)topk_val_addr + utils::align(topk_val_bytes, 32));
 
     uint64_t topk_workspace_size = 0;
     aclOpExecutor *topk_executor = nullptr;
 
-    if (is_bf16) {
+    if (use_fp32_topk) {
         void *probs_fp32;
-        CHECK_ACL(aclrtMalloc(&probs_fp32, _info.n * sizeof(float), ACL_MEM_MALLOC_HUGE_FIRST));
+        auto probs_fp32_size = _info.n * infiniSizeOf(INFINI_DTYPE_F32);
+        CHECK_ACL(aclrtMalloc(&probs_fp32, probs_fp32_size, ACL_MEM_MALLOC_HUGE_FIRST));
 
-        void *probs_bf16_host;
-        CHECK_ACL(aclrtMallocHost(&probs_bf16_host, _info.n * sizeof(bf16_t)));
+        void *probs_host;
+        auto probs_host_size = _info.n * infiniSizeOf(_info.dt_p);
+        CHECK_ACL(aclrtMallocHost(&probs_host, probs_host_size));
         void *probs_fp32_host;
         CHECK_ACL(aclrtMallocHost(&probs_fp32_host, _info.n * sizeof(float)));
 
-        CHECK_ACL(aclrtMemcpy(probs_bf16_host, _info.n * sizeof(bf16_t), probs, _info.n * sizeof(bf16_t), ACL_MEMCPY_DEVICE_TO_HOST));
+        CHECK_ACL(aclrtSynchronizeDevice());
+        CHECK_ACL(aclrtMemcpy(probs_host, probs_host_size, probs, probs_host_size, ACL_MEMCPY_DEVICE_TO_HOST));
 
-        auto bf16_ptr = static_cast<bf16_t *>(probs_bf16_host);
         auto fp32_ptr = static_cast<float *>(probs_fp32_host);
-        for (uint64_t i = 0; i < _info.n; i++) {
-            fp32_ptr[i] = _bf16_to_f32(bf16_ptr[i]);
+        if (_info.dt_p == INFINI_DTYPE_F16) {
+            auto f16_ptr = static_cast<fp16_t *>(probs_host);
+            for (uint64_t i = 0; i < _info.n; i++) {
+                fp32_ptr[i] = _f16_to_f32(f16_ptr[i]);
+            }
+        } else {
+            auto bf16_ptr = static_cast<bf16_t *>(probs_host);
+            for (uint64_t i = 0; i < _info.n; i++) {
+                fp32_ptr[i] = _bf16_to_f32(bf16_ptr[i]);
+            }
         }
 
-        CHECK_ACL(aclrtMemcpy(probs_fp32, _info.n * sizeof(float), probs_fp32_host, _info.n * sizeof(float), ACL_MEMCPY_HOST_TO_DEVICE));
+        CHECK_ACL(aclrtMemcpy(probs_fp32, probs_fp32_size, probs_fp32_host, probs_fp32_size, ACL_MEMCPY_HOST_TO_DEVICE));
 
-        CHECK_ACL(aclrtFreeHost(probs_bf16_host));
+        CHECK_ACL(aclrtFreeHost(probs_host));
         CHECK_ACL(aclrtFreeHost(probs_fp32_host));
 
         int64_t shape = _info.n;
@@ -109,7 +126,7 @@ Descriptor::calculate(
         auto probs_fp32_desc = new aclnnTensorDescriptor(toAclDataType(INFINI_DTYPE_F32), {shape}, {stride});
 
         auto topk_val_fp32_desc = new aclnnTensorDescriptor(toAclDataType(INFINI_DTYPE_F32), topk_shape, topk_stride);
-        auto topk_idx_desc = new aclnnTensorDescriptor(toAclDataType(_info.dt_i), topk_shape, topk_stride);
+        auto topk_idx_desc = new aclnnTensorDescriptor(toAclDataType(INFINI_DTYPE_I64), topk_shape, topk_stride);
 
         CHECK_ACL(aclnnTopkGetWorkspaceSize(probs_fp32_desc->tensor,
                                             topk_shape[0],
@@ -117,7 +134,7 @@ Descriptor::calculate(
                                             true,
                                             true,
                                             topk_val_fp32_desc->tensor,
-                                            dosample ? topk_idx_desc->tensor : _opaque->result->tensor,
+                                            topk_idx_desc->tensor,
                                             &topk_workspace_size,
                                             &topk_executor));
         CHECK_ACL(aclSetAclOpExecutorRepeatable(topk_executor));
@@ -125,27 +142,22 @@ Descriptor::calculate(
         CHECK_ACL(aclrtMalloc(&topk_workspace, topk_workspace_size, ACL_MEM_MALLOC_HUGE_FIRST));
         AclSetTensorAddr(topk_executor, 0, probs_fp32_desc->tensor, probs_fp32);
         AclSetTensorAddr(topk_executor, 1, topk_val_fp32_desc->tensor, topk_val_addr);
-        if (!dosample) {
-            AclSetTensorAddr(topk_executor, 2, _opaque->result->tensor, result);
-        } else {
-            AclSetTensorAddr(topk_executor, 2, topk_idx_desc->tensor, topk_idx_addr);
-        }
+        AclSetTensorAddr(topk_executor, 2, topk_idx_desc->tensor, topk_idx_addr);
         CHECK_ACL(aclnnTopk(topk_workspace, topk_workspace_size, topk_executor, stream));
+        CHECK_ACL(aclrtSynchronizeDevice());
         CHECK_ACL(aclrtFree(topk_workspace));
 
         delete topk_val_fp32_desc;
         delete topk_idx_desc;
         delete probs_fp32_desc;
 
-        if (dosample) {
-            auto status = random_sample_kernel_launch(probs_fp32, result, topk_val_addr, topk_idx_addr, random_val, topp, topk_, temperature, _info.n, INFINI_DTYPE_F32, stream);
-            CHECK_STATUS(status);
-        }
-
+        auto status = random_sample_kernel_launch(probs_fp32, result, topk_val_addr, topk_idx_addr, random_val, topp, effective_topk, temperature, _info.n, INFINI_DTYPE_F32, _info.dt_i, stream);
+        CHECK_STATUS(status);
+        CHECK_ACL(aclrtSynchronizeDevice());
         CHECK_ACL(aclrtFree(probs_fp32));
     } else {
         auto topk_val = new aclnnTensorDescriptor(toAclDataType(_info.dt_p), topk_shape, topk_stride);
-        auto topk_idx = new aclnnTensorDescriptor(toAclDataType(_info.dt_i), topk_shape, topk_stride);
+        auto topk_idx = new aclnnTensorDescriptor(toAclDataType(INFINI_DTYPE_I64), topk_shape, topk_stride);
 
         CHECK_ACL(aclnnTopkGetWorkspaceSize(_opaque->probs->tensor,
                                             topk_shape[0],
@@ -153,7 +165,7 @@ Descriptor::calculate(
                                             true,
                                             true,
                                             topk_val->tensor,
-                                            dosample ? topk_idx->tensor : _opaque->result->tensor,
+                                            topk_idx->tensor,
                                             &topk_workspace_size,
                                             &topk_executor));
         CHECK_ACL(aclSetAclOpExecutorRepeatable(topk_executor));
@@ -161,18 +173,13 @@ Descriptor::calculate(
         CHECK_ACL(aclrtMalloc(&topk_workspace, topk_workspace_size, ACL_MEM_MALLOC_HUGE_FIRST));
         AclSetTensorAddr(topk_executor, 0, _opaque->probs->tensor, (void *)probs);
         AclSetTensorAddr(topk_executor, 1, topk_val->tensor, topk_val_addr);
-        if (!dosample) {
-            AclSetTensorAddr(topk_executor, 2, _opaque->result->tensor, result);
-        } else {
-            AclSetTensorAddr(topk_executor, 2, topk_idx->tensor, topk_idx_addr);
-        }
+        AclSetTensorAddr(topk_executor, 2, topk_idx->tensor, topk_idx_addr);
         CHECK_ACL(aclnnTopk(topk_workspace, topk_workspace_size, topk_executor, stream));
+        CHECK_ACL(aclrtSynchronizeDevice());
         CHECK_ACL(aclrtFree(topk_workspace));
 
-        if (dosample) {
-            auto status = random_sample_kernel_launch(probs_for_topk, result, topk_val_addr, topk_idx_addr, random_val, topp, topk_, temperature, _info.n, _info.dt_p, stream);
-            CHECK_STATUS(status);
-        }
+        auto status = random_sample_kernel_launch(probs_for_topk, result, topk_val_addr, topk_idx_addr, random_val, topp, effective_topk, temperature, _info.n, _info.dt_p, _info.dt_i, stream);
+        CHECK_STATUS(status);
 
         delete topk_val;
         delete topk_idx;

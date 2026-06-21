@@ -23,7 +23,7 @@ public:
         auto dtype = c_desc->dtype();
 
         // Check dtype compatibility
-        CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_BF16);
+        CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_BF16, INFINI_DTYPE_I32, INFINI_DTYPE_I64);
 
         // Check shape compatibility (broadcast)
         auto c_shape = c_desc->shape();

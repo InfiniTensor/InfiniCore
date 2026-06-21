@@ -160,9 +160,17 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
 
   ```shell
 
-  # 在third_party目录拉取cutlass和flash attn库的源码(不需要--recursive)
+  # 该功能依赖 flash-attention 和 cutlass，默认不随仓库递归拉取。
+  # 对应子模块固定为以下提交：
       ## flash-attention commit: 10846960ca0793b993446f6dbaf696479c127a9d
       ## cutlass commit: 087c84df83d254b5fb295a7a408f1a1d554085cf
+
+  # 若需启用英伟达平台 flash attention 能力，请手动初始化对应子模块：
+      git -c submodule.third_party/flash-attention.update=checkout \
+          -c submodule.third_party/cutlass.update=checkout \
+          submodule update --init third_party/flash-attention third_party/cutlass
+
+  # 上述命令只初始化这两个顶层子模块，并会切换到仓库记录的固定提交。
 
   # 设置cutlass路径的环境变量CUTLASS_HOME(部分环境可选)
       export CUTLASS_HOME=<path-to>/InfiniCore/third_party/cutlass
@@ -173,7 +181,7 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
   # 设置额外的环境变量
       export CPLUS_INCLUDE_PATH=$CUDA_HOME/include:$CPLUS_INCLUDE_PATH
 
-  # flash attenion库会伴随infinicore_cpp_api一同编译安装
+  # flash attention库会伴随infinicore_cpp_api一同编译安装
 
   ```
 
@@ -186,6 +194,19 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
 
   #随后参考 mate v0.1.3 README 进行编译，之后在 xmake 配置环节额外打开 --aten 开关和 --flash-attn 使用 mate 提供的 flash attention 能力，可参考：
   xmake f --moore-gpu=y --aten=y --flash-attn=y -cv
+  ```
+
+##### 试验功能 -- 编译marlin相关算子
+
+  ```shell
+
+  # 需要从github上克隆tvm_ffi仓库，克隆命令参考
+  ## tvm-ffi commit: 35c99d0ac4cb784862115d0089f60c603acec8f9
+      git clone https://github.com/apache/tvm-ffi.git --recursive
+
+  # 设置TVM_ROOT
+      export TVM_ROOT=<path-to>/tvm-ffi #用来搜索tvm相关头文件
+  # 注意，编译gptq_marlin_gemm算子的时候除了指定TVM_ROOT以外，还需要指定cuda_arch
   ```
 
 2. 编译安装

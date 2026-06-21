@@ -14,6 +14,9 @@
 #ifdef ENABLE_KUNLUN_API
 #include "kunlun/gelu_kunlun.h"
 #endif
+#ifdef ENABLE_CAMBRICON_API
+#include "bang/gelu_bang.h"
+#endif
 
 __INFINI_C infiniStatus_t infiniopCreateGeluDescriptor(
     infiniopHandle_t handle,
@@ -51,6 +54,9 @@ __INFINI_C infiniStatus_t infiniopCreateGeluDescriptor(
 #endif
 #ifdef ENABLE_KUNLUN_API
         CREATE(INFINI_DEVICE_KUNLUN, kunlun);
+#endif
+#ifdef ENABLE_CAMBRICON_API
+        CREATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
 #ifdef ENABLE_ALI_API
         CREATE(INFINI_DEVICE_ALI, nvidia);
@@ -91,6 +97,9 @@ __INFINI_C infiniStatus_t infiniopGetGeluWorkspaceSize(infiniopGeluDescriptor_t 
 #endif
 #ifdef ENABLE_KUNLUN_API
         GET(INFINI_DEVICE_KUNLUN, kunlun);
+#endif
+#ifdef ENABLE_CAMBRICON_API
+        GET(INFINI_DEVICE_CAMBRICON, bang);
 #endif
 #ifdef ENABLE_ALI_API
         GET(INFINI_DEVICE_ALI, nvidia);
@@ -140,6 +149,9 @@ __INFINI_C infiniStatus_t infiniopGelu(
 #ifdef ENABLE_KUNLUN_API
         CALCULATE(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
+#ifdef ENABLE_CAMBRICON_API
+        CALCULATE(INFINI_DEVICE_CAMBRICON, bang);
+#endif
 #ifdef ENABLE_ALI_API
         CALCULATE(INFINI_DEVICE_ALI, nvidia);
 #endif
@@ -181,6 +193,9 @@ infiniopDestroyGeluDescriptor(infiniopGeluDescriptor_t desc) {
 #endif
 #ifdef ENABLE_KUNLUN_API
         DELETE(INFINI_DEVICE_KUNLUN, kunlun);
+#endif
+#ifdef ENABLE_CAMBRICON_API
+        DELETE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
 #ifdef ENABLE_ALI_API
         DELETE(INFINI_DEVICE_ALI, nvidia);
