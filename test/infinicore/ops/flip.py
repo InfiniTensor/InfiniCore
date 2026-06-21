@@ -73,17 +73,17 @@ class OpTest(BaseOperatorTest):
         return parse_test_cases()
 
     def torch_operator(self, *args, **kwargs):
-        # dims = kwargs.pop("dims", None)
-        # if dims is not None:
-        #     return infinicore.flip(*args, dims)
+        dims = kwargs.pop("dims", None)
+        if dims is not None:
+            return infinicore.flip(*args, dims)
         return torch.flip(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
+    def infinicore_operator(self, *args, **kwargs):
     #     """InfiniCore implementation (operator not yet available)."""
-    #     dims = kwargs.pop("dims", None)
-    #     if dims is not None:
-    #         return infinicore.flip(*args, dims)
-    #     return infinicore.flip(*args, **kwargs)
+        dims = kwargs.pop("dims", None)
+        if dims is not None:
+            return infinicore.flip(*args, dims)
+        return infinicore.flip(*args, **kwargs)
 
 
 def main():
