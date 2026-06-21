@@ -162,7 +162,93 @@ def parse_test_cases():
                     )
                 )
 
+    dense_num_seqs = 2
+    dense_seq_len = 16
+    dense_num_heads = 16
+    dense_num_kv_heads = 1
+    dense_head_size = 576
+    dense_value_size = 512
+    dense_total_tokens = dense_num_seqs * dense_seq_len
+    dense_scale = dense_head_size**-0.5
+    dense_query = torch.randn((dense_total_tokens, dense_num_heads, dense_head_size))
+    dense_key = torch.randn((dense_total_tokens, dense_num_kv_heads, dense_head_size))
+    dense_value = torch.randn(
+        (dense_total_tokens, dense_num_kv_heads, dense_value_size)
+    )
+    dense_cu_seqlens = torch.arange(
+        0, dense_total_tokens + 1, dense_seq_len, dtype=torch.int32
+    )
+    for dtype in _TENSOR_DTYPES:
+        tolerance = _TOLERANCE_MAP.get(dtype)
+        test_cases.append(
+            TestCase(
+                inputs=[
+                    TensorSpec.from_tensor(
+                        dense_query.shape,
+                        init_mode=TensorInitializer.MANUAL,
+                        set_tensor=dense_query.clone(),
+                        dtype=dtype,
+                    ),
+                    TensorSpec.from_tensor(
+                        dense_key.shape,
+                        init_mode=TensorInitializer.MANUAL,
+                        set_tensor=dense_key.clone(),
+                        dtype=dtype,
+                    ),
+                    TensorSpec.from_tensor(
+                        dense_value.shape,
+                        init_mode=TensorInitializer.MANUAL,
+                        set_tensor=dense_value.clone(),
+                        dtype=dtype,
+                    ),
+                    None,
+                    TensorSpec.from_tensor(
+                        dense_cu_seqlens.shape,
+                        init_mode=TensorInitializer.MANUAL,
+                        set_tensor=dense_cu_seqlens.clone(),
+                        dtype=infinicore.int32,
+                    ),
+                    TensorSpec.from_tensor(
+                        dense_cu_seqlens.shape,
+                        init_mode=TensorInitializer.MANUAL,
+                        set_tensor=dense_cu_seqlens.clone(),
+                        dtype=infinicore.int32,
+                    ),
+                ],
+                kwargs={
+                    "scale": dense_scale,
+                    "max_seqlen_q": dense_seq_len,
+                    "max_seqlen_k": dense_seq_len,
+                },
+                tolerance=tolerance,
+                description=f"MHA_Varlen_Dense_MLA_{str(dtype).split('.')[-1]}",
+            )
+        )
+
     return test_cases
+
+
+def ref_dense_attention_varlen(query, key, value, cum_seqlens_q, cum_seqlens_k, scale):
+    output = torch.empty(
+        (*query.shape[:-1], value.shape[-1]), dtype=query.dtype, device=query.device
+    )
+    num_seqs = len(cum_seqlens_q) - 1
+    for i in range(num_seqs):
+        q_start, q_end = cum_seqlens_q[i].item(), cum_seqlens_q[i + 1].item()
+        k_start, k_end = cum_seqlens_k[i].item(), cum_seqlens_k[i + 1].item()
+        cur_q = query[q_start:q_end].unsqueeze(0).transpose(1, 2)
+        cur_k = key[k_start:k_end].unsqueeze(0).transpose(1, 2)
+        cur_v = value[k_start:k_end].unsqueeze(0).transpose(1, 2)
+        cur_out = torch.nn.functional.scaled_dot_product_attention(
+            cur_q,
+            cur_k,
+            cur_v,
+            dropout_p=0.0,
+            is_causal=True,
+            scale=scale,
+        )
+        output[q_start:q_end] = cur_out.transpose(1, 2).squeeze(0)
+    return output
 
 
 def ref_paged_attention_multi_turn(
@@ -228,6 +314,10 @@ class OpTest(BaseOperatorTest):
         max_seqlen_q=0,
         max_seqlen_k=0,
     ):
+        if block_tables is None:
+            return ref_dense_attention_varlen(
+                query, k_cache, v_cache, cum_seqlens_q, cum_seqlens_k, scale
+            )
         return ref_paged_attention_multi_turn(
             query, k_cache, v_cache, block_tables, cum_seqlens_q, cum_seqlens_k, scale
         )
@@ -244,10 +334,16 @@ class OpTest(BaseOperatorTest):
         max_seqlen_q=0,
         max_seqlen_k=0,
     ):
+        if block_tables is None:
+            key = k_cache
+            value = v_cache
+        else:
+            key = k_cache.permute([0, 2, 1, 3])
+            value = v_cache.permute([0, 2, 1, 3])
         out = infinicore.mha_varlen(
             query,
-            k_cache.permute([0, 2, 1, 3]),
-            v_cache.permute([0, 2, 1, 3]),
+            key,
+            value,
             cum_seqlens_q,
             cum_seqlens_k,
             block_tables,

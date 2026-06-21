@@ -16,7 +16,11 @@ public:
             return {std::clamp(x.x, min_val.x, max_val.x), std::clamp(x.y, min_val.y, max_val.y)};
 #endif
         } else {
+#if defined(ENABLE_HYGON_API)
+            return x < min_val ? min_val : (max_val < x ? max_val : x);
+#else
             return std::clamp(x, min_val, max_val);
+#endif
         }
     }
 } ClipOp;

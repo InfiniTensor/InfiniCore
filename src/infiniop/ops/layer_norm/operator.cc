@@ -11,6 +11,12 @@
 #ifdef ENABLE_METAX_API
 #include "metax/layer_norm_metax.h"
 #endif
+#ifdef ENABLE_MOORE_API
+#include "moore/layer_norm_moore.h"
+#endif
+#ifdef ENABLE_CAMBRICON_API
+#include "bang/layer_norm_bang.h"
+#endif
 
 __INFINI_C infiniStatus_t infiniopCreateLayerNormDescriptor(
     infiniopHandle_t handle,
@@ -58,6 +64,12 @@ __INFINI_C infiniStatus_t infiniopCreateLayerNormDescriptor(
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, metax);
 #endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_CAMBRICON_API
+        CREATE(INFINI_DEVICE_CAMBRICON, bang);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -93,6 +105,12 @@ __INFINI_C infiniStatus_t infiniopGetLayerNormWorkspaceSize(infiniopLayerNormDes
 #endif
 #ifdef ENABLE_METAX_API
         GET(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_CAMBRICON_API
+        GET(INFINI_DEVICE_CAMBRICON, bang);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -150,6 +168,12 @@ __INFINI_C infiniStatus_t infiniopLayerNorm(
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_CAMBRICON_API
+        CALCULATE(INFINI_DEVICE_CAMBRICON, bang);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -185,6 +209,12 @@ infiniopDestroyLayerNormDescriptor(infiniopLayerNormDescriptor_t desc) {
 #endif
 #ifdef ENABLE_METAX_API
         DELETE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MOORE_API
+        DELETE(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_CAMBRICON_API
+        DELETE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
 #ifdef ENABLE_ILUVATAR_API
         DELETE(INFINI_DEVICE_ILUVATAR, nvidia);

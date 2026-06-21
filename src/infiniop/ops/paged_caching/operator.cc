@@ -2,14 +2,20 @@
 #include "../../handle.h"
 #include "infiniop/ops/paged_caching.h"
 
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ALI_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ALI_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API) || defined(ENABLE_QY_API)
 #include "nvidia/paged_caching_nvidia.cuh"
 #endif
 #ifdef ENABLE_METAX_API
 #include "metax/paged_caching_metax.h"
 #endif
+#ifdef ENABLE_CAMBRICON_API
+#include "bang/paged_caching_bang.h"
+#endif
 #ifdef ENABLE_MOORE_API
 #include "moore/paged_caching_moore.h"
+#endif
+#ifdef ENABLE_ASCEND_API
+#include "ascend/paged_caching_ascend.h"
 #endif
 
 __INFINI_C infiniStatus_t infiniopCreatePagedCachingDescriptor(
@@ -41,11 +47,20 @@ __INFINI_C infiniStatus_t infiniopCreatePagedCachingDescriptor(
 #ifdef ENABLE_ILUVATAR_API
         CREATE(INFINI_DEVICE_ILUVATAR, nvidia)
 #endif
+#ifdef ENABLE_HYGON_API
+        CREATE(INFINI_DEVICE_HYGON, nvidia)
+#endif
 #ifdef ENABLE_MOORE_API
         CREATE(INFINI_DEVICE_MOORE, moore)
 #endif
+#ifdef ENABLE_CAMBRICON_API
+        CREATE(INFINI_DEVICE_CAMBRICON, bang)
+#endif
 #ifdef ENABLE_QY_API
         CREATE(INFINI_DEVICE_QY, nvidia)
+#endif
+#ifdef ENABLE_ASCEND_API
+        CREATE(INFINI_DEVICE_ASCEND, ascend)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -74,11 +89,20 @@ __INFINI_C infiniStatus_t infiniopGetPagedCachingWorkspaceSize(
 #ifdef ENABLE_ILUVATAR_API
         GET(INFINI_DEVICE_ILUVATAR, nvidia)
 #endif
+#ifdef ENABLE_HYGON_API
+        GET(INFINI_DEVICE_HYGON, nvidia)
+#endif
 #ifdef ENABLE_MOORE_API
         GET(INFINI_DEVICE_MOORE, moore)
 #endif
+#ifdef ENABLE_CAMBRICON_API
+        GET(INFINI_DEVICE_CAMBRICON, bang)
+#endif
 #ifdef ENABLE_QY_API
         GET(INFINI_DEVICE_QY, nvidia)
+#endif
+#ifdef ENABLE_ASCEND_API
+        GET(INFINI_DEVICE_ASCEND, ascend)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -111,11 +135,20 @@ __INFINI_C infiniStatus_t infiniopPagedCaching(
 #ifdef ENABLE_ILUVATAR_API
         CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia)
 #endif
+#ifdef ENABLE_HYGON_API
+        CALCULATE(INFINI_DEVICE_HYGON, nvidia)
+#endif
 #ifdef ENABLE_MOORE_API
         CALCULATE(INFINI_DEVICE_MOORE, moore)
 #endif
+#ifdef ENABLE_CAMBRICON_API
+        CALCULATE(INFINI_DEVICE_CAMBRICON, bang)
+#endif
 #ifdef ENABLE_QY_API
         CALCULATE(INFINI_DEVICE_QY, nvidia)
+#endif
+#ifdef ENABLE_ASCEND_API
+        CALCULATE(INFINI_DEVICE_ASCEND, ascend)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -143,11 +176,20 @@ __INFINI_C infiniStatus_t infiniopDestroyPagedCachingDescriptor(
 #ifdef ENABLE_ILUVATAR_API
         DESTROY(INFINI_DEVICE_ILUVATAR, nvidia)
 #endif
+#ifdef ENABLE_HYGON_API
+        DESTROY(INFINI_DEVICE_HYGON, nvidia)
+#endif
 #ifdef ENABLE_MOORE_API
         DESTROY(INFINI_DEVICE_MOORE, moore)
 #endif
+#ifdef ENABLE_CAMBRICON_API
+        DESTROY(INFINI_DEVICE_CAMBRICON, bang)
+#endif
 #ifdef ENABLE_QY_API
         DESTROY(INFINI_DEVICE_QY, nvidia)
+#endif
+#ifdef ENABLE_ASCEND_API
+        DESTROY(INFINI_DEVICE_ASCEND, ascend)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

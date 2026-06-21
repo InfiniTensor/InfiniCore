@@ -13,11 +13,15 @@ Tensor py_mha_varlen(Tensor q,
                      Tensor v,
                      Tensor cum_seqlens_q,
                      Tensor cum_seqlens_k,
-                     Tensor block_table,
+                     pybind11::object block_table,
                      int max_seqlen_q,
                      int max_seqlen_k,
                      pybind11::object alibi_slopes,
                      float scale) {
+    std::optional<Tensor> block_table_tensor = std::nullopt;
+    if (!block_table.is_none()) {
+        block_table_tensor = block_table.cast<Tensor>();
+    }
     std::optional<Tensor> alibi_slopes_tensor = std::nullopt;
     if (!alibi_slopes.is_none()) {
         alibi_slopes_tensor = alibi_slopes.cast<Tensor>();
@@ -29,7 +33,7 @@ Tensor py_mha_varlen(Tensor q,
         v,
         cum_seqlens_q,
         cum_seqlens_k,
-        block_table,
+        block_table_tensor,
         max_seqlen_q,
         max_seqlen_k,
         alibi_slopes_tensor,
@@ -42,11 +46,15 @@ void py_mha_varlen_(Tensor out,
                     Tensor v,
                     Tensor cum_seqlens_q,
                     Tensor cum_seqlens_k,
-                    Tensor block_table,
+                    pybind11::object block_table,
                     int max_seqlen_q,
                     int max_seqlen_k,
                     pybind11::object alibi_slopes,
                     float scale) {
+    std::optional<Tensor> block_table_tensor = std::nullopt;
+    if (!block_table.is_none()) {
+        block_table_tensor = block_table.cast<Tensor>();
+    }
     std::optional<Tensor> alibi_slopes_tensor = std::nullopt;
     if (!alibi_slopes.is_none()) {
         alibi_slopes_tensor = alibi_slopes.cast<Tensor>();
@@ -59,7 +67,7 @@ void py_mha_varlen_(Tensor out,
         v,
         cum_seqlens_q,
         cum_seqlens_k,
-        block_table,
+        block_table_tensor,
         max_seqlen_q,
         max_seqlen_k,
         alibi_slopes_tensor,

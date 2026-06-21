@@ -98,6 +98,14 @@ infiniStatus_t freeDevice(void *ptr) {
     return INFINI_STATUS_SUCCESS;
 }
 
+infiniStatus_t memsetDevice(void *ptr, int value, size_t count) {
+    return INFINI_STATUS_NOT_IMPLEMENTED;
+}
+
+infiniStatus_t memsetDeviceAsync(void *ptr, int value, size_t count, infinirtStream_t stream) {
+    return INFINI_STATUS_NOT_IMPLEMENTED;
+}
+
 infiniStatus_t freeHost(void *ptr) {
     CHECK_KUNLUNRT(xpu_host_free(ptr));
     return INFINI_STATUS_SUCCESS;

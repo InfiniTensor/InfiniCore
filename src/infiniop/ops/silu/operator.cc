@@ -5,7 +5,7 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/silu_cpu.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_ALI_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_ALI_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/silu_nvidia.cuh"
 #endif
 #ifdef ENABLE_METAX_API
@@ -49,6 +49,9 @@ __INFINI_C infiniStatus_t infiniopCreateSiluDescriptor(
 #ifdef ENABLE_ALI_API
         CREATE(INFINI_DEVICE_ALI, nvidia);
 #endif
+#ifdef ENABLE_HYGON_API
+        CREATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -82,6 +85,9 @@ __INFINI_C infiniStatus_t infiniopGetSiluWorkspaceSize(infiniopSiluDescriptor_t 
 #endif
 #ifdef ENABLE_ALI_API
         GET(INFINI_DEVICE_ALI, nvidia);
+#endif
+#ifdef ENABLE_HYGON_API
+        GET(INFINI_DEVICE_HYGON, nvidia);
 #endif
 
     default:
@@ -125,6 +131,9 @@ __INFINI_C infiniStatus_t infiniopSilu(
 #ifdef ENABLE_ALI_API
         CALCULATE(INFINI_DEVICE_ALI, nvidia);
 #endif
+#ifdef ENABLE_HYGON_API
+        CALCULATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -160,6 +169,9 @@ infiniopDestroySiluDescriptor(infiniopSiluDescriptor_t desc) {
 #endif
 #ifdef ENABLE_ALI_API
         DELETE(INFINI_DEVICE_ALI, nvidia);
+#endif
+#ifdef ENABLE_HYGON_API
+        DELETE(INFINI_DEVICE_HYGON, nvidia);
 #endif
 
     default:

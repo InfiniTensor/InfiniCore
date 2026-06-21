@@ -11,13 +11,25 @@ constexpr double PI = 3.14159265358979323846;
 // Inverse error function.
 __device__ __forceinline__ float erfinv_impl(float x) {
     if (x == 1.0f) {
+#if defined(ENABLE_HYGON_API)
+        return __builtin_huge_valf();
+#else
         return std::numeric_limits<float>::infinity();
+#endif
     }
     if (x == -1.0f) {
+#if defined(ENABLE_HYGON_API)
+        return -__builtin_huge_valf();
+#else
         return -std::numeric_limits<float>::infinity();
+#endif
     }
     if (x > 1.0f || x < -1.0f) {
+#if defined(ENABLE_HYGON_API)
+        return __builtin_nanf("");
+#else
         return std::numeric_limits<float>::quiet_NaN();
+#endif
     }
     if (x == 0.0f) {
         return 0.0f;
@@ -72,13 +84,25 @@ struct ErfinvOp {
 
         } else if constexpr (std::is_same_v<T, double>) {
             if (x == 1.0) {
+#if defined(ENABLE_HYGON_API)
+                return __builtin_huge_val();
+#else
                 return std::numeric_limits<double>::infinity();
+#endif
             }
             if (x == -1.0) {
+#if defined(ENABLE_HYGON_API)
+                return -__builtin_huge_val();
+#else
                 return -std::numeric_limits<double>::infinity();
+#endif
             }
             if (x > 1.0 || x < -1.0) {
+#if defined(ENABLE_HYGON_API)
+                return __builtin_nan("");
+#else
                 return std::numeric_limits<double>::quiet_NaN();
+#endif
             }
             if (x == 0.0) {
                 return 0.0;

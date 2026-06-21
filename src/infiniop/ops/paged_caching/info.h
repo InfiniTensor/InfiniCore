@@ -19,6 +19,7 @@ public:
     size_t num_tokens;
     size_t num_kv_heads;
     size_t head_size;
+    size_t v_head_size;
     size_t block_size;
 
     // --- Strides for Memory Layout ---
@@ -55,12 +56,28 @@ public:
         // PagedCachingInfo info;
         // --- Extract shape dimensions ---
         auto k_shape = k_desc->shape();
+        auto v_shape = v_desc->shape();
         auto k_cache_shape = k_cache_desc->shape();
+        auto v_cache_shape = v_cache_desc->shape();
 
         size_t num_tokens = slot_mapping_desc->shape()[0];
         size_t num_kv_heads = k_shape[1];
         size_t head_size = k_shape[2];
+        size_t v_head_size = v_shape[2];
         size_t block_size = k_cache_shape[2]; // Assuming [num_blocks, num_heads, block_size, head_size] layout
+
+        if (k_shape[0] != num_tokens || v_shape[0] != num_tokens || v_shape[1] != num_kv_heads) {
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
+        if (k_cache_shape.size() < 4 || v_cache_shape.size() < 4) {
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
+        if (v_cache_shape[0] != k_cache_shape[0] || v_cache_shape[1] != num_kv_heads || v_cache_shape[2] != block_size) {
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
+        if (k_cache_shape[1] != num_kv_heads || k_cache_shape[3] != head_size || v_cache_shape[3] != v_head_size) {
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
 
         // --- Extract strides for memory access ---
         ptrdiff_t k_src_stride = k_desc->stride(0);
@@ -77,6 +94,7 @@ public:
             num_tokens,
             num_kv_heads,
             head_size,
+            v_head_size,
             block_size,
             k_src_stride,
             v_src_stride,

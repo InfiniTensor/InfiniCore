@@ -23,6 +23,7 @@ public:
     size_t num_heads;
     size_t num_kv_heads;
     size_t head_size;
+    size_t value_size;
     size_t page_block_size;
     size_t max_num_blocks_per_seq;
     size_t num_blocks;
@@ -108,33 +109,33 @@ public:
         const size_t total_q_tokens = q_shape[0];
         const size_t num_heads = q_shape[1];
         const size_t head_size = q_shape[2];
+        const size_t value_size = v_cache_desc->shape()[3];
+        const bool is_mla = (head_size == 576 && value_size == 512);
 
         const size_t num_blocks = k_shape[0];
         const size_t page_block_size = k_shape[2];
         const size_t num_kv_heads = k_shape[1];
 
-        if (head_size != 64 && head_size != 128) {
+        if (head_size != 64 && head_size != 128 && head_size != 192 && head_size != 576) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
         if (num_heads % num_kv_heads != 0) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
 
-        // v_cache must match the inferred K layout.
+        // v_cache may have a smaller head dim for MLA, but must share the paged layout.
         const auto v_shape = v_cache_desc->shape();
-        if (v_shape[0] != num_blocks || v_shape[3] != head_size) {
+        if (k_shape[3] != head_size) {
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
+        if (v_shape[0] != num_blocks || v_shape[1] != num_kv_heads || v_shape[2] != page_block_size) {
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
+        if (!is_mla && value_size != head_size) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
 
-        if (v_shape[1] != num_kv_heads || v_shape[2] != page_block_size) {
-            return INFINI_STATUS_BAD_TENSOR_SHAPE;
-        }
-
-        if (v_cache_desc->shape()[0] != k_shape[0] || v_cache_desc->shape()[3] != k_shape[3]) {
-            return INFINI_STATUS_BAD_TENSOR_SHAPE;
-        }
-
-        if (out_desc->shape()[0] != q_shape[0] || out_desc->shape()[1] != q_shape[1] || out_desc->shape()[2] != q_shape[2]) {
+        if (out_desc->shape()[0] != q_shape[0] || out_desc->shape()[1] != q_shape[1] || out_desc->shape()[2] != value_size) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
 
@@ -188,6 +189,7 @@ public:
             num_heads,
             num_kv_heads,
             head_size,
+            value_size,
             page_block_size,
             max_num_blocks_per_seq,
             num_blocks,

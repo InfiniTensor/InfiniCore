@@ -8,6 +8,8 @@ namespace py = pybind11;
 
 namespace infinicore::tensor {
 
+Tensor from_list_py(py::handle data, DataType dtype);
+
 inline void bind(py::module &m) {
     py::class_<Tensor>(m, "Tensor")
         .def_property_readonly("shape", [](const Tensor &tensor) { return tensor->shape(); })
@@ -91,6 +93,8 @@ inline void bind(py::module &m) {
             return Tensor{infinicore::Tensor::strided_from_blob(reinterpret_cast<void *>(raw_ptr), shape, strides, dtype, device)};
         },
         pybind11::arg("raw_ptr"), pybind11::arg("shape"), pybind11::arg("strides"), pybind11::arg("dtype"), pybind11::arg("device"));
+
+    m.def("from_list", &from_list_py, py::arg("data"), py::arg("dtype"));
 }
 
 } // namespace infinicore::tensor

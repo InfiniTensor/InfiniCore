@@ -5,7 +5,7 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/adaptive_max_pool1d_cpu.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/adaptive_max_pool1d_nvidia.cuh"
 #endif
 #ifdef ENABLE_METAX_API
@@ -47,6 +47,9 @@ __INFINI_C infiniStatus_t infiniopCreateAdaptiveMaxPool1dDescriptor(
 #ifdef ENABLE_MOORE_API
         CREATE(INFINI_DEVICE_MOORE, moore);
 #endif
+#ifdef ENABLE_HYGON_API
+        CREATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
     }
 #undef CREATE
 
@@ -76,6 +79,9 @@ __INFINI_C infiniStatus_t infiniopGetAdaptiveMaxPool1dWorkspaceSize(
 #endif
 #ifdef ENABLE_MOORE_API
         GET(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_HYGON_API
+        GET(INFINI_DEVICE_HYGON, nvidia);
 #endif
     }
 #undef GET
@@ -111,6 +117,9 @@ __INFINI_C infiniStatus_t infiniopAdaptiveMaxPool1d(
 #ifdef ENABLE_MOORE_API
         CALCULATE(INFINI_DEVICE_MOORE, moore);
 #endif
+#ifdef ENABLE_HYGON_API
+        CALCULATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
     }
 #undef CALCULATE
 
@@ -139,6 +148,9 @@ __INFINI_C infiniStatus_t infiniopDestroyAdaptiveMaxPool1dDescriptor(
 #endif
 #ifdef ENABLE_MOORE_API
         DESTROY(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_HYGON_API
+        DESTROY(INFINI_DEVICE_HYGON, nvidia);
 #endif
     }
 #undef DESTROY

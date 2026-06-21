@@ -117,6 +117,10 @@ void syncDevice() {
     return ContextImpl::singleton().getCurrentRuntime()->syncDevice();
 }
 
+void trimMemory() {
+    return ContextImpl::singleton().getCurrentRuntime()->trimMemory();
+}
+
 std::shared_ptr<Memory> allocateMemory(size_t size) {
     return ContextImpl::singleton().getCurrentRuntime()->allocateMemory(size);
 }
@@ -145,6 +149,14 @@ void memcpyD2D(void *dst, const void *src, size_t size, bool async) {
 void memcpyH2H(void *dst, const void *src, size_t size) {
     setDevice(Device::cpu());
     return ContextImpl::singleton().getCurrentRuntime()->memcpyD2D(dst, src, size);
+}
+
+void setDeviceMemory(void *ptr, int value, size_t count) {
+    return ContextImpl::singleton().getCurrentRuntime()->setDeviceMemory(ptr, value, count);
+}
+
+void setDeviceMemoryAsync(void *ptr, int value, size_t count, infinirtStream_t stream) {
+    return ContextImpl::singleton().getCurrentRuntime()->setDeviceMemoryAsync(ptr, value, count, stream);
 }
 
 // Timing API implementations

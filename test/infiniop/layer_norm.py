@@ -95,7 +95,7 @@ def torch_layer_norm(
     var = input.var(dim=-1, correction=0)
     std = torch.sqrt(var + eps)
     input_standardization.copy_(
-        ((input - mean) / std.unsqueeze(2)).type(input_standardization.dtype)
+        ((input - mean) / std.unsqueeze(-1)).type(input_standardization.dtype)
     )
     input_std_deviation.copy_(std.type(input_standardization.dtype))
     output.copy_(ln(input).detach().type(output.dtype))
@@ -179,8 +179,10 @@ def test(
         else None
     )
 
-    layer_norm(
+    torch_layer_norm(
         output.torch_tensor(),
+        input_standardization.torch_tensor(),
+        input_std_deviation.torch_tensor(),
         input.torch_tensor(),
         weight.torch_tensor(),
         bias.torch_tensor() if bias_exist else None,

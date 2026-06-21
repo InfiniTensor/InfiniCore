@@ -4,6 +4,7 @@
 #include "parameter.hpp"
 
 #include <spdlog/spdlog.h>
+#include <string>
 #include <type_traits>
 #include <unordered_map>
 #include <vector>
@@ -15,17 +16,25 @@ public:
 
     virtual ~Module() = default;
 
-    const std::unordered_map<std::string, Parameter> &state_dict() const;
+    std::unordered_map<std::string, Parameter> state_dict() const;
+
+    std::vector<std::string> state_dict_keys() const;
 
     void load_state_dict(const std::unordered_map<std::string, Tensor> &_state_dict);
 
     void load_parameter(const std::string &name, const Tensor &param);
+
+    void load_parameters_no_sync(const std::unordered_map<std::string, Tensor> &params);
 
     void load_parameter_(const std::string &name, const Tensor &param);
 
     void load_parameter_from_blob(const std::string &name, const void *data);
 
     std::unordered_map<std::string, Module *> modules_dict() const;
+
+    virtual void process_weights_after_loading() {}
+
+    virtual void reset_runtime_state() const {}
 
     const std::unordered_map<std::string, std::shared_ptr<Module>> &children() const {
         return submodules_;
@@ -91,6 +100,7 @@ protected:
 private:
     void load_state_dict_recursively(const std::unordered_map<std::string, Tensor> &_state_dict, const std::string &prefix = "");
     void collect_all_parameters(std::unordered_map<std::string, Parameter> &all_params, const std::string &prefix = "") const;
+    void collect_all_parameter_names(std::vector<std::string> &all_names, const std::string &prefix = "") const;
     void collect_all_modules(std::unordered_map<std::string, Module *> &out, const std::string &prefix) const;
 };
 

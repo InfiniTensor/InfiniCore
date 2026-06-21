@@ -55,7 +55,11 @@ __global__ void logdet_lu_kernel(
         }
 
         if (pivot_abs <= eps) {
+#if defined(ENABLE_HYGON_API)
+            *out = static_cast<T>(-__builtin_huge_val());
+#else
             *out = -std::numeric_limits<T>::infinity();
+#endif
             return;
         }
 
@@ -84,7 +88,11 @@ __global__ void logdet_lu_kernel(
     }
 
     if (det_sign <= 0) {
+#if defined(ENABLE_HYGON_API)
+        *out = static_cast<T>(__builtin_nan(""));
+#else
         *out = static_cast<T>(std::numeric_limits<double>::quiet_NaN());
+#endif
         return;
     }
     *out = static_cast<T>(log_abs_det);

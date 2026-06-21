@@ -35,6 +35,7 @@ rule_end()
 
 target("infiniop-hygon")
     set_kind("static")
+    set_languages("cxx17")
     add_deps("infini-utils")
     on_install(function (target) end)
 
@@ -50,6 +51,7 @@ target("infiniop-hygon")
     if os.isdir(dtk_root) then
         add_includedirs(path.join(dtk_root, "include"))
         add_includedirs(path.join(dtk_root, "cuda", "include"))
+        add_includedirs(path.join(dtk_root, "cuda", "cuda-11", "extras", "clang_internal_header"))
         add_linkdirs(path.join(dtk_root, "lib"))
         add_linkdirs(path.join(dtk_root, "cuda", "lib64"))
     end
@@ -57,6 +59,13 @@ target("infiniop-hygon")
     set_warnings("all", "error")
     add_cuflags("-Wno-error=unused-private-field")
     add_cuflags("-Wno-return-type", {force = true})  -- 抑制return语句警告
+    add_cuflags("-Wno-error=macro-redefined", {force = true})
+    add_cuflags("-Wno-error=ignored-attributes", {force = true})
+    add_cuflags("-Wno-error=uninitialized", {force = true})
+    add_cuflags("-Wno-error=unused-variable", {force = true})
+    add_cuflags("-Wno-error=unused-function", {force = true})
+    add_cuflags("-Wno-error=int-to-void-pointer-cast", {force = true})
+    add_cuflags("-Xclang", "-fno-cuda-host-device-constexpr", {force = true})
     add_cuflags("-fPIC", "-std=c++17", {force = true})
     add_culdflags("-fPIC")
     add_cxflags("-fPIC")
@@ -68,10 +77,21 @@ target("infiniop-hygon")
     add_cuflags("-arch=" .. hygon_arch)
     print("编译海光DCU架构: " .. hygon_arch)
     
+    -- Keep CPU descriptors available because ENABLE_CPU_API is enabled globally.
+    add_files("../src/infiniop/devices/cpu/*.cc", "../src/infiniop/ops/*/cpu/*.cc", "../src/infiniop/reduce/cpu/*.cc")
+
     -- 复用NVIDIA的CUDA实现，通过HIP兼容层
     add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")
-    -- temporarily disble paged ops for hygon
-    remove_files("../src/infiniop/ops/paged*/nvidia/*.cu")
+
+    -- Keep platform-specific or currently unregistered NVIDIA sources out of the Hygon target.
+    remove_files("../src/infiniop/ops/avg_pool3d/nvidia/*.cu")
+    remove_files("../src/infiniop/ops/dequant*/nvidia/*.cu")
+    remove_files("../src/infiniop/ops/dot/nvidia/*.cu")
+    remove_files("../src/infiniop/ops/dist/nvidia/*.cu")
+    remove_files("../src/infiniop/ops/gptq_qyblas_gemm/nvidia/*.cu")
+    remove_files("../src/infiniop/ops/histc/nvidia/*.cu")
+    remove_files("../src/infiniop/ops/quant*/nvidia/*.cu")
+    remove_files("../src/infiniop/ops/scaled_mm/nvidia/*.cu")
 
     if has_config("ninetoothed") then
         add_files("../build/ninetoothed/*.c", "../build/ninetoothed/*.cpp", {cxxflags = {"-Wno-return-type"}})
@@ -94,12 +114,20 @@ target("infinirt-hygon")
     if os.isdir(dtk_root) then
         add_includedirs(path.join(dtk_root, "include"))
         add_includedirs(path.join(dtk_root, "cuda", "include"))
+        add_includedirs(path.join(dtk_root, "cuda", "cuda-11", "extras", "clang_internal_header"))
         add_linkdirs(path.join(dtk_root, "lib"))
         add_linkdirs(path.join(dtk_root, "cuda", "lib64"))
     end
 
     set_warnings("all", "error")
     add_cuflags("-Wno-return-type", {force = true})  -- 抑制return语句警告
+    add_cuflags("-Wno-error=macro-redefined", {force = true})
+    add_cuflags("-Wno-error=ignored-attributes", {force = true})
+    add_cuflags("-Wno-error=uninitialized", {force = true})
+    add_cuflags("-Wno-error=unused-variable", {force = true})
+    add_cuflags("-Wno-error=unused-function", {force = true})
+    add_cuflags("-Wno-error=int-to-void-pointer-cast", {force = true})
+    add_cuflags("-Xclang", "-fno-cuda-host-device-constexpr", {force = true})
     add_cuflags("-fPIC", "-std=c++17", {force = true})
     add_culdflags("-fPIC")
     add_cxflags("-fPIC")
@@ -130,12 +158,20 @@ target("infiniccl-hygon")
         if os.isdir(dtk_root) then
             add_includedirs(path.join(dtk_root, "include"))
             add_includedirs(path.join(dtk_root, "cuda", "include"))
+            add_includedirs(path.join(dtk_root, "cuda", "cuda-11", "extras", "clang_internal_header"))
             add_linkdirs(path.join(dtk_root, "lib"))
             add_linkdirs(path.join(dtk_root, "cuda", "lib64"))
         end
 
         set_warnings("all", "error")
         add_cuflags("-Wno-return-type", {force = true})  -- 抑制return语句警告
+        add_cuflags("-Wno-error=macro-redefined", {force = true})
+        add_cuflags("-Wno-error=ignored-attributes", {force = true})
+        add_cuflags("-Wno-error=uninitialized", {force = true})
+        add_cuflags("-Wno-error=unused-variable", {force = true})
+        add_cuflags("-Wno-error=unused-function", {force = true})
+        add_cuflags("-Wno-error=int-to-void-pointer-cast", {force = true})
+        add_cuflags("-Xclang", "-fno-cuda-host-device-constexpr", {force = true})
         add_cuflags("-fPIC", "-std=c++17", {force = true})
         add_culdflags("-fPIC")
         add_cxflags("-fPIC")

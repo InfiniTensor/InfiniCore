@@ -54,6 +54,10 @@ void Runtime::syncDevice() {
     INFINICORE_CHECK_ERROR(infinirtDeviceSynchronize());
 }
 
+void Runtime::trimMemory() {
+    device_memory_allocator_->trim();
+}
+
 std::shared_ptr<Memory> Runtime::allocateMemory(size_t size) {
     std::byte *data_ptr = device_memory_allocator_->allocate(size);
     return std::make_shared<Memory>(
@@ -104,6 +108,14 @@ void Runtime::memcpyD2D(void *dst, const void *src, size_t size, bool async) {
     } else {
         INFINICORE_CHECK_ERROR(infinirtMemcpy(dst, src, size, INFINIRT_MEMCPY_D2D));
     }
+}
+
+void Runtime::setDeviceMemory(void *ptr, int value, size_t count) {
+    INFINICORE_CHECK_ERROR(infinirtMemset(ptr, value, count));
+}
+
+void Runtime::setDeviceMemoryAsync(void *ptr, int value, size_t count, infinirtStream_t stream) {
+    INFINICORE_CHECK_ERROR(infinirtMemsetAsync(ptr, value, count, stream));
 }
 
 // Timing method implementations

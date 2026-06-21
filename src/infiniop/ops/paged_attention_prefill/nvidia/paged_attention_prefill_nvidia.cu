@@ -1,10 +1,11 @@
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ALI_API) || defined(ENABLE_ILUVATAR_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ALI_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
 #include <cuda_runtime.h>
 
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <type_traits>
 
 #include "../../../devices/nvidia/nvidia_common.cuh"
 #include "../../../devices/nvidia/nvidia_kernel_common.cuh"
@@ -23,10 +24,16 @@ constexpr size_t ceilDiv(size_t a, size_t b) {
 
 inline const char *default_prefill_kernel(const PagedAttentionPrefillInfo &info) {
     // Iluvatar: use warp (stable). Users can override via INFINIOP_FLASH_PREFILL_KERNEL.
-#ifdef ENABLE_ILUVATAR_API
+#if defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
     (void)info;
     return "warp";
 #endif
+    if (info.head_size == 192) {
+        return "warp";
+    }
+    if (info.head_size == 576) {
+        return "ref";
+    }
     // Heuristic auto-dispatch (v0.4):
     // - Prefer the pipelined + tile-wise softmax kernel on FA2-compatible block_size=256.
     // - Keep a conservative fallback for other shapes / older GPUs (cp.async is a no-op below SM80).
@@ -324,6 +331,7 @@ INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd128WarpCta8Pipe(
         o_stride, o_head_stride);
 }
 
+#if !defined(ENABLE_HYGON_API)
 template <typename Tindex>
 INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd128WarpCta8Mma(
     half *out,
@@ -358,6 +366,7 @@ INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd128WarpCta8Mma(
         v_batch_stride, v_row_stride, v_head_stride,
         o_stride, o_head_stride);
 }
+#endif // !defined(ENABLE_HYGON_API)
 
 template <typename Tindex, typename Tdata>
 INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd64WarpCta8Pipe(
@@ -579,6 +588,251 @@ INFINIOP_CUDA_KERNEL PagedAttentionPrefillHd64WarpCta16(
         o_stride, o_head_stride);
 }
 
+template <typename Tindex, typename Tdata, int QK_HEAD_SIZE, int VALUE_SIZE>
+__global__ void PagedAttentionPrefillMlaWarpKernel(
+    Tdata *out_,
+    const Tdata *q_,
+    const Tdata *k_cache_,
+    const Tdata *v_cache_,
+    const Tindex *block_tables_,
+    const Tindex *total_kv_lens_,
+    const Tindex *cu_seqlens_q_,
+    const float *alibi_slopes_,
+    size_t num_heads,
+    size_t num_kv_heads,
+    float scale,
+    size_t page_block_size,
+    ptrdiff_t block_table_batch_stride,
+    ptrdiff_t q_stride,
+    ptrdiff_t q_head_stride,
+    ptrdiff_t k_batch_stride,
+    ptrdiff_t k_row_stride,
+    ptrdiff_t k_head_stride,
+    ptrdiff_t v_batch_stride,
+    ptrdiff_t v_row_stride,
+    ptrdiff_t v_head_stride,
+    ptrdiff_t o_stride,
+    ptrdiff_t o_head_stride,
+    size_t num_seqs) {
+
+    constexpr int WARP_SIZE = 32;
+    constexpr int Q_DIMS_PER_LANE = QK_HEAD_SIZE / WARP_SIZE;
+    constexpr int V_DIMS_PER_LANE = VALUE_SIZE / WARP_SIZE;
+
+    const size_t global_token_idx = static_cast<size_t>(blockIdx.x);
+    const size_t head_idx = static_cast<size_t>(blockIdx.y);
+    const int lane = static_cast<int>(threadIdx.x);
+
+    if (head_idx >= num_heads || lane >= WARP_SIZE) {
+        return;
+    }
+
+    const size_t seq_idx = op::paged_attention_prefill::cuda::find_seq_id<Tindex>(global_token_idx, cu_seqlens_q_, num_seqs);
+    const size_t q_start = static_cast<size_t>(cu_seqlens_q_[seq_idx]);
+    const size_t q_end = static_cast<size_t>(cu_seqlens_q_[seq_idx + 1]);
+    const size_t q_token_idx = global_token_idx - q_start;
+    const size_t q_len = q_end - q_start;
+    const size_t total_kv_len = static_cast<size_t>(total_kv_lens_[seq_idx]);
+    const size_t history_len = total_kv_len - q_len;
+    const size_t causal_limit = history_len + q_token_idx;
+
+    const size_t num_queries_per_kv = num_heads / num_kv_heads;
+    const size_t kv_head_idx = head_idx / num_queries_per_kv;
+    const float alibi_slope = (alibi_slopes_ == nullptr) ? 0.0f : alibi_slopes_[head_idx];
+    constexpr float LOG2E = 1.4426950408889634f;
+    const float scale_log2 = scale * LOG2E;
+
+    const Tdata *q_vec = q_ + static_cast<int64_t>(global_token_idx) * q_stride + static_cast<int64_t>(head_idx) * q_head_stride;
+    Tdata *out_vec = out_ + static_cast<int64_t>(global_token_idx) * o_stride + static_cast<int64_t>(head_idx) * o_head_stride;
+    const Tindex *block_table = block_tables_ + static_cast<int64_t>(seq_idx) * static_cast<int64_t>(block_table_batch_stride);
+    const int pbs = static_cast<int>(page_block_size);
+
+    float q_reg[Q_DIMS_PER_LANE];
+    float acc[V_DIMS_PER_LANE];
+#pragma unroll
+    for (int i = 0; i < Q_DIMS_PER_LANE; ++i) {
+        q_reg[i] = static_cast<float>(q_vec[lane * Q_DIMS_PER_LANE + i]);
+    }
+#pragma unroll
+    for (int i = 0; i < V_DIMS_PER_LANE; ++i) {
+        acc[i] = 0.0f;
+    }
+
+    float m = -INFINITY;
+    float l = 0.0f;
+    for (size_t t = 0; t <= causal_limit; ++t) {
+        const size_t page = t / static_cast<size_t>(pbs);
+        const size_t off = t - page * static_cast<size_t>(pbs);
+        const ptrdiff_t phys = static_cast<ptrdiff_t>(block_table[page]);
+        const Tdata *k_vec = k_cache_ + static_cast<int64_t>(phys) * k_batch_stride + static_cast<int64_t>(off) * k_row_stride + static_cast<int64_t>(kv_head_idx) * k_head_stride;
+        const Tdata *v_vec = v_cache_ + static_cast<int64_t>(phys) * v_batch_stride + static_cast<int64_t>(off) * v_row_stride + static_cast<int64_t>(kv_head_idx) * v_head_stride;
+
+        float qk = 0.0f;
+#pragma unroll
+        for (int i = 0; i < Q_DIMS_PER_LANE; ++i) {
+            const int dim = lane * Q_DIMS_PER_LANE + i;
+            qk += q_reg[i] * static_cast<float>(k_vec[dim]);
+        }
+        qk = op::paged_attention::cuda::warpReduceSum(qk);
+
+        float alpha = 1.0f;
+        float beta = 0.0f;
+        if (lane == 0) {
+            float score = qk * scale_log2;
+            if (alibi_slope != 0.0f) {
+                score += (alibi_slope * static_cast<float>(t - causal_limit)) * LOG2E;
+            }
+            const float m_new = fmaxf(m, score);
+            alpha = exp2f(m - m_new);
+            beta = exp2f(score - m_new);
+            l = l * alpha + beta;
+            m = m_new;
+        }
+        alpha = __shfl_sync(0xffffffff, alpha, 0);
+        beta = __shfl_sync(0xffffffff, beta, 0);
+
+#pragma unroll
+        for (int i = 0; i < V_DIMS_PER_LANE; ++i) {
+            const int dim = lane * V_DIMS_PER_LANE + i;
+            acc[i] = acc[i] * alpha + beta * static_cast<float>(v_vec[dim]);
+        }
+    }
+
+    float inv_l = 0.0f;
+    if (lane == 0) {
+        inv_l = 1.0f / (l + 1e-6f);
+    }
+    inv_l = __shfl_sync(0xffffffff, inv_l, 0);
+
+#pragma unroll
+    for (int i = 0; i < V_DIMS_PER_LANE; ++i) {
+        const int dim = lane * V_DIMS_PER_LANE + i;
+        const float value = acc[i] * inv_l;
+        if constexpr (std::is_same_v<Tdata, half>) {
+            out_vec[dim] = __float2half_rn(value);
+        } else if constexpr (std::is_same_v<Tdata, __nv_bfloat16>) {
+            out_vec[dim] = __float2bfloat16_rn(value);
+        } else {
+            out_vec[dim] = static_cast<Tdata>(value);
+        }
+    }
+}
+
+template <typename Tindex, typename Tdata, typename Tcompute, int QK_HEAD_SIZE, int VALUE_SIZE>
+__global__ void PagedAttentionPrefillMlaReferenceKernel(
+    Tdata *out_,
+    const Tdata *q_,
+    const Tdata *k_cache_,
+    const Tdata *v_cache_,
+    const Tindex *block_tables_,
+    const Tindex *total_kv_lens_,
+    const Tindex *cu_seqlens_q_,
+    const float *alibi_slopes_,
+    size_t num_heads,
+    size_t num_kv_heads,
+    float scale,
+    size_t max_num_blocks_per_seq,
+    size_t page_block_size,
+    ptrdiff_t block_table_batch_stride,
+    ptrdiff_t q_stride,
+    ptrdiff_t q_head_stride,
+    ptrdiff_t k_batch_stride,
+    ptrdiff_t k_row_stride,
+    ptrdiff_t k_head_stride,
+    ptrdiff_t v_batch_stride,
+    ptrdiff_t v_row_stride,
+    ptrdiff_t v_head_stride,
+    ptrdiff_t o_stride,
+    ptrdiff_t o_head_stride,
+    size_t num_seqs) {
+
+    const size_t global_token_idx = static_cast<size_t>(blockIdx.x);
+    const size_t head_idx = static_cast<size_t>(blockIdx.y);
+    const size_t dim_idx = static_cast<size_t>(threadIdx.x);
+
+    if (dim_idx >= VALUE_SIZE || head_idx >= num_heads) {
+        return;
+    }
+
+    const size_t seq_idx = op::paged_attention_prefill::cuda::find_seq_id<Tindex>(global_token_idx, cu_seqlens_q_, num_seqs);
+    const size_t q_token_idx = global_token_idx - static_cast<size_t>(cu_seqlens_q_[seq_idx]);
+    const size_t q_len = static_cast<size_t>(cu_seqlens_q_[seq_idx + 1] - cu_seqlens_q_[seq_idx]);
+
+    const size_t total_kv_len = static_cast<size_t>(total_kv_lens_[seq_idx]);
+    const size_t history_len = total_kv_len - q_len;
+    const size_t causal_limit = history_len + q_token_idx;
+
+    const size_t num_queries_per_kv = num_heads / num_kv_heads;
+    const size_t kv_head_idx = head_idx / num_queries_per_kv;
+    const float alibi_slope = (alibi_slopes_ == nullptr) ? 0.0f : alibi_slopes_[head_idx];
+
+    const Tdata *q_vec = q_ + static_cast<int64_t>(global_token_idx) * q_stride + static_cast<int64_t>(head_idx) * q_head_stride;
+    Tdata *out_ptr = out_ + static_cast<int64_t>(global_token_idx) * o_stride + static_cast<int64_t>(head_idx) * o_head_stride;
+    const Tindex *block_table = block_tables_ + static_cast<int64_t>(seq_idx) * static_cast<int64_t>(block_table_batch_stride);
+    const size_t pbs = page_block_size;
+
+    Tcompute max_score = -INFINITY;
+    for (size_t t = 0; t <= causal_limit; ++t) {
+        const size_t page = t / pbs;
+        const size_t off = t - page * pbs;
+        const ptrdiff_t phys = static_cast<ptrdiff_t>(block_table[page]);
+        const Tdata *k_vec = k_cache_ + static_cast<int64_t>(phys) * k_batch_stride + static_cast<int64_t>(off) * k_row_stride + static_cast<int64_t>(kv_head_idx) * k_head_stride;
+
+        Tcompute score = 0;
+        for (size_t d = 0; d < QK_HEAD_SIZE; ++d) {
+            score += static_cast<Tcompute>(q_vec[d]) * static_cast<Tcompute>(k_vec[d]);
+        }
+        score *= static_cast<Tcompute>(scale);
+        if (alibi_slope != 0.0f) {
+            score += static_cast<Tcompute>(alibi_slope * static_cast<float>(t - causal_limit));
+        }
+        if (score > max_score) {
+            max_score = score;
+        }
+    }
+
+    Tcompute sum_exp = 0;
+    for (size_t t = 0; t <= causal_limit; ++t) {
+        const size_t page = t / pbs;
+        const size_t off = t - page * pbs;
+        const ptrdiff_t phys = static_cast<ptrdiff_t>(block_table[page]);
+        const Tdata *k_vec = k_cache_ + static_cast<int64_t>(phys) * k_batch_stride + static_cast<int64_t>(off) * k_row_stride + static_cast<int64_t>(kv_head_idx) * k_head_stride;
+
+        Tcompute score = 0;
+        for (size_t d = 0; d < QK_HEAD_SIZE; ++d) {
+            score += static_cast<Tcompute>(q_vec[d]) * static_cast<Tcompute>(k_vec[d]);
+        }
+        score *= static_cast<Tcompute>(scale);
+        if (alibi_slope != 0.0f) {
+            score += static_cast<Tcompute>(alibi_slope * static_cast<float>(t - causal_limit));
+        }
+        sum_exp += static_cast<Tcompute>(expf(static_cast<float>(score - max_score)));
+    }
+
+    const Tcompute inv_sum = static_cast<Tcompute>(1.0f) / (sum_exp + static_cast<Tcompute>(1e-6f));
+    Tcompute acc = 0;
+    for (size_t t = 0; t <= causal_limit; ++t) {
+        const size_t page = t / pbs;
+        const size_t off = t - page * pbs;
+        const ptrdiff_t phys = static_cast<ptrdiff_t>(block_table[page]);
+        const Tdata *k_vec = k_cache_ + static_cast<int64_t>(phys) * k_batch_stride + static_cast<int64_t>(off) * k_row_stride + static_cast<int64_t>(kv_head_idx) * k_head_stride;
+
+        Tcompute score = 0;
+        for (size_t d = 0; d < QK_HEAD_SIZE; ++d) {
+            score += static_cast<Tcompute>(q_vec[d]) * static_cast<Tcompute>(k_vec[d]);
+        }
+        score *= static_cast<Tcompute>(scale);
+        if (alibi_slope != 0.0f) {
+            score += static_cast<Tcompute>(alibi_slope * static_cast<float>(t - causal_limit));
+        }
+        const Tcompute prob = static_cast<Tcompute>(expf(static_cast<float>(score - max_score))) * inv_sum;
+        const Tdata *v_vec = v_cache_ + static_cast<int64_t>(phys) * v_batch_stride + static_cast<int64_t>(off) * v_row_stride + static_cast<int64_t>(kv_head_idx) * v_head_stride;
+        acc += prob * static_cast<Tcompute>(v_vec[dim_idx]);
+    }
+
+    out_ptr[dim_idx] = static_cast<Tdata>(acc);
+}
+
 template <typename Tindex, typename Tdata, typename Tcompute>
 infiniStatus_t launch_prefill_ref(
     Tdata *out,
@@ -594,6 +848,7 @@ infiniStatus_t launch_prefill_ref(
     size_t num_kv_heads,
     size_t total_q_tokens,
     size_t head_size,
+    size_t value_size,
     float scale,
     size_t max_num_blocks_per_seq,
     size_t page_block_size,
@@ -611,7 +866,20 @@ infiniStatus_t launch_prefill_ref(
     cudaStream_t stream) {
 
     const dim3 grid(static_cast<uint32_t>(total_q_tokens), static_cast<uint32_t>(num_heads), 1);
-    const dim3 block(static_cast<uint32_t>(head_size), 1, 1);
+    const dim3 block(static_cast<uint32_t>(value_size), 1, 1);
+
+    if (head_size == 576 && value_size == 512) {
+        const dim3 mla_block(32, 1, 1);
+        PagedAttentionPrefillMlaWarpKernel<Tindex, Tdata, 576, 512>
+            <<<grid, mla_block, 0, stream>>>(
+                out, q, k_cache, v_cache, block_tables, total_kv_lens, cu_seqlens_q, alibi_slopes,
+                num_heads, num_kv_heads, scale, page_block_size,
+                block_table_batch_stride, q_stride, q_head_stride,
+                k_batch_stride, k_row_stride, k_head_stride,
+                v_batch_stride, v_row_stride, v_head_stride,
+                o_stride, o_head_stride, num_seqs);
+        return INFINI_STATUS_SUCCESS;
+    }
 
     if (head_size == 64) {
         op::paged_attention_prefill::cuda::PagedAttentionPrefillReferenceKernel<Tindex, Tdata, Tcompute, 64>
@@ -627,6 +895,30 @@ infiniStatus_t launch_prefill_ref(
 
     if (head_size == 128) {
         op::paged_attention_prefill::cuda::PagedAttentionPrefillReferenceKernel<Tindex, Tdata, Tcompute, 128>
+            <<<grid, block, 0, stream>>>(
+                out, q, k_cache, v_cache, block_tables, total_kv_lens, cu_seqlens_q, alibi_slopes,
+                num_heads, num_kv_heads, scale, max_num_blocks_per_seq, page_block_size,
+                block_table_batch_stride, q_stride, q_head_stride,
+                k_batch_stride, k_row_stride, k_head_stride,
+                v_batch_stride, v_row_stride, v_head_stride,
+                o_stride, o_head_stride, num_seqs);
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    if (head_size == 192) {
+        op::paged_attention_prefill::cuda::PagedAttentionPrefillReferenceKernel<Tindex, Tdata, Tcompute, 192>
+            <<<grid, block, 0, stream>>>(
+                out, q, k_cache, v_cache, block_tables, total_kv_lens, cu_seqlens_q, alibi_slopes,
+                num_heads, num_kv_heads, scale, max_num_blocks_per_seq, page_block_size,
+                block_table_batch_stride, q_stride, q_head_stride,
+                k_batch_stride, k_row_stride, k_head_stride,
+                v_batch_stride, v_row_stride, v_head_stride,
+                o_stride, o_head_stride, num_seqs);
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    if (head_size == 576) {
+        op::paged_attention_prefill::cuda::PagedAttentionPrefillReferenceKernel<Tindex, Tdata, Tcompute, 576>
             <<<grid, block, 0, stream>>>(
                 out, q, k_cache, v_cache, block_tables, total_kv_lens, cu_seqlens_q, alibi_slopes,
                 num_heads, num_kv_heads, scale, max_num_blocks_per_seq, page_block_size,
@@ -693,6 +985,17 @@ infiniStatus_t launch_prefill_warp(
         return INFINI_STATUS_SUCCESS;
     case 128:
         op::paged_attention_prefill::cuda::PagedAttentionPrefillWarpGlobalKernel<Tindex, Tdata, 128>
+            <<<grid, block, 0, stream>>>(
+                out, q, k_cache, v_cache, block_tables, total_kv_lens, cu_seqlens_q, alibi_slopes,
+                num_heads, num_seqs, num_kv_heads, total_q_tokens, scale, max_num_blocks_per_seq,
+                page_block_size, block_table_batch_stride,
+                q_stride, q_head_stride,
+                k_batch_stride, k_row_stride, k_head_stride,
+                v_batch_stride, v_row_stride, v_head_stride,
+                o_stride, o_head_stride);
+        return INFINI_STATUS_SUCCESS;
+    case 192:
+        op::paged_attention_prefill::cuda::PagedAttentionPrefillWarpGlobalKernel<Tindex, Tdata, 192>
             <<<grid, block, 0, stream>>>(
                 out, q, k_cache, v_cache, block_tables, total_kv_lens, cu_seqlens_q, alibi_slopes,
                 num_heads, num_seqs, num_kv_heads, total_q_tokens, scale, max_num_blocks_per_seq,
@@ -935,6 +1238,17 @@ infiniStatus_t launch_prefill_warpcta8mma(
     ptrdiff_t o_stride,
     ptrdiff_t o_head_stride,
     cudaStream_t stream) {
+#if defined(ENABLE_HYGON_API)
+    return launch_prefill_warpcta8pipe<Tindex, Tdata>(
+        out, q, k_cache, v_cache, block_tables, total_kv_lens, cu_seqlens_q, alibi_slopes,
+        num_heads, num_seqs, num_kv_heads, total_q_tokens, head_size, scale,
+        max_num_blocks_per_seq, page_block_size,
+        block_table_batch_stride,
+        q_stride, q_head_stride,
+        k_batch_stride, k_row_stride, k_head_stride,
+        v_batch_stride, v_row_stride, v_head_stride,
+        o_stride, o_head_stride, stream);
+#else
 
     // Current WMMA kernel only supports fp16 + head_dim=128.
     if constexpr (!std::is_same_v<Tdata, half>) {
@@ -1016,6 +1330,7 @@ infiniStatus_t launch_prefill_warpcta8mma(
             v_batch_stride, v_row_stride, v_head_stride,
             o_stride, o_head_stride);
     return INFINI_STATUS_SUCCESS;
+#endif // defined(ENABLE_HYGON_API)
 }
 
 template <typename Tindex, typename Tdata>
@@ -1522,7 +1837,7 @@ infiniStatus_t Descriptor::calculate(
                 static_cast<const Tdata *>(k_cache), static_cast<const Tdata *>(v_cache),                                                                                                                                                                                                                                              \
                 static_cast<const Tindex *>(block_tables), static_cast<const Tindex *>(total_kv_lens_ptr), static_cast<const Tindex *>(cu_seqlens_q_ptr), alibi_ptr,                                                                                                                                                                   \
                 _info.num_heads, _info.num_seqs, _info.num_kv_heads, _info.total_q_tokens,                                                                                                                                                                                                                                             \
-                _info.head_size, _info.scale, _info.max_num_blocks_per_seq, _info.page_block_size,                                                                                                                                                                                                                                     \
+                _info.head_size, _info.value_size, _info.scale, _info.max_num_blocks_per_seq, _info.page_block_size,                                                                                                                                                                                                                   \
                 _info.block_table_batch_stride,                                                                                                                                                                                                                                                                                        \
                 _info.q_stride, _info.q_head_stride,                                                                                                                                                                                                                                                                                   \
                 _info.k_batch_stride, _info.k_row_stride, _info.k_head_stride,                                                                                                                                                                                                                                                         \

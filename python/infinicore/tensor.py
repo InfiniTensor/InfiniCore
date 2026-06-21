@@ -159,7 +159,7 @@ def strided_empty(size, strides, *, dtype=None, device=None, pin_memory=False):
     )
 
 
-def zeros(size, *, dtype=None, device=None, pin_memory=False):
+def zeros(size, *, dtype=None, device=infinicore.device.device(), pin_memory=False):
     return Tensor(
         _infinicore.zeros(size, dtype._underlying, device._underlying, pin_memory)
     )
@@ -283,7 +283,35 @@ def from_numpy(
     return result
 
 
-def from_list(data, *, dtype=None, device=None) -> Tensor:
+def from_list(data, *, dtype) -> Tensor:
+    """Convert a 1D or 2D Python list to an infinicore Tensor on CPU.
+
+    This follows a NumPy-like three-stage flow implemented in C++:
+    validate shape, allocate an empty tensor of the requested dtype, then
+    pack list elements directly into the destination buffer.
+
+    Args:
+        data: A 1D list of scalars or a 2D list of scalars.
+        dtype: Required infinicore dtype. Must be specified explicitly;
+            ``from_list`` does not infer the dtype from list elements.
+
+    Returns:
+        Tensor: A CPU infinicore tensor created from the list data.
+
+    Raises:
+        TypeError: If ``dtype`` is missing, or if input is not a list/tuple
+            or contains invalid elements.
+        ValueError: If input is empty, irregular, or deeper than 2D.
+
+    Note:
+        The result is always on CPU. Use ``tensor.to(device)`` to move it elsewhere.
+    """
+    if dtype is None:
+        raise TypeError("from_list() requires `dtype` to be specified")
+    return Tensor(_infinicore.from_list(data, dtype._underlying))
+
+
+def from_list_by_numpy(data, *, dtype=None, device=None) -> Tensor:
     """Convert a Python list to an infinicore Tensor.
 
     Args:

@@ -1,0 +1,39 @@
+#ifndef __ZEROS_BANG_INTERNAL_H__
+#define __ZEROS_BANG_INTERNAL_H__
+
+#include "../../../elementwise/bang/elementwise_bang_kernel.h"
+
+typedef struct ZerosOp {
+public:
+    static constexpr size_t num_inputs = 1;
+    template <typename T>
+    __mlu_device__ void operator()(T *out, const T *input, const T *unused, size_t num_elements) const {
+        (void)input;
+        (void)unused;
+        if constexpr (std::is_same_v<T, double>) {
+            for (size_t i = 0; i < num_elements; ++i) {
+                out[i] = 0.0;
+            }
+        } else {
+            __bang_write_value(out, num_elements, static_cast<T>(0));
+        }
+    }
+} ZerosOp;
+
+LAUNCH_ELEMENTWISE_KERNEL_IMPL(Zeros, ZerosOp)
+
+LAUNCH_ELEMENTWISE_KERNEL_INSTANTIATE(Zeros, uint8_t)
+LAUNCH_ELEMENTWISE_KERNEL_INSTANTIATE(Zeros, bool)
+LAUNCH_ELEMENTWISE_KERNEL_INSTANTIATE(Zeros, int8_t)
+LAUNCH_ELEMENTWISE_KERNEL_INSTANTIATE(Zeros, int16_t)
+LAUNCH_ELEMENTWISE_KERNEL_INSTANTIATE(Zeros, int32_t)
+LAUNCH_ELEMENTWISE_KERNEL_INSTANTIATE(Zeros, int64_t)
+LAUNCH_ELEMENTWISE_KERNEL_INSTANTIATE(Zeros, uint16_t)
+LAUNCH_ELEMENTWISE_KERNEL_INSTANTIATE(Zeros, uint32_t)
+LAUNCH_ELEMENTWISE_KERNEL_INSTANTIATE(Zeros, uint64_t)
+LAUNCH_ELEMENTWISE_KERNEL_INSTANTIATE(Zeros, half)
+LAUNCH_ELEMENTWISE_KERNEL_INSTANTIATE(Zeros, float)
+LAUNCH_ELEMENTWISE_KERNEL_INSTANTIATE(Zeros, double)
+LAUNCH_ELEMENTWISE_KERNEL_INSTANTIATE(Zeros, bfloat16_t)
+
+#endif // __ZEROS_BANG_INTERNAL_H__

@@ -76,6 +76,7 @@ from infinicore.ops.block_diag import block_diag
 from infinicore.ops.broadcast_to import broadcast_to
 from infinicore.ops.cat import cat
 from infinicore.ops.cdist import cdist
+from infinicore.ops.conv2d import conv2d
 from infinicore.ops.cross_entropy import cross_entropy
 from infinicore.ops.diff import diff
 from infinicore.ops.digamma import digamma
@@ -105,8 +106,13 @@ from infinicore.ops.logical_and import logical_and
 from infinicore.ops.logical_not import logical_not
 from infinicore.ops.masked_select import masked_select
 from infinicore.ops.matmul import matmul
+from infinicore.ops.mha import mha
 from infinicore.ops.mha_kvcache import mha_kvcache
 from infinicore.ops.mha_varlen import mha_varlen
+from infinicore.ops.moore_mate_flash_attn import (
+    moore_mate_flash_attn_decode,
+    moore_mate_flash_attn_prefill,
+)
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.nrm2 import nrm2
@@ -139,6 +145,7 @@ from infinicore.tensor import (
     empty_like,
     from_blob,
     from_list,
+    from_list_by_numpy,
     from_numpy,
     from_torch,
     ones,
@@ -221,6 +228,7 @@ __all__ = [
     "fmod",
     "frac",
     "cat",
+    "conv2d",
     "inner",
     "masked_select",
     "logaddexp",
@@ -246,10 +254,12 @@ __all__ = [
     "empty_like",
     "from_blob",
     "from_list",
+    "from_list_by_numpy",
     "from_numpy",
     "from_torch",
     "mha_kvcache",
     "mha_varlen",
+    "mha",
     "fmin",
     "floor_divide",
     "float_power",
@@ -280,6 +290,8 @@ __all__ = [
     "zeros",
     "sum",
     "var_mean",
+    "moore_mate_flash_attn_prefill",
+    "moore_mate_flash_attn_decode",
     "var",
     "topk",
     "all",
