@@ -248,7 +248,7 @@ option_end()
 if has_config("aten") then
     add_defines("ENABLE_ATEN")
     if get_config("flash-attn") and get_config("flash-attn") ~= ""
-       and (has_config("nv-gpu") or has_config("qy-gpu")) then
+       and (has_config("nv-gpu") or has_config("metax-gpu") or has_config("qy-gpu")) then
         add_defines("ENABLE_FLASH_ATTN")
     end
 end

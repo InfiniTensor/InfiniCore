@@ -105,6 +105,14 @@ void run(void *planned_meta) {
         auto q_4d = q.reshape({batch_size, seqlen, num_heads, head_dim}).permute({0, 2, 1, 3});
         auto k_4d = k.reshape({batch_size, seqlen, num_kv_heads, head_dim}).permute({0, 2, 1, 3});
         auto v_4d = v.reshape({batch_size, seqlen, num_kv_heads, value_dim}).permute({0, 2, 1, 3});
+        if (num_heads != num_kv_heads) {
+            if (num_heads % num_kv_heads != 0) {
+                throw std::runtime_error("mha_varlen dense SDPA fallback requires num_heads to be divisible by num_kv_heads");
+            }
+            const int64_t groups = num_heads / num_kv_heads;
+            k_4d = k_4d.unsqueeze(2).expand({batch_size, num_kv_heads, groups, seqlen, head_dim}).reshape({batch_size, num_heads, seqlen, head_dim});
+            v_4d = v_4d.unsqueeze(2).expand({batch_size, num_kv_heads, groups, seqlen, value_dim}).reshape({batch_size, num_heads, seqlen, value_dim});
+        }
         auto result = at::scaled_dot_product_attention(
             q_4d,
             k_4d,
@@ -112,8 +120,7 @@ void run(void *planned_meta) {
             std::nullopt,
             0.0,
             true,
-            static_cast<double>(p->scale),
-            num_heads != num_kv_heads);
+            std::optional<double>(static_cast<double>(p->scale)));
         out_work.copy_(result.permute({0, 2, 1, 3}).reshape({q.size(0), num_heads, value_dim}));
         if (out_need_copy_back) {
             p->out->copy_from(out_work_ic);
