@@ -108,11 +108,6 @@ void cleanup(void **planned_meta_ptr) {
     *planned_meta_ptr = nullptr;
 }
 
-static bool registered = []() {
-    DeepseekMoe::plan_dispatcher().registerDevice(Device::Type::NVIDIA, &plan);
-    DeepseekMoe::run_dispatcher().registerDevice(Device::Type::NVIDIA, &run);
-    DeepseekMoe::cleanup_dispatcher().registerDevice(Device::Type::NVIDIA, &cleanup);
-    return true;
-}();
+INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(DeepseekMoe, &plan, &run, &cleanup);
 
 } // namespace infinicore::op::deepseek_moe_impl::infiniop
