@@ -34,4 +34,57 @@ struct InfinicclComm {
 #define INFINICCL_DEVICE_API_NOOP(NAMSPACE) \
     INFINICCL_DEVICE_API(NAMSPACE, { return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED; })
 
+#define INFINICCL_DEVICE_API_UNSUPPORTED_EP_COLLECTIVES() \
+    infiniStatus_t groupStart(infinicclComm_t) {          \
+        return INFINI_STATUS_NOT_IMPLEMENTED;             \
+    }                                                     \
+                                                          \
+    infiniStatus_t groupEnd(infinicclComm_t) {            \
+        return INFINI_STATUS_NOT_IMPLEMENTED;             \
+    }                                                     \
+                                                          \
+    infiniStatus_t allGather(                             \
+        void *,                                           \
+        void *,                                           \
+        size_t,                                           \
+        infiniDtype_t,                                    \
+        infinicclComm_t,                                  \
+        infinirtStream_t) {                               \
+        return INFINI_STATUS_NOT_IMPLEMENTED;             \
+    }                                                     \
+                                                          \
+    infiniStatus_t allGatherV(                            \
+        void *,                                           \
+        void *,                                           \
+        const size_t *,                                   \
+        int,                                              \
+        infiniDtype_t,                                    \
+        infinicclComm_t,                                  \
+        infinirtStream_t) {                               \
+        return INFINI_STATUS_NOT_IMPLEMENTED;             \
+    }                                                     \
+                                                          \
+    infiniStatus_t reduceScatter(                         \
+        void *,                                           \
+        void *,                                           \
+        size_t,                                           \
+        infiniDtype_t,                                    \
+        infinicclReduceOp_t,                              \
+        infinicclComm_t,                                  \
+        infinirtStream_t) {                               \
+        return INFINI_STATUS_NOT_IMPLEMENTED;             \
+    }                                                     \
+                                                          \
+    infiniStatus_t reduceScatterV(                        \
+        void *,                                           \
+        void *,                                           \
+        const size_t *,                                   \
+        int,                                              \
+        infiniDtype_t,                                    \
+        infinicclReduceOp_t,                              \
+        infinicclComm_t,                                  \
+        infinirtStream_t) {                               \
+        return INFINI_STATUS_NOT_IMPLEMENTED;             \
+    }
+
 #endif // INFINICCL_IMPL_H

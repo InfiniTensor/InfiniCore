@@ -97,4 +97,5 @@ infiniStatus_t allReduce(
     return INFINI_STATUS_SUCCESS;
 }
 
+INFINICCL_DEVICE_API_UNSUPPORTED_EP_COLLECTIVES();
 } // namespace infiniccl::kunlun
