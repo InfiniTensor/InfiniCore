@@ -56,6 +56,12 @@ target("infiniop-iluvatar")
     -- skip gaussian_nll_loss and hinge_embedding_loss and adapt them later
     remove_files("../src/infiniop/ops/gaussian_nll_loss/nvidia/*.cu")
     remove_files("../src/infiniop/ops/hinge_embedding_loss/nvidia/*.cu")
+    if not has_config("marlin") then
+        remove_files(
+            "../src/infiniop/ops/awq_marlin_gemm/nvidia/*.cu",
+            "../src/infiniop/ops/gptq_marlin_gemm/nvidia/*.cu"
+        )
+    end
 
     add_files("../src/infiniop/ops/*/iluvatar/*.cu")
 
