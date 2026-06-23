@@ -12,13 +12,15 @@ __INFINI_C infiniStatus_t infiniopCreateRecurrentGatedDeltaRuleDescriptor(
     infiniopHandle_t handle,
     infiniopRecurrentGatedDeltaRuleDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t out_desc,
+    infiniopTensorDescriptor_t initial_state_desc,
     infiniopTensorDescriptor_t final_state_desc,
     infiniopTensorDescriptor_t q_desc,
     infiniopTensorDescriptor_t k_desc,
     infiniopTensorDescriptor_t v_desc,
     infiniopTensorDescriptor_t g_desc,
     infiniopTensorDescriptor_t beta_desc,
-    infiniopTensorDescriptor_t initial_state_desc,
+    infiniopTensorDescriptor_t initial_state_indices_desc,
+    infiniopTensorDescriptor_t final_state_indices_desc,
     bool use_qk_l2norm) {
 #define CREATE(CASE, NAMESPACE)                                               \
     case CASE:                                                                \
@@ -27,8 +29,9 @@ __INFINI_C infiniStatus_t infiniopCreateRecurrentGatedDeltaRuleDescriptor(
             reinterpret_cast<                                                 \
                 op::recurrent_gated_delta_rule::NAMESPACE::Descriptor **>(    \
                 desc_ptr),                                                    \
-            out_desc, final_state_desc, q_desc, k_desc, v_desc, g_desc,       \
-            beta_desc, initial_state_desc, use_qk_l2norm);
+            out_desc, initial_state_desc, final_state_desc, q_desc, k_desc,   \
+            v_desc, g_desc, beta_desc, initial_state_indices_desc,            \
+            final_state_indices_desc, use_qk_l2norm);
 
     switch (handle->device) {
 #ifdef ENABLE_NVIDIA_API
@@ -64,16 +67,19 @@ __INFINI_C infiniStatus_t infiniopGetRecurrentGatedDeltaRuleWorkspaceSize(
 __INFINI_C infiniStatus_t infiniopRecurrentGatedDeltaRule(
     infiniopRecurrentGatedDeltaRuleDescriptor_t desc,
     void *workspace, size_t workspace_size,
-    void *out, void *final_state,
+    void *out, void *initial_state, void *final_state,
     const void *q, const void *k, const void *v,
-    const void *g, const void *beta, const void *initial_state,
+    const void *g, const void *beta,
+    const void *initial_state_indices,
+    const void *final_state_indices,
     void *stream) {
 #define CALCULATE(CASE, NAMESPACE)                                                \
     case CASE:                                                                    \
         return reinterpret_cast<                                                  \
                    op::recurrent_gated_delta_rule::NAMESPACE::Descriptor *>(desc) \
-            ->calculate(workspace, workspace_size, out, final_state, q, k, v,     \
-                        g, beta, initial_state, stream);
+            ->calculate(workspace, workspace_size, out, initial_state,            \
+                        final_state, q, k, v, g, beta, initial_state_indices,     \
+                        final_state_indices, stream);
 
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API

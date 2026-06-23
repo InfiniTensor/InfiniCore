@@ -7,6 +7,7 @@ from .affine_grid import affine_grid
 from .avg_pool1d import avg_pool1d
 from .binary_cross_entropy_with_logits import binary_cross_entropy_with_logits
 from .causal_softmax import causal_softmax
+from .chunk_gated_delta_rule import chunk_gated_delta_rule
 from .embedding import embedding
 from .flash_attention import flash_attention
 from .gaussian_nll_loss import gaussian_nll_loss
@@ -23,6 +24,7 @@ from .multi_margin_loss import multi_margin_loss
 from .pad import pad
 from .prelu import prelu
 from .random_sample import random_sample
+from .recurrent_gated_delta_rule import recurrent_gated_delta_rule
 from .relu6 import relu6
 from .rms_norm import rms_norm
 from .rope import RopeAlgo, rope
@@ -44,6 +46,7 @@ __all__ = [
     "conv2d",
     "adaptive_max_pool1d",
     "causal_softmax",
+    "chunk_gated_delta_rule",
     "embedding",
     "flash_attention",
     "gaussian_nll_loss",
@@ -56,6 +59,7 @@ __all__ = [
     "prelu",
     "relu6",
     "rms_norm",
+    "recurrent_gated_delta_rule",
     "sigmoid",
     "silu",
     "smooth_l1_loss",

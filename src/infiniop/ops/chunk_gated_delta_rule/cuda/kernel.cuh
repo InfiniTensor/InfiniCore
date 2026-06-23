@@ -1,282 +1,666 @@
-// op/chunk_gated_delta_rule/cuda/kernel.cuh
-
 #ifndef __CHUNK_GATED_DELTA_RULE_KERNEL_CUH__
 #define __CHUNK_GATED_DELTA_RULE_KERNEL_CUH__
 
-#include <cub/cub.cuh>
+#include <cstdint>
+#include <cuda_bf16.h>
 #include <cuda_fp16.h>
 
-#include <stdio.h>
+__device__ inline int64_t loadOptionalIndex(
+    const void *indices,
+    bool is_i64,
+    int idx,
+    int fallback) {
+    if (indices == nullptr) {
+        return static_cast<int64_t>(fallback);
+    }
+    return is_i64
+             ? static_cast<const int64_t *>(indices)[idx]
+             : static_cast<int64_t>(static_cast<const int32_t *>(indices)[idx]);
+}
 
-template <typename Tdata, typename Tcompute,
-          size_t Dk, size_t Dv, size_t BLOCK_THREADS>
+template <typename T>
+__device__ inline float loadAsFloat(const T *ptr, ptrdiff_t offset) {
+    return static_cast<float>(ptr[offset]);
+}
+
+template <>
+__device__ inline float loadAsFloat<half>(const half *ptr, ptrdiff_t offset) {
+    return __half2float(ptr[offset]);
+}
+
+template <>
+__device__ inline float loadAsFloat<__nv_bfloat16>(const __nv_bfloat16 *ptr, ptrdiff_t offset) {
+    return __bfloat162float(ptr[offset]);
+}
+
+#define CGDR_FOR(idx, n) \
+    for (int idx = threadIdx.x; idx < static_cast<int>(n); idx += blockDim.x)
+
+template <typename Tcompute, int NUM_THREADS>
+__device__ Tcompute blockReduceSum(Tcompute v) {
+    __shared__ Tcompute smem[NUM_THREADS];
+    smem[threadIdx.x] = v;
+    __syncthreads();
+
+    for (int s = NUM_THREADS / 2; s > 0; s >>= 1) {
+        if (threadIdx.x < s) {
+            smem[threadIdx.x] += smem[threadIdx.x + s];
+        }
+        __syncthreads();
+    }
+    return smem[0];
+}
+
+template <
+    typename Tdata,
+    typename Tgate,
+    typename Tcompute,
+    size_t Dk,
+    size_t Dv,
+    size_t NUM_THREADS>
 __device__ void chunkGatedDeltaRuleKernel(
+    Tcompute *state_workspace,
     Tdata *out,
+    Tdata *initial_state,
     Tdata *final_state,
     const Tdata *q,
     const Tdata *k,
     const Tdata *v,
-    const Tdata *g,
-    const Tdata *beta,
-    const Tdata *initial_state,
+    const Tgate *g,
+    const Tgate *beta,
+    const void *cu_seqlens,
+    const void *initial_state_indices,
+    const void *final_state_indices,
+    bool cu_seqlens_i64,
+    bool initial_state_indices_i64,
+    bool final_state_indices_i64,
     bool use_qk_l2norm,
-    const size_t chunk_size,
-    const size_t T // Original sequence length, must be passed from host
-) {
-    // Grid Strategy: Each block handles one sequence for one head.
-    // gridDim.x = B, gridDim.y = H
-    const size_t batch_idx = blockIdx.x;
-    const size_t head_idx = blockIdx.y;
-    const size_t thread_idx = threadIdx.x;
+    bool has_cu_seqlens,
+    bool indexed_state_pool,
+    size_t T,
+    size_t chunk_size,
+    size_t pool_size,
+    size_t Hk,
+    size_t value_heads_per_key_head,
+    ptrdiff_t out_s0,
+    ptrdiff_t out_s1,
+    ptrdiff_t out_s2,
+    ptrdiff_t initial_s0,
+    ptrdiff_t initial_s1,
+    ptrdiff_t initial_s2,
+    ptrdiff_t initial_s3,
+    ptrdiff_t final_s0,
+    ptrdiff_t final_s1,
+    ptrdiff_t final_s2,
+    ptrdiff_t final_s3,
+    ptrdiff_t q_s0,
+    ptrdiff_t q_s1,
+    ptrdiff_t q_s2,
+    ptrdiff_t k_s0,
+    ptrdiff_t k_s1,
+    ptrdiff_t k_s2,
+    ptrdiff_t v_s0,
+    ptrdiff_t v_s1,
+    ptrdiff_t v_s2,
+    ptrdiff_t g_s0,
+    ptrdiff_t g_s1,
+    ptrdiff_t g_s2,
+    ptrdiff_t beta_s0,
+    ptrdiff_t beta_s1,
+    ptrdiff_t beta_s2) {
 
-    const size_t H = gridDim.y;
+    const int batch_idx = blockIdx.x;
+    const int value_head_idx = blockIdx.y;
+    const int key_head_idx = value_head_idx / static_cast<int>(value_heads_per_key_head);
 
-    const size_t T_padded = (T + chunk_size - 1) / chunk_size * chunk_size;
-    const size_t num_chunks = T_padded / chunk_size;
-    const float scale = rsqrtf(static_cast<Tcompute>(Dk));
+    if (key_head_idx >= static_cast<int>(Hk)) {
+        return;
+    }
 
-    using BlockScan = cub::BlockScan<Tcompute, BLOCK_THREADS>;
+    int64_t token_begin = 0;
+    int64_t token_end = static_cast<int64_t>(T);
 
-    // --- Shared Memory Layout ---
-    extern __shared__ char shared_mem_char[];
-    Tcompute *shared_mem = reinterpret_cast<Tcompute *>(shared_mem_char);
+    if (has_cu_seqlens) {
+        token_begin = loadOptionalIndex(cu_seqlens, cu_seqlens_i64, batch_idx, 0);
+        token_end = loadOptionalIndex(cu_seqlens, cu_seqlens_i64, batch_idx + 1, 0);
+        if (token_begin < 0 || token_end < token_begin || token_end > static_cast<int64_t>(T)) {
+            return;
+        }
+    }
 
-    // Pointers to different sections of shared memory
-    Tcompute *q_s = shared_mem;
-    Tcompute *k_s = q_s + chunk_size * Dk;
-    Tcompute *v_s = k_s + chunk_size * Dk;
-    Tcompute *k_beta_s = v_s + chunk_size * Dv;
-    Tcompute *g_s = k_beta_s + chunk_size * Dk;
-    Tcompute *beta_s = g_s + chunk_size;
-    Tcompute *g_cumsum_s = beta_s + chunk_size;
-    Tcompute *attn_s = g_cumsum_s + chunk_size;
-    Tcompute *k_cumdecay_s = attn_s + chunk_size * chunk_size;
-    Tcompute *value_prime_s = k_cumdecay_s + chunk_size * Dk;
-    Tcompute *v_prime_s = value_prime_s + chunk_size * Dv;
-    Tcompute *attn_inter_s = v_prime_s + chunk_size * Dv;
+    int64_t read_slot = batch_idx;
+    int64_t write_slot = batch_idx;
 
-    typename BlockScan::TempStorage *cub_temp_storage = (typename BlockScan::TempStorage *)(attn_inter_s + chunk_size * Dv);
+    if (indexed_state_pool) {
+        read_slot = loadOptionalIndex(
+            initial_state_indices,
+            initial_state_indices_i64,
+            batch_idx,
+            batch_idx);
 
-    // --- Main loop over chunks of the sequence ---
-    for (size_t chunk_idx = 0; chunk_idx < num_chunks; ++chunk_idx) {
-        const Tdata *current_state_ptr_g = (chunk_idx == 0 && initial_state != nullptr) ? initial_state : final_state;
-        const ptrdiff_t state_offset = (batch_idx * H + head_idx) * (Dk * Dv);
+        write_slot = final_state_indices == nullptr
+                       ? static_cast<int64_t>(batch_idx)
+                       : loadOptionalIndex(
+                           final_state_indices,
+                           final_state_indices_i64,
+                           batch_idx,
+                           batch_idx);
 
+        if (read_slot < 0 || write_slot < 0 || read_slot >= static_cast<int64_t>(pool_size) || write_slot >= static_cast<int64_t>(pool_size)) {
+            return;
+        }
+    }
+
+    const ptrdiff_t initial_base = indexed_state_pool
+                                     ? static_cast<ptrdiff_t>(read_slot) * initial_s0 + static_cast<ptrdiff_t>(value_head_idx) * initial_s1
+                                     : static_cast<ptrdiff_t>(batch_idx) * initial_s0 + static_cast<ptrdiff_t>(value_head_idx) * initial_s1;
+
+    Tdata *final_state_target = nullptr;
+    ptrdiff_t final_base = 0;
+
+    if (indexed_state_pool && final_state_indices != nullptr) {
+        final_state_target = initial_state;
+        final_base = static_cast<ptrdiff_t>(write_slot) * initial_s0 + static_cast<ptrdiff_t>(value_head_idx) * initial_s1;
+    } else {
+        final_state_target = final_state;
+        final_base = static_cast<ptrdiff_t>(batch_idx) * final_s0 + static_cast<ptrdiff_t>(value_head_idx) * final_s1;
+    }
+
+    const ptrdiff_t per_block_workspace = static_cast<ptrdiff_t>(Dk * Dv) + static_cast<ptrdiff_t>(chunk_size * Dk) * 3 + static_cast<ptrdiff_t>(chunk_size * Dv) * 3 + static_cast<ptrdiff_t>(chunk_size * chunk_size) + static_cast<ptrdiff_t>(chunk_size) * 3;
+
+    const ptrdiff_t workspace_block = (static_cast<ptrdiff_t>(batch_idx) * gridDim.y + static_cast<ptrdiff_t>(value_head_idx)) * per_block_workspace;
+
+    Tcompute *state_local = state_workspace + workspace_block;
+    Tcompute *q_buf = state_local + Dk * Dv;
+    Tcompute *k_buf = q_buf + chunk_size * Dk;
+    Tcompute *k_cumdecay = k_buf + chunk_size * Dk;
+    Tcompute *v_beta = k_cumdecay + chunk_size * Dk;
+    Tcompute *v_mid = v_beta + chunk_size * Dv;
+    Tcompute *v_new = v_mid + chunk_size * Dv;
+    Tcompute *attn = v_new + chunk_size * Dv;
+    Tcompute *g_cum = attn + chunk_size * chunk_size;
+    Tcompute *beta_buf = g_cum + chunk_size;
+    Tcompute *row_buf = beta_buf + chunk_size;
+
+    const int token_batch = has_cu_seqlens ? 0 : batch_idx;
+    const Tcompute scale = rsqrtf(static_cast<Tcompute>(Dk));
+
+    // Load initial state.
+    CGDR_FOR(i, Dk * Dv) {
+        int dk = i / Dv;
+        int dv = i % Dv;
+
+        ptrdiff_t read_idx = indexed_state_pool
+                               ? initial_base + static_cast<ptrdiff_t>(dv) * initial_s2 + static_cast<ptrdiff_t>(dk) * initial_s3
+                               : initial_base + static_cast<ptrdiff_t>(dk) * initial_s2 + static_cast<ptrdiff_t>(dv) * initial_s3;
+
+        state_local[i] = static_cast<Tcompute>(
+            loadAsFloat(initial_state, read_idx));
+    }
+    __syncthreads();
+
+    for (int64_t chunk_begin = token_begin;
+         chunk_begin < token_end;
+         chunk_begin += static_cast<int64_t>(chunk_size)) {
+
+        const int64_t remaining = token_end - chunk_begin;
+        const int actual_len = static_cast<int>(
+            remaining < static_cast<int64_t>(chunk_size)
+                ? remaining
+                : static_cast<int64_t>(chunk_size));
+
+        // Load beta and cumulative gate.
+        if (threadIdx.x == 0) {
+            Tcompute running_g = 0;
+            for (int t = 0; t < static_cast<int>(chunk_size); ++t) {
+                if (t < actual_len) {
+                    int64_t token_idx = chunk_begin + t;
+                    ptrdiff_t gate_offset = static_cast<ptrdiff_t>(token_batch) * g_s0 + static_cast<ptrdiff_t>(token_idx) * g_s1 + static_cast<ptrdiff_t>(value_head_idx) * g_s2;
+                    ptrdiff_t beta_offset = static_cast<ptrdiff_t>(token_batch) * beta_s0 + static_cast<ptrdiff_t>(token_idx) * beta_s1 + static_cast<ptrdiff_t>(value_head_idx) * beta_s2;
+
+                    running_g += static_cast<Tcompute>(
+                        loadAsFloat(g, gate_offset));
+                    beta_buf[t] = static_cast<Tcompute>(
+                        loadAsFloat(beta, beta_offset));
+                    g_cum[t] = running_g;
+                } else {
+                    beta_buf[t] = 0;
+                    g_cum[t] = running_g;
+                }
+            }
+        }
         __syncthreads();
-        size_t chunk_offset = chunk_idx * chunk_size;
 
-        // --- 2.1: Collaborative Loading of chunk data ---
-        // (This section is unchanged)
-        for (size_t i = thread_idx; i < chunk_size; i += BLOCK_THREADS) {
-            size_t t_idx = chunk_offset + i;
-            if (t_idx < T) {
-                ptrdiff_t gb_offset = (batch_idx * H * T) + (head_idx * T) + t_idx;
-                g_s[i] = static_cast<Tcompute>(g[gb_offset]);
-                beta_s[i] = static_cast<Tcompute>(beta[gb_offset]);
+        // Load q/k/v_beta.
+        CGDR_FOR(x, chunk_size * Dk) {
+            int t = x / Dk;
+            int dk = x % Dk;
+
+            if (t < actual_len) {
+                int64_t token_idx = chunk_begin + t;
+                ptrdiff_t q_base = static_cast<ptrdiff_t>(token_batch) * q_s0 + static_cast<ptrdiff_t>(token_idx) * q_s1 + static_cast<ptrdiff_t>(key_head_idx) * q_s2;
+                ptrdiff_t k_base = static_cast<ptrdiff_t>(token_batch) * k_s0 + static_cast<ptrdiff_t>(token_idx) * k_s1 + static_cast<ptrdiff_t>(key_head_idx) * k_s2;
+
+                q_buf[x] = static_cast<Tcompute>(loadAsFloat(q, q_base + dk)) * scale;
+                k_buf[x] = static_cast<Tcompute>(loadAsFloat(k, k_base + dk));
             } else {
-                g_s[i] = 0.0f;
-                beta_s[i] = 1.0f;
+                q_buf[x] = 0;
+                k_buf[x] = 0;
             }
         }
-        for (size_t i = thread_idx; i < chunk_size * Dk; i += BLOCK_THREADS) {
-            size_t t_local = i / Dk;
-            size_t d = i % Dk;
-            size_t t_global = chunk_offset + t_local;
-            if (t_global < T) {
-                ptrdiff_t qk_offset = (batch_idx * H * T * Dk) + (head_idx * T * Dk) + (t_global * Dk) + d;
-                q_s[i] = static_cast<Tcompute>(q[qk_offset]);
-                k_s[i] = static_cast<Tcompute>(k[qk_offset]);
+
+        CGDR_FOR(x, chunk_size * Dv) {
+            int t = x / Dv;
+            int dv = x % Dv;
+
+            if (t < actual_len) {
+                int64_t token_idx = chunk_begin + t;
+                ptrdiff_t v_base = static_cast<ptrdiff_t>(token_batch) * v_s0 + static_cast<ptrdiff_t>(token_idx) * v_s1 + static_cast<ptrdiff_t>(value_head_idx) * v_s2;
+
+                v_beta[x] = static_cast<Tcompute>(loadAsFloat(v, v_base + dv)) * beta_buf[t];
             } else {
-                q_s[i] = 0.0f;
-                k_s[i] = 0.0f;
-            }
-        }
-        for (size_t i = thread_idx; i < chunk_size * Dv; i += BLOCK_THREADS) {
-            size_t t_local = i / Dv;
-            size_t d = i % Dv;
-            size_t t_global = chunk_offset + t_local;
-            if (t_global < T) {
-                ptrdiff_t v_offset = (batch_idx * H * T * Dv) + (head_idx * T * Dv) + (t_global * Dv) + d;
-                v_s[i] = static_cast<Tcompute>(v[v_offset]);
-            } else {
-                v_s[i] = 0.0f;
+                v_beta[x] = 0;
             }
         }
         __syncthreads();
 
-        // --- 2.2: Optional L2 Normalization --- (Unchanged)
+        // Optional q/k L2 norm.
         if (use_qk_l2norm) {
-            // This loop is collapsed for brevity. It is correct and unchanged.
-            for (size_t t = thread_idx; t < chunk_size; t += BLOCK_THREADS) {
-                size_t t_global = chunk_offset + t;
-                if (t_global < T) {
-                    Tcompute q_norm_sq = 0.0f;
-                    Tcompute k_norm_sq = 0.0f;
-                    for (size_t d = 0; d < Dk; ++d) {
-                        Tcompute q_val = q_s[t * Dk + d];
-                        Tcompute k_val = k_s[t * Dk + d];
-                        q_norm_sq += q_val * q_val;
-                        k_norm_sq += k_val * k_val;
-                    }
-                    Tcompute r_q_norm = rsqrtf(q_norm_sq + 1e-6f);
-                    Tcompute r_k_norm = rsqrtf(k_norm_sq + 1e-6f);
-                    for (size_t d = 0; d < Dk; ++d) {
-                        q_s[t * Dk + d] *= r_q_norm;
-                        k_s[t * Dk + d] *= r_k_norm;
-                    }
+            for (int t = 0; t < static_cast<int>(chunk_size); ++t) {
+                Tcompute q_sum = 0;
+                Tcompute k_sum = 0;
+
+                for (int dk = threadIdx.x; dk < static_cast<int>(Dk); dk += blockDim.x) {
+                    q_sum += q_buf[t * Dk + dk] * q_buf[t * Dk + dk];
+                    k_sum += k_buf[t * Dk + dk] * k_buf[t * Dk + dk];
                 }
+
+                q_sum = blockReduceSum<Tcompute, NUM_THREADS>(q_sum);
+                k_sum = blockReduceSum<Tcompute, NUM_THREADS>(k_sum);
+
+                Tcompute q_norm = rsqrtf(q_sum / (scale * scale) + 1e-6f);
+                Tcompute k_norm = rsqrtf(k_sum + 1e-6f);
+
+                for (int dk = threadIdx.x; dk < static_cast<int>(Dk); dk += blockDim.x) {
+                    q_buf[t * Dk + dk] *= q_norm;
+                    k_buf[t * Dk + dk] *= k_norm;
+                }
+                __syncthreads();
+            }
+        }
+
+        // Build lower-triangular attn.
+        CGDR_FOR(x, chunk_size * chunk_size) {
+            int i = x / chunk_size;
+            int j = x % chunk_size;
+
+            if (j < i) {
+                Tcompute dot = 0;
+                for (int dk = 0; dk < static_cast<int>(Dk); ++dk) {
+                    dot += k_buf[i * Dk + dk] * beta_buf[i] * k_buf[j * Dk + dk];
+                }
+                attn[x] = -dot * expf(g_cum[i] - g_cum[j]);
+            } else {
+                attn[x] = 0;
+            }
+        }
+        __syncthreads();
+
+        // Triangular solve-like correction.
+        // Sequential in i, parallel in j.
+        for (int i = 1; i < static_cast<int>(chunk_size); ++i) {
+            CGDR_FOR(m, chunk_size) {
+                row_buf[m] = m < i ? attn[i * chunk_size + m] : 0;
+            }
+            __syncthreads();
+
+            for (int j = threadIdx.x; j < i; j += blockDim.x) {
+                Tcompute correction = 0;
+                for (int m = 0; m < i; ++m) {
+                    correction += row_buf[m] * attn[m * chunk_size + j];
+                }
+                attn[i * chunk_size + j] = row_buf[j] + correction;
             }
             __syncthreads();
         }
 
-        // --- 2.3 Intra-Chunk Calculations --- (Unchanged, all operate on shared memory)
-        Tcompute g_val = (thread_idx < chunk_size) ? g_s[thread_idx] : 0.0f;
-        Tcompute g_cumsum_val;
-        BlockScan(*cub_temp_storage).InclusiveSum(g_val, g_cumsum_val);
-        if (thread_idx < chunk_size) {
-            g_cumsum_s[thread_idx] = g_cumsum_val;
-        }
-        __syncthreads();
-        for (size_t i = thread_idx; i < chunk_size; i += BLOCK_THREADS) {
-            Tcompute beta_val = beta_s[i];
-            for (size_t d = 0; d < Dk; ++d) {
-                k_beta_s[i * Dk + d] = k_s[i * Dk + d] * beta_val;
-            }
-            for (size_t d = 0; d < Dv; ++d) {
-                v_s[i * Dv + d] *= beta_val;
-            }
-            for (size_t d = 0; d < Dk; ++d) {
-                q_s[i * Dk + d] *= scale;
-            }
-        }
-        __syncthreads();
-        for (size_t i = thread_idx; i < chunk_size * chunk_size; i += BLOCK_THREADS) {
-            size_t row = i / chunk_size;
-            size_t col = i % chunk_size;
-            Tcompute dot_prod = 0.0f;
-            if (col < row) {
-                for (size_t d = 0; d < Dk; ++d) { dot_prod += k_beta_s[row * Dk + d] * k_s[col * Dk + d]; }
-                Tcompute decay = expf(g_cumsum_s[row] - g_cumsum_s[col]);
-                attn_s[i] = -dot_prod * decay;
-            } else {
-                attn_s[i] = 0.0f;
-            }
-        }
-        __syncthreads();
-        for (size_t i = 1; i < chunk_size; ++i) {
-            for (size_t j = thread_idx; j < i; j += BLOCK_THREADS) {
-                Tcompute update_val = 0.0f;
-                for (size_t l = 0; l < i; ++l) { update_val += attn_s[i * chunk_size + l] * attn_s[l * chunk_size + j]; }
-                attn_s[i * chunk_size + j] += update_val;
-            }
-            __syncthreads();
-        }
-        if (thread_idx < chunk_size) {
-            attn_s[thread_idx * chunk_size + thread_idx] += 1.0f;
-        }
-        __syncthreads();
-        for (size_t i = thread_idx; i < chunk_size * Dv; i += BLOCK_THREADS) {
-            size_t row = i / Dv;
-            size_t col_v = i % Dv;
-            Tcompute dot_prod = 0.0f;
-            for (size_t d = 0; d < chunk_size; ++d) {
-                dot_prod += attn_s[row * chunk_size + d] * v_s[d * Dv + col_v];
-            }
-            value_prime_s[i] = dot_prod;
-        }
-        for (size_t i = thread_idx; i < chunk_size * Dk; i += BLOCK_THREADS) {
-            size_t row = i / Dk;
-            int col_k = i % Dk;
-            Tcompute dot_prod = 0.0f;
-            for (size_t d = 0; d < chunk_size; ++d) {
-                dot_prod += attn_s[row * chunk_size + d] * k_beta_s[d * Dk + col_k] * expf(g_cumsum_s[d]);
-            }
-            k_cumdecay_s[i] = dot_prod;
+        CGDR_FOR(i, chunk_size) {
+            attn[i * chunk_size + i] = 1;
         }
         __syncthreads();
 
-        // --- 2.4: Inter-Chunk Interaction ---
-        // (Correctly reads from global memory)
-        for (size_t i = thread_idx; i < chunk_size * Dv; i += BLOCK_THREADS) {
-            size_t row = i / Dv;
-            size_t col_v = i % Dv;
-            Tcompute sum = 0.0f;
-            for (size_t d = 0; d < Dk; ++d) {
-                Tcompute state_val = (initial_state == nullptr && chunk_idx == 0) ? 0.0f : static_cast<Tcompute>(current_state_ptr_g[state_offset + d * Dv + col_v]);
-                sum += k_cumdecay_s[row * Dk + d] * state_val;
+        // v_mid = attn @ v_beta.
+        CGDR_FOR(x, chunk_size * Dv) {
+            int i = x / Dv;
+            int dv = x % Dv;
+
+            Tcompute sum = 0;
+            for (int j = 0; j < static_cast<int>(chunk_size); ++j) {
+                sum += attn[i * chunk_size + j] * v_beta[j * Dv + dv];
             }
-            v_prime_s[i] = sum;
+            v_mid[x] = sum;
         }
-        for (size_t i = thread_idx; i < chunk_size * Dv; i += BLOCK_THREADS) {
-            size_t row = i / Dv;
-            size_t col_v = i % Dv;
-            Tcompute sum = 0.0f;
-            Tcompute g_exp = expf(g_cumsum_s[row]);
-            for (size_t d = 0; d < Dk; ++d) {
-                Tcompute state_val = (initial_state == nullptr && chunk_idx == 0) ? 0.0f : static_cast<Tcompute>(current_state_ptr_g[state_offset + d * Dv + col_v]);
-                sum += (q_s[row * Dk + d] * g_exp) * state_val;
+
+        // k_cumdecay = attn @ (k * beta * exp(g)).
+        CGDR_FOR(x, chunk_size * Dk) {
+            int i = x / Dk;
+            int dk = x % Dk;
+
+            Tcompute sum = 0;
+            for (int j = 0; j < static_cast<int>(chunk_size); ++j) {
+                sum += attn[i * chunk_size + j] * k_buf[j * Dk + dk] * beta_buf[j] * expf(g_cum[j]);
             }
-            attn_inter_s[i] = sum;
+            k_cumdecay[x] = sum;
         }
         __syncthreads();
 
-        // --- 2.5: Final Output Calculation and Writeback --- (Unchanged)
-        for (size_t t = thread_idx; t < chunk_size; t += BLOCK_THREADS) {
-            size_t global_t = chunk_offset + t;
-            if (global_t < T) {
-                ptrdiff_t out_offset = (batch_idx * H * T * Dv) + (head_idx * T * Dv) + (global_t * Dv);
-                for (size_t d_v = 0; d_v < Dv; ++d_v) {
-                    Tcompute intra_sum = 0.0f;
-                    for (size_t j = 0; j <= t; ++j) {
-                        Tcompute dot_qk = 0.0f;
-                        for (size_t d_k = 0; d_k < Dk; ++d_k) {
-                            dot_qk += q_s[t * Dk + d_k] * k_s[j * Dk + d_k];
-                        }
-                        Tcompute value_prime_j = value_prime_s[j * Dv + d_v];
-                        Tcompute v_prime_j = v_prime_s[j * Dv + d_v];
-                        Tcompute v_new_j = value_prime_j - v_prime_j;
-                        Tcompute decay = expf(g_cumsum_s[t] - g_cumsum_s[j]);
-                        intra_sum += (dot_qk * decay) * v_new_j;
-                    }
-                    out[out_offset + d_v] = static_cast<Tdata>(attn_inter_s[t * Dv + d_v] + intra_sum);
+        // v_new = v_mid - k_cumdecay @ state.
+        CGDR_FOR(x, chunk_size * Dv) {
+            int i = x / Dv;
+            int dv = x % Dv;
+
+            Tcompute v_prime = 0;
+            for (int dk = 0; dk < static_cast<int>(Dk); ++dk) {
+                v_prime += k_cumdecay[i * Dk + dk] * state_local[dk * Dv + dv];
+            }
+            v_new[x] = v_mid[x] - v_prime;
+        }
+        __syncthreads();
+
+        // Output.
+        CGDR_FOR(x, actual_len * Dv) {
+            int i = x / Dv;
+            int dv = x % Dv;
+
+            int64_t token_idx = chunk_begin + i;
+            ptrdiff_t out_base = static_cast<ptrdiff_t>(token_batch) * out_s0 + static_cast<ptrdiff_t>(token_idx) * out_s1 + static_cast<ptrdiff_t>(value_head_idx) * out_s2;
+
+            Tcompute out_val = 0;
+            Tcompute q_decay = expf(g_cum[i]);
+
+            for (int dk = 0; dk < static_cast<int>(Dk); ++dk) {
+                out_val += q_buf[i * Dk + dk] * q_decay * state_local[dk * Dv + dv];
+            }
+
+            for (int j = 0; j <= i; ++j) {
+                Tcompute qk_attn = 0;
+                for (int dk = 0; dk < static_cast<int>(Dk); ++dk) {
+                    qk_attn += q_buf[i * Dk + dk] * k_buf[j * Dk + dk];
                 }
-            }
-        }
 
-        // --- 2.6: Update inter_chunk_state for the next iteration ---
-        // (Correctly reads-updates-writes to global memory)
+                qk_attn *= expf(g_cum[i] - g_cum[j]);
+                out_val += qk_attn * v_new[j * Dv + dv];
+            }
+
+            out[out_base + dv] = static_cast<Tdata>(out_val);
+        }
         __syncthreads();
-        Tcompute g_final_cumsum = g_cumsum_s[chunk_size - 1];
-        Tcompute final_decay_factor = expf(g_final_cumsum);
-        Tdata *final_state_ptr = final_state + state_offset;
 
-        for (size_t i = thread_idx; i < Dk * Dv; i += BLOCK_THREADS) {
-            size_t dk = i / Dv;
-            size_t dv = i % Dv;
+        // Update state.
+        const Tcompute last_decay = expf(g_cum[chunk_size - 1]);
 
-            Tcompute old_state_val;
-            if (chunk_idx == 0) {
-                old_state_val = (initial_state != nullptr) ? static_cast<Tcompute>(initial_state[state_offset + i]) : 0.0f;
-            } else {
-                old_state_val = static_cast<Tcompute>(final_state_ptr[i]);
-            }
-            Tcompute decayed_state = old_state_val * final_decay_factor;
+        CGDR_FOR(x, Dk * Dv) {
+            int dk = x / Dv;
+            int dv = x % Dv;
 
-            Tcompute chunk_contribution = 0.0f;
-            for (size_t t = 0; t < chunk_size; ++t) {
-                Tcompute decay_factor = expf(g_final_cumsum - g_cumsum_s[t]);
-                Tcompute value_prime_t = value_prime_s[t * Dv + dv];
-                Tcompute v_prime_t = v_prime_s[t * Dv + dv];
-                Tcompute v_new_t = value_prime_t - v_prime_t;
-                chunk_contribution += (k_s[t * Dk + dk] * decay_factor) * v_new_t;
+            Tcompute next_state = state_local[x] * last_decay;
+
+            for (int i = 0; i < static_cast<int>(chunk_size); ++i) {
+                next_state += k_buf[i * Dk + dk] * expf(g_cum[chunk_size - 1] - g_cum[i]) * v_new[i * Dv + dv];
             }
 
-            final_state_ptr[i] = static_cast<Tdata>(decayed_state + chunk_contribution);
+            state_local[x] = next_state;
+        }
+        __syncthreads();
+    }
+
+    // Store final state.
+    CGDR_FOR(i, Dk * Dv) {
+        int dk = i / Dv;
+        int dv = i % Dv;
+
+        ptrdiff_t write_idx;
+        if (indexed_state_pool) {
+            const ptrdiff_t s2 = final_state_indices != nullptr ? initial_s2 : final_s2;
+            const ptrdiff_t s3 = final_state_indices != nullptr ? initial_s3 : final_s3;
+
+            write_idx = final_base + static_cast<ptrdiff_t>(dv) * s2 + static_cast<ptrdiff_t>(dk) * s3;
+        } else {
+            write_idx = final_base + static_cast<ptrdiff_t>(dk) * final_s2 + static_cast<ptrdiff_t>(dv) * final_s3;
         }
 
-        // BUG FIX: Add a block-wide memory fence to ensure global memory writes from this
-        // iteration are visible to all threads before the next iteration begins.
-        __threadfence_block();
+        final_state_target[write_idx] = static_cast<Tdata>(state_local[i]);
+    }
+}
+
+template <
+    typename Tdata,
+    typename Tgate,
+    typename Tcompute,
+    size_t Dk,
+    size_t Dv,
+    size_t NUM_THREADS>
+__device__ void chunkGatedDeltaRuleRecurrentKernel(
+    Tcompute *state_workspace,
+    Tdata *out,
+    Tdata *initial_state,
+    Tdata *final_state,
+    const Tdata *q,
+    const Tdata *k,
+    const Tdata *v,
+    const Tgate *g,
+    const Tgate *beta,
+    const void *cu_seqlens,
+    const void *initial_state_indices,
+    const void *final_state_indices,
+    bool cu_seqlens_i64,
+    bool initial_state_indices_i64,
+    bool final_state_indices_i64,
+    bool use_qk_l2norm,
+    bool has_cu_seqlens,
+    bool indexed_state_pool,
+    size_t T,
+    size_t,
+    size_t pool_size,
+    size_t Hk,
+    size_t value_heads_per_key_head,
+    ptrdiff_t out_s0,
+    ptrdiff_t out_s1,
+    ptrdiff_t out_s2,
+    ptrdiff_t initial_s0,
+    ptrdiff_t initial_s1,
+    ptrdiff_t initial_s2,
+    ptrdiff_t initial_s3,
+    ptrdiff_t final_s0,
+    ptrdiff_t final_s1,
+    ptrdiff_t final_s2,
+    ptrdiff_t final_s3,
+    ptrdiff_t q_s0,
+    ptrdiff_t q_s1,
+    ptrdiff_t q_s2,
+    ptrdiff_t k_s0,
+    ptrdiff_t k_s1,
+    ptrdiff_t k_s2,
+    ptrdiff_t v_s0,
+    ptrdiff_t v_s1,
+    ptrdiff_t v_s2,
+    ptrdiff_t g_s0,
+    ptrdiff_t g_s1,
+    ptrdiff_t g_s2,
+    ptrdiff_t beta_s0,
+    ptrdiff_t beta_s1,
+    ptrdiff_t beta_s2) {
+
+    const int batch_idx = blockIdx.x;
+    const int value_head_idx = blockIdx.y;
+    const int key_head_idx = value_head_idx / static_cast<int>(value_heads_per_key_head);
+
+    if (key_head_idx >= static_cast<int>(Hk)) {
+        return;
+    }
+
+    int64_t token_begin = 0;
+    int64_t token_end = static_cast<int64_t>(T);
+
+    if (has_cu_seqlens) {
+        token_begin = loadOptionalIndex(cu_seqlens, cu_seqlens_i64, batch_idx, 0);
+        token_end = loadOptionalIndex(cu_seqlens, cu_seqlens_i64, batch_idx + 1, 0);
+        if (token_begin < 0 || token_end < token_begin || token_end > static_cast<int64_t>(T)) {
+            return;
+        }
+    }
+
+    int64_t read_slot = batch_idx;
+    int64_t write_slot = batch_idx;
+
+    if (indexed_state_pool) {
+        read_slot = loadOptionalIndex(
+            initial_state_indices,
+            initial_state_indices_i64,
+            batch_idx,
+            batch_idx);
+
+        write_slot = final_state_indices == nullptr
+                       ? static_cast<int64_t>(batch_idx)
+                       : loadOptionalIndex(
+                           final_state_indices,
+                           final_state_indices_i64,
+                           batch_idx,
+                           batch_idx);
+
+        if (read_slot < 0 || write_slot < 0 || read_slot >= static_cast<int64_t>(pool_size) || write_slot >= static_cast<int64_t>(pool_size)) {
+            return;
+        }
+    }
+
+    const ptrdiff_t initial_base = indexed_state_pool
+                                     ? static_cast<ptrdiff_t>(read_slot) * initial_s0 + static_cast<ptrdiff_t>(value_head_idx) * initial_s1
+                                     : static_cast<ptrdiff_t>(batch_idx) * initial_s0 + static_cast<ptrdiff_t>(value_head_idx) * initial_s1;
+
+    Tdata *final_state_target = nullptr;
+    ptrdiff_t final_base = 0;
+
+    if (indexed_state_pool && final_state_indices != nullptr) {
+        final_state_target = initial_state;
+        final_base = static_cast<ptrdiff_t>(write_slot) * initial_s0 + static_cast<ptrdiff_t>(value_head_idx) * initial_s1;
+    } else {
+        final_state_target = final_state;
+        final_base = static_cast<ptrdiff_t>(batch_idx) * final_s0 + static_cast<ptrdiff_t>(value_head_idx) * final_s1;
+    }
+
+    const ptrdiff_t workspace_block = (static_cast<ptrdiff_t>(batch_idx) * gridDim.y + static_cast<ptrdiff_t>(value_head_idx)) * static_cast<ptrdiff_t>(Dk * Dv);
+
+    Tcompute *state_local = state_workspace + workspace_block;
+    __shared__ Tcompute q_vec[Dk];
+    __shared__ Tcompute k_vec[Dk];
+    __shared__ Tcompute v_new[Dv];
+    __shared__ Tcompute scalar_buf[3];
+
+    const int token_batch = has_cu_seqlens ? 0 : batch_idx;
+    const Tcompute scale = rsqrtf(static_cast<Tcompute>(Dk));
+
+    CGDR_FOR(i, Dk * Dv) {
+        int dk = i / Dv;
+        int dv = i % Dv;
+
+        ptrdiff_t read_idx = indexed_state_pool
+                               ? initial_base + static_cast<ptrdiff_t>(dv) * initial_s2 + static_cast<ptrdiff_t>(dk) * initial_s3
+                               : initial_base + static_cast<ptrdiff_t>(dk) * initial_s2 + static_cast<ptrdiff_t>(dv) * initial_s3;
+
+        state_local[i] = static_cast<Tcompute>(
+            loadAsFloat(initial_state, read_idx));
+    }
+    __syncthreads();
+
+    for (int64_t token_idx = token_begin; token_idx < token_end; ++token_idx) {
+        ptrdiff_t q_base = static_cast<ptrdiff_t>(token_batch) * q_s0 + static_cast<ptrdiff_t>(token_idx) * q_s1 + static_cast<ptrdiff_t>(key_head_idx) * q_s2;
+        ptrdiff_t k_base = static_cast<ptrdiff_t>(token_batch) * k_s0 + static_cast<ptrdiff_t>(token_idx) * k_s1 + static_cast<ptrdiff_t>(key_head_idx) * k_s2;
+
+        Tcompute q_sum = 0;
+        Tcompute k_sum = 0;
+        for (int dk = threadIdx.x; dk < static_cast<int>(Dk); dk += blockDim.x) {
+            Tcompute q_raw = static_cast<Tcompute>(loadAsFloat(q, q_base + dk));
+            Tcompute k_raw = static_cast<Tcompute>(loadAsFloat(k, k_base + dk));
+            q_vec[dk] = q_raw;
+            k_vec[dk] = k_raw;
+            q_sum += q_raw * q_raw;
+            k_sum += k_raw * k_raw;
+        }
+
+        q_sum = blockReduceSum<Tcompute, NUM_THREADS>(q_sum);
+        k_sum = blockReduceSum<Tcompute, NUM_THREADS>(k_sum);
+
+        if (threadIdx.x == 0) {
+            ptrdiff_t gate_offset = static_cast<ptrdiff_t>(token_batch) * g_s0 + static_cast<ptrdiff_t>(token_idx) * g_s1 + static_cast<ptrdiff_t>(value_head_idx) * g_s2;
+            ptrdiff_t beta_offset = static_cast<ptrdiff_t>(token_batch) * beta_s0 + static_cast<ptrdiff_t>(token_idx) * beta_s1 + static_cast<ptrdiff_t>(value_head_idx) * beta_s2;
+
+            scalar_buf[0] = expf(static_cast<Tcompute>(loadAsFloat(g, gate_offset)));
+            scalar_buf[1] = static_cast<Tcompute>(loadAsFloat(beta, beta_offset));
+            scalar_buf[2] = use_qk_l2norm
+                              ? rsqrtf(q_sum + static_cast<Tcompute>(1e-6)) * scale
+                              : scale;
+        }
+        __syncthreads();
+
+        const Tcompute decay = scalar_buf[0];
+        const Tcompute beta_t = scalar_buf[1];
+        const Tcompute q_scale = scalar_buf[2];
+        const Tcompute k_scale = use_qk_l2norm
+                                   ? rsqrtf(k_sum + static_cast<Tcompute>(1e-6))
+                                   : static_cast<Tcompute>(1);
+
+        for (int dk = threadIdx.x; dk < static_cast<int>(Dk); dk += blockDim.x) {
+            q_vec[dk] *= q_scale;
+            k_vec[dk] *= k_scale;
+        }
+        __syncthreads();
+
+        for (int dv = threadIdx.x; dv < static_cast<int>(Dv); dv += blockDim.x) {
+            Tcompute projected = 0;
+            for (int dk = 0; dk < static_cast<int>(Dk); ++dk) {
+                projected += k_vec[dk] * state_local[dk * Dv + dv];
+            }
+
+            ptrdiff_t v_base = static_cast<ptrdiff_t>(token_batch) * v_s0 + static_cast<ptrdiff_t>(token_idx) * v_s1 + static_cast<ptrdiff_t>(value_head_idx) * v_s2;
+            Tcompute v_raw = static_cast<Tcompute>(loadAsFloat(v, v_base + dv));
+            v_new[dv] = beta_t * (v_raw - decay * projected);
+        }
+        __syncthreads();
+
+        CGDR_FOR(x, Dk * Dv) {
+            int dk = x / Dv;
+            int dv = x % Dv;
+            state_local[x] = decay * state_local[x] + k_vec[dk] * v_new[dv];
+        }
+        __syncthreads();
+
+        for (int dv = threadIdx.x; dv < static_cast<int>(Dv); dv += blockDim.x) {
+            Tcompute out_val = 0;
+            for (int dk = 0; dk < static_cast<int>(Dk); ++dk) {
+                out_val += q_vec[dk] * state_local[dk * Dv + dv];
+            }
+
+            ptrdiff_t out_base = static_cast<ptrdiff_t>(token_batch) * out_s0 + static_cast<ptrdiff_t>(token_idx) * out_s1 + static_cast<ptrdiff_t>(value_head_idx) * out_s2;
+            out[out_base + dv] = static_cast<Tdata>(out_val);
+        }
+        __syncthreads();
+    }
+
+    CGDR_FOR(i, Dk * Dv) {
+        int dk = i / Dv;
+        int dv = i % Dv;
+
+        ptrdiff_t write_idx;
+        if (indexed_state_pool) {
+            const ptrdiff_t s2 = final_state_indices != nullptr ? initial_s2 : final_s2;
+            const ptrdiff_t s3 = final_state_indices != nullptr ? initial_s3 : final_s3;
+
+            write_idx = final_base + static_cast<ptrdiff_t>(dv) * s2 + static_cast<ptrdiff_t>(dk) * s3;
+        } else {
+            write_idx = final_base + static_cast<ptrdiff_t>(dk) * final_s2 + static_cast<ptrdiff_t>(dv) * final_s3;
+        }
+
+        final_state_target[write_idx] = static_cast<Tdata>(state_local[i]);
     }
 }
 

@@ -12,17 +12,18 @@ __INFINI_C infiniStatus_t infiniopCreateChunkGatedDeltaRuleDescriptor(
     infiniopHandle_t handle,
     infiniopChunkGatedDeltaRuleDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t out_desc,
+    infiniopTensorDescriptor_t initial_state_desc,
     infiniopTensorDescriptor_t final_state_desc,
     infiniopTensorDescriptor_t q_desc,
     infiniopTensorDescriptor_t k_desc,
     infiniopTensorDescriptor_t v_desc,
     infiniopTensorDescriptor_t g_desc,
     infiniopTensorDescriptor_t beta_desc,
-    infiniopTensorDescriptor_t initial_state_desc,
+    infiniopTensorDescriptor_t cu_seqlens_desc,
+    infiniopTensorDescriptor_t initial_state_indices_desc,
+    infiniopTensorDescriptor_t final_state_indices_desc,
     bool use_qk_l2norm,
     size_t chunk_size) {
-
-    std::optional<infiniopTensorDescriptor_t> initial_state_opt = (initial_state_desc == nullptr) ? std::nullopt : std::optional(initial_state_desc);
 
 #define CREATE(CASE, NAMESPACE)                                           \
     case CASE:                                                            \
@@ -31,8 +32,10 @@ __INFINI_C infiniStatus_t infiniopCreateChunkGatedDeltaRuleDescriptor(
             reinterpret_cast<                                             \
                 op::chunk_gated_delta_rule::NAMESPACE::Descriptor **>(    \
                 desc_ptr),                                                \
-            out_desc, final_state_desc, q_desc, k_desc, v_desc, g_desc,   \
-            beta_desc, initial_state_opt, use_qk_l2norm, chunk_size);
+            out_desc, initial_state_desc, final_state_desc, q_desc,       \
+            k_desc, v_desc, g_desc, beta_desc, cu_seqlens_desc,           \
+            initial_state_indices_desc, final_state_indices_desc,         \
+            use_qk_l2norm, chunk_size);
 
     switch (handle->device) {
 #ifdef ENABLE_NVIDIA_API
@@ -68,16 +71,18 @@ __INFINI_C infiniStatus_t infiniopGetChunkGatedDeltaRuleWorkspaceSize(
 __INFINI_C infiniStatus_t infiniopChunkGatedDeltaRule(
     infiniopChunkGatedDeltaRuleDescriptor_t desc,
     void *workspace, size_t workspace_size,
-    void *out, void *final_state,
+    void *out, void *initial_state, void *final_state,
     const void *q, const void *k, const void *v,
-    const void *g, const void *beta, const void *initial_state,
+    const void *g, const void *beta, const void *cu_seqlens,
+    const void *initial_state_indices, const void *final_state_indices,
     void *stream) {
 #define CALCULATE(CASE, NAMESPACE)                                            \
     case CASE:                                                                \
         return reinterpret_cast<                                              \
                    op::chunk_gated_delta_rule::NAMESPACE::Descriptor *>(desc) \
-            ->calculate(workspace, workspace_size, out, final_state, q, k, v, \
-                        g, beta, initial_state, stream);
+            ->calculate(workspace, workspace_size, out, initial_state,        \
+                        final_state, q, k, v, g, beta, cu_seqlens,            \
+                        initial_state_indices, final_state_indices, stream);
 
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API

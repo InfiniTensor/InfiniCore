@@ -8,15 +8,59 @@
 #include "../cuda/kernel.cuh"
 #include <cuda_runtime.h>
 
-// Kernel Launcher Wrapper
-template <typename Tdata, typename Tcompute, size_t Dk, size_t Dv, size_t NUM_THREADS>
+template <typename Tdata, typename Tgate, typename Tcompute, size_t Dk, size_t Dv, size_t NUM_THREADS>
 INFINIOP_CUDA_KERNEL recurrentGatedDeltaRule(
-    Tdata *out, Tdata *final_state,
+    Tdata *out, Tdata *initial_state, Tdata *final_state,
     const Tdata *q, const Tdata *k, const Tdata *v,
-    const Tdata *g, const Tdata *beta, const Tdata *initial_state,
-    bool use_qk_l2norm) {
-    recurrentGatedDeltaRuleKernel<Tdata, Tcompute, Dk, Dv, NUM_THREADS>(
-        out, final_state, q, k, v, g, beta, initial_state, use_qk_l2norm);
+    const Tgate *g, const Tgate *beta,
+    const void *initial_state_indices,
+    const void *final_state_indices,
+    bool initial_state_indices_i64,
+    bool final_state_indices_i64,
+    bool use_qk_l2norm,
+    bool indexed_state_pool,
+    size_t Hk,
+    size_t value_heads_per_key_head,
+    ptrdiff_t out_s0,
+    ptrdiff_t out_s1,
+    ptrdiff_t out_s2,
+    ptrdiff_t initial_s0,
+    ptrdiff_t initial_s1,
+    ptrdiff_t initial_s2,
+    ptrdiff_t initial_s3,
+    ptrdiff_t final_s0,
+    ptrdiff_t final_s1,
+    ptrdiff_t final_s2,
+    ptrdiff_t final_s3,
+    ptrdiff_t q_s0,
+    ptrdiff_t q_s1,
+    ptrdiff_t q_s2,
+    ptrdiff_t k_s0,
+    ptrdiff_t k_s1,
+    ptrdiff_t k_s2,
+    ptrdiff_t v_s0,
+    ptrdiff_t v_s1,
+    ptrdiff_t v_s2,
+    ptrdiff_t g_s0,
+    ptrdiff_t g_s1,
+    ptrdiff_t g_s2,
+    ptrdiff_t beta_s0,
+    ptrdiff_t beta_s1,
+    ptrdiff_t beta_s2) {
+    recurrentGatedDeltaRuleKernel<Tdata, Tgate, Tcompute, Dk, Dv, NUM_THREADS>(
+        out, initial_state, final_state, q, k, v, g, beta,
+        initial_state_indices, final_state_indices,
+        initial_state_indices_i64, final_state_indices_i64,
+        use_qk_l2norm, indexed_state_pool,
+        Hk, value_heads_per_key_head,
+        out_s0, out_s1, out_s2,
+        initial_s0, initial_s1, initial_s2, initial_s3,
+        final_s0, final_s1, final_s2, final_s3,
+        q_s0, q_s1, q_s2,
+        k_s0, k_s1, k_s2,
+        v_s0, v_s1, v_s2,
+        g_s0, g_s1, g_s2,
+        beta_s0, beta_s1, beta_s2);
 }
 
 namespace op {
@@ -35,20 +79,22 @@ infiniStatus_t Descriptor::create(
     infiniopHandle_t handle,
     Descriptor **desc_ptr,
     infiniopTensorDescriptor_t out_desc,
+    infiniopTensorDescriptor_t initial_state_desc,
     infiniopTensorDescriptor_t final_state_desc,
     infiniopTensorDescriptor_t q_desc,
     infiniopTensorDescriptor_t k_desc,
     infiniopTensorDescriptor_t v_desc,
     infiniopTensorDescriptor_t g_desc,
     infiniopTensorDescriptor_t beta_desc,
-    infiniopTensorDescriptor_t initial_state_desc,
+    infiniopTensorDescriptor_t initial_state_indices_desc,
+    infiniopTensorDescriptor_t final_state_indices_desc,
     bool use_qk_l2norm) {
     auto info = RecurrentGatedDeltaRuleInfo::create(
-        out_desc, final_state_desc, q_desc, k_desc, v_desc,
-        g_desc, beta_desc, initial_state_desc, use_qk_l2norm);
+        out_desc, initial_state_desc, final_state_desc, q_desc, k_desc, v_desc,
+        g_desc, beta_desc, initial_state_indices_desc, final_state_indices_desc,
+        use_qk_l2norm);
     CHECK_RESULT(info);
 
-    // Calculate workspace size if needed, here it's 0
     size_t workspace_size = 0;
 
     *desc_ptr = new Descriptor(
@@ -58,72 +104,170 @@ infiniStatus_t Descriptor::create(
     return infiniStatus_t::INFINI_STATUS_SUCCESS;
 }
 
-template <size_t Dk, size_t Dv, size_t NUM_THREADS>
-infiniStatus_t launchKernel(
-    void *out, void *final_state,
+template <typename Tdata, typename Tgate, size_t Dk, size_t Dv, size_t NUM_THREADS>
+infiniStatus_t launchKernelTyped(
+    const RecurrentGatedDeltaRuleInfo &_info,
+    void *out, void *initial_state, void *final_state,
     const void *q, const void *k, const void *v,
-    const void *g, const void *beta, const void *initial_state,
-    bool use_qk_l2norm,
-    infiniDtype_t dtype,
-    size_t B, size_t H,
+    const void *g, const void *beta,
+    const void *initial_state_indices,
+    const void *final_state_indices,
+    bool initial_state_indices_i64,
+    bool final_state_indices_i64,
     cudaStream_t stream) {
-    dim3 grid(uint32_t(B), uint32_t(H), 1);
+    dim3 grid(uint32_t(_info.B), uint32_t(_info.Hv), 1);
     dim3 block(NUM_THREADS);
-    // Shared memory for local Q, K, and one reduction value
     size_t shared_mem_size = (Dk + Dk + NUM_THREADS) * sizeof(float);
 
-    if (dtype == INFINI_DTYPE_F16) {
-        recurrentGatedDeltaRule<half, float, Dk, Dv, NUM_THREADS>
-            <<<grid, block, shared_mem_size, stream>>>(
-                (half *)out, (half *)final_state,
-                (const half *)q, (const half *)k, (const half *)v,
-                (const half *)g, (const half *)beta, (const half *)initial_state,
-                use_qk_l2norm);
-    } else if (dtype == INFINI_DTYPE_BF16) {
-        recurrentGatedDeltaRule<__nv_bfloat16, float, Dk, Dv, NUM_THREADS>
-            <<<grid, block, shared_mem_size, stream>>>(
-                (__nv_bfloat16 *)out, (__nv_bfloat16 *)final_state,
-                (const __nv_bfloat16 *)q, (const __nv_bfloat16 *)k, (const __nv_bfloat16 *)v,
-                (const __nv_bfloat16 *)g, (const __nv_bfloat16 *)beta, (const __nv_bfloat16 *)initial_state,
-                use_qk_l2norm);
-    } else if (dtype == INFINI_DTYPE_F32) {
-        recurrentGatedDeltaRule<float, float, Dk, Dv, NUM_THREADS>
-            <<<grid, block, shared_mem_size, stream>>>(
-                (float *)out, (float *)final_state,
-                (const float *)q, (const float *)k, (const float *)v,
-                (const float *)g, (const float *)beta, (const float *)initial_state,
-                use_qk_l2norm);
-    } else {
+    auto final_s0 = _info.final_state_strides.empty() ? 0 : _info.final_state_strides[0];
+    auto final_s1 = _info.final_state_strides.empty() ? 0 : _info.final_state_strides[1];
+    auto final_s2 = _info.final_state_strides.empty() ? 0 : _info.final_state_strides[2];
+    auto final_s3 = _info.final_state_strides.empty() ? 0 : _info.final_state_strides[3];
+
+    recurrentGatedDeltaRule<Tdata, Tgate, float, Dk, Dv, NUM_THREADS>
+        <<<grid, block, shared_mem_size, stream>>>(
+            static_cast<Tdata *>(out),
+            static_cast<Tdata *>(initial_state),
+            static_cast<Tdata *>(final_state),
+            static_cast<const Tdata *>(q),
+            static_cast<const Tdata *>(k),
+            static_cast<const Tdata *>(v),
+            static_cast<const Tgate *>(g),
+            static_cast<const Tgate *>(beta),
+            initial_state_indices,
+            final_state_indices,
+            initial_state_indices_i64,
+            final_state_indices_i64,
+            _info.use_qk_l2norm,
+            _info.indexed_state_pool,
+            _info.Hk,
+            _info.value_heads_per_key_head,
+            _info.out_strides[0],
+            _info.out_strides[1],
+            _info.out_strides[2],
+            _info.initial_state_strides[0],
+            _info.initial_state_strides[1],
+            _info.initial_state_strides[2],
+            _info.initial_state_strides[3],
+            final_s0,
+            final_s1,
+            final_s2,
+            final_s3,
+            _info.q_strides[0],
+            _info.q_strides[1],
+            _info.q_strides[2],
+            _info.k_strides[0],
+            _info.k_strides[1],
+            _info.k_strides[2],
+            _info.v_strides[0],
+            _info.v_strides[1],
+            _info.v_strides[2],
+            _info.g_strides[0],
+            _info.g_strides[1],
+            _info.g_strides[2],
+            _info.beta_strides[0],
+            _info.beta_strides[1],
+            _info.beta_strides[2]);
+    return infiniStatus_t::INFINI_STATUS_SUCCESS;
+}
+
+template <typename Tdata, size_t Dk, size_t Dv, size_t NUM_THREADS>
+infiniStatus_t launchKernelForGate(
+    const RecurrentGatedDeltaRuleInfo &_info,
+    void *out, void *initial_state, void *final_state,
+    const void *q, const void *k, const void *v,
+    const void *g, const void *beta,
+    const void *initial_state_indices,
+    const void *final_state_indices,
+    bool initial_state_indices_i64,
+    bool final_state_indices_i64,
+    cudaStream_t stream) {
+    switch (_info.gate_dtype) {
+    case INFINI_DTYPE_F16:
+        return launchKernelTyped<Tdata, half, Dk, Dv, NUM_THREADS>(
+            _info, out, initial_state, final_state, q, k, v, g, beta,
+            initial_state_indices, final_state_indices, initial_state_indices_i64, final_state_indices_i64, stream);
+    case INFINI_DTYPE_BF16:
+        return launchKernelTyped<Tdata, __nv_bfloat16, Dk, Dv, NUM_THREADS>(
+            _info, out, initial_state, final_state, q, k, v, g, beta,
+            initial_state_indices, final_state_indices, initial_state_indices_i64, final_state_indices_i64, stream);
+    case INFINI_DTYPE_F32:
+        return launchKernelTyped<Tdata, float, Dk, Dv, NUM_THREADS>(
+            _info, out, initial_state, final_state, q, k, v, g, beta,
+            initial_state_indices, final_state_indices, initial_state_indices_i64, final_state_indices_i64, stream);
+    default:
         return infiniStatus_t::INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
-    return infiniStatus_t::INFINI_STATUS_SUCCESS;
+}
+
+template <size_t Dk, size_t Dv, size_t NUM_THREADS>
+infiniStatus_t launchKernel(
+    const RecurrentGatedDeltaRuleInfo &_info,
+    void *out, void *initial_state, void *final_state,
+    const void *q, const void *k, const void *v,
+    const void *g, const void *beta,
+    const void *initial_state_indices,
+    const void *final_state_indices,
+    bool initial_state_indices_i64,
+    bool final_state_indices_i64,
+    cudaStream_t stream) {
+    switch (_info.data_dtype) {
+    case INFINI_DTYPE_F16:
+        return launchKernelForGate<half, Dk, Dv, NUM_THREADS>(
+            _info, out, initial_state, final_state, q, k, v, g, beta,
+            initial_state_indices, final_state_indices, initial_state_indices_i64, final_state_indices_i64, stream);
+    case INFINI_DTYPE_BF16:
+        return launchKernelForGate<__nv_bfloat16, Dk, Dv, NUM_THREADS>(
+            _info, out, initial_state, final_state, q, k, v, g, beta,
+            initial_state_indices, final_state_indices, initial_state_indices_i64, final_state_indices_i64, stream);
+    case INFINI_DTYPE_F32:
+        return launchKernelForGate<float, Dk, Dv, NUM_THREADS>(
+            _info, out, initial_state, final_state, q, k, v, g, beta,
+            initial_state_indices, final_state_indices, initial_state_indices_i64, final_state_indices_i64, stream);
+    default:
+        return infiniStatus_t::INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
 }
 
 infiniStatus_t Descriptor::calculate(
     void *workspace, size_t workspace_size,
-    void *out, void *final_state,
+    void *out, void *initial_state, void *final_state,
     const void *q, const void *k, const void *v,
-    const void *g, const void *beta, const void *initial_state,
+    const void *g, const void *beta,
+    const void *initial_state_indices,
+    const void *final_state_indices,
     void *stream_) const {
     cudaStream_t stream = (cudaStream_t)stream_;
 
-    // Specialize for common shapes and thread counts
+    if (_info.has_initial_state_indices && initial_state_indices == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    if (_info.has_final_state_indices && final_state_indices == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    if (!_info.has_final_state_indices && final_state == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+
+    bool initial_indices_i64 = _info.initial_state_indices_dtype == INFINI_DTYPE_I64;
+    bool final_indices_i64 = _info.final_state_indices_dtype == INFINI_DTYPE_I64;
+
     if (_info.Dk == 128 && _info.Dv == 128) {
         if (_opaque->internal->maxThreadsPerBlock() >= 128) {
             return launchKernel<128, 128, 128>(
-                out, final_state, q, k, v, g, beta, initial_state, _info.use_qk_l2norm,
-                _info.dtype, _info.B, _info.H, stream);
+                _info, out, initial_state, final_state, q, k, v, g, beta,
+                initial_state_indices, final_state_indices,
+                initial_indices_i64, final_indices_i64, stream);
         }
     } else if (_info.Dk == 64 && _info.Dv == 64) {
         if (_opaque->internal->maxThreadsPerBlock() >= 64) {
             return launchKernel<64, 64, 64>(
-                out, final_state, q, k, v, g, beta, initial_state, _info.use_qk_l2norm,
-                _info.dtype, _info.B, _info.H, stream);
+                _info, out, initial_state, final_state, q, k, v, g, beta,
+                initial_state_indices, final_state_indices,
+                initial_indices_i64, final_indices_i64, stream);
         }
     }
 
-    // Fallback or error for unsupported shapes
-    // You can add more specializations for other shapes here.
     return infiniStatus_t::INFINI_STATUS_BAD_TENSOR_SHAPE;
 }
 
