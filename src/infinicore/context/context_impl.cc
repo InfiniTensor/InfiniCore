@@ -3,6 +3,9 @@
 
 #include "../utils.hpp"
 
+#include <chrono>
+#include <fstream>
+
 namespace infinicore {
 
 thread_local Runtime *ContextImpl::current_runtime_ = nullptr;
@@ -40,6 +43,23 @@ void ContextImpl::setDevice(Device device) {
     if (getCurrentRuntime()->isGraphRecording() && !warn_switch_runtime) {
         spdlog::warn("Switching device runtime during graph recording may break the graph!");
         warn_switch_runtime = true;
+        // #region agent log
+        {
+            const auto from_dev = getCurrentRuntime()->device().toString();
+            const auto to_dev = device.toString();
+            std::ofstream dbg("/workspace/.cursor/debug-66a1a9.log", std::ios::app);
+            if (dbg) {
+                const auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    std::chrono::system_clock::now().time_since_epoch())
+                                    .count();
+                dbg << "{\"sessionId\":\"66a1a9\",\"runId\":\"repro\",\"hypothesisId\":\"B\","
+                    << "\"location\":\"context_impl.cc:setDevice\","
+                    << "\"message\":\"device_switch_during_graph_recording\","
+                    << "\"data\":{\"from\":\"" << from_dev << "\",\"to\":\"" << to_dev << "\"},"
+                    << "\"timestamp\":" << ts << "}\n";
+            }
+        }
+        // #endregion
     }
 
     if (runtime_table_[int(device.getType())][device.getIndex()] == nullptr) {
@@ -49,6 +69,7 @@ void ContextImpl::setDevice(Device device) {
     } else {
         current_runtime_ = runtime_table_[int(device.getType())][device.getIndex()].get()->activate();
     }
+    current_runtime_->flushDeferredPinnedHostFrees();
 }
 
 size_t ContextImpl::getDeviceCount(Device::Type type) {
@@ -115,6 +136,10 @@ void syncStream() {
 
 void syncDevice() {
     return ContextImpl::singleton().getCurrentRuntime()->syncDevice();
+}
+
+void flushDeferredPinnedHostFrees() {
+    return ContextImpl::singleton().getCurrentRuntime()->flushDeferredPinnedHostFrees();
 }
 
 std::shared_ptr<Memory> allocateMemory(size_t size) {

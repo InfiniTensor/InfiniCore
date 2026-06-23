@@ -4,6 +4,7 @@
 #include "infinicore/tensor.hpp"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include <iostream>
 namespace infinicore {
@@ -44,10 +45,10 @@ void TensorImpl::copy_from(Tensor src) {
         } else if (src->device().getType() == Device::Type::CPU) {
             context::setDevice(this->device());
             if (this->is_contiguous()) {
-                context::memcpyH2D(this->data(), src->data(), copy_size);
+                context::memcpyH2D(this->data(), src->data(), copy_size, false);
             } else {
                 auto local_src = Tensor::empty(this->shape(), this->dtype(), this->device());
-                context::memcpyH2D(local_src->data(), src->data(), copy_size);
+                context::memcpyH2D(local_src->data(), src->data(), copy_size, false);
                 op::rearrange_(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()), local_src);
             }
         }

@@ -7,6 +7,10 @@
 #include "../allocators/pinnable_block_allocator.hpp"
 #include "../allocators/stream_ordered_allocator.hpp"
 
+#include <cstdint>
+#include <cstring>
+#include <infinirt.h>
+
 namespace infinicore {
 Runtime::Runtime(Device device) : device_(device), graph_manager_(std::make_unique<graph::GraphManager>()) {
     activate();
@@ -84,11 +88,30 @@ std::shared_ptr<Memory> Runtime::reinstantiateBlob(std::shared_ptr<Memory> blob)
     return std::make_shared<Memory>(blob->data(), blob->size(), device_, nullptr);
 }
 
+void Runtime::flushDeferredPinnedHostFrees() {
+    if (pinned_host_memory_allocator_) {
+        static_cast<DevicePinnedHostAllocator *>(pinned_host_memory_allocator_.get())->gc();
+    }
+}
+
 void Runtime::memcpyH2D(void *dst, const void *src, size_t size, bool async) {
+    std::shared_ptr<Memory> staging;
+    const void *h2d_src = src;
+    // HPCC 3.1: host pages touched by H2D become pinned on the active GPU node.
+    // Stage arbitrary host pointers through rank-local pinned memory so TP ranks
+    // never DMA from pages registered on another node. Sync before releasing staging.
+    if (size > 0 && pinned_host_memory_allocator_) {
+        staging = allocatePinnedHostMemory(size);
+        std::memcpy(staging->data(), src, size);
+        h2d_src = staging->data();
+    }
     if (async) {
-        INFINICORE_CHECK_ERROR(infinirtMemcpyAsync(dst, src, size, INFINIRT_MEMCPY_H2D, stream_));
+        INFINICORE_CHECK_ERROR(infinirtMemcpyAsync(dst, h2d_src, size, INFINIRT_MEMCPY_H2D, stream_));
+        if (staging) {
+            syncStream();
+        }
     } else {
-        INFINICORE_CHECK_ERROR(infinirtMemcpy(dst, src, size, INFINIRT_MEMCPY_H2D));
+        INFINICORE_CHECK_ERROR(infinirtMemcpy(dst, h2d_src, size, INFINIRT_MEMCPY_H2D));
     }
 }
 

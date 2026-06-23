@@ -53,6 +53,9 @@ public:
     float elapsedTime(infinirtEvent_t start, infinirtEvent_t end);
     void streamWaitEvent(infinirtStream_t stream, infinirtEvent_t event);
 
+    /// Drain pinned-host frees deferred because deallocate ran on another device.
+    void flushDeferredPinnedHostFrees();
+
     // Graph
     bool isGraphRecording() const;
     void startGraphRecording();

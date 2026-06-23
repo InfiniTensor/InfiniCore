@@ -23,6 +23,9 @@ infiniopHandle_t getInfiniopHandle(Device device);
 void syncStream();
 void syncDevice();
 
+/// Free pinned-host allocations deferred while another device was active.
+void flushDeferredPinnedHostFrees();
+
 std::shared_ptr<Memory> allocateMemory(size_t size);
 std::shared_ptr<Memory> allocateHostMemory(size_t size);
 std::shared_ptr<Memory> allocatePinnedHostMemory(size_t size);

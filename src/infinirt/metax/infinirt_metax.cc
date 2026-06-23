@@ -1,5 +1,6 @@
 #include "infinirt_metax.h"
 #include "../../utils.h"
+#include <cstdint>
 #include <cstring>
 #ifdef ENABLE_METAX_MC_API
 #include <mcr/mc_runtime.h>
