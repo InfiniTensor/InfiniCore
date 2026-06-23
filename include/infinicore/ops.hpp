@@ -20,6 +20,7 @@
 #include "ops/blas_dot.hpp"
 #include "ops/causal_softmax.hpp"
 #include "ops/cdist.hpp"
+#include "ops/conv1d.hpp"
 #include "ops/conv2d.hpp"
 #include "ops/cross_entropy.hpp"
 #include "ops/deepseek_moe.hpp"
