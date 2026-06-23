@@ -25,10 +25,13 @@ AllReduce::~AllReduce() {
 void AllReduce::run() const {
     PlannedMeta *meta = reinterpret_cast<PlannedMeta *>(planned_meta_);
 
-    INFINICORE_CHECK_ERROR(infinicclAllReduce(meta->input->data(),
-                                              meta->output->data(),
-                                              meta->input->numel(),
-                                              static_cast<infiniDtype_t>(static_cast<int>(meta->input->dtype())),
+    Tensor input = meta->input->resume_from_blob_();
+    Tensor output = meta->output->resume_from_blob_();
+
+    INFINICORE_CHECK_ERROR(infinicclAllReduce(input->data(),
+                                              output->data(),
+                                              input->numel(),
+                                              static_cast<infiniDtype_t>(static_cast<int>(input->dtype())),
                                               meta->op,
                                               meta->communicator,
                                               infinicore::context::getStream()));

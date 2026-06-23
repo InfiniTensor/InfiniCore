@@ -35,6 +35,45 @@ target("infiniop-test")
     set_installdir(INFINI_ROOT)
 target_end()
 
+target("infinicore-distributed-graph-test")
+    set_kind("binary")
+    add_deps("infini-utils")
+    set_default(false)
+
+    set_warnings("all", "error")
+    set_languages("cxx17")
+
+    local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
+    add_includedirs(INFINI_ROOT.."/include")
+    add_includedirs("include")
+    add_linkdirs(INFINI_ROOT.."/lib")
+    add_links("infinirt", "infiniccl", "dl")
+    add_files(os.projectdir().."/src/infinicore-distributed-graph-test/*.cpp")
+
+    before_build(function (target)
+        local py_inc = os.iorunv("python3-config", {"--includes"}):trim()
+        if py_inc and py_inc ~= "" then
+            target:add("cxflags", py_inc, {force = true})
+        end
+    end)
+
+    before_link(function (target)
+        local ldflags = os.iorunv("python3-config", {"--ldflags"}):trim()
+        if ldflags and ldflags ~= "" then
+            target:add("ldflags", ldflags, {force = true})
+        end
+        target:add("ldflags", "-rdynamic -Wl,--no-as-needed -lpython3.10 -Wl,--unresolved-symbols=ignore-all", {force = true})
+    end)
+
+    if not has_config("graph") then
+        on_load(function (target)
+            raise("infinicore-distributed-graph-test requires --graph=y")
+        end)
+    end
+
+    set_installdir(INFINI_ROOT)
+target_end()
+
 target("infiniccl-test")
     set_kind("binary")
     add_deps("infini-utils")

@@ -21,9 +21,8 @@ void Module::load_parameter(const std::string &name, const Tensor &param) {
     auto all_params = state_dict();
     auto it = all_params.find(name);
     if (it != all_params.end()) {
-        auto existing_param = it->second;
         try {
-            existing_param.load(param);
+            it->second.load(param);
         } catch (const std::exception &e) {
             throw std::runtime_error("Error loading parameter '" + name + "'. \n" + e.what());
         }
@@ -40,9 +39,8 @@ void Module::load_parameter_(const std::string &name, const Tensor &param) {
     // This function only handles direct parameters (no hierarchical traversal)
     auto it = parameters_.find(name);
     if (it != parameters_.end()) {
-        auto existing_param = it->second;
         try {
-            existing_param.load(param);
+            it->second.load(param);
         } catch (const std::exception &e) {
             throw std::runtime_error("Error loading parameter '" + name + "'. \n" + e.what());
         }
@@ -56,8 +54,7 @@ void Module::load_parameter_(const std::string &name, const Tensor &param) {
 }
 
 void Module::load_parameter_from_blob(const std::string &name, const void *data) {
-    auto param = parameters_[name];
-    param.load_blob(data);
+    parameters_[name].load_blob(data);
 }
 
 Tensor Module::register_parameter(const std::string &name, Parameter param) {

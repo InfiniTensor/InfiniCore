@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <vector>
 
@@ -40,6 +41,18 @@ public:
 
     void run() const;
 
+    /// True when device graph instantiation succeeded (exec is non-null).
+    bool has_device_exec() const;
+
+    /// Instantiate-time log buffer (empty when exec succeeded).
+    std::string device_graph_log() const;
+
+    /// True iff the most recent ``run()`` with a device exec used ``hcGraphLaunch``.
+    bool last_replay_used_device() const;
+
+    uint64_t replay_device_ok() const;
+    uint64_t replay_op_list_fallback() const;
+
 protected:
     void add_operator(std::shared_ptr<GraphOperator> op);
     void instantiate();
@@ -50,6 +63,12 @@ protected:
 private:
     struct DeviceGraph;
     std::unique_ptr<DeviceGraph> device_graph_;
+
+    void run_op_list_() const;
+
+    mutable bool last_replay_used_device_{false};
+    mutable uint64_t replay_device_ok_{0};
+    mutable uint64_t replay_op_list_fallback_{0};
 };
 } // namespace infinicore::graph
 

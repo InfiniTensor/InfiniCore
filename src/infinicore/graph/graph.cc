@@ -2,9 +2,21 @@
 
 #include "../utils.hpp"
 #include "infinicore/context/context.hpp"
+#include <cstdlib>
+#include <cstring>
 #include <infinirt.h>
+#include <string>
 
 namespace infinicore::graph {
+
+namespace {
+
+bool graph_strict_replay_enabled() {
+    const char *v = std::getenv("INFINI_GRAPH_STRICT_REPLAY");
+    return v != nullptr && v[0] != '\0' && std::string(v) != "0";
+}
+
+} // namespace
 
 /* =========================
  * GraphTensor
@@ -51,21 +63,63 @@ struct Graph::DeviceGraph {
     }
 
     void launch() {
-        INFINICORE_CHECK_ERROR(infinirtGraphLuanch(exec, context::getStream()));
+        if (infinirtGraphLuanch(exec, context::getStream()) != INFINI_STATUS_SUCCESS) {
+            throw std::runtime_error("infinirtGraphLuanch failed");
+        }
     }
 };
+
+void Graph::run_op_list_() const {
+    for (auto &op : op_list_) {
+        op->run();
+    }
+}
 
 Graph::Graph() {
 }
 
 void Graph::run() const {
-    if (device_graph_ != nullptr && device_graph_.get()->exec != nullptr) {
-        device_graph_.get()->launch();
-    } else {
-        for (auto &op : op_list_) {
-            op->run();
+    if (device_graph_ != nullptr && device_graph_->exec != nullptr) {
+        if (infinirtGraphLuanch(device_graph_->exec, context::getStream()) == INFINI_STATUS_SUCCESS) {
+            ++replay_device_ok_;
+            last_replay_used_device_ = true;
+            return;
         }
+        ++replay_op_list_fallback_;
+        last_replay_used_device_ = false;
+        spdlog::warn("hcGraphLaunch replay failed; falling back to op-list replay");
+        if (graph_strict_replay_enabled()) {
+            throw std::runtime_error("hcGraphLaunch replay failed (INFINI_GRAPH_STRICT_REPLAY=1)");
+        }
+        run_op_list_();
+        return;
     }
+    run_op_list_();
+}
+
+bool Graph::has_device_exec() const {
+    return device_graph_ != nullptr && device_graph_->exec != nullptr;
+}
+
+std::string Graph::device_graph_log() const {
+    if (device_graph_ == nullptr) {
+        return {};
+    }
+    const auto &buf = device_graph_->log_buffer;
+    const size_t len = strnlen(buf.data(), buf.size());
+    return std::string(buf.data(), len);
+}
+
+bool Graph::last_replay_used_device() const {
+    return last_replay_used_device_;
+}
+
+uint64_t Graph::replay_device_ok() const {
+    return replay_device_ok_;
+}
+
+uint64_t Graph::replay_op_list_fallback() const {
+    return replay_op_list_fallback_;
 }
 
 void Graph::add_operator(std::shared_ptr<GraphOperator> op) {
@@ -106,11 +160,14 @@ void Graph::instantiate() {
             device_graph_.get()->log_buffer.data(),
             device_graph_.get()->log_buffer.size())
         != INFINI_STATUS_SUCCESS) {
-        static bool warned_once = false;
-        if (!warned_once) {
-            warned_once = true;
-            spdlog::warn("Fail to instantiate device graph: {}", std::string(device_graph_.get()->log_buffer.data()));
-        }
+        const std::string log_msg = device_graph_log();
+        spdlog::warn("Fail to instantiate device graph (op-list replay fallback): {}", log_msg);
+    } else if (device_graph_->exec != nullptr
+               && infinirtGraphLuanch(device_graph_->exec, context::getStream()) != INFINI_STATUS_SUCCESS) {
+        spdlog::warn("Device graph exec launch probe failed; op-list replay fallback");
+        infinirtGraphExecDestroy(device_graph_->exec);
+        device_graph_->exec = nullptr;
+        infinicore::context::syncStream();
     }
 }
 
