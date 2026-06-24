@@ -1,17 +1,10 @@
-#if defined ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) && defined(ENABLE_TVM_API)
 
 #include "../../../devices/nvidia/nvidia_handle.cuh"
 #include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 #include "../moe_wna16_marlin_gemm.h"
 #include "kernel.cuh"
 #include "moe_wna16_marlin_gemm_nvidia.cuh"
-
-// #if defined ENABLE_TVM_API
-// #include "../marlin/kernel.h"
-// #include "../marlin/marlin_template.h"
-// #include "../sgl_kernel/scalar_type.hpp"
-// #include "../sgl_kernel/tensor.h"
-// #endif
 
 template <typename scalar_t>
 infiniStatus_t sglang_moe_wna16_marlin_gemm(
