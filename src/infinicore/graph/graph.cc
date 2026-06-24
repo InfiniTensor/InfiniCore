@@ -4,6 +4,7 @@
 #include "infinicore/context/context.hpp"
 
 #ifdef USE_INFINIRT_GRAPH
+#include "standalone_infinirt_graph_bridge.hpp"
 #include <infinirt.h>
 #endif
 
@@ -36,9 +37,11 @@ DispatchableGraphOperator::~DispatchableGraphOperator() {
 
 #ifdef USE_INFINIRT_GRAPH
 struct Graph::DeviceGraph {
-    infinirtGraph_t graph;
-    infinirtGraphExec_t exec;
-    infinirtGraphNode_t node;
+    infinirtGraph_t graph = nullptr;
+    infinirtGraphExec_t exec = nullptr;
+    infinirtGraphNode_t node = nullptr;
+    infinirtStream_t stream = nullptr;
+    bool standalone = false;
     std::vector<char> log_buffer;
 
     DeviceGraph() {
@@ -47,15 +50,30 @@ struct Graph::DeviceGraph {
 
     ~DeviceGraph() {
         if (exec) {
-            infinirtGraphExecDestroy(exec);
+            if (standalone) {
+                standalone_infinirt::graph_exec_destroy(exec);
+            } else {
+                infinirtGraphExecDestroy(exec);
+            }
         }
         if (graph) {
-            infinirtGraphDestroy(graph);
+            if (standalone) {
+                standalone_infinirt::graph_destroy(graph);
+            } else {
+                infinirtGraphDestroy(graph);
+            }
+        }
+        if (standalone && stream) {
+            standalone_infinirt::destroy_wrapped_stream(stream);
         }
     }
 
     void launch() {
-        INFINICORE_CHECK_ERROR(infinirtGraphLuanch(exec, context::getStream()));
+        if (standalone) {
+            INFINICORE_CHECK_ERROR(standalone_infinirt::graph_launch(exec, stream));
+        } else {
+            INFINICORE_CHECK_ERROR(infinirtGraphLuanch(exec, context::getStream()));
+        }
     }
 };
 #else
@@ -85,6 +103,22 @@ void Graph::instantiate() {
 #ifdef USE_INFINIRT_GRAPH
     // Reset device graph
     device_graph_ = std::make_unique<DeviceGraph>();
+    device_graph_->standalone = standalone_infinirt::available();
+    device_graph_->stream = device_graph_->standalone
+        ? standalone_infinirt::wrap_stream(context::getDevice(), context::getStream())
+        : context::getStream();
+    if (device_graph_->standalone && device_graph_->stream == nullptr) {
+        spdlog::warn("Standalone InfiniRT graph bridge is enabled but failed to wrap the current stream. Falling back to eager execution.");
+        device_graph_.reset();
+        return;
+    }
+    if (device_graph_->standalone) {
+        static bool logged_once = false;
+        if (!logged_once) {
+            logged_once = true;
+            spdlog::info("Using standalone InfiniRT graph bridge for graph capture and replay.");
+        }
+    }
 
     // warmup
     for (size_t iter = 0; iter < 5; ++iter) {
@@ -92,35 +126,42 @@ void Graph::instantiate() {
     }
     infinicore::context::syncStream();
 
-    if (infinirtStreamBeginCapture(
-            context::getStream(),
-            INFINIRT_STREAM_CAPTURE_MODE_RELAXED)
-        != INFINI_STATUS_SUCCESS) {
+    auto begin_status = device_graph_->standalone
+        ? standalone_infinirt::stream_begin_capture(device_graph_->stream, INFINIRT_STREAM_CAPTURE_MODE_RELAXED)
+        : infinirtStreamBeginCapture(context::getStream(), INFINIRT_STREAM_CAPTURE_MODE_RELAXED);
+    if (begin_status != INFINI_STATUS_SUCCESS) {
+        spdlog::warn("Fail to begin device graph capture.");
+        device_graph_.reset();
         return;
     }
 
     // Run and record
     this->run();
 
-    if (infinirtStreamEndCapture(
-            context::getStream(),
-            &device_graph_.get()->graph)
-        != INFINI_STATUS_SUCCESS) {
+    auto end_status = device_graph_->standalone
+        ? standalone_infinirt::stream_end_capture(device_graph_->stream, &device_graph_.get()->graph)
+        : infinirtStreamEndCapture(context::getStream(), &device_graph_.get()->graph);
+    if (end_status != INFINI_STATUS_SUCCESS) {
+        spdlog::warn("Fail to end device graph capture.");
+        device_graph_.reset();
         return;
     }
 
-    if (infinirtGraphInstantiate(
-            &device_graph_.get()->exec,
-            device_graph_.get()->graph,
-            &device_graph_.get()->node,
-            device_graph_.get()->log_buffer.data(),
-            device_graph_.get()->log_buffer.size())
-        != INFINI_STATUS_SUCCESS) {
+    auto instantiate_status = device_graph_->standalone
+        ? standalone_infinirt::graph_instantiate(&device_graph_.get()->exec, device_graph_.get()->graph)
+        : infinirtGraphInstantiate(
+              &device_graph_.get()->exec,
+              device_graph_.get()->graph,
+              &device_graph_.get()->node,
+              device_graph_.get()->log_buffer.data(),
+              device_graph_.get()->log_buffer.size());
+    if (instantiate_status != INFINI_STATUS_SUCCESS) {
         static bool warned_once = false;
         if (!warned_once) {
             warned_once = true;
             spdlog::warn("Fail to instantiate device graph: {}", std::string(device_graph_.get()->log_buffer.data()));
         }
+        device_graph_.reset();
     }
 #endif
 }
