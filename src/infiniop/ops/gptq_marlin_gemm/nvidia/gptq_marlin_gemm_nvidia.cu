@@ -1041,7 +1041,7 @@ infiniStatus_t gptq_marlin_gemm_kernel(void *c,
     return INFINI_STATUS_SUCCESS;
 }
 #endif
-int getCudaDeviceSMCount() {
+static int getCudaDeviceSMCount() {
     int dev;
     cudaGetDevice(&dev);
     cudaDeviceProp prop;
