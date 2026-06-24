@@ -8,6 +8,7 @@ from .avg_pool1d import avg_pool1d
 from .binary_cross_entropy_with_logits import binary_cross_entropy_with_logits
 from .causal_conv1d import causal_conv1d
 from .causal_softmax import causal_softmax
+from .conv1d import conv1d
 from .embedding import embedding
 from .flash_attention import flash_attention
 from .fused_gated_delta_net_gating import fused_gated_delta_net_gating
@@ -47,6 +48,7 @@ __all__ = [
     "adaptive_max_pool1d",
     "causal_conv1d",
     "causal_softmax",
+    "conv1d",
     "embedding",
     "flash_attention",
     "fused_gated_delta_net_gating",

@@ -35,6 +35,7 @@
 #include "ops/causal_conv1d.hpp"
 #include "ops/causal_softmax.hpp"
 #include "ops/cdist.hpp"
+#include "ops/conv1d.hpp"
 #include "ops/conv2d.hpp"
 #include "ops/cross_entropy.hpp"
 #include "ops/diff.hpp"
@@ -246,6 +247,7 @@ inline void bind(py::module &m) {
     bind_atanh(m);
     bind_addcmul(m);
     bind_cdist(m);
+    bind_conv1d(m);
     bind_binary_cross_entropy_with_logits(m);
     bind_reciprocal(m);
     bind_upsample_bilinear(m);
