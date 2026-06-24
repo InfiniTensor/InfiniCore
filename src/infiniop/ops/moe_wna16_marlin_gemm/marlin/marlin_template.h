@@ -166,9 +166,13 @@ __device__ inline void ldsm(typename ScalarType<scalar_t>::FragA &frag_a, const 
                      : "=r"(a[0]), "=r"(a[1]), "=r"(a[2]), "=r"(a[3])
                      : "r"(smem));
     } else if constexpr (count == 2) {
-        asm volatile("ldmatrix.sync.aligned.m8n8.x2.shared.b16 {%0,%1}, [%2];\n" : "=r"(a[0]), "=r"(a[1]) : "r"(smem));
+        asm volatile("ldmatrix.sync.aligned.m8n8.x2.shared.b16 {%0,%1}, [%2];\n"
+                     : "=r"(a[0]), "=r"(a[1])
+                     : "r"(smem));
     } else if constexpr (count == 1) {
-        asm volatile("ldmatrix.sync.aligned.m8n8.x1.shared.b16 {%0}, [%1];\n" : "=r"(a[0]) : "r"(smem));
+        asm volatile("ldmatrix.sync.aligned.m8n8.x1.shared.b16 {%0}, [%1];\n"
+                     : "=r"(a[0])
+                     : "r"(smem));
     } else {
         static_assert(count == 1 || count == 2 || count == 4, "invalid count");
     }
@@ -240,7 +244,9 @@ __device__ inline void barrier_acquire(int *lock, int count) {
         do {
             // Guarantee that subsequent writes by this threadblock will be visible
             // globally.
-            asm volatile("ld.global.acquire.gpu.b32 %0, [%1];\n" : "=r"(state) : "l"(lock));
+            asm volatile("ld.global.acquire.gpu.b32 %0, [%1];\n"
+                         : "=r"(state)
+                         : "l"(lock));
         } while (state != count);
     }
     __syncthreads();
@@ -258,7 +264,9 @@ __device__ inline void barrier_release(int *lock, bool reset = false) {
         // Make sure that all writes since acquiring this barrier are visible
         // globally, while releasing the barrier.
         asm volatile("fence.acq_rel.gpu;\n");
-        asm volatile("red.relaxed.gpu.global.add.s32 [%0], %1;\n" : : "l"(lock), "r"(val));
+        asm volatile("red.relaxed.gpu.global.add.s32 [%0], %1;\n"
+                     :
+                     : "l"(lock), "r"(val));
     }
 }
 
@@ -269,7 +277,9 @@ __device__ inline void wait_negative_and_add(int *lock) {
         do {
             // Guarantee that subsequent writes by this threadblock will be visible
             // globally.
-            asm volatile("ld.global.acquire.gpu.b32 %0, [%1];\n" : "=r"(state) : "l"(lock));
+            asm volatile("ld.global.acquire.gpu.b32 %0, [%1];\n"
+                         : "=r"(state)
+                         : "l"(lock));
         } while (state >= 0);
         atomicAdd(lock, 1);
     }

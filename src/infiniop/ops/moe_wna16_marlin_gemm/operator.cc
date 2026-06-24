@@ -21,7 +21,7 @@ __INFINI_C infiniStatus_t infiniopCreateMoeWna16MarlinGemmDescriptor(
     infiniopTensorDescriptor_t sorted_token_desc,
     infiniopTensorDescriptor_t expert_ids_desc,
     infiniopTensorDescriptor_t num_tokens_post_padded_desc,
-    infiniopTensorDescriptor_t topk_weights_desc, 
+    infiniopTensorDescriptor_t topk_weights_desc,
     int size_m, int size_n, int size_k,
     int top_k, int moe_block_size) {
 #define CREATE(CASE, NAMESPACE)                                                              \
