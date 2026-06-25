@@ -1402,6 +1402,39 @@ def gptq_marlin_gemm_(lib):
 
 
 @OpRegister.operator
+def gptq_marlin_repack_(lib):
+    lib.infiniopCreateGptqMarlinRepackDescriptor.restype = c_int32
+    lib.infiniopCreateGptqMarlinRepackDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_int64,
+        c_bool,
+    ]
+    lib.infiniopGetGptqMarlinRepackWorkspaceSize.restype = c_int32
+    lib.infiniopGetGptqMarlinRepackWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopGptqMarlinRepack.restype = c_int32
+    lib.infiniopGptqMarlinRepack.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyGptqMarlinRepackDescriptor.restype = c_int32
+    lib.infiniopDestroyGptqMarlinRepackDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def gptq_qyblas_gemm_(lib):
     lib.infiniopCreateGptqQyblasGemmDescriptor.restype = c_int32
     lib.infiniopCreateGptqQyblasGemmDescriptor.argtypes = [
@@ -1485,6 +1518,40 @@ def awq_marlin_gemm_(lib):
         c_bool,
         c_bool,
         c_bool,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyAwqMarlinGemmDescriptor.restype = c_int32
+    lib.infiniopDestroyAwqMarlinGemmDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
+def awq_marlin_repack_(lib):
+    lib.infiniopCreateAwqMarlinRepackDescriptor.restype = c_int32
+    lib.infiniopCreateAwqMarlinRepackDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_int64,
+        c_bool,
+    ]
+
+    lib.infiniopGetAwqMarlinRepackWorkspaceSize.restype = c_int32
+    lib.infiniopGetAwqMarlinRepackWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopAwqMarlinRepack.restype = c_int32
+    lib.infiniopAwqMarlinRepack.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
         c_void_p,
     ]
 
