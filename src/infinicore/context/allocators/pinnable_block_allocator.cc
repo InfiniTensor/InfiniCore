@@ -5,10 +5,37 @@
 #include "../../utils.hpp"
 
 #include <algorithm>
+#include <chrono>
+#include <cstdlib>
+#include <fstream>
 #include <infinirt.h>
 #include <stdexcept>
 
 namespace infinicore {
+
+namespace {
+
+void agent_log_alloc_fail(const char *location, size_t size) {
+    const char *v = std::getenv("INFINI_AGENT_DEBUG");
+    if (v == nullptr || v[0] == '\0' || std::string(v) == "0") {
+        return;
+    }
+    const char *path = std::getenv("INFINI_AGENT_DEBUG_LOG");
+    const std::string log_path =
+        (path != nullptr && path[0] != '\0') ? path : "/workspace/.cursor/debug-073e37.log";
+    std::ofstream f(log_path, std::ios::app);
+    if (!f) {
+        return;
+    }
+    const auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+                        std::chrono::system_clock::now().time_since_epoch())
+                        .count();
+    f << "{\"sessionId\":\"073e37\",\"runId\":\"timeout-repro\",\"hypothesisId\":\"H2\","
+      << "\"location\":\"" << location << "\",\"message\":\"hcMalloc_failed\","
+      << "\"data\":{\"size\":" << size << "},\"timestamp\":" << ts << "}\n";
+}
+
+} // namespace
 
 // ------------------- Helper functions -------------------
 
@@ -72,7 +99,13 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
             block->frozen = pinned_mode_;
             block->in_use = true;
 
-            INFINICORE_CHECK_ERROR(infinirtMalloc(&block->ptr, block->size));
+            {
+                const auto st = infinirtMalloc(&block->ptr, block->size);
+                if (st != INFINI_STATUS_SUCCESS) {
+                    agent_log_alloc_fail("pinnable_block_allocator.cc:size_class", block->size);
+                }
+                INFINICORE_CHECK_ERROR(st);
+            }
 
             all_blocks_[block->ptr] = block;
             return reinterpret_cast<std::byte *>(block->ptr);
@@ -97,7 +130,13 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
     block->frozen = pinned_mode_;
     block->in_use = true;
 
-    INFINICORE_CHECK_ERROR(infinirtMalloc(&block->ptr, block->size));
+    {
+        const auto st = infinirtMalloc(&block->ptr, block->size);
+        if (st != INFINI_STATUS_SUCCESS) {
+            agent_log_alloc_fail("pinnable_block_allocator.cc:large_block", block->size);
+        }
+        INFINICORE_CHECK_ERROR(st);
+    }
 
     large_blocks_.push_back(block);
     all_blocks_[block->ptr] = block;

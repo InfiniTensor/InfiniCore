@@ -5,11 +5,42 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <limits>
 #include <stdexcept>
 #include <utility>
 #include <vector>
 
 namespace infinicore::nn {
+namespace {
+
+int64_t max_position_id(const Tensor &pos) {
+    if (!pos || pos->numel() == 0) {
+        return -1;
+    }
+    auto on_cpu = pos->contiguous()->to(Device::cpu());
+    context::syncStream();
+    const size_t n = on_cpu->numel();
+    const int32_t *data = reinterpret_cast<const int32_t *>(on_cpu->data());
+    int64_t max_pos = data[0];
+    for (size_t i = 1; i < n; ++i) {
+        max_pos = std::max(max_pos, static_cast<int64_t>(data[i]));
+    }
+    return max_pos;
+}
+
+void assert_position_in_cache(const Tensor &pos, size_t max_seq_len) {
+    const int64_t max_pos = max_position_id(pos);
+    if (max_pos < 0) {
+        return;
+    }
+    if (static_cast<size_t>(max_pos) >= max_seq_len) {
+        throw std::out_of_range(
+            "RoPE position_id " + std::to_string(max_pos) +
+            " >= sin/cos cache rows " + std::to_string(max_seq_len));
+    }
+}
+
+} // namespace
 
 RoPE::RoPE(size_t head_dim,
            size_t max_seq_len,
@@ -63,8 +94,9 @@ void RoPE::initialize_cache() {
             } else if (scaling_->type() == ScalingType::LONGROPE) {
                 std::shared_ptr<LongRopeConfig> lr = std::dynamic_pointer_cast<LongRopeConfig>(scaling_);
                 table_factor = lr->factor();
+                const size_t longrope_boundary = lr->original_max_position_embeddings();
                 float _ext;
-                if (pos < lr->original_max_position_embeddings()) {
+                if (pos < longrope_boundary) {
                     _ext = lr->short_factor()[j];
                 } else {
                     _ext = lr->long_factor()[j];
@@ -131,6 +163,7 @@ void RoPE::initialize_cache() {
 }
 
 Tensor RoPE::forward(const Tensor &x, const Tensor &pos, bool in_place) const {
+    assert_position_in_cache(pos, max_seq_len_);
     if (in_place) {
         Tensor y = Tensor(x);
         op::rope_(y, x, pos, sin_cache_, cos_cache_, algo_);
@@ -141,6 +174,7 @@ Tensor RoPE::forward(const Tensor &x, const Tensor &pos, bool in_place) const {
 }
 
 Tensor RoPE::forward(const Tensor &y, const Tensor &x, const Tensor &pos) const {
+    assert_position_in_cache(pos, max_seq_len_);
     op::rope_(y, x, pos, sin_cache_, cos_cache_, algo_);
     return y;
 }

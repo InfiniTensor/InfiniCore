@@ -1,6 +1,7 @@
 #include "runtime.hpp"
 
 #include "../../utils.hpp"
+#include "../debug_session_log.hpp"
 
 #include "../allocators/device_pinned_allocator.hpp"
 #include "../allocators/host_allocator.hpp"
@@ -104,6 +105,19 @@ void Runtime::memcpyH2D(void *dst, const void *src, size_t size, bool async) {
         staging = allocatePinnedHostMemory(size);
         std::memcpy(staging->data(), src, size);
         h2d_src = staging->data();
+        // #region agent log
+        if (size >= 4096) {
+            infinicore::debug_session::log(
+                "H3",
+                "runtime.cc:memcpyH2D",
+                "h2d_staged",
+                std::string("{\"device\":") + std::to_string(device_.getIndex()) +
+                    ",\"size\":" + std::to_string(size) + ",\"orig_src\":" +
+                    std::to_string(reinterpret_cast<uintptr_t>(src)) + ",\"staging_src\":" +
+                    std::to_string(reinterpret_cast<uintptr_t>(h2d_src)) +
+                    ",\"graph_rec\":" + (isGraphRecording() ? "1" : "0") + "}");
+        }
+        // #endregion
     }
     if (async) {
         INFINICORE_CHECK_ERROR(infinirtMemcpyAsync(dst, h2d_src, size, INFINIRT_MEMCPY_H2D, stream_));
@@ -116,6 +130,19 @@ void Runtime::memcpyH2D(void *dst, const void *src, size_t size, bool async) {
 }
 
 void Runtime::memcpyD2H(void *dst, const void *src, size_t size) {
+    // #region agent log
+    if (size >= 4096 || isGraphRecording()) {
+        infinicore::debug_session::log(
+            "H2",
+            "runtime.cc:memcpyD2H",
+            "d2h_before",
+            std::string("{\"device\":") + std::to_string(device_.getIndex()) + ",\"size\":" +
+                std::to_string(size) + ",\"dst\":" +
+                std::to_string(reinterpret_cast<uintptr_t>(dst)) + ",\"src\":" +
+                std::to_string(reinterpret_cast<uintptr_t>(src)) + ",\"graph_rec\":" +
+                (isGraphRecording() ? "1" : "0") + "}");
+    }
+    // #endregion
     INFINICORE_CHECK_ERROR(infinirtMemcpy(dst, src, size, INFINIRT_MEMCPY_D2H));
 }
 
