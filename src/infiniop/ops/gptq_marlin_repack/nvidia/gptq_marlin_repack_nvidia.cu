@@ -131,4 +131,4 @@ Descriptor::calculate(
 }
 
 } // namespace op::gptq_marlin_repack::nvidia
-#endif
+#endif // ENABLE_NVIDIA_API
