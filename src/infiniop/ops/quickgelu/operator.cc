@@ -8,6 +8,9 @@
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/quickgelu_nvidia.cuh"
 #endif
+#ifdef ENABLE_METAX_API
+#include "metax/quickgelu_metax.h"
+#endif
 
 __INFINI_C infiniStatus_t infiniopCreateQuickGeluDescriptor(
     infiniopHandle_t handle,
@@ -39,6 +42,9 @@ __INFINI_C infiniStatus_t infiniopCreateQuickGeluDescriptor(
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -68,6 +74,9 @@ __INFINI_C infiniStatus_t infiniopGetQuickGeluWorkspaceSize(infiniopQuickGeluDes
 #endif
 #ifdef ENABLE_HYGON_API
         GET(INFINI_DEVICE_HYGON, nvidia)
+#endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -105,6 +114,9 @@ __INFINI_C infiniStatus_t infiniopQuickGelu(
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -134,6 +146,9 @@ __INFINI_C infiniStatus_t infiniopDestroyQuickGeluDescriptor(infiniopQuickGeluDe
 #endif
 #ifdef ENABLE_HYGON_API
         DELETE(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        DELETE(INFINI_DEVICE_METAX, metax);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
