@@ -494,7 +494,7 @@ infiniStatus_t launch_decode_mla_hd576_v512_impl(
     if (const char *env = std::getenv("INFINIOP_FLASH_DECODE_SPLITKV")) {
         use_split = !(std::strcmp(env, "0") == 0 || std::strcmp(env, "false") == 0);
     }
-    int num_splits = 4;
+    int num_splits = 8;
     if (const char *env = std::getenv("INFINIOP_FLASH_NUM_SPLITS")) {
         const int v = std::atoi(env);
         if (v > 0) {

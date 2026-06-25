@@ -6,6 +6,8 @@
 #include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 #include "deepseek_moe_nvidia.cuh"
 
+#include <vector>
+
 namespace op::deepseek_moe::nvidia {
 
 struct Descriptor::Opaque {
@@ -18,8 +20,45 @@ Descriptor::~Descriptor() {
 
 namespace {
 
+constexpr size_t ROUTE_BATCHED_GEMM_MAX_TOKENS = 16384;
+
 constexpr size_t align_up(size_t value, size_t alignment) {
     return (value + alignment - 1) / alignment * alignment;
+}
+
+inline char *advance_workspace(char *&ptr, size_t bytes, size_t alignment = 256) {
+    ptr = reinterpret_cast<char *>(align_up(reinterpret_cast<uintptr_t>(ptr), alignment));
+    char *out = ptr;
+    ptr += bytes;
+    return out;
+}
+
+template <typename T>
+size_t route_batched_workspace_size(const DeepseekMoeInfo &info, size_t base_offset) {
+    const size_t routes = info.ntokens * info.topk;
+    size_t bytes = base_offset;
+    bytes = align_up(bytes, alignof(void *));
+    bytes += routes * sizeof(void *) * 9;
+    bytes = align_up(bytes, 256);
+    bytes += routes * info.intermediate_size * sizeof(T) * 3;
+    bytes = align_up(bytes, 256);
+    bytes += routes * info.hidden_size * sizeof(T);
+    return align_up(bytes, 256);
+}
+
+template <typename T>
+size_t expert_grouped_workspace_size(const DeepseekMoeInfo &info, size_t base_offset) {
+    const size_t routes = info.ntokens * info.topk;
+    size_t bytes = base_offset;
+    bytes = align_up(bytes, 256);
+    bytes += (info.num_experts + 1) * sizeof(int) * 3;
+    bytes = align_up(bytes, 256);
+    bytes += routes * sizeof(int) * 2;
+    bytes = align_up(bytes, 256);
+    bytes += routes * info.hidden_size * sizeof(T);
+    bytes = align_up(bytes, 256);
+    bytes += routes * info.intermediate_size * sizeof(T) * 2;
+    return align_up(bytes, 256);
 }
 
 template <typename T>
@@ -156,6 +195,380 @@ __global__ void down_kernel(
     }
 }
 
+__global__ void count_experts_kernel(
+    const int *topk_indices,
+    int *counts,
+    int routes,
+    int num_experts) {
+    int route = blockIdx.x * blockDim.x + threadIdx.x;
+    if (route >= routes) {
+        return;
+    }
+    int expert = topk_indices[route];
+    if (expert >= 0 && expert < num_experts) {
+        atomicAdd(counts + expert, 1);
+    }
+}
+
+__global__ void prefix_counts_kernel(
+    const int *counts,
+    int *offsets,
+    int num_experts) {
+    extern __shared__ int scan[];
+    int tid = threadIdx.x;
+    if (tid < num_experts) {
+        scan[tid] = counts[tid];
+    } else {
+        scan[tid] = 0;
+    }
+    __syncthreads();
+
+    for (int stride = 1; stride < blockDim.x; stride <<= 1) {
+        int value = 0;
+        if (tid >= stride) {
+            value = scan[tid - stride];
+        }
+        __syncthreads();
+        scan[tid] += value;
+        __syncthreads();
+    }
+
+    if (tid == 0) {
+        offsets[0] = 0;
+    }
+    if (tid < num_experts) {
+        offsets[tid + 1] = scan[tid];
+    }
+}
+
+template <typename T>
+__global__ void pack_grouped_hidden_kernel(
+    const T *hidden,
+    const int *topk_indices,
+    const int *offsets,
+    int *positions,
+    int *row_to_route,
+    int *route_to_row,
+    T *packed_hidden,
+    int routes,
+    int hidden_size,
+    int topk,
+    int num_experts) {
+    int route = blockIdx.x;
+    int tid = threadIdx.x;
+    if (route >= routes) {
+        return;
+    }
+    int expert = topk_indices[route];
+    if (expert < 0 || expert >= num_experts) {
+        return;
+    }
+    __shared__ int row;
+    if (tid == 0) {
+        int local = atomicAdd(positions + expert, 1);
+        row = offsets[expert] + local;
+        row_to_route[row] = route;
+        route_to_row[route] = row;
+    }
+    __syncthreads();
+    int token = route / topk;
+    for (int h = tid; h < hidden_size; h += blockDim.x) {
+        packed_hidden[static_cast<size_t>(row) * hidden_size + h] = hidden[static_cast<size_t>(token) * hidden_size + h];
+    }
+}
+
+template <typename T>
+__global__ void swiglu_weight_grouped_kernel(
+    T *activated,
+    const T *gate,
+    const T *up,
+    const int *row_to_route,
+    const float *topk_weights,
+    int routes,
+    int intermediate_size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = routes * intermediate_size;
+    if (idx >= total) {
+        return;
+    }
+    int row = idx / intermediate_size;
+    int route = row_to_route[row];
+    float g = to_float<T>(gate[idx]);
+    float u = to_float<T>(up[idx]);
+    float silu = g / (1.0f + __expf(-g));
+    activated[idx] = from_float<T>(silu * u * topk_weights[route]);
+}
+
+template <typename T>
+__global__ void sum_grouped_out_kernel(
+    T *out,
+    const T *packed_out,
+    const int *route_to_row,
+    int ntokens,
+    int hidden_size,
+    int topk) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = ntokens * hidden_size;
+    if (idx >= total) {
+        return;
+    }
+    int token = idx / hidden_size;
+    int h = idx - token * hidden_size;
+    float acc = 0.0f;
+    for (int k = 0; k < topk; ++k) {
+        int route = token * topk + k;
+        int row = route_to_row[route];
+        acc += to_float<T>(packed_out[static_cast<size_t>(row) * hidden_size + h]);
+    }
+    out[idx] = from_float<T>(acc);
+}
+
+template <typename T>
+__global__ void setup_route_batched_ptrs_kernel(
+    const void **a_array,
+    const void **b_array,
+    void **c_array,
+    const T *hidden,
+    const int *topk_indices,
+    const void *const *weights,
+    T *gemm_out,
+    int routes,
+    int hidden_size,
+    int topk,
+    int out_size,
+    int num_experts) {
+    int route = blockIdx.x * blockDim.x + threadIdx.x;
+    if (route >= routes) {
+        return;
+    }
+    int expert = topk_indices[route];
+    if (expert < 0 || expert >= num_experts) {
+        expert = 0;
+    }
+    int token = route / topk;
+    a_array[route] = weights[expert];
+    b_array[route] = hidden + static_cast<size_t>(token) * hidden_size;
+    c_array[route] = gemm_out + static_cast<size_t>(route) * out_size;
+}
+
+template <typename T>
+__global__ void setup_down_batched_ptrs_kernel(
+    const void **a_array,
+    const void **b_array,
+    void **c_array,
+    const T *activated,
+    const int *topk_indices,
+    const void *const *down_weights,
+    T *route_out,
+    int routes,
+    int hidden_size,
+    int topk,
+    int intermediate_size,
+    int num_experts) {
+    int route = blockIdx.x * blockDim.x + threadIdx.x;
+    if (route >= routes) {
+        return;
+    }
+    int expert = topk_indices[route];
+    if (expert < 0 || expert >= num_experts) {
+        expert = 0;
+    }
+    a_array[route] = down_weights[expert];
+    b_array[route] = activated + static_cast<size_t>(route) * intermediate_size;
+    c_array[route] = route_out + static_cast<size_t>(route) * hidden_size;
+}
+
+template <typename T>
+__global__ void setup_all_batched_ptrs_kernel(
+    const void **gate_a_array,
+    const void **gate_b_array,
+    void **gate_c_array,
+    const void **up_a_array,
+    const void **up_b_array,
+    void **up_c_array,
+    const void **down_a_array,
+    const void **down_b_array,
+    void **down_c_array,
+    const T *hidden,
+    const int *topk_indices,
+    const void *const *gate_weights,
+    const void *const *up_weights,
+    const void *const *down_weights,
+    T *gate_buf,
+    T *up_buf,
+    T *activated,
+    T *route_out,
+    int routes,
+    int hidden_size,
+    int topk,
+    int intermediate_size,
+    int num_experts) {
+    int route = blockIdx.x * blockDim.x + threadIdx.x;
+    if (route >= routes) {
+        return;
+    }
+    int expert = topk_indices[route];
+    if (expert < 0 || expert >= num_experts) {
+        expert = 0;
+    }
+    int token = route / topk;
+    const T *token_hidden = hidden + static_cast<size_t>(token) * hidden_size;
+
+    gate_a_array[route] = gate_weights[expert];
+    gate_b_array[route] = token_hidden;
+    gate_c_array[route] = gate_buf + static_cast<size_t>(route) * intermediate_size;
+
+    up_a_array[route] = up_weights[expert];
+    up_b_array[route] = token_hidden;
+    up_c_array[route] = up_buf + static_cast<size_t>(route) * intermediate_size;
+
+    down_a_array[route] = down_weights[expert];
+    down_b_array[route] = activated + static_cast<size_t>(route) * intermediate_size;
+    down_c_array[route] = route_out + static_cast<size_t>(route) * hidden_size;
+}
+
+template <typename T>
+__global__ void swiglu_weight_kernel(
+    T *activated,
+    const T *gate,
+    const T *up,
+    const float *topk_weights,
+    int routes,
+    int intermediate_size) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = routes * intermediate_size;
+    if (idx >= total) {
+        return;
+    }
+    int route = idx / intermediate_size;
+    float g = to_float<T>(gate[idx]);
+    float u = to_float<T>(up[idx]);
+    float silu = g / (1.0f + __expf(-g));
+    activated[idx] = from_float<T>(silu * u * topk_weights[route]);
+}
+
+template <typename T>
+__global__ void sum_route_out_kernel(
+    T *out,
+    const T *route_out,
+    int ntokens,
+    int hidden_size,
+    int topk) {
+    int linear = blockIdx.x * blockDim.x + threadIdx.x;
+    int total = ntokens * hidden_size;
+    if (linear >= total) {
+        return;
+    }
+    int token = linear / hidden_size;
+    int h = linear - token * hidden_size;
+    float acc = 0.0f;
+    for (int k = 0; k < topk; ++k) {
+        int route = token * topk + k;
+        acc += to_float<T>(route_out[static_cast<size_t>(route) * hidden_size + h]);
+    }
+    out[linear] = from_float<T>(acc);
+}
+
+template <typename T>
+infiniStatus_t run_batched_gemm(
+    const std::shared_ptr<device::nvidia::Handle::Internal> &internal,
+    cudaStream_t stream,
+    const void **a_array,
+    const void **b_array,
+    void **c_array,
+    int m,
+    int n,
+    int k,
+    int lda,
+    int ldb,
+    int ldc,
+    int batch_count,
+    cudaDataType dtype) {
+    float alpha = 1.0f;
+    float beta = 0.0f;
+#if defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
+    cudaDataType compute_type = CUDA_R_32F;
+#else
+    cublasComputeType_t compute_type = CUBLAS_COMPUTE_32F;
+#endif
+    CHECK_STATUS(internal->useCublas(
+        stream,
+        [&](cublasHandle_t handle) {
+            CHECK_CUBLAS(cublasGemmBatchedEx(
+                handle,
+                CUBLAS_OP_T,
+                CUBLAS_OP_N,
+                m,
+                n,
+                k,
+                &alpha,
+                reinterpret_cast<const void *const *>(a_array),
+                dtype,
+                lda,
+                reinterpret_cast<const void *const *>(b_array),
+                dtype,
+                ldb,
+                &beta,
+                reinterpret_cast<void *const *>(c_array),
+                dtype,
+                ldc,
+                batch_count,
+                compute_type,
+                CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+            return INFINI_STATUS_SUCCESS;
+        }));
+    return INFINI_STATUS_SUCCESS;
+}
+
+template <typename T>
+infiniStatus_t run_gemm(
+    const std::shared_ptr<device::nvidia::Handle::Internal> &internal,
+    cudaStream_t stream,
+    const void *a,
+    const void *b,
+    void *c,
+    int m,
+    int n,
+    int k,
+    int lda,
+    int ldb,
+    int ldc,
+    cudaDataType dtype) {
+    float alpha = 1.0f;
+    float beta = 0.0f;
+#if defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
+    cudaDataType compute_type = CUDA_R_32F;
+#else
+    cublasComputeType_t compute_type = CUBLAS_COMPUTE_32F;
+#endif
+    CHECK_STATUS(internal->useCublas(
+        stream,
+        [&](cublasHandle_t handle) {
+            CHECK_CUBLAS(cublasGemmEx(
+                handle,
+                CUBLAS_OP_T,
+                CUBLAS_OP_N,
+                m,
+                n,
+                k,
+                &alpha,
+                a,
+                dtype,
+                lda,
+                b,
+                dtype,
+                ldb,
+                &beta,
+                c,
+                dtype,
+                ldc,
+                compute_type,
+                CUBLAS_GEMM_DEFAULT_TENSOR_OP));
+            return INFINI_STATUS_SUCCESS;
+        }));
+    return INFINI_STATUS_SUCCESS;
+}
+
 template <typename T>
 infiniStatus_t launch_typed(
     void *workspace,
@@ -169,7 +582,8 @@ infiniStatus_t launch_typed(
     const void *const *up_weights,
     const void *const *down_weights,
     cudaStream_t stream,
-    bool weight_ptrs_on_device) {
+    bool weight_ptrs_on_device,
+    const std::shared_ptr<device::nvidia::Handle::Internal> &internal) {
 
     const size_t ptr_bytes = align_up(info.num_experts * sizeof(void *), 256);
     const size_t ptr_workspace = ptr_bytes * 3;
@@ -199,6 +613,175 @@ infiniStatus_t launch_typed(
         gate_ptrs = gate_workspace;
         up_ptrs = up_workspace;
         down_ptrs = down_workspace;
+    }
+
+    if (info.ntokens <= ROUTE_BATCHED_GEMM_MAX_TOKENS) {
+        const int routes = static_cast<int>(info.ntokens * info.topk);
+        const int hidden_size_i = static_cast<int>(info.hidden_size);
+        const int topk_i = static_cast<int>(info.topk);
+        const int intermediate_size_i = static_cast<int>(info.intermediate_size);
+        const int num_experts_i = static_cast<int>(info.num_experts);
+        const cudaDataType blas_dtype = info.dtype == INFINI_DTYPE_F16 ? CUDA_R_16F : CUDA_R_16BF;
+
+        if (info.ntokens >= 8192 && info.num_experts <= 256) {
+            char *gptr = base + intermediate_offset;
+            auto *counts = reinterpret_cast<int *>(advance_workspace(gptr, (info.num_experts + 1) * sizeof(int)));
+            auto *offsets = reinterpret_cast<int *>(advance_workspace(gptr, (info.num_experts + 1) * sizeof(int)));
+            auto *positions = reinterpret_cast<int *>(advance_workspace(gptr, (info.num_experts + 1) * sizeof(int)));
+            auto *row_to_route = reinterpret_cast<int *>(advance_workspace(gptr, static_cast<size_t>(routes) * sizeof(int)));
+            auto *route_to_row = reinterpret_cast<int *>(advance_workspace(gptr, static_cast<size_t>(routes) * sizeof(int)));
+            auto *packed_hidden = reinterpret_cast<T *>(advance_workspace(gptr, static_cast<size_t>(routes) * info.hidden_size * sizeof(T)));
+            auto *gate_buf_g = reinterpret_cast<T *>(advance_workspace(gptr, static_cast<size_t>(routes) * info.intermediate_size * sizeof(T)));
+            auto *up_buf_g = reinterpret_cast<T *>(advance_workspace(gptr, static_cast<size_t>(routes) * info.intermediate_size * sizeof(T)));
+            if (static_cast<size_t>(gptr - base) <= workspace_size) {
+                CHECK_CUDA(cudaMemsetAsync(counts, 0, (info.num_experts + 1) * sizeof(int), stream));
+                CHECK_CUDA(cudaMemsetAsync(positions, 0, (info.num_experts + 1) * sizeof(int), stream));
+                count_experts_kernel<<<(routes + 255) / 256, 256, 0, stream>>>(
+                    reinterpret_cast<const int *>(topk_indices), counts, routes, num_experts_i);
+                prefix_counts_kernel<<<1, 256, 256 * sizeof(int), stream>>>(
+                    counts, offsets, num_experts_i);
+                pack_grouped_hidden_kernel<T><<<routes, 256, 0, stream>>>(
+                    reinterpret_cast<const T *>(hidden), reinterpret_cast<const int *>(topk_indices),
+                    offsets, positions, row_to_route, route_to_row, packed_hidden,
+                    routes, hidden_size_i, topk_i, num_experts_i);
+
+                std::vector<int> host_counts(info.num_experts + 1);
+                std::vector<int> host_offsets(info.num_experts + 1);
+                std::vector<const void *> host_gate(info.num_experts);
+                std::vector<const void *> host_up(info.num_experts);
+                std::vector<const void *> host_down(info.num_experts);
+                CHECK_CUDA(cudaMemcpyAsync(host_counts.data(), counts, (info.num_experts + 1) * sizeof(int), cudaMemcpyDeviceToHost, stream));
+                CHECK_CUDA(cudaMemcpyAsync(host_offsets.data(), offsets, (info.num_experts + 1) * sizeof(int), cudaMemcpyDeviceToHost, stream));
+                if (weight_ptrs_on_device) {
+                    CHECK_CUDA(cudaMemcpyAsync(host_gate.data(), gate_weights, info.num_experts * sizeof(void *), cudaMemcpyDeviceToHost, stream));
+                    CHECK_CUDA(cudaMemcpyAsync(host_up.data(), up_weights, info.num_experts * sizeof(void *), cudaMemcpyDeviceToHost, stream));
+                    CHECK_CUDA(cudaMemcpyAsync(host_down.data(), down_weights, info.num_experts * sizeof(void *), cudaMemcpyDeviceToHost, stream));
+                } else {
+                    for (size_t e = 0; e < info.num_experts; ++e) {
+                        host_gate[e] = gate_weights[e];
+                        host_up[e] = up_weights[e];
+                        host_down[e] = down_weights[e];
+                    }
+                }
+                CHECK_CUDA(cudaStreamSynchronize(stream));
+
+                for (int e = 0; e < num_experts_i; ++e) {
+                    int count = host_counts[e];
+                    if (count == 0) {
+                        continue;
+                    }
+                    int offset = host_offsets[e];
+                    CHECK_STATUS(run_gemm<T>(
+                        internal, stream, host_gate[e], packed_hidden + static_cast<size_t>(offset) * hidden_size_i,
+                        gate_buf_g + static_cast<size_t>(offset) * intermediate_size_i,
+                        intermediate_size_i, count, hidden_size_i,
+                        hidden_size_i, hidden_size_i, intermediate_size_i, blas_dtype));
+                    CHECK_STATUS(run_gemm<T>(
+                        internal, stream, host_up[e], packed_hidden + static_cast<size_t>(offset) * hidden_size_i,
+                        up_buf_g + static_cast<size_t>(offset) * intermediate_size_i,
+                        intermediate_size_i, count, hidden_size_i,
+                        hidden_size_i, hidden_size_i, intermediate_size_i, blas_dtype));
+                }
+
+                swiglu_weight_grouped_kernel<T><<<(static_cast<size_t>(routes) * info.intermediate_size + 255) / 256, 256, 0, stream>>>(
+                    gate_buf_g, gate_buf_g, up_buf_g, row_to_route, reinterpret_cast<const float *>(topk_weights), routes, intermediate_size_i);
+
+                for (int e = 0; e < num_experts_i; ++e) {
+                    int count = host_counts[e];
+                    if (count == 0) {
+                        continue;
+                    }
+                    int offset = host_offsets[e];
+                    CHECK_STATUS(run_gemm<T>(
+                        internal, stream, host_down[e], gate_buf_g + static_cast<size_t>(offset) * intermediate_size_i,
+                        packed_hidden + static_cast<size_t>(offset) * hidden_size_i,
+                        hidden_size_i, count, intermediate_size_i,
+                        intermediate_size_i, intermediate_size_i, hidden_size_i, blas_dtype));
+                }
+
+                sum_grouped_out_kernel<T><<<(info.ntokens * info.hidden_size + 255) / 256, 256, 0, stream>>>(
+                    reinterpret_cast<T *>(out), packed_hidden, route_to_row, static_cast<int>(info.ntokens), hidden_size_i, topk_i);
+                return INFINI_STATUS_SUCCESS;
+            }
+        }
+
+        char *bptr = base + intermediate_offset;
+        auto **gate_a_array = reinterpret_cast<const void **>(advance_workspace(bptr, static_cast<size_t>(routes) * sizeof(void *), alignof(void *)));
+        auto **gate_b_array = reinterpret_cast<const void **>(advance_workspace(bptr, static_cast<size_t>(routes) * sizeof(void *), alignof(void *)));
+        auto **gate_c_array = reinterpret_cast<void **>(advance_workspace(bptr, static_cast<size_t>(routes) * sizeof(void *), alignof(void *)));
+        auto **up_a_array = reinterpret_cast<const void **>(advance_workspace(bptr, static_cast<size_t>(routes) * sizeof(void *), alignof(void *)));
+        auto **up_b_array = reinterpret_cast<const void **>(advance_workspace(bptr, static_cast<size_t>(routes) * sizeof(void *), alignof(void *)));
+        auto **up_c_array = reinterpret_cast<void **>(advance_workspace(bptr, static_cast<size_t>(routes) * sizeof(void *), alignof(void *)));
+        auto **down_a_array = reinterpret_cast<const void **>(advance_workspace(bptr, static_cast<size_t>(routes) * sizeof(void *), alignof(void *)));
+        auto **down_b_array = reinterpret_cast<const void **>(advance_workspace(bptr, static_cast<size_t>(routes) * sizeof(void *), alignof(void *)));
+        auto **down_c_array = reinterpret_cast<void **>(advance_workspace(bptr, static_cast<size_t>(routes) * sizeof(void *), alignof(void *)));
+        auto *gate_buf = reinterpret_cast<T *>(advance_workspace(bptr, static_cast<size_t>(routes) * info.intermediate_size * sizeof(T)));
+        auto *up_buf = reinterpret_cast<T *>(advance_workspace(bptr, static_cast<size_t>(routes) * info.intermediate_size * sizeof(T)));
+        auto *activated = reinterpret_cast<T *>(advance_workspace(bptr, static_cast<size_t>(routes) * info.intermediate_size * sizeof(T)));
+        auto *route_out = reinterpret_cast<T *>(advance_workspace(bptr, static_cast<size_t>(routes) * info.hidden_size * sizeof(T)));
+        if (static_cast<size_t>(bptr - base) <= workspace_size) {
+            const int blocks = (routes + 255) / 256;
+            if (info.ntokens >= 8192) {
+                setup_all_batched_ptrs_kernel<T><<<blocks, 256, 0, stream>>>(
+                    gate_a_array, gate_b_array, gate_c_array,
+                    up_a_array, up_b_array, up_c_array,
+                    down_a_array, down_b_array, down_c_array,
+                    reinterpret_cast<const T *>(hidden), reinterpret_cast<const int *>(topk_indices),
+                    gate_ptrs, up_ptrs, down_ptrs, gate_buf, up_buf, activated, route_out,
+                    routes, hidden_size_i, topk_i, intermediate_size_i, num_experts_i);
+                CHECK_STATUS(run_batched_gemm<T>(
+                    internal, stream, gate_a_array, gate_b_array, gate_c_array,
+                    intermediate_size_i, 1, hidden_size_i, hidden_size_i, hidden_size_i, intermediate_size_i,
+                    routes, blas_dtype));
+
+                CHECK_STATUS(run_batched_gemm<T>(
+                    internal, stream, up_a_array, up_b_array, up_c_array,
+                    intermediate_size_i, 1, hidden_size_i, hidden_size_i, hidden_size_i, intermediate_size_i,
+                    routes, blas_dtype));
+
+                swiglu_weight_kernel<T><<<(static_cast<size_t>(routes) * info.intermediate_size + 255) / 256, 256, 0, stream>>>(
+                    activated, gate_buf, up_buf, reinterpret_cast<const float *>(topk_weights), routes, intermediate_size_i);
+
+                CHECK_STATUS(run_batched_gemm<T>(
+                    internal, stream, down_a_array, down_b_array, down_c_array,
+                    hidden_size_i, 1, intermediate_size_i, intermediate_size_i, intermediate_size_i, hidden_size_i,
+                    routes, blas_dtype));
+            } else {
+                setup_route_batched_ptrs_kernel<T><<<blocks, 256, 0, stream>>>(
+                    gate_a_array, gate_b_array, gate_c_array,
+                    reinterpret_cast<const T *>(hidden), reinterpret_cast<const int *>(topk_indices), gate_ptrs,
+                    gate_buf, routes, hidden_size_i, topk_i, intermediate_size_i, num_experts_i);
+                CHECK_STATUS(run_batched_gemm<T>(
+                    internal, stream, gate_a_array, gate_b_array, gate_c_array,
+                    intermediate_size_i, 1, hidden_size_i, hidden_size_i, hidden_size_i, intermediate_size_i,
+                    routes, blas_dtype));
+
+                setup_route_batched_ptrs_kernel<T><<<blocks, 256, 0, stream>>>(
+                    gate_a_array, gate_b_array, gate_c_array,
+                    reinterpret_cast<const T *>(hidden), reinterpret_cast<const int *>(topk_indices), up_ptrs,
+                    up_buf, routes, hidden_size_i, topk_i, intermediate_size_i, num_experts_i);
+                CHECK_STATUS(run_batched_gemm<T>(
+                    internal, stream, gate_a_array, gate_b_array, gate_c_array,
+                    intermediate_size_i, 1, hidden_size_i, hidden_size_i, hidden_size_i, intermediate_size_i,
+                    routes, blas_dtype));
+
+                swiglu_weight_kernel<T><<<(static_cast<size_t>(routes) * info.intermediate_size + 255) / 256, 256, 0, stream>>>(
+                    activated, gate_buf, up_buf, reinterpret_cast<const float *>(topk_weights), routes, intermediate_size_i);
+
+                setup_down_batched_ptrs_kernel<T><<<blocks, 256, 0, stream>>>(
+                    gate_a_array, gate_b_array, gate_c_array,
+                    activated, reinterpret_cast<const int *>(topk_indices), down_ptrs,
+                    route_out, routes, hidden_size_i, topk_i, intermediate_size_i, num_experts_i);
+                CHECK_STATUS(run_batched_gemm<T>(
+                    internal, stream, gate_a_array, gate_b_array, gate_c_array,
+                    hidden_size_i, 1, intermediate_size_i, intermediate_size_i, intermediate_size_i, hidden_size_i,
+                    routes, blas_dtype));
+            }
+
+            sum_route_out_kernel<T><<<(info.ntokens * info.hidden_size + 255) / 256, 256, 0, stream>>>(
+                reinterpret_cast<T *>(out), route_out, static_cast<int>(info.ntokens), hidden_size_i, topk_i);
+            return INFINI_STATUS_SUCCESS;
+        }
     }
 
     constexpr int threads = 256;
@@ -251,7 +834,19 @@ infiniStatus_t Descriptor::create(
     const size_t ptr_bytes = align_up(info.num_experts * sizeof(void *), 256);
     const size_t intermediate_offset = align_up(ptr_bytes * 3, 256);
     const size_t intermediate_bytes = info.ntokens * info.topk * info.intermediate_size * dtype_size;
-    const size_t workspace_size = intermediate_offset + intermediate_bytes;
+    const size_t old_workspace_size = intermediate_offset + intermediate_bytes;
+    size_t batched_workspace_size = old_workspace_size;
+    size_t grouped_workspace_size = old_workspace_size;
+    if (info.ntokens <= ROUTE_BATCHED_GEMM_MAX_TOKENS) {
+        if (info.dtype == INFINI_DTYPE_F16) {
+            batched_workspace_size = route_batched_workspace_size<half>(info, intermediate_offset);
+            grouped_workspace_size = expert_grouped_workspace_size<half>(info, intermediate_offset);
+        } else {
+            batched_workspace_size = route_batched_workspace_size<__nv_bfloat16>(info, intermediate_offset);
+            grouped_workspace_size = expert_grouped_workspace_size<__nv_bfloat16>(info, intermediate_offset);
+        }
+    }
+    const size_t workspace_size = std::max(old_workspace_size, std::max(batched_workspace_size, grouped_workspace_size));
 
     *desc_ptr = new Descriptor(
         new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
@@ -276,10 +871,10 @@ infiniStatus_t Descriptor::calculate(
 
     auto stream = reinterpret_cast<cudaStream_t>(stream_);
     if (_info.dtype == INFINI_DTYPE_F16) {
-        return launch_typed<half>(workspace, workspace_size, _info, out, hidden, topk_indices, topk_weights, gate_weights, up_weights, down_weights, stream, false);
+        return launch_typed<half>(workspace, workspace_size, _info, out, hidden, topk_indices, topk_weights, gate_weights, up_weights, down_weights, stream, false, _opaque->internal);
     }
     if (_info.dtype == INFINI_DTYPE_BF16) {
-        return launch_typed<__nv_bfloat16>(workspace, workspace_size, _info, out, hidden, topk_indices, topk_weights, gate_weights, up_weights, down_weights, stream, false);
+        return launch_typed<__nv_bfloat16>(workspace, workspace_size, _info, out, hidden, topk_indices, topk_weights, gate_weights, up_weights, down_weights, stream, false, _opaque->internal);
     }
     return INFINI_STATUS_BAD_TENSOR_DTYPE;
 }
@@ -301,10 +896,10 @@ infiniStatus_t Descriptor::calculateWithDevicePtrs(
     auto up_weights = reinterpret_cast<const void *const *>(up_weight_ptrs);
     auto down_weights = reinterpret_cast<const void *const *>(down_weight_ptrs);
     if (_info.dtype == INFINI_DTYPE_F16) {
-        return launch_typed<half>(workspace, workspace_size, _info, out, hidden, topk_indices, topk_weights, gate_weights, up_weights, down_weights, stream, true);
+        return launch_typed<half>(workspace, workspace_size, _info, out, hidden, topk_indices, topk_weights, gate_weights, up_weights, down_weights, stream, true, _opaque->internal);
     }
     if (_info.dtype == INFINI_DTYPE_BF16) {
-        return launch_typed<__nv_bfloat16>(workspace, workspace_size, _info, out, hidden, topk_indices, topk_weights, gate_weights, up_weights, down_weights, stream, true);
+        return launch_typed<__nv_bfloat16>(workspace, workspace_size, _info, out, hidden, topk_indices, topk_weights, gate_weights, up_weights, down_weights, stream, true, _opaque->internal);
     }
     return INFINI_STATUS_BAD_TENSOR_DTYPE;
 }
