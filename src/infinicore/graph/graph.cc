@@ -37,7 +37,7 @@ struct Graph::DeviceGraph {
     infinirtGraphNode_t node;
     std::vector<char> log_buffer;
 
-    DeviceGraph() {
+    DeviceGraph() : graph(nullptr), exec(nullptr), node(nullptr) {
         log_buffer.resize(4 * 1024);
     }
 
