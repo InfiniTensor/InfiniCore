@@ -15,6 +15,7 @@ from .fused_gated_delta_net_gating import fused_gated_delta_net_gating
 from .gaussian_nll_loss import gaussian_nll_loss
 from .hardswish import hardswish
 from .hardtanh import hardtanh
+from .kl_div import kl_div
 from .hinge_embedding_loss import hinge_embedding_loss
 from .huber_loss import huber_loss
 from .interpolate import interpolate
@@ -61,6 +62,7 @@ __all__ = [
     "random_sample",
     "adaptive_avg_pool1d",
     "affine_grid",
+    "kl_div",
     "prelu",
     "relu6",
     "rms_norm",

@@ -75,8 +75,10 @@ from infinicore.ops.blas_dot import blas_dot
 from infinicore.ops.block_diag import block_diag
 from infinicore.ops.broadcast_to import broadcast_to
 from infinicore.ops.cat import cat
+from infinicore.ops.combinations import combinations
 from infinicore.ops.cdist import cdist
-from infinicore.ops.conv2d import conv2d
+from infinicore.ops.corrcoef import corrcoef
+from infinicore.ops.count_nonzero import count_nonzero
 from infinicore.ops.cross_entropy import cross_entropy
 from infinicore.ops.diff import diff
 from infinicore.ops.digamma import digamma
@@ -211,6 +213,9 @@ __all__ = [
     "blas_amin",
     "blas_copy",
     "blas_dot",
+    "combinations",
+    "corrcoef",
+    "count_nonzero",
     "acos",
     "addbmm",
     "floor",

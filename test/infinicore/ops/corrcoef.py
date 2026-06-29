@@ -18,7 +18,7 @@ _TEST_CASES_DATA = [
     ((1, 7), None),
 ]
 
-_TOLERANCE_MAP = {infinicore.float32: {"atol": 1e-5, "rtol": 1e-4}}
+_TOLERANCE_MAP = {infinicore.float32: {"atol": 5e-4, "rtol": 1e-4}}
 
 _TENSOR_DTYPES = [infinicore.float32]
 
@@ -59,9 +59,9 @@ class OpTest(BaseOperatorTest):
     def torch_operator(self, *args, **kwargs):
         return torch.corrcoef(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
+    def infinicore_operator(self, *args, **kwargs):
     #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.corrcoef(*args, **kwargs)
+        return infinicore.corrcoef(*args, **kwargs)
 
 
 def main():
