@@ -27,7 +27,7 @@ inline void bind_chunk_gated_delta_rule(py::module &m) {
 
 Padded mode:
   q/k: [B, T, Hk, Dk], v/out: [B, T, Hv, Dv], g/beta: [B, T, Hv],
-  initial_state: [B, Hv, Dk, Dv].
+  initial_state: [B, Hv, Dv, Dk].
 
 Continuous-batch mode:
   pass cu_seqlens [B + 1]; q/k: [1, total_tokens, Hk, Dk],

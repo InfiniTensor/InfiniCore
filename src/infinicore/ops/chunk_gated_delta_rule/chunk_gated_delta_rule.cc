@@ -86,19 +86,14 @@ static void check_4d_sequence_tensor(const Tensor &x, const char *name) {
 
 static Shape chunk_final_state_shape(const Tensor &q,
                                      const Tensor &v,
-                                     const Tensor &initial_state,
-                                     std::optional<Tensor> cu_seqlens,
-                                     std::optional<Tensor> initial_state_indices) {
+                                     std::optional<Tensor> cu_seqlens) {
     const auto &q_shape = q->shape();
     const auto &v_shape = v->shape();
     size_t B = cu_seqlens.has_value() ? cu_seqlens.value()->shape()[0] - 1 : v_shape[0];
     size_t Hv = v_shape[2];
     size_t Dk = q_shape[3];
     size_t Dv = v_shape[3];
-    if (initial_state_indices.has_value()) {
-        return {B, Hv, Dv, Dk};
-    }
-    return {B, Hv, Dk, Dv};
+    return {B, Hv, Dv, Dk};
 }
 
 Tensor chunk_gated_delta_rule(const Tensor &q,
@@ -118,7 +113,7 @@ Tensor chunk_gated_delta_rule(const Tensor &q,
     auto out = Tensor::empty(v->shape(), v->dtype(), v->device());
     std::optional<Tensor> final_state = std::nullopt;
     if (!final_state_indices.has_value()) {
-        final_state = Tensor::empty(chunk_final_state_shape(q, v, initial_state, cu_seqlens, initial_state_indices),
+        final_state = Tensor::empty(chunk_final_state_shape(q, v, cu_seqlens),
                                     initial_state->dtype(),
                                     initial_state->device());
     }

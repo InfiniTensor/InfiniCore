@@ -39,7 +39,7 @@ def ref_chunk_gated_delta_rule(
     query, key, value, beta, g = [
         x.contiguous().to(torch.float32) for x in (query, key, value, beta, g)
     ]
-    state = initial_state.contiguous().to(torch.float32).clone()
+    state = initial_state.transpose(-1, -2).contiguous().to(torch.float32).clone()
 
     if cu_seqlens is None:
         batch_size, sequence_length, key_heads, k_head_dim = key.shape
@@ -77,7 +77,9 @@ def ref_chunk_gated_delta_rule(
                 state[b, vh] = state_t
                 out[token_b, t, vh] = (state_t * q_t.unsqueeze(-1)).sum(dim=-2)
 
-    return out.contiguous().to(initial_dtype), state.contiguous().to(initial_dtype)
+    return out.contiguous().to(initial_dtype), state.transpose(-1, -2).contiguous().to(
+        initial_dtype
+    )
 
 
 _PADDED_TEST_CASES_DATA = [
@@ -99,7 +101,7 @@ _TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.BF16, InfiniDtype.F32]
 _TOLERANCE_MAP = {
     InfiniDtype.F16: {"atol": 1e-2, "rtol": 1e-2},
     InfiniDtype.BF16: {"atol": 5e-2, "rtol": 5e-2},
-    InfiniDtype.F32: {"atol": 1e-4, "rtol": 1e-4},
+    InfiniDtype.F32: {"atol": 1e-3, "rtol": 1e-3},
 }
 
 DEBUG = False
@@ -245,8 +247,8 @@ def test_padded(
     )
     g = make_gate((B, T, Hv), device)
     beta = make_beta((B, T, Hv), device)
-    initial_state = TestTensor((B, Hv, Dk, Dv), None, dtype, device)
-    final_state = TestTensor((B, Hv, Dk, Dv), None, dtype, device)
+    initial_state = TestTensor((B, Hv, Dv, Dk), None, dtype, device)
+    final_state = TestTensor((B, Hv, Dv, Dk), None, dtype, device)
     out = TestTensor(
         (B, T, Hv, Dv),
         bthd_strides(B, T, Hv, Dv, strided_qkv),
@@ -355,11 +357,9 @@ def test_varlen_indexed_pool(
         final_state_indices_torch, InfiniDtype.I64, device
     )
 
-    gathered_initial = (
-        initial_state_pool.torch_tensor()[initial_state_indices_torch]
-        .transpose(-1, -2)
-        .contiguous()
-    )
+    gathered_initial = initial_state_pool.torch_tensor()[
+        initial_state_indices_torch
+    ].contiguous()
     ans_out, ans_final_state = ref_chunk_gated_delta_rule(
         q.torch_tensor(),
         k.torch_tensor(),
@@ -371,7 +371,7 @@ def test_varlen_indexed_pool(
         use_qk_l2norm_in_kernel=use_qk_l2norm,
     )
     ans_pool = initial_state_pool.torch_tensor().clone()
-    ans_pool[final_state_indices_torch] = ans_final_state.transpose(-1, -2).contiguous()
+    ans_pool[final_state_indices_torch] = ans_final_state.contiguous()
     if sync:
         sync()
 

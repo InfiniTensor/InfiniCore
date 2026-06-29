@@ -125,7 +125,7 @@ public:
                 return INFINI_STATUS_BAD_TENSOR_SHAPE;
             }
         } else {
-            if (initial_shape[0] != B || initial_shape[1] != Hv || initial_shape[2] != Dk || initial_shape[3] != Dv) {
+            if (initial_shape[0] != B || initial_shape[1] != Hv || initial_shape[2] != Dv || initial_shape[3] != Dk) {
                 return INFINI_STATUS_BAD_TENSOR_SHAPE;
             }
         }
@@ -137,7 +137,7 @@ public:
                     return INFINI_STATUS_BAD_TENSOR_SHAPE;
                 }
             } else {
-                if (final_shape[0] != B || final_shape[1] != Hv || final_shape[2] != Dk || final_shape[3] != Dv) {
+                if (final_shape[0] != B || final_shape[1] != Hv || final_shape[2] != Dv || final_shape[3] != Dk) {
                     return INFINI_STATUS_BAD_TENSOR_SHAPE;
                 }
             }

@@ -93,7 +93,7 @@ Tensor recurrent_gated_delta_rule(const Tensor &q,
     Tensor k4 = ensure_4d_sequence_tensor(k, "k");
     Tensor v4 = ensure_4d_sequence_tensor(v, "v");
     auto out = Tensor::empty(recurrent_output_shape(v4), v4->dtype(), v4->device());
-    Shape final_state_shape = {v4->shape()[0], v4->shape()[2], q4->shape()[3], v4->shape()[3]};
+    Shape final_state_shape = {v4->shape()[0], v4->shape()[2], v4->shape()[3], q4->shape()[3]};
     auto final_state = Tensor::empty(final_state_shape, initial_state->dtype(), initial_state->device());
     recurrent_gated_delta_rule_(out,
                                 initial_state,

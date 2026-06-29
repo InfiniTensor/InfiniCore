@@ -9,7 +9,7 @@ __INFINI_C __export infiniStatus_t infiniopCreateRecurrentGatedDeltaRuleDescript
     infiniopHandle_t handle,
     infiniopRecurrentGatedDeltaRuleDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t out_desc,                   // [B, T, Hv, Dv], T must be 1; last dim contiguous
-    infiniopTensorDescriptor_t initial_state_desc,         // legacy: [B, Hv, Dk, Dv]; indexed pool: [pool_size, Hv, Dv, Dk]
+    infiniopTensorDescriptor_t initial_state_desc,         // legacy: [B, Hv, Dv, Dk]; indexed pool: [pool_size, Hv, Dv, Dk]
     infiniopTensorDescriptor_t final_state_desc,           // legacy/indexed out-of-place final state; null when final_state_indices_desc is provided
     infiniopTensorDescriptor_t q_desc,                     // [B, T, Hk, Dk], T must be 1; last dim contiguous
     infiniopTensorDescriptor_t k_desc,                     // [B, T, Hk, Dk], same shape as q; last dim contiguous

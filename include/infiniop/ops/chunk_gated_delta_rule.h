@@ -9,7 +9,7 @@ __INFINI_C __export infiniStatus_t infiniopCreateChunkGatedDeltaRuleDescriptor(
     infiniopHandle_t handle,
     infiniopChunkGatedDeltaRuleDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t out_desc,                   // padded: [B, T, Hv, Dv]; varlen: [1, total_tokens, Hv, Dv]
-    infiniopTensorDescriptor_t initial_state_desc,         // legacy: [B, Hv, Dk, Dv]; indexed pool: [pool_size, Hv, Dv, Dk]
+    infiniopTensorDescriptor_t initial_state_desc,         // legacy: [B, Hv, Dv, Dk]; indexed pool: [pool_size, Hv, Dv, Dk]
     infiniopTensorDescriptor_t final_state_desc,           // null when final_state_indices_desc is provided
     infiniopTensorDescriptor_t q_desc,                     // padded: [B, T, Hk, Dk]; varlen: [1, total_tokens, Hk, Dk]
     infiniopTensorDescriptor_t k_desc,                     // same shape as q

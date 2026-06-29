@@ -22,7 +22,7 @@ def chunk_gated_delta_rule(
         q, k: ``[B, T, Hk, Dk]``
         v, out: ``[B, T, Hv, Dv]``
         g, beta: ``[B, T, Hv]``
-        initial_state: ``[B, Hv, Dk, Dv]``
+        initial_state: ``[B, Hv, Dv, Dk]``
 
     Continuous-batch mode shapes:
         Pass ``cu_seqlens`` with shape ``[B + 1]`` and dtype int32/int64.
