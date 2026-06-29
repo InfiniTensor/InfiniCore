@@ -83,6 +83,10 @@ inline constexpr const char *kDeviceStringMap[] = {
 
 constexpr int kMaxDeviceType = 16;
 
+struct PrintableDevice {
+    DLDevice device;
+};
+
 template <typename T>
 struct _dtype_trait;
 
@@ -167,6 +171,10 @@ inline std::ostream &operator<<(std::ostream &os, DLDevice device) {
         os << ":" << device.device_id;
     }
     return os;
+}
+
+inline std::ostream &operator<<(std::ostream &os, details::PrintableDevice pd) {
+    return os << pd.device;
 }
 
 template <typename T>
