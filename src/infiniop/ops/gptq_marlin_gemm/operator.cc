@@ -2,7 +2,7 @@
 #include "../../handle.h"
 #include "infiniop/ops/gptq_marlin_gemm.h"
 
-#if defined ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) && defined(ENABLE_MARLIN)
 #include "nvidia/gptq_marlin_gemm_nvidia.cuh"
 #endif
 
@@ -32,7 +32,7 @@ __INFINI_C infiniStatus_t infiniopCreateGptqMarlinGemmDescriptor(
             perm_desc)
 
     switch (handle->device) {
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) && defined(ENABLE_MARLIN)
         CREATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
 
@@ -51,7 +51,7 @@ __INFINI_C infiniStatus_t infiniopGetGptqMarlinGemmWorkspaceSize(infiniopGptqMar
         return INFINI_STATUS_SUCCESS
 
     switch (desc->device_type) {
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) && defined(ENABLE_MARLIN)
         GET(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
 
@@ -86,7 +86,7 @@ __INFINI_C infiniStatus_t infiniopGptqMarlinGemm(
             ->calculate(workspace, workspace_size, out, a, b, b_scales, global_scales, b_zeros, g_idx, perm, b_q_type_id, is_k_full, use_atomic_add, use_fp32_reduce, is_zp_float, stream)
 
     switch (desc->device_type) {
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) && defined(ENABLE_MARLIN)
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
 
@@ -106,7 +106,7 @@ infiniopDestroyGptqMarlinGemmDescriptor(infiniopGptqMarlinGemmDescriptor_t desc)
         return INFINI_STATUS_SUCCESS;
 
     switch (desc->device_type) {
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) && defined(ENABLE_MARLIN)
         DELETE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
 
@@ -116,5 +116,4 @@ infiniopDestroyGptqMarlinGemmDescriptor(infiniopGptqMarlinGemmDescriptor_t desc)
 
 #undef DELETE
 }
-
 // #endif
