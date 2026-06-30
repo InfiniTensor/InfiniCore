@@ -1,16 +1,16 @@
 local dtk_root = os.getenv("DTK_ROOT") or "/opt/dtk"
 
 local function hygon_cuda_roots()
-    local roots = {}
     local configured = get_config("cuda") or os.getenv("HYGON_CUDA_HOME")
     if configured and configured ~= "" then
-        table.insert(roots, configured)
+        return {configured}
     end
-    table.insert(roots, path.join(dtk_root, "cuda", "cuda"))
-    table.insert(roots, path.join(dtk_root, "cuda", "cuda-12"))
-    table.insert(roots, path.join(dtk_root, "cuda", "cuda-11"))
-    table.insert(roots, path.join(dtk_root, "cuda"))
-    return roots
+    return {
+        path.join(dtk_root, "cuda", "cuda"),
+        path.join(dtk_root, "cuda", "cuda-12"),
+        path.join(dtk_root, "cuda", "cuda-11"),
+        path.join(dtk_root, "cuda"),
+    }
 end
 
 local function resolve_hygon_cuda_tool(tool)
