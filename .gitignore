@@ -1,3 +1,5 @@
+third_party/
+
 # Xmake cache
 .xmake/
 build/

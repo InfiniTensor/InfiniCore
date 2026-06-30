@@ -57,6 +57,16 @@ if has_config("nv-gpu") then
     includes("xmake/nvidia.lua")
 end
 
+option("marlin")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Enable AWQ/GPTQ Marlin GEMM operators (requires --nv-gpu=y; GPTQ Marlin may need TVM_ROOT and --cuda_arch)")
+option_end()
+
+if has_config("marlin") then
+    add_defines("ENABLE_MARLIN")
+end
+
 option("cudnn")
     set_default(true)
     set_showmenu(true)
@@ -554,6 +564,13 @@ target("infiniop")
     set_languages("cxx17")
     add_files("src/infiniop/devices/handle.cc")
     add_files("src/infiniop/ops/*/operator.cc", "src/infiniop/ops/*/*/operator.cc")
+    if not has_config("marlin") then
+        remove_files(
+            "src/infiniop/ops/gptq_marlin_gemm/operator.cc",
+            "src/infiniop/ops/awq_marlin_gemm/operator.cc"
+        )
+        add_files("src/infiniop/ops/marlin_stub/operators.cc")
+    end
     add_files("src/infiniop/*.cc")
 
     set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
@@ -860,6 +877,13 @@ target("infinicore_cpp_api")
     if has_config("infiniops") and not has_config("nv-gpu") then
         remove_files("src/infinicore/ops/paged_attention/paged_attention_infiniops.cc")
         remove_files("src/infinicore/ops/paged_attention_prefill/paged_attention_prefill_infiniops.cc")
+    end
+    
+    if not has_config("marlin") then
+        remove_files(
+            "src/infinicore/ops/awq_marlin_gemm/*.cc",
+            "src/infinicore/ops/gptq_marlin_gemm/*.cc"
+        )
     end
     if has_config("mutual-awareness") then
         add_files("src/infinicore/analyzer/*.cc")
