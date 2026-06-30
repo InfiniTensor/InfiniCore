@@ -1,6 +1,7 @@
 #include "infinicore/nn/rope.hpp"
 #include "../../utils.h"
 #include "../utils.hpp"
+#include "infinicore/context/context.hpp"
 #include "infinicore/ops.hpp"
 #include <algorithm>
 #include <cassert>
@@ -11,6 +12,13 @@
 #include <vector>
 
 namespace infinicore::nn {
+namespace {
+
+void sync_cache_copy() {
+    infinicore::context::syncStream();
+}
+
+} // namespace
 
 RoPE::RoPE(size_t head_dim,
            size_t rotary_dim,
@@ -82,6 +90,7 @@ void RoPE::initialize_cache() {
         auto cos_f32_cpu = Tensor::from_blob(cos_data.data(), {max_seq_len_, cache_dim}, DataType::F32, cpu_device);
         sin_cache_->copy_from(sin_f32_cpu);
         cos_cache_->copy_from(cos_f32_cpu);
+        sync_cache_copy();
     } else if (dtype_ == DataType::BF16) {
         // Convert F32 to BF16 using the same conversion as Python's ml_dtypes.bfloat16
         // This uses round-to-nearest-even (matching _f32_to_bf16 implementation)
@@ -99,6 +108,7 @@ void RoPE::initialize_cache() {
         // copy_from handles cross-device copying to target device
         sin_cache_->copy_from(sin_bf16_cpu);
         cos_cache_->copy_from(cos_bf16_cpu);
+        sync_cache_copy();
     } else if (dtype_ == DataType::F16) {
         // Convert F32 to F16
         std::vector<fp16_t> sin_f16_data(max_seq_len_ * cache_dim);
@@ -114,6 +124,7 @@ void RoPE::initialize_cache() {
 
         sin_cache_->copy_from(sin_f16_cpu);
         cos_cache_->copy_from(cos_f16_cpu);
+        sync_cache_copy();
     } else {
         throw std::runtime_error(
             "RoPE cache dtype conversion not yet supported for dtype: "
