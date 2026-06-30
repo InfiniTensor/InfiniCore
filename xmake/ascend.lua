@@ -10,7 +10,14 @@ add_links("libascendcl.so")
 add_links("libnnopbase.so")
 add_links("libopapi.so")
 add_links("libruntime.so")
-add_linkdirs(ASCEND_HOME .. "/../../driver/lib64/driver")
+for _, driver_dir in ipairs({
+    path.join(ASCEND_HOME, "../driver/lib64/driver"),
+    path.join(ASCEND_HOME, "../../driver/lib64/driver"),
+}) do
+    if os.isdir(driver_dir) then
+        add_linkdirs(driver_dir)
+    end
+end
 add_links("libascend_hal.so")
 local builddir = string.format(
         "%s/build/%s/%s/%s",
