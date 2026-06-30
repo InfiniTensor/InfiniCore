@@ -1401,6 +1401,69 @@ def gptq_marlin_gemm_(lib):
 
 
 @OpRegister.operator
+def moe_wna16_marlin_gemm_(lib):
+    lib.infiniopCreateMoeWna16MarlinGemmDescriptor.restype = c_int32
+    lib.infiniopCreateMoeWna16MarlinGemmDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_int32,
+        c_int32,
+        c_int32,
+        c_int32,
+        c_int32,
+    ]
+    lib.infiniopGetMoeWna16MarlinGemmWorkspaceSize.restype = c_int32
+    lib.infiniopGetMoeWna16MarlinGemmWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopMoeWna16MarlinGemm.restype = c_int32
+    lib.infiniopMoeWna16MarlinGemm.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_bool,
+        c_bool,
+        c_int64,
+        c_bool,
+        c_bool,
+        c_bool,
+        c_bool,
+        c_void_p,
+    ]
+    lib.infiniopDestroyMoeWna16MarlinGemmDescriptor.restype = c_int32
+    lib.infiniopDestroyMoeWna16MarlinGemmDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def gptq_qyblas_gemm_(lib):
     lib.infiniopCreateGptqQyblasGemmDescriptor.restype = c_int32
     lib.infiniopCreateGptqQyblasGemmDescriptor.argtypes = [
