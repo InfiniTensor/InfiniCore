@@ -423,7 +423,7 @@ infiniStatus_t Descriptor::calculate(
     if (_opaque->has_residual && !fuse_residual) {
         CHECK_STATUS(_opaque->residual_add->calculate(
             inner_ws, inner_ws_size,
-            out, out, residual, stream));
+            out, {out, residual}, stream));
     }
 
     return INFINI_STATUS_SUCCESS;

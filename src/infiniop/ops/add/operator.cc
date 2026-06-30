@@ -23,7 +23,6 @@
 #ifdef ENABLE_ASCEND_API
 #include "ascend/add_ascend.h"
 #endif
-#include <vector>
 
 __INFINI_C infiniStatus_t infiniopCreateAddDescriptor(
     infiniopHandle_t handle,
@@ -133,36 +132,6 @@ __INFINI_C infiniStatus_t infiniopGetAddWorkspaceSize(infiniopAddDescriptor_t de
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
-namespace {
-
-template <typename Descriptor>
-infiniStatus_t calculateAdd(
-    const Descriptor *desc,
-    void *workspace,
-    size_t workspace_size,
-    void *c,
-    const void *a,
-    const void *b,
-    void *stream) {
-    const std::vector<const void *> inputs{a, b};
-    return desc->calculate(workspace, workspace_size, c, inputs, stream);
-}
-
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API) || defined(ENABLE_ALI_API)
-infiniStatus_t calculateAdd(
-    const op::add::nvidia::Descriptor *desc,
-    void *workspace,
-    size_t workspace_size,
-    void *c,
-    const void *a,
-    const void *b,
-    void *stream) {
-    return desc->calculate(workspace, workspace_size, c, a, b, stream);
-}
-#endif
-
-} // namespace
-
 __INFINI_C infiniStatus_t infiniopAdd(
     infiniopAddDescriptor_t desc,
     void *workspace,
@@ -172,18 +141,10 @@ __INFINI_C infiniStatus_t infiniopAdd(
     const void *b,
     void *stream) {
 
-// NVIDIA Add keeps explicit a/b pointers because the generic elementwise
-// input-vector path copies inputs.data() from host to device workspace before
-// launching the kernel. During CUDA graph capture, that H2D node records the
-// host source address; if infiniopAdd used a temporary vector such as {a, b},
-// graph replay could later read from an invalid host address and copy bad input
-// pointers into device workspace. Other backends keep their original vector
-// interface through calculateAdd's default forwarding path.
-#define CALCULATE(CASE, NAMESPACE)                                          \
-    case CASE:                                                              \
-        return calculateAdd(                                                \
-            reinterpret_cast<const op::add::NAMESPACE::Descriptor *>(desc), \
-            workspace, workspace_size, c, a, b, stream)
+#define CALCULATE(CASE, NAMESPACE)                                            \
+    case CASE:                                                                \
+        return reinterpret_cast<const op::add::NAMESPACE::Descriptor *>(desc) \
+            ->calculate(workspace, workspace_size, c, {a, b}, stream)
 
     switch (desc->device_type) {
 

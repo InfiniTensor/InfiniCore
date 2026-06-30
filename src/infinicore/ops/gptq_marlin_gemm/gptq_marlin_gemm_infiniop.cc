@@ -138,7 +138,6 @@ void run_with_workspace(void *planned_meta) {
         return tensor->numel() == 0 ? nullptr : tensor->data();
     };
 
-    context::setDeviceMemoryAsync(planned->workspace->data(), 0, planned->workspace->nbytes(), context::getStream());
     INFINICORE_CHECK_ERROR(infiniopGptqMarlinGemm(
         planned->descriptor->desc,
         planned->workspace->data(),
@@ -184,7 +183,6 @@ void direct_with_workspace(Tensor workspace, Tensor out, const Tensor &a, const 
         return tensor->numel() == 0 ? nullptr : tensor->data();
     };
 
-    context::setDeviceMemoryAsync(workspace->data(), 0, workspace->nbytes(), context::getStream());
     INFINICORE_CHECK_ERROR(infiniopGptqMarlinGemm(
         descriptor->desc,
         workspace->data(),

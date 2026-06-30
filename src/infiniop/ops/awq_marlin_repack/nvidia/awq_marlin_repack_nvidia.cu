@@ -119,4 +119,4 @@ Descriptor::calculate(
 }
 
 } // namespace op::awq_marlin_repack::nvidia
-#endif // ENABLE_NVIDIA_API
+#endif
