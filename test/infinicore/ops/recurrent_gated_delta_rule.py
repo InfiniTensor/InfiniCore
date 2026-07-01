@@ -49,7 +49,7 @@ def ref_recurrent_gated_delta_rule(
     query, key, value, beta, g = [
         x.contiguous().to(torch.float32) for x in (query, key, value, beta, g)
     ]
-    state = initial_state.contiguous().to(torch.float32).clone()
+    state = initial_state.transpose(-1, -2).contiguous().to(torch.float32).clone()
     batch_size, sequence_length, key_heads, _ = key.shape
     value_heads, v_head_dim = value.shape[2], value.shape[-1]
     value_heads_per_key_head = value_heads // key_heads
@@ -82,7 +82,9 @@ def ref_recurrent_gated_delta_rule(
             state[:, vh] = state_t
             out[:, i, vh] = (state_t * q_t.unsqueeze(-1)).sum(dim=-2)
 
-    return out.contiguous().to(initial_dtype), state.contiguous().to(initial_dtype)
+    return out.contiguous().to(initial_dtype), state.transpose(-1, -2).contiguous().to(
+        initial_dtype
+    )
 
 
 def strided_bthd_strides(shape):
@@ -123,7 +125,7 @@ def parse_test_cases():
         k_shape = (B, T, Hk, Dk)
         v_shape = (B, T, Hv, Dv)
         gate_shape = (B, T, Hv)
-        initial_state_shape = (B, Hv, Dk, Dv)
+        initial_state_shape = (B, Hv, Dv, Dk)
         pool_size = B * 2 + 3
         state_pool_shape = (pool_size, Hv, Dv, Dk)
         q_strides = strided_bthd_strides(q_shape) if strided_qkv else None
@@ -220,9 +222,7 @@ class OpTest(BaseOperatorTest):
         if mode == "indexed_pool":
             initial_state_indices, final_state_indices = args
             state_pool = initial_state.clone()
-            gathered_initial_state = (
-                state_pool[initial_state_indices].transpose(-1, -2).contiguous()
-            )
+            gathered_initial_state = state_pool[initial_state_indices].contiguous()
             out, final_state = ref_recurrent_gated_delta_rule(
                 q,
                 k,
@@ -232,7 +232,7 @@ class OpTest(BaseOperatorTest):
                 gathered_initial_state,
                 use_qk_l2norm=use_qk_l2norm,
             )
-            state_pool[final_state_indices] = final_state.transpose(-1, -2).contiguous()
+            state_pool[final_state_indices] = final_state.contiguous()
             return out, state_pool
 
         if mode == "user_3d":

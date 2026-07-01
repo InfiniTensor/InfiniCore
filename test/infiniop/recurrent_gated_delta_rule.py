@@ -42,7 +42,9 @@ def ref_recurrent_gated_delta_rule(
     query, key, value, beta, g = [
         x.contiguous().to(torch.float32) for x in (query, key, value, beta, g)
     ]
-    initial_state = initial_state.contiguous().to(torch.float32).clone()
+    initial_state = (
+        initial_state.transpose(-1, -2).contiguous().to(torch.float32).clone()
+    )
 
     batch_size, sequence_length, key_heads, k_head_dim = key.shape
     value_heads, v_head_dim = value.shape[2], value.shape[-1]
@@ -82,7 +84,9 @@ def ref_recurrent_gated_delta_rule(
 
     core_attn_out = core_attn_out.contiguous().to(initial_dtype)
     if last_recurrent_state is not None:
-        last_recurrent_state = last_recurrent_state.contiguous().to(initial_dtype)
+        last_recurrent_state = (
+            last_recurrent_state.transpose(-1, -2).contiguous().to(initial_dtype)
+        )
 
     return core_attn_out, last_recurrent_state
 
@@ -160,7 +164,7 @@ def test(
     g = make_gate((B, T, Hv), device)
     beta = make_beta((B, T, Hv), device)
 
-    initial_state = TestTensor((B, Hv, Dk, Dv), None, dtype, device)
+    initial_state = TestTensor((B, Hv, Dv, Dk), None, dtype, device)
     out = TestTensor(
         (B, T, Hv, Dv),
         bthd_strides(B, T, Hv, Dv, strided_qkv),
@@ -168,7 +172,7 @@ def test(
         device,
         mode="zeros",
     )
-    final_state = TestTensor((B, Hv, Dk, Dv), None, dtype, device)
+    final_state = TestTensor((B, Hv, Dv, Dk), None, dtype, device)
 
     ans_out, ans_final_state = ref_recurrent_gated_delta_rule(
         q.torch_tensor(),
@@ -341,11 +345,9 @@ def test_indexed_pool_inplace(
         mode="zeros",
     )
 
-    gathered_initial_state = (
-        initial_state_pool.torch_tensor()[initial_state_indices_torch]
-        .transpose(-1, -2)
-        .contiguous()
-    )
+    gathered_initial_state = initial_state_pool.torch_tensor()[
+        initial_state_indices_torch
+    ].contiguous()
     ans_out, ans_final_state = ref_recurrent_gated_delta_rule(
         q.torch_tensor(),
         k.torch_tensor(),
@@ -357,9 +359,7 @@ def test_indexed_pool_inplace(
         use_qk_l2norm_in_kernel=use_qk_l2norm,
     )
     ans_initial_state_pool = initial_state_pool.torch_tensor().clone()
-    ans_initial_state_pool[final_state_indices_torch] = ans_final_state.transpose(
-        -1, -2
-    ).contiguous()
+    ans_initial_state_pool[final_state_indices_torch] = ans_final_state.contiguous()
 
     if sync:
         sync()

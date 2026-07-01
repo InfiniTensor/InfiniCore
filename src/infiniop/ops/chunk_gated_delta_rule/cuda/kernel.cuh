@@ -2,8 +2,6 @@
 #define __CHUNK_GATED_DELTA_RULE_KERNEL_CUH__
 
 #include <cstdint>
-#include <cuda_bf16.h>
-#include <cuda_fp16.h>
 
 __device__ inline int64_t loadOptionalIndex(
     const void *indices,
@@ -29,7 +27,7 @@ __device__ inline float loadAsFloat<half>(const half *ptr, ptrdiff_t offset) {
 }
 
 template <>
-__device__ inline float loadAsFloat<__nv_bfloat16>(const __nv_bfloat16 *ptr, ptrdiff_t offset) {
+__device__ inline float loadAsFloat<cuda_bfloat16>(const cuda_bfloat16 *ptr, ptrdiff_t offset) {
     return __bfloat162float(ptr[offset]);
 }
 
@@ -190,9 +188,7 @@ __device__ void chunkGatedDeltaRuleKernel(
         int dk = i / Dv;
         int dv = i % Dv;
 
-        ptrdiff_t read_idx = indexed_state_pool
-                               ? initial_base + static_cast<ptrdiff_t>(dv) * initial_s2 + static_cast<ptrdiff_t>(dk) * initial_s3
-                               : initial_base + static_cast<ptrdiff_t>(dk) * initial_s2 + static_cast<ptrdiff_t>(dv) * initial_s3;
+        ptrdiff_t read_idx = initial_base + static_cast<ptrdiff_t>(dv) * initial_s2 + static_cast<ptrdiff_t>(dk) * initial_s3;
 
         state_local[i] = static_cast<Tcompute>(
             loadAsFloat(initial_state, read_idx));
@@ -419,15 +415,9 @@ __device__ void chunkGatedDeltaRuleKernel(
         int dk = i / Dv;
         int dv = i % Dv;
 
-        ptrdiff_t write_idx;
-        if (indexed_state_pool) {
-            const ptrdiff_t s2 = final_state_indices != nullptr ? initial_s2 : final_s2;
-            const ptrdiff_t s3 = final_state_indices != nullptr ? initial_s3 : final_s3;
-
-            write_idx = final_base + static_cast<ptrdiff_t>(dv) * s2 + static_cast<ptrdiff_t>(dk) * s3;
-        } else {
-            write_idx = final_base + static_cast<ptrdiff_t>(dk) * final_s2 + static_cast<ptrdiff_t>(dv) * final_s3;
-        }
+        const ptrdiff_t s2 = final_state_indices != nullptr ? initial_s2 : final_s2;
+        const ptrdiff_t s3 = final_state_indices != nullptr ? initial_s3 : final_s3;
+        ptrdiff_t write_idx = final_base + static_cast<ptrdiff_t>(dv) * s2 + static_cast<ptrdiff_t>(dk) * s3;
 
         final_state_target[write_idx] = static_cast<Tdata>(state_local[i]);
     }
@@ -563,9 +553,7 @@ __device__ void chunkGatedDeltaRuleRecurrentKernel(
         int dk = i / Dv;
         int dv = i % Dv;
 
-        ptrdiff_t read_idx = indexed_state_pool
-                               ? initial_base + static_cast<ptrdiff_t>(dv) * initial_s2 + static_cast<ptrdiff_t>(dk) * initial_s3
-                               : initial_base + static_cast<ptrdiff_t>(dk) * initial_s2 + static_cast<ptrdiff_t>(dv) * initial_s3;
+        ptrdiff_t read_idx = initial_base + static_cast<ptrdiff_t>(dv) * initial_s2 + static_cast<ptrdiff_t>(dk) * initial_s3;
 
         state_local[i] = static_cast<Tcompute>(
             loadAsFloat(initial_state, read_idx));
@@ -650,15 +638,9 @@ __device__ void chunkGatedDeltaRuleRecurrentKernel(
         int dk = i / Dv;
         int dv = i % Dv;
 
-        ptrdiff_t write_idx;
-        if (indexed_state_pool) {
-            const ptrdiff_t s2 = final_state_indices != nullptr ? initial_s2 : final_s2;
-            const ptrdiff_t s3 = final_state_indices != nullptr ? initial_s3 : final_s3;
-
-            write_idx = final_base + static_cast<ptrdiff_t>(dv) * s2 + static_cast<ptrdiff_t>(dk) * s3;
-        } else {
-            write_idx = final_base + static_cast<ptrdiff_t>(dk) * final_s2 + static_cast<ptrdiff_t>(dv) * final_s3;
-        }
+        const ptrdiff_t s2 = final_state_indices != nullptr ? initial_s2 : final_s2;
+        const ptrdiff_t s3 = final_state_indices != nullptr ? initial_s3 : final_s3;
+        ptrdiff_t write_idx = final_base + static_cast<ptrdiff_t>(dv) * s2 + static_cast<ptrdiff_t>(dk) * s3;
 
         final_state_target[write_idx] = static_cast<Tdata>(state_local[i]);
     }

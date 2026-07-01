@@ -1,5 +1,3 @@
-// recurrent_gated_delta_rule_nvidia.cu
-
 #include "../../../devices/nvidia/nvidia_common.cuh"
 #include "recurrent_gated_delta_rule_nvidia.cuh"
 
@@ -8,8 +6,8 @@
 #include "../cuda/kernel.cuh"
 #include <cuda_runtime.h>
 
-template <typename Tdata, typename Tgate, typename Tcompute, size_t Dk, size_t Dv, size_t NUM_THREADS>
-INFINIOP_CUDA_KERNEL recurrentGatedDeltaRule(
+template <typename Tdata, typename Tgate, typename Tcompute, size_t Dk, size_t Dv, size_t WARPS_PER_BLOCK>
+INFINIOP_CUDA_KERNEL recurrentGatedDeltaRuleIndexedPoolWarp(
     Tdata *out, Tdata *initial_state, Tdata *final_state,
     const Tdata *q, const Tdata *k, const Tdata *v,
     const Tgate *g, const Tgate *beta,
@@ -18,7 +16,6 @@ INFINIOP_CUDA_KERNEL recurrentGatedDeltaRule(
     bool initial_state_indices_i64,
     bool final_state_indices_i64,
     bool use_qk_l2norm,
-    bool indexed_state_pool,
     size_t Hk,
     size_t value_heads_per_key_head,
     ptrdiff_t out_s0,
@@ -47,11 +44,11 @@ INFINIOP_CUDA_KERNEL recurrentGatedDeltaRule(
     ptrdiff_t beta_s0,
     ptrdiff_t beta_s1,
     ptrdiff_t beta_s2) {
-    recurrentGatedDeltaRuleKernel<Tdata, Tgate, Tcompute, Dk, Dv, NUM_THREADS>(
+    recurrentGatedDeltaRuleIndexedPoolWarpKernel<Tdata, Tgate, Tcompute, Dk, Dv, WARPS_PER_BLOCK>(
         out, initial_state, final_state, q, k, v, g, beta,
         initial_state_indices, final_state_indices,
         initial_state_indices_i64, final_state_indices_i64,
-        use_qk_l2norm, indexed_state_pool,
+        use_qk_l2norm,
         Hk, value_heads_per_key_head,
         out_s0, out_s1, out_s2,
         initial_s0, initial_s1, initial_s2, initial_s3,
@@ -62,7 +59,6 @@ INFINIOP_CUDA_KERNEL recurrentGatedDeltaRule(
         g_s0, g_s1, g_s2,
         beta_s0, beta_s1, beta_s2);
 }
-
 namespace op {
 namespace recurrent_gated_delta_rule {
 namespace nvidia {
@@ -104,8 +100,8 @@ infiniStatus_t Descriptor::create(
     return infiniStatus_t::INFINI_STATUS_SUCCESS;
 }
 
-template <typename Tdata, typename Tgate, size_t Dk, size_t Dv, size_t NUM_THREADS>
-infiniStatus_t launchKernelTyped(
+template <typename Tdata, typename Tgate, size_t Dk, size_t Dv, size_t WARPS_PER_BLOCK>
+infiniStatus_t launchIndexedPoolWarpKernelTyped(
     const RecurrentGatedDeltaRuleInfo &_info,
     void *out, void *initial_state, void *final_state,
     const void *q, const void *k, const void *v,
@@ -115,7 +111,8 @@ infiniStatus_t launchKernelTyped(
     bool initial_state_indices_i64,
     bool final_state_indices_i64,
     cudaStream_t stream) {
-    dim3 grid(uint32_t(_info.B), uint32_t(_info.Hv), 1);
+    constexpr size_t NUM_THREADS = WARPS_PER_BLOCK * 32;
+    dim3 grid(uint32_t(_info.B), uint32_t(_info.Hv), uint32_t((_info.Dv + WARPS_PER_BLOCK - 1) / WARPS_PER_BLOCK));
     dim3 block(NUM_THREADS);
     size_t shared_mem_size = (Dk + Dk + NUM_THREADS) * sizeof(float);
 
@@ -124,7 +121,7 @@ infiniStatus_t launchKernelTyped(
     auto final_s2 = _info.final_state_strides.empty() ? 0 : _info.final_state_strides[2];
     auto final_s3 = _info.final_state_strides.empty() ? 0 : _info.final_state_strides[3];
 
-    recurrentGatedDeltaRule<Tdata, Tgate, float, Dk, Dv, NUM_THREADS>
+    recurrentGatedDeltaRuleIndexedPoolWarp<Tdata, Tgate, float, Dk, Dv, WARPS_PER_BLOCK>
         <<<grid, block, shared_mem_size, stream>>>(
             static_cast<Tdata *>(out),
             static_cast<Tdata *>(initial_state),
@@ -139,7 +136,6 @@ infiniStatus_t launchKernelTyped(
             initial_state_indices_i64,
             final_state_indices_i64,
             _info.use_qk_l2norm,
-            _info.indexed_state_pool,
             _info.Hk,
             _info.value_heads_per_key_head,
             _info.out_strides[0],
@@ -170,9 +166,8 @@ infiniStatus_t launchKernelTyped(
             _info.beta_strides[2]);
     return infiniStatus_t::INFINI_STATUS_SUCCESS;
 }
-
-template <typename Tdata, size_t Dk, size_t Dv, size_t NUM_THREADS>
-infiniStatus_t launchKernelForGate(
+template <typename Tdata, size_t Dk, size_t Dv, size_t WARPS_PER_BLOCK>
+infiniStatus_t launchIndexedPoolWarpKernelForGate(
     const RecurrentGatedDeltaRuleInfo &_info,
     void *out, void *initial_state, void *final_state,
     const void *q, const void *k, const void *v,
@@ -184,15 +179,15 @@ infiniStatus_t launchKernelForGate(
     cudaStream_t stream) {
     switch (_info.gate_dtype) {
     case INFINI_DTYPE_F16:
-        return launchKernelTyped<Tdata, half, Dk, Dv, NUM_THREADS>(
+        return launchIndexedPoolWarpKernelTyped<Tdata, half, Dk, Dv, WARPS_PER_BLOCK>(
             _info, out, initial_state, final_state, q, k, v, g, beta,
             initial_state_indices, final_state_indices, initial_state_indices_i64, final_state_indices_i64, stream);
     case INFINI_DTYPE_BF16:
-        return launchKernelTyped<Tdata, __nv_bfloat16, Dk, Dv, NUM_THREADS>(
+        return launchIndexedPoolWarpKernelTyped<Tdata, __nv_bfloat16, Dk, Dv, WARPS_PER_BLOCK>(
             _info, out, initial_state, final_state, q, k, v, g, beta,
             initial_state_indices, final_state_indices, initial_state_indices_i64, final_state_indices_i64, stream);
     case INFINI_DTYPE_F32:
-        return launchKernelTyped<Tdata, float, Dk, Dv, NUM_THREADS>(
+        return launchIndexedPoolWarpKernelTyped<Tdata, float, Dk, Dv, WARPS_PER_BLOCK>(
             _info, out, initial_state, final_state, q, k, v, g, beta,
             initial_state_indices, final_state_indices, initial_state_indices_i64, final_state_indices_i64, stream);
     default:
@@ -200,8 +195,8 @@ infiniStatus_t launchKernelForGate(
     }
 }
 
-template <size_t Dk, size_t Dv, size_t NUM_THREADS>
-infiniStatus_t launchKernel(
+template <size_t Dk, size_t Dv, size_t WARPS_PER_BLOCK>
+infiniStatus_t launchIndexedPoolWarpKernel(
     const RecurrentGatedDeltaRuleInfo &_info,
     void *out, void *initial_state, void *final_state,
     const void *q, const void *k, const void *v,
@@ -213,22 +208,21 @@ infiniStatus_t launchKernel(
     cudaStream_t stream) {
     switch (_info.data_dtype) {
     case INFINI_DTYPE_F16:
-        return launchKernelForGate<half, Dk, Dv, NUM_THREADS>(
+        return launchIndexedPoolWarpKernelForGate<half, Dk, Dv, WARPS_PER_BLOCK>(
             _info, out, initial_state, final_state, q, k, v, g, beta,
             initial_state_indices, final_state_indices, initial_state_indices_i64, final_state_indices_i64, stream);
     case INFINI_DTYPE_BF16:
-        return launchKernelForGate<__nv_bfloat16, Dk, Dv, NUM_THREADS>(
+        return launchIndexedPoolWarpKernelForGate<__nv_bfloat16, Dk, Dv, WARPS_PER_BLOCK>(
             _info, out, initial_state, final_state, q, k, v, g, beta,
             initial_state_indices, final_state_indices, initial_state_indices_i64, final_state_indices_i64, stream);
     case INFINI_DTYPE_F32:
-        return launchKernelForGate<float, Dk, Dv, NUM_THREADS>(
+        return launchIndexedPoolWarpKernelForGate<float, Dk, Dv, WARPS_PER_BLOCK>(
             _info, out, initial_state, final_state, q, k, v, g, beta,
             initial_state_indices, final_state_indices, initial_state_indices_i64, final_state_indices_i64, stream);
     default:
         return infiniStatus_t::INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
 }
-
 infiniStatus_t Descriptor::calculate(
     void *workspace, size_t workspace_size,
     void *out, void *initial_state, void *final_state,
@@ -253,15 +247,15 @@ infiniStatus_t Descriptor::calculate(
     bool final_indices_i64 = _info.final_state_indices_dtype == INFINI_DTYPE_I64;
 
     if (_info.Dk == 128 && _info.Dv == 128) {
-        if (_opaque->internal->maxThreadsPerBlock() >= 128) {
-            return launchKernel<128, 128, 128>(
+        if (_opaque->internal->maxThreadsPerBlock() >= 256) {
+            return launchIndexedPoolWarpKernel<128, 128, 8>(
                 _info, out, initial_state, final_state, q, k, v, g, beta,
                 initial_state_indices, final_state_indices,
                 initial_indices_i64, final_indices_i64, stream);
         }
     } else if (_info.Dk == 64 && _info.Dv == 64) {
-        if (_opaque->internal->maxThreadsPerBlock() >= 64) {
-            return launchKernel<64, 64, 64>(
+        if (_opaque->internal->maxThreadsPerBlock() >= 256) {
+            return launchIndexedPoolWarpKernel<64, 64, 8>(
                 _info, out, initial_state, final_state, q, k, v, g, beta,
                 initial_state_indices, final_state_indices,
                 initial_indices_i64, final_indices_i64, stream);
