@@ -1163,6 +1163,35 @@ def sigmoid_(lib):
 
 
 @OpRegister.operator
+def quickgelu_(lib):
+    lib.infiniopCreateQuickGeluDescriptor.restype = c_int32
+    lib.infiniopCreateQuickGeluDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+    lib.infiniopGetQuickGeluWorkspaceSize.restype = c_int32
+    lib.infiniopGetQuickGeluWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopQuickGelu.restype = c_int32
+    lib.infiniopQuickGelu.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyQuickGeluDescriptor.restype = c_int32
+    lib.infiniopDestroyQuickGeluDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def topksoftmax_(lib):
     lib.infiniopCreateTopksoftmaxDescriptor.restype = c_int32
     lib.infiniopCreateTopksoftmaxDescriptor.argtypes = [
