@@ -28,7 +28,7 @@ def generate_help_epilog(ops_dir=None):
 
     # Examples section
     epilog_parts.append("Examples:")
-    epilog_parts.append("  # Run all operator tests on CPU")
+    epilog_parts.append("  # Run common operator tests on CPU")
     epilog_parts.append("  python run.py --cpu")
     epilog_parts.append("")
     epilog_parts.append("  # Run specific operators")
@@ -317,7 +317,7 @@ def main():
             if not valid_ops:
                 # Case A: User input provided, but ALL were invalid.
                 print(f"⚠️  No valid operators remained from your list.")
-                print(f"🔄 Fallback: Proceeding to run ALL available tests...")
+                print(f"🔄 Fallback: Proceeding to run common tests...")
             else:
                 # Case B: At least some valid operators found.
                 print(f"🎯 Targeted operators: {', '.join(valid_ops)}")
@@ -331,6 +331,18 @@ def main():
         test_manager = TestManager(
             ops_dir=args.ops_dir, verbose=args.verbose, bench_mode=args.bench
         )
+
+        # default to common operators if none specified
+        if target_ops is None:
+            target_ops = [
+                "add",
+                "causal_softmax",
+                "matmul",
+                "random_sample",
+                "rms_norm",
+                "rope",
+                "swiglu",
+            ]
 
         success, _ = test_manager.test(
             target_ops=target_ops, global_exec_args=global_exec_args
