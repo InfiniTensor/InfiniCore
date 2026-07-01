@@ -35,9 +35,7 @@ INFINIOP_CUDA_KERNEL mropeKernel(
     ptrdiff_t q_stride_head,
     ptrdiff_t k_stride_token,
     ptrdiff_t k_stride_head,
-    ptrdiff_t cos_stride_axis,
     ptrdiff_t cos_stride_position,
-    ptrdiff_t sin_stride_axis,
     ptrdiff_t sin_stride_position,
     ptrdiff_t positions_stride_axis,
     ptrdiff_t positions_stride_token,
@@ -51,7 +49,7 @@ INFINIOP_CUDA_KERNEL mropeKernel(
         q_out, k_out, q, k, cos, sin, positions, num_q_heads, num_kv_heads, head_size, rotary_dim, half_rotary_dim,
         q_out_stride_token, q_out_stride_head, k_out_stride_token, k_out_stride_head,
         q_stride_token, q_stride_head, k_stride_token, k_stride_head,
-        cos_stride_axis, cos_stride_position, sin_stride_axis, sin_stride_position,
+        cos_stride_position, sin_stride_position,
         positions_stride_axis, positions_stride_token, max_position_embeddings,
         section_t, section_h, section_w, positions_has_axes, interleaved);
 }
@@ -75,7 +73,7 @@ infiniStatus_t launchMRoPE(
         info.num_q_heads, info.num_kv_heads, info.head_size, info.rotary_dim, info.half_rotary_dim,
         info.q_out_stride_token, info.q_out_stride_head, info.k_out_stride_token, info.k_out_stride_head,
         info.q_stride_token, info.q_stride_head, info.k_stride_token, info.k_stride_head,
-        info.cos_stride_axis, info.cos_stride_position, info.sin_stride_axis, info.sin_stride_position,
+        info.cos_stride_position, info.sin_stride_position,
         info.positions_stride_axis, info.positions_stride_token, info.max_position_embeddings,
         info.section_t, info.section_h, info.section_w, info.positions_has_axes, info.interleaved);
     return INFINI_STATUS_SUCCESS;

@@ -18,12 +18,18 @@ from libinfiniop import (
     test_operator,
 )
 
-_TEST_CASES = [
+_BASE_TEST_CASES = [
     # num_tokens, num_q_heads, num_kv_heads, head_size, rotary_dim, sections, interleaved
     (5, 2, 1, 128, 128, (16, 24, 24), False),
     (7, 4, 2, 128, 128, (16, 24, 24), False),
     (3, 3, 1, 128, 96, (8, 16, 24), False),
     (6, 2, 2, 128, 96, (8, 16, 24), True),
+]
+_POSITION_DTYPES = [InfiniDtype.I32, InfiniDtype.I64]
+_TEST_CASES = [
+    (*case, position_dtype)
+    for case in _BASE_TEST_CASES
+    for position_dtype in _POSITION_DTYPES
 ]
 _TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.BF16, InfiniDtype.F32]
 _TOLERANCE_MAP = {
@@ -61,8 +67,8 @@ def torch_mrope_one(
     for i in range(half):
         axis = axis_for_dim(i, sections, interleaved)
         pos = positions[axis] if has_axes else positions
-        cos_row[:, i] = cos[axis, pos, i]
-        sin_row[:, i] = sin[axis, pos, i]
+        cos_row[:, i] = cos[pos, i]
+        sin_row[:, i] = sin[pos, i]
     x0 = x[:, :, :half].float()
     x1 = x[:, :, half:rotary_dim].float()
     cos_row = cos_row[:, None, :].float()
@@ -82,6 +88,7 @@ def test(
     rotary_dim,
     sections,
     interleaved,
+    position_dtype,
     dtype,
     sync=None,
 ):
@@ -89,7 +96,7 @@ def test(
         f"Testing MRoPE on {InfiniDeviceNames[device]} tokens={num_tokens} "
         f"q_heads={num_q_heads} kv_heads={num_kv_heads} head_size={head_size} "
         f"rotary_dim={rotary_dim} sections={sections} interleaved={interleaved} "
-        f"dtype={InfiniDtypeNames[dtype]}"
+        f"dtype={InfiniDtypeNames[dtype]} position_dtype={InfiniDtypeNames[position_dtype]}"
     )
     q = TestTensor((num_tokens, num_q_heads * head_size), None, dtype, device)
     k = TestTensor((num_tokens, num_kv_heads * head_size), None, dtype, device)
@@ -100,8 +107,8 @@ def test(
         (num_tokens, num_kv_heads * head_size), None, dtype, device, mode="zeros"
     )
     max_positions = max(num_tokens + 3, 16)
-    cos = TestTensor((3, max_positions, rotary_dim // 2), None, dtype, device)
-    sin = TestTensor((3, max_positions, rotary_dim // 2), None, dtype, device)
+    cos = TestTensor((max_positions, rotary_dim // 2), None, dtype, device)
+    sin = TestTensor((max_positions, rotary_dim // 2), None, dtype, device)
     positions_torch = torch.stack(
         [
             torch.arange(num_tokens, dtype=torch.int64),
@@ -109,7 +116,7 @@ def test(
             torch.arange(num_tokens, dtype=torch.int64) + 2,
         ]
     )
-    positions = TestTensor.from_torch(positions_torch, InfiniDtype.I64, device)
+    positions = TestTensor.from_torch(positions_torch, position_dtype, device)
     expected_q = torch_mrope_one(
         q.torch_tensor(),
         cos.torch_tensor(),

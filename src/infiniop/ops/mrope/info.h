@@ -16,7 +16,7 @@ public:
     size_t section_t, section_h, section_w;
     ptrdiff_t q_out_stride_token, q_out_stride_head, k_out_stride_token, k_out_stride_head;
     ptrdiff_t q_stride_token, q_stride_head, k_stride_token, k_stride_head;
-    ptrdiff_t cos_stride_axis, cos_stride_position, sin_stride_axis, sin_stride_position;
+    ptrdiff_t cos_stride_position, sin_stride_position;
     ptrdiff_t positions_stride_axis, positions_stride_token;
     bool positions_has_axes;
     bool interleaved;
@@ -51,9 +51,8 @@ public:
 
         CHECK_OR_RETURN(q_desc->ndim() == 2 && k_desc->ndim() == 2 && q_out_desc->ndim() == 2 && k_out_desc->ndim() == 2,
                         INFINI_STATUS_BAD_TENSOR_SHAPE);
-        CHECK_OR_RETURN(cos_desc->ndim() == 3 && sin_desc->ndim() == 3, INFINI_STATUS_BAD_TENSOR_SHAPE);
-        CHECK_OR_RETURN(cos_desc->dim(0) == 3 && sin_desc->dim(0) == 3, INFINI_STATUS_BAD_TENSOR_SHAPE);
-        CHECK_OR_RETURN(cos_desc->dim(1) == sin_desc->dim(1), INFINI_STATUS_BAD_TENSOR_SHAPE);
+        CHECK_OR_RETURN(cos_desc->ndim() == 2 && sin_desc->ndim() == 2, INFINI_STATUS_BAD_TENSOR_SHAPE);
+        CHECK_OR_RETURN(cos_desc->dim(0) == sin_desc->dim(0), INFINI_STATUS_BAD_TENSOR_SHAPE);
 
         const size_t num_tokens = q_desc->dim(0);
         CHECK_OR_RETURN(k_desc->dim(0) == num_tokens && q_out_desc->dim(0) == num_tokens && k_out_desc->dim(0) == num_tokens,
@@ -72,7 +71,7 @@ public:
         } else {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
-        CHECK_OR_RETURN(cos_desc->dim(2) == size_t(rotary_dim / 2) && sin_desc->dim(2) == size_t(rotary_dim / 2),
+        CHECK_OR_RETURN(cos_desc->dim(1) == size_t(rotary_dim / 2) && sin_desc->dim(1) == size_t(rotary_dim / 2),
                         INFINI_STATUS_BAD_TENSOR_SHAPE);
 
         CHECK_OR_RETURN(q_desc->dim(1) % size_t(head_size) == 0 && k_desc->dim(1) % size_t(head_size) == 0,
@@ -82,7 +81,7 @@ public:
 
         CHECK_OR_RETURN(q_desc->stride(1) == 1 && k_desc->stride(1) == 1 && q_out_desc->stride(1) == 1 && k_out_desc->stride(1) == 1,
                         INFINI_STATUS_BAD_TENSOR_STRIDES);
-        CHECK_OR_RETURN(cos_desc->stride(2) == 1 && sin_desc->stride(2) == 1, INFINI_STATUS_BAD_TENSOR_STRIDES);
+        CHECK_OR_RETURN(cos_desc->stride(1) == 1 && sin_desc->stride(1) == 1, INFINI_STATUS_BAD_TENSOR_STRIDES);
 
         return utils::Result<MRoPEInfo>(MRoPEInfo{
             data_type,
@@ -93,7 +92,7 @@ public:
             size_t(head_size),
             size_t(rotary_dim),
             size_t(rotary_dim / 2),
-            cos_desc->dim(1),
+            cos_desc->dim(0),
             size_t(section_t),
             size_t(section_h),
             size_t(section_w),
@@ -106,9 +105,7 @@ public:
             k_desc->stride(0),
             ptrdiff_t(head_size),
             cos_desc->stride(0),
-            cos_desc->stride(1),
             sin_desc->stride(0),
-            sin_desc->stride(1),
             positions_stride_axis,
             positions_stride_token,
             positions_has_axes,

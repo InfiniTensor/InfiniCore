@@ -82,6 +82,7 @@
 #include "ops/mha.hpp"
 #include "ops/mha_kvcache.hpp"
 #include "ops/mha_varlen.hpp"
+#include "ops/mrope.hpp"
 #include "ops/mul.hpp"
 #include "ops/multi_margin_loss.hpp"
 #include "ops/nrm2.hpp"
@@ -188,6 +189,7 @@ inline void bind(py::module &m) {
     bind_mha_kvcache(m);
     bind_mha_varlen(m);
     bind_mha(m);
+    bind_mrope(m);
     bind_hardswish(m);
     bind_hardtanh(m);
     bind_gaussian_nll_loss(m);
