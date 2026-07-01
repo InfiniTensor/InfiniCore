@@ -112,6 +112,7 @@ from infinicore.ops.moore_mate_flash_attn import (
     moore_mate_flash_attn_decode,
     moore_mate_flash_attn_prefill,
 )
+from infinicore.ops.mrope import mrope
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
 from infinicore.ops.nrm2 import nrm2
@@ -215,6 +216,7 @@ __all__ = [
     "addbmm",
     "floor",
     "attention",
+    "mrope",
     "block_diag",
     "kron",
     "bitwise_right_shift",

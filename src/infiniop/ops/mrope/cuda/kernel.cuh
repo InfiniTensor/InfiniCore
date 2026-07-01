@@ -52,9 +52,7 @@ __device__ void rotateOne(
     ptrdiff_t out_stride_head,
     ptrdiff_t in_stride_token,
     ptrdiff_t in_stride_head,
-    ptrdiff_t cos_stride_axis,
     ptrdiff_t cos_stride_position,
-    ptrdiff_t sin_stride_axis,
     ptrdiff_t sin_stride_position,
     ptrdiff_t positions_stride_axis,
     ptrdiff_t positions_stride_token,
@@ -90,9 +88,9 @@ __device__ void rotateOne(
                                        : static_cast<ptrdiff_t>(token_idx) * positions_stride_token;
         const int64_t raw_pos = static_cast<int64_t>(positions[pos_offset]);
         const size_t position = (raw_pos >= 0 && static_cast<size_t>(raw_pos) < max_position_embeddings) ? static_cast<size_t>(raw_pos) : 0;
-        const ptrdiff_t table_offset = axis * cos_stride_axis + static_cast<ptrdiff_t>(position) * cos_stride_position + i;
+        const ptrdiff_t table_offset = static_cast<ptrdiff_t>(position) * cos_stride_position + i;
         const Tangle cos_v = loadAs<Tdata, Tangle>(cos[table_offset]);
-        const Tangle sin_v = loadAs<Tdata, Tangle>(sin[axis * sin_stride_axis + static_cast<ptrdiff_t>(position) * sin_stride_position + i]);
+        const Tangle sin_v = loadAs<Tdata, Tangle>(sin[static_cast<ptrdiff_t>(position) * sin_stride_position + i]);
         const Tangle x0 = loadAs<Tdata, Tangle>(in[in_offset + i]);
         const Tangle x1 = loadAs<Tdata, Tangle>(in[in_offset + i + half_rotary_dim]);
         out[out_offset + i] = storeAs<Tdata, Tangle>(x0 * cos_v - x1 * sin_v);
@@ -125,9 +123,7 @@ __device__ void mropeBlock(
     ptrdiff_t q_stride_head,
     ptrdiff_t k_stride_token,
     ptrdiff_t k_stride_head,
-    ptrdiff_t cos_stride_axis,
     ptrdiff_t cos_stride_position,
-    ptrdiff_t sin_stride_axis,
     ptrdiff_t sin_stride_position,
     ptrdiff_t positions_stride_axis,
     ptrdiff_t positions_stride_token,
@@ -140,12 +136,12 @@ __device__ void mropeBlock(
     const size_t head_idx = blockIdx.y;
     rotateOne<Tdata, Tangle, Tpos>(q_out, q, cos, sin, positions, head_idx, num_q_heads, head_size, rotary_dim, half_rotary_dim,
                                    q_out_stride_token, q_out_stride_head, q_stride_token, q_stride_head,
-                                   cos_stride_axis, cos_stride_position, sin_stride_axis, sin_stride_position,
+                                   cos_stride_position, sin_stride_position,
                                    positions_stride_axis, positions_stride_token, max_position_embeddings,
                                    section_t, section_h, section_w, positions_has_axes, interleaved);
     rotateOne<Tdata, Tangle, Tpos>(k_out, k, cos, sin, positions, head_idx, num_kv_heads, head_size, rotary_dim, half_rotary_dim,
                                    k_out_stride_token, k_out_stride_head, k_stride_token, k_stride_head,
-                                   cos_stride_axis, cos_stride_position, sin_stride_axis, sin_stride_position,
+                                   cos_stride_position, sin_stride_position,
                                    positions_stride_axis, positions_stride_token, max_position_embeddings,
                                    section_t, section_h, section_w, positions_has_axes, interleaved);
 }
