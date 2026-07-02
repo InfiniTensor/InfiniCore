@@ -260,8 +260,18 @@ option("graph")
     set_description("Whether to use device graph instantiating feature, such as cuda graph for nvidia")
 option_end()
 
-if has_config("graph") then
+option("standalone-infinirt-graph")
+    set_default(false)
+    set_showmenu(true)
+    set_description("Whether to route graph lifecycle calls through an installed standalone InfiniRT")
+option_end()
+
+if has_config("graph") or has_config("standalone-infinirt-graph") then
     add_defines("USE_INFINIRT_GRAPH")
+end
+
+if has_config("standalone-infinirt-graph") then
+    add_defines("USE_STANDALONE_INFINIRT_GRAPH")
 end
 
 
@@ -326,6 +336,30 @@ local function get_infiniops_cuda_architectures()
 end
 
 local infiniops_external_built = false
+
+local function find_standalone_infinirt(infinirt_root, xmake_os)
+    local standalone_infinirt = path.join(infinirt_root, "lib", "libinfinirt.so")
+    if not xmake_os.isfile(standalone_infinirt) then
+        standalone_infinirt = path.join(infinirt_root, "lib64", "libinfinirt.so")
+    end
+    if not xmake_os.isfile(standalone_infinirt) then
+        raise("Standalone InfiniRT library not found under: " .. infinirt_root)
+    end
+    return standalone_infinirt
+end
+
+local function patch_infiniops_private_infinirt(xmake_os, infiniops_lib, standalone_infinirt, private_infinirt)
+    local private_soname = path.filename(private_infinirt)
+    xmake_os.cp(standalone_infinirt, private_infinirt)
+    xmake_os.execv("patchelf", {"--set-soname", private_soname, private_infinirt})
+    xmake_os.execv("patchelf", {"--replace-needed", standalone_infinirt, private_soname, infiniops_lib})
+    xmake_os.execv("patchelf", {"--replace-needed", "libinfinirt.so", private_soname, infiniops_lib})
+
+    local needed = xmake_os.iorunv("patchelf", {"--print-needed", infiniops_lib})
+    if not needed:find(private_soname, 1, true) then
+        xmake_os.execv("patchelf", {"--add-needed", private_soname, infiniops_lib})
+    end
+end
 
 local function filter_infiniops_ops_for_backend(infiniops_ops)
     if not infiniops_ops or #infiniops_ops == 0 then
@@ -408,20 +442,10 @@ local function build_infiniops_external(xmake_os)
     xmake_os.execv("cmake", {"--build", infiniops_builddir, "--target", "infiniops"})
     xmake_os.execv("cmake", {"--install", infiniops_builddir, "--prefix", INFINI_ROOT})
     if infinirt_root and infinirt_root ~= "" then
-        local standalone_infinirt = path.join(infinirt_root, "lib", "libinfinirt.so")
-        if not xmake_os.isfile(standalone_infinirt) then
-            standalone_infinirt = path.join(infinirt_root, "lib64", "libinfinirt.so")
-        end
-        if not xmake_os.isfile(standalone_infinirt) then
-            raise("Standalone InfiniRT library not found under: " .. infinirt_root)
-        end
+        local standalone_infinirt = find_standalone_infinirt(infinirt_root, xmake_os)
         local infiniops_lib = path.join(INFINI_ROOT, "lib", "libinfiniops.so")
-        local private_soname = "libinfiniops_infinirt.so"
-        local private_infinirt = path.join(INFINI_ROOT, "lib", private_soname)
-        xmake_os.cp(standalone_infinirt, private_infinirt)
-        xmake_os.execv("patchelf", {"--set-soname", private_soname, private_infinirt})
-        xmake_os.execv("patchelf", {"--replace-needed", standalone_infinirt, private_soname, infiniops_lib})
-        xmake_os.execv("patchelf", {"--replace-needed", "libinfinirt.so", private_soname, infiniops_lib})
+        local private_infinirt = path.join(INFINI_ROOT, "lib", "libinfiniops_infinirt.so")
+        patch_infiniops_private_infinirt(xmake_os, infiniops_lib, standalone_infinirt, private_infinirt)
     end
     infiniops_external_built = true
 end
@@ -669,6 +693,16 @@ target("infinicore_cpp_api")
         add_defines("CHAR_BIT=8", "INT_MIN=(-2147483647 - 1)", "INT_MAX=2147483647", "UINT_MAX=4294967295U")
     end
     add_includedirs(INFINI_ROOT.."/include", { public = true })
+    local graph_infinirt_root = get_standalone_infinirt_root()
+    if has_config("standalone-infinirt-graph") then
+        if not graph_infinirt_root or graph_infinirt_root == "" then
+            raise("--standalone-infinirt-graph requires --infinirt-root or INFINI_RT_ROOT")
+        end
+        add_includedirs(graph_infinirt_root .. "/include")
+        if is_plat("linux") then
+            add_links("dl")
+        end
+    end
     if has_config("nv-gpu") then
         local cuda_root = os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH") or get_config("cuda") or "/usr/local/cuda"
         add_includedirs(cuda_root .. "/include")
@@ -696,19 +730,10 @@ target("infinicore_cpp_api")
             local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
             local infinirt_root = get_standalone_infinirt_root()
             if infinirt_root and infinirt_root ~= "" then
-                local standalone_infinirt = path.join(infinirt_root, "lib", "libinfinirt.so")
-                if not os.isfile(standalone_infinirt) then
-                    standalone_infinirt = path.join(infinirt_root, "lib64", "libinfinirt.so")
-                end
-                if not os.isfile(standalone_infinirt) then
-                    raise("Standalone InfiniRT library not found under: " .. infinirt_root)
-                end
+                local standalone_infinirt = find_standalone_infinirt(infinirt_root, os)
                 local infiniops_lib = path.join(INFINI_ROOT, "lib", "libinfiniops.so")
-                local private_soname = "libinfiniops_infinirt.so"
-                local private_infinirt = path.join(INFINI_ROOT, "lib", private_soname)
-                os.cp(standalone_infinirt, private_infinirt)
-                os.execv("patchelf", {"--set-soname", private_soname, private_infinirt})
-                os.execv("patchelf", {"--replace-needed", "libinfinirt.so", private_soname, infiniops_lib})
+                local private_infinirt = path.join(INFINI_ROOT, "lib", "libinfiniops_infinirt.so")
+                patch_infiniops_private_infinirt(os, infiniops_lib, standalone_infinirt, private_infinirt)
             end
         end)
     end
@@ -967,19 +992,9 @@ target("_infinicore")
             end
             local infinirt_root = get_standalone_infinirt_root()
             if infinirt_root and infinirt_root ~= "" then
-                local standalone_infinirt = path.join(infinirt_root, "lib", "libinfinirt.so")
-                if not os.isfile(standalone_infinirt) then
-                    standalone_infinirt = path.join(infinirt_root, "lib64", "libinfinirt.so")
-                end
-                if not os.isfile(standalone_infinirt) then
-                    raise("Standalone InfiniRT library not found under: " .. infinirt_root)
-                end
-                local private_soname = "libinfiniops_infinirt.so"
-                local private_infinirt = path.join(INFINI_ROOT, "lib", private_soname)
-                os.cp(standalone_infinirt, private_infinirt)
-                os.execv("patchelf", {"--set-soname", private_soname, private_infinirt})
-                os.execv("patchelf", {"--replace-needed", standalone_infinirt, private_soname, infiniops_lib})
-                os.execv("patchelf", {"--replace-needed", "libinfinirt.so", private_soname, infiniops_lib})
+                local standalone_infinirt = find_standalone_infinirt(infinirt_root, os)
+                local private_infinirt = path.join(INFINI_ROOT, "lib", "libinfiniops_infinirt.so")
+                patch_infiniops_private_infinirt(os, infiniops_lib, standalone_infinirt, private_infinirt)
             end
             os.mkdir(path.join(INFINI_ROOT, "lib"))
             if not infiniops_lib_installed then
