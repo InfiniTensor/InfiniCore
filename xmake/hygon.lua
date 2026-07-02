@@ -151,9 +151,11 @@ target("infiniop-hygon")
 
     -- Keep platform-specific or currently unregistered NVIDIA sources out of the Hygon target.
     remove_files("../src/infiniop/ops/avg_pool3d/nvidia/*.cu")
+    remove_files("../src/infiniop/ops/awq_marlin_gemm/nvidia/*.cu")
     remove_files("../src/infiniop/ops/dequant*/nvidia/*.cu")
     remove_files("../src/infiniop/ops/dot/nvidia/*.cu")
     remove_files("../src/infiniop/ops/dist/nvidia/*.cu")
+    remove_files("../src/infiniop/ops/gptq_marlin_gemm/nvidia/*.cu")
     remove_files("../src/infiniop/ops/gptq_qyblas_gemm/nvidia/*.cu")
     remove_files("../src/infiniop/ops/histc/nvidia/*.cu")
     remove_files("../src/infiniop/ops/quant/per_tensor_quant_int8/nvidia/*.cu")
