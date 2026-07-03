@@ -154,6 +154,7 @@ target("infiniop-hygon")
     remove_files("../src/infiniop/ops/gptq_qyblas_gemm/nvidia/*.cu")
     remove_files("../src/infiniop/ops/histc/nvidia/*.cu")
     remove_files("../src/infiniop/ops/quant/per_tensor_quant_int8/nvidia/*.cu")
+
     if has_config("ninetoothed") then
         add_files("../build/ninetoothed/*.c", "../build/ninetoothed/*.cpp", {cxxflags = {"-Wno-return-type"}})
     end
