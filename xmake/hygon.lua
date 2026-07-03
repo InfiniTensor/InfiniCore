@@ -140,6 +140,7 @@ target("infiniop-hygon")
 
     -- 复用NVIDIA的CUDA实现，通过HIP兼容层
     add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")
+    add_files("../src/infiniop/ops/quant/per_channel_quant_int8/nvidia/*.cu")
 
     -- Keep platform-specific or currently unregistered NVIDIA sources out of the Hygon target.
     remove_files("../src/infiniop/ops/avg_pool3d/nvidia/*.cu")
@@ -148,8 +149,7 @@ target("infiniop-hygon")
     remove_files("../src/infiniop/ops/dist/nvidia/*.cu")
     remove_files("../src/infiniop/ops/gptq_qyblas_gemm/nvidia/*.cu")
     remove_files("../src/infiniop/ops/histc/nvidia/*.cu")
-    remove_files("../src/infiniop/ops/quant*/nvidia/*.cu")
-    remove_files("../src/infiniop/ops/scaled_mm/nvidia/*.cu")
+    remove_files("../src/infiniop/ops/quant/per_tensor_quant_int8/nvidia/*.cu")
 
     if has_config("ninetoothed") then
         add_files("../build/ninetoothed/*.c", "../build/ninetoothed/*.cpp", {cxxflags = {"-Wno-return-type"}})
