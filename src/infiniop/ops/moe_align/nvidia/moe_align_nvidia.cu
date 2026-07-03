@@ -7,7 +7,7 @@
  * Licensed under the Apache License, Version 2.0.
  */
 
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_HYGON_API)
 
 #include "moe_align_nvidia.cuh"
 
@@ -71,7 +71,7 @@ size_t next_pow2(size_t value) {
 }
 
 template <typename T>
-constexpr T ceil_div(T a, T b) {
+__host__ __device__ constexpr T ceil_div(T a, T b) {
     return (a + b - 1) / b;
 }
 
@@ -415,4 +415,4 @@ infiniStatus_t Descriptor::calculate(
 
 } // namespace op::moe_align::nvidia
 
-#endif // ENABLE_NVIDIA_API
+#endif // ENABLE_NVIDIA_API || ENABLE_HYGON_API
