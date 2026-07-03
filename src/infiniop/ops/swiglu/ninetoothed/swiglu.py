@@ -2,7 +2,6 @@ import functools
 
 import ninetoothed.language as ntl
 from ninetoothed import Tensor
-
 from ntops.kernels.element_wise import arrangement
 
 

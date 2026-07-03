@@ -1,7 +1,7 @@
 #pragma once
 
-#include "optimization_intent.hpp"
 #include "op_trace.hpp"
+#include "optimization_intent.hpp"
 
 #include <algorithm>
 #include <vector>
@@ -72,7 +72,9 @@ private:
         PhaseType phase,
         const std::vector<OpTraceEntry> &window) const {
 
-        if (window.empty()) return 0.0f;
+        if (window.empty()) {
+            return 0.0f;
+        }
 
         size_t heavy_compute_ops = 0;
         for (auto &e : window) {
@@ -201,7 +203,7 @@ private:
 
         // Fusion is beneficial for bandwidth-bound phases (reduce memory traffic)
         hint.prefer_fused_ops = (bottleneck == BottleneckType::BANDWIDTH_BOUND)
-                                || phase == PhaseType::DECODE;
+                             || phase == PhaseType::DECODE;
 
         // In-place when memory is tight
         hint.prefer_in_place = (bottleneck == BottleneckType::MEMORY_BOUND);
@@ -218,8 +220,8 @@ private:
 
         // Async comm overlap for multi-device and communication phases
         hint.prefer_async_comm = (device_intents.size() > 1)
-                                 && (phase == PhaseType::GEMM_MLP_DENSE
-                                     || phase == PhaseType::COMMUNICATION);
+                              && (phase == PhaseType::GEMM_MLP_DENSE
+                                  || phase == PhaseType::COMMUNICATION);
 
         return hint;
     }
@@ -254,7 +256,9 @@ private:
             default:
                 break;
             }
-            if (match) matching++;
+            if (match) {
+                matching++;
+            }
         }
 
         return static_cast<float>(matching) / static_cast<float>(window.size());

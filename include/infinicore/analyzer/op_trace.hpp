@@ -144,9 +144,9 @@ OpTraceRing &getGlobalOpTrace();
 /// This is the function called from the INFINICORE_GRAPH_OP_RECORD_OR_RUN
 /// macro hook (when ENABLE_MUTUAL_AWARENESS is defined).
 inline void traceOp(OpType op_type,
-                     const size_t *shape, size_t ndim,
-                     uint8_t dtype,
-                     uint8_t device_type, int8_t device_id) {
+                    const size_t *shape, size_t ndim,
+                    uint8_t dtype,
+                    uint8_t device_type, int8_t device_id) {
     OpTraceEntry entry;
     entry.op_type = op_type;
     entry.setShape(shape, ndim);

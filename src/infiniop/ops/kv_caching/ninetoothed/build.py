@@ -1,7 +1,8 @@
 import ninetoothed
-from . import kv_caching
 
 import infiniop.ninetoothed.build
+
+from . import kv_caching
 
 
 def build():

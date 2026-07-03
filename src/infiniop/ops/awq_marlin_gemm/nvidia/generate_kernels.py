@@ -32,12 +32,15 @@ FILE_HEAD_COMMENT = """
 """.lstrip()
 
 
-FILE_HEAD = FILE_HEAD_COMMENT + """
+FILE_HEAD = (
+    FILE_HEAD_COMMENT
+    + """
 #include "../marlin/kernel.h"
 #include "../marlin/marlin_template.h"
 
 namespace MARLIN_NAMESPACE_NAME {
 """
+)
 
 TEMPLATE = (
     "template __global__ void Marlin<"
