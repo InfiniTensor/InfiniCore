@@ -63,9 +63,6 @@ struct Graph::DeviceGraph {
                 infinirtGraphDestroy(graph);
             }
         }
-        if (standalone && stream) {
-            standalone_infinirt::destroy_wrapped_stream(stream);
-        }
     }
 
     void launch() {
@@ -103,16 +100,16 @@ void Graph::instantiate() {
 #ifdef USE_INFINIRT_GRAPH
     // Reset device graph
     device_graph_ = std::make_unique<DeviceGraph>();
-    device_graph_->standalone = standalone_infinirt::available();
-    device_graph_->stream = device_graph_->standalone
-        ? standalone_infinirt::wrap_stream(context::getDevice(), context::getStream())
-        : context::getStream();
-    if (device_graph_->standalone && device_graph_->stream == nullptr) {
-        spdlog::warn("Standalone InfiniRT graph bridge is enabled but failed to wrap the current stream. Falling back to eager execution.");
-        device_graph_.reset();
-        return;
-    }
+    device_graph_->standalone = standalone_infinirt::available(context::getDevice());
+    device_graph_->stream = context::getStream();
     if (device_graph_->standalone) {
+        auto set_device_status = standalone_infinirt::set_device(context::getDevice());
+        if (set_device_status != INFINI_STATUS_SUCCESS) {
+            spdlog::warn("Standalone InfiniRT graph bridge failed to select the current device. Falling back to eager execution.");
+            device_graph_.reset();
+            return;
+        }
+
         static bool logged_once = false;
         if (!logged_once) {
             logged_once = true;
@@ -127,8 +124,8 @@ void Graph::instantiate() {
     infinicore::context::syncStream();
 
     auto begin_status = device_graph_->standalone
-        ? standalone_infinirt::stream_begin_capture(device_graph_->stream, INFINIRT_STREAM_CAPTURE_MODE_RELAXED)
-        : infinirtStreamBeginCapture(context::getStream(), INFINIRT_STREAM_CAPTURE_MODE_RELAXED);
+                          ? standalone_infinirt::stream_begin_capture(device_graph_->stream, INFINIRT_STREAM_CAPTURE_MODE_RELAXED)
+                          : infinirtStreamBeginCapture(context::getStream(), INFINIRT_STREAM_CAPTURE_MODE_RELAXED);
     if (begin_status != INFINI_STATUS_SUCCESS) {
         spdlog::warn("Fail to begin device graph capture.");
         device_graph_.reset();
@@ -139,8 +136,8 @@ void Graph::instantiate() {
     this->run();
 
     auto end_status = device_graph_->standalone
-        ? standalone_infinirt::stream_end_capture(device_graph_->stream, &device_graph_.get()->graph)
-        : infinirtStreamEndCapture(context::getStream(), &device_graph_.get()->graph);
+                        ? standalone_infinirt::stream_end_capture(device_graph_->stream, &device_graph_.get()->graph)
+                        : infinirtStreamEndCapture(context::getStream(), &device_graph_.get()->graph);
     if (end_status != INFINI_STATUS_SUCCESS) {
         spdlog::warn("Fail to end device graph capture.");
         device_graph_.reset();
@@ -148,13 +145,13 @@ void Graph::instantiate() {
     }
 
     auto instantiate_status = device_graph_->standalone
-        ? standalone_infinirt::graph_instantiate(&device_graph_.get()->exec, device_graph_.get()->graph)
-        : infinirtGraphInstantiate(
-              &device_graph_.get()->exec,
-              device_graph_.get()->graph,
-              &device_graph_.get()->node,
-              device_graph_.get()->log_buffer.data(),
-              device_graph_.get()->log_buffer.size());
+                                ? standalone_infinirt::graph_instantiate(&device_graph_.get()->exec, device_graph_.get()->graph)
+                                : infinirtGraphInstantiate(
+                                    &device_graph_.get()->exec,
+                                    device_graph_.get()->graph,
+                                    &device_graph_.get()->node,
+                                    device_graph_.get()->log_buffer.data(),
+                                    device_graph_.get()->log_buffer.size());
     if (instantiate_status != INFINI_STATUS_SUCCESS) {
         static bool warned_once = false;
         if (!warned_once) {

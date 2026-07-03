@@ -7,11 +7,9 @@ namespace infinicore::graph::standalone_infinirt {
 
 bool enabled();
 
-bool available();
+bool available(const Device &device);
 
-infinirtStream_t wrap_stream(const Device &device, infinirtStream_t stream);
-
-void destroy_wrapped_stream(infinirtStream_t stream);
+infiniStatus_t set_device(const Device &device);
 
 infiniStatus_t stream_begin_capture(infinirtStream_t stream, infinirtStreamCaptureMode_t mode);
 

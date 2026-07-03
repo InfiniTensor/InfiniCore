@@ -654,9 +654,6 @@ target("infinicore_cpp_api")
             raise("--standalone-infinirt-graph requires --infinirt-root or INFINI_RT_ROOT")
         end
         add_includedirs(graph_infinirt_root .. "/include")
-        if is_plat("linux") then
-            add_links("dl")
-        end
     end
     if has_config("nv-gpu") then
         local cuda_root = os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH") or get_config("cuda") or "/usr/local/cuda"
