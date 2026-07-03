@@ -15,9 +15,9 @@ def layer_norm(
 ) -> Tensor:
     r"""Apply Layer Normalization."""
 
-    assert (
-        normalized_shape == weight.shape
-    ), "normalized_shape does not match weight.shape."
+    assert normalized_shape == weight.shape, (
+        "normalized_shape does not match weight.shape."
+    )
 
     if out is None:
         return Tensor(

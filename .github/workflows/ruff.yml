@@ -8,7 +8,9 @@ jobs:
       - uses: chartboost/ruff-action@v1
         with:
           src: './python/'
+          version: "0.15.20"
       - uses: chartboost/ruff-action@v1
         with:
           src: './python/'
           args: format --check
+          version: "0.15.20"
