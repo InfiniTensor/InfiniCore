@@ -45,10 +45,13 @@ mha_varlen_fwd(at::Tensor &q,                               // total_q x num_hea
                const float softcap,
                const bool return_softmax,
                std::optional<at::Generator> gen_
-#if defined(ENABLE_METAX_API) && defined(ENABLE_METAX_MC_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
-               // MACA (--use-mc) Mars `flash_attn_2_cuda` (e.g. 2.6.x+mars) appends this vs upstream/HPCC pip flash-attn.
+#if defined(ENABLE_METAX_API) && defined(INFINICORE_FLASH_ATTN_VARLEN_MARS_EXT)
                ,
                std::optional<at::Tensor> &flash_attn_mars_ext_
+#if defined(INFINICORE_FLASH_ATTN_VARLEN_TAIL_BOOL)
+               ,
+               bool flash_attn_mars_tail_
+#endif
 #endif
     );
 
@@ -120,8 +123,7 @@ mha_fwd_kvcache(at::Tensor &q,                                     // batch_size
                 const float softcap,
                 bool is_rotary_interleaved, // if true, rotary combines indices 0 & 1, else indices 0 & rotary_dim / 2
                 int num_splits
-#if defined(ENABLE_METAX_API) && defined(ENABLE_METAX_MC_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
-                // MACA (--use-mc) Mars `flash_attn_2_cuda` (e.g. 2.6.x+mars) appends this vs upstream/HPCC pip flash-attn.
+#if defined(ENABLE_METAX_API) && defined(INFINICORE_FLASH_ATTN_MARS_EXT)
                 ,
                 std::optional<at::Tensor> &flash_attn_mars_ext_
 #endif

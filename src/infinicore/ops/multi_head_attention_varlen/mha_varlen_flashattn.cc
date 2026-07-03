@@ -83,7 +83,7 @@ void run(void *planned_meta) {
     auto alibi_slopes = p->alibi_slopes ? std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(*p->alibi_slopes)) : std::nullopt;
     auto scale = p->scale;
 
-#if defined(ENABLE_METAX_API) && defined(ENABLE_METAX_MC_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
+#if defined(ENABLE_METAX_API) && defined(INFINICORE_FLASH_ATTN_VARLEN_MARS_EXT)
     std::optional<at::Tensor> flash_attn_mars_ext = std::nullopt;
 #endif
 
@@ -110,9 +110,13 @@ void run(void *planned_meta) {
         0.0,
         false,
         std::nullopt
-#if defined(ENABLE_METAX_API) && defined(ENABLE_METAX_MC_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
+#if defined(ENABLE_METAX_API) && defined(INFINICORE_FLASH_ATTN_VARLEN_MARS_EXT)
         ,
         flash_attn_mars_ext
+#if defined(INFINICORE_FLASH_ATTN_VARLEN_TAIL_BOOL)
+        ,
+        false
+#endif
 #endif
     );
 
