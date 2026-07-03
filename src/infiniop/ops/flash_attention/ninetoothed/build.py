@@ -1,12 +1,11 @@
+import os
+
 import ninetoothed
-from . import flash_attention
-from .flash_attention import CausalVariant
 
 import infiniop.ninetoothed.build
 
-import torch
-
-import os
+from . import flash_attention
+from .flash_attention import CausalVariant
 
 
 def build():

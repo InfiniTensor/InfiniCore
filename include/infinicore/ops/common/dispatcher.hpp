@@ -66,11 +66,12 @@ public:
 private:
     static std::size_t goalKey(Device::Type device_type, analyzer::OptimizationGoal goal) {
         return static_cast<std::size_t>(device_type) * kGoalCount
-               + static_cast<std::size_t>(goal);
+             + static_cast<std::size_t>(goal);
     }
 
     std::array<Fn,
-               static_cast<std::size_t>(Device::Type::COUNT) * kGoalCount> goal_table_{};
+               static_cast<std::size_t>(Device::Type::COUNT) * kGoalCount>
+        goal_table_{};
 #endif
 
 private:

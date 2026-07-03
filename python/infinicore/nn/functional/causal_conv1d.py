@@ -41,9 +41,11 @@ def causal_conv1d(
             weight._underlying,
             None if bias is None else bias._underlying,
             None if cu_seqlens is None else cu_seqlens._underlying,
-            None
-            if initial_state_indices is None
-            else initial_state_indices._underlying,
+            (
+                None
+                if initial_state_indices is None
+                else initial_state_indices._underlying
+            ),
             None if final_state_indices is None else final_state_indices._underlying,
         )
     )

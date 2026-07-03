@@ -56,9 +56,11 @@ def chunk_gated_delta_rule(
             beta._underlying,
             initial_state._underlying,
             None if cu_seqlens is None else cu_seqlens._underlying,
-            None
-            if initial_state_indices is None
-            else initial_state_indices._underlying,
+            (
+                None
+                if initial_state_indices is None
+                else initial_state_indices._underlying
+            ),
             None if final_state_indices is None else final_state_indices._underlying,
             use_qk_l2norm,
             chunk_size,

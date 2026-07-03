@@ -84,52 +84,98 @@ enum class OpType : uint8_t {
 /// Convert OpType to human-readable string.
 inline const char *opTypeToString(OpType type) {
     switch (type) {
-    case OpType::ATTENTION: return "attention";
-    case OpType::FLASH_ATTENTION: return "flash_attention";
-    case OpType::CAUSAL_SOFTMAX: return "causal_softmax";
-    case OpType::PAGED_ATTENTION: return "paged_attention";
-    case OpType::PAGED_ATTENTION_PREFILL: return "paged_attention_prefill";
-    case OpType::MHA_KVCACHE: return "mha_kvcache";
-    case OpType::MHA_VARLEN: return "mha_varlen";
-    case OpType::SOFTMAX: return "softmax";
-    case OpType::GEMM: return "gemm";
-    case OpType::LINEAR: return "linear";
-    case OpType::MATMUL: return "matmul";
-    case OpType::INT8_GEMM: return "int8_gemm";
-    case OpType::SCALED_MM_I8: return "scaled_mm_i8";
-    case OpType::SILU: return "silu";
-    case OpType::SILU_AND_MUL: return "silu_and_mul";
-    case OpType::GELU: return "gelu";
-    case OpType::SWIGLU: return "swiglu";
-    case OpType::RELU: return "relu";
-    case OpType::SIGMOID: return "sigmoid";
-    case OpType::RMS_NORM: return "rms_norm";
-    case OpType::ADD_RMS_NORM: return "add_rms_norm";
-    case OpType::LAYER_NORM: return "layer_norm";
-    case OpType::EMBEDDING: return "embedding";
-    case OpType::ROPE: return "rope";
-    case OpType::KV_CACHING: return "kv_caching";
-    case OpType::PAGED_CACHING: return "paged_caching";
-    case OpType::ADD: return "add";
-    case OpType::MUL: return "mul";
-    case OpType::SUB: return "sub";
-    case OpType::SUM: return "sum";
-    case OpType::RECIPROCAL: return "reciprocal";
-    case OpType::PER_TENSOR_QUANT_I8: return "per_tensor_quant_i8";
-    case OpType::PER_TENSOR_DEQUANT_I8: return "per_tensor_dequant_i8";
-    case OpType::PER_CHANNEL_QUANT_I8: return "per_channel_quant_i8";
-    case OpType::DEQUANTIZE_AWQ: return "dequantize_awq";
-    case OpType::DEQUANTIZE_GPTQ: return "dequantize_gptq";
-    case OpType::RANDOM_SAMPLE: return "random_sample";
-    case OpType::TOPK: return "topk";
-    case OpType::TOPK_ROUTER: return "topk_router";
-    case OpType::TOPK_SOFTMAX: return "topk_softmax";
-    case OpType::ALLREDUCE: return "allreduce";
-    case OpType::REARRANGE: return "rearrange";
-    case OpType::ONES: return "ones";
-    case OpType::ZEROS: return "zeros";
-    case OpType::TAKE: return "take";
-    default: return "unknown";
+    case OpType::ATTENTION:
+        return "attention";
+    case OpType::FLASH_ATTENTION:
+        return "flash_attention";
+    case OpType::CAUSAL_SOFTMAX:
+        return "causal_softmax";
+    case OpType::PAGED_ATTENTION:
+        return "paged_attention";
+    case OpType::PAGED_ATTENTION_PREFILL:
+        return "paged_attention_prefill";
+    case OpType::MHA_KVCACHE:
+        return "mha_kvcache";
+    case OpType::MHA_VARLEN:
+        return "mha_varlen";
+    case OpType::SOFTMAX:
+        return "softmax";
+    case OpType::GEMM:
+        return "gemm";
+    case OpType::LINEAR:
+        return "linear";
+    case OpType::MATMUL:
+        return "matmul";
+    case OpType::INT8_GEMM:
+        return "int8_gemm";
+    case OpType::SCALED_MM_I8:
+        return "scaled_mm_i8";
+    case OpType::SILU:
+        return "silu";
+    case OpType::SILU_AND_MUL:
+        return "silu_and_mul";
+    case OpType::GELU:
+        return "gelu";
+    case OpType::SWIGLU:
+        return "swiglu";
+    case OpType::RELU:
+        return "relu";
+    case OpType::SIGMOID:
+        return "sigmoid";
+    case OpType::RMS_NORM:
+        return "rms_norm";
+    case OpType::ADD_RMS_NORM:
+        return "add_rms_norm";
+    case OpType::LAYER_NORM:
+        return "layer_norm";
+    case OpType::EMBEDDING:
+        return "embedding";
+    case OpType::ROPE:
+        return "rope";
+    case OpType::KV_CACHING:
+        return "kv_caching";
+    case OpType::PAGED_CACHING:
+        return "paged_caching";
+    case OpType::ADD:
+        return "add";
+    case OpType::MUL:
+        return "mul";
+    case OpType::SUB:
+        return "sub";
+    case OpType::SUM:
+        return "sum";
+    case OpType::RECIPROCAL:
+        return "reciprocal";
+    case OpType::PER_TENSOR_QUANT_I8:
+        return "per_tensor_quant_i8";
+    case OpType::PER_TENSOR_DEQUANT_I8:
+        return "per_tensor_dequant_i8";
+    case OpType::PER_CHANNEL_QUANT_I8:
+        return "per_channel_quant_i8";
+    case OpType::DEQUANTIZE_AWQ:
+        return "dequantize_awq";
+    case OpType::DEQUANTIZE_GPTQ:
+        return "dequantize_gptq";
+    case OpType::RANDOM_SAMPLE:
+        return "random_sample";
+    case OpType::TOPK:
+        return "topk";
+    case OpType::TOPK_ROUTER:
+        return "topk_router";
+    case OpType::TOPK_SOFTMAX:
+        return "topk_softmax";
+    case OpType::ALLREDUCE:
+        return "allreduce";
+    case OpType::REARRANGE:
+        return "rearrange";
+    case OpType::ONES:
+        return "ones";
+    case OpType::ZEROS:
+        return "zeros";
+    case OpType::TAKE:
+        return "take";
+    default:
+        return "unknown";
     }
 }
 

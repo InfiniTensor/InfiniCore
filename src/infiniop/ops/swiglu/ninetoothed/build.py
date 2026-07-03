@@ -1,7 +1,8 @@
 import ninetoothed
-from . import swiglu
 
 import infiniop.ninetoothed.build
+
+from . import swiglu
 
 
 def build():

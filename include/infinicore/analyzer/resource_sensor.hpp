@@ -11,15 +11,15 @@ namespace infinicore::analyzer {
 
 /// Memory statistics from the allocator.
 struct MemoryStats {
-    size_t allocated_bytes = 0;    // Currently allocated bytes
-    size_t total_capacity = 0;     // Total pool capacity in bytes
-    size_t peak_allocated = 0;     // Peak allocation since last reset
-    size_t allocation_count = 0;   // Number of active allocations
+    size_t allocated_bytes = 0;  // Currently allocated bytes
+    size_t total_capacity = 0;   // Total pool capacity in bytes
+    size_t peak_allocated = 0;   // Peak allocation since last reset
+    size_t allocation_count = 0; // Number of active allocations
 
     float usageRatio() const {
         return total_capacity > 0
-            ? static_cast<float>(allocated_bytes) / static_cast<float>(total_capacity)
-            : 0.0f;
+                 ? static_cast<float>(allocated_bytes) / static_cast<float>(total_capacity)
+                 : 0.0f;
     }
 };
 
@@ -70,10 +70,18 @@ struct DeviceResourceSnapshot {
 
     float resourceConfidence() const {
         float confidence = 0.0f;
-        if (has_memory_capacity) confidence += 0.35f;
-        if (has_compute_utilization) confidence += 0.25f;
-        if (has_memory_bandwidth_utilization) confidence += 0.25f;
-        if (has_communication) confidence += 0.15f;
+        if (has_memory_capacity) {
+            confidence += 0.35f;
+        }
+        if (has_compute_utilization) {
+            confidence += 0.25f;
+        }
+        if (has_memory_bandwidth_utilization) {
+            confidence += 0.25f;
+        }
+        if (has_communication) {
+            confidence += 0.15f;
+        }
         return std::min(confidence, 1.0f);
     }
 };
@@ -94,8 +102,8 @@ public:
         intent.device_id = snapshot.device_id;
         intent.memory_usage_ratio = snapshot.memoryUsageRatio();
         intent.memory_available_bytes = snapshot.free_bytes > 0
-            ? snapshot.free_bytes
-            : ((snapshot.total_bytes >= snapshot.used_bytes) ? (snapshot.total_bytes - snapshot.used_bytes) : 0);
+                                          ? snapshot.free_bytes
+                                          : ((snapshot.total_bytes >= snapshot.used_bytes) ? (snapshot.total_bytes - snapshot.used_bytes) : 0);
         intent.compute_utilization = snapshot.compute_utilization;
         intent.memory_bandwidth_utilization = snapshot.memory_bandwidth_utilization;
         intent.communication_time_ratio = snapshot.communication_time_ratio;
@@ -149,8 +157,8 @@ public:
         snapshot.device_type = device_type;
         snapshot.has_memory_capacity = stats.total_capacity > 0;
         snapshot.free_bytes = stats.total_capacity >= stats.allocated_bytes
-            ? (stats.total_capacity - stats.allocated_bytes)
-            : 0;
+                                ? (stats.total_capacity - stats.allocated_bytes)
+                                : 0;
         snapshot.total_bytes = stats.total_capacity;
         snapshot.used_bytes = stats.allocated_bytes;
         snapshot.reserved_bytes = stats.total_capacity;

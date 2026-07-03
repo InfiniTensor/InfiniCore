@@ -14,9 +14,9 @@ def rms_norm(
 ) -> Tensor:
     r"""Apply Root Mean Square Layer Normalization."""
 
-    assert normalized_shape == weight.shape, (
-        "normalized_shape does not match weight.shape."
-    )
+    assert (
+        normalized_shape == weight.shape
+    ), "normalized_shape does not match weight.shape."
 
     if out is None:
         return Tensor(_infinicore.rms_norm(input._underlying, weight._underlying, eps))

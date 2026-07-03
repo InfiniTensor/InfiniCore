@@ -11,36 +11,36 @@ namespace infinicore::analyzer {
 inline OpType opTypeFromName(const char *name) {
     static const std::unordered_map<std::string, OpType> registry = {
         // Attention
-        {"FlashAttention",      OpType::FLASH_ATTENTION},
-        {"CausalSoftmax",       OpType::CAUSAL_SOFTMAX},
-        {"PagedAttention",      OpType::PAGED_ATTENTION},
-        {"MhaKVCache",          OpType::MHA_KVCACHE},
+        {"FlashAttention", OpType::FLASH_ATTENTION},
+        {"CausalSoftmax", OpType::CAUSAL_SOFTMAX},
+        {"PagedAttention", OpType::PAGED_ATTENTION},
+        {"MhaKVCache", OpType::MHA_KVCACHE},
         {"MultiheadAttentionVarlen", OpType::MHA_VARLEN},
         // GEMM / MLP
-        {"Gemm",                OpType::GEMM},
-        {"I8Gemm",              OpType::SCALED_MM_I8},
+        {"Gemm", OpType::GEMM},
+        {"I8Gemm", OpType::SCALED_MM_I8},
         // Activation
-        {"SiluAndMul",          OpType::SILU_AND_MUL},
-        {"SwiGLU",              OpType::SWIGLU},
+        {"SiluAndMul", OpType::SILU_AND_MUL},
+        {"SwiGLU", OpType::SWIGLU},
         // Norm
-        {"RMSNorm",             OpType::RMS_NORM},
-        {"AddRMSNorm",          OpType::ADD_RMS_NORM},
+        {"RMSNorm", OpType::RMS_NORM},
+        {"AddRMSNorm", OpType::ADD_RMS_NORM},
         // Embedding / Positional
-        {"Embedding",           OpType::EMBEDDING},
-        {"RoPE",                OpType::ROPE},
+        {"Embedding", OpType::EMBEDDING},
+        {"RoPE", OpType::ROPE},
         // KV Cache
-        {"KVCaching",           OpType::KV_CACHING},
-        {"PagedCaching",        OpType::PAGED_CACHING},
+        {"KVCaching", OpType::KV_CACHING},
+        {"PagedCaching", OpType::PAGED_CACHING},
         // Elementwise
-        {"Add",                 OpType::ADD},
-        {"Mul",                 OpType::MUL},
+        {"Add", OpType::ADD},
+        {"Mul", OpType::MUL},
         // Quantization
-        {"PerTensorQuantI8",    OpType::PER_TENSOR_QUANT_I8},
-        {"PerTensorDequantI8",  OpType::PER_TENSOR_DEQUANT_I8},
-        {"PerChannelQuantI8",   OpType::PER_CHANNEL_QUANT_I8},
-        {"DequantizeAWQ",       OpType::DEQUANTIZE_AWQ},
+        {"PerTensorQuantI8", OpType::PER_TENSOR_QUANT_I8},
+        {"PerTensorDequantI8", OpType::PER_TENSOR_DEQUANT_I8},
+        {"PerChannelQuantI8", OpType::PER_CHANNEL_QUANT_I8},
+        {"DequantizeAWQ", OpType::DEQUANTIZE_AWQ},
         // Misc
-        {"Rearrange",           OpType::REARRANGE},
+        {"Rearrange", OpType::REARRANGE},
     };
     auto it = registry.find(name);
     return it != registry.end() ? it->second : OpType::UNKNOWN;

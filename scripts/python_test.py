@@ -1,7 +1,8 @@
 import os
 import subprocess
-from set_env import set_env
 import sys
+
+from set_env import set_env
 
 PROJECT_DIR = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "test", "infiniop")

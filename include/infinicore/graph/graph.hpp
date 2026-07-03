@@ -93,35 +93,35 @@ private:
 // Trace one op invocation into the global ring. Op type is resolved by
 // stringified class name through `opTypeFromName`, so new graph ops are
 // automatically discoverable without modifying the op header.
-#define _INFINICORE_TRACE_OP(__OP_NAME__, __TRACE_TENSOR__)                  \
-    do {                                                                     \
-        auto __op_type = ::infinicore::analyzer::opTypeFromName(#__OP_NAME__);\
-        auto &&__trace_tensor = (__TRACE_TENSOR__);                          \
-        if (__trace_tensor) {                                                \
-            const auto &__trace_shape = __trace_tensor->shape();             \
-            const auto __trace_device = __trace_tensor->device();            \
-            ::infinicore::analyzer::traceOp(                                 \
-                __op_type,                                                   \
-                __trace_shape.data(),                                        \
-                __trace_shape.size(),                                        \
-                static_cast<uint8_t>(__trace_tensor->dtype()),               \
-                static_cast<uint8_t>(__trace_device.getType()),              \
-                static_cast<int8_t>(__trace_device.getIndex()));             \
-        } else {                                                             \
-            ::infinicore::analyzer::traceOp(__op_type, nullptr, 0, 0, 0, -1);\
-        }                                                                    \
+#define _INFINICORE_TRACE_OP(__OP_NAME__, __TRACE_TENSOR__)                    \
+    do {                                                                       \
+        auto __op_type = ::infinicore::analyzer::opTypeFromName(#__OP_NAME__); \
+        auto &&__trace_tensor = (__TRACE_TENSOR__);                            \
+        if (__trace_tensor) {                                                  \
+            const auto &__trace_shape = __trace_tensor->shape();               \
+            const auto __trace_device = __trace_tensor->device();              \
+            ::infinicore::analyzer::traceOp(                                   \
+                __op_type,                                                     \
+                __trace_shape.data(),                                          \
+                __trace_shape.size(),                                          \
+                static_cast<uint8_t>(__trace_tensor->dtype()),                 \
+                static_cast<uint8_t>(__trace_device.getType()),                \
+                static_cast<int8_t>(__trace_device.getIndex()));               \
+        } else {                                                               \
+            ::infinicore::analyzer::traceOp(__op_type, nullptr, 0, 0, 0, -1);  \
+        }                                                                      \
     } while (0)
 #else
 #define _INFINICORE_TRACE_OP(__OP_NAME__, __TRACE_TENSOR__) ((void)0)
 #endif
 
-#define INFINICORE_GRAPH_OP_RECORD_OR_RUN(__OP_NAME__, ...)                  \
-    auto ___op = std::make_shared<__OP_NAME__>(__VA_ARGS__);                 \
-    if (context::isGraphRecording()) {                                       \
-        context::addGraphOperator(___op);                                    \
-    } else {                                                                 \
-        ___op->run();                                                        \
-    }                                                                        \
+#define INFINICORE_GRAPH_OP_RECORD_OR_RUN(__OP_NAME__, ...)  \
+    auto ___op = std::make_shared<__OP_NAME__>(__VA_ARGS__); \
+    if (context::isGraphRecording()) {                       \
+        context::addGraphOperator(___op);                    \
+    } else {                                                 \
+        ___op->run();                                        \
+    }                                                        \
     _INFINICORE_TRACE_OP(__OP_NAME__, INFINICORE_DETAIL_FIRST_ARG(__VA_ARGS__));
 
 #define INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(__OP_NAME__, __PLAN_F__, __RUN_F__, __CLEANUP_F__) \
