@@ -240,7 +240,6 @@ void run(void *planned_meta) {
         0.0,
         false,
         std::nullopt);
-    c10::hip::device_synchronize();
     if (!result.empty() && result[0].defined()) {
         out_work.copy_(result[0]);
     }
