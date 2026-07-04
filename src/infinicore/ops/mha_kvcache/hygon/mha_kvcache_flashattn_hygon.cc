@@ -143,7 +143,6 @@ void run(void *planned_meta) {
         false,
         0);
 
-    c10::hip::device_synchronize();
     if (!result.empty() && result[0].defined()) {
         out_tensor.copy_(result[0]);
     }
