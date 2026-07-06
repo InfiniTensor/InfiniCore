@@ -57,26 +57,22 @@ __device__ void SwiGLUCudaKernel(
         } else if constexpr (std::is_same_v<T, half>) {
             c[ind_c] = __hmul(__hmul(gate, sigmoid(gate)), up);
         } else if constexpr (std::is_same_v<T, cuda_bfloat162>) {
+            cuda_bfloat162 sig = sigmoid(gate);
             float gate0 = __bfloat162float(__low2bfloat16(gate));
             float gate1 = __bfloat162float(__high2bfloat16(gate));
+            float sig0 = __bfloat162float(__low2bfloat16(sig));
+            float sig1 = __bfloat162float(__high2bfloat16(sig));
             float up0 = __bfloat162float(__low2bfloat16(up));
             float up1 = __bfloat162float(__high2bfloat16(up));
-            float sig0 = __frcp_rn(__fadd_rn(1.0f, __expf(-gate0)));
-            float sig1 = __frcp_rn(__fadd_rn(1.0f, __expf(-gate1)));
-            cuda_bfloat16 silu0_bf16 = __float2bfloat16_rn(__fmul_rn(gate0, sig0));
-            cuda_bfloat16 silu1_bf16 = __float2bfloat16_rn(__fmul_rn(gate1, sig1));
-            float silu0 = __bfloat162float(silu0_bf16);
-            float silu1 = __bfloat162float(silu1_bf16);
-            float res0 = __fmul_rn(silu0, up0);
-            float res1 = __fmul_rn(silu1, up1);
+            float res0 = __fmul_rn(__fmul_rn(gate0, sig0), up0);
+            float res1 = __fmul_rn(__fmul_rn(gate1, sig1), up1);
             c[ind_c] = __floats2bfloat162_rn(res0, res1);
         } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
+            cuda_bfloat16 sig = sigmoid(gate);
             float gatef = __bfloat162float(gate);
+            float sigf = __bfloat162float(sig);
             float upf = __bfloat162float(up);
-            float sigf = __frcp_rn(__fadd_rn(1.0f, __expf(-gatef)));
-            cuda_bfloat16 silu_bf16 = __float2bfloat16_rn(__fmul_rn(gatef, sigf));
-            float siluf = __bfloat162float(silu_bf16);
-            c[ind_c] = __float2bfloat16_rn(__fmul_rn(siluf, upf));
+            c[ind_c] = __float2bfloat16_rn(__fmul_rn(__fmul_rn(gatef, sigf), upf));
         } else if constexpr (std::is_same_v<T, float>) {
             c[ind_c] = __fmul_rn(__fmul_rn(gate, sigmoid(gate)), up);
         } else {
