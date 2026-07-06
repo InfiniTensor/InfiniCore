@@ -2,8 +2,6 @@
 
 #ifdef USE_STANDALONE_INFINIRT_GRAPH
 
-#include "../utils.hpp"
-
 #include <cstdlib>
 #include <string>
 
@@ -21,24 +19,6 @@ bool truthy_env(const char *name) {
     }
     std::string text{value};
     return text == "1" || text == "ON" || text == "on" || text == "true" || text == "TRUE";
-}
-
-std::string standalone_library_path() {
-    if (auto explicit_path = std::getenv("INFINIRT_GRAPH_LIBRARY")) {
-        return explicit_path;
-    }
-    if (auto root = std::getenv("INFINI_RT_ROOT")) {
-        return std::string(root) + "/lib/libinfinirt.so";
-    }
-    return "libinfinirt.so";
-}
-
-void log_loaded_once() {
-    static bool logged_once = false;
-    if (!logged_once) {
-        logged_once = true;
-        spdlog::info("Standalone InfiniRT graph bridge loaded: {}", standalone_library_path());
-    }
 }
 
 template <StandaloneDevice::Type device_type>
@@ -180,11 +160,7 @@ bool enabled() {
 }
 
 bool available(const Device &device) {
-    if (!enabled() || !supports_device(device.getType())) {
-        return false;
-    }
-    log_loaded_once();
-    return true;
+    return enabled() && supports_device(device.getType());
 }
 
 infiniStatus_t set_device(const Device &device) {

@@ -113,7 +113,7 @@ void Graph::instantiate() {
         static bool logged_once = false;
         if (!logged_once) {
             logged_once = true;
-            spdlog::info("Using standalone InfiniRT graph bridge for graph capture and replay.");
+            spdlog::info("Using standalone InfiniRT C++ graph runtime API for graph capture and replay.");
         }
     }
 
