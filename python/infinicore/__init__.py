@@ -108,10 +108,21 @@ from infinicore.ops.matmul import matmul
 from infinicore.ops.mha import mha
 from infinicore.ops.mha_kvcache import mha_kvcache
 from infinicore.ops.mha_varlen import mha_varlen
-from infinicore.ops.moore_mate_flash_attn import (
-    moore_mate_flash_attn_decode,
-    moore_mate_flash_attn_prefill,
-)
+_optional_ops = []
+
+try:
+    from infinicore.ops.moore_mate_flash_attn import (
+        moore_mate_flash_attn_decode,
+        moore_mate_flash_attn_prefill,
+    )
+
+    _optional_ops.extend(
+        ["moore_mate_flash_attn_prefill", "moore_mate_flash_attn_decode"]
+    )
+except Exception:
+    # Optional Moore Threads flash-attn bridge. Keep other backends importable
+    # when its Python-side dependencies are absent or incompatible.
+    pass
 from infinicore.ops.mrope import mrope
 from infinicore.ops.mul import mul
 from infinicore.ops.narrow import narrow
@@ -288,14 +299,12 @@ __all__ = [
     "zeros",
     "sum",
     "var_mean",
-    "moore_mate_flash_attn_prefill",
-    "moore_mate_flash_attn_decode",
     "var",
     "topk",
     "all",
     "set_printoptions",
     "printoptions",
-]
+] + _optional_ops
 
 use_ntops = False
 

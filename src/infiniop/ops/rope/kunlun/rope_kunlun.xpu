@@ -206,6 +206,20 @@ infiniStatus_t Descriptor::calculate(
         default:
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
+    } else if (_info.pos_type == INFINI_DTYPE_I64) {
+        switch (_info.data_type) {
+        case INFINI_DTYPE_F32:
+            LAUNCH_KERNEL(float, int64_t);
+            break;
+        case INFINI_DTYPE_F16:
+            LAUNCH_KERNEL(half, int64_t);
+            break;
+        case INFINI_DTYPE_BF16:
+            LAUNCH_KERNEL(bfloat16_t, int64_t);
+            break;
+        default:
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
     } else if (_info.pos_type == INFINI_DTYPE_U32) {
         switch (_info.data_type) {
         case INFINI_DTYPE_F32:
