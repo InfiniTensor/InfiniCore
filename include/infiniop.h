@@ -118,6 +118,7 @@
 #include "infiniop/ops/recurrent_gated_delta_rule.h"
 #include "infiniop/ops/relu.h"
 #include "infiniop/ops/rms_norm.h"
+#include "infiniop/ops/unweighted_rms_norm.h"
 #include "infiniop/ops/rope.h"
 #include "infiniop/ops/rot.h"
 #include "infiniop/ops/rotg.h"
