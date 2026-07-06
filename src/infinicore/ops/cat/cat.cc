@@ -156,6 +156,25 @@ void cat_(Tensor out, std::vector<Tensor> tensors, int dim) {
     }
     assert(dim_shape == out->shape()[dim]);
 
+    if (out->device().getType() == Device::Type::HYGON) {
+        // The generic path recursively issues one memcpy for every outer
+        // index. Concatenating MLA tensors on the last dimension can therefore
+        // enqueue hundreds of tiny hipMemcpyAsync calls per layer. A strided
+        // output slice is semantically identical and copy_from lowers it to a
+        // single rearrange kernel per input tensor.
+        size_t offset = 0;
+        for (auto &tensor : tensors) {
+            if (tensor->ndim() == 1) {
+                continue;
+            }
+            const size_t length = tensor->shape()[dim];
+            auto output_slice = out->narrow({{static_cast<size_t>(dim), offset, length}});
+            output_slice->copy_from(tensor);
+            offset += length;
+        }
+        return;
+    }
+
     // Get info
     CatInfo info = CatInfo::create(out, tensors, dim);
     std::vector<std::byte *> tensors_ptr(tensors.size());
