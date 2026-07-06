@@ -64,6 +64,9 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
                     cls.free_blocks.pop_back();
                     block->in_use = true;
                     block->use_count = 1;
+                    // Graph capture stores raw device pointers; reused blocks
+                    // touched in pin mode must not return to the free list.
+                    block->frozen = block->frozen || pinned_mode_;
                     return reinterpret_cast<std::byte *>(block->ptr);
                 }
             }
@@ -129,6 +132,12 @@ void PinnableBlockAllocator::deallocate(std::byte *ptr) {
 
     --block->use_count;
     if (block->use_count > 0) {
+        return;
+    }
+
+    if (block->frozen) {
+        // Keep graph-captured pointers stable across replay.
+        block->in_use = true;
         return;
     }
 

@@ -188,11 +188,15 @@ void launchLayerNorm(
     ptrdiff_t *mlu_std_deviation_strides = mlu_standardization_strides + info.ndim;
     ptrdiff_t *mlu_input_strides = mlu_std_deviation_strides + (info.ndim - 1);
 
-    CNRT_CHECK(cnrtMemcpyAsync(mlu_shape, const_cast<size_t *>(info.input_shape.data()), info.ndim * sizeof(size_t), queue, cnrtMemcpyHostToDev));
-    CNRT_CHECK(cnrtMemcpyAsync(mlu_output_strides, const_cast<ptrdiff_t *>(info.output_strides.data()), info.ndim * sizeof(ptrdiff_t), queue, cnrtMemcpyHostToDev));
-    CNRT_CHECK(cnrtMemcpyAsync(mlu_standardization_strides, const_cast<ptrdiff_t *>(info.input_standardization_strides.data()), info.ndim * sizeof(ptrdiff_t), queue, cnrtMemcpyHostToDev));
-    CNRT_CHECK(cnrtMemcpyAsync(mlu_std_deviation_strides, const_cast<ptrdiff_t *>(info.input_std_deviation_strides.data()), (info.ndim - 1) * sizeof(ptrdiff_t), queue, cnrtMemcpyHostToDev));
-    CNRT_CHECK(cnrtMemcpyAsync(mlu_input_strides, const_cast<ptrdiff_t *>(info.input_strides.data()), info.ndim * sizeof(ptrdiff_t), queue, cnrtMemcpyHostToDev));
+    if (!device::bang::isQueueCapturing(queue)) {
+        // Capture reuses metadata populated during graph warmup; avoid H2D
+        // copies while CNRT is recording the TaskTopo.
+        CNRT_CHECK(cnrtMemcpyAsync(mlu_shape, const_cast<size_t *>(info.input_shape.data()), info.ndim * sizeof(size_t), queue, cnrtMemcpyHostToDev));
+        CNRT_CHECK(cnrtMemcpyAsync(mlu_output_strides, const_cast<ptrdiff_t *>(info.output_strides.data()), info.ndim * sizeof(ptrdiff_t), queue, cnrtMemcpyHostToDev));
+        CNRT_CHECK(cnrtMemcpyAsync(mlu_standardization_strides, const_cast<ptrdiff_t *>(info.input_standardization_strides.data()), info.ndim * sizeof(ptrdiff_t), queue, cnrtMemcpyHostToDev));
+        CNRT_CHECK(cnrtMemcpyAsync(mlu_std_deviation_strides, const_cast<ptrdiff_t *>(info.input_std_deviation_strides.data()), (info.ndim - 1) * sizeof(ptrdiff_t), queue, cnrtMemcpyHostToDev));
+        CNRT_CHECK(cnrtMemcpyAsync(mlu_input_strides, const_cast<ptrdiff_t *>(info.input_strides.data()), info.ndim * sizeof(ptrdiff_t), queue, cnrtMemcpyHostToDev));
+    }
 
     layerNormKernel<Tdata, Tweight><<<kernel_dim, cnrtFuncTypeUnion1, queue>>>(
         reinterpret_cast<Tdata *>(output),
@@ -213,7 +217,7 @@ void launchLayerNorm(
         info.bias_exist ? info.bias_strides.back() : 0,
         info.eps,
         info.bias_exist);
-    cnrtQueueSync(queue);
+    device::bang::syncQueueIfNotCapturing(queue);
 }
 
 namespace op::layer_norm::bang {

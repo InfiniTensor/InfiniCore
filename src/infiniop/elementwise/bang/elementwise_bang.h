@@ -60,11 +60,15 @@ struct DeviceImpl::Opaque {
         const size_t *d_input_shapes = nullptr;
         const ptrdiff_t *d_input_strides = nullptr;
 
-        // Copy metadata to device and setup pointers
+        const bool queue_capturing = device::bang::isQueueCapturing(queue);
+
+        // During TaskTopo capture, metadata must already live in the pinned
+        // workspace from graph warmup; recording H2D metadata copies is unsafe.
         CHECK_STATUS(infoToDevice<N>(info, workspace, inputs.data(), d_inputs_arr,
                                      d_input_contiguous, d_input_broadcasted,
                                      d_output_shape, d_output_strides,
-                                     d_input_shapes, d_input_strides));
+                                     d_input_shapes, d_input_strides,
+                                     !queue_capturing));
 
         // Launch the elementwise kernel
         Op::template launch<Tdata>(
@@ -78,13 +82,13 @@ struct DeviceImpl::Opaque {
             reinterpret_cast<const void *>(d_output_strides),
             reinterpret_cast<const void *>(d_input_strides),
             output,
-            reinterpret_cast<const void *const *>(d_inputs_arr),
+            inputs.data(),
             queue,
             internal,
             args...);
 
         // Synchronize queue to ensure completion
-        CNRT_CHECK(cnrtQueueSync(queue));
+        CHECK_STATUS(device::bang::syncQueueIfNotCapturing(queue));
 
         return INFINI_STATUS_SUCCESS;
     }
@@ -118,7 +122,8 @@ private:
         const size_t *&d_output_shape,
         const ptrdiff_t *&d_output_strides,
         const size_t *&d_input_shapes,
-        const ptrdiff_t *&d_input_strides) const {
+        const ptrdiff_t *&d_input_strides,
+        bool copy_metadata) const {
 
         constexpr auto input_size = N;
         const auto ndim = info.getNdim();
@@ -126,9 +131,12 @@ private:
         const int8_t *info_meta_start = info.getMetaStart();
         const int8_t *d_meta_start = reinterpret_cast<int8_t *>(workspace) + input_arr_size;
 
-        // Copy input pointer array and metadata to device
-        CNRT_CHECK(cnrtMemcpy(workspace, (void *)h_inputs_arr, input_arr_size, cnrtMemcpyHostToDev));
-        CNRT_CHECK(cnrtMemcpy((void *)d_meta_start, (void *)info_meta_start, info.getMetaMemSize(), cnrtMemcpyHostToDev));
+        (void)h_inputs_arr;
+        if (copy_metadata) {
+            // Input pointers are passed as kernel arguments, so only static
+            // tensor metadata is stored in the workspace.
+            CNRT_CHECK(cnrtMemcpy((void *)d_meta_start, (void *)info_meta_start, info.getMetaMemSize(), cnrtMemcpyHostToDev));
+        }
 
         // Setup pointers to device memory regions
         d_inputs_arr = reinterpret_cast<const void **>(workspace);

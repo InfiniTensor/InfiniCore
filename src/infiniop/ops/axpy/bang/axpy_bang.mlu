@@ -64,7 +64,7 @@ infiniStatus_t calculateAxpy(
             incy);
     }
 
-    cnrtQueueSync(queue);
+    device::bang::syncQueueIfNotCapturing(queue);
 
     return INFINI_STATUS_SUCCESS;
 }

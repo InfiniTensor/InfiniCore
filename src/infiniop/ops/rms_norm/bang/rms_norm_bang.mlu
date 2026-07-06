@@ -247,15 +247,21 @@ void rmsnormUnion(void *workspace, int core_per_cluster, int cluster_count, cnrt
     ptrdiff_t *mlu_x_strides = (ptrdiff_t *)tmp_stride;
     ptrdiff_t *mlu_y_strides = mlu_x_strides + ndim;
 
-    // Copy shape and stride information to device
-    CNRT_CHECK(cnrtMemcpyAsync(mlu_shape, const_cast<size_t *>(shape), ndim * sizeof(size_t), queue, cnrtMemcpyHostToDev)); // const not supported
-    CNRT_CHECK(cnrtMemcpyAsync(mlu_x_strides, const_cast<ptrdiff_t *>(x_strides), ndim * sizeof(ptrdiff_t), queue, cnrtMemcpyHostToDev));
-    CNRT_CHECK(cnrtMemcpyAsync(mlu_y_strides, const_cast<ptrdiff_t *>(y_strides), ndim * sizeof(ptrdiff_t), queue, cnrtMemcpyHostToDev));
+    const bool queue_capturing = device::bang::isQueueCapturing(queue);
+    if (!queue_capturing) {
+        // Capture reuses metadata populated during graph warmup; avoid H2D
+        // copies while CNRT is recording the TaskTopo.
+        CNRT_CHECK(cnrtMemcpyAsync(mlu_shape, const_cast<size_t *>(shape), ndim * sizeof(size_t), queue, cnrtMemcpyHostToDev)); // const not supported
+        CNRT_CHECK(cnrtMemcpyAsync(mlu_x_strides, const_cast<ptrdiff_t *>(x_strides), ndim * sizeof(ptrdiff_t), queue, cnrtMemcpyHostToDev));
+        CNRT_CHECK(cnrtMemcpyAsync(mlu_y_strides, const_cast<ptrdiff_t *>(y_strides), ndim * sizeof(ptrdiff_t), queue, cnrtMemcpyHostToDev));
+    }
 
     // Launch kernel
     rmsnorm<T, Tw><<<kernel_dim, kernel_type, queue>>>(y_, x_, w_, mlu_shape, mlu_y_strides, mlu_x_strides, eps, ndim, dim_s);
 
-    cnrtQueueSync(queue);
+    if (!queue_capturing) {
+        device::bang::syncQueueIfNotCapturing(queue);
+    }
 }
 
 namespace op::rms_norm::bang {

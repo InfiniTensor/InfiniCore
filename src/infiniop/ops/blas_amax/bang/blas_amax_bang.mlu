@@ -58,7 +58,7 @@ infiniStatus_t calculateBlasAmax(
             result);
     }
 
-    cnrtQueueSync(queue);
+    device::bang::syncQueueIfNotCapturing(queue);
 
     return INFINI_STATUS_SUCCESS;
 }

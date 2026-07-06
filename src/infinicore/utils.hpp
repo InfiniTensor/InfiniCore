@@ -8,10 +8,12 @@
 
 inline struct SpdlogInitializer {
     SpdlogInitializer() {
-        if (!std::getenv("INFINICORE_LOG_LEVEL")) {
+        const char *log_level = std::getenv("INFINICORE_LOG_LEVEL");
+        if (!log_level) {
             spdlog::set_level(spdlog::level::info);
         } else {
-            spdlog::cfg::load_env_levels("INFINICORE_LOG_LEVEL");
+            // Use helper parsing for compatibility with older packaged spdlog.
+            spdlog::cfg::helpers::load_levels(log_level);
         }
         // Set pattern for logging
         // Using SPDLOG_* macros enables source location support (%s and %#)

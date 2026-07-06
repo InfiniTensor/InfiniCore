@@ -49,7 +49,7 @@ infiniStatus_t calculateRotg(
         c,
         s);
 
-    cnrtQueueSync(queue);
+    device::bang::syncQueueIfNotCapturing(queue);
     return INFINI_STATUS_SUCCESS;
 }
 

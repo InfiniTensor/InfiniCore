@@ -148,7 +148,7 @@ infiniStatus_t Descriptor::calculate(
                 workspace_size));
             return INFINI_STATUS_SUCCESS;
         }));
-    cnrtQueueSync((cnrtQueue_t)stream);
+    CHECK_STATUS(device::bang::syncQueueIfNotCapturing((cnrtQueue_t)stream));
 
     return INFINI_STATUS_SUCCESS;
 }

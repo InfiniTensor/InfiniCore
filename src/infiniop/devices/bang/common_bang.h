@@ -16,6 +16,30 @@ constexpr size_t ALIGN_SIZE = 128;
 
 namespace device::bang {
 
+// CNRT TaskTopo capture cannot record a sync on the queue being captured.
+inline bool isQueueCapturing(cnrtQueue_t queue) {
+    cnrtQueueCaptureStatus_t status = cnrtQueueCaptureStatusNone;
+    uint64_t capture_id = 0;
+    cnrtTaskTopo_t task_topo = nullptr;
+    const cnrtTaskTopoNode_t *dependencies = nullptr;
+    size_t num_dependencies = 0;
+    auto ret = cnrtQueueGetCaptureInfo(
+        queue,
+        &status,
+        &capture_id,
+        &task_topo,
+        &dependencies,
+        &num_dependencies);
+    return ret == cnrtSuccess && status == cnrtQueueCaptureStatusActive;
+}
+
+inline infiniStatus_t syncQueueIfNotCapturing(cnrtQueue_t queue) {
+    if (!isQueueCapturing(queue)) {
+        CHECK_INTERNAL(cnrtQueueSync(queue), cnrtSuccess);
+    }
+    return INFINI_STATUS_SUCCESS;
+}
+
 class Handle::Internal {
     Pool<cnnlHandle_t> cnnl_handles;
 

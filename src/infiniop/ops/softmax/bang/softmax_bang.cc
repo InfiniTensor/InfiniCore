@@ -89,7 +89,7 @@ infiniStatus_t Descriptor::calculate(
                 y));
             return INFINI_STATUS_SUCCESS;
         }));
-    cnrtQueueSync(queue);
+    device::bang::syncQueueIfNotCapturing(queue);
     return INFINI_STATUS_SUCCESS;
 }
 

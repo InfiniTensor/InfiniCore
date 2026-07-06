@@ -59,7 +59,7 @@ infiniStatus_t calculateBlasCopy(
             incy);
     }
 
-    cnrtQueueSync(queue);
+    device::bang::syncQueueIfNotCapturing(queue);
     return INFINI_STATUS_SUCCESS;
 }
 

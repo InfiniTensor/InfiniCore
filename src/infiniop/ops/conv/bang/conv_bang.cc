@@ -338,7 +338,7 @@ infiniStatus_t Descriptor::calculate(
                 _opaque->transpose_workspace_size));
             return INFINI_STATUS_SUCCESS;
         }));
-    cnrtQueueSync(queue);
+    device::bang::syncQueueIfNotCapturing(queue);
     return INFINI_STATUS_SUCCESS;
 }
 

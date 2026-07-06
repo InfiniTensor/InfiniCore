@@ -276,7 +276,7 @@ infiniStatus_t launchPagedAttentionPrefill(
         info.v_head_stride,
         info.o_stride,
         info.o_head_stride);
-    cnrtQueueSync(queue);
+    device::bang::syncQueueIfNotCapturing(queue);
     return INFINI_STATUS_SUCCESS;
 }
 

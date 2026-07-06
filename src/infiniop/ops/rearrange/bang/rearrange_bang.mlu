@@ -226,7 +226,7 @@ infiniStatus_t Descriptor::create(
                         dst_strides_32.size() * sizeof(int), queue, cnrtMemcpyHostToDev);
         cnrtMemcpyAsync(d_src_strides, src_strides_32.data(),
                         src_strides_32.size() * sizeof(int), queue, cnrtMemcpyHostToDev);
-        cnrtQueueSync(queue);
+        device::bang::syncQueueIfNotCapturing(queue);
         cnrtQueueDestroy(queue);
     }
 
@@ -292,7 +292,7 @@ infiniStatus_t Descriptor::calculate(
             static_cast<int>(meta.unit()));
     }
 
-    cnrtQueueSync(queue);
+    device::bang::syncQueueIfNotCapturing(queue);
     return INFINI_STATUS_SUCCESS;
 }
 

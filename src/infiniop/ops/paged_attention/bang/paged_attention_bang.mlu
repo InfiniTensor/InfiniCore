@@ -247,7 +247,7 @@ infiniStatus_t launchPagedAttention(
         info.o_stride,
         info.block_table_batch_stride,
         info.cache_lens_stride);
-    cnrtQueueSync(queue);
+    CHECK_STATUS(device::bang::syncQueueIfNotCapturing(queue));
     return INFINI_STATUS_SUCCESS;
 }
 

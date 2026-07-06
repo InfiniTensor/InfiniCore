@@ -373,7 +373,7 @@ static infiniStatus_t launchAddRMSNorm(
             stride_b_nhead,
             epsilon);
     }
-    cnrtQueueSync(queue);
+    CHECK_STATUS(device::bang::syncQueueIfNotCapturing(queue));
     return INFINI_STATUS_SUCCESS;
 }
 

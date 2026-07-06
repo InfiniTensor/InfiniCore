@@ -57,7 +57,7 @@ infiniStatus_t calculateScal(
             incx);
     }
 
-    cnrtQueueSync(queue);
+    device::bang::syncQueueIfNotCapturing(queue);
 
     return INFINI_STATUS_SUCCESS;
 }
