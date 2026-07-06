@@ -654,6 +654,21 @@ target("infinicore_cpp_api")
             raise("--standalone-infinirt-graph requires --infinirt-root or INFINI_RT_ROOT")
         end
         add_includedirs(graph_infinirt_root .. "/include")
+        if has_config("ascend-npu") then
+            local ascend_home = os.getenv("ASCEND_HOME") or os.getenv("ASCEND_TOOLKIT_HOME") or os.getenv("ASCEND_HOME_PATH")
+            if ascend_home and ascend_home ~= "" then
+                for _, include_dir in ipairs({
+                    path.join(ascend_home, "include"),
+                    path.join(ascend_home, "include/aclnn"),
+                    path.join(ascend_home, "aarch64-linux/include"),
+                    path.join(ascend_home, "aarch64-linux/include/aclnn"),
+                }) do
+                    if os.isdir(include_dir) then
+                        add_includedirs(include_dir)
+                    end
+                end
+            end
+        end
     end
     if has_config("nv-gpu") then
         local cuda_root = os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH") or get_config("cuda") or "/usr/local/cuda"
