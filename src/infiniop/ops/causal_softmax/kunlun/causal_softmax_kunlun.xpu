@@ -17,22 +17,22 @@ __global__ void causalSoftmaxKernel(
     __shared__ Tdata x_sm[SM_SIZE / sizeof(Tdata)];
     __shared__ Tdata y_sm[SM_SIZE / sizeof(Tdata)];
 
-    int row_id = cluster_id();
+    for (uint32_t row_id = cluster_id(); row_id < height; row_id += cluster_num()) {
+        __global_ptr__ Tdata *y_ = y + row_id * y_stride_h;
+        __global_ptr__ const Tdata *x_ = x + row_id * x_stride_h;
 
-    __global_ptr__ Tdata *y_ = y + row_id * y_stride_h;
-    __global_ptr__ const Tdata *x_ = x + row_id * x_stride_h;
+        if (core_id() == 0) {
+            GM2SM_ASYNC(x_, x_sm, width * sizeof(Tdata));
+        }
+        sync_cluster();
 
-    if (core_id() == 0) {
-        GM2SM_ASYNC(x_, x_sm, width * sizeof(Tdata));
+        causalSoftmaxBlock<BLOCK_SIZE, Tdata, Tcompute>(y_sm, x_sm, height, width, row_id);
+
+        if (core_id() == 0) {
+            SM2GM_ASYNC(y_sm, y_, width * sizeof(Tdata));
+        }
+        sync_cluster();
     }
-    sync_cluster();
-
-    causalSoftmaxBlock<BLOCK_SIZE, Tdata, Tcompute>(y_sm, x_sm, height, width, row_id);
-
-    if (core_id() == 0) {
-        SM2GM_ASYNC(y_sm, y_, width * sizeof(Tdata));
-    }
-    sync_cluster();
 }
 
 namespace op::causal_softmax::kunlun {
@@ -77,9 +77,9 @@ infiniStatus_t launchKernel(void *y, const void *x, infiniDtype_t dtype,
 #define LAUCH_KERNEL(Tdata, Tcompute)                                                                            \
     for (uint32_t i = 0; i < batch_size_; ++i) {                                                                 \
         causalSoftmaxKernel<BLOCK_SIZE, Tdata, Tcompute>                                                         \
-            <<<seq_len_, BLOCK_SIZE, stream>>>((Tdata *)y + i * y_stride_b_, (const Tdata *)x + i * x_stride_b_, \
-                                               batch_size, seq_len, total_seq_len,                               \
-                                               y_stride_h, x_stride_h);                                          \
+            <<<8, BLOCK_SIZE, stream>>>((Tdata *)y + i * y_stride_b_, (const Tdata *)x + i * x_stride_b_,        \
+                                        batch_size_, seq_len_, total_seq_len_,                                   \
+                                        y_stride_h_, x_stride_h_);                                               \
     }
 
     if (dtype == INFINI_DTYPE_F16) {
@@ -105,6 +105,7 @@ infiniStatus_t Descriptor::calculate(void *workspace,
     CHECK_STATUS(launchKernel<64>(
         y, x, _info.dtype, _info.batch_size, _info.seq_len, _info.total_seq_len,
         _info.y_stride_b, _info.y_stride_i, _info.x_stride_b, _info.x_stride_i, stream));
+    xpu_wait(stream);
     return INFINI_STATUS_SUCCESS;
 }
 

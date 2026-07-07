@@ -18,9 +18,11 @@ __device__ void causalSoftmaxBlock(
     __shared__ Tdata max_;
     Tdata max_0 = op::common_kunlun::reduce_op::max<BLOCK_SIZE, Tdata>(x, width - height + 1 + size_t(row_id));
     if (core_id() == 0) {
-        max_ = max_0;
+        storeShared(&max_, max_0);
     }
     sync_cluster();
+
+    Tdata max_val = loadShared(&max_);
 
     // Elemetwise sub max for each element and apply causal softmax
     for (size_t col = core_id(); col < width; col += BLOCK_SIZE) {
@@ -30,15 +32,18 @@ __device__ void causalSoftmaxBlock(
         //          2 | * * * ... * * * |
         //  height: 3  col_id->
         if (width + size_t(row_id) >= col + height) {
+            Tdata x_val = loadShared(x + col);
+            Tdata y_val;
             if constexpr (std::is_same_v<Tdata, half>) {
-                y[col] = hexp(x[col] - max_);
+                y_val = hexp(x_val - max_val);
             } else if constexpr (std::is_same_v<Tdata, bfloat16_t>) {
-                y[col] = __float2bfloat16(exp(__bfloat162float(x[col]) - __bfloat162float(max_)));
+                y_val = __float2bfloat16(exp(__bfloat162float(x_val) - __bfloat162float(max_val)));
             } else {
-                y[col] = exp(x[col] - max_);
+                y_val = exp(x_val - max_val);
             }
+            storeShared(y + col, y_val);
         } else {
-            y[col] = Tdata(0);
+            storeShared(y + col, Tdata(0));
         }
     }
     sync_cluster();
@@ -47,16 +52,19 @@ __device__ void causalSoftmaxBlock(
     __shared__ Tcompute sum_;
     Tcompute sum_0 = op::common_kunlun::reduce_op::sum<BLOCK_SIZE, Tdata, Tcompute>(y, width);
     if (core_id() == 0) {
-        sum_ = sum_0;
+        storeShared(&sum_, sum_0);
     }
     sync_cluster();
 
+    Tcompute sum_val = loadShared(&sum_);
+
     // Apply softmax
     for (size_t col = core_id(); col < width; col += BLOCK_SIZE) {
-        if (sum_ != 0) {
-            y[col] = Tdata(Tcompute(y[col]) / sum_);
+        if (sum_val != 0) {
+            Tdata y_val = loadShared(y + col);
+            storeShared(y + col, Tdata(Tcompute(y_val) / sum_val));
         } else {
-            y[col] = Tdata(0);
+            storeShared(y + col, Tdata(0));
         }
     }
     sync_cluster();

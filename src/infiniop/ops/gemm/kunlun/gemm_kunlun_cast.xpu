@@ -1,0 +1,435 @@
+#include "gemm_kunlun_cast.h"
+#include "../../../devices/kunlun/kunlun_kernel_common.h"
+
+namespace op::gemm::kunlun {
+
+template <typename Tin, typename Tout>
+__global__ void packMatrixKernel(
+    const Tin *src,
+    Tout *dst,
+    long long batch,
+    long long rows,
+    long long cols,
+    long long stride,
+    long long row_stride,
+    long long col_stride) {
+
+    int cid = core_id();
+    int ncores = core_num();
+    if (cid >= ncores) {
+        return;
+    }
+    int tid = ncores * cluster_id() + cid;
+    int nthreads = ncores * cluster_num();
+
+    long long matrix_elements = rows * cols;
+    long long total = batch * matrix_elements;
+
+    for (long long idx = tid; idx < total; idx += nthreads) {
+        long long batch_id = idx / matrix_elements;
+        long long rem = idx - batch_id * matrix_elements;
+        long long row = rem % rows;
+        long long col = rem / rows;
+        long long src_batch_offset = stride == 0 ? 0 : batch_id * stride;
+        long long src_offset = src_batch_offset + row * row_stride + col * col_stride;
+
+        Tin in;
+        Tout out;
+        GM2LM_ASYNC(src + src_offset, &in, sizeof(Tin));
+        mfence();
+        if constexpr (xpu_std::is_same<Tin, bfloat16_t>::value && xpu_std::is_same<Tout, half>::value) {
+            out = __float2half(__bfloat162float(in));
+        } else if constexpr (xpu_std::is_same<Tin, bfloat16_t>::value && xpu_std::is_same<Tout, float>::value) {
+            out = __bfloat162float(in);
+        } else if constexpr (xpu_std::is_same<Tin, half>::value && xpu_std::is_same<Tout, bfloat16_t>::value) {
+            out = __float2bfloat16(__half2float(in));
+        } else {
+            out = __float2bfloat16(in);
+        }
+        LM2GM_ASYNC(&out, dst + idx, sizeof(Tout));
+        mfence();
+    }
+    sync_cluster();
+}
+
+template <typename Tin, typename Tout>
+__global__ void unpackMatrixKernel(
+    const Tin *src,
+    Tout *dst,
+    long long batch,
+    long long rows,
+    long long cols,
+    long long stride,
+    long long row_stride,
+    long long col_stride) {
+
+    int cid = core_id();
+    int ncores = core_num();
+    if (cid >= ncores) {
+        return;
+    }
+    int tid = ncores * cluster_id() + cid;
+    int nthreads = ncores * cluster_num();
+
+    long long matrix_elements = rows * cols;
+    long long total = batch * matrix_elements;
+
+    for (long long idx = tid; idx < total; idx += nthreads) {
+        long long batch_id = idx / matrix_elements;
+        long long rem = idx - batch_id * matrix_elements;
+        long long row = rem % rows;
+        long long col = rem / rows;
+        long long dst_batch_offset = stride == 0 ? 0 : batch_id * stride;
+        long long dst_offset = dst_batch_offset + row * row_stride + col * col_stride;
+
+        Tin in;
+        Tout out;
+        GM2LM_ASYNC(src + idx, &in, sizeof(Tin));
+        mfence();
+        if constexpr (xpu_std::is_same<Tin, half>::value && xpu_std::is_same<Tout, bfloat16_t>::value) {
+            out = __float2bfloat16(__half2float(in));
+        } else if constexpr (xpu_std::is_same<Tin, float>::value && xpu_std::is_same<Tout, bfloat16_t>::value) {
+            out = __float2bfloat16(in);
+        } else if constexpr (xpu_std::is_same<Tin, bfloat16_t>::value && xpu_std::is_same<Tout, half>::value) {
+            out = __float2half(__bfloat162float(in));
+        } else {
+            out = __bfloat162float(in);
+        }
+        LM2GM_ASYNC(&out, dst + dst_offset, sizeof(Tout));
+        mfence();
+    }
+    sync_cluster();
+}
+
+infiniStatus_t castBf16ToF16(
+    const void *src,
+    void *dst,
+    const BlasMatrix &matrix,
+    size_t batch,
+    kunlunStream_t stream) {
+
+    packMatrixKernel<bfloat16_t, half>
+        <<<12, 64, stream>>>(
+            reinterpret_cast<const bfloat16_t *>(src),
+            reinterpret_cast<half *>(dst),
+            static_cast<long long>(batch),
+            static_cast<long long>(matrix.rows),
+            static_cast<long long>(matrix.cols),
+            static_cast<long long>(matrix.stride),
+            static_cast<long long>(matrix.row_stride),
+            static_cast<long long>(matrix.col_stride));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t castF16ToBf16(
+    const void *src,
+    void *dst,
+    const BlasMatrix &matrix,
+    size_t batch,
+    kunlunStream_t stream) {
+
+    unpackMatrixKernel<half, bfloat16_t>
+        <<<12, 64, stream>>>(
+            reinterpret_cast<const half *>(src),
+            reinterpret_cast<bfloat16_t *>(dst),
+            static_cast<long long>(batch),
+            static_cast<long long>(matrix.rows),
+            static_cast<long long>(matrix.cols),
+            static_cast<long long>(matrix.stride),
+            static_cast<long long>(matrix.row_stride),
+            static_cast<long long>(matrix.col_stride));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t castBf16ToF32(
+    const void *src,
+    void *dst,
+    const BlasMatrix &matrix,
+    size_t batch,
+    kunlunStream_t stream) {
+
+    packMatrixKernel<bfloat16_t, float>
+        <<<12, 64, stream>>>(
+            reinterpret_cast<const bfloat16_t *>(src),
+            reinterpret_cast<float *>(dst),
+            static_cast<long long>(batch),
+            static_cast<long long>(matrix.rows),
+            static_cast<long long>(matrix.cols),
+            static_cast<long long>(matrix.stride),
+            static_cast<long long>(matrix.row_stride),
+            static_cast<long long>(matrix.col_stride));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t castF32ToBf16(
+    const void *src,
+    void *dst,
+    const BlasMatrix &matrix,
+    size_t batch,
+    kunlunStream_t stream) {
+
+    unpackMatrixKernel<float, bfloat16_t>
+        <<<12, 64, stream>>>(
+            reinterpret_cast<const float *>(src),
+            reinterpret_cast<bfloat16_t *>(dst),
+            static_cast<long long>(batch),
+            static_cast<long long>(matrix.rows),
+            static_cast<long long>(matrix.cols),
+            static_cast<long long>(matrix.stride),
+            static_cast<long long>(matrix.row_stride),
+            static_cast<long long>(matrix.col_stride));
+    return INFINI_STATUS_SUCCESS;
+}
+
+template <typename Tin, typename Tout>
+__global__ void packMatrixRowsKernel(
+    const Tin *src,
+    Tout *dst,
+    long long batch,
+    long long rows,
+    long long cols,
+    long long stride,
+    long long row_stride,
+    long long col_stride,
+    long long row_offset) {
+
+    int cid = core_id();
+    int ncores = core_num();
+    if (cid >= ncores) {
+        return;
+    }
+    int tid = ncores * cluster_id() + cid;
+    int nthreads = ncores * cluster_num();
+
+    long long matrix_elements = rows * cols;
+    long long total = batch * matrix_elements;
+
+    for (long long idx = tid; idx < total; idx += nthreads) {
+        long long batch_id = idx / matrix_elements;
+        long long rem = idx - batch_id * matrix_elements;
+        long long row = rem % rows;
+        long long col = rem / rows;
+        long long src_batch_offset = stride == 0 ? 0 : batch_id * stride;
+        long long src_offset = src_batch_offset + (row_offset + row) * row_stride + col * col_stride;
+
+        Tin in;
+        Tout out;
+        GM2LM_ASYNC(src + src_offset, &in, sizeof(Tin));
+        mfence();
+        if constexpr (xpu_std::is_same<Tin, bfloat16_t>::value && xpu_std::is_same<Tout, float>::value) {
+            out = __bfloat162float(in);
+        } else {
+            out = __float2bfloat16(in);
+        }
+        LM2GM_ASYNC(&out, dst + idx, sizeof(Tout));
+        mfence();
+    }
+    sync_cluster();
+}
+
+template <typename Tin, typename Tout>
+__global__ void unpackMatrixRowsKernel(
+    const Tin *src,
+    Tout *dst,
+    long long batch,
+    long long rows,
+    long long cols,
+    long long stride,
+    long long row_stride,
+    long long col_stride,
+    long long row_offset) {
+
+    int cid = core_id();
+    int ncores = core_num();
+    if (cid >= ncores) {
+        return;
+    }
+    int tid = ncores * cluster_id() + cid;
+    int nthreads = ncores * cluster_num();
+
+    long long matrix_elements = rows * cols;
+    long long total = batch * matrix_elements;
+
+    for (long long idx = tid; idx < total; idx += nthreads) {
+        long long batch_id = idx / matrix_elements;
+        long long rem = idx - batch_id * matrix_elements;
+        long long row = rem % rows;
+        long long col = rem / rows;
+        long long dst_batch_offset = stride == 0 ? 0 : batch_id * stride;
+        long long dst_offset = dst_batch_offset + (row_offset + row) * row_stride + col * col_stride;
+
+        Tin in;
+        Tout out;
+        GM2LM_ASYNC(src + idx, &in, sizeof(Tin));
+        mfence();
+        if constexpr (xpu_std::is_same<Tin, float>::value && xpu_std::is_same<Tout, bfloat16_t>::value) {
+            out = __float2bfloat16(in);
+        } else {
+            out = __bfloat162float(in);
+        }
+        LM2GM_ASYNC(&out, dst + dst_offset, sizeof(Tout));
+        mfence();
+    }
+    sync_cluster();
+}
+
+infiniStatus_t castBf16ToF32Chunk(
+    const void *src,
+    void *dst,
+    const BlasMatrix &matrix,
+    size_t batch,
+    size_t row_offset,
+    size_t rows,
+    kunlunStream_t stream) {
+
+    packMatrixRowsKernel<bfloat16_t, float>
+        <<<12, 64, stream>>>(
+            reinterpret_cast<const bfloat16_t *>(src),
+            reinterpret_cast<float *>(dst),
+            static_cast<long long>(batch),
+            static_cast<long long>(rows),
+            static_cast<long long>(matrix.cols),
+            static_cast<long long>(matrix.stride),
+            static_cast<long long>(matrix.row_stride),
+            static_cast<long long>(matrix.col_stride),
+            static_cast<long long>(row_offset));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t castF32ToBf16Chunk(
+    const void *src,
+    void *dst,
+    const BlasMatrix &matrix,
+    size_t batch,
+    size_t row_offset,
+    size_t rows,
+    kunlunStream_t stream) {
+
+    unpackMatrixRowsKernel<float, bfloat16_t>
+        <<<12, 64, stream>>>(
+            reinterpret_cast<const float *>(src),
+            reinterpret_cast<bfloat16_t *>(dst),
+            static_cast<long long>(batch),
+            static_cast<long long>(rows),
+            static_cast<long long>(matrix.cols),
+            static_cast<long long>(matrix.stride),
+            static_cast<long long>(matrix.row_stride),
+            static_cast<long long>(matrix.col_stride),
+            static_cast<long long>(row_offset));
+    return INFINI_STATUS_SUCCESS;
+}
+
+
+__global__ void zeroPackedBufferKernel(
+    __global_ptr__ char *dst,
+    long long bytes) {
+
+    int cid = core_id();
+    int ncores = core_num();
+    if (cid >= ncores) {
+        return;
+    }
+    int tid = ncores * cluster_id() + cid;
+    int nthreads = ncores * cluster_num();
+
+    for (long long idx = tid; idx < bytes; idx += nthreads) {
+        __local__ char zero = 0;
+        LM2GM_ASYNC(&zero, dst + idx, sizeof(char));
+    }
+    mfence();
+    sync_cluster();
+}
+
+infiniStatus_t zeroPackedBuffer(
+    void *dst,
+    size_t bytes,
+    kunlunStream_t stream) {
+
+    zeroPackedBufferKernel<<<12, 64, stream>>>(
+        reinterpret_cast<__global_ptr__ char *>(dst),
+        static_cast<long long>(bytes));
+    return INFINI_STATUS_SUCCESS;
+}
+
+__global__ void bf16SkinnyGemvKernel(
+    __global_ptr__ const bfloat16_t *a,
+    __global_ptr__ const bfloat16_t *b,
+    __global_ptr__ bfloat16_t *c,
+    long long m,
+    long long k,
+    long long a_row_stride,
+    long long a_col_stride,
+    long long b_row_stride,
+    long long b_col_stride,
+    long long c_row_stride,
+    long long c_col_stride,
+    float alpha,
+    float beta) {
+
+    int cid = core_id();
+    int ncores = core_num();
+    if (cid >= ncores) {
+        return;
+    }
+    int tid = ncores * cluster_id() + cid;
+    int nthreads = ncores * cluster_num();
+
+    for (long long row = tid; row < m; row += nthreads) {
+        float acc = 0.0f;
+        for (long long col = 0; col < k; ++col) {
+            __local__ bfloat16_t av;
+            __local__ bfloat16_t bv;
+            GM2LM_ASYNC(a + row * a_row_stride + col * a_col_stride, &av, sizeof(bfloat16_t));
+            mfence();
+            GM2LM_ASYNC(b + col * b_row_stride, &bv, sizeof(bfloat16_t));
+            mfence();
+            acc += __bfloat162float(av) * __bfloat162float(bv);
+        }
+
+        auto c_ptr = c + row * c_row_stride;
+        if (beta != 0.0f) {
+            __local__ bfloat16_t cv;
+            GM2LM_ASYNC(c_ptr, &cv, sizeof(bfloat16_t));
+            mfence();
+            acc = alpha * acc + beta * __bfloat162float(cv);
+        } else {
+            acc *= alpha;
+        }
+        __local__ bfloat16_t out = __float2bfloat16(acc);
+        LM2GM_ASYNC(&out, c_ptr, sizeof(bfloat16_t));
+        mfence();
+    }
+    sync_cluster();
+}
+
+infiniStatus_t bf16SkinnyGemv(
+    const void *a,
+    const void *b,
+    void *c,
+    const BlasMatrix &a_matrix,
+    const BlasMatrix &b_matrix,
+    const BlasMatrix &c_matrix,
+    size_t m,
+    size_t k,
+    float alpha,
+    float beta,
+    kunlunStream_t stream) {
+
+    bf16SkinnyGemvKernel<<<12, 64, stream>>>(
+        reinterpret_cast<const bfloat16_t *>(a),
+        reinterpret_cast<const bfloat16_t *>(b),
+        reinterpret_cast<bfloat16_t *>(c),
+        static_cast<long long>(m),
+        static_cast<long long>(k),
+        static_cast<long long>(a_matrix.row_stride),
+        static_cast<long long>(a_matrix.col_stride),
+        static_cast<long long>(b_matrix.row_stride),
+        static_cast<long long>(b_matrix.col_stride),
+        static_cast<long long>(c_matrix.row_stride),
+        static_cast<long long>(c_matrix.col_stride),
+        alpha,
+        beta);
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace op::gemm::kunlun

@@ -1,21 +1,22 @@
-import torch
 import ctypes
 from ctypes import c_uint64
+
+import torch
 from libinfiniop import (
     LIBINFINIOP,
-    TestTensor,
-    get_test_devices,
-    check_error,
-    test_operator,
-    get_args,
-    debug_all,
-    get_tolerance,
-    profile_operation,
-    TestWorkspace,
+    InfiniDeviceNames,
     InfiniDtype,
     InfiniDtypeNames,
-    InfiniDeviceNames,
+    TestTensor,
+    TestWorkspace,
+    check_error,
+    debug_all,
+    get_args,
+    get_test_devices,
+    get_tolerance,
     infiniopOperatorDescriptor_t,
+    profile_operation,
+    test_operator,
 )
 
 # ==============================================================================
@@ -33,14 +34,37 @@ _TEST_CASES = [
     (16384, 0.15, 0, 1, 2.0),
     (32000, 0.08, 0.8, 50, 1.0),
     (32000, 0.08, 1.0, 25, 1.0),
+    (151936, 0.5, 1.0, 1, 1.0),
     # (119696, 0.01, 1.0, 100, 1.0),
 ]
 
 # Batch test cases: (batch_size, voc, list of (random_val, topp, topk, temperature))
 _BATCH_TEST_CASES = [
     # batch_size, voc, [(random_val, topp, topk, temperature), ...]
-    (4, 512, [(0.8, 0.8, 3, 0.5), (0.05, 0.9, 5, 1.0), (0.15, 0.85, 10, 2.0), (0.08, 0, 3, 0.5)]),
-    (8, 4096, [(0.5, 0.9, 1, 1.0), (0.15, 0, 1, 2.0), (0.08, 0.8, 50, 1.0), (0.08, 1.0, 25, 1.0), (0.8, 0.8, 3, 0.5), (0.05, 0.9, 5, 1.0), (0.15, 0.85, 10, 2.0), (0.08, 0, 3, 0.5)]),
+    (
+        4,
+        512,
+        [
+            (0.8, 0.8, 3, 0.5),
+            (0.05, 0.9, 5, 1.0),
+            (0.15, 0.85, 10, 2.0),
+            (0.08, 0, 3, 0.5),
+        ],
+    ),
+    (
+        8,
+        4096,
+        [
+            (0.5, 0.9, 1, 1.0),
+            (0.15, 0, 1, 2.0),
+            (0.08, 0.8, 50, 1.0),
+            (0.08, 1.0, 25, 1.0),
+            (0.8, 0.8, 3, 0.5),
+            (0.05, 0.9, 5, 1.0),
+            (0.15, 0.85, 10, 2.0),
+            (0.08, 0, 3, 0.5),
+        ],
+    ),
     (2, 16384, [(0.15, 0.85, 10, 2.0), (0.5, 0.9, 1, 1.0)]),
 ]
 
@@ -238,8 +262,10 @@ def test_batch(
             )
         )
     except Exception as e:
-        print(f"\033[93mNote: Batch descriptor creation not implemented yet: {e}\033[0m")
-        print(f"  This is expected - batch interface implementation is pending")
+        print(
+            f"\033[93mNote: Batch descriptor creation not implemented yet: {e}\033[0m"
+        )
+        print("  This is expected - batch interface implementation is pending")
         return
 
     # Invalidate the shape and strides in the descriptor to prevent them from being directly used by the kernel
@@ -284,18 +310,24 @@ def test_batch(
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:
         debug_all(
-            (indices.actual_tensor(), logits.actual_tensor()[torch.arange(batch_size), indices.actual_tensor()]),
+            (
+                indices.actual_tensor(),
+                logits.actual_tensor()[
+                    torch.arange(batch_size), indices.actual_tensor()
+                ],
+            ),
             (ans_batch, logits.torch_tensor()[torch.arange(batch_size), ans_batch]),
             "or",
             atol=atol,
             rtol=rtol,
         )
-    
+
     actual_indices = indices.actual_tensor()
     for i in range(batch_size):
         assert (
             actual_indices[i] == ans_batch[i]
-            or logits.actual_tensor()[i, actual_indices[i]] == logits.torch_tensor()[i, ans_batch[i]]
+            or logits.actual_tensor()[i, actual_indices[i]]
+            == logits.torch_tensor()[i, ans_batch[i]]
         )
 
     # Profiling workflow
@@ -312,7 +344,7 @@ def test_batch(
         profile_operation("PyTorch", lambda: pytorch_batch(), device, NUM_PRERUN, NUM_ITERATIONS)
         profile_operation("    lib", lambda: lib_random_sample_batch(), device, NUM_PRERUN, NUM_ITERATIONS)
         # fmt: on
-    
+
     check_error(LIBINFINIOP.infiniopDestroyRandomSampleDescriptor(descriptor))
 
 
@@ -327,12 +359,12 @@ if __name__ == "__main__":
     # Execute tests
     for device in get_test_devices(args):
         test_operator(device, test, _TEST_CASES, _TENSOR_DTYPES)
-        
+
         print(f"\n\033[93mRunning batch tests on {InfiniDeviceNames[device]}...\033[0m")
         try:
             test_operator(device, test_batch, _BATCH_TEST_CASES, _TENSOR_DTYPES)
         except Exception as e:
             print(f"\033[91mBatch test failed (not implemented yet): {e}\033[0m")
-            print(f"  This is expected - batch interface implementation is pending")
+            print("  This is expected - batch interface implementation is pending")
 
     print("\033[92mTest passed!\033[0m")

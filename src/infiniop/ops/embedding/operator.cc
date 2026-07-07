@@ -21,6 +21,9 @@
 #ifdef ENABLE_MOORE_API
 #include "moore/embedding_moore.h"
 #endif
+#ifdef ENABLE_KUNLUN_API
+#include "kunlun/embedding_kunlun.h"
+#endif
 
 __INFINI_C infiniStatus_t infiniopCreateEmbeddingDescriptor(
     infiniopHandle_t handle,
@@ -69,6 +72,9 @@ __INFINI_C infiniStatus_t infiniopCreateEmbeddingDescriptor(
 #endif
 #ifdef ENABLE_CAMBRICON_API
         CREATE(INFINI_DEVICE_CAMBRICON, bang);
+#endif
+#ifdef ENABLE_KUNLUN_API
+        CREATE(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
 
     default:
@@ -122,6 +128,9 @@ __INFINI_C infiniStatus_t infiniopEmbedding(
 #ifdef ENABLE_CAMBRICON_API
         CALCULATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
+#ifdef ENABLE_KUNLUN_API
+        CALCULATE(INFINI_DEVICE_KUNLUN, kunlun);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -164,6 +173,9 @@ __INFINI_C infiniStatus_t infiniopDestroyEmbeddingDescriptor(infiniopEmbeddingDe
 #endif
 #ifdef ENABLE_CAMBRICON_API
         DESTROY(INFINI_DEVICE_CAMBRICON, bang);
+#endif
+#ifdef ENABLE_KUNLUN_API
+        DESTROY(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
 
     default:
