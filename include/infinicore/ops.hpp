@@ -36,6 +36,7 @@
 #include "ops/dsv4_silu_mul_quant.hpp"
 #include "ops/dsv4_swa_prefill_indices.hpp"
 #include "ops/dsv4_topk_transform.hpp"
+#include "ops/deepseek_moe_w8a8i8.hpp"
 #include "ops/deepseek_v4_router.hpp"
 #include "ops/embedding.hpp"
 #include "ops/flash_attention.hpp"
