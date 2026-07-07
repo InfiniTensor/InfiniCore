@@ -184,7 +184,6 @@ def application_without_kv_cache(
         max = ntl.full((query_i.shape[-2],), float("-inf"), dtype=ntl.float32)
 
         for j in range(-(-actual_kv_len // key.dtype.shape[0])):
-
             qk = ntl.dot(query_i, ntl.trans(key[j]))
 
             key_pos = key[j].offsets(-2)

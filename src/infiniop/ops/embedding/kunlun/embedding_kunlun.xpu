@@ -1,0 +1,169 @@
+#include "../../../../utils.h"
+#include "../../../devices/kunlun/kunlun_common.h"
+#include "../../../devices/kunlun/kunlun_handle.h"
+#include "../../../devices/kunlun/kunlun_kernel_common.h"
+#include "../../../tensor.h"
+#include "embedding_kunlun.h"
+#include <memory>
+
+using namespace device::kunlun::kernel;
+
+template <typename T, typename IndexT>
+__global__ void embeddingKernel(
+    __global_ptr__ T *output,
+    __global_ptr__ const IndexT *indices,
+    __global_ptr__ const T *weight,
+    uint32_t total_size,
+    uint32_t embedding_dim,
+    uint32_t vocab_size) {
+
+    int cid = core_id();
+    int ncores = core_num();
+    if (cid >= ncores) {
+        return;
+    }
+
+    int thread_id = ncores * cluster_id() + cid;
+    int nthreads = ncores * cluster_num();
+
+    for (uint32_t linear = thread_id; linear < total_size; linear += nthreads) {
+        uint32_t token_pos = linear / embedding_dim;
+        uint32_t dim = linear - token_pos * embedding_dim;
+        IndexT token = indices[token_pos];
+
+        if (token >= 0 && static_cast<uint64_t>(token) < static_cast<uint64_t>(vocab_size)) {
+            __local__ T value;
+            GM2LM_ASYNC(weight + static_cast<uint64_t>(token) * embedding_dim + dim, &value, sizeof(T));
+            mfence();
+            LM2GM_ASYNC(&value, output + linear, sizeof(T));
+        }
+    }
+}
+
+namespace op::embedding::kunlun {
+
+struct Descriptor::Opaque {
+    std::shared_ptr<device::kunlun::Handle::Internal> internal;
+};
+
+Descriptor::~Descriptor() {
+    delete _opaque;
+}
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t output_desc,
+    infiniopTensorDescriptor_t input_desc,
+    infiniopTensorDescriptor_t weight_desc) {
+
+    auto input_shape = input_desc->shape();
+    auto weight_shape = weight_desc->shape();
+    auto output_shape = output_desc->shape();
+
+    CHECK_OR_RETURN(weight_shape.size() == 2, INFINI_STATUS_BAD_TENSOR_SHAPE);
+    CHECK_OR_RETURN(output_shape.size() == input_shape.size() + 1, INFINI_STATUS_BAD_TENSOR_SHAPE);
+
+    size_t embedding_dim = weight_shape[1];
+    CHECK_OR_RETURN(output_shape.back() == embedding_dim, INFINI_STATUS_BAD_TENSOR_SHAPE);
+    for (size_t i = 0; i < input_shape.size(); ++i) {
+        CHECK_OR_RETURN(output_shape[i] == input_shape[i], INFINI_STATUS_BAD_TENSOR_SHAPE);
+    }
+
+    auto input_dtype = input_desc->dtype();
+    auto weight_dtype = weight_desc->dtype();
+    CHECK_OR_RETURN(input_dtype == INFINI_DTYPE_I32 || input_dtype == INFINI_DTYPE_I64,
+                    INFINI_STATUS_BAD_TENSOR_DTYPE);
+    CHECK_OR_RETURN(weight_dtype == INFINI_DTYPE_F32 || weight_dtype == INFINI_DTYPE_F16 || weight_dtype == INFINI_DTYPE_BF16,
+                    INFINI_STATUS_BAD_TENSOR_DTYPE);
+    CHECK_OR_RETURN(output_desc->dtype() == weight_dtype, INFINI_STATUS_BAD_TENSOR_DTYPE);
+
+    size_t num_indices = 1;
+    for (auto dim : input_shape) {
+        num_indices *= dim;
+    }
+
+    *desc_ptr = new Descriptor(
+        num_indices,
+        embedding_dim,
+        weight_shape[0],
+        input_dtype,
+        weight_dtype,
+        new Opaque{reinterpret_cast<device::kunlun::Handle *>(handle)->internal()},
+        handle->device,
+        handle->device_id);
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+template <typename IndexT>
+infiniStatus_t launchEmbeddingByWeightDtype(
+    void *output,
+    const void *input,
+    const void *weight,
+    size_t total_size,
+    size_t embedding_dim,
+    size_t vocab_size,
+    infiniDtype_t weight_dtype,
+    kunlunStream_t stream) {
+
+    if (total_size > static_cast<size_t>(UINT32_MAX) ||
+        embedding_dim > static_cast<size_t>(UINT32_MAX) ||
+        vocab_size > static_cast<size_t>(UINT32_MAX)) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+
+#define LAUNCH_KERNEL(T)                                                               \
+    embeddingKernel<T, IndexT><<<12, 64, stream>>>(                                    \
+        reinterpret_cast<__global_ptr__ T *>(output),                                  \
+        reinterpret_cast<__global_ptr__ const IndexT *>(input),                        \
+        reinterpret_cast<__global_ptr__ const T *>(weight),                            \
+        static_cast<uint32_t>(total_size),                                             \
+        static_cast<uint32_t>(embedding_dim),                                          \
+        static_cast<uint32_t>(vocab_size));
+
+    switch (weight_dtype) {
+    case INFINI_DTYPE_F32:
+        LAUNCH_KERNEL(float);
+        break;
+    case INFINI_DTYPE_F16:
+        LAUNCH_KERNEL(half);
+        break;
+    case INFINI_DTYPE_BF16:
+        LAUNCH_KERNEL(bfloat16_t);
+        break;
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
+#undef LAUNCH_KERNEL
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *output,
+    const void *input,
+    const void *weight,
+    void *stream) const {
+
+    if (_num_indices == 0) {
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    auto total_size = _num_indices * _embedding_dim;
+    auto kunlun_stream = reinterpret_cast<kunlunStream_t>(stream);
+
+    switch (_input_dtype) {
+    case INFINI_DTYPE_I32:
+        return launchEmbeddingByWeightDtype<int32_t>(
+            output, input, weight, total_size, _embedding_dim, _vocab_size, _weight_dtype, kunlun_stream);
+    case INFINI_DTYPE_I64:
+        return launchEmbeddingByWeightDtype<int64_t>(
+            output, input, weight, total_size, _embedding_dim, _vocab_size, _weight_dtype, kunlun_stream);
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+}
+
+} // namespace op::embedding::kunlun
