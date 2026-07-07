@@ -25,6 +25,7 @@
 #include "ops/conv2d.hpp"
 #include "ops/cross_entropy.hpp"
 #include "ops/deepseek_moe.hpp"
+#include "ops/deepseek_moe_w8a8i8.hpp"
 #include "ops/deepseek_v4_router.hpp"
 #include "ops/embedding.hpp"
 #include "ops/flash_attention.hpp"
