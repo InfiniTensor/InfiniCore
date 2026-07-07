@@ -43,6 +43,18 @@ __device__ inline void loadsm(__shared_ptr__ const T *p, T *v, int len) {
     __builtin_memcpy(v, p, len * sizeof(T));
 }
 
+template <typename T>
+__device__ inline T loadShared(__shared_ptr__ const T *ptr) {
+    T value;
+    __builtin_memcpy(&value, ptr, sizeof(T));
+    return value;
+}
+
+template <typename T>
+__device__ inline void storeShared(__shared_ptr__ T *ptr, const T &value) {
+    __builtin_memcpy(ptr, &value, sizeof(T));
+}
+
 /**
  * @brief atomicAdd for kunlun xpu
  * @param ptr: pointer to shared memory
@@ -57,12 +69,14 @@ inline __device__ T atomicAdd(__shared_ptr__ T *ptr, T value) {
 template <>
 inline __device__ half atomicAdd<half>(__shared_ptr__ half *ptr, half value) {
     ticket_lock_mix();
-    half old = *ptr;
+    half old = loadShared(ptr);
+
     float of = __half2float(old);
     float vf = __half2float(value);
     float sumf = of + vf;
     half sum = __float2half_rn(sumf);
-    *ptr = sum;
+    storeShared(ptr, sum);
+
     mfence_sm();
     ticket_unlock_mix();
     return old;
@@ -71,12 +85,14 @@ inline __device__ half atomicAdd<half>(__shared_ptr__ half *ptr, half value) {
 template <>
 inline __device__ bfloat16_t atomicAdd<bfloat16_t>(__shared_ptr__ bfloat16_t *ptr, bfloat16_t value) {
     ticket_lock_mix();
-    bfloat16_t old = *ptr;
+    bfloat16_t old = loadShared(ptr);
+
     float of = __bfloat162float(old);
     float vf = __bfloat162float(value);
     float sumf = of + vf;
     bfloat16_t sum = __float2bfloat16_rn(sumf);
-    *ptr = sum;
+    storeShared(ptr, sum);
+
     mfence_sm();
     ticket_unlock_mix();
     return old;
@@ -90,15 +106,17 @@ inline __device__ bfloat16_t atomicAdd<bfloat16_t>(__shared_ptr__ bfloat16_t *pt
 template <typename T>
 inline __device__ T atomicMax(__shared_ptr__ T *ptr, T value) {
     ticket_lock_mix();
-    T old = *ptr;
+    T old = loadShared(ptr);
+
     if constexpr (std::is_same<T, bfloat16_t>::value) {
         float of = __bfloat162float(old);
         float vf = __bfloat162float(value);
         float maxf = fmax(of, vf);
         bfloat16_t max = __float2bfloat16_rn(maxf);
-        *ptr = max;
+        storeShared(ptr, max);
     } else {
-        *ptr = fmax(old, value);
+        const T max = fmax(old, value);
+        storeShared(ptr, max);
     }
     mfence_sm();
     ticket_unlock_mix();

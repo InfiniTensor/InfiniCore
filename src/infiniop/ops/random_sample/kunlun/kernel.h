@@ -258,7 +258,7 @@ __device__ Tcompute softmaxSum(__global_ptr__ const Tval *probs,
                                int voc,
                                __global_ptr__ Tcompute *sum_global) {
 
-    int sm_size = SM_SIZE / sizeof(Tval);
+    int sm_size = (SM_SIZE / 2) / sizeof(Tval);
     int all_sm_size = cluster_num() * sm_size;
     int sm_remain = voc % all_sm_size;
     int sm_repeat = (voc - sm_remain) / all_sm_size;
@@ -274,8 +274,6 @@ __device__ Tcompute softmaxSum(__global_ptr__ const Tval *probs,
     }
     sync_cluster();
 
-    //__global_ptr__ Tval const *probs_ = probs;
-
     for (int r = 0; r < sm_repeat + (sm_step > 0 ? 1 : 0); r++) {
         int read_len = (r < sm_repeat ? sm_size : sm_step);
         int start = (r < sm_repeat ? r * all_sm_size + cluster_id() * sm_size : sm_repeat * all_sm_size + sm_ind_start);
@@ -285,12 +283,16 @@ __device__ Tcompute softmaxSum(__global_ptr__ const Tval *probs,
         sync_cluster();
 
         for (int index = core_id(); index < read_len; index += BLOCK_SIZE) {
+            Tval x = loadShared(x_sm + index);
             if constexpr (std::is_same_v<Tval, half>) {
-                y_sm[index] = __float2half(exp((__half2float(x_sm[index]) - float(max_value)) / temperature));
+                Tval y = __float2half(exp((__half2float(x) - float(max_value)) / temperature));
+                storeShared(y_sm + index, y);
             } else if constexpr (std::is_same_v<Tval, bfloat16_t>) {
-                y_sm[index] = __float2bfloat16(exp((__bfloat162float(x_sm[index]) - float(max_value)) / temperature));
+                Tval y = __float2bfloat16(exp((__bfloat162float(x) - float(max_value)) / temperature));
+                storeShared(y_sm + index, y);
             } else if constexpr (std::is_same_v<Tval, float>) {
-                y_sm[index] = exp((x_sm[index] - max_value) / temperature);
+                Tval y = exp((x - max_value) / temperature);
+                storeShared(y_sm + index, y);
             }
         }
         sync_cluster();
@@ -384,6 +386,88 @@ __device__ void sample(__global_ptr__ Tidx *result,
         }
     }
 }
+
+template <typename Tval>
+__device__ float randomSampleToFloat(Tval value) {
+    if constexpr (std::is_same_v<Tval, float>) {
+        return value;
+    } else if constexpr (std::is_same_v<Tval, half>) {
+        return __half2float(value);
+    } else if constexpr (std::is_same_v<Tval, bfloat16_t>) {
+        return __bfloat162float(value);
+    }
+}
+
+template <typename Tval, typename Tidx, int MAX_TOPK>
+__global__ void serialRandomSampleKernel(
+    Tidx *result,
+    const Tval *probs,
+    float random_val,
+    float topp,
+    int voc,
+    int topk,
+    float temperature) {
+
+    if (cluster_id() != 0 || core_id() != 0) {
+        return;
+    }
+
+    __local__ float top_values[MAX_TOPK];
+    __local__ Tidx top_indices[MAX_TOPK];
+    int k = topk < voc ? topk : voc;
+    if (k > MAX_TOPK) {
+        k = MAX_TOPK;
+    }
+
+    for (int i = 0; i < MAX_TOPK; ++i) {
+        top_values[i] = -INFINITY;
+        top_indices[i] = 0;
+    }
+
+    for (int idx = 0; idx < voc; ++idx) {
+        __local__ Tval raw;
+        GM2LM(probs + idx, &raw, sizeof(Tval));
+        float value = randomSampleToFloat(raw);
+        for (int pos = 0; pos < k; ++pos) {
+            if (value > top_values[pos]) {
+                for (int move = k - 1; move > pos; --move) {
+                    top_values[move] = top_values[move - 1];
+                    top_indices[move] = top_indices[move - 1];
+                }
+                top_values[pos] = value;
+                top_indices[pos] = static_cast<Tidx>(idx);
+                break;
+            }
+        }
+    }
+
+    float max_value = top_values[0];
+    float denom = 0.0f;
+    for (int idx = 0; idx < voc; ++idx) {
+        __local__ Tval raw;
+        GM2LM(probs + idx, &raw, sizeof(Tval));
+        denom += exp((randomSampleToFloat(raw) - max_value) / temperature);
+    }
+
+    float topk_cumsum = 0.0f;
+    for (int i = 0; i < k; ++i) {
+        topk_cumsum += exp((top_values[i] - max_value) / temperature) / denom;
+    }
+
+    float limit = topk_cumsum < topp ? topk_cumsum : topp;
+    float threshold = limit * random_val;
+    float cumsum = 0.0f;
+    Tidx selected = top_indices[k - 1];
+    for (int i = 0; i < k; ++i) {
+        cumsum += exp((top_values[i] - max_value) / temperature) / denom;
+        if (cumsum >= threshold) {
+            selected = top_indices[i];
+            break;
+        }
+    }
+    result[0] = selected;
+}
+
 template <unsigned int CLUSTER_SIZE, unsigned int BLOCK_SIZE, typename Tval, typename Tcompute, typename Tidx>
 __global__ void randomSampleKernel(Tidx *result,
                                    const Tval *probs,
@@ -417,8 +501,8 @@ __global__ void randomSampleKernel(Tidx *result,
     GM2LM(values_global, &max_value, sizeof(Tval));
     sync_cluster();
 
-    __shared__ Tval x_sm[SM_SIZE / sizeof(Tval)];
-    __shared__ Tval y_sm[SM_SIZE / sizeof(Tval)];
+    __shared__ Tval x_sm[(SM_SIZE / 2) / sizeof(Tval)];
+    __shared__ Tval y_sm[(SM_SIZE / 2) / sizeof(Tval)];
 
     Tcompute all_sum = softmaxSum<CLUSTER_SIZE, BLOCK_SIZE, Tval, Tcompute>(probs,
                                                                             max_value,
@@ -431,7 +515,7 @@ __global__ void randomSampleKernel(Tidx *result,
 }
 template <typename Tval, typename Tidx>
 __device__ void TopOneKernel(__global_ptr__ Tidx *result,
-                             __global_ptr__ Tval *values,
+                             __global_ptr__ const Tval *values,
                              __global_ptr__ Tidx *indices,
                              __global_ptr__ Tidx *indices_global,
                              __global_ptr__ Tval *values_global,
@@ -490,7 +574,9 @@ __device__ void TopOneKernel(__global_ptr__ Tidx *result,
     }
     if (thread_id == 0) {
         findTopOne(values_global, indices_global, nthreads);
-        result[0] = indices_global[0];
+        __local__ Tidx result_idx;
+        GM2LM(indices_global, &result_idx, sizeof(Tidx));
+        LM2GM(&result_idx, result, sizeof(Tidx));
     }
 }
 template <typename Tval, typename Tidx>
@@ -503,7 +589,7 @@ __global__ void argmaxKernel(Tidx *result, const Tval *probs, int voc,
     __local__ Tval values_local[2 * buf_size];
     __local__ Tidx indices_local[2 * buf_size];
     TopOneKernel<Tval, Tidx>(result,
-                             values,
+                             probs,
                              indices,
                              indices_global,
                              values_global,

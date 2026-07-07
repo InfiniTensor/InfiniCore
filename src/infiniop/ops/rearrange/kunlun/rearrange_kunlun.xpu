@@ -137,6 +137,18 @@ infiniStatus_t launchKernel(
     case INFINI_DTYPE_F16:
         LAUNCH_KERNEL(half);
         break;
+    case INFINI_DTYPE_I32:
+        LAUNCH_KERNEL(int32_t);
+        break;
+    case INFINI_DTYPE_I64:
+        LAUNCH_KERNEL(int64_t);
+        break;
+    case INFINI_DTYPE_U32:
+        LAUNCH_KERNEL(uint32_t);
+        break;
+    case INFINI_DTYPE_U64:
+        LAUNCH_KERNEL(uint64_t);
+        break;
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
@@ -153,6 +165,11 @@ infiniStatus_t Descriptor::calculate(
     size_t ndim = _info.ndim();
     size_t total_size = _info.nelements();
     infiniDtype_t dtype = _info.dtype;
+
+    if (ndim == 0) {
+        CHECK_KUNLUN(xpu_memcpy_async(y, x, infiniSizeOf(dtype), XPU_DEVICE_TO_DEVICE, stream));
+        return INFINI_STATUS_SUCCESS;
+    }
 
     // Get workspace from opaque
     void *workspace = _opaque->workspace;

@@ -15,7 +15,7 @@ void launchKernel(void *workspace,
                   float temperature,
                   int64_t n,
                   XPUStream stream) {
-    constexpr unsigned int cluster_num = 8;
+    constexpr unsigned int cluster_num = 1;
     constexpr unsigned int core_num = 64;
     char *workspace_value = reinterpret_cast<char *>(workspace);
     int topk_ = topk <= (int)n ? topk : (int)n;
@@ -30,19 +30,14 @@ void launchKernel(void *workspace,
     Tidx *indices = (Tidx *)workspace_index;
     Tidx *indices_global = indices + n;
     if (dosample) {
-        randomSampleKernel<cluster_num, core_num, Tval, float, Tidx>
-            <<<cluster_num, core_num, stream>>>((Tidx *)result,
-                                                (Tval *)probs,
-                                                random_val,
-                                                topp,
-                                                n,
-                                                topk_,
-                                                temperature,
-                                                indices,
-                                                values,
-                                                indices_global,
-                                                values_global,
-                                                sum_global);
+        serialRandomSampleKernel<Tval, Tidx, 128>
+            <<<1, 64, stream>>>((Tidx *)result,
+                                (const Tval *)probs,
+                                random_val,
+                                topp,
+                                n,
+                                topk_,
+                                temperature);
     }
 
     else {
@@ -80,7 +75,7 @@ infiniStatus_t Descriptor::create(
 
     auto info = result.take();
 
-    int cluster_num = 8;
+    int cluster_num = 1;
     int core_num = 64;
     int n = probs_desc->numel();
 
@@ -145,6 +140,7 @@ Descriptor::calculate(
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
 
+    xpu_wait(stream);
     return INFINI_STATUS_SUCCESS;
 }
 
