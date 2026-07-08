@@ -1,0 +1,9 @@
+#ifndef __INFINIOP_DSV4_SWA_PREFILL_INDICES_API_H__
+#define __INFINIOP_DSV4_SWA_PREFILL_INDICES_API_H__
+#include "../operator_descriptor.h"
+typedef struct InfiniopDescriptor *infiniopDsv4SwaPrefillIndicesDescriptor_t;
+__INFINI_C __export infiniStatus_t infiniopCreateDsv4SwaPrefillIndicesDescriptor(infiniopHandle_t, infiniopDsv4SwaPrefillIndicesDescriptor_t *, infiniopTensorDescriptor_t, int);
+__INFINI_C __export infiniStatus_t infiniopGetDsv4SwaPrefillIndicesWorkspaceSize(infiniopDsv4SwaPrefillIndicesDescriptor_t, size_t *);
+__INFINI_C __export infiniStatus_t infiniopDsv4SwaPrefillIndices(infiniopDsv4SwaPrefillIndicesDescriptor_t, void *, size_t, void *, void *);
+__INFINI_C __export infiniStatus_t infiniopDestroyDsv4SwaPrefillIndicesDescriptor(infiniopDsv4SwaPrefillIndicesDescriptor_t);
+#endif
