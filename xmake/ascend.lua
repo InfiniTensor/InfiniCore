@@ -91,7 +91,6 @@ target_end()
 
 target("infiniccl-ascend")
     set_kind("static")
-    add_deps("infinirt")
     add_deps("infini-utils")
     set_warnings("all", "error")
     set_languages("cxx17")

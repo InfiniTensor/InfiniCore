@@ -158,7 +158,6 @@ target_end()
 
 target("infiniccl-metax")
     set_kind("static")
-    add_deps("infinirt")
     on_install(function (target) end)
     set_warnings("all", "error")
     if not is_plat("windows") then
