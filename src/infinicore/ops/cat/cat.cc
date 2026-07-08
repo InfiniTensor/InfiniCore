@@ -6,6 +6,17 @@ namespace infinicore::op {
 
 namespace {
 
+bool use_slice_copy_cat(Device::Type device_type, int dim, int ndim) {
+    // Keep this path limited to CUDA-like backends we have validated or can
+    // trace to the nvidia rearrange implementation. Other devices may be
+    // correct through copy_from, but their performance impact is unverified.
+    return dim == ndim - 1
+        && (device_type == Device::Type::NVIDIA
+            || device_type == Device::Type::HYGON
+            || device_type == Device::Type::ILUVATAR
+            || device_type == Device::Type::ALI);
+}
+
 class CatInfo {
 
     CatInfo() = default;
@@ -156,12 +167,12 @@ void cat_(Tensor out, std::vector<Tensor> tensors, int dim) {
     }
     assert(dim_shape == out->shape()[dim]);
 
-    if (out->device().getType() == Device::Type::HYGON) {
+    if (use_slice_copy_cat(out->device().getType(), dim, ndim)) {
         // The generic path recursively issues one memcpy for every outer
         // index. Concatenating MLA tensors on the last dimension can therefore
-        // enqueue hundreds of tiny hipMemcpyAsync calls per layer. A strided
-        // output slice is semantically identical and copy_from lowers it to a
-        // single rearrange kernel per input tensor.
+        // enqueue hundreds of tiny D2D copy calls per layer. A strided output
+        // slice is semantically identical and copy_from lowers it to a single
+        // rearrange kernel per input tensor on CUDA-like backends.
         size_t offset = 0;
         for (auto &tensor : tensors) {
             if (tensor->ndim() == 1) {

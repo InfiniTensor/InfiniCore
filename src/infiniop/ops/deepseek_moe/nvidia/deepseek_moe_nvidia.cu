@@ -23,16 +23,10 @@ Descriptor::~Descriptor() {
 namespace {
 
 constexpr size_t ROUTE_BATCHED_GEMM_MAX_TOKENS = 16384;
-#if defined(ENABLE_HYGON_API)
 constexpr size_t EXPERT_GROUPED_GEMM_MIN_TOKENS = 2048;
 constexpr size_t FUSED_DECODE_MAX_TOKENS = 32;
 constexpr int FUSED_KERNEL_THREADS = 64;
 constexpr size_t CHUNKED_GROUPED_GEMM_TOKENS = 4096;
-#else
-constexpr size_t EXPERT_GROUPED_GEMM_MIN_TOKENS = 8192;
-constexpr size_t FUSED_DECODE_MAX_TOKENS = 0;
-constexpr int FUSED_KERNEL_THREADS = 256;
-#endif
 
 constexpr size_t align_up(size_t value, size_t alignment) {
     return (value + alignment - 1) / alignment * alignment;
@@ -109,7 +103,6 @@ __device__ __nv_bfloat16 from_float<__nv_bfloat16>(float value) {
     return __float2bfloat16_rn(value);
 }
 
-#if defined(ENABLE_HYGON_API)
 __device__ __forceinline__ float dot_bf16x8(const uint4 &a, const uint4 &b) {
     const auto *a2 = reinterpret_cast<const __nv_bfloat162 *>(&a);
     const auto *b2 = reinterpret_cast<const __nv_bfloat162 *>(&b);
@@ -122,7 +115,6 @@ __device__ __forceinline__ float dot_bf16x8(const uint4 &a, const uint4 &b) {
     }
     return sum;
 }
-#endif
 
 template <typename T>
 __global__ void gate_up_kernel(
@@ -154,7 +146,6 @@ __global__ void gate_up_kernel(
 
     float gate_sum = 0.0f;
     float up_sum = 0.0f;
-#if defined(ENABLE_HYGON_API)
     if constexpr (std::is_same_v<T, __nv_bfloat16>) {
         if ((hidden_size & 7) == 0) {
             const auto *x8 = reinterpret_cast<const uint4 *>(x);
@@ -186,7 +177,6 @@ __global__ void gate_up_kernel(
             }
         }
     } else
-#endif
     {
         for (size_t h = threadIdx.x; h < hidden_size; h += blockDim.x) {
             const float xv = to_float<T>(x[h]);
@@ -238,7 +228,6 @@ __global__ void down_kernel(
     float acc = 0.0f;
     const size_t route_base = token * topk;
     const size_t count = topk * intermediate_size;
-#if defined(ENABLE_HYGON_API)
     if constexpr (std::is_same_v<T, __nv_bfloat16>) {
         if ((intermediate_size & 7) == 0) {
             const size_t chunks_per_expert = intermediate_size / 8;
@@ -287,7 +276,6 @@ __global__ void down_kernel(
             }
         }
     } else
-#endif
     {
         for (size_t idx = threadIdx.x; idx < count; idx += blockDim.x) {
             const size_t k = idx / intermediate_size;
@@ -689,7 +677,6 @@ infiniStatus_t run_gemm(
     return INFINI_STATUS_SUCCESS;
 }
 
-#if defined(ENABLE_HYGON_API)
 template <typename T>
 infiniStatus_t run_chunked_grouped_gemm(
     char *base,
@@ -814,7 +801,6 @@ infiniStatus_t run_chunked_grouped_gemm(
 
     return INFINI_STATUS_SUCCESS;
 }
-#endif
 
 template <typename T>
 infiniStatus_t launch_typed(
@@ -836,11 +822,9 @@ infiniStatus_t launch_typed(
     const size_t ptr_workspace = ptr_bytes * 3;
     const size_t intermediate_offset = align_up(ptr_workspace, 256);
     size_t intermediate_tokens = info.ntokens;
-#if defined(ENABLE_HYGON_API)
     if (info.ntokens > ROUTE_BATCHED_GEMM_MAX_TOKENS && info.num_experts <= 256) {
         intermediate_tokens = std::min(info.ntokens, CHUNKED_GROUPED_GEMM_TOKENS);
     }
-#endif
     const size_t intermediate_bytes = intermediate_tokens * info.topk * info.intermediate_size * sizeof(T);
     if (workspace_size < intermediate_offset + intermediate_bytes) {
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
@@ -868,7 +852,6 @@ infiniStatus_t launch_typed(
         down_ptrs = down_workspace;
     }
 
-#if defined(ENABLE_HYGON_API)
     if (info.ntokens > ROUTE_BATCHED_GEMM_MAX_TOKENS && info.num_experts <= 256) {
         return run_chunked_grouped_gemm<T>(
             base, workspace_size, intermediate_offset, info,
@@ -877,7 +860,6 @@ infiniStatus_t launch_typed(
             gate_weights, up_weights, down_weights,
             stream, weight_ptrs_on_device, internal);
     }
-#endif
 
     if (info.ntokens > FUSED_DECODE_MAX_TOKENS
         && info.ntokens <= ROUTE_BATCHED_GEMM_MAX_TOKENS) {
@@ -1099,16 +1081,13 @@ infiniStatus_t Descriptor::create(
     const size_t ptr_bytes = align_up(info.num_experts * sizeof(void *), 256);
     const size_t intermediate_offset = align_up(ptr_bytes * 3, 256);
     size_t workspace_tokens = info.ntokens;
-#if defined(ENABLE_HYGON_API)
     if (info.ntokens > ROUTE_BATCHED_GEMM_MAX_TOKENS && info.num_experts <= 256) {
         workspace_tokens = std::min(info.ntokens, CHUNKED_GROUPED_GEMM_TOKENS);
     }
-#endif
     const size_t intermediate_bytes = workspace_tokens * info.topk * info.intermediate_size * dtype_size;
     const size_t old_workspace_size = intermediate_offset + intermediate_bytes;
     size_t batched_workspace_size = old_workspace_size;
     size_t grouped_workspace_size = old_workspace_size;
-#if defined(ENABLE_HYGON_API)
     if (info.ntokens > ROUTE_BATCHED_GEMM_MAX_TOKENS && info.num_experts <= 256) {
         auto chunk_info = info;
         chunk_info.ntokens = workspace_tokens;
@@ -1118,7 +1097,6 @@ infiniStatus_t Descriptor::create(
             grouped_workspace_size = expert_grouped_workspace_size<__nv_bfloat16>(chunk_info, intermediate_offset);
         }
     } else
-#endif
         if (info.ntokens > FUSED_DECODE_MAX_TOKENS
             && info.ntokens <= ROUTE_BATCHED_GEMM_MAX_TOKENS) {
         if (info.dtype == INFINI_DTYPE_F16) {
