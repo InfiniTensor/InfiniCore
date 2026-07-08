@@ -124,7 +124,7 @@ target("infiniop-hygon")
     add_hygon_dtk_paths()
 
     set_warnings("all", "error")
-    add_cuflags("-Wno-error=unused-private-field")
+    add_cuflags("-Wno-error=unused-private-field", {force = true})
     add_cuflags("-Wno-return-type", {force = true})  -- 抑制return语句警告
     add_cuflags("-Wno-error=macro-redefined", {force = true})
     add_cuflags("-Wno-error=ignored-attributes", {force = true})
