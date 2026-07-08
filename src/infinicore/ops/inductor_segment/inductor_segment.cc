@@ -7,6 +7,21 @@
 #include "../../utils.hpp"
 #include "inductor_segment_registry.hpp"
 
+namespace {
+
+size_t resolve_valid_seq_len(size_t bucket, const infinicore::Tensor &hidden_states) {
+    const size_t runtime_valid = infinicore::op::inductor_segment_impl::current_piecewise_valid_seq_len();
+    if (runtime_valid > 0) {
+        return std::min(runtime_valid, bucket);
+    }
+    if (hidden_states->shape().size() >= 2) {
+        return std::min(static_cast<size_t>(hidden_states->shape()[1]), bucket);
+    }
+    return bucket;
+}
+
+} // namespace
+
 #ifdef ENABLE_ATEN
 #include "aot_package_runner.hpp"
 #include "infinicore/adaptor/aten_adaptor.hpp"
@@ -295,10 +310,7 @@ void *plan(const Tensor &positions,
            PiecewiseInductorSegmentId segment_id,
            size_t layer_idx,
            size_t bucket) {
-    size_t valid_len = bucket;
-    if (hidden_states->shape().size() >= 2) {
-        valid_len = hidden_states->shape()[1];
-    }
+    const size_t valid_len = resolve_valid_seq_len(bucket, hidden_states);
     const auto device = hidden_states->device();
     auto positions_padded = infinicore::Tensor::zeros(
         {1, bucket},
@@ -332,6 +344,7 @@ void run(void *planned_meta) {
     Tensor q_rope(meta->q_rope);
     Tensor k_rope(meta->k_rope);
     Tensor v_rope(meta->v_rope);
+    const size_t valid_len = resolve_valid_seq_len(meta->bucket, hidden_states);
     run_pre_attn_segment(
         Tensor(meta->positions),
         positions_padded,
@@ -342,7 +355,7 @@ void run(void *planned_meta) {
         v_rope,
         meta->layer_idx,
         meta->bucket,
-        meta->valid_len);
+        valid_len);
 #else
     (void)planned_meta;
     throw std::runtime_error("InductorSegment requires ENABLE_ATEN build");

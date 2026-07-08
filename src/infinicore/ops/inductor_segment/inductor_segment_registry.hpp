@@ -43,12 +43,15 @@ struct SegmentKeyHash {
 };
 
 using TpRankResolver = size_t (*)();
+using ValidSeqLenResolver = size_t (*)();
 
 /// Thread-local override for lookup when TP global state is unavailable (smoke tests).
 void set_lookup_tp_rank_override(size_t tp_rank);
 void clear_lookup_tp_rank_override();
 void set_tensor_parallel_rank_resolver(TpRankResolver resolver);
 size_t current_tensor_parallel_rank();
+void set_piecewise_valid_seq_len_resolver(ValidSeqLenResolver resolver);
+size_t current_piecewise_valid_seq_len();
 SegmentKey make_segment_key(
     PiecewiseInductorSegmentId segment_id,
     size_t layer_idx,

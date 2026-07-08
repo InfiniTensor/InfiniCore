@@ -13,6 +13,7 @@ namespace {
 
 thread_local size_t g_lookup_tp_rank_override = std::numeric_limits<size_t>::max();
 TpRankResolver g_tp_rank_resolver = nullptr;
+ValidSeqLenResolver g_valid_seq_len_resolver = nullptr;
 
 #ifdef ENABLE_ATEN
 PreAttnWeightResolver g_pre_attn_weight_resolver;
@@ -45,6 +46,17 @@ size_t current_tensor_parallel_rank() {
     }
     if (g_tp_rank_resolver != nullptr) {
         return g_tp_rank_resolver();
+    }
+    return 0;
+}
+
+void set_piecewise_valid_seq_len_resolver(ValidSeqLenResolver resolver) {
+    g_valid_seq_len_resolver = resolver;
+}
+
+size_t current_piecewise_valid_seq_len() {
+    if (g_valid_seq_len_resolver != nullptr) {
+        return g_valid_seq_len_resolver();
     }
     return 0;
 }

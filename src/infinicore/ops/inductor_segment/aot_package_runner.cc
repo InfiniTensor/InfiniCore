@@ -26,9 +26,7 @@ void AotPackageRunner::ensure_loader_() {
     c10::cuda::CUDAGuard device_guard(device_index);
 #endif
     loader_ = std::make_unique<torch::inductor::AOTIModelPackageLoader>(
-        package_path_,
-        "model",
-        /*run_single_threaded=*/true);
+        package_path_, "model");
 }
 
 std::vector<at::Tensor> AotPackageRunner::run(

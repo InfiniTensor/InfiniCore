@@ -82,6 +82,7 @@ void clear_pre_attn_weight_resolver();
 void set_lookup_tp_rank_override(size_t tp_rank);
 void clear_lookup_tp_rank_override();
 void set_tensor_parallel_rank_resolver(size_t (*)());
+void set_piecewise_valid_seq_len_resolver(size_t (*)());
 
 #ifdef ENABLE_ATEN
 void warmup_pre_attn(
