@@ -4,8 +4,14 @@
 #include "../../handle.h"
 #include "infiniop/ops/recurrent_gated_delta_rule.h"
 
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_HYGON_API)
+#if defined(ENABLE_NVIDIA_API)
 #include "nvidia/recurrent_gated_delta_rule_nvidia.cuh"
+#endif
+#ifdef ENABLE_METAX_API
+#include "metax/recurrent_gated_delta_rule_metax.h"
+#endif
+#ifdef ENABLE_MOORE_API
+#include "moore/recurrent_gated_delta_rule_moore.h"
 #endif
 
 __INFINI_C infiniStatus_t infiniopCreateRecurrentGatedDeltaRuleDescriptor(
@@ -37,8 +43,11 @@ __INFINI_C infiniStatus_t infiniopCreateRecurrentGatedDeltaRuleDescriptor(
 #ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-#ifdef ENABLE_HYGON_API
-        CREATE(INFINI_DEVICE_HYGON, nvidia)
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax)
+#endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore)
 #endif
 
     default:
@@ -60,8 +69,11 @@ __INFINI_C infiniStatus_t infiniopGetRecurrentGatedDeltaRuleWorkspaceSize(
 #ifdef ENABLE_NVIDIA_API
         GET(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-#ifdef ENABLE_HYGON_API
-        GET(INFINI_DEVICE_HYGON, nvidia)
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax)
+#endif
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, moore)
 #endif
 
     default:
@@ -91,8 +103,11 @@ __INFINI_C infiniStatus_t infiniopRecurrentGatedDeltaRule(
 #ifdef ENABLE_NVIDIA_API
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-#ifdef ENABLE_HYGON_API
-        CALCULATE(INFINI_DEVICE_HYGON, nvidia)
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax)
+#endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore)
 #endif
 
     default:
@@ -113,8 +128,11 @@ __INFINI_C infiniStatus_t infiniopDestroyRecurrentGatedDeltaRuleDescriptor(
 #ifdef ENABLE_NVIDIA_API
         DESTROY(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-#ifdef ENABLE_HYGON_API
-        DESTROY(INFINI_DEVICE_HYGON, nvidia)
+#ifdef ENABLE_METAX_API
+        DESTROY(INFINI_DEVICE_METAX, metax)
+#endif
+#ifdef ENABLE_MOORE_API
+        DESTROY(INFINI_DEVICE_MOORE, moore)
 #endif
 
     default:
