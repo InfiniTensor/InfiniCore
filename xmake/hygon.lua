@@ -101,7 +101,12 @@ local function resolve_hygon_arch()
 end
 
 local HYGON_ARCH = resolve_hygon_arch()
+local HYGON_SKIP_PER_CHANNEL_QUANT_INT8 = HYGON_ARCH == "gfx906"
 print("编译海光DCU架构: " .. HYGON_ARCH)
+if HYGON_SKIP_PER_CHANNEL_QUANT_INT8 then
+    print("Hygon gfx906: skip per_channel_quant_int8 operator")
+    add_defines("INFINIOP_DISABLE_HYGON_PER_CHANNEL_QUANT_INT8")
+end
 
 target("infiniop-hygon")
     set_kind("static")
@@ -140,6 +145,9 @@ target("infiniop-hygon")
 
     -- 复用NVIDIA的CUDA实现，通过HIP兼容层
     add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")
+    if not HYGON_SKIP_PER_CHANNEL_QUANT_INT8 then
+        add_files("../src/infiniop/ops/quant/per_channel_quant_int8/nvidia/*.cu")
+    end
 
     -- Keep platform-specific or currently unregistered NVIDIA sources out of the Hygon target.
     remove_files("../src/infiniop/ops/avg_pool3d/nvidia/*.cu")
@@ -148,8 +156,7 @@ target("infiniop-hygon")
     remove_files("../src/infiniop/ops/dist/nvidia/*.cu")
     remove_files("../src/infiniop/ops/gptq_qyblas_gemm/nvidia/*.cu")
     remove_files("../src/infiniop/ops/histc/nvidia/*.cu")
-    remove_files("../src/infiniop/ops/quant*/nvidia/*.cu")
-    remove_files("../src/infiniop/ops/scaled_mm/nvidia/*.cu")
+    remove_files("../src/infiniop/ops/quant/per_tensor_quant_int8/nvidia/*.cu")
 
     if has_config("ninetoothed") then
         add_files("../build/ninetoothed/*.c", "../build/ninetoothed/*.cpp", {cxxflags = {"-Wno-return-type"}})

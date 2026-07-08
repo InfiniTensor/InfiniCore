@@ -114,6 +114,7 @@ from infinicore.ops.moore_mate_flash_attn import (
 )
 from infinicore.ops.mrope import mrope
 from infinicore.ops.mul import mul
+from infinicore.ops.mul_scalar import mul_scalar
 from infinicore.ops.narrow import narrow
 from infinicore.ops.nrm2 import nrm2
 from infinicore.ops.paged_attention import paged_attention
@@ -234,6 +235,7 @@ __all__ = [
     "matmul",
     "equal",
     "mul",
+    "mul_scalar",
     "diff",
     "digamma",
     "dist",

@@ -128,6 +128,9 @@ class Tensor:
     def __mul__(self, other):
         return infinicore.mul(self, other)
 
+    def __rmul__(self, other):
+        return infinicore.mul(self, other)
+
     def narrow(self, dim, start, length):
         return infinicore.narrow(self, dim, start, length)
 
