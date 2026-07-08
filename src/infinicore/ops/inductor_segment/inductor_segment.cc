@@ -1,5 +1,9 @@
 #include "infinicore/ops/inductor_segment.hpp"
 
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
+#include <c10/cuda/CUDAGuard.h>
+#endif
+
 #include "../../utils.hpp"
 #include "inductor_segment_registry.hpp"
 
@@ -62,16 +66,34 @@ void fill_positions_padded_into(
     }
 }
 
+void restore_cuda_context(const infinicore::Device &device) {
+    infinicore::context::setDevice(device);
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
+    c10::cuda::CUDAGuard guard(static_cast<int>(device.getIndex()));
+#endif
+}
+
+auto as_contiguous_on_device(const at::Tensor &tensor) -> at::Tensor {
+    if (tensor.is_contiguous()) {
+        return tensor;
+    }
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
+    if (tensor.device().is_cuda()) {
+        c10::cuda::CUDAGuard guard(static_cast<int>(tensor.device().index()));
+        return tensor.contiguous();
+    }
+#endif
+    return tensor.contiguous();
+}
+
 void copy_tensor_if_needed(infinicore::Tensor &dst, const at::Tensor &src) {
+    const auto device = dst->device();
+    restore_cuda_context(device);
     auto dst_aten = infinicore::adaptor::to_aten_tensor(dst);
     if (dst_aten.data_ptr() == src.data_ptr()) {
         return;
     }
-    if (src.is_contiguous()) {
-        dst_aten.copy_(src);
-    } else {
-        dst_aten.copy_(src.contiguous());
-    }
+    dst_aten.copy_(as_contiguous_on_device(src));
 }
 
 void run_pre_attn_segment(
@@ -85,14 +107,32 @@ void run_pre_attn_segment(
     size_t layer_idx,
     size_t bucket,
     size_t valid_len) {
+    const auto rank_device = hidden_states->device();
+    restore_cuda_context(rank_device);
+
+    bool layer_agnostic = false;
     auto &runner = infinicore::op::inductor_segment_impl::InductorSegmentRegistry::instance().runner(
-        infinicore::op::PiecewiseInductorSegmentId::PreAttn, layer_idx, bucket);
+        infinicore::op::PiecewiseInductorSegmentId::PreAttn,
+        layer_idx,
+        bucket,
+        &layer_agnostic);
 
     fill_positions_padded_into(positions_padded, positions, bucket, valid_len);
 
     auto hidden = infinicore::adaptor::to_aten_tensor(hidden_states);
     auto res = infinicore::adaptor::to_aten_tensor(residual);
     auto pos = infinicore::adaptor::to_aten_tensor(positions_padded);
+
+    std::vector<at::Tensor> inputs = {hidden, res, pos};
+    if (layer_agnostic) {
+        auto weights = infinicore::op::inductor_segment_impl::resolve_pre_attn_weights(layer_idx);
+        inputs.push_back(weights.ln_weight);
+        inputs.push_back(weights.q_weight);
+        inputs.push_back(weights.k_weight);
+        inputs.push_back(weights.v_weight);
+        inputs.push_back(weights.q_norm_weight);
+        inputs.push_back(weights.k_norm_weight);
+    }
 
     // #region agent log
     agent_debug_log(
@@ -106,7 +146,7 @@ void run_pre_attn_segment(
     // #endregion
 
     std::vector<at::Tensor> outputs = runner.run(
-        {hidden, res, pos},
+        inputs,
         infinicore::context::getStream());
     if (outputs.size() < 5) {
         throw std::runtime_error(
@@ -119,6 +159,11 @@ void run_pre_attn_segment(
     copy_tensor_if_needed(q_rope, outputs[2]);
     copy_tensor_if_needed(k_rope, outputs[3]);
     copy_tensor_if_needed(v_rope, outputs[4]);
+    restore_cuda_context(rank_device);
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
+    c10::cuda::getCurrentCUDAStream().synchronize();
+#endif
+    infinicore::context::syncDevice();
 }
 #endif // ENABLE_ATEN
 
@@ -193,6 +238,36 @@ void inductor_segment_(const Tensor &positions,
         segment_id,
         layer_idx,
         bucket);
+}
+
+void inductor_warmup_pre_attn_bucket(
+    const Tensor &positions,
+    Tensor &positions_padded,
+    Tensor &hidden_states,
+    Tensor &residual,
+    size_t layer_idx,
+    size_t bucket,
+    size_t valid_len) {
+#ifdef ENABLE_ATEN
+    inductor_segment_impl::warmup_pre_attn(
+        positions,
+        positions_padded,
+        hidden_states,
+        residual,
+        layer_idx,
+        bucket,
+        valid_len);
+#else
+    (void)positions;
+    (void)positions_padded;
+    (void)hidden_states;
+    (void)residual;
+    (void)layer_idx;
+    (void)bucket;
+    (void)valid_len;
+    throw std::runtime_error(
+        "inductor_warmup_pre_attn_bucket requires ENABLE_ATEN InfiniCore build");
+#endif
 }
 
 namespace inductor_segment_impl {
@@ -288,17 +363,80 @@ void warmup_pre_attn(
     size_t layer_idx,
     size_t bucket,
     size_t valid_len) {
+    const auto rank_device = hidden_states->device();
+    restore_cuda_context(rank_device);
+
+    bool layer_agnostic = false;
     auto &runner = InductorSegmentRegistry::instance().runner(
-        PiecewiseInductorSegmentId::PreAttn, layer_idx, bucket);
+        PiecewiseInductorSegmentId::PreAttn, layer_idx, bucket, &layer_agnostic);
     fill_positions_padded_into(positions_padded, positions, bucket, valid_len);
     auto hidden = infinicore::adaptor::to_aten_tensor(hidden_states);
     auto res = infinicore::adaptor::to_aten_tensor(residual);
     auto pos = infinicore::adaptor::to_aten_tensor(positions_padded);
-    runner.warmup({hidden, res, pos});
+    std::vector<at::Tensor> inputs = {hidden, res, pos};
+    if (layer_agnostic) {
+        auto weights = resolve_pre_attn_weights(layer_idx);
+        inputs.push_back(weights.ln_weight);
+        inputs.push_back(weights.q_weight);
+        inputs.push_back(weights.k_weight);
+        inputs.push_back(weights.v_weight);
+        inputs.push_back(weights.q_norm_weight);
+        inputs.push_back(weights.k_norm_weight);
+    }
+    runner.warmup(inputs);
+    restore_cuda_context(rank_device);
 }
 #endif
 
 INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(InductorSegment, &plan, &run, &cleanup);
+
+namespace {
+
+std::function<PreAttnExternalWeightTensors(size_t)> g_pre_attn_ic_resolver;
+
+auto as_contiguous_aten(const infinicore::Tensor &tensor) -> at::Tensor {
+    auto out = infinicore::adaptor::to_aten_tensor(tensor);
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
+    if (out.device().is_cuda()) {
+        c10::cuda::CUDAGuard guard(static_cast<int>(out.device().index()));
+        return out.is_contiguous() ? out : out.contiguous();
+    }
+#endif
+    return out.is_contiguous() ? out : out.contiguous();
+}
+
+PreAttnExternalWeights to_aten_weights(const PreAttnExternalWeightTensors &ic) {
+    PreAttnExternalWeights out;
+    out.ln_weight = as_contiguous_aten(ic.ln_weight);
+    out.q_weight = as_contiguous_aten(ic.q_weight);
+    out.k_weight = as_contiguous_aten(ic.k_weight);
+    out.v_weight = as_contiguous_aten(ic.v_weight);
+    out.q_norm_weight = as_contiguous_aten(ic.q_norm_weight);
+    out.k_norm_weight = as_contiguous_aten(ic.k_norm_weight);
+    return out;
+}
+
+} // namespace
+
+void set_pre_attn_weight_resolver(
+    std::function<PreAttnExternalWeightTensors(size_t layer_idx)> resolver) {
+    g_pre_attn_ic_resolver = std::move(resolver);
+    if (!g_pre_attn_ic_resolver) {
+        inductor_segment_impl::set_pre_attn_aten_weight_resolver(nullptr);
+        return;
+    }
+    inductor_segment_impl::set_pre_attn_aten_weight_resolver([](size_t layer_idx) {
+        if (!g_pre_attn_ic_resolver) {
+            throw std::runtime_error("InductorSegment: pre_attn weight resolver cleared");
+        }
+        return to_aten_weights(g_pre_attn_ic_resolver(layer_idx));
+    });
+}
+
+void clear_pre_attn_weight_resolver() {
+    g_pre_attn_ic_resolver = nullptr;
+    inductor_segment_impl::set_pre_attn_aten_weight_resolver(nullptr);
+}
 
 } // namespace inductor_segment_impl
 

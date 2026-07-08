@@ -3,6 +3,9 @@
 #include "../device.hpp"
 #include "common/op.hpp"
 
+#include <functional>
+#include <string>
+
 namespace infinicore::op {
 
 /// M4 piecewise segment ids (mirror ``piecewise_segments.py``).
@@ -35,14 +38,34 @@ void inductor_segment_(
     size_t layer_idx,
     size_t bucket);
 
+/// Eager AOT warmup on the current rank/device (before hcGraph capture).
+void inductor_warmup_pre_attn_bucket(
+    const Tensor &positions,
+    Tensor &positions_padded,
+    Tensor &hidden_states,
+    Tensor &residual,
+    size_t layer_idx,
+    size_t bucket,
+    size_t valid_len);
+
 namespace inductor_segment_impl {
+
+struct PreAttnExternalWeightTensors {
+    Tensor ln_weight;
+    Tensor q_weight;
+    Tensor k_weight;
+    Tensor v_weight;
+    Tensor q_norm_weight;
+    Tensor k_norm_weight;
+};
 
 void register_package(
     PiecewiseInductorSegmentId segment_id,
     size_t layer_idx,
     size_t bucket,
     const std::string &package_path,
-    size_t tp_rank = 0);
+    size_t tp_rank = 0,
+    bool layer_agnostic = false);
 
 void clear_packages();
 
@@ -50,6 +73,11 @@ bool has_package(
     PiecewiseInductorSegmentId segment_id,
     size_t layer_idx,
     size_t bucket);
+
+void set_pre_attn_weight_resolver(
+    std::function<PreAttnExternalWeightTensors(size_t layer_idx)> resolver);
+
+void clear_pre_attn_weight_resolver();
 
 void set_lookup_tp_rank_override(size_t tp_rank);
 void clear_lookup_tp_rank_override();

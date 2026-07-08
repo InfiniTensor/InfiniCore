@@ -27,18 +27,28 @@ inline void bind(py::module &m) {
     m.def(
         "register_piecewise_inductor_package",
         [](const std::string &segment,
-           size_t layer_idx,
+           py::ssize_t layer_idx,
            size_t bucket,
            const std::string &package_path,
-           size_t tp_rank) {
+           size_t tp_rank,
+           bool layer_agnostic) {
+            size_t reg_layer = layer_agnostic
+                                   ? static_cast<size_t>(-1)
+                                   : static_cast<size_t>(layer_idx);
             infinicore::op::inductor_segment_impl::register_package(
-                parse_segment_id(segment), layer_idx, bucket, package_path, tp_rank);
+                parse_segment_id(segment),
+                reg_layer,
+                bucket,
+                package_path,
+                tp_rank,
+                layer_agnostic);
         },
         py::arg("segment"),
         py::arg("layer_idx"),
         py::arg("bucket"),
         py::arg("package_path"),
-        py::arg("tp_rank") = 0);
+        py::arg("tp_rank") = 0,
+        py::arg("layer_agnostic") = false);
 
     m.def(
         "set_piecewise_inductor_lookup_tp_rank",

@@ -23,6 +23,8 @@ public:
     void warmup(const std::vector<at::Tensor> &inputs);
 
 private:
+    void ensure_loader_();
+
     std::string package_path_;
     std::unique_ptr<torch::inductor::AOTIModelPackageLoader> loader_;
 };
