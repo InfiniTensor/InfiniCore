@@ -35,9 +35,9 @@ __device__ inline float loadAsFloat<cuda_bfloat16>(const cuda_bfloat16 *ptr, ptr
 __device__ inline float warpReduceSum(float value) {
 #pragma unroll
     for (int offset = 16; offset > 0; offset >>= 1) {
-        value += __shfl_down_sync(0xffffffff, value, offset);
+        value += __shfl_down_sync(0xffffffff, value, offset, 32);
     }
-    return __shfl_sync(0xffffffff, value, 0);
+    return __shfl_sync(0xffffffff, value, 0, 32);
 }
 template <typename Tdata, typename Tgate, typename Tcompute, size_t Dk, size_t Dv, size_t WARPS_PER_BLOCK>
 __device__ void recurrentGatedDeltaRuleIndexedPoolWarpKernel(
