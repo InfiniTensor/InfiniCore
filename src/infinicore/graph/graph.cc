@@ -4,6 +4,8 @@
 #include "infinicore/context/context.hpp"
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
+#include <chrono>
 #include <infinirt.h>
 #include <string>
 
@@ -15,6 +17,45 @@ bool graph_strict_replay_enabled() {
     const char *v = std::getenv("INFINI_GRAPH_STRICT_REPLAY");
     return v != nullptr && v[0] != '\0' && std::string(v) != "0";
 }
+
+infinirtStreamCaptureMode_t graph_capture_mode() {
+    const char *v = std::getenv("INFINI_GRAPH_CAPTURE_MODE");
+    if (v == nullptr) {
+        return INFINIRT_STREAM_CAPTURE_MODE_RELAXED;
+    }
+    if (std::strcmp(v, "global") == 0) {
+        return INFINIRT_STREAM_CAPTURE_MODE_GLOBAL;
+    }
+    if (std::strcmp(v, "thread_local") == 0) {
+        return INFINIRT_STREAM_CAPTURE_MODE_THREAD_LOCAL;
+    }
+    return INFINIRT_STREAM_CAPTURE_MODE_RELAXED;
+}
+
+[[noreturn]] void throw_graph_fatal(const std::string &msg) {
+    throw std::runtime_error(msg);
+}
+
+// #region agent log
+void agent_debug_log(
+    const char *location,
+    const char *message,
+    const char *hypothesis_id,
+    const std::string &data_json) {
+    std::ofstream out(
+        "/opt/offline/infinilm-metax-20260622/.cursor/debug-1c7a11.log",
+        std::ios::app);
+    if (!out) {
+        return;
+    }
+    const auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::system_clock::now().time_since_epoch())
+                      .count();
+    out << "{\"sessionId\":\"1c7a11\",\"location\":\"" << location
+        << "\",\"message\":\"" << message << "\",\"hypothesisId\":\"" << hypothesis_id
+        << "\",\"data\":" << data_json << ",\"timestamp\":" << ts << "}\n";
+}
+// #endregion
 
 } // namespace
 
@@ -80,13 +121,38 @@ Graph::Graph() {
 
 void Graph::run() const {
     if (device_graph_ != nullptr && device_graph_->exec != nullptr) {
+        // #region agent log
+        agent_debug_log(
+            "graph.cc:Graph::run",
+            "device_exec_launch_attempt",
+            "H1",
+            std::string("{\"stream_ptr\":") + std::to_string(
+                reinterpret_cast<uintptr_t>(context::getStream()))
+                + ",\"exec_ptr\":"
+                + std::to_string(reinterpret_cast<uintptr_t>(device_graph_->exec)) + "}");
+        // #endregion
         if (infinirtGraphLuanch(device_graph_->exec, context::getStream()) == INFINI_STATUS_SUCCESS) {
             ++replay_device_ok_;
             last_replay_used_device_ = true;
+            // #region agent log
+            agent_debug_log(
+                "graph.cc:Graph::run",
+                "device_exec_launch_ok",
+                "H1",
+                "{\"ok\":true}");
+            // #endregion
             return;
         }
         ++replay_op_list_fallback_;
         last_replay_used_device_ = false;
+        // #region agent log
+        agent_debug_log(
+            "graph.cc:Graph::run",
+            "device_exec_launch_failed",
+            "H1",
+            "{\"ok\":false,\"strict\":"
+                + std::string(graph_strict_replay_enabled() ? "true" : "false") + "}");
+        // #endregion
         spdlog::warn("hcGraphLaunch replay failed; falling back to op-list replay");
         if (graph_strict_replay_enabled()) {
             throw std::runtime_error("hcGraphLaunch replay failed (INFINI_GRAPH_STRICT_REPLAY=1)");
@@ -130,26 +196,39 @@ void Graph::instantiate() {
     // Reset device graph
     device_graph_ = std::make_unique<DeviceGraph>();
 
-    // warmup
+    // Pre-capture warmup: op-list only (device exec is null; avoid probing stale exec).
     for (size_t iter = 0; iter < 5; ++iter) {
-        this->run();
+        run_op_list_();
     }
     infinicore::context::syncStream();
 
-    if (infinirtStreamBeginCapture(
-            context::getStream(),
-            INFINIRT_STREAM_CAPTURE_MODE_RELAXED)
+    const auto capture_mode = graph_capture_mode();
+    // #region agent log
+    agent_debug_log(
+        "graph.cc:Graph::instantiate",
+        "begin_capture",
+        "H5",
+        std::string("{\"capture_mode\":") + std::to_string(static_cast<int>(capture_mode))
+            + ",\"op_count\":" + std::to_string(op_list_.size()) + "}");
+    // #endregion
+    if (infinirtStreamBeginCapture(context::getStream(), capture_mode)
         != INFINI_STATUS_SUCCESS) {
+        if (graph_strict_replay_enabled()) {
+            throw_graph_fatal("infinirtStreamBeginCapture failed (INFINI_GRAPH_STRICT_REPLAY=1)");
+        }
         return;
     }
 
-    // Run and record
-    this->run();
+    // Record op-list into hcGraph (exec still null during capture).
+    run_op_list_();
 
     if (infinirtStreamEndCapture(
             context::getStream(),
             &device_graph_.get()->graph)
         != INFINI_STATUS_SUCCESS) {
+        if (graph_strict_replay_enabled()) {
+            throw_graph_fatal("infinirtStreamEndCapture failed (INFINI_GRAPH_STRICT_REPLAY=1)");
+        }
         return;
     }
 
@@ -161,13 +240,44 @@ void Graph::instantiate() {
             device_graph_.get()->log_buffer.size())
         != INFINI_STATUS_SUCCESS) {
         const std::string log_msg = device_graph_log();
+        // #region agent log
+        agent_debug_log(
+            "graph.cc:Graph::instantiate",
+            "instantiate_failed",
+            "H5",
+            "{\"ok\":false}");
+        // #endregion
+        if (graph_strict_replay_enabled()) {
+            throw_graph_fatal(
+                "infinirtGraphInstantiate failed (INFINI_GRAPH_STRICT_REPLAY=1): " + log_msg);
+        }
         spdlog::warn("Fail to instantiate device graph (op-list replay fallback): {}", log_msg);
-    } else if (device_graph_->exec != nullptr
-               && infinirtGraphLuanch(device_graph_->exec, context::getStream()) != INFINI_STATUS_SUCCESS) {
-        spdlog::warn("Device graph exec launch probe failed; op-list replay fallback");
-        infinirtGraphExecDestroy(device_graph_->exec);
-        device_graph_->exec = nullptr;
-        infinicore::context::syncStream();
+    } else {
+        const bool probe_ok = device_graph_->exec == nullptr
+                              || infinirtGraphLuanch(device_graph_->exec, context::getStream())
+                                     == INFINI_STATUS_SUCCESS;
+        // #region agent log
+        agent_debug_log(
+            "graph.cc:Graph::instantiate",
+            "instantiate_done",
+            "H5",
+            std::string("{\"exec_ptr\":")
+                + std::to_string(reinterpret_cast<uintptr_t>(device_graph_->exec))
+                + ",\"probe_ok\":" + (probe_ok ? "true" : "false") + "}");
+        // #endregion
+        if (device_graph_->exec != nullptr && !probe_ok) {
+            if (graph_strict_replay_enabled()) {
+                infinirtGraphExecDestroy(device_graph_->exec);
+                device_graph_->exec = nullptr;
+                infinicore::context::syncStream();
+                throw_graph_fatal(
+                    "hcGraphLaunch instantiate probe failed (INFINI_GRAPH_STRICT_REPLAY=1)");
+            }
+            spdlog::warn("Device graph exec launch probe failed; op-list replay fallback");
+            infinirtGraphExecDestroy(device_graph_->exec);
+            device_graph_->exec = nullptr;
+            infinicore::context::syncStream();
+        }
     }
 }
 

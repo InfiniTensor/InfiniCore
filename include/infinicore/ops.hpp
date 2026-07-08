@@ -24,6 +24,7 @@
 #include "ops/cross_entropy.hpp"
 #include "ops/embedding.hpp"
 #include "ops/flash_attention.hpp"
+#include "ops/inductor_segment.hpp"
 #include "ops/fmin.hpp"
 #include "ops/fmod.hpp"
 #include "ops/gelu.hpp"

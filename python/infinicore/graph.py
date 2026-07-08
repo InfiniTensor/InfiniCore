@@ -14,5 +14,20 @@ class Graph:
     def run(self):
         return self._graph.run()
 
+    def has_device_exec(self) -> bool:
+        return self._graph.has_device_exec()
+
+    def device_graph_log(self) -> str:
+        return self._graph.device_graph_log()
+
+    def last_replay_used_device(self) -> bool:
+        return self._graph.last_replay_used_device()
+
+    def replay_device_ok(self) -> int:
+        return self._graph.replay_device_ok()
+
+    def replay_op_list_fallback(self) -> int:
+        return self._graph.replay_op_list_fallback()
+
     def __repr__(self):
         return f"<Graph wrapper of {self._graph!r}>"

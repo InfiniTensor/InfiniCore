@@ -10,6 +10,7 @@
 #include "io.hpp"
 #include "ops.hpp"
 #include "tensor.hpp"
+#include "compiled_subgraphs.hpp"
 
 #ifdef ENABLE_MUTUAL_AWARENESS
 #include "analyzer.hpp"
@@ -26,6 +27,7 @@ PYBIND11_MODULE(_infinicore, m) {
     tensor::bind(m);
     io::bind(m);
     graph::bind(m);
+    compiled_subgraphs::bind(m);
 
 #ifdef ENABLE_MUTUAL_AWARENESS
     analyzer::pybind::bind(m);

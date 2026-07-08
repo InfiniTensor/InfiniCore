@@ -12,6 +12,11 @@ inline void bind(py::module_ &m) {
     py::class_<infinicore::graph::Graph,
                std::shared_ptr<infinicore::graph::Graph>>(m, "Graph")
         .def(py::init<>()) // allow construction
-        .def("run", &infinicore::graph::Graph::run);
+        .def("run", &infinicore::graph::Graph::run)
+        .def("has_device_exec", &infinicore::graph::Graph::has_device_exec)
+        .def("device_graph_log", &infinicore::graph::Graph::device_graph_log)
+        .def("last_replay_used_device", &infinicore::graph::Graph::last_replay_used_device)
+        .def("replay_device_ok", &infinicore::graph::Graph::replay_device_ok)
+        .def("replay_op_list_fallback", &infinicore::graph::Graph::replay_op_list_fallback);
 }
 } // namespace infinicore::graph
