@@ -41,6 +41,7 @@
 #include "infiniop/ops/deepseek_v4_compressor.h"
 #include "infiniop/ops/deepseek_v4_router.h"
 #include "infiniop/ops/deepseek_v4_mhc.h"
+#include "infiniop/ops/deepseek_v4_mhc_head.h"
 #include "infiniop/ops/deepseek_v4_indexer.h"
 #include "infiniop/ops/dequant/per_tensor_dequant_int8.h"
 #include "infiniop/ops/dequantize_awq.h"
