@@ -4,5 +4,7 @@
 #include "../deepseek_v4_mhc.h"
 
 PARAMS_DESCRIPTOR(nvidia)
+PRE_COLLAPSE_DESCRIPTOR(nvidia)
+SCALE_MIXES_DESCRIPTOR(nvidia)
 
 #endif
