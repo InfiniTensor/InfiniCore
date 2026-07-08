@@ -2,6 +2,22 @@
 #define __PER_CHANNEL_QUANT_INT8_KERNEL_CUH__
 
 #include <cub/block/block_reduce.cuh>
+
+namespace per_channel_quant_int8_detail {
+
+struct CubMinFallback {
+    __host__ __device__ __forceinline__ float operator()(float a, float b) const {
+        return fminf(a, b);
+    }
+};
+
+struct CubMaxFallback {
+    __host__ __device__ __forceinline__ float operator()(float a, float b) const {
+        return fmaxf(a, b);
+    }
+};
+
+} // namespace per_channel_quant_int8_detail
 __device__ inline int round_half_away_from_zero(float x) {
     float ax = fabsf(x);
     float r = floorf(ax + 0.5f);
@@ -33,7 +49,9 @@ __device__ void blockPerChannelQuantI8Kernel(
     for (int ind = threadIdx.x; ind < K; ind += BLOCK_SIZE) {
         thread_min = fminf(thread_min, (float)x[tid + ind]);
     }
-#if CUDART_VERSION >= 12090
+#if defined(INFINIOP_HYGON_GFX906)
+    float local_min = BlockReduce(temp_storage).Reduce(thread_min, per_channel_quant_int8_detail::CubMinFallback());
+#elif CUDART_VERSION >= 12090
     float local_min = BlockReduce(temp_storage).Reduce(thread_min, ::cuda::minimum());
 #else
     float local_min = BlockReduce(temp_storage).Reduce(thread_min, cub::Min());
@@ -91,7 +109,9 @@ __device__ void blockPerChannelQuantI8SymKernel(
     for (int ind = threadIdx.x; ind < K; ind += BLOCK_SIZE) {
         thread_max = fmaxf(thread_max, fabs((float)x[tid + ind]));
     }
-#if CUDART_VERSION >= 12090
+#if defined(INFINIOP_HYGON_GFX906)
+    float local_max = BlockReduce(temp_storage).Reduce(thread_max, per_channel_quant_int8_detail::CubMaxFallback());
+#elif CUDART_VERSION >= 12090
     float local_max = BlockReduce(temp_storage).Reduce(thread_max, ::cuda::maximum());
 #else
     float local_max = BlockReduce(temp_storage).Reduce(thread_max, cub::Max());
