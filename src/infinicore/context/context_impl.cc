@@ -82,6 +82,16 @@ ContextImpl::ContextImpl() {
         }
     }
 
+    if constexpr (infini::rt::DeviceEnabled<infini::rt::Device::Type::kAscend>::value) {
+        infini::rt::set_runtime_device_type(bridge::infini::rt::translate(INFINI_DEVICE_ASCEND));
+        INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::GetDeviceCount(&device_counter[static_cast<int>(Device::Type::ASCEND)])));
+        runtime_table_[static_cast<int>(Device::Type::ASCEND)].resize(device_counter[static_cast<int>(Device::Type::ASCEND)]);
+        if (device_counter[static_cast<int>(Device::Type::ASCEND)] > 0) {
+            runtime_table_[static_cast<int>(Device::Type::ASCEND)][0] = std::unique_ptr<Runtime>(new Runtime(Device(Device::Type::ASCEND, 0)));
+            current_runtime_ = runtime_table_[static_cast<int>(Device::Type::ASCEND)][0].get();
+        }
+    }
+
     if (current_runtime_ == nullptr && !runtime_table_[static_cast<int>(Device::Type::CPU)].empty()) {
         current_runtime_ = runtime_table_[static_cast<int>(Device::Type::CPU)][0].get();
     }

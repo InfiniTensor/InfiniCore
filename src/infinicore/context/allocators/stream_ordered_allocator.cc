@@ -13,7 +13,10 @@ std::byte *StreamOrderedAllocator::allocate(size_t size) {
     }
     void *ptr = nullptr;
     if (device_.getType() != Device::Type::CPU) {
-        INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::MallocAsync(&ptr, size, bridge::infini::rt::translate(context::getStream()))));
+        INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::MallocAsync(
+            &ptr,
+            size,
+            bridge::infini::rt::to_rt_stream(context::getStream()))));
     } else {
         INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::Malloc(&ptr, size)));
     }
@@ -25,7 +28,9 @@ void StreamOrderedAllocator::deallocate(std::byte *ptr) {
         return;
     }
     if (device_.getType() != Device::Type::CPU) {
-        INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::FreeAsync(ptr, bridge::infini::rt::translate(context::getStream()))));
+        INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::FreeAsync(
+            ptr,
+            bridge::infini::rt::to_rt_stream(context::getStream()))));
     } else {
         INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::Free(ptr)));
     }
