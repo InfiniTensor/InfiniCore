@@ -85,6 +85,7 @@
 #include "ops/moe_topk_softmax.hpp"
 #include "ops/mrope.hpp"
 #include "ops/mul.hpp"
+#include "ops/mul_scalar.hpp"
 #include "ops/multi_margin_loss.hpp"
 #include "ops/nrm2.hpp"
 #include "ops/pad.hpp"
@@ -186,6 +187,7 @@ inline void bind(py::module &m) {
     bind_mamba_selective_scan(m);
     bind_kron(m);
     bind_mul(m);
+    bind_mul_scalar(m);
     bind_nrm2(m);
     bind_mha_kvcache(m);
     bind_mha_varlen(m);

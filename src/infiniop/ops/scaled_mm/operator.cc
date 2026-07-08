@@ -2,7 +2,7 @@
 #include "../../handle.h"
 #include "infiniop/ops/int8_gemm.h"
 
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/int8_gemm_nvidia.cuh"
 #endif
 
@@ -36,6 +36,9 @@ __INFINI_C infiniStatus_t infiniopCreateI8GemmDescriptor(infiniopHandle_t handle
 #if defined(ENABLE_QY_API)
         CREATE(INFINI_DEVICE_QY, nvidia)
 #endif
+#if defined(ENABLE_HYGON_API)
+        CREATE(INFINI_DEVICE_HYGON, nvidia)
+#endif
 #if defined(ENABLE_MOORE_API)
         CREATE(INFINI_DEVICE_MOORE, moore)
 #endif
@@ -56,6 +59,9 @@ __INFINI_C infiniStatus_t infiniopGetI8GemmWorkspaceSize(infiniopI8GemmDescripto
 #endif
 #if defined(ENABLE_QY_API)
         GET(INFINI_DEVICE_QY, nvidia)
+#endif
+#if defined(ENABLE_HYGON_API)
+        GET(INFINI_DEVICE_HYGON, nvidia)
 #endif
 #if defined(ENABLE_MOORE_API)
         GET(INFINI_DEVICE_MOORE, moore)
@@ -87,6 +93,9 @@ __INFINI_C infiniStatus_t infiniopI8Gemm(infiniopI8GemmDescriptor_t desc,
 #if defined(ENABLE_QY_API)
         CACULATE(INFINI_DEVICE_QY, nvidia)
 #endif
+#if defined(ENABLE_HYGON_API)
+        CACULATE(INFINI_DEVICE_HYGON, nvidia)
+#endif
 #if defined(ENABLE_MOORE_API)
         CACULATE(INFINI_DEVICE_MOORE, moore)
 #endif
@@ -107,6 +116,9 @@ __INFINI_C infiniStatus_t infiniopDestroyI8GemmDescriptor(infiniopI8GemmDescript
 #endif
 #if defined(ENABLE_QY_API)
         DESTROY(INFINI_DEVICE_QY, nvidia)
+#endif
+#if defined(ENABLE_HYGON_API)
+        DESTROY(INFINI_DEVICE_HYGON, nvidia)
 #endif
 #if defined(ENABLE_MOORE_API)
         DESTROY(INFINI_DEVICE_MOORE, moore)
