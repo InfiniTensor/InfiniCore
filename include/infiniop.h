@@ -104,6 +104,7 @@
 #include "infiniop/ops/moe_topk_softmax.h"
 #include "infiniop/ops/mrope.h"
 #include "infiniop/ops/mul.h"
+#include "infiniop/ops/mul_scalar.h"
 #include "infiniop/ops/multi_margin_loss.h"
 #include "infiniop/ops/nrm2.h"
 #include "infiniop/ops/nsa_compress_paged_cache.h"
