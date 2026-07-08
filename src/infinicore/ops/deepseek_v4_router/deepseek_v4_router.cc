@@ -6,6 +6,7 @@ namespace infinicore::op {
 
 INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(DeepseekV4TopkRouter);
 INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(DeepseekV4HashRouter);
+INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(DeepseekV4HashTopkRouter);
 
 DeepseekV4TopkRouter::DeepseekV4TopkRouter(Tensor topk_weights,
                                            Tensor topk_indices,
@@ -117,6 +118,71 @@ void deepseek_v4_hash_router_(Tensor topk_weights,
                               const Tensor &tid2eid,
                               bool renormalize) {
     DeepseekV4HashRouter::execute(topk_weights, topk_indices, logits, input_ids, tid2eid, renormalize);
+}
+
+
+DeepseekV4HashTopkRouter::DeepseekV4HashTopkRouter(Tensor topk_weights,
+                                                   Tensor topk_indices,
+                                                   const Tensor &hidden_states,
+                                                   const Tensor &weight,
+                                                   const Tensor &input_ids,
+                                                   const Tensor &tid2eid,
+                                                   bool renormalize) {
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(topk_weights, topk_indices, hidden_states, weight, input_ids, tid2eid);
+    INFINICORE_GRAPH_OP_DISPATCH(
+        topk_weights->device().getType(),
+        topk_weights,
+        topk_indices,
+        hidden_states,
+        weight,
+        input_ids,
+        tid2eid,
+        renormalize);
+}
+
+void DeepseekV4HashTopkRouter::execute(Tensor topk_weights,
+                                       Tensor topk_indices,
+                                       const Tensor &hidden_states,
+                                       const Tensor &weight,
+                                       const Tensor &input_ids,
+                                       const Tensor &tid2eid,
+                                       bool renormalize) {
+    INFINICORE_GRAPH_OP_RECORD_OR_RUN(
+        DeepseekV4HashTopkRouter,
+        topk_weights,
+        topk_indices,
+        hidden_states,
+        weight,
+        input_ids,
+        tid2eid,
+        renormalize);
+}
+
+std::tuple<Tensor, Tensor> deepseek_v4_hash_topk_router(
+    const Tensor &hidden_states,
+    const Tensor &weight,
+    const Tensor &input_ids,
+    const Tensor &tid2eid,
+    bool renormalize) {
+    auto hidden_shape = hidden_states->shape();
+    auto table_shape = tid2eid->shape();
+    INFINICORE_ASSERT(hidden_shape.size() == 2);
+    INFINICORE_ASSERT(table_shape.size() == 2);
+    auto topk = table_shape[1];
+    auto topk_weights = Tensor::empty({hidden_shape[0], topk}, DataType::F32, hidden_states->device());
+    auto topk_indices = Tensor::empty({hidden_shape[0], topk}, DataType::I32, hidden_states->device());
+    deepseek_v4_hash_topk_router_(topk_weights, topk_indices, hidden_states, weight, input_ids, tid2eid, renormalize);
+    return {topk_weights, topk_indices};
+}
+
+void deepseek_v4_hash_topk_router_(Tensor topk_weights,
+                                   Tensor topk_indices,
+                                   const Tensor &hidden_states,
+                                   const Tensor &weight,
+                                   const Tensor &input_ids,
+                                   const Tensor &tid2eid,
+                                   bool renormalize) {
+    DeepseekV4HashTopkRouter::execute(topk_weights, topk_indices, hidden_states, weight, input_ids, tid2eid, renormalize);
 }
 
 } // namespace infinicore::op

@@ -5,5 +5,6 @@
 
 TOPK_DESCRIPTOR(nvidia)
 HASH_DESCRIPTOR(nvidia)
+HASH_TOPK_DESCRIPTOR(nvidia)
 
 #endif
