@@ -101,12 +101,13 @@ local function resolve_hygon_arch()
 end
 
 local HYGON_ARCH = resolve_hygon_arch()
-local HYGON_NEEDS_CUB_REDUCE_FALLBACK = HYGON_ARCH == "gfx906"
+local HYGON_SKIP_PER_CHANNEL_QUANT_INT8 = HYGON_ARCH == "gfx906"
 print("编译海光DCU架构: " .. HYGON_ARCH)
-if HYGON_NEEDS_CUB_REDUCE_FALLBACK then
-    print("Hygon gfx906: use cub reduce fallback for per_channel_quant_int8")
-    add_defines("INFINIOP_HYGON_GFX906")
+if HYGON_SKIP_PER_CHANNEL_QUANT_INT8 then
+    print("Hygon gfx906: skip per_channel_quant_int8 operator")
+    add_defines("INFINIOP_DISABLE_HYGON_PER_CHANNEL_QUANT_INT8")
 end
+
 target("infiniop-hygon")
     set_kind("static")
     set_languages("cxx17")
@@ -144,7 +145,9 @@ target("infiniop-hygon")
 
     -- 复用NVIDIA的CUDA实现，通过HIP兼容层
     add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")
-    add_files("../src/infiniop/ops/quant/per_channel_quant_int8/nvidia/*.cu")
+    if not HYGON_SKIP_PER_CHANNEL_QUANT_INT8 then
+        add_files("../src/infiniop/ops/quant/per_channel_quant_int8/nvidia/*.cu")
+    end
 
     -- Keep platform-specific or currently unregistered NVIDIA sources out of the Hygon target.
     remove_files("../src/infiniop/ops/avg_pool3d/nvidia/*.cu")
