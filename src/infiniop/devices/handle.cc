@@ -1,6 +1,6 @@
 #include "infiniop/handle.h"
+#include "../../bridge/infini/rt.hpp"
 #include "../../utils.h"
-#include "infinirt.h"
 
 #ifdef ENABLE_CPU_API
 #include "cpu/cpu_handle.h"
@@ -24,14 +24,29 @@
 #include "metax/metax_handle.h"
 #endif
 
+__INFINI_C infiniStatus_t infiniopSetRuntimeDevice(infiniDevice_t device, int device_id) {
+    auto rt_device = infinicore::bridge::infini::rt::translate(device);
+    if (rt_device == infini::rt::Device::Type::kCount) {
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    }
+
+    infini::rt::set_runtime_device_type(rt_device);
+    CHECK_STATUS(infinicore::bridge::infini::rt::translate(infini::rt::runtime::SetDevice(device_id)));
+    return INFINI_STATUS_SUCCESS;
+}
+
 __INFINI_C infiniStatus_t infiniopCreateHandle(infiniopHandle_t *handle_ptr) {
     if (handle_ptr == nullptr) {
         return INFINI_STATUS_NULL_POINTER;
     }
 
-    infiniDevice_t device;
-    int device_id;
-    CHECK_STATUS(infinirtGetDevice(&device, &device_id));
+    infiniDevice_t device = infinicore::bridge::infini::rt::translate(infini::rt::runtime_device_type());
+    if (device == INFINI_DEVICE_TYPE_COUNT) {
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    }
+
+    int device_id = 0;
+    CHECK_STATUS(infinicore::bridge::infini::rt::translate(infini::rt::runtime::GetDevice(&device_id)));
 
 #define CREATE(CASE, NAMESPACE) \
     case CASE:                  \

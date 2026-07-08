@@ -1,6 +1,6 @@
 #include "device_pinned_allocator.hpp"
 
-#include <infinirt.h>
+#include "../../../bridge/infini/rt.hpp"
 
 #include "../../utils.hpp"
 
@@ -16,7 +16,7 @@ std::byte *DevicePinnedHostAllocator::allocate(size_t size) {
         return nullptr;
     }
     void *ptr;
-    INFINICORE_CHECK_ERROR(infinirtMallocHost(&ptr, size));
+    INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::MallocHost(&ptr, size)));
     return (std::byte *)ptr;
 }
 
@@ -25,7 +25,7 @@ void DevicePinnedHostAllocator::deallocate(std::byte *ptr) {
         return;
     }
     if (owner_ == context::getDevice()) {
-        INFINICORE_CHECK_ERROR(infinirtFreeHost(ptr));
+        INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::FreeHost(ptr)));
         gc();
     } else {
         gc_queue_.push(ptr);
@@ -35,7 +35,7 @@ void DevicePinnedHostAllocator::deallocate(std::byte *ptr) {
 void DevicePinnedHostAllocator::gc() {
     while (gc_queue_.empty() == false) {
         std::byte *p = gc_queue_.front();
-        INFINICORE_CHECK_ERROR(infinirtFreeHost(p));
+        INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::FreeHost(p)));
         gc_queue_.pop();
     }
 }

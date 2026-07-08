@@ -54,14 +54,20 @@ target_end()
 
 target("infinirt-test")
     set_kind("binary")
-    add_deps("infinirt")
+    set_default(false)
     on_install(function (target) end)
 
     set_languages("cxx17")
     set_warnings("all", "error")
 
+    local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
+    add_includedirs(INFINI_ROOT.."/include")
+    add_linkdirs(INFINI_ROOT.."/lib")
+    add_links("infinirt")
+    add_rpathdirs(INFINI_ROOT.."/lib")
+
     add_files(os.projectdir().."/src/infinirt-test/*.cc")
-    set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
+    set_installdir(INFINI_ROOT)
 target_end()
 
 target("infinicore-test")

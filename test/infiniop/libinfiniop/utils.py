@@ -730,7 +730,7 @@ def test_operator(device, test_func, test_cases, tensor_dtypes):
         to be passed to `test_func`.
     - tensor_dtypes (list): A list of tensor data types (e.g., `torch.float32`) to test.
     """
-    LIBINFINIOP.infinirtSetDevice(device, ctypes.c_int(0))
+    check_error(LIBINFINIOP.infiniopSetRuntimeDevice(device, ctypes.c_int(0)))
     handle = create_handle()
     tensor_dtypes = filter_tensor_dtypes_by_device(device, tensor_dtypes)
     try:

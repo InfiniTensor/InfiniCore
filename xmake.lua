@@ -461,57 +461,13 @@ target("infini-utils")
     add_files("src/utils/*.cc")
 target_end()
 
-target("infinirt")
-    set_kind("shared")
-
-    if has_config("cpu") then
-        add_deps("infinirt-cpu")
-    end
-    if has_config("nv-gpu") then
-        add_deps("infinirt-nvidia")
-    end
-    if has_config("cambricon-mlu") then
-        add_deps("infinirt-cambricon")
-    end
-    if has_config("ascend-npu") then
-        add_deps("infinirt-ascend")
-    end
-    if has_config("metax-gpu") then
-        add_deps("infinirt-metax")
-    end
-    if has_config("moore-gpu") then
-        add_deps("infinirt-moore")
-    end
-    if has_config("iluvatar-gpu") then
-        add_deps("infinirt-iluvatar")
-    end
-    if has_config("ali-ppu") then
-        add_deps("infinirt-ali")
-    end
-    if has_config("qy-gpu") then
-        add_deps("infinirt-qy")
-        add_files("build/.objs/infinirt-qy/rules/qy.cuda/src/infinirt/cuda/*.cu.o", {public = true})
-    end
-    if has_config("kunlun-xpu") then
-        add_deps("infinirt-kunlun")
-    end
-    if has_config("hygon-dcu") then
-        add_deps("infinirt-hygon")
-    end
-    set_languages("cxx17")
-    if not is_plat("windows") then
-        add_cxflags("-fPIC")
-        add_cxxflags("-fPIC")
-        add_ldflags("-fPIC", {force = true})
-    end
-    set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
-    add_files("src/infinirt/*.cc")
-    add_installfiles("include/infinirt.h", {prefixdir = "include"})
-target_end()
-
 target("infiniop")
     set_kind("shared")
-    add_deps("infinirt")
+    local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
+    add_includedirs(INFINI_ROOT.."/include", { public = true })
+    add_linkdirs(INFINI_ROOT.."/lib")
+    add_links("infinirt")
+    add_rpathdirs(INFINI_ROOT.."/lib")
 
     local public_cuda_root = get_config("cuda") or os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH")
     if public_cuda_root and public_cuda_root ~= "" then
@@ -589,7 +545,6 @@ target_end()
 
 target("infiniccl")
     set_kind("shared")
-    add_deps("infinirt")
 
     if has_config("nv-gpu") then
         add_deps("infiniccl-nvidia")
@@ -635,7 +590,7 @@ target_end()
 
 target("infinicore_c_api")
     set_kind("phony")
-    add_deps("infiniop", "infinirt", "infiniccl")
+    add_deps("infiniop", "infiniccl")
     after_build(function (target) print(YELLOW .. "[Congratulations!] Now you can install the libraries with \"xmake install\"" .. NC) end)
 target_end()
 
@@ -650,7 +605,7 @@ target_end()
 
 target("infinicore_cpp_api")
     set_kind("shared")
-    add_deps("infiniop", "infinirt", "infiniccl")
+    add_deps("infiniop", "infiniccl")
     set_languages("cxx17")
     set_symbols("visibility")
 
@@ -715,6 +670,7 @@ target("infinicore_cpp_api")
 
     add_linkdirs(INFINI_ROOT.."/lib")
     add_links("infiniop", "infinirt", "infiniccl")
+    add_rpathdirs(INFINI_ROOT.."/lib")
 
     if get_config("flash-attn") and get_config("flash-attn") ~= "" then
         add_installfiles("(builddir)/$(plat)/$(arch)/$(mode)/flash-attn*.so", {prefixdir = "lib"})

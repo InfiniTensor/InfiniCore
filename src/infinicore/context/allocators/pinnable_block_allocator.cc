@@ -4,8 +4,9 @@
 
 #include "../../utils.hpp"
 
+#include "../../../bridge/infini/rt.hpp"
+
 #include <algorithm>
-#include <infinirt.h>
 #include <stdexcept>
 
 namespace infinicore {
@@ -74,7 +75,7 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
             block->in_use = true;
             block->use_count = 1;
 
-            INFINICORE_CHECK_ERROR(infinirtMalloc(&block->ptr, block->size));
+            INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::Malloc(&block->ptr, block->size)));
 
             all_blocks_[block->ptr] = block;
             return reinterpret_cast<std::byte *>(block->ptr);
@@ -101,7 +102,7 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
     block->in_use = true;
     block->use_count = 1;
 
-    INFINICORE_CHECK_ERROR(infinirtMalloc(&block->ptr, block->size));
+    INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::Malloc(&block->ptr, block->size)));
 
     large_blocks_.push_back(block);
     all_blocks_[block->ptr] = block;
@@ -167,7 +168,7 @@ void PinnableBlockAllocator::trim() {
     for (auto &cls : size_classes_) {
         for (auto it = cls.free_blocks.begin(); it != cls.free_blocks.end();) {
             if (!(*it)->frozen) {
-                INFINICORE_CHECK_ERROR(infinirtFree((*it)->ptr));
+                INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::Free((*it)->ptr)));
                 all_blocks_.erase((*it)->ptr);
                 it = cls.free_blocks.erase(it);
             } else {
@@ -178,7 +179,7 @@ void PinnableBlockAllocator::trim() {
     // Free non-frozen large blocks
     for (auto it = large_blocks_.begin(); it != large_blocks_.end();) {
         if (!(*it)->frozen && !(*it)->in_use) {
-            INFINICORE_CHECK_ERROR(infinirtFree((*it)->ptr));
+            INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::Free((*it)->ptr)));
             all_blocks_.erase((*it)->ptr);
             it = large_blocks_.erase(it);
         } else {
@@ -192,7 +193,7 @@ PinnableBlockAllocator::~PinnableBlockAllocator() {
     std::lock_guard<std::mutex> lock(mutex_);
     for (auto &p : all_blocks_) {
         if (p.second->ptr) {
-            infinirtFree(p.second->ptr);
+            (void)infini::rt::runtime::Free(p.second->ptr);
         }
     }
     all_blocks_.clear();
