@@ -24,6 +24,15 @@ INFINICORE_GRAPH_OP_CLASS(DeepseekV4HashRouter,
                           const Tensor &,
                           bool);
 
+INFINICORE_GRAPH_OP_CLASS(DeepseekV4HashTopkRouter,
+                          Tensor,
+                          Tensor,
+                          const Tensor &,
+                          const Tensor &,
+                          const Tensor &,
+                          const Tensor &,
+                          bool);
+
 std::tuple<Tensor, Tensor> deepseek_v4_topk_router(
     const Tensor &logits,
     size_t topk,
@@ -47,6 +56,22 @@ void deepseek_v4_hash_router_(
     Tensor topk_weights,
     Tensor topk_indices,
     const Tensor &logits,
+    const Tensor &input_ids,
+    const Tensor &tid2eid,
+    bool renormalize = true);
+
+std::tuple<Tensor, Tensor> deepseek_v4_hash_topk_router(
+    const Tensor &hidden_states,
+    const Tensor &weight,
+    const Tensor &input_ids,
+    const Tensor &tid2eid,
+    bool renormalize);
+
+void deepseek_v4_hash_topk_router_(
+    Tensor topk_weights,
+    Tensor topk_indices,
+    const Tensor &hidden_states,
+    const Tensor &weight,
     const Tensor &input_ids,
     const Tensor &tid2eid,
     bool renormalize = true);

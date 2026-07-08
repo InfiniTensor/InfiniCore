@@ -53,4 +53,32 @@
     };                                                                                                               \
     }
 
+
+#define HASH_TOPK_DESCRIPTOR(NAMESPACE)                                         \
+    namespace op::deepseek_v4_router::NAMESPACE {                               \
+    class HashTopkRouterDescriptor final : public InfiniopDescriptor {          \
+        struct Opaque;                                                          \
+        Opaque *_opaque;                                                        \
+        DeepseekV4HashTopkRouterInfo _info;                                     \
+        size_t _workspace_size;                                                 \
+        HashTopkRouterDescriptor(Opaque *opaque, DeepseekV4HashTopkRouterInfo info, size_t workspace_size, infiniDevice_t device, int id) \
+            : InfiniopDescriptor{device, id}, _opaque(opaque), _info(info), _workspace_size(workspace_size) {}       \
+                                                                                \
+    public:                                                                     \
+        ~HashTopkRouterDescriptor();                                            \
+        size_t workspaceSize() const { return _workspace_size; }                \
+        static infiniStatus_t create(infiniopHandle_t handle, HashTopkRouterDescriptor **desc_ptr,                       \
+                                     infiniopTensorDescriptor_t topk_weights_desc,                                   \
+                                     infiniopTensorDescriptor_t topk_indices_desc,                                   \
+                                     infiniopTensorDescriptor_t hidden_states_desc,                                  \
+                                     infiniopTensorDescriptor_t weight_desc,                                         \
+                                     infiniopTensorDescriptor_t input_ids_desc,                                      \
+                                     infiniopTensorDescriptor_t tid2eid_desc,                                       \
+                                     bool renormalize);                         \
+        infiniStatus_t calculate(void *workspace, size_t workspace_size, void *topk_weights, void *topk_indices,     \
+                                 const void *hidden_states, const void *weight, const void *input_ids, const void *tid2eid, void *stream) const;\
+    };                                                                          \
+    }
+
+
 #endif

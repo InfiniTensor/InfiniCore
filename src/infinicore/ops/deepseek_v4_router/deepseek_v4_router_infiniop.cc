@@ -137,3 +137,76 @@ void cleanup(void **planned_meta_ptr) {
 INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(DeepseekV4HashRouter, &plan, &run, cleanup);
 
 } // namespace infinicore::op::deepseek_v4_hash_router_impl::infiniop
+
+
+namespace infinicore::op::deepseek_v4_hash_topk_router_impl::infiniop {
+
+INFINIOP_CACHABLE_DESCRIPTOR(Descriptor, DeepseekV4HashTopkRouter, 100);
+
+struct PlannedMeta {
+    std::shared_ptr<Descriptor> descriptor;
+    graph::GraphTensor workspace;
+    graph::GraphTensor topk_weights;
+    graph::GraphTensor topk_indices;
+    graph::GraphTensor hidden_states;
+    graph::GraphTensor weight;
+    graph::GraphTensor input_ids;
+    graph::GraphTensor tid2eid;
+};
+
+void *plan(Tensor topk_weights,
+           Tensor topk_indices,
+           const Tensor &hidden_states,
+           const Tensor &weight,
+           const Tensor &input_ids,
+           const Tensor &tid2eid,
+           bool renormalize) {
+    size_t seed = hash_combine(topk_weights, topk_indices, hidden_states, weight, input_ids, tid2eid, renormalize);
+    INFINIOP_CACHABLE_DESCRIPTOR_GET_OR_CREATE(
+        Descriptor,
+        descriptor,
+        DeepseekV4HashTopkRouter,
+        seed,
+        topk_weights->desc(),
+        topk_indices->desc(),
+        hidden_states->desc(),
+        weight->desc(),
+        input_ids->desc(),
+        tid2eid->desc(),
+        renormalize);
+    INFINIOP_WORKSPACE_TENSOR(workspace, DeepseekV4HashTopkRouter, descriptor);
+
+    return new PlannedMeta{
+        descriptor,
+        graph::GraphTensor(workspace),
+        graph::GraphTensor(topk_weights),
+        graph::GraphTensor(topk_indices),
+        graph::GraphTensor(hidden_states),
+        graph::GraphTensor(weight),
+        graph::GraphTensor(input_ids),
+        graph::GraphTensor(tid2eid)};
+}
+
+void run(void *planned_meta) {
+    auto planned = reinterpret_cast<PlannedMeta *>(planned_meta);
+    INFINICORE_CHECK_ERROR(infiniopDeepseekV4HashTopkRouter(
+        planned->descriptor->desc,
+        planned->workspace->data(),
+        planned->workspace->numel(),
+        planned->topk_weights->data(),
+        planned->topk_indices->data(),
+        planned->hidden_states->data(),
+        planned->weight->data(),
+        planned->input_ids->data(),
+        planned->tid2eid->data(),
+        context::getStream()));
+}
+
+void cleanup(void **planned_meta_ptr) {
+    delete *reinterpret_cast<PlannedMeta **>(planned_meta_ptr);
+    *planned_meta_ptr = nullptr;
+}
+
+INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(DeepseekV4HashTopkRouter, &plan, &run, cleanup);
+
+} // namespace infinicore::op::deepseek_v4_hash_topk_router_impl::infiniop
