@@ -60,16 +60,31 @@ __device__ bool better_pair(float candidate_score, int candidate_expert, float b
 }
 
 template <typename T>
+__device__ void reduce_pair_warp(float &score, int &expert) {
+    constexpr unsigned FULL_MASK = 0xffffffffu;
+    for (int offset = 16; offset > 0; offset >>= 1) {
+        const float other_score = __shfl_down_sync(FULL_MASK, score, offset);
+        const int other_expert = __shfl_down_sync(FULL_MASK, expert, offset);
+        if (better_pair(other_score, other_expert, score, expert)) {
+            score = other_score;
+            expert = other_expert;
+        }
+    }
+}
+
+template <typename T>
 __global__ void topk_router_kernel(
-    const T *logits,
-    const float *bias,
-    float *topk_weights,
-    int *topk_indices,
+    const T *__restrict__ logits,
+    const float *__restrict__ bias,
+    float *__restrict__ topk_weights,
+    int *__restrict__ topk_indices,
     size_t num_tokens,
     size_t num_experts,
     size_t topk,
     bool renormalize) {
     constexpr int THREADS = 256;
+    constexpr int WARP_SIZE = 32;
+    constexpr int WARPS = THREADS / WARP_SIZE;
     const size_t token = blockIdx.x;
     if (token >= num_tokens) {
         return;
@@ -77,11 +92,16 @@ __global__ void topk_router_kernel(
 
     __shared__ float raw_scores[THREADS];
     __shared__ float select_scores[THREADS];
+    __shared__ float warp_scores[WARPS];
+    __shared__ int warp_experts[WARPS];
     __shared__ int selected_experts[32];
     __shared__ float selected_weights[32];
 
     const int tid = threadIdx.x;
+    const int lane = tid & (WARP_SIZE - 1);
+    const int warp = tid / WARP_SIZE;
     const bool active = static_cast<size_t>(tid) < num_experts;
+
     float raw = -CUDART_INF_F;
     float select = -CUDART_INF_F;
     if (active) {
@@ -94,38 +114,29 @@ __global__ void topk_router_kernel(
 
     float denom = 0.0f;
     for (size_t k = 0; k < topk; ++k) {
-        float thread_best_score = -CUDART_INF_F;
-        int thread_best_expert = static_cast<int>(num_experts);
-        if (active) {
-            thread_best_score = select_scores[tid];
-            thread_best_expert = tid;
-        }
+        float best_score = active ? select_scores[tid] : -CUDART_INF_F;
+        int best_expert = active ? tid : static_cast<int>(num_experts);
+        reduce_pair_warp<T>(best_score, best_expert);
 
-        __shared__ float reduce_scores[THREADS];
-        __shared__ int reduce_experts[THREADS];
-        reduce_scores[tid] = thread_best_score;
-        reduce_experts[tid] = thread_best_expert;
+        if (lane == 0) {
+            warp_scores[warp] = best_score;
+            warp_experts[warp] = best_expert;
+        }
         __syncthreads();
 
-        for (int stride = THREADS / 2; stride > 0; stride >>= 1) {
-            if (tid < stride) {
-                const float other_score = reduce_scores[tid + stride];
-                const int other_expert = reduce_experts[tid + stride];
-                if (better_pair(other_score, other_expert, reduce_scores[tid], reduce_experts[tid])) {
-                    reduce_scores[tid] = other_score;
-                    reduce_experts[tid] = other_expert;
-                }
+        if (warp == 0) {
+            best_score = lane < WARPS ? warp_scores[lane] : -CUDART_INF_F;
+            best_expert = lane < WARPS ? warp_experts[lane] : static_cast<int>(num_experts);
+            reduce_pair_warp<T>(best_score, best_expert);
+            if (lane == 0) {
+                selected_experts[k] = best_expert;
+                selected_weights[k] = raw_scores[best_expert];
+                denom += selected_weights[k];
             }
-            __syncthreads();
-        }
-
-        const int winner = reduce_experts[0];
-        if (tid == 0) {
-            selected_experts[k] = winner;
-            selected_weights[k] = raw_scores[winner];
-            denom += selected_weights[k];
         }
         __syncthreads();
+
+        const int winner = selected_experts[k];
         if (active && tid == winner) {
             select_scores[tid] = -CUDART_INF_F;
         }
