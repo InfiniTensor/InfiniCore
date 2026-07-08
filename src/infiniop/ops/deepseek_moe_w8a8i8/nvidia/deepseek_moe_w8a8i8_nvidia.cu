@@ -31,12 +31,37 @@ size_t ptr_workspace_size(const DeepseekMoeW8A8I8Info &info) {
     return align_up(info.num_experts * sizeof(void *), 256) * 6;
 }
 
-size_t raw_workspace_size(const DeepseekMoeW8A8I8Info &info, size_t dtype_size) {
-    const size_t base = ptr_workspace_size(info);
-    const size_t intermediate_offset = align_up(base, 256);
-    return intermediate_offset + info.ntokens * info.topk * info.intermediate_size * dtype_size;
+struct RawLayout {
+    size_t total_size;
+    size_t hidden_packed_offset;
+    size_t hidden_scale_offset;
+    size_t intermediate_offset;
+    size_t intermediate_packed_offset;
+    size_t intermediate_scale_offset;
+};
+
+RawLayout make_raw_layout(const DeepseekMoeW8A8I8Info &info, size_t dtype_size) {
+    RawLayout layout{};
+    const size_t routes = info.ntokens * info.topk;
+    size_t offset = ptr_workspace_size(info);
+
+    layout.hidden_packed_offset = offset;
+    offset = align_up(offset + info.ntokens * info.hidden_size * sizeof(int8_t), 256);
+    layout.hidden_scale_offset = offset;
+    offset = align_up(offset + info.ntokens * sizeof(float), 256);
+    layout.intermediate_offset = offset;
+    offset = align_up(offset + routes * info.intermediate_size * dtype_size, 256);
+    layout.intermediate_packed_offset = offset;
+    offset = align_up(offset + routes * info.intermediate_size * sizeof(int8_t), 256);
+    layout.intermediate_scale_offset = offset;
+    offset = align_up(offset + routes * sizeof(float), 256);
+    layout.total_size = offset;
+    return layout;
 }
 
+size_t raw_workspace_size(const DeepseekMoeW8A8I8Info &info, size_t dtype_size) {
+    return make_raw_layout(info, dtype_size).total_size;
+}
 
 struct GroupedLayout {
     size_t total_size;
@@ -281,6 +306,68 @@ __global__ void gate_up_grouped_post_kernel(
     const float u = x_scale * up_scale[j] * static_cast<float>(up_i32[idx]);
     const float silu = g / (1.0f + __expf(-g));
     intermediate[idx] = from_float<T>(silu * u);
+}
+
+
+template <typename T>
+__global__ void gate_up_grouped_post_quant_kernel(
+    int8_t *intermediate_packed,
+    float *intermediate_scales,
+    const int32_t *gate_i32,
+    const int32_t *up_i32,
+    const float *hidden_scales,
+    const int32_t *sorted_routes,
+    const int *topk_indices,
+    const void *const *gate_weight_scales,
+    const void *const *up_weight_scales,
+    size_t routes,
+    size_t topk,
+    size_t intermediate_size) {
+    const size_t sorted_route = blockIdx.x;
+    if (sorted_route >= routes) {
+        return;
+    }
+    const int32_t route_i32 = sorted_routes[sorted_route];
+    if (route_i32 < 0) {
+        return;
+    }
+    const size_t route = static_cast<size_t>(route_i32);
+    const int expert = topk_indices[route];
+    const size_t token = route / topk;
+    const float x_scale = hidden_scales[token];
+    const float *gate_scale = reinterpret_cast<const float *>(gate_weight_scales[expert]);
+    const float *up_scale = reinterpret_cast<const float *>(up_weight_scales[expert]);
+    const size_t base = sorted_route * intermediate_size;
+
+    __shared__ float shared_max[256];
+    float local_max = 0.0f;
+    for (size_t j = threadIdx.x; j < intermediate_size; j += blockDim.x) {
+        const float g = x_scale * gate_scale[j] * static_cast<float>(gate_i32[base + j]);
+        const float u = x_scale * up_scale[j] * static_cast<float>(up_i32[base + j]);
+        const float silu = g / (1.0f + __expf(-g));
+        local_max = fmaxf(local_max, fabsf(silu * u));
+    }
+
+    shared_max[threadIdx.x] = local_max;
+    __syncthreads();
+    for (unsigned int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+        if (threadIdx.x < stride) {
+            shared_max[threadIdx.x] = fmaxf(shared_max[threadIdx.x], shared_max[threadIdx.x + stride]);
+        }
+        __syncthreads();
+    }
+
+    const float scale = shared_max[0] / 127.0f;
+    if (threadIdx.x == 0) {
+        intermediate_scales[sorted_route] = scale;
+    }
+
+    for (size_t j = threadIdx.x; j < intermediate_size; j += blockDim.x) {
+        const float g = x_scale * gate_scale[j] * static_cast<float>(gate_i32[base + j]);
+        const float u = x_scale * up_scale[j] * static_cast<float>(up_i32[base + j]);
+        const float silu = g / (1.0f + __expf(-g));
+        intermediate_packed[base + j] = quantize_sym(silu * u, scale);
+    }
 }
 
 template <typename T>
@@ -538,6 +625,133 @@ __global__ void down_w8a8i8_kernel(
 }
 
 
+template <typename T>
+__global__ void gate_up_w8a8i8_packed_kernel(
+    T *intermediate,
+    const int8_t *hidden_packed,
+    const float *hidden_scales,
+    const int *topk_indices,
+    const void *const *gate_weights,
+    const void *const *up_weights,
+    const void *const *gate_weight_scales,
+    const void *const *up_weight_scales,
+    size_t ntokens,
+    size_t hidden_size,
+    size_t topk,
+    size_t intermediate_size,
+    size_t num_experts) {
+
+    const size_t route = blockIdx.x / intermediate_size;
+    const size_t j = blockIdx.x - route * intermediate_size;
+    if (route >= ntokens * topk) {
+        return;
+    }
+    const int expert = topk_indices[route];
+    if (expert < 0 || static_cast<size_t>(expert) >= num_experts) {
+        return;
+    }
+
+    const size_t token = route / topk;
+    const int8_t *x = hidden_packed + token * hidden_size;
+    const float x_scale = hidden_scales[token];
+    const int8_t *gate = reinterpret_cast<const int8_t *>(gate_weights[expert]) + j * hidden_size;
+    const int8_t *up = reinterpret_cast<const int8_t *>(up_weights[expert]) + j * hidden_size;
+    const float *gate_scale = reinterpret_cast<const float *>(gate_weight_scales[expert]);
+    const float *up_scale = reinterpret_cast<const float *>(up_weight_scales[expert]);
+
+    __shared__ int gate_shared[256];
+    __shared__ int up_shared[256];
+    int gate_sum = 0;
+    int up_sum = 0;
+    for (size_t h = threadIdx.x; h < hidden_size; h += blockDim.x) {
+        const int xq = static_cast<int>(x[h]);
+        gate_sum += xq * static_cast<int>(gate[h]);
+        up_sum += xq * static_cast<int>(up[h]);
+    }
+
+    gate_shared[threadIdx.x] = gate_sum;
+    up_shared[threadIdx.x] = up_sum;
+    __syncthreads();
+
+    for (unsigned int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+        if (threadIdx.x < stride) {
+            gate_shared[threadIdx.x] += gate_shared[threadIdx.x + stride];
+            up_shared[threadIdx.x] += up_shared[threadIdx.x + stride];
+        }
+        __syncthreads();
+    }
+
+    if (threadIdx.x == 0) {
+        const float g = x_scale * gate_scale[j] * static_cast<float>(gate_shared[0]);
+        const float u = x_scale * up_scale[j] * static_cast<float>(up_shared[0]);
+        const float silu = g / (1.0f + __expf(-g));
+        intermediate[route * intermediate_size + j] = from_float<T>(silu * u);
+    }
+}
+
+template <typename T>
+__global__ void down_w8a8i8_packed_kernel(
+    T *out,
+    const int8_t *intermediate_packed,
+    const float *intermediate_scales,
+    const int *topk_indices,
+    const float *topk_weights,
+    const void *const *down_weights,
+    const void *const *down_weight_scales,
+    size_t ntokens,
+    size_t hidden_size,
+    size_t topk,
+    size_t intermediate_size,
+    size_t num_experts) {
+
+    const size_t linear = blockIdx.x;
+    const size_t token = linear / hidden_size;
+    const size_t h = linear - token * hidden_size;
+    if (token >= ntokens) {
+        return;
+    }
+
+    __shared__ int shared_sum[256];
+    float acc = 0.0f;
+    const size_t route_base = token * topk;
+    for (size_t k = 0; k < topk; ++k) {
+        const size_t route = route_base + k;
+        const int expert = topk_indices[route];
+        if (expert < 0 || static_cast<size_t>(expert) >= num_experts) {
+            continue;
+        }
+
+        const int8_t *x = intermediate_packed + route * intermediate_size;
+        const float x_scale = intermediate_scales[route];
+        const int8_t *down = reinterpret_cast<const int8_t *>(down_weights[expert]) + h * intermediate_size;
+        const float *down_scale = reinterpret_cast<const float *>(down_weight_scales[expert]);
+
+        int sum = 0;
+        for (size_t j = threadIdx.x; j < intermediate_size; j += blockDim.x) {
+            sum += static_cast<int>(x[j]) * static_cast<int>(down[j]);
+        }
+
+        shared_sum[threadIdx.x] = sum;
+        __syncthreads();
+        for (unsigned int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+            if (threadIdx.x < stride) {
+                shared_sum[threadIdx.x] += shared_sum[threadIdx.x + stride];
+            }
+            __syncthreads();
+        }
+
+        if (threadIdx.x == 0) {
+            acc += x_scale * down_scale[h] * static_cast<float>(shared_sum[0]) * topk_weights[route];
+        }
+        __syncthreads();
+    }
+
+    if (threadIdx.x == 0) {
+        out[token * hidden_size + h] = from_float<T>(acc);
+    }
+}
+
+
 infiniStatus_t launch_single_i8_gemm(
     const device::nvidia::Handle::Internal *internal,
     cudaStream_t stream,
@@ -673,28 +887,46 @@ infiniStatus_t launch_grouped_typed(
                                            static_cast<int>(info.hidden_size), static_cast<int>(info.intermediate_size)));
     }
 
-    const size_t gate_post_total = routes * info.intermediate_size;
-    gate_up_grouped_post_kernel<T><<<static_cast<unsigned int>((gate_post_total + threads - 1) / threads), threads, 0, stream>>>(
-        intermediate,
-        gate_i32,
-        up_i32,
-        hidden_scales,
-        sorted_routes,
-        reinterpret_cast<const int *>(topk_indices),
-        gate_scale_ptrs,
-        up_scale_ptrs,
-        routes,
-        info.topk,
-        info.intermediate_size);
-    CHECK_CUDA(cudaGetLastError());
+    const bool use_legacy_grouped_post = std::getenv("INFINICORE_DSV4_W8A8_GROUPED_LEGACY_POST") != nullptr;
+    if (use_legacy_grouped_post) {
+        const size_t gate_post_total = routes * info.intermediate_size;
+        gate_up_grouped_post_kernel<T><<<static_cast<unsigned int>((gate_post_total + threads - 1) / threads), threads, 0, stream>>>(
+            intermediate,
+            gate_i32,
+            up_i32,
+            hidden_scales,
+            sorted_routes,
+            reinterpret_cast<const int *>(topk_indices),
+            gate_scale_ptrs,
+            up_scale_ptrs,
+            routes,
+            info.topk,
+            info.intermediate_size);
+        CHECK_CUDA(cudaGetLastError());
 
-    quantize_rows_kernel<T><<<static_cast<unsigned int>(routes), threads, 0, stream>>>(
-        intermediate_packed,
-        intermediate_scales,
-        intermediate,
-        routes,
-        info.intermediate_size);
-    CHECK_CUDA(cudaGetLastError());
+        quantize_rows_kernel<T><<<static_cast<unsigned int>(routes), threads, 0, stream>>>(
+            intermediate_packed,
+            intermediate_scales,
+            intermediate,
+            routes,
+            info.intermediate_size);
+        CHECK_CUDA(cudaGetLastError());
+    } else {
+        gate_up_grouped_post_quant_kernel<T><<<static_cast<unsigned int>(routes), threads, 0, stream>>>(
+            intermediate_packed,
+            intermediate_scales,
+            gate_i32,
+            up_i32,
+            hidden_scales,
+            sorted_routes,
+            reinterpret_cast<const int *>(topk_indices),
+            gate_scale_ptrs,
+            up_scale_ptrs,
+            routes,
+            info.topk,
+            info.intermediate_size);
+        CHECK_CUDA(cudaGetLastError());
+    }
 
     for (size_t expert = 0; expert < info.num_experts; ++expert) {
         const int32_t begin = offsets_host[expert];
@@ -741,21 +973,69 @@ infiniStatus_t launch_raw_typed(
     const void *const *up_scale_ptrs,
     const void *const *down_scale_ptrs,
     cudaStream_t stream) {
-    const size_t base = ptr_workspace_size(info);
-    const size_t intermediate_offset = align_up(base, 256);
-    const size_t intermediate_bytes = info.ntokens * info.topk * info.intermediate_size * sizeof(T);
-    if (workspace_size < intermediate_offset + intermediate_bytes) {
+    const auto layout = make_raw_layout(info, sizeof(T));
+    if (workspace_size < layout.total_size) {
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
-    auto *intermediate = reinterpret_cast<T *>(reinterpret_cast<char *>(workspace) + intermediate_offset);
+
+    auto *base = reinterpret_cast<char *>(workspace);
+    auto *hidden_packed = reinterpret_cast<int8_t *>(base + layout.hidden_packed_offset);
+    auto *hidden_scales = reinterpret_cast<float *>(base + layout.hidden_scale_offset);
+    auto *intermediate = reinterpret_cast<T *>(base + layout.intermediate_offset);
+    auto *intermediate_packed = reinterpret_cast<int8_t *>(base + layout.intermediate_packed_offset);
+    auto *intermediate_scales = reinterpret_cast<float *>(base + layout.intermediate_scale_offset);
 
     constexpr int threads = 256;
-    const dim3 gate_blocks(static_cast<unsigned int>(info.ntokens * info.topk * info.intermediate_size));
-    gate_up_w8a8i8_kernel<T><<<gate_blocks, threads, 0, stream>>>(
-        intermediate,
+    const bool use_legacy_raw = std::getenv("INFINICORE_DSV4_W8A8_RAW_LEGACY") != nullptr;
+    if (use_legacy_raw) {
+        const dim3 gate_blocks(static_cast<unsigned int>(info.ntokens * info.topk * info.intermediate_size));
+        gate_up_w8a8i8_kernel<T><<<gate_blocks, threads, 0, stream>>>(
+            intermediate,
+            reinterpret_cast<const T *>(hidden),
+            reinterpret_cast<const int *>(topk_indices),
+            reinterpret_cast<const float *>(topk_weights),
+            gate_ptrs,
+            up_ptrs,
+            gate_scale_ptrs,
+            up_scale_ptrs,
+            info.ntokens,
+            info.hidden_size,
+            info.topk,
+            info.intermediate_size,
+            info.num_experts);
+        CHECK_CUDA(cudaGetLastError());
+
+        const dim3 down_blocks(static_cast<unsigned int>(info.ntokens * info.hidden_size));
+        down_w8a8i8_kernel<T><<<down_blocks, threads, 0, stream>>>(
+            reinterpret_cast<T *>(out),
+            intermediate,
+            reinterpret_cast<const int *>(topk_indices),
+            reinterpret_cast<const float *>(topk_weights),
+            down_ptrs,
+            down_scale_ptrs,
+            info.ntokens,
+            info.hidden_size,
+            info.topk,
+            info.intermediate_size,
+            info.num_experts);
+        CHECK_CUDA(cudaGetLastError());
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    quantize_rows_kernel<T><<<static_cast<unsigned int>(info.ntokens), threads, 0, stream>>>(
+        hidden_packed,
+        hidden_scales,
         reinterpret_cast<const T *>(hidden),
+        info.ntokens,
+        info.hidden_size);
+    CHECK_CUDA(cudaGetLastError());
+
+    const dim3 gate_blocks(static_cast<unsigned int>(info.ntokens * info.topk * info.intermediate_size));
+    gate_up_w8a8i8_packed_kernel<T><<<gate_blocks, threads, 0, stream>>>(
+        intermediate,
+        hidden_packed,
+        hidden_scales,
         reinterpret_cast<const int *>(topk_indices),
-        reinterpret_cast<const float *>(topk_weights),
         gate_ptrs,
         up_ptrs,
         gate_scale_ptrs,
@@ -765,11 +1045,21 @@ infiniStatus_t launch_raw_typed(
         info.topk,
         info.intermediate_size,
         info.num_experts);
+    CHECK_CUDA(cudaGetLastError());
+
+    quantize_rows_kernel<T><<<static_cast<unsigned int>(info.ntokens * info.topk), threads, 0, stream>>>(
+        intermediate_packed,
+        intermediate_scales,
+        intermediate,
+        info.ntokens * info.topk,
+        info.intermediate_size);
+    CHECK_CUDA(cudaGetLastError());
 
     const dim3 down_blocks(static_cast<unsigned int>(info.ntokens * info.hidden_size));
-    down_w8a8i8_kernel<T><<<down_blocks, threads, 0, stream>>>(
+    down_w8a8i8_packed_kernel<T><<<down_blocks, threads, 0, stream>>>(
         reinterpret_cast<T *>(out),
-        intermediate,
+        intermediate_packed,
+        intermediate_scales,
         reinterpret_cast<const int *>(topk_indices),
         reinterpret_cast<const float *>(topk_weights),
         down_ptrs,
@@ -779,6 +1069,7 @@ infiniStatus_t launch_raw_typed(
         info.topk,
         info.intermediate_size,
         info.num_experts);
+    CHECK_CUDA(cudaGetLastError());
 
     return INFINI_STATUS_SUCCESS;
 }
