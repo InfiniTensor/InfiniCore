@@ -1,11 +1,12 @@
+import ctypes
 import os
 import platform
-import ctypes
-from ctypes import c_int, c_int64, c_uint64, POINTER
+from ctypes import POINTER, c_int, c_int64, c_uint64
+from pathlib import Path
+
 from .datatypes import *
 from .devices import *
 from .op_register import OpRegister
-from pathlib import Path
 from .structs import *
 
 INFINI_ROOT = os.getenv("INFINI_ROOT") or str(Path.home() / ".infini")
@@ -45,12 +46,12 @@ def open_lib():
         libop_path = find_library_in_ld_path("lib", "libinfiniop.so")
         librt_path = find_library_in_ld_path("lib", "libinfinirt.so")
 
-    assert (
-        libop_path is not None
-    ), f"Cannot find infiniop.dll or libinfiniop.so. Check if INFINI_ROOT is set correctly."
-    assert (
-        librt_path is not None
-    ), f"Cannot find infinirt.dll or libinfinirt.so. Check if INFINI_ROOT is set correctly."
+    assert libop_path is not None, (
+        "Cannot find infiniop.dll or libinfiniop.so. Check if INFINI_ROOT is set correctly."
+    )
+    assert librt_path is not None, (
+        "Cannot find infinirt.dll or libinfinirt.so. Check if INFINI_ROOT is set correctly."
+    )
 
     librt = ctypes.CDLL(librt_path)
     libop = ctypes.CDLL(libop_path)
@@ -65,13 +66,12 @@ def open_lib():
     lib.infiniopCreateTensorDescriptor.restype = c_int
     lib.infiniopDestroyTensorDescriptor.argtypes = [infiniopTensorDescriptor_t]
     lib.infiniopDestroyTensorDescriptor.restype = c_int
+    lib.infiniopSetRuntimeDevice.argtypes = [c_int, c_int]
+    lib.infiniopSetRuntimeDevice.restype = c_int
     lib.infiniopCreateHandle.argtypes = [POINTER(infiniopHandle_t)]
     lib.infiniopCreateHandle.restype = c_int
     lib.infiniopDestroyHandle.argtypes = [infiniopHandle_t]
     lib.infiniopDestroyHandle.restype = c_int
-    lib.infinirtSetDevice.argtypes = [c_int, c_int]
-    lib.infinirtSetDevice.restype = c_int
-
     OpRegister.register_lib(lib)
 
     return lib

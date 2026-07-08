@@ -1,4 +1,5 @@
 #include "runtime.hpp"
+#include "../../../bridge/infini/rt.hpp"
 
 #include "../../utils.hpp"
 
@@ -10,7 +11,7 @@
 namespace infinicore {
 Runtime::Runtime(Device device) : device_(device), graph_manager_(std::make_unique<graph::GraphManager>()) {
     activate();
-    INFINICORE_CHECK_ERROR(infinirtStreamCreate(&stream_));
+    INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::StreamCreate(bridge::infini::rt::translate(&stream_))));
     INFINICORE_CHECK_ERROR(infiniopCreateHandle(&infiniop_handle_));
     if (device_.getType() == Device::Type::CPU) {
         device_memory_allocator_ = std::make_unique<PinnableBlockAllocator>(device);
@@ -26,11 +27,14 @@ Runtime::~Runtime() {
     }
     device_memory_allocator_.reset();
     infiniopDestroyHandle(infiniop_handle_);
-    infinirtStreamDestroy(stream_);
+    (void)infini::rt::runtime::StreamDestroy(bridge::infini::rt::translate(stream_));
 }
 
 Runtime *Runtime::activate() {
-    INFINICORE_CHECK_ERROR(infinirtSetDevice((infiniDevice_t)device_.getType(), (int)device_.getIndex()));
+    auto rt_device = bridge::infini::rt::translate(static_cast<infiniDevice_t>(device_.getType()));
+    INFINICORE_ASSERT(rt_device != infini::rt::Device::Type::kCount);
+    infini::rt::set_runtime_device_type(rt_device);
+    INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::SetDevice(static_cast<int>(device_.getIndex()))));
     return this;
 }
 
@@ -47,11 +51,11 @@ infiniopHandle_t Runtime::infiniopHandle() const {
 }
 
 void Runtime::syncStream() {
-    INFINICORE_CHECK_ERROR(infinirtStreamSynchronize(stream_));
+    INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::StreamSynchronize(bridge::infini::rt::translate(stream_))));
 }
 
 void Runtime::syncDevice() {
-    INFINICORE_CHECK_ERROR(infinirtDeviceSynchronize());
+    INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::DeviceSynchronize()));
 }
 
 void Runtime::trimMemory() {
@@ -103,43 +107,47 @@ std::shared_ptr<Memory> Runtime::reinstantiateBlob(std::shared_ptr<Memory> blob)
 }
 
 void Runtime::memcpyH2D(void *dst, const void *src, size_t size, bool async) {
-    if (async) {
-        INFINICORE_CHECK_ERROR(infinirtMemcpyAsync(dst, src, size, INFINIRT_MEMCPY_H2D, stream_));
+    if (async && device_.getType() != Device::Type::CPU) {
+        INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::MemcpyAsync(dst, src, size, infini::rt::runtime::kMemcpyHostToDevice, bridge::infini::rt::translate(stream_))));
     } else {
-        INFINICORE_CHECK_ERROR(infinirtMemcpy(dst, src, size, INFINIRT_MEMCPY_H2D));
+        INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::Memcpy(dst, src, size, infini::rt::runtime::kMemcpyHostToDevice)));
     }
 }
 
 void Runtime::memcpyD2H(void *dst, const void *src, size_t size) {
-    INFINICORE_CHECK_ERROR(infinirtMemcpy(dst, src, size, INFINIRT_MEMCPY_D2H));
+    INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::Memcpy(dst, src, size, infini::rt::runtime::kMemcpyDeviceToHost)));
 }
 
 void Runtime::memcpyD2D(void *dst, const void *src, size_t size, bool async) {
-    if (async) {
-        INFINICORE_CHECK_ERROR(infinirtMemcpyAsync(dst, src, size, INFINIRT_MEMCPY_D2D, stream_));
+    if (async && device_.getType() != Device::Type::CPU) {
+        INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::MemcpyAsync(dst, src, size, infini::rt::runtime::kMemcpyDeviceToDevice, bridge::infini::rt::translate(stream_))));
     } else {
-        INFINICORE_CHECK_ERROR(infinirtMemcpy(dst, src, size, INFINIRT_MEMCPY_D2D));
+        INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::Memcpy(dst, src, size, infini::rt::runtime::kMemcpyDeviceToDevice)));
     }
 }
 
 void Runtime::setDeviceMemory(void *ptr, int value, size_t count) {
-    INFINICORE_CHECK_ERROR(infinirtMemset(ptr, value, count));
+    INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::Memset(ptr, value, count)));
 }
 
 void Runtime::setDeviceMemoryAsync(void *ptr, int value, size_t count, infinirtStream_t stream) {
-    INFINICORE_CHECK_ERROR(infinirtMemsetAsync(ptr, value, count, stream));
+    if (device_.getType() != Device::Type::CPU) {
+        INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::MemsetAsync(ptr, value, count, bridge::infini::rt::translate(stream))));
+    } else {
+        INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::Memset(ptr, value, count)));
+    }
 }
 
 // Timing method implementations
 infinirtEvent_t Runtime::createEvent() {
     infinirtEvent_t event;
-    INFINICORE_CHECK_ERROR(infinirtEventCreate(&event));
+    INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::EventCreate(&event)));
     return event;
 }
 
 infinirtEvent_t Runtime::createEventWithFlags(uint32_t flags) {
     infinirtEvent_t event;
-    INFINICORE_CHECK_ERROR(infinirtEventCreateWithFlags(&event, flags));
+    INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::EventCreateWithFlags(&event, flags)));
     return event;
 }
 
@@ -147,26 +155,24 @@ void Runtime::recordEvent(infinirtEvent_t event, infinirtStream_t stream) {
     if (stream == nullptr) {
         stream = stream_;
     }
-    INFINICORE_CHECK_ERROR(infinirtEventRecord(event, stream));
+    INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::EventRecord(event, bridge::infini::rt::translate(stream))));
 }
 
 bool Runtime::queryEvent(infinirtEvent_t event) {
-    infinirtEventStatus_t status;
-    INFINICORE_CHECK_ERROR(infinirtEventQuery(event, &status));
-    return status == INFINIRT_EVENT_COMPLETE;
+    return bridge::infini::rt::translate(infini::rt::runtime::EventQuery(event)) == INFINI_STATUS_SUCCESS;
 }
 
 void Runtime::synchronizeEvent(infinirtEvent_t event) {
-    INFINICORE_CHECK_ERROR(infinirtEventSynchronize(event));
+    INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::EventSynchronize(event)));
 }
 
 void Runtime::destroyEvent(infinirtEvent_t event) {
-    INFINICORE_CHECK_ERROR(infinirtEventDestroy(event));
+    INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::EventDestroy(event)));
 }
 
 float Runtime::elapsedTime(infinirtEvent_t start, infinirtEvent_t end) {
     float ms;
-    INFINICORE_CHECK_ERROR(infinirtEventElapsedTime(&ms, start, end));
+    INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::EventElapsedTime(&ms, start, end)));
     return ms;
 }
 
@@ -175,7 +181,7 @@ void Runtime::streamWaitEvent(infinirtStream_t stream, infinirtEvent_t event) {
     if (stream == nullptr) {
         stream = stream_;
     }
-    INFINICORE_CHECK_ERROR(infinirtStreamWaitEvent(stream, event));
+    INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::StreamWaitEvent(bridge::infini::rt::translate(stream), event, 0)));
 }
 
 bool Runtime::isGraphRecording() const {
