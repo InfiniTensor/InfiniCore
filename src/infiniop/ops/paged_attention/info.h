@@ -124,7 +124,7 @@ public:
         //     printf("paged block size %zu\n", page_block_size);
         //     return INFINI_STATUS_BAD_TENSOR_SHAPE;
         // }
-        if (head_size != 64 && head_size != 128 && head_size != 192 && head_size != 576) {
+        if (head_size != 64 && head_size != 128 && head_size != 192 && head_size != 256 && head_size != 576) {
             // First build only targets common FA2 head dims plus DeepSeek MLA latent dim.
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }

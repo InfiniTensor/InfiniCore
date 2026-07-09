@@ -27,6 +27,10 @@ _TEST_CASES_DATA = [
     (3, 8, 8, 128, 16, 1024, False),
     (3, 8, 8, 64, 16, 1024, False),
     (8, 64, 8, 128, 16, 2048, False),
+    # Qwen3.6/Qwen3.5 full attention local TP shapes: head_dim=value_dim=256, GQA ratio=6.
+    (1, 24, 4, 256, 16, 32, False),
+    (1, 12, 2, 256, 16, 32, False),
+    (1, 6, 1, 256, 16, 32, False),
     # New DeepSeek MLA wrapper case: verifies decode output uses the
     # value head size when q/k head size is 576 and value size is 512.
     (1, 16, 1, 576, 16, 32, False, 512),

@@ -84,7 +84,7 @@ class TensorInitializer:
                 raise ValueError(
                     f"Shape mismatch: expected {shape}, got {tensor.shape}"
                 )
-            return tensor.to(torch_dtype).to(torch_device_str)
+            return tensor.to(torch_dtype).to(torch_device_str).contiguous()
         elif mode == TensorInitializer.BINARY:
             tensor = kwargs.get("set_tensor")
             if tensor is None:
