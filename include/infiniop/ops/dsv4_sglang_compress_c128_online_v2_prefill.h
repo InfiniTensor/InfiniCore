@@ -1,0 +1,9 @@
+#ifndef __INFINIOP_DSV4_SGLANG_COMPRESS_C128_ONLINE_V2_PREFILL_H__
+#define __INFINIOP_DSV4_SGLANG_COMPRESS_C128_ONLINE_V2_PREFILL_H__
+#include "../operator_descriptor.h"
+typedef struct InfiniopDescriptor *infiniopDsv4SglangCompressC128OnlineV2PrefillDescriptor_t;
+__INFINI_C __export infiniStatus_t infiniopCreateDsv4SglangCompressC128OnlineV2PrefillDescriptor(infiniopHandle_t handle, infiniopDsv4SglangCompressC128OnlineV2PrefillDescriptor_t *desc_ptr, infiniopTensorDescriptor_t kv_score_buffer_desc, infiniopTensorDescriptor_t kv_score_input_desc, infiniopTensorDescriptor_t kv_output_desc, infiniopTensorDescriptor_t ape_desc, infiniopTensorDescriptor_t plan_c_desc, infiniopTensorDescriptor_t plan_w_desc);
+__INFINI_C __export infiniStatus_t infiniopGetDsv4SglangCompressC128OnlineV2PrefillWorkspaceSize(infiniopDsv4SglangCompressC128OnlineV2PrefillDescriptor_t desc, size_t *size);
+__INFINI_C __export infiniStatus_t infiniopDsv4SglangCompressC128OnlineV2Prefill(infiniopDsv4SglangCompressC128OnlineV2PrefillDescriptor_t desc, void *workspace, size_t workspace_size, const void *kv_score_buffer, const void *kv_score_input, void *kv_output, const void *ape, const void *plan_c, const void *plan_w, void *stream);
+__INFINI_C __export infiniStatus_t infiniopDestroyDsv4SglangCompressC128OnlineV2PrefillDescriptor(infiniopDsv4SglangCompressC128OnlineV2PrefillDescriptor_t desc);
+#endif

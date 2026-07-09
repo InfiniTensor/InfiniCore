@@ -1,0 +1,9 @@
+#ifndef __INFINIOP_DSV4_SGLANG_MEGA_MOE_PRE_DISPATCH_H__
+#define __INFINIOP_DSV4_SGLANG_MEGA_MOE_PRE_DISPATCH_H__
+#include "../operator_descriptor.h"
+typedef struct InfiniopDescriptor *infiniopDsv4SglangMegaMoePreDispatchDescriptor_t;
+__INFINI_C __export infiniStatus_t infiniopCreateDsv4SglangMegaMoePreDispatchDescriptor(infiniopHandle_t handle, infiniopDsv4SglangMegaMoePreDispatchDescriptor_t *desc_ptr, infiniopTensorDescriptor_t x_desc, infiniopTensorDescriptor_t topk_idx_desc, infiniopTensorDescriptor_t topk_weights_desc, infiniopTensorDescriptor_t buf_x_desc, infiniopTensorDescriptor_t buf_x_sf_desc, infiniopTensorDescriptor_t buf_topk_idx_desc, infiniopTensorDescriptor_t buf_topk_weights_desc);
+__INFINI_C __export infiniStatus_t infiniopGetDsv4SglangMegaMoePreDispatchWorkspaceSize(infiniopDsv4SglangMegaMoePreDispatchDescriptor_t desc, size_t *size);
+__INFINI_C __export infiniStatus_t infiniopDsv4SglangMegaMoePreDispatch(infiniopDsv4SglangMegaMoePreDispatchDescriptor_t desc, void *workspace, size_t workspace_size, const void *x, const void *topk_idx, const void *topk_weights, void *buf_x, void *buf_x_sf, void *buf_topk_idx, void *buf_topk_weights, void *stream);
+__INFINI_C __export infiniStatus_t infiniopDestroyDsv4SglangMegaMoePreDispatchDescriptor(infiniopDsv4SglangMegaMoePreDispatchDescriptor_t desc);
+#endif

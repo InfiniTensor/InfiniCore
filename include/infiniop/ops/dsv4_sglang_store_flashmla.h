@@ -1,0 +1,9 @@
+#ifndef __INFINIOP_DSV4_SGLANG_STORE_FLASHMLA_H__
+#define __INFINIOP_DSV4_SGLANG_STORE_FLASHMLA_H__
+#include "../operator_descriptor.h"
+typedef struct InfiniopDescriptor *infiniopDsv4SglangStoreFlashmlaDescriptor_t;
+__INFINI_C __export infiniStatus_t infiniopCreateDsv4SglangStoreFlashmlaDescriptor(infiniopHandle_t handle, infiniopDsv4SglangStoreFlashmlaDescriptor_t *desc_ptr, infiniopTensorDescriptor_t input_desc, infiniopTensorDescriptor_t cache_desc, infiniopTensorDescriptor_t indices_desc);
+__INFINI_C __export infiniStatus_t infiniopGetDsv4SglangStoreFlashmlaWorkspaceSize(infiniopDsv4SglangStoreFlashmlaDescriptor_t desc, size_t *size);
+__INFINI_C __export infiniStatus_t infiniopDsv4SglangStoreFlashmla(infiniopDsv4SglangStoreFlashmlaDescriptor_t desc, void *workspace, size_t workspace_size, const void *input, void *cache, const void *indices, void *stream);
+__INFINI_C __export infiniStatus_t infiniopDestroyDsv4SglangStoreFlashmlaDescriptor(infiniopDsv4SglangStoreFlashmlaDescriptor_t desc);
+#endif

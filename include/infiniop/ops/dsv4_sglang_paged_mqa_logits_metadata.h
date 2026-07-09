@@ -1,0 +1,9 @@
+#ifndef __INFINIOP_DSV4_SGLANG_PAGED_MQA_LOGITS_METADATA_H__
+#define __INFINIOP_DSV4_SGLANG_PAGED_MQA_LOGITS_METADATA_H__
+#include "../operator_descriptor.h"
+typedef struct InfiniopDescriptor *infiniopDsv4SglangPagedMqaLogitsMetadataDescriptor_t;
+__INFINI_C __export infiniStatus_t infiniopCreateDsv4SglangPagedMqaLogitsMetadataDescriptor(infiniopHandle_t handle, infiniopDsv4SglangPagedMqaLogitsMetadataDescriptor_t *desc_ptr, infiniopTensorDescriptor_t seq_lens_desc, infiniopTensorDescriptor_t metadata_desc);
+__INFINI_C __export infiniStatus_t infiniopGetDsv4SglangPagedMqaLogitsMetadataWorkspaceSize(infiniopDsv4SglangPagedMqaLogitsMetadataDescriptor_t desc, size_t *size);
+__INFINI_C __export infiniStatus_t infiniopDsv4SglangPagedMqaLogitsMetadata(infiniopDsv4SglangPagedMqaLogitsMetadataDescriptor_t desc, void *workspace, size_t workspace_size, const void *seq_lens, void *metadata, void *stream);
+__INFINI_C __export infiniStatus_t infiniopDestroyDsv4SglangPagedMqaLogitsMetadataDescriptor(infiniopDsv4SglangPagedMqaLogitsMetadataDescriptor_t desc);
+#endif

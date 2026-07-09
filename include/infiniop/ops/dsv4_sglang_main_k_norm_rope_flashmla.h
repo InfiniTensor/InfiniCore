@@ -1,0 +1,9 @@
+#ifndef __INFINIOP_DSV4_SGLANG_MAIN_K_NORM_ROPE_FLASHMLA_H__
+#define __INFINIOP_DSV4_SGLANG_MAIN_K_NORM_ROPE_FLASHMLA_H__
+#include "../operator_descriptor.h"
+typedef struct InfiniopDescriptor *infiniopDsv4SglangMainKNormRopeFlashmlaDescriptor_t;
+__INFINI_C __export infiniStatus_t infiniopCreateDsv4SglangMainKNormRopeFlashmlaDescriptor(infiniopHandle_t handle, infiniopDsv4SglangMainKNormRopeFlashmlaDescriptor_t *desc_ptr, infiniopTensorDescriptor_t kv_desc, infiniopTensorDescriptor_t weight_desc, infiniopTensorDescriptor_t freqs_desc, infiniopTensorDescriptor_t positions_desc, infiniopTensorDescriptor_t out_loc_desc, infiniopTensorDescriptor_t cache_desc, double eps);
+__INFINI_C __export infiniStatus_t infiniopGetDsv4SglangMainKNormRopeFlashmlaWorkspaceSize(infiniopDsv4SglangMainKNormRopeFlashmlaDescriptor_t desc, size_t *size);
+__INFINI_C __export infiniStatus_t infiniopDsv4SglangMainKNormRopeFlashmla(infiniopDsv4SglangMainKNormRopeFlashmlaDescriptor_t desc, void *workspace, size_t workspace_size, void *kv, const void *weight, const void *freqs, const void *positions, const void *out_loc, void *cache, void *stream);
+__INFINI_C __export infiniStatus_t infiniopDestroyDsv4SglangMainKNormRopeFlashmlaDescriptor(infiniopDsv4SglangMainKNormRopeFlashmlaDescriptor_t desc);
+#endif

@@ -1,0 +1,9 @@
+#ifndef __INFINIOP_DSV4_SGLANG_SILU_AND_MUL_CLAMP_H__
+#define __INFINIOP_DSV4_SGLANG_SILU_AND_MUL_CLAMP_H__
+#include "../operator_descriptor.h"
+typedef struct InfiniopDescriptor *infiniopDsv4SglangSiluAndMulClampDescriptor_t;
+__INFINI_C __export infiniStatus_t infiniopCreateDsv4SglangSiluAndMulClampDescriptor(infiniopHandle_t handle, infiniopDsv4SglangSiluAndMulClampDescriptor_t *desc_ptr, infiniopTensorDescriptor_t output_desc, infiniopTensorDescriptor_t input_desc, double limit);
+__INFINI_C __export infiniStatus_t infiniopGetDsv4SglangSiluAndMulClampWorkspaceSize(infiniopDsv4SglangSiluAndMulClampDescriptor_t desc, size_t *size);
+__INFINI_C __export infiniStatus_t infiniopDsv4SglangSiluAndMulClamp(infiniopDsv4SglangSiluAndMulClampDescriptor_t desc, void *workspace, size_t workspace_size, void *output, const void *input, void *stream);
+__INFINI_C __export infiniStatus_t infiniopDestroyDsv4SglangSiluAndMulClampDescriptor(infiniopDsv4SglangSiluAndMulClampDescriptor_t desc);
+#endif

@@ -3501,6 +3501,310 @@ def dsv4_sglang_hash_topk_(lib):
 
 
 @OpRegister.operator
+def dsv4_sglang_silu_and_mul_clamp_(lib):
+    lib.infiniopCreateDsv4SglangSiluAndMulClampDescriptor.restype = c_int32
+    lib.infiniopCreateDsv4SglangSiluAndMulClampDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_double,
+    ]
+    lib.infiniopGetDsv4SglangSiluAndMulClampWorkspaceSize.restype = c_int32
+    lib.infiniopGetDsv4SglangSiluAndMulClampWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopDsv4SglangSiluAndMulClamp.restype = c_int32
+    lib.infiniopDsv4SglangSiluAndMulClamp.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyDsv4SglangSiluAndMulClampDescriptor.restype = c_int32
+    lib.infiniopDestroyDsv4SglangSiluAndMulClampDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t
+    ]
+
+
+@OpRegister.operator
+def dsv4_sglang_paged_mqa_logits_metadata_(lib):
+    lib.infiniopCreateDsv4SglangPagedMqaLogitsMetadataDescriptor.restype = c_int32
+    lib.infiniopCreateDsv4SglangPagedMqaLogitsMetadataDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+    lib.infiniopGetDsv4SglangPagedMqaLogitsMetadataWorkspaceSize.restype = c_int32
+    lib.infiniopGetDsv4SglangPagedMqaLogitsMetadataWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopDsv4SglangPagedMqaLogitsMetadata.restype = c_int32
+    lib.infiniopDsv4SglangPagedMqaLogitsMetadata.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyDsv4SglangPagedMqaLogitsMetadataDescriptor.restype = c_int32
+    lib.infiniopDestroyDsv4SglangPagedMqaLogitsMetadataDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t
+    ]
+
+
+@OpRegister.operator
+def dsv4_sglang_topk_v2_(lib):
+    lib.infiniopCreateDsv4SglangTopkV2Descriptor.restype = c_int32
+    lib.infiniopCreateDsv4SglangTopkV2Descriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_int64,
+    ]
+    lib.infiniopGetDsv4SglangTopkV2WorkspaceSize.restype = c_int32
+    lib.infiniopGetDsv4SglangTopkV2WorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopDsv4SglangTopkV2.restype = c_int32
+    lib.infiniopDsv4SglangTopkV2.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyDsv4SglangTopkV2Descriptor.restype = c_int32
+    lib.infiniopDestroyDsv4SglangTopkV2Descriptor.argtypes = [
+        infiniopOperatorDescriptor_t
+    ]
+
+
+@OpRegister.operator
+def dsv4_sglang_fused_norm_rope_(lib):
+    lib.infiniopCreateDsv4SglangFusedNormRopeDescriptor.restype = c_int32
+    lib.infiniopCreateDsv4SglangFusedNormRopeDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_double,
+    ]
+    lib.infiniopGetDsv4SglangFusedNormRopeWorkspaceSize.restype = c_int32
+    lib.infiniopGetDsv4SglangFusedNormRopeWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopDsv4SglangFusedNormRope.restype = c_int32
+    lib.infiniopDsv4SglangFusedNormRope.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyDsv4SglangFusedNormRopeDescriptor.restype = c_int32
+    lib.infiniopDestroyDsv4SglangFusedNormRopeDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t
+    ]
+
+
+@OpRegister.operator
+def dsv4_sglang_main_q_norm_rope_(lib):
+    lib.infiniopCreateDsv4SglangMainQNormRopeDescriptor.restype = c_int32
+    lib.infiniopCreateDsv4SglangMainQNormRopeDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_double,
+    ]
+    lib.infiniopGetDsv4SglangMainQNormRopeWorkspaceSize.restype = c_int32
+    lib.infiniopGetDsv4SglangMainQNormRopeWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopDsv4SglangMainQNormRope.restype = c_int32
+    lib.infiniopDsv4SglangMainQNormRope.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyDsv4SglangMainQNormRopeDescriptor.restype = c_int32
+    lib.infiniopDestroyDsv4SglangMainQNormRopeDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t
+    ]
+
+
+@OpRegister.operator
+def dsv4_sglang_store_indexer_(lib):
+    lib.infiniopCreateDsv4SglangStoreIndexerDescriptor.restype = c_int32
+    lib.infiniopCreateDsv4SglangStoreIndexerDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+    lib.infiniopGetDsv4SglangStoreIndexerWorkspaceSize.restype = c_int32
+    lib.infiniopGetDsv4SglangStoreIndexerWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopDsv4SglangStoreIndexer.restype = c_int32
+    lib.infiniopDsv4SglangStoreIndexer.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyDsv4SglangStoreIndexerDescriptor.restype = c_int32
+    lib.infiniopDestroyDsv4SglangStoreIndexerDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t
+    ]
+
+
+@OpRegister.operator
+def dsv4_sglang_store_flashmla_(lib):
+    lib.infiniopCreateDsv4SglangStoreFlashmlaDescriptor.restype = c_int32
+    lib.infiniopCreateDsv4SglangStoreFlashmlaDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+    lib.infiniopGetDsv4SglangStoreFlashmlaWorkspaceSize.restype = c_int32
+    lib.infiniopGetDsv4SglangStoreFlashmlaWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopDsv4SglangStoreFlashmla.restype = c_int32
+    lib.infiniopDsv4SglangStoreFlashmla.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyDsv4SglangStoreFlashmlaDescriptor.restype = c_int32
+    lib.infiniopDestroyDsv4SglangStoreFlashmlaDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t
+    ]
+
+
+@OpRegister.operator
+def dsv4_sglang_mega_moe_pre_dispatch_(lib):
+    lib.infiniopCreateDsv4SglangMegaMoePreDispatchDescriptor.restype = c_int32
+    lib.infiniopCreateDsv4SglangMegaMoePreDispatchDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+    lib.infiniopGetDsv4SglangMegaMoePreDispatchWorkspaceSize.restype = c_int32
+    lib.infiniopGetDsv4SglangMegaMoePreDispatchWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopDsv4SglangMegaMoePreDispatch.restype = c_int32
+    lib.infiniopDsv4SglangMegaMoePreDispatch.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyDsv4SglangMegaMoePreDispatchDescriptor.restype = c_int32
+    lib.infiniopDestroyDsv4SglangMegaMoePreDispatchDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t
+    ]
+
+
+@OpRegister.operator
+def dsv4_sglang_main_k_norm_rope_flashmla_(lib):
+    lib.infiniopCreateDsv4SglangMainKNormRopeFlashmlaDescriptor.restype = c_int32
+    lib.infiniopCreateDsv4SglangMainKNormRopeFlashmlaDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_double,
+    ]
+    lib.infiniopGetDsv4SglangMainKNormRopeFlashmlaWorkspaceSize.restype = c_int32
+    lib.infiniopGetDsv4SglangMainKNormRopeFlashmlaWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopDsv4SglangMainKNormRopeFlashmla.restype = c_int32
+    lib.infiniopDsv4SglangMainKNormRopeFlashmla.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyDsv4SglangMainKNormRopeFlashmlaDescriptor.restype = c_int32
+    lib.infiniopDestroyDsv4SglangMainKNormRopeFlashmlaDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t
+    ]
+
+
+@OpRegister.operator
 def dsv4_deepgemm_tf32_hc_pernorm_gemm_(lib):
     lib.infiniopCreateDsv4DeepgemmTf32HcPernormGemmDescriptor.restype = c_int32
     lib.infiniopCreateDsv4DeepgemmTf32HcPernormGemmDescriptor.argtypes = [
@@ -3856,5 +4160,116 @@ def dsv4_fused_quant_ops_(lib):
     ]
     lib.infiniopDestroyDsv4SwaPrefillIndicesDescriptor.restype = c_int32
     lib.infiniopDestroyDsv4SwaPrefillIndicesDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t
+    ]
+
+
+@OpRegister.operator
+def dsv4_sglang_compress_c4_v2_prefill_(lib):
+    lib.infiniopCreateDsv4SglangCompressC4V2PrefillDescriptor.restype = c_int32
+    lib.infiniopCreateDsv4SglangCompressC4V2PrefillDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+    lib.infiniopGetDsv4SglangCompressC4V2PrefillWorkspaceSize.restype = c_int32
+    lib.infiniopGetDsv4SglangCompressC4V2PrefillWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopDsv4SglangCompressC4V2Prefill.restype = c_int32
+    lib.infiniopDsv4SglangCompressC4V2Prefill.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyDsv4SglangCompressC4V2PrefillDescriptor.restype = c_int32
+    lib.infiniopDestroyDsv4SglangCompressC4V2PrefillDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t
+    ]
+
+
+@OpRegister.operator
+def dsv4_sglang_compress_c128_v2_prefill_(lib):
+    lib.infiniopCreateDsv4SglangCompressC128V2PrefillDescriptor.restype = c_int32
+    lib.infiniopCreateDsv4SglangCompressC128V2PrefillDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+    lib.infiniopGetDsv4SglangCompressC128V2PrefillWorkspaceSize.restype = c_int32
+    lib.infiniopGetDsv4SglangCompressC128V2PrefillWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopDsv4SglangCompressC128V2Prefill.restype = c_int32
+    lib.infiniopDsv4SglangCompressC128V2Prefill.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyDsv4SglangCompressC128V2PrefillDescriptor.restype = c_int32
+    lib.infiniopDestroyDsv4SglangCompressC128V2PrefillDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t
+    ]
+
+
+@OpRegister.operator
+def dsv4_sglang_compress_c128_online_v2_prefill_(lib):
+    lib.infiniopCreateDsv4SglangCompressC128OnlineV2PrefillDescriptor.restype = c_int32
+    lib.infiniopCreateDsv4SglangCompressC128OnlineV2PrefillDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+    lib.infiniopGetDsv4SglangCompressC128OnlineV2PrefillWorkspaceSize.restype = c_int32
+    lib.infiniopGetDsv4SglangCompressC128OnlineV2PrefillWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopDsv4SglangCompressC128OnlineV2Prefill.restype = c_int32
+    lib.infiniopDsv4SglangCompressC128OnlineV2Prefill.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyDsv4SglangCompressC128OnlineV2PrefillDescriptor.restype = c_int32
+    lib.infiniopDestroyDsv4SglangCompressC128OnlineV2PrefillDescriptor.argtypes = [
         infiniopOperatorDescriptor_t
     ]

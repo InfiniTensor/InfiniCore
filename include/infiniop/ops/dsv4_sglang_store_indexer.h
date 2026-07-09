@@ -1,0 +1,9 @@
+#ifndef __INFINIOP_DSV4_SGLANG_STORE_INDEXER_H__
+#define __INFINIOP_DSV4_SGLANG_STORE_INDEXER_H__
+#include "../operator_descriptor.h"
+typedef struct InfiniopDescriptor *infiniopDsv4SglangStoreIndexerDescriptor_t;
+__INFINI_C __export infiniStatus_t infiniopCreateDsv4SglangStoreIndexerDescriptor(infiniopHandle_t handle, infiniopDsv4SglangStoreIndexerDescriptor_t *desc_ptr, infiniopTensorDescriptor_t input_desc, infiniopTensorDescriptor_t cache_desc, infiniopTensorDescriptor_t indices_desc);
+__INFINI_C __export infiniStatus_t infiniopGetDsv4SglangStoreIndexerWorkspaceSize(infiniopDsv4SglangStoreIndexerDescriptor_t desc, size_t *size);
+__INFINI_C __export infiniStatus_t infiniopDsv4SglangStoreIndexer(infiniopDsv4SglangStoreIndexerDescriptor_t desc, void *workspace, size_t workspace_size, const void *input, void *cache, const void *indices, void *stream);
+__INFINI_C __export infiniStatus_t infiniopDestroyDsv4SglangStoreIndexerDescriptor(infiniopDsv4SglangStoreIndexerDescriptor_t desc);
+#endif
