@@ -122,6 +122,15 @@ target("infiniop-hygon")
     
     add_hygon_dtk_paths()
 
+    local tvm_ffi_root = os.getenv("TVM_FFI_ROOT") or "/usr/local/lib/python3.10/dist-packages/tvm_ffi"
+    if os.isdir(path.join(tvm_ffi_root, "include")) then
+        add_includedirs(path.join(tvm_ffi_root, "include"))
+    end
+    if os.isdir(path.join(tvm_ffi_root, "lib")) then
+        add_linkdirs(path.join(tvm_ffi_root, "lib"))
+    end
+    add_links("tvm_ffi", "dl")
+
     set_warnings("all", "error")
     add_cuflags("-Wno-error=unused-private-field", {force = true})
     add_cuflags("-Wno-return-type", {force = true})  -- 抑制return语句警告
@@ -143,8 +152,7 @@ target("infiniop-hygon")
     add_files("../src/infiniop/devices/cpu/*.cc", "../src/infiniop/ops/*/cpu/*.cc", "../src/infiniop/reduce/cpu/*.cc")
 
     -- 复用NVIDIA的CUDA实现，通过HIP兼容层
-    add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")
-    add_files("../src/infiniop/ops/quant/per_channel_quant_int8/nvidia/*.cu")
+    add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu", "../src/infiniop/ops/*/*/nvidia/*.cu")
 
     -- Keep platform-specific or currently unregistered NVIDIA sources out of the Hygon target.
     remove_files("../src/infiniop/ops/avg_pool3d/nvidia/*.cu")
