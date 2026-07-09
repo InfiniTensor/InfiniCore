@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <memory>
+#include <string>
 #include <vector>
 
 namespace op::deepseek_moe_w8a8i8::nvidia {
@@ -22,6 +23,8 @@ Descriptor::~Descriptor() {
 }
 
 namespace {
+
+constexpr size_t W8A8_GROUPED_GEMM_MIN_TOKENS = 2048;
 
 constexpr size_t align_up(size_t value, size_t alignment) {
     return (value + alignment - 1) / alignment * alignment;
@@ -1130,7 +1133,11 @@ infiniStatus_t launch_typed(
         down_scale_ptrs = down_scale_workspace;
     }
 
-    const bool use_grouped_gemm = std::getenv("INFINICORE_DSV4_W8A8_GROUPED_GEMM") != nullptr;
+    const char *grouped_env = std::getenv("INFINICORE_DSV4_W8A8_GROUPED_GEMM");
+    const bool force_grouped = grouped_env != nullptr && std::string(grouped_env) == "1";
+    const bool disable_grouped = grouped_env != nullptr && std::string(grouped_env) == "0";
+    const bool auto_grouped = info.ntokens >= W8A8_GROUPED_GEMM_MIN_TOKENS && info.num_experts <= 256;
+    const bool use_grouped_gemm = force_grouped || (!disable_grouped && auto_grouped);
     if (use_grouped_gemm && info.ntokens >= 4) {
         return launch_grouped_typed<T>(workspace, workspace_size, info, out, hidden, topk_indices, topk_weights,
                                        gate_ptrs, up_ptrs, down_ptrs, gate_scale_ptrs, up_scale_ptrs, down_scale_ptrs,
