@@ -22,6 +22,10 @@ _TEST_CASES_DATA = [
     (2, 8, 8, 128, 16, 32, 2),
     (4, 16, 16, 128, 8, 64, 3),
     (8, 64, 64, 128, 8, 16, 5),
+    # Qwen3.6/Qwen3.5 full attention local TP shapes: head_dim=value_dim=256, GQA ratio=6.
+    (1, 24, 4, 256, 8, 8, 1),
+    (1, 12, 2, 256, 8, 8, 1),
+    (1, 6, 1, 256, 8, 8, 1),
     # New DeepSeek MLA wrapper case: verifies prefill supports q/k head
     # size 576 with value head size 512.
     (1, 16, 1, 576, 8, 8, 1, 512),
@@ -209,6 +213,11 @@ def ref_paged_attention_multi_turn(
 
         K = torch.stack(keys, dim=0)
         V = torch.stack(values, dim=0)
+        num_query_heads, num_kv_heads = cur_q.shape[1], K.shape[1]
+        num_queries_per_kv = num_query_heads // num_kv_heads
+        if num_queries_per_kv > 1:
+            K = torch.repeat_interleave(K, num_queries_per_kv, dim=1)
+            V = torch.repeat_interleave(V, num_queries_per_kv, dim=1)
 
         scores = torch.einsum("qhd,khd->hqk", cur_q.float(), K.float()) * scale
         mask = torch.full((q_len, total_len), float("-inf"), device=query.device)

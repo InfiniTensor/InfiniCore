@@ -26,6 +26,9 @@ inline const char *default_prefill_kernel(const PagedAttentionPrefillInfo &info)
     if (info.head_size == 576) {
         return "ref";
     }
+    if (info.head_size == 256) {
+        return "ref";
+    }
     // Iluvatar/Hygon: use warp for the non-MLA shapes where it is the stable path.
 #if defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
     (void)info;
@@ -907,6 +910,18 @@ infiniStatus_t launch_prefill_ref(
 
     if (head_size == 192) {
         op::paged_attention_prefill::cuda::PagedAttentionPrefillReferenceKernel<Tindex, Tdata, Tcompute, 192>
+            <<<grid, block, 0, stream>>>(
+                out, q, k_cache, v_cache, block_tables, total_kv_lens, cu_seqlens_q, alibi_slopes,
+                num_heads, num_kv_heads, scale, max_num_blocks_per_seq, page_block_size,
+                block_table_batch_stride, q_stride, q_head_stride,
+                k_batch_stride, k_row_stride, k_head_stride,
+                v_batch_stride, v_row_stride, v_head_stride,
+                o_stride, o_head_stride, num_seqs);
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    if (head_size == 256) {
+        op::paged_attention_prefill::cuda::PagedAttentionPrefillReferenceKernel<Tindex, Tdata, Tcompute, 256>
             <<<grid, block, 0, stream>>>(
                 out, q, k_cache, v_cache, block_tables, total_kv_lens, cu_seqlens_q, alibi_slopes,
                 num_heads, num_kv_heads, scale, max_num_blocks_per_seq, page_block_size,
