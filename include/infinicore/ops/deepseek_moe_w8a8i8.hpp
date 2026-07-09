@@ -22,6 +22,17 @@ INFINICORE_GRAPH_OP_CLASS(
     size_t,
     size_t);
 
+
+INFINICORE_GRAPH_OP_CLASS(
+    DeepseekMoeW8A8I8WithPtrTables,
+    Tensor,
+    const Tensor &,
+    const Tensor &,
+    const Tensor &,
+    const Tensor &,
+    size_t,
+    size_t);
+
 Tensor deepseek_moe_w8a8i8(const Tensor &hidden,
                            const Tensor &topk_indices,
                            const Tensor &topk_weights,
@@ -46,5 +57,21 @@ void deepseek_moe_w8a8i8_(Tensor out,
                           const std::vector<Tensor> &down_weight_scales,
                           size_t intermediate_size,
                           size_t num_experts);
+
+
+Tensor deepseek_moe_w8a8i8_with_ptr_tables(const Tensor &hidden,
+                                           const Tensor &topk_indices,
+                                           const Tensor &topk_weights,
+                                           const Tensor &ptr_tables,
+                                           size_t intermediate_size,
+                                           size_t num_experts);
+
+void deepseek_moe_w8a8i8_with_ptr_tables_(Tensor out,
+                                          const Tensor &hidden,
+                                          const Tensor &topk_indices,
+                                          const Tensor &topk_weights,
+                                          const Tensor &ptr_tables,
+                                          size_t intermediate_size,
+                                          size_t num_experts);
 
 } // namespace infinicore::op
