@@ -1,6 +1,7 @@
 #include "infinicore/ops/mul_scalar.hpp"
 
 #include "../infiniop_impl.hpp"
+#include "infiniop/ops/mul_scalar.h"
 
 namespace infinicore::op::mul_scalar_impl::infiniop {
 
