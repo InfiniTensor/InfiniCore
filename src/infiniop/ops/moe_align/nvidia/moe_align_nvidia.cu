@@ -356,13 +356,23 @@ infiniStatus_t Descriptor::calculate(
     auto *cumsum_buffer = static_cast<int32_t *>(workspace);
 
     constexpr int warp_size = 32;
-    int threads = 1024;
+#if defined(ENABLE_HYGON_API) && !defined(ENABLE_NVIDIA_API)
+    constexpr int max_threads_per_block = 256;
+#else
+    constexpr int max_threads_per_block = 1024;
+#endif
+    int threads = max_threads_per_block;
     threads = ((threads + warp_size - 1) / warp_size) * warp_size;
 
     const int32_t num_experts = static_cast<int32_t>(_info.num_experts + 1);
     const int32_t block_size = static_cast<int32_t>(_info.block_size);
     const int32_t max_num_tokens_padded = static_cast<int32_t>(_info.max_num_tokens_padded);
-    const bool small_batch_expert_mode = (_info.numel < 1024) && (num_experts <= 64);
+    const bool small_batch_expert_mode =
+#if defined(ENABLE_HYGON_API) && !defined(ENABLE_NVIDIA_API)
+        false;
+#else
+        (_info.numel < 1024) && (num_experts <= 64);
+#endif
 
     if (small_batch_expert_mode) {
         const int32_t expert_threads = std::max(num_experts, warp_size);

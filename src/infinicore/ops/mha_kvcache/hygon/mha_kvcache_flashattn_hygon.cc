@@ -11,8 +11,17 @@
 
 #include <c10/hip/HIPFunctions.h>
 #include <c10/hip/HIPGuard.h>
+#include <hip/hip_runtime.h>
 
 namespace infinicore::op::mha_kvcache_impl::flashattn {
+
+namespace {
+bool isCurrentHipStreamCapturing() {
+    hipStreamCaptureStatus capture_status = hipStreamCaptureStatusNone;
+    hipError_t status = hipStreamIsCapturing(infinicore::adaptor::get_hip_stream().stream(), &capture_status);
+    return status == hipSuccess && capture_status != hipStreamCaptureStatusNone;
+}
+} // namespace
 
 struct PlannedMeta {
     graph::GraphTensor out, q, k_cache, v_cache, seqlens_k, block_table;
@@ -143,6 +152,9 @@ void run(void *planned_meta) {
         false,
         0);
 
+    if (!isCurrentHipStreamCapturing()) {
+        c10::hip::device_synchronize();
+    }
     if (!result.empty() && result[0].defined()) {
         out_tensor.copy_(result[0]);
     }

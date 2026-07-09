@@ -57,6 +57,7 @@
 #include "ops/moe_sum.hpp"
 #include "ops/moe_topk_sigmoid.hpp"
 #include "ops/moe_topk_softmax.hpp"
+#include "ops/moe_w16a16_marlin.hpp"
 #include "ops/nrm2.hpp"
 #include "ops/ones.hpp"
 #include "ops/paged_attention.hpp"

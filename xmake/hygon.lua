@@ -220,9 +220,7 @@ target("infiniccl-hygon")
         add_cxxflags("-fPIC")
 
         -- 添加海光DCU特定的编译标志
-        -- 检测实际GPU架构，如果未指定则默认使用gfx906
-        local hygon_arch = os.getenv("HYGON_ARCH") or "gfx906"
-        add_cuflags("-arch=" .. hygon_arch)
+        add_cuflags("-arch=" .. HYGON_ARCH)
 
         -- 使用NCCL (NVIDIA Collective Communications Library)
         add_links("nccl")
