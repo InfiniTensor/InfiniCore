@@ -371,6 +371,96 @@ __global__ void hash_topk_selected_linear_kernel(
     }
 }
 
+
+template <typename T>
+__global__ void hash_topk_selected_linear_topk6_kernel(
+    const T *__restrict__ hidden_states,
+    const T *__restrict__ weight,
+    const void *__restrict__ input_ids,
+    const void *__restrict__ tid2eid,
+    float *__restrict__ topk_weights,
+    int *__restrict__ topk_indices,
+    size_t num_tokens,
+    size_t hidden_size,
+    size_t num_experts,
+    size_t vocab_size,
+    infiniDtype_t input_ids_dtype,
+    infiniDtype_t tid2eid_dtype,
+    bool renormalize) {
+    constexpr int TOPK = 6;
+    const size_t token = blockIdx.x;
+    const int tid = threadIdx.x;
+    if (token >= num_tokens) {
+        return;
+    }
+
+    extern __shared__ float shared[];
+    float *partials = shared;
+    float *scores = shared + TOPK * blockDim.x;
+    int *experts = reinterpret_cast<int *>(scores + TOPK);
+
+    float local[TOPK];
+#pragma unroll
+    for (int k = 0; k < TOPK; ++k) {
+        local[k] = 0.0f;
+    }
+
+    const long long token_id = load_id_by_dtype(input_ids, token, input_ids_dtype);
+    if (tid < TOPK) {
+        int expert_i32 = 0;
+        if (token_id >= 0 && static_cast<size_t>(token_id) < vocab_size) {
+            const long long expert_id = load_id_by_dtype(tid2eid, static_cast<size_t>(token_id) * TOPK + tid, tid2eid_dtype);
+            if (expert_id >= 0 && static_cast<size_t>(expert_id) < num_experts) {
+                expert_i32 = static_cast<int>(expert_id);
+            }
+        }
+        experts[tid] = expert_i32;
+        topk_indices[token * TOPK + tid] = expert_i32;
+    }
+    __syncthreads();
+
+    const T *hidden = hidden_states + token * hidden_size;
+    for (size_t h = tid; h < hidden_size; h += blockDim.x) {
+        const float hv = to_float<T>(hidden[h]);
+#pragma unroll
+        for (int k = 0; k < TOPK; ++k) {
+            const int expert = experts[k];
+            local[k] += hv * to_float<T>(weight[static_cast<size_t>(expert) * hidden_size + h]);
+        }
+    }
+
+#pragma unroll
+    for (int k = 0; k < TOPK; ++k) {
+        partials[k * blockDim.x + tid] = local[k];
+    }
+    __syncthreads();
+
+    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+        if (tid < stride) {
+#pragma unroll
+            for (int k = 0; k < TOPK; ++k) {
+                partials[k * blockDim.x + tid] += partials[k * blockDim.x + tid + stride];
+            }
+        }
+        __syncthreads();
+    }
+
+    if (tid == 0) {
+        float denom = 0.0f;
+#pragma unroll
+        for (int k = 0; k < TOPK; ++k) {
+            const float score = sqrtsoftplus(partials[k * blockDim.x]);
+            scores[k] = score;
+            denom += score;
+        }
+        const float inv = renormalize ? 1.0f / (denom + 1.0e-9f) : 1.0f;
+#pragma unroll
+        for (int k = 0; k < TOPK; ++k) {
+            topk_weights[token * TOPK + k] = scores[k] * inv;
+        }
+    }
+}
+
 template <typename T>
 infiniStatus_t launch_hash_topk_typed(
     const DeepseekV4HashTopkRouterInfo &info,
@@ -385,6 +475,25 @@ infiniStatus_t launch_hash_topk_typed(
         return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
     }
     constexpr int threads = 256;
+    if (info.topk == 6 && std::getenv("INFINICORE_DSV4_ROUTER_DISABLE_TOPK6_FAST_PATH") == nullptr) {
+        const size_t shared_bytes = (6 * threads + 6) * sizeof(float) + 6 * sizeof(int);
+        hash_topk_selected_linear_topk6_kernel<T><<<info.num_tokens, threads, shared_bytes, stream>>>(
+            reinterpret_cast<const T *>(hidden_states),
+            reinterpret_cast<const T *>(weight),
+            input_ids,
+            tid2eid,
+            topk_weights,
+            topk_indices,
+            info.num_tokens,
+            info.hidden_size,
+            info.num_experts,
+            info.vocab_size,
+            info.input_ids_dtype,
+            info.tid2eid_dtype,
+            info.renormalize);
+        CHECK_CUDA(cudaGetLastError());
+        return INFINI_STATUS_SUCCESS;
+    }
     const size_t shared_bytes = (16 * threads + 16) * sizeof(float) + 16 * sizeof(int);
     hash_topk_selected_linear_kernel<T><<<info.num_tokens, threads, shared_bytes, stream>>>(
         reinterpret_cast<const T *>(hidden_states),
