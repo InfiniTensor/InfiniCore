@@ -1,0 +1,21 @@
+#ifndef DEEPSEEK_V4_SWA_PREFILL_H
+#define DEEPSEEK_V4_SWA_PREFILL_H
+
+#include "../../operator.h"
+#include "info.h"
+
+#define DESCRIPTOR(NAMESPACE) \
+    namespace op::deepseek_v4_swa_prefill::NAMESPACE { \
+    class Descriptor final : public InfiniopDescriptor { \
+        DeepseekV4SwaPrefillInfo _info; \
+        size_t _workspace_size; \
+        Descriptor(DeepseekV4SwaPrefillInfo info, size_t workspace_size, infiniDevice_t device_type, int device_id) : InfiniopDescriptor{device_type, device_id}, _info(info), _workspace_size(workspace_size) {} \
+    public: \
+        size_t workspaceSize() const { return _workspace_size; } \
+        const DeepseekV4SwaPrefillInfo &info() const { return _info; } \
+        static infiniStatus_t create(infiniopHandle_t handle, Descriptor **desc_ptr, infiniopTensorDescriptor_t y_desc, infiniopTensorDescriptor_t q_desc, infiniopTensorDescriptor_t k_desc, infiniopTensorDescriptor_t attn_sink_desc, infiniopTensorDescriptor_t query_positions_desc, infiniopTensorDescriptor_t key_positions_desc, float softmax_scale, size_t window, size_t rope_dim, double rope_theta, bool use_yarn, double yarn_factor, double yarn_beta_fast, double yarn_beta_slow, int64_t yarn_original_seq_len, double yarn_extrapolation_factor); \
+        infiniStatus_t calculate(void *workspace, size_t workspace_size, void *y, const void *q, const void *k, const void *attn_sink, const void *query_positions, const void *key_positions, void *stream) const; \
+    }; \
+    }
+
+#endif

@@ -14,6 +14,8 @@ __INFINI_C infiniStatus_t infiniopCreateDeepseekV4SwaDecodeDescriptor(
     infiniopTensorDescriptor_t k_desc,
     infiniopTensorDescriptor_t attn_sink_desc,
     infiniopTensorDescriptor_t positions_desc,
+    size_t key_offset,
+    size_t key_len,
     float softmax_scale,
     size_t rope_dim,
     double rope_theta,
@@ -25,7 +27,7 @@ __INFINI_C infiniStatus_t infiniopCreateDeepseekV4SwaDecodeDescriptor(
     double yarn_extrapolation_factor) {
 #define CREATE(CASE, NAMESPACE) \
     case CASE: \
-        return op::deepseek_v4_swa_decode::NAMESPACE::Descriptor::create(handle, reinterpret_cast<op::deepseek_v4_swa_decode::NAMESPACE::Descriptor **>(desc_ptr), y_desc, q_desc, k_desc, attn_sink_desc, positions_desc, softmax_scale, rope_dim, rope_theta, use_yarn, yarn_factor, yarn_beta_fast, yarn_beta_slow, yarn_original_seq_len, yarn_extrapolation_factor)
+        return op::deepseek_v4_swa_decode::NAMESPACE::Descriptor::create(handle, reinterpret_cast<op::deepseek_v4_swa_decode::NAMESPACE::Descriptor **>(desc_ptr), y_desc, q_desc, k_desc, attn_sink_desc, positions_desc, key_offset, key_len, softmax_scale, rope_dim, rope_theta, use_yarn, yarn_factor, yarn_beta_fast, yarn_beta_slow, yarn_original_seq_len, yarn_extrapolation_factor)
     switch (handle->device) {
 #ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia);

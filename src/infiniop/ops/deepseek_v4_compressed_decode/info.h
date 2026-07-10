@@ -29,6 +29,8 @@ struct DeepseekV4CompressedDecodeInfo {
     size_t query_len;
     size_t num_heads;
     size_t key_len;
+    size_t full_key_len;
+    size_t key_offset;
     size_t num_kv_heads;
     size_t num_blocks;
     size_t head_dim;
@@ -57,6 +59,8 @@ struct DeepseekV4CompressedDecodeInfo {
         infiniopTensorDescriptor_t query_positions_desc,
         infiniopTensorDescriptor_t block_positions_desc,
         infiniopTensorDescriptor_t indexed_blocks_desc,
+        size_t key_offset,
+        size_t active_key_len,
         float softmax_scale,
         size_t compress_ratio,
         size_t index_top_k,
@@ -100,11 +104,12 @@ struct DeepseekV4CompressedDecodeInfo {
         const size_t query_len = q_desc->dim(1);
         const size_t num_heads = q_desc->dim(2);
         const size_t head_dim = q_desc->dim(3);
-        const size_t key_len = k_desc->dim(1);
+        const size_t full_key_len = k_desc->dim(1);
+        const size_t key_len = active_key_len == 0 ? full_key_len : active_key_len;
         const size_t num_kv_heads = k_desc->dim(2);
         const size_t num_blocks = kv_comp_desc->dim(1);
-        if (batch_size == 0 || query_len == 0 || num_heads == 0 || key_len == 0 ||
-            num_kv_heads == 0 || num_blocks == 0 || head_dim == 0 || compress_ratio == 0) {
+        if (batch_size == 0 || query_len == 0 || num_heads == 0 || full_key_len == 0 || key_len == 0 ||
+            num_kv_heads == 0 || num_blocks == 0 || head_dim == 0 || compress_ratio == 0 || key_offset + key_len > full_key_len) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
         if (num_heads % num_kv_heads != 0 || rope_dim > head_dim || (rope_dim % 2) != 0) {
@@ -133,7 +138,7 @@ struct DeepseekV4CompressedDecodeInfo {
             return INFINI_STATUS_BAD_TENSOR_STRIDES;
         }
         return utils::Result<DeepseekV4CompressedDecodeInfo>(DeepseekV4CompressedDecodeInfo{
-            batch_size, query_len, num_heads, key_len, num_kv_heads, num_blocks, head_dim,
+            batch_size, query_len, num_heads, key_len, full_key_len, key_offset, num_kv_heads, num_blocks, head_dim,
             dtype, sink_dtype, positions_dtype, indexed_dtype, softmax_scale, compress_ratio,
             index_top_k, rope_dim, rope_theta, use_yarn, yarn_factor, yarn_beta_fast,
             yarn_beta_slow, yarn_original_seq_len, yarn_extrapolation_factor});

@@ -1,6 +1,6 @@
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API) || defined(ENABLE_ALI_API)
 
-#include "deepseek_v4_swa_decode_nvidia.cuh"
+#include "deepseek_v4_swa_prefill_nvidia.cuh"
 
 #include "../../../devices/nvidia/nvidia_common.cuh"
 #include "../../../devices/nvidia/nvidia_kernel_common.cuh"
@@ -11,7 +11,7 @@
 #include <math_constants.h>
 #include <type_traits>
 
-namespace op::deepseek_v4_swa_decode::nvidia {
+namespace op::deepseek_v4_swa_prefill::nvidia {
 namespace {
 
 template <typename T>
@@ -72,29 +72,29 @@ __device__ double yarn_inv_freq(size_t pair_idx,
     return inv_freq_interpolation * (1.0 - inv_freq_mask) + inv_freq_extrapolation * inv_freq_mask;
 }
 
-template <typename T, typename SinkT, typename PosT>
-__global__ void swa_decode_kernel(T *__restrict__ y,
-                                  const T *__restrict__ q,
-                                  const T *__restrict__ k,
-                                  const SinkT *__restrict__ attn_sink,
-                                  const void *__restrict__ positions,
-                                  size_t batch_size,
-                                  size_t query_len,
-                                  size_t num_heads,
-                                  size_t key_len,
-                                  size_t full_key_len,
-                                  size_t key_offset,
-                                  size_t num_kv_heads,
-                                  size_t head_dim,
-                                  float softmax_scale,
-                                  size_t rope_dim,
-                                  double rope_theta,
-                                  bool use_yarn,
-                                  double yarn_factor,
-                                  double yarn_beta_fast,
-                                  double yarn_beta_slow,
-                                  int64_t yarn_original_seq_len,
-                                  double yarn_extrapolation_factor) {
+template <typename T, typename SinkT, typename QPosT, typename KPosT>
+__global__ void swa_prefill_kernel(T *__restrict__ y,
+                                   const T *__restrict__ q,
+                                   const T *__restrict__ k,
+                                   const SinkT *__restrict__ attn_sink,
+                                   const void *__restrict__ query_positions,
+                                   const void *__restrict__ key_positions,
+                                   size_t batch_size,
+                                   size_t query_len,
+                                   size_t num_heads,
+                                   size_t key_len,
+                                   size_t num_kv_heads,
+                                   size_t head_dim,
+                                   float softmax_scale,
+                                   size_t window,
+                                   size_t rope_dim,
+                                   double rope_theta,
+                                   bool use_yarn,
+                                   double yarn_factor,
+                                   double yarn_beta_fast,
+                                   double yarn_beta_slow,
+                                   int64_t yarn_original_seq_len,
+                                   double yarn_extrapolation_factor) {
     extern __shared__ float smem[];
     float *logits = smem;
     float *scratch = smem + key_len;
@@ -111,12 +111,23 @@ __global__ void swa_decode_kernel(T *__restrict__ y,
     const size_t tq = tmp % query_len;
     const size_t b = tmp / query_len;
     const size_t kv_head = h / (num_heads / num_kv_heads);
+    const int64_t q_pos = read_pos<QPosT>(query_positions, tq);
+    const int64_t lower = q_pos - static_cast<int64_t>(window);
 
     const size_t q_base = ((b * query_len + tq) * num_heads + h) * head_dim;
-    const size_t k_base = (b * full_key_len * num_kv_heads + key_offset * num_kv_heads + kv_head) * head_dim;
+    const size_t k_base = (b * key_len * num_kv_heads + kv_head) * head_dim;
 
     float row_max = to_float<SinkT>(attn_sink[h]);
     for (size_t j = 0; j < key_len; ++j) {
+        const int64_t k_pos = read_pos<KPosT>(key_positions, j);
+        const bool valid = k_pos <= q_pos && k_pos > lower;
+        if (!valid) {
+            if (tid == 0) {
+                logits[j] = -CUDART_INF_F;
+            }
+            __syncthreads();
+            continue;
+        }
         const size_t k_offset = k_base + j * num_kv_heads * head_dim;
         float local_dot = 0.0f;
         for (size_t hd = tid; hd < head_dim; hd += blockDim.x) {
@@ -141,7 +152,9 @@ __global__ void swa_decode_kernel(T *__restrict__ y,
     if (tid == 0) {
         float denom = expf(to_float<SinkT>(attn_sink[h]) - row_max);
         for (size_t j = 0; j < key_len; ++j) {
-            denom += expf(logits[j] - row_max);
+            if (isfinite(logits[j])) {
+                denom += expf(logits[j] - row_max);
+            }
         }
         scratch[0] = row_max;
         scratch[1] = denom;
@@ -151,11 +164,13 @@ __global__ void swa_decode_kernel(T *__restrict__ y,
     const float max_logit = scratch[0];
     const float denom = scratch[1];
     const size_t pass_dim = head_dim - rope_dim;
-    const int64_t position = read_pos<PosT>(positions, tq);
 
     for (size_t d = tid; d < pass_dim; d += blockDim.x) {
         float acc = 0.0f;
         for (size_t j = 0; j < key_len; ++j) {
+            if (!isfinite(logits[j])) {
+                continue;
+            }
             const size_t k_offset = k_base + j * num_kv_heads * head_dim;
             const float prob = expf(logits[j] - max_logit) / denom;
             acc += prob * to_float<T>(k[k_offset + d]);
@@ -170,6 +185,9 @@ __global__ void swa_decode_kernel(T *__restrict__ y,
         float acc_even = 0.0f;
         float acc_odd = 0.0f;
         for (size_t j = 0; j < key_len; ++j) {
+            if (!isfinite(logits[j])) {
+                continue;
+            }
             const size_t k_offset = k_base + j * num_kv_heads * head_dim;
             const float prob = expf(logits[j] - max_logit) / denom;
             acc_even += prob * to_float<T>(k[k_offset + even]);
@@ -180,7 +198,7 @@ __global__ void swa_decode_kernel(T *__restrict__ y,
             inv_freq = yarn_inv_freq(pair, rope_dim, rope_theta, yarn_factor, yarn_beta_fast,
                                      yarn_beta_slow, yarn_original_seq_len, yarn_extrapolation_factor);
         }
-        const double angle = static_cast<double>(position) * inv_freq;
+        const double angle = static_cast<double>(q_pos) * inv_freq;
         const float c = static_cast<float>(cos(angle));
         const float s = static_cast<float>(-sin(angle));
         y[q_base + even] = from_float<T>(acc_even * c - acc_odd * s);
@@ -188,33 +206,34 @@ __global__ void swa_decode_kernel(T *__restrict__ y,
     }
 }
 
-template <typename T, typename SinkT, typename PosT>
-infiniStatus_t launch_typed_pos(const DeepseekV4SwaDecodeInfo &info,
-                                void *y,
-                                const void *q,
-                                const void *k,
-                                const void *attn_sink,
-                                const void *positions,
-                                cudaStream_t stream) {
+template <typename T, typename SinkT, typename QPosT, typename KPosT>
+infiniStatus_t launch_typed(const DeepseekV4SwaPrefillInfo &info,
+                            void *y,
+                            const void *q,
+                            const void *k,
+                            const void *attn_sink,
+                            const void *query_positions,
+                            const void *key_positions,
+                            cudaStream_t stream) {
     constexpr int threads = 256;
     const dim3 block(threads);
     const dim3 grid(info.batch_size * info.query_len * info.num_heads);
     const size_t shared_bytes = (info.key_len + threads) * sizeof(float);
-    swa_decode_kernel<T, SinkT, PosT><<<grid, block, shared_bytes, stream>>>(
+    swa_prefill_kernel<T, SinkT, QPosT, KPosT><<<grid, block, shared_bytes, stream>>>(
         reinterpret_cast<T *>(y),
         reinterpret_cast<const T *>(q),
         reinterpret_cast<const T *>(k),
         reinterpret_cast<const SinkT *>(attn_sink),
-        positions,
+        query_positions,
+        key_positions,
         info.batch_size,
         info.query_len,
         info.num_heads,
         info.key_len,
-        info.full_key_len,
-        info.key_offset,
         info.num_kv_heads,
         info.head_dim,
         info.softmax_scale,
+        info.window,
         info.rope_dim,
         info.rope_theta,
         info.use_yarn,
@@ -227,39 +246,59 @@ infiniStatus_t launch_typed_pos(const DeepseekV4SwaDecodeInfo &info,
     return INFINI_STATUS_SUCCESS;
 }
 
-template <typename T, typename SinkT>
-infiniStatus_t launch_by_pos_dtype(const DeepseekV4SwaDecodeInfo &info,
-                                   void *y,
-                                   const void *q,
-                                   const void *k,
-                                   const void *attn_sink,
-                                   const void *positions,
-                                   cudaStream_t stream) {
-    if (info.positions_dtype == INFINI_DTYPE_I64) {
-        return launch_typed_pos<T, SinkT, int64_t>(info, y, q, k, attn_sink, positions, stream);
+template <typename T, typename SinkT, typename QPosT>
+infiniStatus_t launch_by_kpos_dtype(const DeepseekV4SwaPrefillInfo &info,
+                                    void *y,
+                                    const void *q,
+                                    const void *k,
+                                    const void *attn_sink,
+                                    const void *query_positions,
+                                    const void *key_positions,
+                                    cudaStream_t stream) {
+    if (info.key_positions_dtype == INFINI_DTYPE_I64) {
+        return launch_typed<T, SinkT, QPosT, int64_t>(info, y, q, k, attn_sink, query_positions, key_positions, stream);
     }
-    if (info.positions_dtype == INFINI_DTYPE_I32) {
-        return launch_typed_pos<T, SinkT, int32_t>(info, y, q, k, attn_sink, positions, stream);
+    if (info.key_positions_dtype == INFINI_DTYPE_I32) {
+        return launch_typed<T, SinkT, QPosT, int32_t>(info, y, q, k, attn_sink, query_positions, key_positions, stream);
+    }
+    return INFINI_STATUS_BAD_TENSOR_DTYPE;
+}
+
+template <typename T, typename SinkT>
+infiniStatus_t launch_by_qpos_dtype(const DeepseekV4SwaPrefillInfo &info,
+                                    void *y,
+                                    const void *q,
+                                    const void *k,
+                                    const void *attn_sink,
+                                    const void *query_positions,
+                                    const void *key_positions,
+                                    cudaStream_t stream) {
+    if (info.query_positions_dtype == INFINI_DTYPE_I64) {
+        return launch_by_kpos_dtype<T, SinkT, int64_t>(info, y, q, k, attn_sink, query_positions, key_positions, stream);
+    }
+    if (info.query_positions_dtype == INFINI_DTYPE_I32) {
+        return launch_by_kpos_dtype<T, SinkT, int32_t>(info, y, q, k, attn_sink, query_positions, key_positions, stream);
     }
     return INFINI_STATUS_BAD_TENSOR_DTYPE;
 }
 
 template <typename T>
-infiniStatus_t launch_by_sink_dtype(const DeepseekV4SwaDecodeInfo &info,
+infiniStatus_t launch_by_sink_dtype(const DeepseekV4SwaPrefillInfo &info,
                                     void *y,
                                     const void *q,
                                     const void *k,
                                     const void *attn_sink,
-                                    const void *positions,
+                                    const void *query_positions,
+                                    const void *key_positions,
                                     cudaStream_t stream) {
     if (info.sink_dtype == INFINI_DTYPE_F16) {
-        return launch_by_pos_dtype<T, half>(info, y, q, k, attn_sink, positions, stream);
+        return launch_by_qpos_dtype<T, half>(info, y, q, k, attn_sink, query_positions, key_positions, stream);
     }
     if (info.sink_dtype == INFINI_DTYPE_BF16) {
-        return launch_by_pos_dtype<T, __nv_bfloat16>(info, y, q, k, attn_sink, positions, stream);
+        return launch_by_qpos_dtype<T, __nv_bfloat16>(info, y, q, k, attn_sink, query_positions, key_positions, stream);
     }
     if (info.sink_dtype == INFINI_DTYPE_F32) {
-        return launch_by_pos_dtype<T, float>(info, y, q, k, attn_sink, positions, stream);
+        return launch_by_qpos_dtype<T, float>(info, y, q, k, attn_sink, query_positions, key_positions, stream);
     }
     return INFINI_STATUS_BAD_TENSOR_DTYPE;
 }
@@ -272,10 +311,10 @@ infiniStatus_t Descriptor::create(infiniopHandle_t handle,
                                   infiniopTensorDescriptor_t q_desc,
                                   infiniopTensorDescriptor_t k_desc,
                                   infiniopTensorDescriptor_t attn_sink_desc,
-                                  infiniopTensorDescriptor_t positions_desc,
-                                  size_t key_offset,
-                                  size_t key_len,
+                                  infiniopTensorDescriptor_t query_positions_desc,
+                                  infiniopTensorDescriptor_t key_positions_desc,
                                   float softmax_scale,
+                                  size_t window,
                                   size_t rope_dim,
                                   double rope_theta,
                                   bool use_yarn,
@@ -284,8 +323,9 @@ infiniStatus_t Descriptor::create(infiniopHandle_t handle,
                                   double yarn_beta_slow,
                                   int64_t yarn_original_seq_len,
                                   double yarn_extrapolation_factor) {
-    auto result = DeepseekV4SwaDecodeInfo::create(y_desc, q_desc, k_desc, attn_sink_desc,
-                                                   positions_desc, key_offset, key_len, softmax_scale, rope_dim,
+    auto result = DeepseekV4SwaPrefillInfo::create(y_desc, q_desc, k_desc, attn_sink_desc,
+                                                   query_positions_desc, key_positions_desc,
+                                                   softmax_scale, window, rope_dim,
                                                    rope_theta, use_yarn, yarn_factor,
                                                    yarn_beta_fast, yarn_beta_slow,
                                                    yarn_original_seq_len,
@@ -301,23 +341,24 @@ infiniStatus_t Descriptor::calculate(void *workspace,
                                      const void *q,
                                      const void *k,
                                      const void *attn_sink,
-                                     const void *positions,
+                                     const void *query_positions,
+                                     const void *key_positions,
                                      void *stream) const {
     if (workspace_size < _workspace_size) {
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
     if (_info.dtype == INFINI_DTYPE_F16) {
-        return launch_by_sink_dtype<half>(_info, y, q, k, attn_sink, positions, (cudaStream_t)stream);
+        return launch_by_sink_dtype<half>(_info, y, q, k, attn_sink, query_positions, key_positions, (cudaStream_t)stream);
     }
     if (_info.dtype == INFINI_DTYPE_BF16) {
-        return launch_by_sink_dtype<__nv_bfloat16>(_info, y, q, k, attn_sink, positions, (cudaStream_t)stream);
+        return launch_by_sink_dtype<__nv_bfloat16>(_info, y, q, k, attn_sink, query_positions, key_positions, (cudaStream_t)stream);
     }
     if (_info.dtype == INFINI_DTYPE_F32) {
-        return launch_by_sink_dtype<float>(_info, y, q, k, attn_sink, positions, (cudaStream_t)stream);
+        return launch_by_sink_dtype<float>(_info, y, q, k, attn_sink, query_positions, key_positions, (cudaStream_t)stream);
     }
     return INFINI_STATUS_BAD_TENSOR_DTYPE;
 }
 
-} // namespace op::deepseek_v4_swa_decode::nvidia
+} // namespace op::deepseek_v4_swa_prefill::nvidia
 
 #endif

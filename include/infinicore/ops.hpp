@@ -32,6 +32,7 @@
 #include "ops/dsv4_mask_topk_ids.hpp"
 #include "ops/dsv4_per_token_quant_int8.hpp"
 #include "ops/deepseek_v4_swa_decode.hpp"
+#include "ops/deepseek_v4_swa_prefill.hpp"
 #include "ops/dsv4_rmsnorm_self.hpp"
 #include "ops/dsv4_silu_and_mul.hpp"
 #include "ops/dsv4_silu_mul_quant.hpp"

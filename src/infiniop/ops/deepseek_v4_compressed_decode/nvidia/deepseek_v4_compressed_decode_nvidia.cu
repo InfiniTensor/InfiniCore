@@ -46,25 +46,6 @@ __device__ int64_t read_pos(const void *positions, size_t idx) {
     return read_int<PosT>(positions, idx);
 }
 
-template <typename IndexT>
-__device__ bool block_selected(const void *indexed_blocks,
-                               size_t index_top_k,
-                               size_t query_len,
-                               size_t batch_idx,
-                               size_t query_idx,
-                               size_t block) {
-    if (index_top_k == 0) {
-        return true;
-    }
-    const size_t base = (batch_idx * query_len + query_idx) * index_top_k;
-    const int64_t target = static_cast<int64_t>(block);
-    for (size_t i = 0; i < index_top_k; ++i) {
-        if (read_int<IndexT>(indexed_blocks, base + i) == target) {
-            return true;
-        }
-    }
-    return false;
-}
 
 __device__ double yarn_inv_freq(size_t pair_idx,
                                 size_t rope_dim,
@@ -161,6 +142,8 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
                                          size_t query_len,
                                          size_t num_heads,
                                          size_t key_len,
+                                         size_t full_key_len,
+                                         size_t key_offset,
                                          size_t num_kv_heads,
                                          size_t num_blocks,
                                          size_t head_dim,
@@ -176,7 +159,8 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
                                          int64_t yarn_original_seq_len,
                                          double yarn_extrapolation_factor) {
     extern __shared__ float smem[];
-    const size_t total_keys = num_blocks + key_len;
+    const size_t compressed_keys = index_top_k == 0 ? num_blocks : index_top_k;
+    const size_t total_keys = compressed_keys + key_len;
     float *logits = smem;
     float *scratch = smem + total_keys;
 
@@ -196,13 +180,21 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
     const size_t visible_blocks = static_cast<size_t>(max(static_cast<int64_t>(0), (q_pos + 1) / static_cast<int64_t>(compress_ratio)));
 
     const size_t q_base = ((b * query_len + tq) * num_heads + h) * head_dim;
-    const size_t k_base = (b * key_len * num_kv_heads + kv_head) * head_dim;
+    const size_t k_base = (b * full_key_len * num_kv_heads + key_offset * num_kv_heads + kv_head) * head_dim;
     const size_t comp_batch_base = b * num_blocks * head_dim;
+    const size_t index_base = (b * query_len + tq) * index_top_k;
 
     float row_max = to_float<SinkT>(attn_sink[h]);
-    for (size_t block = 0; block < num_blocks; ++block) {
+    for (size_t slot = 0; slot < compressed_keys; ++slot) {
         float logit = -CUDART_INF_F;
-        if (block < visible_blocks && block_selected<IndexT>(indexed_blocks, index_top_k, query_len, b, tq, block)) {
+        const int64_t selected_block = index_top_k == 0
+            ? static_cast<int64_t>(slot)
+            : read_int<IndexT>(indexed_blocks, index_base + slot);
+        const bool valid = selected_block >= 0
+            && static_cast<size_t>(selected_block) < num_blocks
+            && static_cast<size_t>(selected_block) < visible_blocks;
+        if (valid) {
+            const size_t block = static_cast<size_t>(selected_block);
             const size_t comp_base = comp_batch_base + block * head_dim;
             const int64_t block_pos = read_pos<PosT>(block_positions, block);
             float local_dot = 0.0f;
@@ -226,7 +218,7 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
             __syncthreads();
         }
         if (tid == 0) {
-            logits[block] = logit;
+            logits[slot] = logit;
             row_max = fmaxf(row_max, logit);
         }
         __syncthreads();
@@ -248,7 +240,7 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
         }
         if (tid == 0) {
             const float logit = scratch[0] * softmax_scale;
-            logits[num_blocks + j] = logit;
+            logits[compressed_keys + j] = logit;
             row_max = fmaxf(row_max, logit);
         }
         __syncthreads();
@@ -270,15 +262,21 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
 
     for (size_t d = tid; d < pass_dim; d += blockDim.x) {
         float acc = 0.0f;
-        for (size_t block = 0; block < num_blocks; ++block) {
-            if (block < visible_blocks && block_selected<IndexT>(indexed_blocks, index_top_k, query_len, b, tq, block)) {
-                const float prob = expf(logits[block] - max_logit) / denom;
-                const size_t comp_base = comp_batch_base + block * head_dim;
+        for (size_t slot = 0; slot < compressed_keys; ++slot) {
+            const int64_t selected_block = index_top_k == 0
+                ? static_cast<int64_t>(slot)
+                : read_int<IndexT>(indexed_blocks, index_base + slot);
+            const bool valid = selected_block >= 0
+                && static_cast<size_t>(selected_block) < num_blocks
+                && static_cast<size_t>(selected_block) < visible_blocks;
+            if (valid) {
+                const float prob = expf(logits[slot] - max_logit) / denom;
+                const size_t comp_base = comp_batch_base + static_cast<size_t>(selected_block) * head_dim;
                 acc += prob * to_float<T>(kv_comp[comp_base + d]);
             }
         }
         for (size_t j = 0; j < key_len; ++j) {
-            const float prob = expf(logits[num_blocks + j] - max_logit) / denom;
+            const float prob = expf(logits[compressed_keys + j] - max_logit) / denom;
             const size_t k_offset = k_base + j * num_kv_heads * head_dim;
             acc += prob * to_float<T>(k[k_offset + d]);
         }
@@ -291,9 +289,16 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
         const size_t odd = even + 1;
         float acc_even = 0.0f;
         float acc_odd = 0.0f;
-        for (size_t block = 0; block < num_blocks; ++block) {
-            if (block < visible_blocks && block_selected<IndexT>(indexed_blocks, index_top_k, query_len, b, tq, block)) {
-                const float prob = expf(logits[block] - max_logit) / denom;
+        for (size_t slot = 0; slot < compressed_keys; ++slot) {
+            const int64_t selected_block = index_top_k == 0
+                ? static_cast<int64_t>(slot)
+                : read_int<IndexT>(indexed_blocks, index_base + slot);
+            const bool valid = selected_block >= 0
+                && static_cast<size_t>(selected_block) < num_blocks
+                && static_cast<size_t>(selected_block) < visible_blocks;
+            if (valid) {
+                const float prob = expf(logits[slot] - max_logit) / denom;
+                const size_t block = static_cast<size_t>(selected_block);
                 const size_t comp_base = comp_batch_base + block * head_dim;
                 const int64_t block_pos = read_pos<PosT>(block_positions, block);
                 acc_even += prob * rotated_comp_value<T>(kv_comp, comp_base, even, head_dim,
@@ -309,7 +314,7 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
             }
         }
         for (size_t j = 0; j < key_len; ++j) {
-            const float prob = expf(logits[num_blocks + j] - max_logit) / denom;
+            const float prob = expf(logits[compressed_keys + j] - max_logit) / denom;
             const size_t k_offset = k_base + j * num_kv_heads * head_dim;
             acc_even += prob * to_float<T>(k[k_offset + even]);
             acc_odd += prob * to_float<T>(k[k_offset + odd]);
@@ -339,7 +344,8 @@ infiniStatus_t launch_typed_pos(const DeepseekV4CompressedDecodeInfo &info,
     constexpr int threads = 256;
     const dim3 block(threads);
     const dim3 grid(info.batch_size * info.query_len * info.num_heads);
-    const size_t shared_bytes = (info.num_blocks + info.key_len + threads) * sizeof(float);
+    const size_t compressed_keys = info.index_top_k == 0 ? info.num_blocks : info.index_top_k;
+    const size_t shared_bytes = (compressed_keys + info.key_len + threads) * sizeof(float);
     compressed_decode_kernel<T, SinkT, PosT, IndexT><<<grid, block, shared_bytes, stream>>>(
         reinterpret_cast<T *>(y),
         reinterpret_cast<const T *>(q),
@@ -353,6 +359,8 @@ infiniStatus_t launch_typed_pos(const DeepseekV4CompressedDecodeInfo &info,
         info.query_len,
         info.num_heads,
         info.key_len,
+        info.full_key_len,
+        info.key_offset,
         info.num_kv_heads,
         info.num_blocks,
         info.head_dim,
@@ -443,6 +451,8 @@ infiniStatus_t Descriptor::create(infiniopHandle_t handle,
                                   infiniopTensorDescriptor_t query_positions_desc,
                                   infiniopTensorDescriptor_t block_positions_desc,
                                   infiniopTensorDescriptor_t indexed_blocks_desc,
+                                  size_t key_offset,
+                                  size_t key_len,
                                   float softmax_scale,
                                   size_t compress_ratio,
                                   size_t index_top_k,
@@ -456,7 +466,8 @@ infiniStatus_t Descriptor::create(infiniopHandle_t handle,
                                   double yarn_extrapolation_factor) {
     auto result = DeepseekV4CompressedDecodeInfo::create(y_desc, q_desc, k_desc, kv_comp_desc,
                                                          attn_sink_desc, query_positions_desc,
-                                                         block_positions_desc, indexed_blocks_desc, softmax_scale,
+                                                         block_positions_desc, indexed_blocks_desc,
+                                                         key_offset, key_len, softmax_scale,
                                                          compress_ratio, index_top_k, rope_dim, rope_theta,
                                                          use_yarn, yarn_factor, yarn_beta_fast,
                                                          yarn_beta_slow, yarn_original_seq_len,
