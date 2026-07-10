@@ -36,9 +36,34 @@ __device__ T from_float(float value) {
     }
 }
 
+template <typename IntT>
+__device__ int64_t read_int(const void *values, size_t idx) {
+    return static_cast<int64_t>(reinterpret_cast<const IntT *>(values)[idx]);
+}
+
 template <typename PosT>
 __device__ int64_t read_pos(const void *positions, size_t idx) {
-    return static_cast<int64_t>(reinterpret_cast<const PosT *>(positions)[idx]);
+    return read_int<PosT>(positions, idx);
+}
+
+template <typename IndexT>
+__device__ bool block_selected(const void *indexed_blocks,
+                               size_t index_top_k,
+                               size_t query_len,
+                               size_t batch_idx,
+                               size_t query_idx,
+                               size_t block) {
+    if (index_top_k == 0) {
+        return true;
+    }
+    const size_t base = (batch_idx * query_len + query_idx) * index_top_k;
+    const int64_t target = static_cast<int64_t>(block);
+    for (size_t i = 0; i < index_top_k; ++i) {
+        if (read_int<IndexT>(indexed_blocks, base + i) == target) {
+            return true;
+        }
+    }
+    return false;
 }
 
 __device__ double yarn_inv_freq(size_t pair_idx,
@@ -123,7 +148,7 @@ __device__ float rotated_comp_value(const T *__restrict__ kv_comp,
     return raw_odd * c + raw_even * s;
 }
 
-template <typename T, typename SinkT, typename PosT>
+template <typename T, typename SinkT, typename PosT, typename IndexT>
 __global__ void compressed_decode_kernel(T *__restrict__ y,
                                          const T *__restrict__ q,
                                          const T *__restrict__ k,
@@ -131,6 +156,7 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
                                          const SinkT *__restrict__ attn_sink,
                                          const void *__restrict__ query_positions,
                                          const void *__restrict__ block_positions,
+                                         const void *__restrict__ indexed_blocks,
                                          size_t batch_size,
                                          size_t query_len,
                                          size_t num_heads,
@@ -138,6 +164,7 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
                                          size_t num_kv_heads,
                                          size_t num_blocks,
                                          size_t head_dim,
+                                         size_t index_top_k,
                                          float softmax_scale,
                                          size_t compress_ratio,
                                          size_t rope_dim,
@@ -175,7 +202,7 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
     float row_max = to_float<SinkT>(attn_sink[h]);
     for (size_t block = 0; block < num_blocks; ++block) {
         float logit = -CUDART_INF_F;
-        if (block < visible_blocks) {
+        if (block < visible_blocks && block_selected<IndexT>(indexed_blocks, index_top_k, query_len, b, tq, block)) {
             const size_t comp_base = comp_batch_base + block * head_dim;
             const int64_t block_pos = read_pos<PosT>(block_positions, block);
             float local_dot = 0.0f;
@@ -244,7 +271,7 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
     for (size_t d = tid; d < pass_dim; d += blockDim.x) {
         float acc = 0.0f;
         for (size_t block = 0; block < num_blocks; ++block) {
-            if (block < visible_blocks) {
+            if (block < visible_blocks && block_selected<IndexT>(indexed_blocks, index_top_k, query_len, b, tq, block)) {
                 const float prob = expf(logits[block] - max_logit) / denom;
                 const size_t comp_base = comp_batch_base + block * head_dim;
                 acc += prob * to_float<T>(kv_comp[comp_base + d]);
@@ -265,7 +292,7 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
         float acc_even = 0.0f;
         float acc_odd = 0.0f;
         for (size_t block = 0; block < num_blocks; ++block) {
-            if (block < visible_blocks) {
+            if (block < visible_blocks && block_selected<IndexT>(indexed_blocks, index_top_k, query_len, b, tq, block)) {
                 const float prob = expf(logits[block] - max_logit) / denom;
                 const size_t comp_base = comp_batch_base + block * head_dim;
                 const int64_t block_pos = read_pos<PosT>(block_positions, block);
@@ -298,7 +325,7 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
     }
 }
 
-template <typename T, typename SinkT, typename PosT>
+template <typename T, typename SinkT, typename PosT, typename IndexT>
 infiniStatus_t launch_typed_pos(const DeepseekV4CompressedDecodeInfo &info,
                                 void *y,
                                 const void *q,
@@ -307,12 +334,13 @@ infiniStatus_t launch_typed_pos(const DeepseekV4CompressedDecodeInfo &info,
                                 const void *attn_sink,
                                 const void *query_positions,
                                 const void *block_positions,
+                                const void *indexed_blocks,
                                 cudaStream_t stream) {
     constexpr int threads = 256;
     const dim3 block(threads);
     const dim3 grid(info.batch_size * info.query_len * info.num_heads);
     const size_t shared_bytes = (info.num_blocks + info.key_len + threads) * sizeof(float);
-    compressed_decode_kernel<T, SinkT, PosT><<<grid, block, shared_bytes, stream>>>(
+    compressed_decode_kernel<T, SinkT, PosT, IndexT><<<grid, block, shared_bytes, stream>>>(
         reinterpret_cast<T *>(y),
         reinterpret_cast<const T *>(q),
         reinterpret_cast<const T *>(k),
@@ -320,6 +348,7 @@ infiniStatus_t launch_typed_pos(const DeepseekV4CompressedDecodeInfo &info,
         reinterpret_cast<const SinkT *>(attn_sink),
         query_positions,
         block_positions,
+        indexed_blocks,
         info.batch_size,
         info.query_len,
         info.num_heads,
@@ -327,6 +356,7 @@ infiniStatus_t launch_typed_pos(const DeepseekV4CompressedDecodeInfo &info,
         info.num_kv_heads,
         info.num_blocks,
         info.head_dim,
+        info.index_top_k,
         info.softmax_scale,
         info.compress_ratio,
         info.rope_dim,
@@ -350,14 +380,27 @@ infiniStatus_t launch_by_pos_dtype(const DeepseekV4CompressedDecodeInfo &info,
                                    const void *attn_sink,
                                    const void *query_positions,
                                    const void *block_positions,
+                                   const void *indexed_blocks,
                                    cudaStream_t stream) {
     if (info.positions_dtype == INFINI_DTYPE_I64) {
-        return launch_typed_pos<T, SinkT, int64_t>(info, y, q, k, kv_comp, attn_sink,
-                                                  query_positions, block_positions, stream);
+        if (info.indexed_dtype == INFINI_DTYPE_I64) {
+            return launch_typed_pos<T, SinkT, int64_t, int64_t>(info, y, q, k, kv_comp, attn_sink,
+                                                               query_positions, block_positions, indexed_blocks, stream);
+        }
+        if (info.indexed_dtype == INFINI_DTYPE_I32) {
+            return launch_typed_pos<T, SinkT, int64_t, int32_t>(info, y, q, k, kv_comp, attn_sink,
+                                                               query_positions, block_positions, indexed_blocks, stream);
+        }
     }
     if (info.positions_dtype == INFINI_DTYPE_I32) {
-        return launch_typed_pos<T, SinkT, int32_t>(info, y, q, k, kv_comp, attn_sink,
-                                                  query_positions, block_positions, stream);
+        if (info.indexed_dtype == INFINI_DTYPE_I64) {
+            return launch_typed_pos<T, SinkT, int32_t, int64_t>(info, y, q, k, kv_comp, attn_sink,
+                                                               query_positions, block_positions, indexed_blocks, stream);
+        }
+        if (info.indexed_dtype == INFINI_DTYPE_I32) {
+            return launch_typed_pos<T, SinkT, int32_t, int32_t>(info, y, q, k, kv_comp, attn_sink,
+                                                               query_positions, block_positions, indexed_blocks, stream);
+        }
     }
     return INFINI_STATUS_BAD_TENSOR_DTYPE;
 }
@@ -371,18 +414,19 @@ infiniStatus_t launch_by_sink_dtype(const DeepseekV4CompressedDecodeInfo &info,
                                     const void *attn_sink,
                                     const void *query_positions,
                                     const void *block_positions,
+                                    const void *indexed_blocks,
                                     cudaStream_t stream) {
     if (info.sink_dtype == INFINI_DTYPE_F16) {
         return launch_by_pos_dtype<T, half>(info, y, q, k, kv_comp, attn_sink,
-                                           query_positions, block_positions, stream);
+                                           query_positions, block_positions, indexed_blocks, stream);
     }
     if (info.sink_dtype == INFINI_DTYPE_BF16) {
         return launch_by_pos_dtype<T, __nv_bfloat16>(info, y, q, k, kv_comp, attn_sink,
-                                                     query_positions, block_positions, stream);
+                                                     query_positions, block_positions, indexed_blocks, stream);
     }
     if (info.sink_dtype == INFINI_DTYPE_F32) {
         return launch_by_pos_dtype<T, float>(info, y, q, k, kv_comp, attn_sink,
-                                             query_positions, block_positions, stream);
+                                             query_positions, block_positions, indexed_blocks, stream);
     }
     return INFINI_STATUS_BAD_TENSOR_DTYPE;
 }
@@ -398,8 +442,10 @@ infiniStatus_t Descriptor::create(infiniopHandle_t handle,
                                   infiniopTensorDescriptor_t attn_sink_desc,
                                   infiniopTensorDescriptor_t query_positions_desc,
                                   infiniopTensorDescriptor_t block_positions_desc,
+                                  infiniopTensorDescriptor_t indexed_blocks_desc,
                                   float softmax_scale,
                                   size_t compress_ratio,
+                                  size_t index_top_k,
                                   size_t rope_dim,
                                   double rope_theta,
                                   bool use_yarn,
@@ -410,8 +456,8 @@ infiniStatus_t Descriptor::create(infiniopHandle_t handle,
                                   double yarn_extrapolation_factor) {
     auto result = DeepseekV4CompressedDecodeInfo::create(y_desc, q_desc, k_desc, kv_comp_desc,
                                                          attn_sink_desc, query_positions_desc,
-                                                         block_positions_desc, softmax_scale,
-                                                         compress_ratio, rope_dim, rope_theta,
+                                                         block_positions_desc, indexed_blocks_desc, softmax_scale,
+                                                         compress_ratio, index_top_k, rope_dim, rope_theta,
                                                          use_yarn, yarn_factor, yarn_beta_fast,
                                                          yarn_beta_slow, yarn_original_seq_len,
                                                          yarn_extrapolation_factor);
@@ -429,21 +475,22 @@ infiniStatus_t Descriptor::calculate(void *workspace,
                                      const void *attn_sink,
                                      const void *query_positions,
                                      const void *block_positions,
+                                     const void *indexed_blocks,
                                      void *stream) const {
     if (workspace_size < _workspace_size) {
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
     if (_info.dtype == INFINI_DTYPE_F16) {
         return launch_by_sink_dtype<half>(_info, y, q, k, kv_comp, attn_sink,
-                                          query_positions, block_positions, (cudaStream_t)stream);
+                                          query_positions, block_positions, indexed_blocks, (cudaStream_t)stream);
     }
     if (_info.dtype == INFINI_DTYPE_BF16) {
         return launch_by_sink_dtype<__nv_bfloat16>(_info, y, q, k, kv_comp, attn_sink,
-                                                   query_positions, block_positions, (cudaStream_t)stream);
+                                                   query_positions, block_positions, indexed_blocks, (cudaStream_t)stream);
     }
     if (_info.dtype == INFINI_DTYPE_F32) {
         return launch_by_sink_dtype<float>(_info, y, q, k, kv_comp, attn_sink,
-                                           query_positions, block_positions, (cudaStream_t)stream);
+                                           query_positions, block_positions, indexed_blocks, (cudaStream_t)stream);
     }
     return INFINI_STATUS_BAD_TENSOR_DTYPE;
 }

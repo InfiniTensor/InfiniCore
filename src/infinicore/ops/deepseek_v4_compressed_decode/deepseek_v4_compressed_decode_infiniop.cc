@@ -17,6 +17,7 @@ struct PlannedMeta {
     graph::GraphTensor attn_sink;
     graph::GraphTensor query_positions;
     graph::GraphTensor block_positions;
+    graph::GraphTensor indexed_blocks;
 };
 
 void *plan(Tensor y,
@@ -26,8 +27,10 @@ void *plan(Tensor y,
            const Tensor &attn_sink,
            const Tensor &query_positions,
            const Tensor &block_positions,
+           const Tensor &indexed_blocks,
            float softmax_scale,
            size_t compress_ratio,
+           size_t index_top_k,
            size_t rope_dim,
            double rope_theta,
            bool use_yarn,
@@ -37,7 +40,8 @@ void *plan(Tensor y,
            int64_t yarn_original_seq_len,
            double yarn_extrapolation_factor) {
     size_t seed = hash_combine(y, q, k, kv_comp, attn_sink, query_positions,
-                               block_positions, softmax_scale, compress_ratio,
+                               block_positions, indexed_blocks, softmax_scale,
+                               compress_ratio, index_top_k,
                                rope_dim, rope_theta, use_yarn, yarn_factor,
                                yarn_beta_fast, yarn_beta_slow,
                                yarn_original_seq_len, yarn_extrapolation_factor);
@@ -53,8 +57,10 @@ void *plan(Tensor y,
         attn_sink->desc(),
         query_positions->desc(),
         block_positions->desc(),
+        indexed_blocks->desc(),
         softmax_scale,
         compress_ratio,
+        index_top_k,
         rope_dim,
         rope_theta,
         use_yarn,
@@ -73,7 +79,8 @@ void *plan(Tensor y,
         graph::GraphTensor(kv_comp),
         graph::GraphTensor(attn_sink),
         graph::GraphTensor(query_positions),
-        graph::GraphTensor(block_positions)};
+        graph::GraphTensor(block_positions),
+        graph::GraphTensor(indexed_blocks)};
 }
 
 void run(void *planned_meta) {
@@ -89,6 +96,7 @@ void run(void *planned_meta) {
         p->attn_sink->data(),
         p->query_positions->data(),
         p->block_positions->data(),
+        p->indexed_blocks->data(),
         context::getStream()));
 }
 

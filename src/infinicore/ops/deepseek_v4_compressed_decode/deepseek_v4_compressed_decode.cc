@@ -14,8 +14,10 @@ DeepseekV4CompressedDecode::DeepseekV4CompressedDecode(
     const Tensor &attn_sink,
     const Tensor &query_positions,
     const Tensor &block_positions,
+    const Tensor &indexed_blocks,
     float softmax_scale,
     size_t compress_ratio,
+    size_t index_top_k,
     size_t rope_dim,
     double rope_theta,
     bool use_yarn,
@@ -24,12 +26,17 @@ DeepseekV4CompressedDecode::DeepseekV4CompressedDecode(
     double yarn_beta_slow,
     int64_t yarn_original_seq_len,
     double yarn_extrapolation_factor) {
-    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(y, q, k, kv_comp, attn_sink, query_positions, block_positions);
+    if (indexed_blocks) {
+        INFINICORE_ASSERT_TENSORS_SAME_DEVICE(y, q, k, kv_comp, attn_sink, query_positions, block_positions, indexed_blocks);
+    } else {
+        INFINICORE_ASSERT_TENSORS_SAME_DEVICE(y, q, k, kv_comp, attn_sink, query_positions, block_positions);
+    }
     INFINICORE_GRAPH_OP_DISPATCH(y->device().getType(), y, q, k, kv_comp, attn_sink,
-                                 query_positions, block_positions, softmax_scale,
-                                 compress_ratio, rope_dim, rope_theta, use_yarn,
-                                 yarn_factor, yarn_beta_fast, yarn_beta_slow,
-                                 yarn_original_seq_len, yarn_extrapolation_factor);
+                                 query_positions, block_positions, indexed_blocks,
+                                 softmax_scale, compress_ratio, index_top_k, rope_dim,
+                                 rope_theta, use_yarn, yarn_factor, yarn_beta_fast,
+                                 yarn_beta_slow, yarn_original_seq_len,
+                                 yarn_extrapolation_factor);
 }
 
 void DeepseekV4CompressedDecode::execute(
@@ -40,8 +47,10 @@ void DeepseekV4CompressedDecode::execute(
     const Tensor &attn_sink,
     const Tensor &query_positions,
     const Tensor &block_positions,
+    const Tensor &indexed_blocks,
     float softmax_scale,
     size_t compress_ratio,
+    size_t index_top_k,
     size_t rope_dim,
     double rope_theta,
     bool use_yarn,
@@ -52,9 +61,9 @@ void DeepseekV4CompressedDecode::execute(
     double yarn_extrapolation_factor) {
     INFINICORE_GRAPH_OP_RECORD_OR_RUN(DeepseekV4CompressedDecode, y, q, k, kv_comp,
                                       attn_sink, query_positions, block_positions,
-                                      softmax_scale, compress_ratio, rope_dim,
-                                      rope_theta, use_yarn, yarn_factor,
-                                      yarn_beta_fast, yarn_beta_slow,
+                                      indexed_blocks, softmax_scale, compress_ratio,
+                                      index_top_k, rope_dim, rope_theta, use_yarn,
+                                      yarn_factor, yarn_beta_fast, yarn_beta_slow,
                                       yarn_original_seq_len,
                                       yarn_extrapolation_factor);
 }
@@ -65,8 +74,10 @@ Tensor deepseek_v4_compressed_decode(const Tensor &q,
                                      const Tensor &attn_sink,
                                      const Tensor &query_positions,
                                      const Tensor &block_positions,
+                                     const Tensor &indexed_blocks,
                                      float softmax_scale,
                                      size_t compress_ratio,
+                                     size_t index_top_k,
                                      size_t rope_dim,
                                      double rope_theta,
                                      bool use_yarn,
@@ -79,9 +90,9 @@ Tensor deepseek_v4_compressed_decode(const Tensor &q,
     INFINICORE_ASSERT(q_shape.size() == 4);
     auto y = Tensor::empty(q_shape, q->dtype(), q->device());
     deepseek_v4_compressed_decode_(y, q, k, kv_comp, attn_sink, query_positions,
-                                   block_positions, softmax_scale, compress_ratio,
-                                   rope_dim, rope_theta, use_yarn, yarn_factor,
-                                   yarn_beta_fast, yarn_beta_slow,
+                                   block_positions, indexed_blocks, softmax_scale,
+                                   compress_ratio, index_top_k, rope_dim, rope_theta,
+                                   use_yarn, yarn_factor, yarn_beta_fast, yarn_beta_slow,
                                    yarn_original_seq_len, yarn_extrapolation_factor);
     return y;
 }
@@ -93,8 +104,10 @@ void deepseek_v4_compressed_decode_(Tensor y,
                                     const Tensor &attn_sink,
                                     const Tensor &query_positions,
                                     const Tensor &block_positions,
+                                    const Tensor &indexed_blocks,
                                     float softmax_scale,
                                     size_t compress_ratio,
+                                    size_t index_top_k,
                                     size_t rope_dim,
                                     double rope_theta,
                                     bool use_yarn,
@@ -104,8 +117,9 @@ void deepseek_v4_compressed_decode_(Tensor y,
                                     int64_t yarn_original_seq_len,
                                     double yarn_extrapolation_factor) {
     DeepseekV4CompressedDecode::execute(y, q, k, kv_comp, attn_sink, query_positions,
-                                        block_positions, softmax_scale, compress_ratio,
-                                        rope_dim, rope_theta, use_yarn, yarn_factor,
+                                        block_positions, indexed_blocks, softmax_scale,
+                                        compress_ratio, index_top_k, rope_dim,
+                                        rope_theta, use_yarn, yarn_factor,
                                         yarn_beta_fast, yarn_beta_slow,
                                         yarn_original_seq_len, yarn_extrapolation_factor);
 }

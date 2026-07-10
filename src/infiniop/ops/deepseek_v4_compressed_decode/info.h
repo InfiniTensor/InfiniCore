@@ -35,8 +35,10 @@ struct DeepseekV4CompressedDecodeInfo {
     infiniDtype_t dtype;
     infiniDtype_t sink_dtype;
     infiniDtype_t positions_dtype;
+    infiniDtype_t indexed_dtype;
     float softmax_scale;
     size_t compress_ratio;
+    size_t index_top_k;
     size_t rope_dim;
     double rope_theta;
     bool use_yarn;
@@ -54,8 +56,10 @@ struct DeepseekV4CompressedDecodeInfo {
         infiniopTensorDescriptor_t attn_sink_desc,
         infiniopTensorDescriptor_t query_positions_desc,
         infiniopTensorDescriptor_t block_positions_desc,
+        infiniopTensorDescriptor_t indexed_blocks_desc,
         float softmax_scale,
         size_t compress_ratio,
+        size_t index_top_k,
         size_t rope_dim,
         double rope_theta,
         bool use_yarn,
@@ -65,7 +69,7 @@ struct DeepseekV4CompressedDecodeInfo {
         int64_t yarn_original_seq_len,
         double yarn_extrapolation_factor) {
         if (!y_desc || !q_desc || !k_desc || !kv_comp_desc || !attn_sink_desc ||
-            !query_positions_desc || !block_positions_desc) {
+            !query_positions_desc || !block_positions_desc || !indexed_blocks_desc) {
             return INFINI_STATUS_NULL_POINTER;
         }
         const auto dtype = q_desc->dtype();
@@ -82,9 +86,14 @@ struct DeepseekV4CompressedDecodeInfo {
             block_positions_desc->dtype() != positions_dtype) {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
+        const auto indexed_dtype = indexed_blocks_desc->dtype();
+        if (indexed_dtype != INFINI_DTYPE_I64 && indexed_dtype != INFINI_DTYPE_I32) {
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
         if (y_desc->ndim() != 4 || q_desc->ndim() != 4 || k_desc->ndim() != 4 ||
             kv_comp_desc->ndim() != 3 || attn_sink_desc->ndim() != 1 ||
-            query_positions_desc->ndim() != 1 || block_positions_desc->ndim() != 1) {
+            query_positions_desc->ndim() != 1 || block_positions_desc->ndim() != 1 ||
+            indexed_blocks_desc->ndim() != 1) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
         const size_t batch_size = q_desc->dim(0);
@@ -113,16 +122,21 @@ struct DeepseekV4CompressedDecodeInfo {
             block_positions_desc->dim(0) != num_blocks) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
+        const size_t expected_indexed = index_top_k == 0 ? 1 : batch_size * query_len * index_top_k;
+        if (indexed_blocks_desc->dim(0) != expected_indexed) {
+            return INFINI_STATUS_BAD_TENSOR_SHAPE;
+        }
         if (!is_contiguous(y_desc) || !is_contiguous(q_desc) || !is_contiguous(k_desc) ||
             !is_contiguous(kv_comp_desc) || !is_contiguous(attn_sink_desc) ||
-            !is_contiguous(query_positions_desc) || !is_contiguous(block_positions_desc)) {
+            !is_contiguous(query_positions_desc) || !is_contiguous(block_positions_desc) ||
+            !is_contiguous(indexed_blocks_desc)) {
             return INFINI_STATUS_BAD_TENSOR_STRIDES;
         }
         return utils::Result<DeepseekV4CompressedDecodeInfo>(DeepseekV4CompressedDecodeInfo{
             batch_size, query_len, num_heads, key_len, num_kv_heads, num_blocks, head_dim,
-            dtype, sink_dtype, positions_dtype, softmax_scale, compress_ratio, rope_dim,
-            rope_theta, use_yarn, yarn_factor, yarn_beta_fast, yarn_beta_slow,
-            yarn_original_seq_len, yarn_extrapolation_factor});
+            dtype, sink_dtype, positions_dtype, indexed_dtype, softmax_scale, compress_ratio,
+            index_top_k, rope_dim, rope_theta, use_yarn, yarn_factor, yarn_beta_fast,
+            yarn_beta_slow, yarn_original_seq_len, yarn_extrapolation_factor});
     }
 };
 

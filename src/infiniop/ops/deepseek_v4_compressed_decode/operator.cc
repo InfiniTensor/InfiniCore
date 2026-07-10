@@ -16,8 +16,10 @@ __INFINI_C infiniStatus_t infiniopCreateDeepseekV4CompressedDecodeDescriptor(
     infiniopTensorDescriptor_t attn_sink_desc,
     infiniopTensorDescriptor_t query_positions_desc,
     infiniopTensorDescriptor_t block_positions_desc,
+    infiniopTensorDescriptor_t indexed_blocks_desc,
     float softmax_scale,
     size_t compress_ratio,
+    size_t index_top_k,
     size_t rope_dim,
     double rope_theta,
     bool use_yarn,
@@ -28,7 +30,7 @@ __INFINI_C infiniStatus_t infiniopCreateDeepseekV4CompressedDecodeDescriptor(
     double yarn_extrapolation_factor) {
 #define CREATE(CASE, NAMESPACE) \
     case CASE: \
-        return op::deepseek_v4_compressed_decode::NAMESPACE::Descriptor::create(handle, reinterpret_cast<op::deepseek_v4_compressed_decode::NAMESPACE::Descriptor **>(desc_ptr), y_desc, q_desc, k_desc, kv_comp_desc, attn_sink_desc, query_positions_desc, block_positions_desc, softmax_scale, compress_ratio, rope_dim, rope_theta, use_yarn, yarn_factor, yarn_beta_fast, yarn_beta_slow, yarn_original_seq_len, yarn_extrapolation_factor)
+        return op::deepseek_v4_compressed_decode::NAMESPACE::Descriptor::create(handle, reinterpret_cast<op::deepseek_v4_compressed_decode::NAMESPACE::Descriptor **>(desc_ptr), y_desc, q_desc, k_desc, kv_comp_desc, attn_sink_desc, query_positions_desc, block_positions_desc, indexed_blocks_desc, softmax_scale, compress_ratio, index_top_k, rope_dim, rope_theta, use_yarn, yarn_factor, yarn_beta_fast, yarn_beta_slow, yarn_original_seq_len, yarn_extrapolation_factor)
     switch (handle->device) {
 #ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia);
@@ -91,10 +93,11 @@ __INFINI_C infiniStatus_t infiniopDeepseekV4CompressedDecode(
     const void *attn_sink,
     const void *query_positions,
     const void *block_positions,
+    const void *indexed_blocks,
     void *stream) {
 #define CALC(CASE, NAMESPACE) \
     case CASE: \
-        return reinterpret_cast<op::deepseek_v4_compressed_decode::NAMESPACE::Descriptor *>(desc)->calculate(workspace, workspace_size, y, q, k, kv_comp, attn_sink, query_positions, block_positions, stream)
+        return reinterpret_cast<op::deepseek_v4_compressed_decode::NAMESPACE::Descriptor *>(desc)->calculate(workspace, workspace_size, y, q, k, kv_comp, attn_sink, query_positions, block_positions, indexed_blocks, stream)
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API
         CALC(INFINI_DEVICE_NVIDIA, nvidia);
