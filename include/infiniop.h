@@ -39,6 +39,7 @@
 #include "infiniop/ops/deepseek_moe.h"
 #include "infiniop/ops/deepseek_moe_w8a8i8.h"
 #include "infiniop/ops/deepseek_v4_compressor.h"
+#include "infiniop/ops/deepseek_v4_compressed_decode.h"
 #include "infiniop/ops/deepseek_v4_router.h"
 #include "infiniop/ops/deepseek_v4_mhc.h"
 #include "infiniop/ops/deepseek_v4_swa_decode.h"

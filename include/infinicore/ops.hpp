@@ -39,6 +39,7 @@
 #include "ops/dsv4_topk_transform.hpp"
 #include "ops/deepseek_moe_w8a8i8.hpp"
 #include "ops/deepseek_v4_compressor.hpp"
+#include "ops/deepseek_v4_compressed_decode.hpp"
 #include "ops/deepseek_v4_router.hpp"
 #include "ops/deepseek_v4_indexer.hpp"
 #include "ops/embedding.hpp"
