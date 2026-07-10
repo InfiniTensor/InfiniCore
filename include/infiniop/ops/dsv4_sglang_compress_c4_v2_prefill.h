@@ -1,0 +1,9 @@
+#ifndef __INFINIOP_DSV4_SGLANG_COMPRESS_C4_V2_PREFILL_H__
+#define __INFINIOP_DSV4_SGLANG_COMPRESS_C4_V2_PREFILL_H__
+#include "../operator_descriptor.h"
+typedef struct InfiniopDescriptor *infiniopDsv4SglangCompressC4V2PrefillDescriptor_t;
+__INFINI_C __export infiniStatus_t infiniopCreateDsv4SglangCompressC4V2PrefillDescriptor(infiniopHandle_t handle, infiniopDsv4SglangCompressC4V2PrefillDescriptor_t *desc_ptr, infiniopTensorDescriptor_t kv_buffer_desc, infiniopTensorDescriptor_t kv_input_desc, infiniopTensorDescriptor_t kv_output_desc, infiniopTensorDescriptor_t ape_desc, infiniopTensorDescriptor_t plan_c_desc, infiniopTensorDescriptor_t plan_w_desc);
+__INFINI_C __export infiniStatus_t infiniopGetDsv4SglangCompressC4V2PrefillWorkspaceSize(infiniopDsv4SglangCompressC4V2PrefillDescriptor_t desc, size_t *size);
+__INFINI_C __export infiniStatus_t infiniopDsv4SglangCompressC4V2Prefill(infiniopDsv4SglangCompressC4V2PrefillDescriptor_t desc, void *workspace, size_t workspace_size, const void *kv_buffer, const void *kv_input, void *kv_output, const void *ape, const void *plan_c, const void *plan_w, void *stream);
+__INFINI_C __export infiniStatus_t infiniopDestroyDsv4SglangCompressC4V2PrefillDescriptor(infiniopDsv4SglangCompressC4V2PrefillDescriptor_t desc);
+#endif

@@ -1,0 +1,9 @@
+#ifndef __INFINIOP_DSV4_SGLANG_MAIN_Q_NORM_ROPE_H__
+#define __INFINIOP_DSV4_SGLANG_MAIN_Q_NORM_ROPE_H__
+#include "../operator_descriptor.h"
+typedef struct InfiniopDescriptor *infiniopDsv4SglangMainQNormRopeDescriptor_t;
+__INFINI_C __export infiniStatus_t infiniopCreateDsv4SglangMainQNormRopeDescriptor(infiniopHandle_t handle, infiniopDsv4SglangMainQNormRopeDescriptor_t *desc_ptr, infiniopTensorDescriptor_t output_desc, infiniopTensorDescriptor_t input_desc, infiniopTensorDescriptor_t freqs_desc, infiniopTensorDescriptor_t positions_desc, double eps);
+__INFINI_C __export infiniStatus_t infiniopGetDsv4SglangMainQNormRopeWorkspaceSize(infiniopDsv4SglangMainQNormRopeDescriptor_t desc, size_t *size);
+__INFINI_C __export infiniStatus_t infiniopDsv4SglangMainQNormRope(infiniopDsv4SglangMainQNormRopeDescriptor_t desc, void *workspace, size_t workspace_size, void *output, const void *input, const void *freqs, const void *positions, void *stream);
+__INFINI_C __export infiniStatus_t infiniopDestroyDsv4SglangMainQNormRopeDescriptor(infiniopDsv4SglangMainQNormRopeDescriptor_t desc);
+#endif

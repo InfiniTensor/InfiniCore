@@ -1,0 +1,9 @@
+#ifndef __INFINIOP_DSV4_SGLANG_FUSED_NORM_ROPE_H__
+#define __INFINIOP_DSV4_SGLANG_FUSED_NORM_ROPE_H__
+#include "../operator_descriptor.h"
+typedef struct InfiniopDescriptor *infiniopDsv4SglangFusedNormRopeDescriptor_t;
+__INFINI_C __export infiniStatus_t infiniopCreateDsv4SglangFusedNormRopeDescriptor(infiniopHandle_t handle, infiniopDsv4SglangFusedNormRopeDescriptor_t *desc_ptr, infiniopTensorDescriptor_t kv_desc, infiniopTensorDescriptor_t weight_desc, infiniopTensorDescriptor_t positions_desc, infiniopTensorDescriptor_t freqs_desc, double eps);
+__INFINI_C __export infiniStatus_t infiniopGetDsv4SglangFusedNormRopeWorkspaceSize(infiniopDsv4SglangFusedNormRopeDescriptor_t desc, size_t *size);
+__INFINI_C __export infiniStatus_t infiniopDsv4SglangFusedNormRope(infiniopDsv4SglangFusedNormRopeDescriptor_t desc, void *workspace, size_t workspace_size, void *kv, const void *weight, const void *positions, const void *freqs, void *stream);
+__INFINI_C __export infiniStatus_t infiniopDestroyDsv4SglangFusedNormRopeDescriptor(infiniopDsv4SglangFusedNormRopeDescriptor_t desc);
+#endif

@@ -122,6 +122,7 @@ target("infiniop-hygon")
     add_links("cudart", "cublas", "curand", "cublasLt", "cudnn")
     
     add_hygon_dtk_paths()
+    add_includedirs("/usr/local/lib/python3.10/dist-packages/tvm_ffi/include")
 
     set_warnings("all", "error")
     add_cuflags("-Wno-error=unused-private-field", {force = true})
@@ -177,6 +178,7 @@ target("infinirt-hygon")
     add_links("cudart", "curand")
     
     add_hygon_dtk_paths()
+    add_includedirs("/usr/local/lib/python3.10/dist-packages/tvm_ffi/include")
 
     set_warnings("all", "error")
     add_cuflags("-Wno-return-type", {force = true})  -- 抑制return语句警告
@@ -210,6 +212,7 @@ target("infiniccl-hygon")
         add_links("cudart", "curand")
         
         add_hygon_dtk_paths()
+    add_includedirs("/usr/local/lib/python3.10/dist-packages/tvm_ffi/include")
 
         set_warnings("all", "error")
         add_cuflags("-Wno-return-type", {force = true})  -- 抑制return语句警告
