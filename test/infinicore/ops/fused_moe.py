@@ -13,6 +13,8 @@ ACT_SWIGLU = 1
 CASES = [
     (2, 16, 32, 4, 2, ACT_SILU),
     (3, 32, 16, 5, 2, ACT_SWIGLU),
+    (1, 2560, 1536, 64, 6, ACT_SWIGLU),
+    (64, 2560, 1536, 64, 6, ACT_SWIGLU),
 ]
 DTYPES = [infinicore.float16, infinicore.bfloat16, infinicore.float32]
 TOLS = {
