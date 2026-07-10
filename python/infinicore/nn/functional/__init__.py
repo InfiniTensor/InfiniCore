@@ -12,6 +12,7 @@ from .chunk_gated_delta_rule import chunk_gated_delta_rule
 from .embedding import embedding
 from .flash_attention import flash_attention
 from .fused_gated_delta_net_gating import fused_gated_delta_net_gating
+from .fused_moe import ACT_SILU, ACT_SWIGLU, fused_moe
 from .gaussian_nll_loss import gaussian_nll_loss
 from .hardswish import hardswish
 from .hardtanh import hardtanh
@@ -54,6 +55,9 @@ __all__ = [
     "embedding",
     "flash_attention",
     "fused_gated_delta_net_gating",
+    "fused_moe",
+    "ACT_SILU",
+    "ACT_SWIGLU",
     "gaussian_nll_loss",
     "interpolate",
     "linear",

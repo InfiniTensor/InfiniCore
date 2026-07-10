@@ -30,6 +30,7 @@
 #include "ops/fmin.hpp"
 #include "ops/fmod.hpp"
 #include "ops/fused_gated_delta_net_gating.hpp"
+#include "ops/fused_moe.hpp"
 #include "ops/gelu.hpp"
 #include "ops/gelutanh.hpp"
 #include "ops/hardswish.hpp"
