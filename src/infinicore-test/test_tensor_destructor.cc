@@ -202,6 +202,27 @@ TestResult TensorDestructorTest::testStridedTensor() {
                 std::cout << dim << " ";
             }
             std::cout << std::endl;
+
+            auto singleton_strided = Tensor::strided_empty(
+                {1, 1, 2048}, {2560, 2560, 1}, DataType::F32, Device::Type::CPU);
+            if (!singleton_strided->is_contiguous()) {
+                std::cerr << "Size-one dimensions must not constrain contiguity" << std::endl;
+                return false;
+            }
+
+            auto genuinely_strided = Tensor::strided_empty(
+                {2, 1, 3}, {4, 100, 1}, DataType::F32, Device::Type::CPU);
+            if (genuinely_strided->is_contiguous()) {
+                std::cerr << "A gap between non-singleton dimensions must be non-contiguous" << std::endl;
+                return false;
+            }
+
+            auto empty_strided = Tensor::strided_empty(
+                {0, 3}, {99, 1}, DataType::F32, Device::Type::CPU);
+            if (!empty_strided->is_contiguous()) {
+                std::cerr << "Empty tensors must be contiguous" << std::endl;
+                return false;
+            }
         }
 
         std::cout << "Destroyed strided tensor successfully" << std::endl;

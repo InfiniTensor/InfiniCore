@@ -106,8 +106,16 @@ Size TensorImpl::ndim() const {
 }
 
 bool TensorImpl::is_contiguous() const {
+    if (numel() == 0) {
+        return true;
+    }
+
     Stride expected_stride = 1;
     for (int i = meta_.shape.size() - 1; i >= 0; --i) {
+        // Size-one dimensions do not constrain the physical layout.
+        if (meta_.shape[i] == 1) {
+            continue;
+        }
         if (meta_.strides[i] != expected_stride) {
             return false;
         }
