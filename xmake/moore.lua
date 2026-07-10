@@ -70,6 +70,7 @@ target_end()
 
 target("infinirt-moore")
     set_kind("static")
+    set_default(false)
     set_languages("cxx17")
     on_install(function (target) end)
     add_deps("infini-utils")
@@ -81,7 +82,6 @@ target_end()
 
 target("infiniccl-moore")
     set_kind("static")
-    add_deps("infinirt")
     on_install(function (target) end)
     set_warnings("all", "error")
     if not is_plat("windows") then
