@@ -1,7 +1,5 @@
 #include "host_allocator.hpp"
 
-#include <infinirt.h>
-
 namespace infinicore {
 std::byte *HostAllocator::allocate(size_t size) {
     if (size == 0) {
