@@ -41,6 +41,7 @@
 #include "infiniop/ops/deepseek_v4_compressor.h"
 #include "infiniop/ops/deepseek_v4_router.h"
 #include "infiniop/ops/deepseek_v4_mhc.h"
+#include "infiniop/ops/deepseek_v4_swa_decode.h"
 #include "infiniop/ops/deepseek_v4_mhc_head.h"
 #include "infiniop/ops/deepseek_v4_mhc_post.h"
 #include "infiniop/ops/deepseek_v4_indexer.h"
