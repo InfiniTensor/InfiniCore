@@ -50,6 +50,15 @@ void TensorImpl::copy_from(Tensor src) {
                 context::memcpyH2D(local_src->data(), src->data(), copy_size);
                 op::rearrange_(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()), local_src);
             }
+        } else {
+            context::setDevice(this->device());
+            if (this->is_contiguous()) {
+                context::memcpyD2D(this->data(), src->data(), copy_size);
+            } else {
+                auto local_src = Tensor::empty(this->shape(), this->dtype(), this->device());
+                context::memcpyD2D(local_src->data(), src->data(), copy_size);
+                op::rearrange_(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()), local_src);
+            }
         }
     }
 }
