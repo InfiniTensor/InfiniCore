@@ -1,4 +1,5 @@
 #include "infinicore/memory.hpp"
+#include "infinicore/context/context.hpp"
 
 namespace infinicore {
 
@@ -14,7 +15,25 @@ Memory::~Memory() {
         return;
     }
     try {
-        deleter_(data_);
+        Device current_device = context::getDevice();
+        bool switched_device = current_device != device_;
+        if (switched_device) {
+            context::setDevice(device_);
+        }
+        try {
+            deleter_(data_);
+        } catch (...) {
+            if (switched_device) {
+                try {
+                    context::setDevice(current_device);
+                } catch (...) {
+                }
+            }
+            throw;
+        }
+        if (switched_device) {
+            context::setDevice(current_device);
+        }
     } catch (...) {
         // Memory can be released during interpreter/static shutdown after
         // allocator metadata has already been torn down. Destructors must not
