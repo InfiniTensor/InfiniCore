@@ -10,8 +10,15 @@ Memory::Memory(std::byte *data,
     : data_{data}, size_{size}, device_{device}, deleter_{deleter}, is_pinned_(pin_memory) {}
 
 Memory::~Memory() {
-    if (deleter_) {
+    if (!deleter_) {
+        return;
+    }
+    try {
         deleter_(data_);
+    } catch (...) {
+        // Memory can be released during interpreter/static shutdown after
+        // allocator metadata has already been torn down. Destructors must not
+        // let allocator cleanup errors escape and terminate the process.
     }
 }
 
