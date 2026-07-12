@@ -116,6 +116,7 @@
 #define hcclAllReduce mcclAllReduce
 #define hcblasSetStream mcblasSetStream
 #define hcblasHandle_t mcblasHandle_t
+#define hcblasGemmBatchedEx mcblasGemmBatchedEx
 #define hcblasGemmStridedBatchedEx mcblasGemmStridedBatchedEx
 #define hcblasGemmEx mcblasGemmEx
 #define hcblasCreate mcblasCreate

@@ -62,6 +62,7 @@
 #include "infiniop/ops/gemm.h"
 #include "infiniop/ops/gptq_marlin_gemm.h"
 #include "infiniop/ops/gptq_qyblas_gemm.h"
+#include "infiniop/ops/grouped_gemm.h"
 #include "infiniop/ops/hardswish.h"
 #include "infiniop/ops/hardtanh.h"
 #include "infiniop/ops/hinge_embedding_loss.h"
