@@ -31,9 +31,9 @@ public:
 protected:
     using run_schema = void (*)(void *);
     using cleanup_schema = void (*)(void **);
-    void *planned_meta_;
-    run_schema runner_;
-    cleanup_schema deleter_;
+    void *planned_meta_ = nullptr;
+    run_schema runner_ = nullptr;
+    cleanup_schema deleter_ = nullptr;
 };
 
 class Graph {

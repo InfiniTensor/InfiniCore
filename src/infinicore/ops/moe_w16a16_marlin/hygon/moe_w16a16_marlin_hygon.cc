@@ -10,10 +10,7 @@
 #include <ATen/ATen.h>
 #include <c10/hip/HIPGuard.h>
 
-#include <cstdlib>
-#include <iostream>
 #include <optional>
-#include <sstream>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -66,40 +63,6 @@ at::Tensor pack_one_expert(const at::Tensor &weight) {
                  .reshape({size_k / 16, size_n * 16})
                  .contiguous();
     return packed;
-}
-
-
-bool debug_enabled() {
-    const char *value = std::getenv("INFINICORE_DEBUG_HYGON_MARLIN");
-    return value != nullptr && value[0] != '\0' && std::string(value) != "0";
-}
-
-std::string tensor_desc(const at::Tensor &tensor) {
-    std::ostringstream oss;
-    oss << "shape=[";
-    for (int64_t i = 0; i < tensor.dim(); ++i) {
-        if (i != 0) {
-            oss << ",";
-        }
-        oss << tensor.size(i);
-    }
-    oss << "] stride=[";
-    for (int64_t i = 0; i < tensor.dim(); ++i) {
-        if (i != 0) {
-            oss << ",";
-        }
-        oss << tensor.stride(i);
-    }
-    oss << "] dtype=" << tensor.scalar_type()
-        << " device=" << tensor.device()
-        << " contiguous=" << (tensor.is_contiguous() ? "true" : "false");
-    return oss.str();
-}
-
-void debug_tensor(const char *name, const at::Tensor &tensor) {
-    if (debug_enabled()) {
-        std::cerr << "[hygon-marlin] " << name << " " << tensor_desc(tensor) << std::endl;
-    }
 }
 
 Tensor pack(const Tensor &weight) {
@@ -160,7 +123,7 @@ void *plan(Tensor output,
            int delta0,
            int mode1,
            int delta1) {
-    infinicore::adaptor::lightop::preload_basic_ops();
+    infinicore::adaptor::lightop::preload_moe_w16a16_ops();
     return new PlannedMeta{
         graph::GraphTensor(output), graph::GraphTensor(cache13), graph::GraphTensor(cache2),
         graph::GraphTensor(hidden_states), graph::GraphTensor(w13_marlin), graph::GraphTensor(w2_marlin),
@@ -208,20 +171,6 @@ void run(void *planned_meta) {
     auto sorted_token_ids = infinicore::adaptor::to_aten_tensor(p->sorted_token_ids);
     auto expert_ids = infinicore::adaptor::to_aten_tensor(p->expert_ids);
     auto num_tokens_post_padded = infinicore::adaptor::to_aten_tensor(p->num_tokens_post_padded);
-
-    if (debug_enabled()) {
-        std::cerr << "[hygon-marlin] top_k=" << top_k << " mode0=" << p->mode0 << " delta0=" << p->delta0
-                  << " mode1=" << p->mode1 << " delta1=" << p->delta1 << std::endl;
-        debug_tensor("hidden", hidden);
-        debug_tensor("w13", w13);
-        debug_tensor("cache1", cache1);
-        debug_tensor("cache2", cache2);
-        debug_tensor("cache3", cache3);
-        debug_tensor("topk_weights", topk_weights);
-        debug_tensor("sorted_token_ids", sorted_token_ids);
-        debug_tensor("expert_ids", expert_ids);
-        debug_tensor("num_tokens_post_padded", num_tokens_post_padded);
-    }
 
     try {
         infinicore::adaptor::lightop::moe_gemm_marlin_w16a16(

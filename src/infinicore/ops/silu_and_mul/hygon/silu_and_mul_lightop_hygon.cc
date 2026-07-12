@@ -44,8 +44,7 @@ void cleanup(void **planned_meta_ptr) {
 }
 
 static bool registered = []() {
-    if (!infinicore::adaptor::lightop::enabled_by_env()
-        || !infinicore::adaptor::lightop::available()) {
+    if (!infinicore::adaptor::lightop::available()) {
         return false;
     }
     SiluAndMul::plan_dispatcher().registerDevice(Device::Type::HYGON, &plan);

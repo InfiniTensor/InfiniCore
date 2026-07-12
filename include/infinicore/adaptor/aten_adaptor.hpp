@@ -44,7 +44,7 @@ inline at::ScalarType to_at_dtype(DataType dtype) {
     case DataType::I64:
         return at::kLong;
     default:
-        throw std::runtime_error("Unsupported dtype for ATen");
+        throw std::runtime_error("Unsupported dtype for ATen: " + infinicore::toString(dtype));
     }
 }
 
