@@ -1,0 +1,76 @@
+#include "../../../elementwise/moore/elementwise_moore.h"
+#include "gelu_moore.h"
+
+#include <cmath>
+#include <type_traits>
+
+namespace op::gelu::moore {
+
+struct GeluOp {
+    static constexpr size_t num_inputs = 1;
+
+    template <typename T>
+    __device__ __forceinline__ T operator()(const T &x) const {
+        if constexpr (std::is_same_v<T, half>) {
+            float xf = __half2float(x);
+            float result = 0.5f * xf * (1.0f + erff(xf * 0.7071067811865476f));
+            return __float2half(result);
+        } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
+            float xf = __bfloat162float(x);
+            float result = 0.5f * xf * (1.0f + erff(xf * 0.7071067811865476f));
+            return __float2bfloat16_rn(result);
+        } else if constexpr (std::is_same_v<T, float>) {
+            return 0.5f * x * (1.0f + erff(x * 0.7071067811865476f));
+        } else {
+            double xd = static_cast<double>(x);
+            return static_cast<T>(0.5 * xd * (1.0 + erf(xd * 0.7071067811865476)));
+        }
+    }
+};
+
+Descriptor::~Descriptor() = default;
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t out_desc,
+    std::vector<infiniopTensorDescriptor_t> input_desc_vec) {
+
+    auto handle = reinterpret_cast<device::moore::Handle *>(handle_);
+    auto dtype = out_desc->dtype();
+    const auto &input_desc = input_desc_vec.at(0);
+
+    CHECK_DTYPE(dtype, INFINI_DTYPE_BF16, INFINI_DTYPE_F16, INFINI_DTYPE_F32, INFINI_DTYPE_F64);
+    CHECK_SAME_SHAPE(out_desc->shape(), input_desc->shape());
+
+    CREATE_ELEMENTWISE_MOORE_DESCRIPTOR(handle, dtype, out_desc, input_desc_vec)
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *output,
+    std::vector<const void *> inputs,
+    void *stream) const {
+
+    if (workspace_size < _workspace_size) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+
+    switch (_dtype) {
+    case INFINI_DTYPE_BF16:
+        return _device_info->calculate<256, GeluOp, cuda_bfloat16>(_info, workspace, output, inputs, stream);
+    case INFINI_DTYPE_F16:
+        return _device_info->calculate<256, GeluOp, half>(_info, workspace, output, inputs, stream);
+    case INFINI_DTYPE_F32:
+        return _device_info->calculate<256, GeluOp, float>(_info, workspace, output, inputs, stream);
+    case INFINI_DTYPE_F64:
+        return _device_info->calculate<256, GeluOp, double>(_info, workspace, output, inputs, stream);
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+}
+
+} // namespace op::gelu::moore
