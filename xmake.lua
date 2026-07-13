@@ -502,6 +502,9 @@ target("infiniop")
         end
     elseif has_config("nv-gpu") then
         add_includedirs(path.join("/usr/local/cuda", "include"))
+    elseif has_config("iluvatar-gpu") then
+        add_includedirs(path.join("/usr/local/corex", "include"))
+        add_linkdirs(path.join("/usr/local/corex", "lib64"))
     end
 
     if has_config("cpu") then
@@ -640,8 +643,9 @@ target("infinicore_cpp_api")
     end
     add_includedirs(INFINI_ROOT.."/include", { public = true })
     add_moore_runtime_sdk_dirs()
-    if has_config("nv-gpu") then
-        local cuda_root = os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH") or get_config("cuda") or "/usr/local/cuda"
+    if has_config("nv-gpu") or has_config("iluvatar-gpu") then
+        local default_cuda_root = has_config("iluvatar-gpu") and "/usr/local/corex" or "/usr/local/cuda"
+        local cuda_root = os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH") or get_config("cuda") or default_cuda_root
         add_includedirs(cuda_root .. "/include")
     end
     if has_config("infiniops") then
@@ -917,6 +921,10 @@ target("_infinicore")
     local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
     add_includedirs(INFINI_ROOT.."/include", { public = true })
     add_moore_runtime_sdk_dirs()
+    if has_config("iluvatar-gpu") then
+        local cuda_root = os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH") or get_config("cuda") or "/usr/local/corex"
+        add_cxxflags("-idirafter", cuda_root .. "/include", {force = true})
+    end
 
     add_linkdirs(INFINI_ROOT.."/lib")
     add_links("infiniop", "infinirt", "infiniccl")
