@@ -85,6 +85,7 @@ constexpr size_t kHygonTp2StageCapacityElements = 1u << 22;
 constexpr int kHygonTp8WorldSize = 8;
 constexpr int kHygonTp8Threads = 512;
 constexpr int kHygonTp8MaxBlocks = 80;
+constexpr int kHygonTp8OneStageMaxBlocks = 16;
 constexpr size_t kHygonTp8OneStageMaxBytes = 80u * 1024u;
 constexpr size_t kHygonTp8TwoStageMaxBytes = 512u * 1024u;
 constexpr int kHygonHipSuccess = 0;
@@ -621,52 +622,44 @@ __global__ __launch_bounds__(kHygonTp8Threads, 1) void hygon_tp8_bf16_allreduce_
     int rank,
     size_t pack_count) {
     constexpr int num_ranks = kHygonTp8WorldSize;
-    constexpr int threads_per_rank = kHygonTp8Threads / num_ranks;
-    __shared__ HygonBf16Pack shared_packs[kHygonTp8Threads];
     __shared__ uint32_t block_flag;
 
-    const int source_rank = threadIdx.x / threads_per_rank;
-    const int lane = threadIdx.x % threads_per_rank;
     const uint32_t sync_flag = hygon_tp8_start_sync<num_ranks>(
         rank_signals, self_signal, rank, &block_flag);
 
-    for (size_t base = blockIdx.x * threads_per_rank;
-         base < pack_count;
-         base += gridDim.x * threads_per_rank) {
-        const size_t index = base + lane;
-        HygonBf16Pack source_pack{};
-        if (index < pack_count) {
-            const auto *source = reinterpret_cast<const HygonBf16Pack *>(
-                rank_data.ptrs[source_rank]);
+    const size_t thread_index =
+        static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    const size_t thread_stride =
+        static_cast<size_t>(gridDim.x) * blockDim.x;
+    auto *packed_output = reinterpret_cast<HygonBf16Pack *>(output);
+    for (size_t index = thread_index;
+         index < pack_count;
+         index += thread_stride) {
+        const auto *source = reinterpret_cast<const HygonBf16Pack *>(
+            rank_data.ptrs[0]);
+        HygonBf16Pack source_pack = source[index];
+        float reduced[8];
+#pragma unroll
+        for (int element = 0; element < 8; ++element) {
+            reduced[element] = __bfloat162float(source_pack.values[element]);
+        }
+#pragma unroll
+        for (int peer = 1; peer < num_ranks; ++peer) {
+            source = reinterpret_cast<const HygonBf16Pack *>(
+                rank_data.ptrs[peer]);
             source_pack = source[index];
-        }
-        shared_packs[threadIdx.x] = source_pack;
-        __syncthreads();
-
-        if (source_rank == 0 && index < pack_count) {
-            float reduced[8];
 #pragma unroll
             for (int element = 0; element < 8; ++element) {
-                reduced[element] = __bfloat162float(
-                    shared_packs[threadIdx.x].values[element]);
+                reduced[element] +=
+                    __bfloat162float(source_pack.values[element]);
             }
-#pragma unroll
-            for (int peer = 1; peer < num_ranks; ++peer) {
-#pragma unroll
-                for (int element = 0; element < 8; ++element) {
-                    reduced[element] += __bfloat162float(
-                        shared_packs[peer * threads_per_rank + threadIdx.x]
-                            .values[element]);
-                }
-            }
-            HygonBf16Pack result;
-#pragma unroll
-            for (int element = 0; element < 8; ++element) {
-                result.values[element] = __float2bfloat16(reduced[element]);
-            }
-            reinterpret_cast<HygonBf16Pack *>(output)[index] = result;
         }
-        __syncthreads();
+        HygonBf16Pack result;
+#pragma unroll
+        for (int element = 0; element < 8; ++element) {
+            result.values[element] = __float2bfloat16(reduced[element]);
+        }
+        packed_output[index] = result;
     }
 
     hygon_tp8_end_sync<num_ranks>(
@@ -957,18 +950,23 @@ HygonTp8AllReduceResult try_hygon_tp8_graph_allreduce(
         return HygonTp8AllReduceResult::Fallback;
     }
 
-    constexpr int threads_per_rank =
-        kHygonTp8Threads / kHygonTp8WorldSize;
     size_t pack_count = count / 8;
     const bool use_two_stage =
         count * sizeof(__nv_bfloat16) >= kHygonTp8OneStageMaxBytes;
-    const size_t work_pack_count = use_two_stage
-                                       ? pack_count / kHygonTp8WorldSize +
-                                             pack_count % kHygonTp8WorldSize
-                                       : pack_count;
+    const size_t work_pack_count =
+        use_two_stage
+            ? pack_count / kHygonTp8WorldSize +
+                  pack_count % kHygonTp8WorldSize
+            : pack_count;
+    const size_t work_threads =
+        use_two_stage
+            ? kHygonTp8Threads / kHygonTp8WorldSize
+            : kHygonTp8Threads;
+    const int max_blocks =
+        use_two_stage ? kHygonTp8MaxBlocks : kHygonTp8OneStageMaxBlocks;
     int blocks = static_cast<int>(std::min<size_t>(
-        kHygonTp8MaxBlocks,
-        (work_pack_count + threads_per_rank - 1) / threads_per_rank));
+        max_blocks,
+        (work_pack_count + work_threads - 1) / work_threads));
     blocks = std::max(blocks, 1);
     HygonTp8RankSignals rank_signals = state->rank_signals;
     HygonTp8Signal *self_signal = state->signals[rank];
