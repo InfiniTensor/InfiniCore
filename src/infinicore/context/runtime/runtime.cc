@@ -225,8 +225,9 @@ void Runtime::addGraphOperator(std::shared_ptr<graph::GraphOperator> op) {
 }
 
 std::shared_ptr<graph::Graph> Runtime::stopGraphRecording() {
-    auto graph = graph_manager_->stop_recording();
+    // End pin_mode before instantiate warmup/replay; plan() already captured GraphTensor blobs.
     device_memory_allocator_->set_pin_mode(false);
+    auto graph = graph_manager_->stop_recording();
     return graph;
 }
 
