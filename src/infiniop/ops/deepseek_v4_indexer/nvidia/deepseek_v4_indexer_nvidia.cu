@@ -36,7 +36,7 @@ __device__ float to_float(T value) {
 }
 
 __device__ bool better_pair(float candidate_score, int candidate_block, float best_score, int best_block) {
-    if (candidate_block < 0) {
+    if (candidate_block < 0 || isnan(candidate_score)) {
         return false;
     }
     if (best_block < 0) {
@@ -45,34 +45,31 @@ __device__ bool better_pair(float candidate_score, int candidate_block, float be
     return candidate_score > best_score || (candidate_score == best_score && candidate_block < best_block);
 }
 
-template <typename T, int THREADS>
-__global__ void deepseek_v4_indexer_kernel(
+template <typename T>
+__global__ void deepseek_v4_indexer_score_kernel(
     const T *__restrict__ q,
     const T *__restrict__ weights,
     const T *__restrict__ compressed,
     const long long *__restrict__ positions,
-    long long *__restrict__ indices,
+    float *__restrict__ scores,
     size_t batch_size,
     size_t query_len,
     size_t index_n_heads,
     size_t head_dim,
     size_t num_blocks,
-    size_t topk,
     size_t query_start,
     size_t compress_ratio,
     float score_scale,
     float weight_scale) {
-    const size_t row = blockIdx.x;
+    const size_t row_block = blockIdx.x;
+    const size_t row = row_block / num_blocks;
     if (row >= batch_size * query_len) {
         return;
     }
+    const size_t block = row_block - row * num_blocks;
     const size_t b = row / query_len;
     const size_t tq = row - b * query_len;
-    const int tid = threadIdx.x;
-
-    extern __shared__ long long selected_blocks[];
-    __shared__ float reduce_scores[THREADS];
-    __shared__ int reduce_blocks[THREADS];
+    const size_t tid = threadIdx.x;
 
     const long long pos = positions[query_start + tq];
     long long threshold = (pos + 1) / static_cast<long long>(compress_ratio);
@@ -83,39 +80,62 @@ __global__ void deepseek_v4_indexer_kernel(
     if (valid_blocks > num_blocks) {
         valid_blocks = num_blocks;
     }
+    if (block >= valid_blocks) {
+        if (tid == 0) {
+            scores[row * num_blocks + block] = CUDART_NAN_F;
+        }
+        return;
+    }
+
+    extern __shared__ float head_scores[];
+    const size_t k_base = (b * num_blocks + block) * head_dim;
+    for (size_t h = tid; h < index_n_heads; h += blockDim.x) {
+        float dot = 0.0f;
+        const size_t q_base = (row * index_n_heads + h) * head_dim;
+        for (size_t d = 0; d < head_dim; ++d) {
+            dot += to_float<T>(q[q_base + d]) * to_float<T>(compressed[k_base + d]);
+        }
+        const float relu_score = fmaxf(0.0f, dot * score_scale);
+        head_scores[h] = relu_score
+                       * to_float<T>(weights[row * index_n_heads + h])
+                       * weight_scale;
+    }
+    __syncthreads();
+
+    if (tid == 0) {
+        float score_sum = 0.0f;
+        for (size_t h = 0; h < index_n_heads; ++h) {
+            score_sum += head_scores[h];
+        }
+        scores[row * num_blocks + block] = score_sum;
+    }
+}
+
+template <int THREADS>
+__global__ void deepseek_v4_indexer_select_kernel(
+    float *__restrict__ scores,
+    long long *__restrict__ indices,
+    size_t rows,
+    size_t num_blocks,
+    size_t topk) {
+    const size_t row = blockIdx.x;
+    if (row >= rows) {
+        return;
+    }
+    const int tid = threadIdx.x;
+    __shared__ float reduce_scores[THREADS];
+    __shared__ int reduce_blocks[THREADS];
 
     for (size_t k = 0; k < topk; ++k) {
         float thread_best_score = -CUDART_INF_F;
         int thread_best_block = -1;
-        for (size_t block = static_cast<size_t>(tid); block < valid_blocks; block += THREADS) {
-            bool already_selected = false;
-            for (size_t prev = 0; prev < k; ++prev) {
-                if (selected_blocks[prev] == static_cast<long long>(block)) {
-                    already_selected = true;
-                    break;
-                }
-            }
-            if (already_selected) {
-                continue;
-            }
-
-            float score_sum = 0.0f;
-            for (size_t h = 0; h < index_n_heads; ++h) {
-                float dot = 0.0f;
-                const size_t q_base = ((b * query_len + tq) * index_n_heads + h) * head_dim;
-                const size_t k_base = (b * num_blocks + block) * head_dim;
-                for (size_t d = 0; d < head_dim; ++d) {
-                    dot += to_float<T>(q[q_base + d]) * to_float<T>(compressed[k_base + d]);
-                }
-                const float relu_score = fmaxf(0.0f, dot * score_scale);
-                score_sum += relu_score * to_float<T>(weights[(b * query_len + tq) * index_n_heads + h]) * weight_scale;
-            }
-            if (better_pair(score_sum, static_cast<int>(block), thread_best_score, thread_best_block)) {
-                thread_best_score = score_sum;
+        for (size_t block = static_cast<size_t>(tid); block < num_blocks; block += THREADS) {
+            const float score = scores[row * num_blocks + block];
+            if (better_pair(score, static_cast<int>(block), thread_best_score, thread_best_block)) {
+                thread_best_score = score;
                 thread_best_block = static_cast<int>(block);
             }
         }
-
         reduce_scores[tid] = thread_best_score;
         reduce_blocks[tid] = thread_best_block;
         __syncthreads();
@@ -133,8 +153,10 @@ __global__ void deepseek_v4_indexer_kernel(
 
         if (tid == 0) {
             const int winner = reduce_blocks[0];
-            selected_blocks[k] = static_cast<long long>(winner);
             indices[row * topk + k] = winner >= 0 ? static_cast<long long>(winner) : -1LL;
+            if (winner >= 0) {
+                scores[row * num_blocks + static_cast<size_t>(winner)] = CUDART_NAN_F;
+            }
         }
         __syncthreads();
     }
@@ -143,6 +165,8 @@ __global__ void deepseek_v4_indexer_kernel(
 template <typename T>
 infiniStatus_t launch_typed(
     const DeepseekV4IndexerInfo &info,
+    void *workspace,
+    size_t workspace_size,
     long long *indices,
     const void *q,
     const void *weights,
@@ -151,23 +175,35 @@ infiniStatus_t launch_typed(
     cudaStream_t stream) {
     constexpr int THREADS = 256;
     const size_t rows = info.batch_size * info.query_len;
-    const size_t shared_bytes = info.topk * sizeof(long long);
-    deepseek_v4_indexer_kernel<T, THREADS><<<rows, THREADS, shared_bytes, stream>>>(
+    const size_t score_count = rows * info.num_blocks;
+    const size_t score_bytes = score_count * sizeof(float);
+    if (workspace_size < score_bytes) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+    auto *scores = reinterpret_cast<float *>(workspace);
+    const size_t score_blocks = score_count;
+    const size_t score_shared_bytes = info.index_n_heads * sizeof(float);
+    deepseek_v4_indexer_score_kernel<T><<<score_blocks, THREADS, score_shared_bytes, stream>>>(
         reinterpret_cast<const T *>(q),
         reinterpret_cast<const T *>(weights),
         reinterpret_cast<const T *>(compressed),
         reinterpret_cast<const long long *>(positions),
-        indices,
+        scores,
         info.batch_size,
         info.query_len,
         info.index_n_heads,
         info.head_dim,
         info.num_blocks,
-        info.topk,
         info.query_start,
         info.compress_ratio,
         info.score_scale,
         info.weight_scale);
+    deepseek_v4_indexer_select_kernel<THREADS><<<rows, THREADS, 0, stream>>>(
+        scores,
+        indices,
+        rows,
+        info.num_blocks,
+        info.topk);
     CHECK_CUDA(cudaGetLastError());
     return INFINI_STATUS_SUCCESS;
 }
@@ -188,10 +224,12 @@ infiniStatus_t Descriptor::create(
         indices_desc, q_desc, weights_desc, compressed_desc, positions_desc, query_start, compress_ratio);
     CHECK_RESULT(result);
     auto info = result.take();
+    const size_t workspace_size = info.batch_size * info.query_len
+                                * info.num_blocks * sizeof(float);
     *desc_ptr = new Descriptor(
         new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
         info,
-        0,
+        workspace_size,
         handle->device,
         handle->device_id);
     return INFINI_STATUS_SUCCESS;
@@ -206,19 +244,21 @@ infiniStatus_t Descriptor::calculate(
     const void *compressed,
     const void *positions,
     void *stream_) const {
-    (void)workspace;
     if (workspace_size < _workspace_size) {
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
     auto stream = reinterpret_cast<cudaStream_t>(stream_);
     if (_info.dtype == INFINI_DTYPE_F16) {
-        return launch_typed<half>(_info, reinterpret_cast<long long *>(indices), q, weights, compressed, positions, stream);
+        return launch_typed<half>(_info, workspace, workspace_size,
+                                  reinterpret_cast<long long *>(indices), q, weights, compressed, positions, stream);
     }
     if (_info.dtype == INFINI_DTYPE_BF16) {
-        return launch_typed<__nv_bfloat16>(_info, reinterpret_cast<long long *>(indices), q, weights, compressed, positions, stream);
+        return launch_typed<__nv_bfloat16>(_info, workspace, workspace_size,
+                                           reinterpret_cast<long long *>(indices), q, weights, compressed, positions, stream);
     }
     if (_info.dtype == INFINI_DTYPE_F32) {
-        return launch_typed<float>(_info, reinterpret_cast<long long *>(indices), q, weights, compressed, positions, stream);
+        return launch_typed<float>(_info, workspace, workspace_size,
+                                   reinterpret_cast<long long *>(indices), q, weights, compressed, positions, stream);
     }
     return INFINI_STATUS_BAD_TENSOR_DTYPE;
 }
