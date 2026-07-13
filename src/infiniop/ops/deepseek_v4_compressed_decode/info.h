@@ -31,6 +31,9 @@ struct DeepseekV4CompressedDecodeInfo {
     size_t key_len;
     size_t full_key_len;
     size_t key_offset;
+    bool causal;
+    size_t sliding_window;
+    int64_t key_position_base;
     size_t num_kv_heads;
     size_t num_blocks;
     size_t head_dim;
@@ -61,6 +64,9 @@ struct DeepseekV4CompressedDecodeInfo {
         infiniopTensorDescriptor_t indexed_blocks_desc,
         size_t key_offset,
         size_t active_key_len,
+        bool causal,
+        size_t sliding_window,
+        int64_t key_position_base,
         float softmax_scale,
         size_t compress_ratio,
         size_t index_top_k,
@@ -115,7 +121,8 @@ struct DeepseekV4CompressedDecodeInfo {
         if (num_heads % num_kv_heads != 0 || rope_dim > head_dim || (rope_dim % 2) != 0) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
-        if (num_blocks + key_len > 4096) {
+        const size_t compressed_keys = index_top_k == 0 ? num_blocks : index_top_k;
+        if (compressed_keys + key_len > 4096) {
             return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
         }
         if (y_desc->dim(0) != batch_size || y_desc->dim(1) != query_len ||
@@ -138,7 +145,9 @@ struct DeepseekV4CompressedDecodeInfo {
             return INFINI_STATUS_BAD_TENSOR_STRIDES;
         }
         return utils::Result<DeepseekV4CompressedDecodeInfo>(DeepseekV4CompressedDecodeInfo{
-            batch_size, query_len, num_heads, key_len, full_key_len, key_offset, num_kv_heads, num_blocks, head_dim,
+            batch_size, query_len, num_heads, key_len, full_key_len, key_offset,
+            causal, sliding_window, key_position_base,
+            num_kv_heads, num_blocks, head_dim,
             dtype, sink_dtype, positions_dtype, indexed_dtype, softmax_scale, compress_ratio,
             index_top_k, rope_dim, rope_theta, use_yarn, yarn_factor, yarn_beta_fast,
             yarn_beta_slow, yarn_original_seq_len, yarn_extrapolation_factor});

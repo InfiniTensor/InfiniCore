@@ -144,6 +144,9 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
                                          size_t key_len,
                                          size_t full_key_len,
                                          size_t key_offset,
+                                         bool causal,
+                                         size_t sliding_window,
+                                         int64_t key_position_base,
                                          size_t num_kv_heads,
                                          size_t num_blocks,
                                          size_t head_dim,
@@ -226,9 +229,17 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
 
     for (size_t j = 0; j < key_len; ++j) {
         const size_t k_offset = k_base + j * num_kv_heads * head_dim;
+        const int64_t key_pos = key_position_base
+                              + static_cast<int64_t>(key_offset + j);
+        const bool valid = !causal
+                        || (key_pos <= q_pos
+                            && (sliding_window == 0
+                                || key_pos > q_pos - static_cast<int64_t>(sliding_window)));
         float local_dot = 0.0f;
-        for (size_t hd = tid; hd < head_dim; hd += blockDim.x) {
-            local_dot += to_float<T>(q[q_base + hd]) * to_float<T>(k[k_offset + hd]);
+        if (valid) {
+            for (size_t hd = tid; hd < head_dim; hd += blockDim.x) {
+                local_dot += to_float<T>(q[q_base + hd]) * to_float<T>(k[k_offset + hd]);
+            }
         }
         scratch[tid] = local_dot;
         __syncthreads();
@@ -239,9 +250,11 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
             __syncthreads();
         }
         if (tid == 0) {
-            const float logit = scratch[0] * softmax_scale;
+            const float logit = valid ? scratch[0] * softmax_scale : -CUDART_INF_F;
             logits[compressed_keys + j] = logit;
-            row_max = fmaxf(row_max, logit);
+            if (valid) {
+                row_max = fmaxf(row_max, logit);
+            }
         }
         __syncthreads();
     }
@@ -361,6 +374,9 @@ infiniStatus_t launch_typed_pos(const DeepseekV4CompressedDecodeInfo &info,
         info.key_len,
         info.full_key_len,
         info.key_offset,
+        info.causal,
+        info.sliding_window,
+        info.key_position_base,
         info.num_kv_heads,
         info.num_blocks,
         info.head_dim,
@@ -453,6 +469,9 @@ infiniStatus_t Descriptor::create(infiniopHandle_t handle,
                                   infiniopTensorDescriptor_t indexed_blocks_desc,
                                   size_t key_offset,
                                   size_t key_len,
+                                  bool causal,
+                                  size_t sliding_window,
+                                  int64_t key_position_base,
                                   float softmax_scale,
                                   size_t compress_ratio,
                                   size_t index_top_k,
@@ -467,7 +486,8 @@ infiniStatus_t Descriptor::create(infiniopHandle_t handle,
     auto result = DeepseekV4CompressedDecodeInfo::create(y_desc, q_desc, k_desc, kv_comp_desc,
                                                          attn_sink_desc, query_positions_desc,
                                                          block_positions_desc, indexed_blocks_desc,
-                                                         key_offset, key_len, softmax_scale,
+                                                         key_offset, key_len, causal, sliding_window,
+                                                         key_position_base, softmax_scale,
                                                          compress_ratio, index_top_k, rope_dim, rope_theta,
                                                          use_yarn, yarn_factor, yarn_beta_fast,
                                                          yarn_beta_slow, yarn_original_seq_len,

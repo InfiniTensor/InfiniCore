@@ -19,6 +19,9 @@ __INFINI_C infiniStatus_t infiniopCreateDeepseekV4CompressedDecodeDescriptor(
     infiniopTensorDescriptor_t indexed_blocks_desc,
     size_t key_offset,
     size_t key_len,
+    bool causal,
+    size_t sliding_window,
+    int64_t key_position_base,
     float softmax_scale,
     size_t compress_ratio,
     size_t index_top_k,
@@ -32,7 +35,7 @@ __INFINI_C infiniStatus_t infiniopCreateDeepseekV4CompressedDecodeDescriptor(
     double yarn_extrapolation_factor) {
 #define CREATE(CASE, NAMESPACE) \
     case CASE: \
-        return op::deepseek_v4_compressed_decode::NAMESPACE::Descriptor::create(handle, reinterpret_cast<op::deepseek_v4_compressed_decode::NAMESPACE::Descriptor **>(desc_ptr), y_desc, q_desc, k_desc, kv_comp_desc, attn_sink_desc, query_positions_desc, block_positions_desc, indexed_blocks_desc, key_offset, key_len, softmax_scale, compress_ratio, index_top_k, rope_dim, rope_theta, use_yarn, yarn_factor, yarn_beta_fast, yarn_beta_slow, yarn_original_seq_len, yarn_extrapolation_factor)
+        return op::deepseek_v4_compressed_decode::NAMESPACE::Descriptor::create(handle, reinterpret_cast<op::deepseek_v4_compressed_decode::NAMESPACE::Descriptor **>(desc_ptr), y_desc, q_desc, k_desc, kv_comp_desc, attn_sink_desc, query_positions_desc, block_positions_desc, indexed_blocks_desc, key_offset, key_len, causal, sliding_window, key_position_base, softmax_scale, compress_ratio, index_top_k, rope_dim, rope_theta, use_yarn, yarn_factor, yarn_beta_fast, yarn_beta_slow, yarn_original_seq_len, yarn_extrapolation_factor)
     switch (handle->device) {
 #ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia);
