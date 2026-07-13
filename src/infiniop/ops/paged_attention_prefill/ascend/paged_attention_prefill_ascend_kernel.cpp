@@ -197,22 +197,22 @@ private:
     }
 
     __aicore__ inline ptrdiff_t keyBase(size_t seq_idx, size_t kv_head_idx, size_t token_idx) {
-        const size_t page_block_idx = token_idx / _page_block_size;
+        const size_t block_idx = token_idx / _page_block_size;
         const size_t token_offset = token_idx % _page_block_size;
         const int64_t physical_block = loadPrefillIndex(
             _block_tables_gm,
-            static_cast<ptrdiff_t>(seq_idx) * _block_table_batch_stride + static_cast<ptrdiff_t>(page_block_idx));
+            static_cast<ptrdiff_t>(seq_idx) * _block_table_batch_stride + static_cast<ptrdiff_t>(block_idx));
         return static_cast<ptrdiff_t>(physical_block) * _k_batch_stride
              + static_cast<ptrdiff_t>(kv_head_idx) * _k_head_stride
              + static_cast<ptrdiff_t>(token_offset) * _k_row_stride;
     }
 
     __aicore__ inline ptrdiff_t valueBase(size_t seq_idx, size_t kv_head_idx, size_t token_idx) {
-        const size_t page_block_idx = token_idx / _page_block_size;
+        const size_t block_idx = token_idx / _page_block_size;
         const size_t token_offset = token_idx % _page_block_size;
         const int64_t physical_block = loadPrefillIndex(
             _block_tables_gm,
-            static_cast<ptrdiff_t>(seq_idx) * _block_table_batch_stride + static_cast<ptrdiff_t>(page_block_idx));
+            static_cast<ptrdiff_t>(seq_idx) * _block_table_batch_stride + static_cast<ptrdiff_t>(block_idx));
         return static_cast<ptrdiff_t>(physical_block) * _v_batch_stride
              + static_cast<ptrdiff_t>(kv_head_idx) * _v_head_stride
              + static_cast<ptrdiff_t>(token_offset) * _v_row_stride;
