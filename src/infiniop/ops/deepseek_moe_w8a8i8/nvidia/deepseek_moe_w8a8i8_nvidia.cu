@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <vector>
 
@@ -16,6 +17,13 @@ namespace op::deepseek_moe_w8a8i8::nvidia {
 
 struct Descriptor::Opaque {
     std::shared_ptr<device::nvidia::Handle::Internal> internal;
+    mutable std::mutex host_ptr_cache_mutex;
+    mutable const void *cached_gate_table = nullptr;
+    mutable const void *cached_up_table = nullptr;
+    mutable const void *cached_down_table = nullptr;
+    mutable std::vector<const void *> gate_host;
+    mutable std::vector<const void *> up_host;
+    mutable std::vector<const void *> down_host;
 };
 
 Descriptor::~Descriptor() {
@@ -24,7 +32,15 @@ Descriptor::~Descriptor() {
 
 namespace {
 
-constexpr size_t W8A8_GROUPED_GEMM_MIN_TOKENS = 2048;
+constexpr size_t W8A8_GROUPED_GEMM_MIN_TOKENS = 16;
+
+bool grouped_gemm_enabled(const DeepseekMoeW8A8I8Info &info) {
+    const char *grouped_env = std::getenv("INFINICORE_DSV4_W8A8_GROUPED_GEMM");
+    const bool force_grouped = grouped_env != nullptr && std::string(grouped_env) == "1";
+    const bool disable_grouped = grouped_env != nullptr && std::string(grouped_env) == "0";
+    const bool auto_grouped = info.ntokens >= W8A8_GROUPED_GEMM_MIN_TOKENS && info.num_experts <= 256;
+    return (force_grouped || (!disable_grouped && auto_grouped)) && info.ntokens >= 4;
+}
 
 constexpr size_t align_up(size_t value, size_t alignment) {
     return (value + alignment - 1) / alignment * alignment;
@@ -167,6 +183,7 @@ __device__ int8_t quantize_sym(float value, float scale) {
     }
     return static_cast<int8_t>(q);
 }
+
 
 template <typename T>
 __global__ void quantize_rows_kernel(
@@ -895,6 +912,84 @@ __global__ void gate_up_w8a8i8_packed_h4096_kernel(
 }
 
 template <typename T>
+__global__ void gate_up_w8a8i8_packed_h4096_tile4_kernel(
+    T *intermediate,
+    const int8_t *hidden_packed,
+    const float *hidden_scales,
+    const int *topk_indices,
+    const void *const *gate_weights,
+    const void *const *up_weights,
+    const void *const *gate_weight_scales,
+    const void *const *up_weight_scales,
+    size_t routes,
+    size_t topk,
+    size_t num_experts) {
+    constexpr size_t HIDDEN = 4096;
+    constexpr size_t INTERMEDIATE = 2048;
+    constexpr size_t TILE = 4;
+    const size_t block = blockIdx.x;
+    const size_t route = block / (INTERMEDIATE / TILE);
+    const size_t j_base = (block - route * (INTERMEDIATE / TILE)) * TILE;
+    if (route >= routes) {
+        return;
+    }
+    const int expert = topk_indices[route];
+    if (expert < 0 || static_cast<size_t>(expert) >= num_experts) {
+        return;
+    }
+
+    const size_t token = route / topk;
+    const int8_t *x = hidden_packed + token * HIDDEN;
+    const float x_scale = hidden_scales[token];
+    const float *gate_scale = reinterpret_cast<const float *>(gate_weight_scales[expert]);
+    const float *up_scale = reinterpret_cast<const float *>(up_weight_scales[expert]);
+
+    __shared__ int gate_shared[TILE][256];
+    __shared__ int up_shared[TILE][256];
+    int gate_sum[TILE] = {0, 0, 0, 0};
+    int up_sum[TILE] = {0, 0, 0, 0};
+
+    const int8_t *gate_base = reinterpret_cast<const int8_t *>(gate_weights[expert]) + j_base * HIDDEN;
+    const int8_t *up_base = reinterpret_cast<const int8_t *>(up_weights[expert]) + j_base * HIDDEN;
+    for (size_t h = threadIdx.x; h < HIDDEN; h += 256) {
+        const int xq = static_cast<int>(x[h]);
+#pragma unroll
+        for (size_t t = 0; t < TILE; ++t) {
+            gate_sum[t] += xq * static_cast<int>(gate_base[t * HIDDEN + h]);
+            up_sum[t] += xq * static_cast<int>(up_base[t * HIDDEN + h]);
+        }
+    }
+
+#pragma unroll
+    for (size_t t = 0; t < TILE; ++t) {
+        gate_shared[t][threadIdx.x] = gate_sum[t];
+        up_shared[t][threadIdx.x] = up_sum[t];
+    }
+    __syncthreads();
+    for (unsigned int stride = 128; stride > 0; stride >>= 1) {
+        if (threadIdx.x < stride) {
+#pragma unroll
+            for (size_t t = 0; t < TILE; ++t) {
+                gate_shared[t][threadIdx.x] += gate_shared[t][threadIdx.x + stride];
+                up_shared[t][threadIdx.x] += up_shared[t][threadIdx.x + stride];
+            }
+        }
+        __syncthreads();
+    }
+
+    if (threadIdx.x == 0) {
+#pragma unroll
+        for (size_t t = 0; t < TILE; ++t) {
+            const size_t j = j_base + t;
+            const float g = x_scale * gate_scale[j] * static_cast<float>(gate_shared[t][0]);
+            const float u = x_scale * up_scale[j] * static_cast<float>(up_shared[t][0]);
+            const float silu = g / (1.0f + __expf(-g));
+            intermediate[route * INTERMEDIATE + j] = from_float<T>(silu * u);
+        }
+    }
+}
+
+template <typename T>
 __global__ void down_w8a8i8_packed_h2048_topk6_kernel(
     T *out,
     const int8_t *intermediate_packed,
@@ -950,6 +1045,84 @@ __global__ void down_w8a8i8_packed_h2048_topk6_kernel(
 
     if (threadIdx.x == 0) {
         out[token * hidden_size + h] = from_float<T>(acc);
+    }
+}
+
+
+template <typename T>
+__global__ void down_w8a8i8_packed_h2048_topk6_tile4_kernel(
+    T *out,
+    const int8_t *intermediate_packed,
+    const float *intermediate_scales,
+    const int *topk_indices,
+    const float *topk_weights,
+    const void *const *down_weights,
+    const void *const *down_weight_scales,
+    size_t ntokens,
+    size_t hidden_size,
+    size_t num_experts) {
+    constexpr size_t TOPK = 6;
+    constexpr size_t INTERMEDIATE = 2048;
+    constexpr size_t TILE = 4;
+    const size_t linear = blockIdx.x;
+    const size_t token = linear / (hidden_size / TILE);
+    const size_t h_base = (linear - token * (hidden_size / TILE)) * TILE;
+    if (token >= ntokens) {
+        return;
+    }
+
+    __shared__ int shared_sum[TILE][256];
+    float acc[TILE] = {0.0f, 0.0f, 0.0f, 0.0f};
+    const size_t route_base = token * TOPK;
+    for (size_t k = 0; k < TOPK; ++k) {
+        const size_t route = route_base + k;
+        const int expert = topk_indices[route];
+        if (expert >= 0 && static_cast<size_t>(expert) < num_experts) {
+            const int8_t *x = intermediate_packed + route * INTERMEDIATE;
+            const float x_scale = intermediate_scales[route];
+            const int8_t *down_base = reinterpret_cast<const int8_t *>(down_weights[expert]) + h_base * INTERMEDIATE;
+            const float *down_scale = reinterpret_cast<const float *>(down_weight_scales[expert]);
+
+            int sum[TILE] = {0, 0, 0, 0};
+            for (size_t j = threadIdx.x; j < INTERMEDIATE; j += 256) {
+                const int xv = static_cast<int>(x[j]);
+#pragma unroll
+                for (size_t t = 0; t < TILE; ++t) {
+                    sum[t] += xv * static_cast<int>(down_base[t * INTERMEDIATE + j]);
+                }
+            }
+
+#pragma unroll
+            for (size_t t = 0; t < TILE; ++t) {
+                shared_sum[t][threadIdx.x] = sum[t];
+            }
+            __syncthreads();
+            for (unsigned int stride = 128; stride > 0; stride >>= 1) {
+                if (threadIdx.x < stride) {
+#pragma unroll
+                    for (size_t t = 0; t < TILE; ++t) {
+                        shared_sum[t][threadIdx.x] += shared_sum[t][threadIdx.x + stride];
+                    }
+                }
+                __syncthreads();
+            }
+
+            if (threadIdx.x == 0) {
+#pragma unroll
+                for (size_t t = 0; t < TILE; ++t) {
+                    acc[t] += x_scale * down_scale[h_base + t]
+                            * static_cast<float>(shared_sum[t][0]) * topk_weights[route];
+                }
+            }
+        }
+        __syncthreads();
+    }
+
+    if (threadIdx.x == 0) {
+#pragma unroll
+        for (size_t t = 0; t < TILE; ++t) {
+            out[token * hidden_size + h_base + t] = from_float<T>(acc[t]);
+        }
     }
 }
 
@@ -1013,7 +1186,10 @@ infiniStatus_t launch_grouped_typed(
     const void *const *up_scale_ptrs,
     const void *const *down_scale_ptrs,
     cudaStream_t stream,
-    const device::nvidia::Handle::Internal *internal) {
+    const device::nvidia::Handle::Internal *internal,
+    const std::vector<const void *> *cached_gate_host = nullptr,
+    const std::vector<const void *> *cached_up_host = nullptr,
+    const std::vector<const void *> *cached_down_host = nullptr) {
     const size_t routes = info.ntokens * info.topk;
     const auto layout = make_grouped_layout(info, sizeof(T));
     if (workspace_size < layout.total_size) {
@@ -1055,13 +1231,24 @@ infiniStatus_t launch_grouped_typed(
     CHECK_CUDA(cudaGetLastError());
 
     std::vector<int32_t> offsets_host(info.num_experts + 1);
-    std::vector<const void *> gate_host(info.num_experts);
-    std::vector<const void *> up_host(info.num_experts);
-    std::vector<const void *> down_host(info.num_experts);
+    std::vector<const void *> gate_host;
+    std::vector<const void *> up_host;
+    std::vector<const void *> down_host;
+    const std::vector<const void *> *gate_host_ptr = cached_gate_host;
+    const std::vector<const void *> *up_host_ptr = cached_up_host;
+    const std::vector<const void *> *down_host_ptr = cached_down_host;
     CHECK_CUDA(cudaMemcpyAsync(offsets_host.data(), offsets, (info.num_experts + 1) * sizeof(int32_t), cudaMemcpyDeviceToHost, stream));
-    CHECK_CUDA(cudaMemcpyAsync(gate_host.data(), gate_ptrs, info.num_experts * sizeof(void *), cudaMemcpyDeviceToHost, stream));
-    CHECK_CUDA(cudaMemcpyAsync(up_host.data(), up_ptrs, info.num_experts * sizeof(void *), cudaMemcpyDeviceToHost, stream));
-    CHECK_CUDA(cudaMemcpyAsync(down_host.data(), down_ptrs, info.num_experts * sizeof(void *), cudaMemcpyDeviceToHost, stream));
+    if (gate_host_ptr == nullptr || up_host_ptr == nullptr || down_host_ptr == nullptr) {
+        gate_host.resize(info.num_experts);
+        up_host.resize(info.num_experts);
+        down_host.resize(info.num_experts);
+        CHECK_CUDA(cudaMemcpyAsync(gate_host.data(), gate_ptrs, info.num_experts * sizeof(void *), cudaMemcpyDeviceToHost, stream));
+        CHECK_CUDA(cudaMemcpyAsync(up_host.data(), up_ptrs, info.num_experts * sizeof(void *), cudaMemcpyDeviceToHost, stream));
+        CHECK_CUDA(cudaMemcpyAsync(down_host.data(), down_ptrs, info.num_experts * sizeof(void *), cudaMemcpyDeviceToHost, stream));
+        gate_host_ptr = &gate_host;
+        up_host_ptr = &up_host;
+        down_host_ptr = &down_host;
+    }
     CHECK_CUDA(cudaStreamSynchronize(stream));
 
     const size_t hidden_total = routes * info.hidden_size;
@@ -1081,10 +1268,10 @@ infiniStatus_t launch_grouped_typed(
         if (count <= 0) {
             continue;
         }
-        CHECK_STATUS(launch_single_i8_gemm(internal, stream, gate_host[expert], sorted_hidden_packed + static_cast<size_t>(begin) * info.hidden_size,
+        CHECK_STATUS(launch_single_i8_gemm(internal, stream, (*gate_host_ptr)[expert], sorted_hidden_packed + static_cast<size_t>(begin) * info.hidden_size,
                                            gate_i32 + static_cast<size_t>(begin) * info.intermediate_size, count,
                                            static_cast<int>(info.hidden_size), static_cast<int>(info.intermediate_size)));
-        CHECK_STATUS(launch_single_i8_gemm(internal, stream, up_host[expert], sorted_hidden_packed + static_cast<size_t>(begin) * info.hidden_size,
+        CHECK_STATUS(launch_single_i8_gemm(internal, stream, (*up_host_ptr)[expert], sorted_hidden_packed + static_cast<size_t>(begin) * info.hidden_size,
                                            up_i32 + static_cast<size_t>(begin) * info.intermediate_size, count,
                                            static_cast<int>(info.hidden_size), static_cast<int>(info.intermediate_size)));
     }
@@ -1137,7 +1324,7 @@ infiniStatus_t launch_grouped_typed(
         if (count <= 0) {
             continue;
         }
-        CHECK_STATUS(launch_single_i8_gemm(internal, stream, down_host[expert], intermediate_packed + static_cast<size_t>(begin) * info.intermediate_size,
+        CHECK_STATUS(launch_single_i8_gemm(internal, stream, (*down_host_ptr)[expert], intermediate_packed + static_cast<size_t>(begin) * info.intermediate_size,
                                            down_i32 + static_cast<size_t>(begin) * info.hidden_size, count,
                                            static_cast<int>(info.intermediate_size), static_cast<int>(info.hidden_size)));
     }
@@ -1237,19 +1424,36 @@ infiniStatus_t launch_raw_typed(
         CHECK_CUDA(cudaGetLastError());
 
         const size_t routes = info.ntokens * info.topk;
-        const dim3 gate_blocks(static_cast<unsigned int>(routes * info.intermediate_size));
-        gate_up_w8a8i8_packed_h4096_kernel<T><<<gate_blocks, threads, 0, stream>>>(
-            intermediate,
-            hidden_packed,
-            hidden_scales,
-            reinterpret_cast<const int *>(topk_indices),
-            gate_ptrs,
-            up_ptrs,
-            gate_scale_ptrs,
-            up_scale_ptrs,
-            routes,
-            info.topk,
-            info.num_experts);
+        const bool disable_tile4 = std::getenv("INFINICORE_DSV4_W8A8_DISABLE_TILE4") != nullptr;
+        if (disable_tile4) {
+            const dim3 gate_blocks(static_cast<unsigned int>(routes * info.intermediate_size));
+            gate_up_w8a8i8_packed_h4096_kernel<T><<<gate_blocks, threads, 0, stream>>>(
+                intermediate,
+                hidden_packed,
+                hidden_scales,
+                reinterpret_cast<const int *>(topk_indices),
+                gate_ptrs,
+                up_ptrs,
+                gate_scale_ptrs,
+                up_scale_ptrs,
+                routes,
+                info.topk,
+                info.num_experts);
+        } else {
+            const dim3 gate_blocks(static_cast<unsigned int>(routes * (info.intermediate_size / 4)));
+            gate_up_w8a8i8_packed_h4096_tile4_kernel<T><<<gate_blocks, threads, 0, stream>>>(
+                intermediate,
+                hidden_packed,
+                hidden_scales,
+                reinterpret_cast<const int *>(topk_indices),
+                gate_ptrs,
+                up_ptrs,
+                gate_scale_ptrs,
+                up_scale_ptrs,
+                routes,
+                info.topk,
+                info.num_experts);
+        }
         CHECK_CUDA(cudaGetLastError());
 
         quantize_rows_2048_kernel<T><<<static_cast<unsigned int>(routes), threads, 0, stream>>>(
@@ -1259,18 +1463,33 @@ infiniStatus_t launch_raw_typed(
             routes);
         CHECK_CUDA(cudaGetLastError());
 
-        const dim3 down_blocks(static_cast<unsigned int>(info.ntokens * info.hidden_size));
-        down_w8a8i8_packed_h2048_topk6_kernel<T><<<down_blocks, threads, 0, stream>>>(
-            reinterpret_cast<T *>(out),
-            intermediate_packed,
-            intermediate_scales,
-            reinterpret_cast<const int *>(topk_indices),
-            reinterpret_cast<const float *>(topk_weights),
-            down_ptrs,
-            down_scale_ptrs,
-            info.ntokens,
-            info.hidden_size,
-            info.num_experts);
+        if (disable_tile4) {
+            const dim3 down_blocks(static_cast<unsigned int>(info.ntokens * info.hidden_size));
+            down_w8a8i8_packed_h2048_topk6_kernel<T><<<down_blocks, threads, 0, stream>>>(
+                reinterpret_cast<T *>(out),
+                intermediate_packed,
+                intermediate_scales,
+                reinterpret_cast<const int *>(topk_indices),
+                reinterpret_cast<const float *>(topk_weights),
+                down_ptrs,
+                down_scale_ptrs,
+                info.ntokens,
+                info.hidden_size,
+                info.num_experts);
+        } else {
+            const dim3 down_blocks(static_cast<unsigned int>(info.ntokens * (info.hidden_size / 4)));
+            down_w8a8i8_packed_h2048_topk6_tile4_kernel<T><<<down_blocks, threads, 0, stream>>>(
+                reinterpret_cast<T *>(out),
+                intermediate_packed,
+                intermediate_scales,
+                reinterpret_cast<const int *>(topk_indices),
+                reinterpret_cast<const float *>(topk_weights),
+                down_ptrs,
+                down_scale_ptrs,
+                info.ntokens,
+                info.hidden_size,
+                info.num_experts);
+        }
         CHECK_CUDA(cudaGetLastError());
         return INFINI_STATUS_SUCCESS;
     }
@@ -1344,7 +1563,10 @@ infiniStatus_t launch_typed(
     const void *const *down_weight_scales,
     cudaStream_t stream,
     bool ptrs_on_device,
-    const device::nvidia::Handle::Internal *internal) {
+    const device::nvidia::Handle::Internal *internal,
+    const std::vector<const void *> *cached_gate_host = nullptr,
+    const std::vector<const void *> *cached_up_host = nullptr,
+    const std::vector<const void *> *cached_down_host = nullptr) {
 
     const size_t ptr_bytes = align_up(info.num_experts * sizeof(void *), 256);
     auto *base = reinterpret_cast<char *>(workspace);
@@ -1383,15 +1605,10 @@ infiniStatus_t launch_typed(
         down_scale_ptrs = down_scale_workspace;
     }
 
-    const char *grouped_env = std::getenv("INFINICORE_DSV4_W8A8_GROUPED_GEMM");
-    const bool force_grouped = grouped_env != nullptr && std::string(grouped_env) == "1";
-    const bool disable_grouped = grouped_env != nullptr && std::string(grouped_env) == "0";
-    const bool auto_grouped = info.ntokens >= W8A8_GROUPED_GEMM_MIN_TOKENS && info.num_experts <= 256;
-    const bool use_grouped_gemm = force_grouped || (!disable_grouped && auto_grouped);
-    if (use_grouped_gemm && info.ntokens >= 4) {
+    if (grouped_gemm_enabled(info)) {
         return launch_grouped_typed<T>(workspace, workspace_size, info, out, hidden, topk_indices, topk_weights,
                                        gate_ptrs, up_ptrs, down_ptrs, gate_scale_ptrs, up_scale_ptrs, down_scale_ptrs,
-                                       stream, internal);
+                                       stream, internal, cached_gate_host, cached_up_host, cached_down_host);
     }
     return launch_raw_typed<T>(workspace, workspace_size, info, out, hidden, topk_indices, topk_weights,
                                gate_ptrs, up_ptrs, down_ptrs, gate_scale_ptrs, up_scale_ptrs, down_scale_ptrs,
@@ -1456,6 +1673,7 @@ infiniStatus_t Descriptor::calculate(
     return INFINI_STATUS_BAD_TENSOR_DTYPE;
 }
 
+
 infiniStatus_t Descriptor::calculateWithDevicePtrs(
     void *workspace,
     size_t workspace_size,
@@ -1478,15 +1696,42 @@ infiniStatus_t Descriptor::calculateWithDevicePtrs(
     auto gate_weight_scales = reinterpret_cast<const void *const *>(gate_weight_scale_ptrs);
     auto up_weight_scales = reinterpret_cast<const void *const *>(up_weight_scale_ptrs);
     auto down_weight_scales = reinterpret_cast<const void *const *>(down_weight_scale_ptrs);
+    const bool use_grouped = grouped_gemm_enabled(_info);
+    if (use_grouped) {
+        std::lock_guard<std::mutex> lock(_opaque->host_ptr_cache_mutex);
+        const bool cache_hit = _opaque->cached_gate_table == gate_weight_ptrs
+                            && _opaque->cached_up_table == up_weight_ptrs
+                            && _opaque->cached_down_table == down_weight_ptrs
+                            && _opaque->gate_host.size() == _info.num_experts
+                            && _opaque->up_host.size() == _info.num_experts
+                            && _opaque->down_host.size() == _info.num_experts;
+        if (!cache_hit) {
+            _opaque->gate_host.resize(_info.num_experts);
+            _opaque->up_host.resize(_info.num_experts);
+            _opaque->down_host.resize(_info.num_experts);
+            CHECK_CUDA(cudaMemcpyAsync(_opaque->gate_host.data(), gate_weight_ptrs, _info.num_experts * sizeof(void *), cudaMemcpyDeviceToHost, stream));
+            CHECK_CUDA(cudaMemcpyAsync(_opaque->up_host.data(), up_weight_ptrs, _info.num_experts * sizeof(void *), cudaMemcpyDeviceToHost, stream));
+            CHECK_CUDA(cudaMemcpyAsync(_opaque->down_host.data(), down_weight_ptrs, _info.num_experts * sizeof(void *), cudaMemcpyDeviceToHost, stream));
+            CHECK_CUDA(cudaStreamSynchronize(stream));
+            _opaque->cached_gate_table = gate_weight_ptrs;
+            _opaque->cached_up_table = up_weight_ptrs;
+            _opaque->cached_down_table = down_weight_ptrs;
+        }
+    }
+    const auto *cached_gate_host = use_grouped ? &_opaque->gate_host : nullptr;
+    const auto *cached_up_host = use_grouped ? &_opaque->up_host : nullptr;
+    const auto *cached_down_host = use_grouped ? &_opaque->down_host : nullptr;
     if (_info.dtype == INFINI_DTYPE_F16) {
         return launch_typed<half>(workspace, workspace_size, _info, out, hidden, topk_indices, topk_weights,
                                   gate_weights, up_weights, down_weights, gate_weight_scales, up_weight_scales,
-                                  down_weight_scales, stream, true, _opaque->internal.get());
+                                  down_weight_scales, stream, true, _opaque->internal.get(),
+                                  cached_gate_host, cached_up_host, cached_down_host);
     }
     if (_info.dtype == INFINI_DTYPE_BF16) {
         return launch_typed<__nv_bfloat16>(workspace, workspace_size, _info, out, hidden, topk_indices, topk_weights,
                                            gate_weights, up_weights, down_weights, gate_weight_scales, up_weight_scales,
-                                           down_weight_scales, stream, true, _opaque->internal.get());
+                                           down_weight_scales, stream, true, _opaque->internal.get(),
+                                           cached_gate_host, cached_up_host, cached_down_host);
     }
     return INFINI_STATUS_BAD_TENSOR_DTYPE;
 }
