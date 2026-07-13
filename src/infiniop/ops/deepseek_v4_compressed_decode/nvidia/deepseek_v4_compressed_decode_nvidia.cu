@@ -94,41 +94,6 @@ __device__ double rope_inv_freq(size_t pair,
     return 1.0 / pow(rope_theta, static_cast<double>(2 * pair) / static_cast<double>(rope_dim));
 }
 
-template <typename T>
-__device__ float rotated_comp_value(const T *__restrict__ kv_comp,
-                                    size_t base,
-                                    size_t d,
-                                    size_t head_dim,
-                                    size_t rope_dim,
-                                    int64_t block_pos,
-                                    double rope_theta,
-                                    bool use_yarn,
-                                    double yarn_factor,
-                                    double yarn_beta_fast,
-                                    double yarn_beta_slow,
-                                    int64_t yarn_original_seq_len,
-                                    double yarn_extrapolation_factor) {
-    const size_t pass_dim = head_dim - rope_dim;
-    if (d < pass_dim) {
-        return to_float<T>(kv_comp[base + d]);
-    }
-    const size_t pair = (d - pass_dim) / 2;
-    const size_t even = pass_dim + 2 * pair;
-    const size_t odd = even + 1;
-    const float raw_even = to_float<T>(kv_comp[base + even]);
-    const float raw_odd = to_float<T>(kv_comp[base + odd]);
-    const double inv_freq = rope_inv_freq(pair, rope_dim, rope_theta, use_yarn, yarn_factor,
-                                          yarn_beta_fast, yarn_beta_slow,
-                                          yarn_original_seq_len, yarn_extrapolation_factor);
-    const double angle = static_cast<double>(block_pos) * inv_freq;
-    const float c = static_cast<float>(cos(angle));
-    const float s = static_cast<float>(sin(angle));
-    if (((d - pass_dim) & 1) == 0) {
-        return raw_even * c - raw_odd * s;
-    }
-    return raw_odd * c + raw_even * s;
-}
-
 template <typename T, typename SinkT, typename PosT, typename IndexT>
 __global__ void compressed_decode_kernel(T *__restrict__ y,
                                          const T *__restrict__ q,
@@ -149,6 +114,7 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
                                          int64_t key_position_base,
                                          size_t num_kv_heads,
                                          size_t num_blocks,
+                                         ptrdiff_t kv_comp_stride_batch,
                                          size_t head_dim,
                                          size_t index_top_k,
                                          float softmax_scale,
@@ -184,7 +150,8 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
 
     const size_t q_base = ((b * query_len + tq) * num_heads + h) * head_dim;
     const size_t k_base = (b * full_key_len * num_kv_heads + key_offset * num_kv_heads + kv_head) * head_dim;
-    const size_t comp_batch_base = b * num_blocks * head_dim;
+    const size_t comp_batch_base = static_cast<size_t>(
+        static_cast<ptrdiff_t>(b) * kv_comp_stride_batch);
     const size_t index_base = (b * query_len + tq) * index_top_k;
 
     float row_max = to_float<SinkT>(attn_sink[h]);
@@ -199,13 +166,10 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
         if (valid) {
             const size_t block = static_cast<size_t>(selected_block);
             const size_t comp_base = comp_batch_base + block * head_dim;
-            const int64_t block_pos = read_pos<PosT>(block_positions, block);
             float local_dot = 0.0f;
             for (size_t hd = tid; hd < head_dim; hd += blockDim.x) {
-                local_dot += to_float<T>(q[q_base + hd]) * rotated_comp_value<T>(
-                    kv_comp, comp_base, hd, head_dim, rope_dim, block_pos, rope_theta,
-                    use_yarn, yarn_factor, yarn_beta_fast, yarn_beta_slow,
-                    yarn_original_seq_len, yarn_extrapolation_factor);
+                local_dot += to_float<T>(q[q_base + hd])
+                           * to_float<T>(kv_comp[comp_base + hd]);
             }
             scratch[tid] = local_dot;
             __syncthreads();
@@ -317,17 +281,8 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
                 const float prob = logits[slot];
                 const size_t block = static_cast<size_t>(selected_block);
                 const size_t comp_base = comp_batch_base + block * head_dim;
-                const int64_t block_pos = read_pos<PosT>(block_positions, block);
-                acc_even += prob * rotated_comp_value<T>(kv_comp, comp_base, even, head_dim,
-                                                         rope_dim, block_pos, rope_theta,
-                                                         use_yarn, yarn_factor, yarn_beta_fast,
-                                                         yarn_beta_slow, yarn_original_seq_len,
-                                                         yarn_extrapolation_factor);
-                acc_odd += prob * rotated_comp_value<T>(kv_comp, comp_base, odd, head_dim,
-                                                        rope_dim, block_pos, rope_theta,
-                                                        use_yarn, yarn_factor, yarn_beta_fast,
-                                                        yarn_beta_slow, yarn_original_seq_len,
-                                                        yarn_extrapolation_factor);
+                acc_even += prob * to_float<T>(kv_comp[comp_base + even]);
+                acc_odd += prob * to_float<T>(kv_comp[comp_base + odd]);
             }
         }
         for (size_t j = 0; j < key_len; ++j) {
@@ -383,6 +338,7 @@ infiniStatus_t launch_typed_pos(const DeepseekV4CompressedDecodeInfo &info,
         info.key_position_base,
         info.num_kv_heads,
         info.num_blocks,
+        info.kv_comp_stride_batch,
         info.head_dim,
         info.index_top_k,
         info.softmax_scale,

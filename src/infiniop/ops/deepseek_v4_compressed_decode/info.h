@@ -36,6 +36,7 @@ struct DeepseekV4CompressedDecodeInfo {
     int64_t key_position_base;
     size_t num_kv_heads;
     size_t num_blocks;
+    ptrdiff_t kv_comp_stride_batch;
     size_t head_dim;
     infiniDtype_t dtype;
     infiniDtype_t sink_dtype;
@@ -139,15 +140,21 @@ struct DeepseekV4CompressedDecodeInfo {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
         if (!is_contiguous(y_desc) || !is_contiguous(q_desc) || !is_contiguous(k_desc) ||
-            !is_contiguous(kv_comp_desc) || !is_contiguous(attn_sink_desc) ||
+            !is_contiguous(attn_sink_desc) ||
             !is_contiguous(query_positions_desc) || !is_contiguous(block_positions_desc) ||
             !is_contiguous(indexed_blocks_desc)) {
+            return INFINI_STATUS_BAD_TENSOR_STRIDES;
+        }
+        if (kv_comp_desc->stride(2) != 1
+            || kv_comp_desc->stride(1) != static_cast<ptrdiff_t>(head_dim)
+            || kv_comp_desc->stride(0)
+                   < static_cast<ptrdiff_t>(num_blocks * head_dim)) {
             return INFINI_STATUS_BAD_TENSOR_STRIDES;
         }
         return utils::Result<DeepseekV4CompressedDecodeInfo>(DeepseekV4CompressedDecodeInfo{
             batch_size, query_len, num_heads, key_len, full_key_len, key_offset,
             causal, sliding_window, key_position_base,
-            num_kv_heads, num_blocks, head_dim,
+            num_kv_heads, num_blocks, kv_comp_desc->stride(0), head_dim,
             dtype, sink_dtype, positions_dtype, indexed_dtype, softmax_scale, compress_ratio,
             index_top_k, rope_dim, rope_theta, use_yarn, yarn_factor, yarn_beta_fast,
             yarn_beta_slow, yarn_original_seq_len, yarn_extrapolation_factor});

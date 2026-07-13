@@ -15,6 +15,7 @@ struct DeepseekV4IndexerInfo {
     size_t index_n_heads;
     size_t head_dim;
     size_t num_blocks;
+    ptrdiff_t compressed_stride_batch;
     size_t topk;
     size_t query_start;
     size_t compress_ratio;
@@ -68,8 +69,14 @@ struct DeepseekV4IndexerInfo {
         if (positions_desc->numel() < query_start + query_len) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
-        if (!q_desc->isContiguous() || !weights_desc->isContiguous() || !compressed_desc->isContiguous()
+        if (!q_desc->isContiguous() || !weights_desc->isContiguous()
             || !indices_desc->isContiguous() || !positions_desc->isContiguous()) {
+            return INFINI_STATUS_BAD_TENSOR_STRIDES;
+        }
+        if (compressed_desc->stride(2) != 1
+            || compressed_desc->stride(1) != static_cast<ptrdiff_t>(head_dim)
+            || compressed_desc->stride(0)
+                   < static_cast<ptrdiff_t>(num_blocks * head_dim)) {
             return INFINI_STATUS_BAD_TENSOR_STRIDES;
         }
         if (topk > 1024) {
@@ -81,6 +88,7 @@ struct DeepseekV4IndexerInfo {
             index_n_heads,
             head_dim,
             num_blocks,
+            compressed_desc->stride(0),
             topk,
             query_start,
             compress_ratio,

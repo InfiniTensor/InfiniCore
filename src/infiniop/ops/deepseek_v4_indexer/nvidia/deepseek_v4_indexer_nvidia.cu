@@ -65,6 +65,7 @@ __global__ void deepseek_v4_indexer_score_kernel(
     size_t index_n_heads,
     size_t head_dim,
     size_t num_blocks,
+    ptrdiff_t compressed_stride_batch,
     size_t query_start,
     size_t compress_ratio,
     float score_scale,
@@ -96,7 +97,9 @@ __global__ void deepseek_v4_indexer_score_kernel(
     }
 
     extern __shared__ float head_scores[];
-    const size_t k_base = (b * num_blocks + block) * head_dim;
+    const size_t k_base = static_cast<size_t>(
+        static_cast<ptrdiff_t>(b) * compressed_stride_batch)
+                        + block * head_dim;
     for (size_t h = tid; h < index_n_heads; h += blockDim.x) {
         float dot = 0.0f;
         const size_t q_base = (row * index_n_heads + h) * head_dim;
@@ -314,6 +317,7 @@ infiniStatus_t launch_typed(
         info.index_n_heads,
         info.head_dim,
         info.num_blocks,
+        info.compressed_stride_batch,
         info.query_start,
         info.compress_ratio,
         info.score_scale,
