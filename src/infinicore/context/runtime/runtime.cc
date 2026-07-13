@@ -10,6 +10,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <stdexcept>
 #include <infinirt.h>
 
 namespace infinicore {
@@ -83,10 +84,18 @@ std::shared_ptr<Memory> Runtime::allocatePinnedHostMemory(size_t size) {
 }
 
 std::shared_ptr<Memory> Runtime::reinstantiateBlob(std::shared_ptr<Memory> blob) {
-    device_memory_allocator_.get()->mark_in_use_(blob->data(), true);
+    const auto &device = blob->device();
+    if (device_memory_allocator_) {
+        try {
+            device_memory_allocator_.get()->mark_in_use_(blob->data(), true);
+        } catch (const std::runtime_error &) {
+            // External memory (e.g. from_torch): alias without allocator tracking.
+            return std::make_shared<Memory>(blob->data(), blob->size(), device, nullptr);
+        }
+    }
     // Non-owning view: the source blob keeps the deleter; graph replay must not
     // double-free the same pinned allocation (see PinnableBlockAllocator).
-    return std::make_shared<Memory>(blob->data(), blob->size(), device_, nullptr);
+    return std::make_shared<Memory>(blob->data(), blob->size(), device, nullptr);
 }
 
 void Runtime::flushDeferredPinnedHostFrees() {

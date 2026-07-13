@@ -1,7 +1,9 @@
 #pragma once
 
+#include <mutex>
 #include <pybind11/pybind11.h>
 #include <pybind11/stl.h>
+#include <unordered_map>
 
 #include "infinicore/ops/inductor_segment.hpp"
 
@@ -10,6 +12,27 @@ namespace py = pybind11;
 namespace infinicore::compiled_subgraphs {
 
 namespace {
+
+std::mutex g_pre_attn_external_weights_mutex;
+std::unordered_map<size_t, infinicore::op::inductor_segment_impl::PreAttnExternalWeightTensors>
+    g_pre_attn_external_weights;
+
+void ensure_py_pre_attn_weight_resolver() {
+    static std::once_flag once;
+    std::call_once(once, []() {
+        infinicore::op::inductor_segment_impl::set_pre_attn_weight_resolver(
+            [](size_t layer_idx) -> infinicore::op::inductor_segment_impl::PreAttnExternalWeightTensors {
+                std::lock_guard<std::mutex> lock(g_pre_attn_external_weights_mutex);
+                auto it = g_pre_attn_external_weights.find(layer_idx);
+                if (it == g_pre_attn_external_weights.end()) {
+                    throw std::runtime_error(
+                        "InductorSegment: pre_attn external weights not registered for layer "
+                        + std::to_string(layer_idx));
+                }
+                return it->second;
+            });
+    });
+}
 
 infinicore::op::PiecewiseInductorSegmentId parse_segment_id(const std::string &segment) {
     if (segment == "pre_attn") {
@@ -63,6 +86,43 @@ inline void bind(py::module &m) {
 
     m.def("clear_piecewise_inductor_packages", []() {
         infinicore::op::inductor_segment_impl::clear_packages();
+    });
+
+    m.def(
+        "register_pre_attn_external_weights",
+        [](size_t layer_idx,
+           const infinicore::Tensor &ln_weight,
+           const infinicore::Tensor &q_weight,
+           const infinicore::Tensor &k_weight,
+           const infinicore::Tensor &v_weight,
+           const infinicore::Tensor &q_norm_weight,
+           const infinicore::Tensor &k_norm_weight) {
+            ensure_py_pre_attn_weight_resolver();
+            std::lock_guard<std::mutex> lock(g_pre_attn_external_weights_mutex);
+            g_pre_attn_external_weights[layer_idx] =
+                infinicore::op::inductor_segment_impl::PreAttnExternalWeightTensors{
+                    ln_weight,
+                    q_weight,
+                    k_weight,
+                    v_weight,
+                    q_norm_weight,
+                    k_norm_weight,
+                };
+        },
+        py::arg("layer_idx"),
+        py::arg("ln_weight"),
+        py::arg("q_weight"),
+        py::arg("k_weight"),
+        py::arg("v_weight"),
+        py::arg("q_norm_weight"),
+        py::arg("k_norm_weight"));
+
+    m.def("clear_pre_attn_external_weights", []() {
+        {
+            std::lock_guard<std::mutex> lock(g_pre_attn_external_weights_mutex);
+            g_pre_attn_external_weights.clear();
+        }
+        infinicore::op::inductor_segment_impl::clear_pre_attn_weight_resolver();
     });
 
     m.def(
