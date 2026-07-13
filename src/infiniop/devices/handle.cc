@@ -25,7 +25,7 @@
 #endif
 
 __INFINI_C infiniStatus_t infiniopSetRuntimeDevice(infiniDevice_t device, int device_id) {
-    auto rt_device = infinicore::bridge::infini::rt::translate(device);
+    auto rt_device = infinicore::bridge::infini::rt::translate_to(device);
     if (rt_device == infini::rt::Device::Type::kCount) {
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -40,7 +40,7 @@ __INFINI_C infiniStatus_t infiniopCreateHandle(infiniopHandle_t *handle_ptr) {
         return INFINI_STATUS_NULL_POINTER;
     }
 
-    infiniDevice_t device = infinicore::bridge::infini::rt::translate(infini::rt::runtime_device_type());
+    infiniDevice_t device = infinicore::bridge::infini::rt::translate_from(infini::rt::runtime_device_type());
     if (device == INFINI_DEVICE_TYPE_COUNT) {
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }

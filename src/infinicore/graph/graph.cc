@@ -90,9 +90,9 @@ void Graph::instantiate() {
     // Reset device graph
     device_graph_ = std::make_unique<DeviceGraph>();
     auto current_device = context::getDevice();
-    device_graph_->device_type = bridge::infini::rt::translate(static_cast<infiniDevice_t>(current_device.getType()));
+    device_graph_->device_type = bridge::infini::rt::translate_to(static_cast<infiniDevice_t>(current_device.getType()));
     device_graph_->device_index = static_cast<int>(current_device.getIndex());
-    device_graph_->stream = bridge::infini::rt::to_rt_stream(context::getStream());
+    device_graph_->stream = bridge::infini::rt::translate_to(context::getStream());
     if (device_graph_->device_type == ::infini::rt::Device::Type::kCount) {
         spdlog::warn("InfiniRT graph runtime does not support the current device. Falling back to eager execution.");
         device_graph_.reset();
