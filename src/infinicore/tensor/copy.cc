@@ -43,11 +43,13 @@ void TensorImpl::copy_from(Tensor src) {
             }
         } else if (src->device().getType() == Device::Type::CPU) {
             context::setDevice(this->device());
+            // Keep Ascend H2D synchronous because copy_from does not retain the host source.
+            const bool async = this->device().getType() != Device::Type::ASCEND;
             if (this->is_contiguous()) {
-                context::memcpyH2D(this->data(), src->data(), copy_size);
+                context::memcpyH2D(this->data(), src->data(), copy_size, async);
             } else {
                 auto local_src = Tensor::empty(this->shape(), this->dtype(), this->device());
-                context::memcpyH2D(local_src->data(), src->data(), copy_size);
+                context::memcpyH2D(local_src->data(), src->data(), copy_size, async);
                 op::rearrange_(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()), local_src);
             }
         }

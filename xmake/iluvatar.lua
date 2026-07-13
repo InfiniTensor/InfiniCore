@@ -102,7 +102,6 @@ target_end()
 
 target("infiniccl-iluvatar")
     set_kind("static")
-    add_deps("infinirt")
     on_install(function (target) end)
 
     if has_config("ccl") then

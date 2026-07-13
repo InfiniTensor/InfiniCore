@@ -1,16 +1,38 @@
 add_defines("ENABLE_ASCEND_API")
-local ASCEND_HOME = os.getenv("ASCEND_HOME") or os.getenv("ASCEND_TOOLKIT_HOME")
+local ASCEND_HOME = os.getenv("ASCEND_HOME") or os.getenv("ASCEND_TOOLKIT_HOME") or os.getenv("ASCEND_HOME_PATH")
 local SOC_VERSION = os.getenv("SOC_VERSION")
 
 -- Add include dirs
-add_includedirs(ASCEND_HOME .. "/include")
-add_includedirs(ASCEND_HOME .. "/include/aclnn")
-add_linkdirs(ASCEND_HOME .. "/lib64")
+for _, include_dir in ipairs({
+    path.join(ASCEND_HOME, "include"),
+    path.join(ASCEND_HOME, "include/aclnn"),
+    path.join(ASCEND_HOME, "aarch64-linux/include"),
+    path.join(ASCEND_HOME, "aarch64-linux/include/aclnn"),
+}) do
+    if os.isdir(include_dir) then
+        add_includedirs(include_dir)
+    end
+end
+for _, lib_dir in ipairs({
+    path.join(ASCEND_HOME, "lib64"),
+    path.join(ASCEND_HOME, "aarch64-linux/lib64"),
+}) do
+    if os.isdir(lib_dir) then
+        add_linkdirs(lib_dir)
+    end
+end
 add_links("libascendcl.so")
 add_links("libnnopbase.so")
 add_links("libopapi.so")
 add_links("libruntime.so")
-add_linkdirs(ASCEND_HOME .. "/../../driver/lib64/driver")
+for _, driver_dir in ipairs({
+    path.join(ASCEND_HOME, "../driver/lib64/driver"),
+    path.join(ASCEND_HOME, "../../driver/lib64/driver"),
+}) do
+    if os.isdir(driver_dir) then
+        add_linkdirs(driver_dir)
+    end
+end
 add_links("libascend_hal.so")
 local builddir = string.format(
         "%s/build/%s/%s/%s",
@@ -69,7 +91,6 @@ target_end()
 
 target("infiniccl-ascend")
     set_kind("static")
-    add_deps("infinirt")
     add_deps("infini-utils")
     set_warnings("all", "error")
     set_languages("cxx17")

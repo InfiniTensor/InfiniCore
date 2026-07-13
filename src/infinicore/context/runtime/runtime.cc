@@ -11,7 +11,9 @@
 namespace infinicore {
 Runtime::Runtime(Device device) : device_(device), graph_manager_(std::make_unique<graph::GraphManager>()) {
     activate();
-    INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::StreamCreate(bridge::infini::rt::translate(&stream_))));
+    infini::rt::runtime::Stream stream = nullptr;
+    INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::StreamCreate(&stream)));
+    stream_ = bridge::infini::rt::translate_from(stream);
     INFINICORE_CHECK_ERROR(infiniopCreateHandle(&infiniop_handle_));
     if (device_.getType() == Device::Type::CPU) {
         device_memory_allocator_ = std::make_unique<PinnableBlockAllocator>(device);
@@ -27,11 +29,11 @@ Runtime::~Runtime() {
     }
     device_memory_allocator_.reset();
     infiniopDestroyHandle(infiniop_handle_);
-    (void)infini::rt::runtime::StreamDestroy(bridge::infini::rt::translate(stream_));
+    (void)infini::rt::runtime::StreamDestroy(bridge::infini::rt::translate_to(stream_));
 }
 
 Runtime *Runtime::activate() {
-    auto rt_device = bridge::infini::rt::translate(static_cast<infiniDevice_t>(device_.getType()));
+    auto rt_device = bridge::infini::rt::translate_to(static_cast<infiniDevice_t>(device_.getType()));
     INFINICORE_ASSERT(rt_device != infini::rt::Device::Type::kCount);
     infini::rt::set_runtime_device_type(rt_device);
     INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::SetDevice(static_cast<int>(device_.getIndex()))));
@@ -51,7 +53,7 @@ infiniopHandle_t Runtime::infiniopHandle() const {
 }
 
 void Runtime::syncStream() {
-    INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::StreamSynchronize(bridge::infini::rt::translate(stream_))));
+    INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::StreamSynchronize(bridge::infini::rt::translate_to(stream_))));
 }
 
 void Runtime::syncDevice() {
@@ -108,7 +110,7 @@ std::shared_ptr<Memory> Runtime::reinstantiateBlob(std::shared_ptr<Memory> blob)
 
 void Runtime::memcpyH2D(void *dst, const void *src, size_t size, bool async) {
     if (async && device_.getType() != Device::Type::CPU) {
-        INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::MemcpyAsync(dst, src, size, infini::rt::runtime::kMemcpyHostToDevice, bridge::infini::rt::translate(stream_))));
+        INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::MemcpyAsync(dst, src, size, infini::rt::runtime::kMemcpyHostToDevice, bridge::infini::rt::translate_to(stream_))));
     } else {
         INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::Memcpy(dst, src, size, infini::rt::runtime::kMemcpyHostToDevice)));
     }
@@ -120,7 +122,7 @@ void Runtime::memcpyD2H(void *dst, const void *src, size_t size) {
 
 void Runtime::memcpyD2D(void *dst, const void *src, size_t size, bool async) {
     if (async && device_.getType() != Device::Type::CPU) {
-        INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::MemcpyAsync(dst, src, size, infini::rt::runtime::kMemcpyDeviceToDevice, bridge::infini::rt::translate(stream_))));
+        INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::MemcpyAsync(dst, src, size, infini::rt::runtime::kMemcpyDeviceToDevice, bridge::infini::rt::translate_to(stream_))));
     } else {
         INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::Memcpy(dst, src, size, infini::rt::runtime::kMemcpyDeviceToDevice)));
     }
@@ -132,7 +134,7 @@ void Runtime::setDeviceMemory(void *ptr, int value, size_t count) {
 
 void Runtime::setDeviceMemoryAsync(void *ptr, int value, size_t count, infinirtStream_t stream) {
     if (device_.getType() != Device::Type::CPU) {
-        INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::MemsetAsync(ptr, value, count, bridge::infini::rt::translate(stream))));
+        INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::MemsetAsync(ptr, value, count, bridge::infini::rt::translate_to(stream))));
     } else {
         INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::Memset(ptr, value, count)));
     }
@@ -155,7 +157,7 @@ void Runtime::recordEvent(infinirtEvent_t event, infinirtStream_t stream) {
     if (stream == nullptr) {
         stream = stream_;
     }
-    INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::EventRecord(event, bridge::infini::rt::translate(stream))));
+    INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::EventRecord(event, bridge::infini::rt::translate_to(stream))));
 }
 
 bool Runtime::queryEvent(infinirtEvent_t event) {
@@ -181,7 +183,7 @@ void Runtime::streamWaitEvent(infinirtStream_t stream, infinirtEvent_t event) {
     if (stream == nullptr) {
         stream = stream_;
     }
-    INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::StreamWaitEvent(bridge::infini::rt::translate(stream), event, 0)));
+    INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::StreamWaitEvent(bridge::infini::rt::translate_to(stream), event, 0)));
 }
 
 bool Runtime::isGraphRecording() const {
