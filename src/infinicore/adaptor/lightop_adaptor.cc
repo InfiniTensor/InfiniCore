@@ -5,6 +5,7 @@
 #include <dlfcn.h>
 #include <hip/hip_runtime.h>
 
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <limits>
@@ -116,6 +117,74 @@ LightopLibrary &library() {
     return lib;
 }
 
+constexpr const char *kMoeW16A16MarlinMode1000UpCo =
+    "moe_w16a16_channel/moe_w16a16_marlin_128x256x64_TN_BF16_UP.co";
+constexpr const char *kMoeW16A16MarlinMode1000DownCo =
+    "moe_w16a16_channel/moe_w16a16_marlin_128x256x64_TN_BF16_DOWN.co";
+constexpr const char *kMoeW16A16MarlinMode1000UpKernel =
+    "MOE_W16A16_BF16_PERCHANNEL_MARLIN_ASM_TN_MT128x256x64_WGM1_UP";
+constexpr const char *kMoeW16A16MarlinMode1000DownKernel =
+    "MOE_W16A16_BF16_PERCHANNEL_MARLIN_ASM_TN_MT128x256x64_WGM1_DOWN";
+constexpr uint32_t kMoeW16A16MarlinNBlock = 256;
+constexpr uint32_t kMoeW16A16MarlinMBlock = 128;
+constexpr uint32_t kMoeW16A16MarlinKBlock = 64;
+constexpr uint32_t kMoeW16A16MarlinWorkgroupSize = 768;
+
+struct MoeW16A16MarlinMode1000Args {
+    uint32_t n_block_count;
+    uint32_t m_block_count;
+    void *output;
+    void *weight;
+    void *input;
+    void *scale_a;
+    void *scale_b;
+    void *topk_weights;
+    void *sorted_token_ids;
+    void *expert_ids;
+    void *num_tokens_post_padded;
+    uint32_t num_experts;
+    uint32_t m;
+    uint32_t n;
+    uint32_t k;
+    uint32_t stride_asm;
+    uint32_t stride_ask;
+    uint32_t stride_bse;
+    uint32_t stride_bsn;
+    uint32_t stride_bsk;
+    uint32_t sorted_token_lens;
+    uint32_t top_k;
+    float inverse_top_k;
+    float inverse_delta;
+    uint32_t reserved0;
+    uint32_t reserved1;
+    uint32_t reserved2;
+};
+static_assert(sizeof(MoeW16A16MarlinMode1000Args) == 144);
+static_assert(offsetof(MoeW16A16MarlinMode1000Args, output) == 8);
+static_assert(offsetof(MoeW16A16MarlinMode1000Args, topk_weights) == 48);
+static_assert(offsetof(MoeW16A16MarlinMode1000Args, num_experts) == 80);
+static_assert(offsetof(MoeW16A16MarlinMode1000Args, sorted_token_lens) == 116);
+static_assert(offsetof(MoeW16A16MarlinMode1000Args, inverse_top_k) == 124);
+static_assert(offsetof(MoeW16A16MarlinMode1000Args, inverse_delta) == 128);
+static_assert(offsetof(MoeW16A16MarlinMode1000Args, reserved0) == 132);
+
+struct MoeW16A16MarlinDeviceKernel {
+    hipModule_t module = nullptr;
+    hipFunction_t function = nullptr;
+};
+
+std::mutex &moe_w16a16_marlin_kernel_mutex() {
+    static std::mutex mutex;
+    return mutex;
+}
+
+std::unordered_map<int, MoeW16A16MarlinDeviceKernel> &
+moe_w16a16_marlin_kernels(bool down_stage) {
+    static std::unordered_map<int, MoeW16A16MarlinDeviceKernel> up_kernels;
+    static std::unordered_map<int, MoeW16A16MarlinDeviceKernel> down_kernels;
+    return down_stage ? down_kernels : up_kernels;
+}
+
 constexpr const char *kMoeW8A8MarlinMode1001Co =
     "moe_w8a8_channel/moe_w8a8_i8_marlin_64x256x128_TN_BF16_UP.co";
 constexpr const char *kMoeW8A8MarlinMode1001Kernel =
@@ -179,6 +248,53 @@ std::string hip_error_message(const std::string &operation, hipError_t status) {
     return oss.str();
 }
 
+MoeW16A16MarlinDeviceKernel get_moe_w16a16_marlin_mode1000_kernel(
+    bool down_stage) {
+    int device = -1;
+    auto status = hipGetDevice(&device);
+    if (status != hipSuccess) {
+        throw std::runtime_error(hip_error_message("hipGetDevice", status));
+    }
+
+    std::lock_guard<std::mutex> lock(moe_w16a16_marlin_kernel_mutex());
+    auto &kernels = moe_w16a16_marlin_kernels(down_stage);
+    auto found = kernels.find(device);
+    if (found != kernels.end()) {
+        return found->second;
+    }
+
+    ensure_default_lightop_env();
+    const char *asm_dir_env = std::getenv("LIGHTOP_ASM_DIR");
+    std::string asm_dir =
+        asm_dir_env != nullptr && asm_dir_env[0] != '\0'
+            ? asm_dir_env
+            : kDefaultLightopAsmDir;
+    if (!asm_dir.empty() && asm_dir.back() != '/') {
+        asm_dir.push_back('/');
+    }
+    const char *co = down_stage
+                         ? kMoeW16A16MarlinMode1000DownCo
+                         : kMoeW16A16MarlinMode1000UpCo;
+    const char *function = down_stage
+                               ? kMoeW16A16MarlinMode1000DownKernel
+                               : kMoeW16A16MarlinMode1000UpKernel;
+    const std::string co_path = asm_dir + co;
+
+    MoeW16A16MarlinDeviceKernel kernel;
+    status = hipModuleLoad(&kernel.module, co_path.c_str());
+    if (status != hipSuccess) {
+        throw std::runtime_error(hip_error_message("hipModuleLoad(" + co_path + ")", status));
+    }
+    status = hipModuleGetFunction(&kernel.function, kernel.module, function);
+    if (status != hipSuccess) {
+        (void)hipModuleUnload(kernel.module);
+        throw std::runtime_error(hip_error_message("hipModuleGetFunction", status));
+    }
+
+    kernels.emplace(device, kernel);
+    return kernel;
+}
+
 MoeW8A8MarlinDeviceKernel get_moe_w8a8_marlin_mode1001_kernel() {
     int device = -1;
     auto status = hipGetDevice(&device);
@@ -226,6 +342,143 @@ uint32_t checked_u32(int64_t value, const char *name) {
         throw std::runtime_error(std::string("Hygon W8A8 Marlin ") + name + " exceeds uint32");
     }
     return static_cast<uint32_t>(value);
+}
+
+uint32_t checked_w16_u32(int64_t value, const char *name) {
+    if (value < 0 ||
+        static_cast<uint64_t>(value) > std::numeric_limits<uint32_t>::max()) {
+        throw std::runtime_error(std::string("Hygon W16A16 Marlin ") + name + " exceeds uint32");
+    }
+    return static_cast<uint32_t>(value);
+}
+
+void launch_moe_w16a16_marlin_mode1000(
+    at::Tensor &input,
+    at::Tensor &weight,
+    at::Tensor &output,
+    const std::optional<at::Tensor> &topk_weights,
+    at::Tensor &sorted_token_ids,
+    at::Tensor &expert_ids,
+    at::Tensor &num_tokens_post_padded,
+    int64_t top_k,
+    int delta) {
+    const auto device = input.device();
+    if (delta <= 0 || top_k <= 0 ||
+        input.dim() != 2 || weight.dim() != 3 || output.dim() != 2 ||
+        sorted_token_ids.dim() != 1 || expert_ids.dim() != 1 ||
+        input.scalar_type() != at::kBFloat16 ||
+        weight.scalar_type() != at::kBFloat16 ||
+        output.scalar_type() != at::kBFloat16 ||
+        sorted_token_ids.scalar_type() != at::kInt ||
+        expert_ids.scalar_type() != at::kInt ||
+        num_tokens_post_padded.scalar_type() != at::kInt ||
+        !input.is_contiguous() || !weight.is_contiguous() ||
+        !output.is_contiguous() || !sorted_token_ids.is_contiguous() ||
+        !expert_ids.is_contiguous() || !num_tokens_post_padded.is_contiguous() ||
+        weight.device() != device || output.device() != device ||
+        sorted_token_ids.device() != device || expert_ids.device() != device ||
+        num_tokens_post_padded.device() != device ||
+        (topk_weights.has_value() &&
+         (topk_weights->scalar_type() != at::kFloat ||
+          !topk_weights->is_contiguous() || topk_weights->device() != device))) {
+        throw std::runtime_error("Hygon W16A16 Marlin mode 1000 tensor contract mismatch");
+    }
+
+    const int64_t m = input.size(0);
+    const int64_t k = input.size(1);
+    const int64_t num_experts = weight.size(0);
+    const int64_t n = weight.size(2) / 16;
+    const int64_t sorted_token_lens = sorted_token_ids.numel();
+    if (m <= 0 || k <= 0 || n <= 0 || num_experts <= 0 ||
+        m > std::numeric_limits<int64_t>::max() / top_k ||
+        k % kMoeW16A16MarlinKBlock != 0 ||
+        weight.size(1) != k / 16 || weight.size(2) != n * 16 ||
+        output.size(0) != m * top_k || output.size(1) != n ||
+        num_tokens_post_padded.numel() != 1 || sorted_token_lens <= 0 ||
+        (topk_weights.has_value() && topk_weights->numel() != m)) {
+        throw std::runtime_error("Hygon W16A16 Marlin mode 1000 tensor shape mismatch");
+    }
+
+    const uint32_t n_u32 = checked_w16_u32(n, "N");
+    const uint32_t sorted_token_lens_u32 =
+        checked_w16_u32(sorted_token_lens, "sorted_token_lens");
+    (void)checked_w16_u32(expert_ids.numel(), "expert_ids capacity");
+    const uint32_t top_k_u32 = checked_w16_u32(top_k, "top_k");
+    const uint32_t n_block_count =
+        1 + (n_u32 - 1) / kMoeW16A16MarlinNBlock;
+    const uint32_t m_block_count =
+        1 + (sorted_token_lens_u32 - 1) / kMoeW16A16MarlinMBlock;
+    if (static_cast<uint64_t>(expert_ids.numel()) < m_block_count) {
+        throw std::runtime_error("Hygon W16A16 Marlin mode 1000 expert_ids capacity mismatch");
+    }
+
+    MoeW16A16MarlinMode1000Args args{
+        n_block_count,
+        m_block_count,
+        output.data_ptr(),
+        weight.data_ptr(),
+        input.data_ptr(),
+        nullptr,
+        nullptr,
+        topk_weights.has_value() ? topk_weights->data_ptr() : nullptr,
+        sorted_token_ids.data_ptr(),
+        expert_ids.data_ptr(),
+        num_tokens_post_padded.data_ptr(),
+        checked_w16_u32(num_experts, "num_experts"),
+        checked_w16_u32(m, "M"),
+        n_u32,
+        checked_w16_u32(k, "K"),
+        0,
+        0,
+        0,
+        0,
+        0,
+        sorted_token_lens_u32,
+        top_k_u32,
+        1.0f / static_cast<float>(top_k_u32),
+        1.0f / static_cast<float>(delta),
+        0,
+        0,
+        0};
+
+    int current_device = -1;
+    auto status = hipGetDevice(&current_device);
+    if (status != hipSuccess) {
+        throw std::runtime_error(hip_error_message("hipGetDevice", status));
+    }
+    if (input.get_device() != current_device) {
+        throw std::runtime_error("Hygon W16A16 Marlin mode 1000 current device mismatch");
+    }
+
+    size_t args_size = sizeof(args);
+    void *launch_config[] = {
+        HIP_LAUNCH_PARAM_BUFFER_POINTER,
+        &args,
+        HIP_LAUNCH_PARAM_BUFFER_SIZE,
+        &args_size,
+        HIP_LAUNCH_PARAM_END};
+
+    const bool down_stage = topk_weights.has_value();
+    auto kernel = get_moe_w16a16_marlin_mode1000_kernel(down_stage);
+    status = hipModuleLaunchKernel(
+        kernel.function,
+        n_block_count,
+        1,
+        m_block_count,
+        kMoeW16A16MarlinWorkgroupSize,
+        1,
+        1,
+        0,
+        infinicore::adaptor::get_hip_stream().stream(),
+        nullptr,
+        launch_config);
+    if (status != hipSuccess) {
+        const char *stage = down_stage ? "DOWN" : "UP";
+        throw std::runtime_error(
+            hip_error_message(
+                std::string("hipModuleLaunchKernel(W16A16 Marlin mode 1000 ") + stage + ")",
+                status));
+    }
 }
 
 bool can_launch_moe_w8a8_marlin_mode1001(
@@ -587,10 +840,22 @@ bool available() {
     return library().available();
 }
 
-void preload_moe_w16a16_ops() {
+void preload_moe_w16a16_ops(bool preload_legacy_gemm, bool preload_legacy_asm) {
     (void)moe_sum_fn();
-    (void)moe_gemm_w16a16_fn();
-    (void)moe_marlin_w16a16_asm_fn();
+    if (preload_legacy_gemm) {
+        (void)moe_gemm_w16a16_fn();
+    }
+    if (preload_legacy_asm) {
+        (void)moe_marlin_w16a16_asm_fn();
+    }
+}
+
+void preload_moe_w16a16_ops() {
+    preload_moe_w16a16_ops(true, true);
+}
+
+void preload_moe_w16a16_marlin_asm(bool down_stage) {
+    (void)get_moe_w16a16_marlin_mode1000_kernel(down_stage);
 }
 
 void preload_moe_w8a8_ops() {
@@ -702,6 +967,11 @@ void moe_gemm_marlin_w16a16(at::Tensor input,
             input, b_qweight, output, topk_weights,
             sorted_token_ids, expert_ids, num_tokens_post_padded,
             top_k, mode, delta);
+    } else if (mode == 1000 && input.scalar_type() == at::kBFloat16) {
+        launch_moe_w16a16_marlin_mode1000(
+            input, b_qweight, output, topk_weights,
+            sorted_token_ids, expert_ids, num_tokens_post_padded,
+            top_k, delta);
     } else {
         moe_marlin_w16a16_asm_fn()(
             input, b_qweight, output, topk_weights,

@@ -12,6 +12,10 @@ bool available();
 
 void preload_moe_w16a16_ops();
 
+void preload_moe_w16a16_ops(bool preload_legacy_gemm, bool preload_legacy_asm);
+
+void preload_moe_w16a16_marlin_asm(bool down_stage);
+
 void preload_moe_w8a8_ops();
 
 void preload_moe_align();
