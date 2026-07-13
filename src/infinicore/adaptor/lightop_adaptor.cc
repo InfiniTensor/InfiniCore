@@ -1,19 +1,25 @@
-#if defined(ENABLE_HYGON_API) && defined(ENABLE_ATEN)
 #include "infinicore/adaptor/lightop_adaptor.hpp"
+
+#if defined(ENABLE_HYGON_API) && defined(ENABLE_ATEN)
 #include "infinicore/adaptor/aten_adaptor.hpp"
 
 #include <dlfcn.h>
 #include <hip/hip_runtime.h>
 
+#include <algorithm>
+#include <cerrno>
+#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <limits>
 #include <mutex>
 #include <sstream>
 #include <stdexcept>
 #include <string>
 #include <unordered_map>
+#include <utility>
 
 namespace infinicore::adaptor::lightop {
 namespace {
@@ -22,9 +28,8 @@ constexpr const char *kDefaultLightopSo =
     "/usr/local/lib/python3.10/dist-packages/lightop/op.cpython-310-x86_64-linux-gnu.so";
 constexpr const char *kDefaultLmslimQuantSo =
     "/usr/local/lib/python3.10/dist-packages/lmslimquant.cpython-310-x86_64-linux-gnu.so";
-constexpr const char *kDefaultLightopGpuTarget = "gfx936";
-constexpr const char *kDefaultLightopAsmDir =
-    "/usr/local/lib/python3.10/dist-packages/lightop/hsa/gfx936/";
+constexpr const char *kLightopAsmRoot =
+    "/usr/local/lib/python3.10/dist-packages/lightop/hsa/";
 constexpr const char *kFuseSiluAndMulSymbol =
     "_ZN2at6native17fuse_silu_and_mulERNS_6TensorES2_";
 constexpr const char *kRmsRotaryEmbeddingFuseSymbol =
@@ -50,7 +55,98 @@ constexpr const char *kBlasltW8A8Bf16Symbol =
 constexpr const char *kBlasltW8A8Fp16Symbol =
     "_ZN14hipblaslt_gemm14w8a8_fp16_gemmERKN2at6TensorES3_S3_S3_RS1_llllRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES3_S3_RKSt8optionalIS1_E";
 
-void ensure_default_lightop_env();
+std::string hip_error_message(const std::string &operation, hipError_t status);
+
+struct LightopRuntimeConfig {
+    std::string gpu_target;
+    std::string asm_dir;
+    int compute_units = 0;
+};
+
+std::string normalize_gpu_target(std::string target) {
+    const auto feature_pos = target.find(':');
+    if (feature_pos != std::string::npos) {
+        target.resize(feature_pos);
+    }
+    std::transform(target.begin(), target.end(), target.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    if (target.size() <= 3 || target.compare(0, 3, "gfx") != 0 ||
+        !std::all_of(target.begin() + 3, target.end(), [](unsigned char ch) {
+            return std::isalnum(ch) != 0;
+        })) {
+        throw std::runtime_error("invalid Hygon GPU target: " + target);
+    }
+    return target;
+}
+
+void set_lightop_env(const char *name, const std::string &value) {
+    if (setenv(name, value.c_str(), 1) != 0) {
+        throw std::runtime_error(
+            std::string("failed to set ") + name + ": " + std::strerror(errno));
+    }
+}
+
+DeviceInfo query_device_info(int device) {
+    hipDeviceProp_t properties{};
+    const auto status = hipGetDeviceProperties(&properties, device);
+    if (status != hipSuccess) {
+        throw std::runtime_error(hip_error_message("hipGetDeviceProperties", status));
+    }
+
+    const char *arch_end = std::find(
+        properties.gcnArchName,
+        properties.gcnArchName + sizeof(properties.gcnArchName),
+        '\0');
+    if (arch_end == properties.gcnArchName + sizeof(properties.gcnArchName)) {
+        throw std::runtime_error("hipGetDeviceProperties returned an unterminated gcnArchName");
+    }
+
+    if (properties.multiProcessorCount <= 0) {
+        throw std::runtime_error("hipGetDeviceProperties returned an invalid compute unit count");
+    }
+
+    return DeviceInfo{
+        normalize_gpu_target(std::string(
+            properties.gcnArchName,
+            static_cast<std::size_t>(arch_end - properties.gcnArchName))),
+        properties.multiProcessorCount,
+    };
+}
+
+const DeviceInfo &cached_device_info(int device) {
+    thread_local std::unordered_map<int, DeviceInfo> cache;
+    const auto found = cache.find(device);
+    if (found != cache.end()) {
+        return found->second;
+    }
+    return cache.emplace(device, query_device_info(device)).first->second;
+}
+
+LightopRuntimeConfig make_lightop_runtime_config() {
+    int device = -1;
+    auto status = hipGetDevice(&device);
+    if (status != hipSuccess) {
+        throw std::runtime_error(hip_error_message("hipGetDevice", status));
+    }
+
+    const auto &detected = cached_device_info(device);
+    std::string gpu_target = detected.gpu_target;
+    std::string asm_dir = std::string(kLightopAsmRoot) + gpu_target + "/";
+
+    set_lightop_env("LIGHTOP_GPU_TARGET", gpu_target);
+    set_lightop_env("LIGHTOP_ASM_DIR", asm_dir);
+    return LightopRuntimeConfig{
+        std::move(gpu_target),
+        std::move(asm_dir),
+        detected.compute_units,
+    };
+}
+
+const LightopRuntimeConfig &lightop_runtime_config() {
+    static const LightopRuntimeConfig config = make_lightop_runtime_config();
+    return config;
+}
 
 class LightopLibrary {
 public:
@@ -85,7 +181,14 @@ private:
             return true;
         }
 
-        ensure_default_lightop_env();
+        try {
+            (void)lightop_runtime_config();
+        } catch (const std::exception &exception) {
+            if (update_error || error_.empty()) {
+                error_ = exception.what();
+            }
+            return false;
+        }
 
         const char *path_env = std::getenv("INFINICORE_LIGHTOP_SO");
         const char *path = (path_env != nullptr && path_env[0] != '\0') ? path_env : kDefaultLightopSo;
@@ -263,15 +366,12 @@ MoeW16A16MarlinDeviceKernel get_moe_w16a16_marlin_mode1000_kernel(
         return found->second;
     }
 
-    ensure_default_lightop_env();
-    const char *asm_dir_env = std::getenv("LIGHTOP_ASM_DIR");
-    std::string asm_dir =
-        asm_dir_env != nullptr && asm_dir_env[0] != '\0'
-            ? asm_dir_env
-            : kDefaultLightopAsmDir;
-    if (!asm_dir.empty() && asm_dir.back() != '/') {
-        asm_dir.push_back('/');
+    const auto &runtime_config = lightop_runtime_config();
+    const auto &current_device = cached_device_info(device);
+    if (current_device.gpu_target != runtime_config.gpu_target) {
+        throw std::runtime_error("LightOP does not support mixed Hygon GPU architectures in one process");
     }
+    const auto &asm_dir = runtime_config.asm_dir;
     const char *co = down_stage
                          ? kMoeW16A16MarlinMode1000DownCo
                          : kMoeW16A16MarlinMode1000UpCo;
@@ -309,15 +409,12 @@ MoeW8A8MarlinDeviceKernel get_moe_w8a8_marlin_mode1001_kernel() {
         return found->second;
     }
 
-    ensure_default_lightop_env();
-    const char *asm_dir_env = std::getenv("LIGHTOP_ASM_DIR");
-    std::string asm_dir =
-        asm_dir_env != nullptr && asm_dir_env[0] != '\0'
-            ? asm_dir_env
-            : kDefaultLightopAsmDir;
-    if (!asm_dir.empty() && asm_dir.back() != '/') {
-        asm_dir.push_back('/');
+    const auto &runtime_config = lightop_runtime_config();
+    const auto &current_device = cached_device_info(device);
+    if (current_device.gpu_target != runtime_config.gpu_target) {
+        throw std::runtime_error("LightOP does not support mixed Hygon GPU architectures in one process");
     }
+    const auto &asm_dir = runtime_config.asm_dir;
     const std::string co_path = asm_dir + kMoeW8A8MarlinMode1001Co;
 
     MoeW8A8MarlinDeviceKernel kernel;
@@ -656,15 +753,6 @@ LmslimQuantLibrary &lmslimquant_library() {
     return lib;
 }
 
-void ensure_default_lightop_env() {
-    if (std::getenv("LIGHTOP_GPU_TARGET") == nullptr) {
-        setenv("LIGHTOP_GPU_TARGET", kDefaultLightopGpuTarget, 0);
-    }
-    if (std::getenv("LIGHTOP_ASM_DIR") == nullptr) {
-        setenv("LIGHTOP_ASM_DIR", kDefaultLightopAsmDir, 0);
-    }
-}
-
 template <typename Fn>
 Fn resolve(const char *symbol) {
     return reinterpret_cast<Fn>(library().symbol(symbol));
@@ -835,6 +923,13 @@ BlasltW8A8GemmFn blaslt_w8a8_fp16_fn() {
 }
 
 } // namespace
+
+DeviceInfo device_info(std::size_t device_index) {
+    if (device_index > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+        throw std::runtime_error("Hygon device index exceeds int range");
+    }
+    return cached_device_info(static_cast<int>(device_index));
+}
 
 bool available() {
     return library().available();
@@ -1076,6 +1171,16 @@ void blaslt_w8a8_gemm(at::Tensor &output,
         return;
     }
     throw std::runtime_error("lmslimquant W8A8 GEMM only supports FP16/BF16 output");
+}
+
+} // namespace infinicore::adaptor::lightop
+
+#else
+
+namespace infinicore::adaptor::lightop {
+
+DeviceInfo device_info(std::size_t) {
+    return {};
 }
 
 } // namespace infinicore::adaptor::lightop

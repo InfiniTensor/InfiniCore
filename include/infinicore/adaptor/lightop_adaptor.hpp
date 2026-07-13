@@ -1,5 +1,20 @@
-#if defined(ENABLE_HYGON_API) && defined(ENABLE_ATEN)
 #pragma once
+
+#include <cstddef>
+#include <string>
+
+namespace infinicore::adaptor::lightop {
+
+struct DeviceInfo {
+    std::string gpu_target;
+    int compute_units = 0;
+};
+
+DeviceInfo device_info(std::size_t device_index);
+
+} // namespace infinicore::adaptor::lightop
+
+#if defined(ENABLE_HYGON_API) && defined(ENABLE_ATEN)
 
 #include <ATen/ATen.h>
 
