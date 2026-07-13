@@ -271,6 +271,10 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
 
     const float max_logit = scratch[0];
     const float denom = scratch[1];
+    for (size_t idx = tid; idx < total_keys; idx += blockDim.x) {
+        logits[idx] = expf(logits[idx] - max_logit) / denom;
+    }
+    __syncthreads();
     const size_t pass_dim = head_dim - rope_dim;
 
     for (size_t d = tid; d < pass_dim; d += blockDim.x) {
@@ -283,13 +287,13 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
                 && static_cast<size_t>(selected_block) < num_blocks
                 && static_cast<size_t>(selected_block) < visible_blocks;
             if (valid) {
-                const float prob = expf(logits[slot] - max_logit) / denom;
+                const float prob = logits[slot];
                 const size_t comp_base = comp_batch_base + static_cast<size_t>(selected_block) * head_dim;
                 acc += prob * to_float<T>(kv_comp[comp_base + d]);
             }
         }
         for (size_t j = 0; j < key_len; ++j) {
-            const float prob = expf(logits[compressed_keys + j] - max_logit) / denom;
+            const float prob = logits[compressed_keys + j];
             const size_t k_offset = k_base + j * num_kv_heads * head_dim;
             acc += prob * to_float<T>(k[k_offset + d]);
         }
@@ -310,7 +314,7 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
                 && static_cast<size_t>(selected_block) < num_blocks
                 && static_cast<size_t>(selected_block) < visible_blocks;
             if (valid) {
-                const float prob = expf(logits[slot] - max_logit) / denom;
+                const float prob = logits[slot];
                 const size_t block = static_cast<size_t>(selected_block);
                 const size_t comp_base = comp_batch_base + block * head_dim;
                 const int64_t block_pos = read_pos<PosT>(block_positions, block);
@@ -327,7 +331,7 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
             }
         }
         for (size_t j = 0; j < key_len; ++j) {
-            const float prob = expf(logits[compressed_keys + j] - max_logit) / denom;
+            const float prob = logits[compressed_keys + j];
             const size_t k_offset = k_base + j * num_kv_heads * head_dim;
             acc_even += prob * to_float<T>(k[k_offset + even]);
             acc_odd += prob * to_float<T>(k[k_offset + odd]);

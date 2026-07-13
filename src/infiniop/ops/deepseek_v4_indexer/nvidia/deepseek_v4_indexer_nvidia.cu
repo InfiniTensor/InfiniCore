@@ -45,6 +45,14 @@ __device__ bool better_pair(float candidate_score, int candidate_block, float be
     return candidate_score > best_score || (candidate_score == best_score && candidate_block < best_block);
 }
 
+__device__ uint32_t ordered_float_key(float value) {
+    // The legacy comparator treats +0.0 and -0.0 as equal, then resolves the
+    // tie by block id. Canonicalize zero so radix selection preserves that.
+    const float normalized = value == 0.0f ? 0.0f : value;
+    const uint32_t bits = __float_as_uint(normalized);
+    return (bits & 0x80000000U) != 0 ? ~bits : (bits ^ 0x80000000U);
+}
+
 template <typename T>
 __global__ void deepseek_v4_indexer_score_kernel(
     const T *__restrict__ q,
@@ -113,52 +121,162 @@ __global__ void deepseek_v4_indexer_score_kernel(
 
 template <int THREADS>
 __global__ void deepseek_v4_indexer_select_kernel(
-    float *__restrict__ scores,
+    const float *__restrict__ scores,
     long long *__restrict__ indices,
     size_t rows,
     size_t num_blocks,
     size_t topk) {
+    constexpr int RADIX = 256;
+    constexpr int MAX_TOPK = 512;
     const size_t row = blockIdx.x;
     if (row >= rows) {
         return;
     }
     const int tid = threadIdx.x;
-    __shared__ float reduce_scores[THREADS];
-    __shared__ int reduce_blocks[THREADS];
+    const float *row_scores = scores + row * num_blocks;
+    __shared__ uint32_t histogram[RADIX];
+    __shared__ float selected_scores[MAX_TOPK];
+    __shared__ int selected_blocks[MAX_TOPK];
+    __shared__ uint32_t prefix;
+    __shared__ uint32_t prefix_mask;
+    __shared__ uint32_t threshold_key;
+    __shared__ uint32_t remaining;
+    __shared__ uint32_t candidate_count;
+    __shared__ bool use_threshold;
 
-    for (size_t k = 0; k < topk; ++k) {
-        float thread_best_score = -CUDART_INF_F;
-        int thread_best_block = -1;
-        for (size_t block = static_cast<size_t>(tid); block < num_blocks; block += THREADS) {
-            const float score = scores[row * num_blocks + block];
-            if (better_pair(score, static_cast<int>(block), thread_best_score, thread_best_block)) {
-                thread_best_score = score;
-                thread_best_block = static_cast<int>(block);
+    if (tid == 0) {
+        prefix = 0;
+        prefix_mask = 0;
+        threshold_key = 0;
+        remaining = static_cast<uint32_t>(topk);
+        candidate_count = 0;
+        use_threshold = true;
+    }
+    __syncthreads();
+
+    // Four byte-wise radix passes find the exact K-th ordered float key.
+    for (int pass = 0; pass < 4; ++pass) {
+        if (tid < RADIX) {
+            histogram[tid] = 0;
+        }
+        __syncthreads();
+        const int shift = 24 - pass * 8;
+        for (size_t block = static_cast<size_t>(tid); block < num_blocks;
+             block += THREADS) {
+            const float score = row_scores[block];
+            if (isnan(score)) {
+                continue;
+            }
+            const uint32_t key = ordered_float_key(score);
+            if ((key & prefix_mask) == prefix) {
+                atomicAdd(&histogram[(key >> shift) & 0xffU], 1U);
             }
         }
-        reduce_scores[tid] = thread_best_score;
-        reduce_blocks[tid] = thread_best_block;
         __syncthreads();
-        for (int stride = THREADS / 2; stride > 0; stride >>= 1) {
-            if (tid < stride) {
-                const float other_score = reduce_scores[tid + stride];
-                const int other_block = reduce_blocks[tid + stride];
-                if (better_pair(other_score, other_block, reduce_scores[tid], reduce_blocks[tid])) {
-                    reduce_scores[tid] = other_score;
-                    reduce_blocks[tid] = other_block;
+        if (tid == 0) {
+            uint32_t total = 0;
+            for (int bin = RADIX - 1; bin >= 0; --bin) {
+                total += histogram[bin];
+            }
+            if (pass == 0 && total <= topk) {
+                use_threshold = false;
+            } else {
+                uint32_t better_count = 0;
+                for (int bin = RADIX - 1; bin >= 0; --bin) {
+                    const uint32_t count = histogram[bin];
+                    if (better_count + count >= remaining) {
+                        prefix |= static_cast<uint32_t>(bin) << shift;
+                        prefix_mask |= 0xffU << shift;
+                        remaining -= better_count;
+                        break;
+                    }
+                    better_count += count;
+                }
+                if (pass == 3) {
+                    threshold_key = prefix;
+                }
+            }
+        }
+        __syncthreads();
+        if (!use_threshold) {
+            break;
+        }
+    }
+
+    for (size_t block = static_cast<size_t>(tid); block < num_blocks;
+         block += THREADS) {
+        const float score = row_scores[block];
+        if (isnan(score)) {
+            continue;
+        }
+        const uint32_t key = ordered_float_key(score);
+        if (!use_threshold || key > threshold_key) {
+            const uint32_t slot = atomicAdd(&candidate_count, 1U);
+            if (slot < topk) {
+                selected_scores[slot] = score;
+                selected_blocks[slot] = static_cast<int>(block);
+            }
+        }
+    }
+    __syncthreads();
+
+    // Resolve threshold ties in block order to preserve the old deterministic
+    // score-descending, lower-block-first behavior.
+    if (tid == 0 && use_threshold) {
+        uint32_t slot = candidate_count;
+        for (size_t block = 0; block < num_blocks && slot < topk; ++block) {
+            const float score = row_scores[block];
+            if (!isnan(score) && ordered_float_key(score) == threshold_key) {
+                selected_scores[slot] = score;
+                selected_blocks[slot] = static_cast<int>(block);
+                ++slot;
+            }
+        }
+        candidate_count = slot;
+    }
+    __syncthreads();
+
+    for (size_t slot = static_cast<size_t>(tid); slot < MAX_TOPK;
+         slot += THREADS) {
+        if (slot >= candidate_count || slot >= topk) {
+            selected_scores[slot] = -CUDART_INF_F;
+            selected_blocks[slot] = -1;
+        }
+    }
+    __syncthreads();
+
+    // Sort only the fixed 512 candidates instead of rescanning all blocks 512
+    // times. Ties retain lower block ids first.
+    for (int width = 2; width <= MAX_TOPK; width <<= 1) {
+        for (int stride = width >> 1; stride > 0; stride >>= 1) {
+            const int slot = (tid / stride) * (stride * 2) + (tid % stride);
+            const int partner = slot + stride;
+            if (partner < MAX_TOPK) {
+                const bool descending_half = (slot & width) == 0;
+                const bool partner_is_better = better_pair(
+                    selected_scores[partner], selected_blocks[partner],
+                    selected_scores[slot], selected_blocks[slot]);
+                const bool current_is_better = better_pair(
+                    selected_scores[slot], selected_blocks[slot],
+                    selected_scores[partner], selected_blocks[partner]);
+                if ((descending_half && partner_is_better)
+                    || (!descending_half && current_is_better)) {
+                    const float score = selected_scores[slot];
+                    const int block = selected_blocks[slot];
+                    selected_scores[slot] = selected_scores[partner];
+                    selected_blocks[slot] = selected_blocks[partner];
+                    selected_scores[partner] = score;
+                    selected_blocks[partner] = block;
                 }
             }
             __syncthreads();
         }
+    }
 
-        if (tid == 0) {
-            const int winner = reduce_blocks[0];
-            indices[row * topk + k] = winner >= 0 ? static_cast<long long>(winner) : -1LL;
-            if (winner >= 0) {
-                scores[row * num_blocks + static_cast<size_t>(winner)] = CUDART_NAN_F;
-            }
-        }
-        __syncthreads();
+    for (size_t slot = static_cast<size_t>(tid); slot < topk;
+         slot += THREADS) {
+        indices[row * topk + slot]
+            = static_cast<long long>(selected_blocks[slot]);
     }
 }
 
@@ -173,7 +291,9 @@ infiniStatus_t launch_typed(
     const void *compressed,
     const void *positions,
     cudaStream_t stream) {
-    constexpr int THREADS = 256;
+    constexpr int SCORE_THREADS = 256;
+    constexpr int SELECT_THREADS = 256;
+    constexpr size_t MAX_TOPK = 512;
     const size_t rows = info.batch_size * info.query_len;
     const size_t score_count = rows * info.num_blocks;
     const size_t score_bytes = score_count * sizeof(float);
@@ -183,7 +303,7 @@ infiniStatus_t launch_typed(
     auto *scores = reinterpret_cast<float *>(workspace);
     const size_t score_blocks = score_count;
     const size_t score_shared_bytes = info.index_n_heads * sizeof(float);
-    deepseek_v4_indexer_score_kernel<T><<<score_blocks, THREADS, score_shared_bytes, stream>>>(
+    deepseek_v4_indexer_score_kernel<T><<<score_blocks, SCORE_THREADS, score_shared_bytes, stream>>>(
         reinterpret_cast<const T *>(q),
         reinterpret_cast<const T *>(weights),
         reinterpret_cast<const T *>(compressed),
@@ -198,7 +318,11 @@ infiniStatus_t launch_typed(
         info.compress_ratio,
         info.score_scale,
         info.weight_scale);
-    deepseek_v4_indexer_select_kernel<THREADS><<<rows, THREADS, 0, stream>>>(
+    if (info.topk > MAX_TOPK) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+    deepseek_v4_indexer_select_kernel<SELECT_THREADS>
+        <<<rows, SELECT_THREADS, 0, stream>>>(
         scores,
         indices,
         rows,

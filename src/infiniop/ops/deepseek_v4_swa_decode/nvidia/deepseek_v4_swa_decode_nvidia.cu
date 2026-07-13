@@ -150,6 +150,10 @@ __global__ void swa_decode_kernel(T *__restrict__ y,
 
     const float max_logit = scratch[0];
     const float denom = scratch[1];
+    for (size_t j = tid; j < key_len; j += blockDim.x) {
+        logits[j] = expf(logits[j] - max_logit) / denom;
+    }
+    __syncthreads();
     const size_t pass_dim = head_dim - rope_dim;
     const int64_t position = read_pos<PosT>(positions, tq);
 
@@ -157,7 +161,7 @@ __global__ void swa_decode_kernel(T *__restrict__ y,
         float acc = 0.0f;
         for (size_t j = 0; j < key_len; ++j) {
             const size_t k_offset = k_base + j * num_kv_heads * head_dim;
-            const float prob = expf(logits[j] - max_logit) / denom;
+            const float prob = logits[j];
             acc += prob * to_float<T>(k[k_offset + d]);
         }
         y[q_base + d] = from_float<T>(acc);
@@ -171,7 +175,7 @@ __global__ void swa_decode_kernel(T *__restrict__ y,
         float acc_odd = 0.0f;
         for (size_t j = 0; j < key_len; ++j) {
             const size_t k_offset = k_base + j * num_kv_heads * head_dim;
-            const float prob = expf(logits[j] - max_logit) / denom;
+            const float prob = logits[j];
             acc_even += prob * to_float<T>(k[k_offset + even]);
             acc_odd += prob * to_float<T>(k[k_offset + odd]);
         }
