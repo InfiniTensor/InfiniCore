@@ -13,6 +13,7 @@ from .embedding import embedding
 from .flash_attention import flash_attention
 from .fused_gated_delta_net_gating import fused_gated_delta_net_gating
 from .gaussian_nll_loss import gaussian_nll_loss
+from .gumbel_softmax import gumbel_softmax
 from .hardswish import hardswish
 from .hardtanh import hardtanh
 from .hinge_embedding_loss import hinge_embedding_loss
@@ -55,6 +56,7 @@ __all__ = [
     "flash_attention",
     "fused_gated_delta_net_gating",
     "gaussian_nll_loss",
+    "gumbel_softmax",
     "interpolate",
     "linear",
     "binary_cross_entropy_with_logits",
