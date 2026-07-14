@@ -17,6 +17,17 @@ inline size_t align_up(size_t size, size_t alignment) {
     return (size + alignment - 1) / alignment * alignment;
 }
 
+namespace {
+constexpr size_t kSlabTargetBytes = 64 * 1024 * 1024;
+
+size_t blocks_per_slab(size_t block_size) {
+    if (block_size == 0) {
+        return 1;
+    }
+    return std::max<size_t>(1, kSlabTargetBytes / block_size);
+}
+} // namespace
+
 // ------------------- Constructor -------------------
 PinnableBlockAllocator::PinnableBlockAllocator(Device device)
     : device_(device) {
@@ -67,16 +78,30 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
                     return reinterpret_cast<std::byte *>(block->ptr);
                 }
             }
-            // Allocate a new block for this class
-            block = std::make_shared<Block>();
-            block->size = cls.block_size;
-            block->frozen = pinned_mode_;
-            block->in_use = true;
-            block->use_count = 1;
+            // Allocate a slab for this size class to avoid issuing tens of
+            // thousands of small device allocations for expert parameters.
+            const size_t nblocks = blocks_per_slab(cls.block_size);
+            const size_t slab_size = cls.block_size * nblocks;
+            void *slab_ptr = nullptr;
+            INFINICORE_CHECK_ERROR(infinirtMalloc(&slab_ptr, slab_size));
+            slab_allocations_.push_back(slab_ptr);
 
-            INFINICORE_CHECK_ERROR(infinirtMalloc(&block->ptr, block->size));
-
-            all_blocks_[block->ptr] = block;
+            auto *base = reinterpret_cast<std::byte *>(slab_ptr);
+            for (size_t i = 0; i < nblocks; ++i) {
+                auto slab_block = std::make_shared<Block>();
+                slab_block->ptr = base + i * cls.block_size;
+                slab_block->size = cls.block_size;
+                slab_block->frozen = pinned_mode_;
+                slab_block->pooled = true;
+                slab_block->in_use = (i == 0);
+                slab_block->use_count = (i == 0) ? 1 : 0;
+                all_blocks_[slab_block->ptr] = slab_block;
+                if (i == 0) {
+                    block = slab_block;
+                } else {
+                    cls.free_blocks.push_back(slab_block);
+                }
+            }
             return reinterpret_cast<std::byte *>(block->ptr);
         }
     }
@@ -166,7 +191,7 @@ void PinnableBlockAllocator::trim() {
     // Free non-frozen size-class blocks
     for (auto &cls : size_classes_) {
         for (auto it = cls.free_blocks.begin(); it != cls.free_blocks.end();) {
-            if (!(*it)->frozen) {
+            if (!(*it)->frozen && !(*it)->pooled) {
                 INFINICORE_CHECK_ERROR(infinirtFree((*it)->ptr));
                 all_blocks_.erase((*it)->ptr);
                 it = cls.free_blocks.erase(it);
@@ -191,11 +216,17 @@ void PinnableBlockAllocator::trim() {
 PinnableBlockAllocator::~PinnableBlockAllocator() {
     std::lock_guard<std::mutex> lock(mutex_);
     for (auto &p : all_blocks_) {
-        if (p.second->ptr) {
+        if (p.second->ptr && !p.second->pooled) {
             infinirtFree(p.second->ptr);
         }
     }
+    for (auto *ptr : slab_allocations_) {
+        if (ptr) {
+            infinirtFree(ptr);
+        }
+    }
     all_blocks_.clear();
+    slab_allocations_.clear();
     large_blocks_.clear();
     for (auto &cls : size_classes_) {
         cls.free_blocks.clear();

@@ -14,6 +14,7 @@ class PinnableBlockAllocator : public MemoryAllocator {
         size_t size = 0;      // Block size in bytes
         bool frozen = false;  // True if used in pinned/graph mode
         bool in_use = false;  // Wether the block is currently in use
+        bool pooled = false;  // True if this block is a slice of a slab allocation
         size_t use_count = 0; // Number of Memory owners for this block
     };
 
@@ -47,6 +48,7 @@ private:
 
     std::vector<SizeClass> size_classes_;
     std::vector<std::shared_ptr<Block>> large_blocks_;
+    std::vector<void *> slab_allocations_;
     std::unordered_map<void *, std::shared_ptr<Block>> all_blocks_;
 
     std::mutex mutex_; // Thread safety
