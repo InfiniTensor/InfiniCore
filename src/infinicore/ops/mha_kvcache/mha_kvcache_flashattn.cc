@@ -47,6 +47,8 @@ void run(void *planned_meta) {
 #ifdef ENABLE_FLASH_ATTN
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
     c10::cuda::CUDAStreamGuard guard(infinicore::adaptor::get_cuda_stream());
+#elif defined(ENABLE_ILUVATAR_API)
+    infinicore::adaptor::set_aten_stream_to_infinicore();
 #endif
     auto *p = reinterpret_cast<PlannedMeta *>(planned_meta);
 

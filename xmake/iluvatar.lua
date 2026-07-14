@@ -25,7 +25,7 @@ toolchain("iluvatar.toolchain")
 toolchain_end()
 
 rule("iluvatar.env")
-    add_deps("cuda.env", {order = true})
+    add_orders("cuda.env", "iluvatar.env")
     after_load(function (target)
         local old = target:get("syslinks")
         local new = {}

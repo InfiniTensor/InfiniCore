@@ -46,6 +46,13 @@ Args:
     weight: Scale weights
     epsilon: Small constant for numerical stability, default is 1e-5
 )doc");
+    m.def("add_rms_norm_inplace",
+          &op::add_rms_norm_inplace,
+          py::arg("input"),
+          py::arg("residual"),
+          py::arg("weight"),
+          py::arg("epsilon") = 1e-5f,
+          R"doc(In-place vLLM-style fused Add and RMSNorm: input = RMSNorm(input + residual), residual = input_old + residual.)doc");
 }
 
 } // namespace infinicore::ops

@@ -32,3 +32,20 @@ def add_rms_norm(a, b, weight, epsilon=1e-5, *, out=None, residual=None):
     )
 
     return out, residual
+
+
+def add_rms_norm_inplace(input, residual, weight, epsilon=1e-5):
+    """
+    vLLM-style in-place fused Add and RMSNorm.
+
+    Mutates input and residual in place:
+      residual = input_old + residual
+      input = RMSNorm(residual, weight, epsilon)
+    """
+    _infinicore.add_rms_norm_inplace(
+        input._underlying,
+        residual._underlying,
+        weight._underlying,
+        epsilon,
+    )
+    return input, residual

@@ -36,11 +36,15 @@
 #include "ops/causal_softmax.hpp"
 #include "ops/cdist.hpp"
 #include "ops/chunk_gated_delta_rule.hpp"
+#include "ops/concat_and_cache_mla.hpp"
+#include "ops/concat_and_cache_mla_int8.hpp"
+#include "ops/concat_mla_q.hpp"
 #include "ops/conv2d.hpp"
 #include "ops/cross_entropy.hpp"
 #include "ops/diff.hpp"
 #include "ops/digamma.hpp"
 #include "ops/dist.hpp"
+#include "ops/dynamic_scaled_int8_quant.hpp"
 #include "ops/embedding.hpp"
 #include "ops/equal.hpp"
 #include "ops/flash_attention.hpp"
@@ -52,6 +56,7 @@
 #include "ops/fmod.hpp"
 #include "ops/fused_gated_delta_net_gating.hpp"
 #include "ops/gaussian_nll_loss.hpp"
+#include "ops/grouped_topk_vllm.hpp"
 #include "ops/hardswish.hpp"
 #include "ops/hardtanh.hpp"
 #include "ops/hinge_embedding_loss.hpp"
@@ -82,7 +87,12 @@
 #include "ops/mha.hpp"
 #include "ops/mha_kvcache.hpp"
 #include "ops/mha_varlen.hpp"
+#include "ops/moe_argsort_bincount.hpp"
+#include "ops/moe_expand_input.hpp"
+#include "ops/moe_silu_and_mul_quant.hpp"
+#include "ops/moe_sum_vllm.hpp"
 #include "ops/moe_topk_softmax.hpp"
+#include "ops/moe_topk_vllm.hpp"
 #include "ops/mrope.hpp"
 #include "ops/mul.hpp"
 #include "ops/mul_scalar.hpp"
@@ -106,6 +116,7 @@
 #include "ops/rotmg.hpp"
 #include "ops/rwkv5_wkv.hpp"
 #include "ops/scal.hpp"
+#include "ops/scaled_mm_w4a8.hpp"
 #include "ops/scatter.hpp"
 #include "ops/selu.hpp"
 #include "ops/sigmoid.hpp"
@@ -131,6 +142,8 @@
 #include "ops/vander.hpp"
 #include "ops/var.hpp"
 #include "ops/var_mean.hpp"
+#include "ops/w4a8_group_gemm.hpp"
+#include "ops/w8a8_group_gemm.hpp"
 
 namespace py = pybind11;
 
@@ -167,6 +180,7 @@ inline void bind(py::module &m) {
     bind_diff(m);
     bind_digamma(m);
     bind_dist(m);
+    bind_dynamic_scaled_int8_quant(m);
     bind_flash_attention(m);
     bind_hinge_embedding_loss(m);
     bind_kv_caching(m);
@@ -192,11 +206,17 @@ inline void bind(py::module &m) {
     bind_mha_kvcache(m);
     bind_mha_varlen(m);
     bind_mha(m);
+    bind_moe_argsort_bincount(m);
+    bind_moe_expand_input(m);
+    bind_moe_silu_and_mul_quant(m);
+    bind_moe_sum_vllm(m);
     bind_moe_topk_softmax(m);
+    bind_moe_topk_vllm(m);
     bind_mrope(m);
     bind_hardswish(m);
     bind_hardtanh(m);
     bind_gaussian_nll_loss(m);
+    bind_grouped_topk_vllm(m);
     bind_interpolate(m);
     bind_paged_attention(m);
     bind_paged_attention_prefill(m);
@@ -206,6 +226,9 @@ inline void bind(py::module &m) {
     bind_random_sample(m);
     bind_cross_entropy(m);
     bind_conv2d(m);
+    bind_concat_mla_q(m);
+    bind_concat_and_cache_mla(m);
+    bind_concat_and_cache_mla_int8(m);
     bind_hypot(m);
     bind_take(m);
     bind_index_copy(m);
@@ -224,6 +247,8 @@ inline void bind(py::module &m) {
     bind_logical_and(m);
     bind_logical_not(m);
     bind_vander(m);
+    bind_w4a8_group_gemm(m);
+    bind_w8a8_group_gemm(m);
     bind_unfold(m);
     bind_rope(m);
     bind_rot(m);
@@ -236,6 +261,7 @@ inline void bind(py::module &m) {
     bind_flipud(m);
     bind_multi_margin_loss(m);
     bind_scatter(m);
+    bind_scaled_mm_w4a8(m);
     bind_scal(m);
     bind_broadcast_to(m);
     bind_softplus(m);

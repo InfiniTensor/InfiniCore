@@ -1,6 +1,12 @@
 #ifdef ENABLE_ATEN
 #include "infinicore/adaptor/aten_adaptor.hpp"
 
+#include <cstdint>
+
+#if defined(ENABLE_ILUVATAR_API)
+extern "C" int32_t torch_set_current_cuda_stream(void *stream, int32_t device_index);
+#endif
+
 namespace infinicore::adaptor {
 
 at::Tensor to_aten_tensor(const infinicore::Tensor &t) {
@@ -41,6 +47,19 @@ c10::hip::HIPStream get_hip_stream() {
 c10::cuda::CUDAStream get_cuda_stream() {
     return c10::cuda::getStreamFromExternal(
         cudaStream_t(infinicore::context::getStream()), infinicore::context::getDevice().getIndex());
+}
+#endif
+
+#if defined(ENABLE_ILUVATAR_API)
+void set_aten_stream_to_infinicore() {
+    const auto error = torch_set_current_cuda_stream(
+        infinicore::context::getStream(),
+        static_cast<int32_t>(infinicore::context::getDevice().getIndex()));
+    if (error != 0) {
+        throw std::runtime_error(
+            "torch_set_current_cuda_stream failed with error code "
+            + std::to_string(error));
+    }
 }
 #endif
 

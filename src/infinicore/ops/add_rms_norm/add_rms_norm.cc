@@ -1,5 +1,10 @@
 #include "infinicore/ops/add_rms_norm.hpp"
 
+#if defined(ENABLE_ATEN) && defined(ENABLE_ILUVATAR_API)
+#include "infinicore/adaptor/aten_adaptor.hpp"
+#include "infinicore/adaptor/vllm_iluvatar_adaptor.hpp"
+#endif
+
 #include "../../utils.hpp"
 
 namespace infinicore::op {
@@ -27,6 +32,16 @@ void add_rms_norm_(Tensor out, Tensor residual, const Tensor &a, const Tensor &b
 }
 
 void add_rms_norm_inplace(Tensor input, Tensor residual, const Tensor &weight, float epsilon) {
+#if defined(ENABLE_ATEN) && defined(ENABLE_ILUVATAR_API)
+    if (input->device().getType() == Device::Type::ILUVATAR && adaptor::vllm_iluvatar::available()) {
+        INFINICORE_ASSERT_TENSORS_SAME_DEVICE(input, residual, weight);
+        auto input_at = adaptor::to_aten_tensor(input);
+        auto residual_at = adaptor::to_aten_tensor(residual);
+        auto weight_at = adaptor::to_aten_tensor(weight);
+        adaptor::vllm_iluvatar::fused_add_rms_norm(input_at, residual_at, weight_at, epsilon);
+        return;
+    }
+#endif
     add_rms_norm_(input, residual, input, residual, weight, epsilon);
 }
 

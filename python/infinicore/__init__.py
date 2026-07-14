@@ -50,7 +50,7 @@ from infinicore.dtype import (
 )
 from infinicore.ops.acos import acos
 from infinicore.ops.add import add
-from infinicore.ops.add_rms_norm import add_rms_norm
+from infinicore.ops.add_rms_norm import add_rms_norm, add_rms_norm_inplace
 from infinicore.ops.addbmm import addbmm
 from infinicore.ops.addcmul import addcmul
 from infinicore.ops.addr import addr
@@ -76,11 +76,15 @@ from infinicore.ops.block_diag import block_diag
 from infinicore.ops.broadcast_to import broadcast_to
 from infinicore.ops.cat import cat
 from infinicore.ops.cdist import cdist
+from infinicore.ops.concat_and_cache_mla import concat_and_cache_mla
+from infinicore.ops.concat_and_cache_mla_int8 import concat_and_cache_mla_int8
+from infinicore.ops.concat_mla_q import concat_mla_q
 from infinicore.ops.conv2d import conv2d
 from infinicore.ops.cross_entropy import cross_entropy
 from infinicore.ops.diff import diff
 from infinicore.ops.digamma import digamma
 from infinicore.ops.dist import dist
+from infinicore.ops.dynamic_scaled_int8_quant import dynamic_scaled_int8_quant
 from infinicore.ops.equal import equal
 from infinicore.ops.flipud import flipud
 from infinicore.ops.float_power import float_power
@@ -88,6 +92,7 @@ from infinicore.ops.floor import floor
 from infinicore.ops.floor_divide import floor_divide
 from infinicore.ops.fmin import fmin
 from infinicore.ops.fmod import fmod
+from infinicore.ops.grouped_topk_vllm import grouped_topk_vllm
 from infinicore.ops.hypot import hypot
 from infinicore.ops.index_add import index_add
 from infinicore.ops.index_copy import index_copy
@@ -108,6 +113,11 @@ from infinicore.ops.matmul import matmul
 from infinicore.ops.mha import mha
 from infinicore.ops.mha_kvcache import mha_kvcache
 from infinicore.ops.mha_varlen import mha_varlen
+from infinicore.ops.moe_argsort_bincount import moe_argsort_bincount_with_inv_pos_
+from infinicore.ops.moe_expand_input import moe_expand_input_with_inv_pos_
+from infinicore.ops.moe_silu_and_mul_quant import moe_silu_and_mul_quant_
+from infinicore.ops.moe_sum_vllm import moe_sum_vllm_
+from infinicore.ops.moe_topk_vllm import moe_topk_sigmoid_vllm, moe_topk_softmax_vllm
 from infinicore.ops.moore_mate_flash_attn import (
     moore_mate_flash_attn_decode,
     moore_mate_flash_attn_prefill,
@@ -127,6 +137,7 @@ from infinicore.ops.rotg import rotg
 from infinicore.ops.rotm import rotm
 from infinicore.ops.rotmg import rotmg
 from infinicore.ops.scal import scal
+from infinicore.ops.scaled_mm_w4a8 import scaled_mm_w4a8
 from infinicore.ops.scatter import scatter
 from infinicore.ops.sinh import sinh
 from infinicore.ops.squeeze import squeeze
@@ -139,6 +150,8 @@ from infinicore.ops.unsqueeze import unsqueeze
 from infinicore.ops.vander import vander
 from infinicore.ops.var import var
 from infinicore.ops.var_mean import var_mean
+from infinicore.ops.w4a8_group_gemm import w4a8_group_gemm_
+from infinicore.ops.w8a8_group_gemm import w8a8_group_gemm_
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -205,6 +218,7 @@ __all__ = [
     "add",
     "addr",
     "add_rms_norm",
+    "add_rms_norm_inplace",
     "argwhere",
     "asin",
     "asum",
@@ -218,6 +232,8 @@ __all__ = [
     "floor",
     "attention",
     "mrope",
+    "moe_topk_sigmoid_vllm",
+    "moe_topk_softmax_vllm",
     "block_diag",
     "kron",
     "bitwise_right_shift",
@@ -228,6 +244,9 @@ __all__ = [
     "fmod",
     "cat",
     "conv2d",
+    "concat_mla_q",
+    "concat_and_cache_mla",
+    "concat_and_cache_mla_int8",
     "inner",
     "masked_select",
     "logaddexp",
@@ -237,6 +256,7 @@ __all__ = [
     "mul",
     "mul_scalar",
     "diff",
+    "dynamic_scaled_int8_quant",
     "digamma",
     "dist",
     "logdet",
@@ -278,6 +298,7 @@ __all__ = [
     "paged_attention",
     "paged_attention_prefill",
     "hypot",
+    "grouped_topk_vllm",
     "index_copy",
     "index_add",
     "take",
