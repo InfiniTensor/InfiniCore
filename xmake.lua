@@ -365,6 +365,13 @@ local function add_external_infinirt()
             end
         end
     end
+    if has_config("metax-gpu") then
+        local maca_root = os.getenv("MACA_PATH") or os.getenv("MACA_HOME") or os.getenv("MACA_ROOT") or "/opt/maca"
+        local maca_include = path.join(maca_root, "include")
+        if os.isdir(maca_include) then
+            add_includedirs(maca_include, { public = true })
+        end
+    end
     add_links("infinirt")
 end
 

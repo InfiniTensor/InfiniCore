@@ -92,6 +92,7 @@ ContextImpl::ContextImpl() {
     initializeRuntime<Device::Type::NVIDIA>();
     initializeRuntime<Device::Type::ILUVATAR>();
     initializeRuntime<Device::Type::HYGON>();
+    initializeRuntime<Device::Type::METAX>();
     initializeRuntime<Device::Type::ASCEND>();
 
     if (current_runtime_ == nullptr && !runtime_table_[static_cast<int>(Device::Type::CPU)].empty()) {
