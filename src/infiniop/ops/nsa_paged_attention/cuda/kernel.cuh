@@ -4,8 +4,13 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+// On MetaX these headers do not exist; the equivalents come from
+// devices/metax/metax_kernel_common.h, which the .maca translation unit
+// includes before this one.
+#if !defined(__MACA__) && !defined(__MACACC__)
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
+#endif
 
 namespace op::nsa_paged_attention::cuda {
 
@@ -44,7 +49,7 @@ __device__ inline float blockReduceSum128(float value) {
     const int lane = threadIdx.x & 31;
     const int warp = threadIdx.x >> 5;
 
-#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API) && !defined(__MACA__) && !defined(__MACACC__)
 #pragma unroll
 #endif
     for (int offset = 16; offset > 0; offset >>= 1) {
@@ -59,7 +64,7 @@ __device__ inline float blockReduceSum128(float value) {
 
     float sum = threadIdx.x < 4 ? warp_sums[lane] : 0.0f;
     if (warp == 0) {
-#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API) && !defined(__MACA__) && !defined(__MACACC__)
 #pragma unroll
 #endif
         for (int offset = 2; offset > 0; offset >>= 1) {
@@ -132,7 +137,7 @@ __device__ void nsaPagedDecodeHd128Kernel(
     const int active_select_blocks = max(1, min(select_blocks, kMaxSelectBlocks));
     float top_scores[kMaxSelectBlocks];
     int top_blocks[kMaxSelectBlocks];
-#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API) && !defined(__MACA__) && !defined(__MACACC__)
 #pragma unroll
 #endif
     for (int i = 0; i < active_select_blocks; ++i) {
@@ -177,7 +182,7 @@ __device__ void nsaPagedDecodeHd128Kernel(
     float sel_acc = 0.0f;
     float sel_m = -INFINITY;
     float sel_l = 0.0f;
-#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API) && !defined(__MACA__) && !defined(__MACACC__)
 #pragma unroll
 #endif
     for (int selected = 0; selected < active_select_blocks; ++selected) {
