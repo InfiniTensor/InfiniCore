@@ -80,10 +80,17 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
             }
             // Allocate a slab for this size class to avoid issuing tens of
             // thousands of small device allocations for expert parameters.
-            const size_t nblocks = blocks_per_slab(cls.block_size);
-            const size_t slab_size = cls.block_size * nblocks;
+            size_t nblocks = blocks_per_slab(cls.block_size);
             void *slab_ptr = nullptr;
-            INFINICORE_CHECK_ERROR(infinirtMalloc(&slab_ptr, slab_size));
+            infiniStatus_t status = INFINI_STATUS_INTERNAL_ERROR;
+            while (nblocks > 0) {
+                status = infinirtMalloc(&slab_ptr, cls.block_size * nblocks);
+                if (status == INFINI_STATUS_SUCCESS) {
+                    break;
+                }
+                nblocks /= 2;
+            }
+            INFINICORE_CHECK_ERROR(status);
             slab_allocations_.push_back(slab_ptr);
 
             auto *base = reinterpret_cast<std::byte *>(slab_ptr);
