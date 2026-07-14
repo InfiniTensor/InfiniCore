@@ -318,6 +318,16 @@ local function add_moore_runtime_sdk_dirs()
     add_rpathdirs(path.join(musa_root, "lib"), path.join(musa_root, "lib64"))
 end
 
+local function add_metax_runtime_sdk_dirs()
+    if not has_config("metax-gpu") then
+        return
+    end
+    local maca_root = os.getenv("MACA_PATH") or os.getenv("MACA_HOME") or os.getenv("MACA_ROOT") or "/opt/maca"
+    add_includedirs(path.join(maca_root, "include"))
+    add_linkdirs(path.join(maca_root, "lib"), path.join(maca_root, "lib64"))
+    add_rpathdirs(path.join(maca_root, "lib"), path.join(maca_root, "lib64"))
+end
+
 local function get_infiniops_cuda_architectures()
     local arch_opt = get_config("cuda_arch")
     if not arch_opt or arch_opt == "" then
@@ -481,6 +491,7 @@ target("infiniop")
     add_links("infinirt")
     add_rpathdirs(INFINI_ROOT.."/lib")
     add_moore_runtime_sdk_dirs()
+    add_metax_runtime_sdk_dirs()
 
     local public_cuda_root = get_config("cuda") or os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH")
     if public_cuda_root and public_cuda_root ~= "" then
@@ -643,6 +654,7 @@ target("infinicore_cpp_api")
     end
     add_includedirs(INFINI_ROOT.."/include", { public = true })
     add_moore_runtime_sdk_dirs()
+    add_metax_runtime_sdk_dirs()
     if has_config("nv-gpu") or has_config("iluvatar-gpu") then
         local default_cuda_root = has_config("iluvatar-gpu") and "/usr/local/corex" or "/usr/local/cuda"
         local cuda_root = os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH") or get_config("cuda") or default_cuda_root
@@ -921,6 +933,7 @@ target("_infinicore")
     local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
     add_includedirs(INFINI_ROOT.."/include", { public = true })
     add_moore_runtime_sdk_dirs()
+    add_metax_runtime_sdk_dirs()
     if has_config("iluvatar-gpu") then
         local cuda_root = os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH") or get_config("cuda") or "/usr/local/corex"
         add_cxxflags("-idirafter", cuda_root .. "/include", {force = true})
