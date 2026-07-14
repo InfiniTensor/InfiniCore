@@ -133,7 +133,8 @@ __global__ void compressed_decode_kernel(T *__restrict__ y,
     float *logits = smem;
     float *scratch = smem + total_keys;
 
-    const size_t row = blockIdx.x;
+    const size_t row = static_cast<size_t>(blockIdx.x)
+                     + static_cast<size_t>(blockIdx.y) * static_cast<size_t>(gridDim.x);
     const size_t tid = threadIdx.x;
     const size_t rows = batch_size * query_len * num_heads;
     if (row >= rows) {
@@ -315,7 +316,14 @@ infiniStatus_t launch_typed_pos(const DeepseekV4CompressedDecodeInfo &info,
                                 cudaStream_t stream) {
     constexpr int threads = 256;
     const dim3 block(threads);
-    const dim3 grid(info.batch_size * info.query_len * info.num_heads);
+    const size_t rows = info.batch_size * info.query_len * info.num_heads;
+    constexpr size_t max_grid_x = 65535;
+    const size_t grid_x = rows < max_grid_x ? rows : max_grid_x;
+    const size_t grid_y = (rows + grid_x - 1) / grid_x;
+    if (grid_y > 65535) {
+        return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
+    }
+    const dim3 grid(static_cast<unsigned int>(grid_x), static_cast<unsigned int>(grid_y));
     const size_t compressed_keys = info.index_top_k == 0 ? info.num_blocks : info.index_top_k;
     const size_t shared_bytes = (compressed_keys + info.key_len + threads) * sizeof(float);
     compressed_decode_kernel<T, SinkT, PosT, IndexT><<<grid, block, shared_bytes, stream>>>(

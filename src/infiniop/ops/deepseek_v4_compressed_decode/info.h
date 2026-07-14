@@ -123,7 +123,7 @@ struct DeepseekV4CompressedDecodeInfo {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
         const size_t compressed_keys = index_top_k == 0 ? num_blocks : index_top_k;
-        if (compressed_keys + key_len > 4096) {
+        if (compressed_keys + key_len > 8192) {
             return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
         }
         if (y_desc->dim(0) != batch_size || y_desc->dim(1) != query_len ||
