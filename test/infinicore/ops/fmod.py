@@ -39,7 +39,11 @@ def parse_test_cases():
             tol = _TOLERANCE_MAP[dtype]
             a_spec = TensorSpec.from_tensor(in_shape, in_strides, dtype)
             b_spec = TensorSpec.from_tensor(
-                in_shape if other_shape is None else other_shape, None, dtype
+                in_shape if other_shape is None else other_shape,
+                None,
+                dtype,
+                scale=0.9,
+                bias=0.1,
             )
 
             cases.append(
