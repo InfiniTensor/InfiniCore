@@ -7,7 +7,7 @@
  * Licensed under the Apache License, Version 2.0.
  */
 
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_HYGON_API)
 
 #include "moe_topk_softmax_nvidia.cuh"
 
@@ -181,7 +181,9 @@ __launch_bounds__(TPB) __global__ void moeTopKFast(
         TopKPairArgMax reducer;
         const TopKPair result_pair = BlockReduce(tmp_storage).Reduce(thread_pair, reducer);
         if (threadIdx.x == 0) {
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
             for (int i = 0; i < TopKPair::PAIR; ++i) {
                 if (k_idx * 2 + i >= k) {
                     break;
@@ -308,19 +310,25 @@ __launch_bounds__(WARPS_PER_CTA *WARP_SIZE) __global__ void topkGatingSoftmax(
     T row_chunk_temp[VPT];
     auto *row_chunk_vec_ptr = reinterpret_cast<AccessType *>(&row_chunk_temp);
     const auto *vec_thread_read_ptr = reinterpret_cast<const AccessType *>(thread_read_ptr);
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
     for (int ii = 0; ii < LDG_PER_THREAD; ++ii) {
         row_chunk_vec_ptr[ii] = vec_thread_read_ptr[ii * THREADS_PER_ROW];
     }
 
     float row_chunk[VPT];
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
     for (int ii = 0; ii < VPT; ++ii) {
         row_chunk[ii] = convert_to_float<T>(row_chunk_temp[ii]);
     }
 
     if (moe_softcapping != 0.0f) {
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
         for (int ii = 0; ii < VPT; ++ii) {
             float val = row_chunk[ii];
             if (moe_softcapping != 0.0f) {
@@ -331,27 +339,37 @@ __launch_bounds__(WARPS_PER_CTA *WARP_SIZE) __global__ void topkGatingSoftmax(
     }
 
     float thread_max = row_chunk[0];
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
     for (int ii = 1; ii < VPT; ++ii) {
         thread_max = fmaxf(thread_max, row_chunk[ii]);
     }
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
     for (int mask = THREADS_PER_ROW / 2; mask > 0; mask /= 2) {
         thread_max = fmaxf(thread_max, __shfl_xor_sync(0xffffffff, thread_max, mask, THREADS_PER_ROW));
     }
 
     float row_sum = 0.0f;
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
     for (int ii = 0; ii < VPT; ++ii) {
         row_chunk[ii] = expf(row_chunk[ii] - thread_max);
         row_sum += row_chunk[ii];
     }
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
     for (int mask = THREADS_PER_ROW / 2; mask > 0; mask /= 2) {
         row_sum += __shfl_xor_sync(0xffffffff, row_sum, mask, THREADS_PER_ROW);
     }
     const float reciprocal_row_sum = 1.0f / row_sum;
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
     for (int ii = 0; ii < VPT; ++ii) {
         row_chunk[ii] *= reciprocal_row_sum;
     }
@@ -362,9 +380,13 @@ __launch_bounds__(WARPS_PER_CTA *WARP_SIZE) __global__ void topkGatingSoftmax(
         float max_prob = row_chunk[0];
         float max_choice = correction_bias == nullptr ? max_prob : max_prob + correction_bias[start_col];
         int expert = start_col;
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
         for (int ldg = 0, col = start_col; ldg < LDG_PER_THREAD; ++ldg, col += COLS_PER_GROUP_LDG) {
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
             for (int ii = 0; ii < ELTS_PER_LDG; ++ii) {
                 const int expert_idx = col + ii;
                 float prob = row_chunk[ldg * ELTS_PER_LDG + ii];
@@ -377,7 +399,9 @@ __launch_bounds__(WARPS_PER_CTA *WARP_SIZE) __global__ void topkGatingSoftmax(
             }
         }
 
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
         for (int mask = THREADS_PER_ROW / 2; mask > 0; mask /= 2) {
             float other_choice = __shfl_xor_sync(0xffffffff, max_choice, mask, THREADS_PER_ROW);
             float other_prob = __shfl_xor_sync(0xffffffff, max_prob, mask, THREADS_PER_ROW);
@@ -408,7 +432,9 @@ __launch_bounds__(WARPS_PER_CTA *WARP_SIZE) __global__ void topkGatingSoftmax(
 
     if (renormalize && thread_group_idx == 0) {
         const float inv = 1.0f / row_sum_for_renormalize;
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
         for (int k_idx = 0; k_idx < k; ++k_idx) {
             const int idx = k * thread_row + k_idx;
             output[idx] *= inv;
@@ -618,4 +644,4 @@ infiniStatus_t Descriptor::calculate(
 
 } // namespace op::moe_topk_softmax::nvidia
 
-#endif // ENABLE_NVIDIA_API
+#endif // ENABLE_NVIDIA_API || ENABLE_HYGON_API

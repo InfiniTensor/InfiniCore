@@ -1,4 +1,4 @@
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_HYGON_API)
 
 #include "moe_sum_nvidia.cuh"
 
@@ -46,7 +46,9 @@ __global__ void moe_sum_kernel(
     const size_t token_idx = blockIdx.x;
     for (size_t idx = threadIdx.x; idx < hidden_size; idx += blockDim.x) {
         scalar_t x = static_cast<scalar_t>(0.0f);
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
         for (int k = 0; k < TOPK; ++k) {
             x += input[token_idx * TOPK * hidden_size + k * hidden_size + idx];
         }
@@ -117,4 +119,4 @@ infiniStatus_t Descriptor::calculate(
 
 } // namespace op::moe_sum::nvidia
 
-#endif // ENABLE_NVIDIA_API
+#endif // ENABLE_NVIDIA_API || ENABLE_HYGON_API

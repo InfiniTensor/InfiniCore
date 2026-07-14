@@ -7,7 +7,7 @@
  * Licensed under the Apache License, Version 2.0.
  */
 
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_HYGON_API)
 
 #include "moe_topk_sigmoid_nvidia.cuh"
 
@@ -192,13 +192,17 @@ __launch_bounds__(WARPS_PER_CTA *WARP_SIZE) __global__ void topkGatingSigmoid(
     T row_chunk_temp[VPT];
     auto *row_chunk_vec_ptr = reinterpret_cast<AccessType *>(&row_chunk_temp);
     const auto *vec_thread_read_ptr = reinterpret_cast<const AccessType *>(thread_read_ptr);
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
     for (int ii = 0; ii < LDG_PER_THREAD; ++ii) {
         row_chunk_vec_ptr[ii] = vec_thread_read_ptr[ii * THREADS_PER_ROW];
     }
 
     float row_chunk[VPT];
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
     for (int ii = 0; ii < VPT; ++ii) {
         float val = convert_to_float<T>(row_chunk_temp[ii]);
         val = 1.0f / (1.0f + expf(-val));
@@ -216,9 +220,13 @@ __launch_bounds__(WARPS_PER_CTA *WARP_SIZE) __global__ void topkGatingSigmoid(
     for (int k_idx = 0; k_idx < k; ++k_idx) {
         float max_val = row_chunk[0];
         int expert = start_col;
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
         for (int ldg = 0, col = start_col; ldg < LDG_PER_THREAD; ++ldg, col += COLS_PER_GROUP_LDG) {
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
             for (int ii = 0; ii < ELTS_PER_LDG; ++ii) {
                 float val = row_chunk[ldg * ELTS_PER_LDG + ii];
                 if (val > max_val) {
@@ -228,7 +236,9 @@ __launch_bounds__(WARPS_PER_CTA *WARP_SIZE) __global__ void topkGatingSigmoid(
             }
         }
 
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
         for (int mask = THREADS_PER_ROW / 2; mask > 0; mask /= 2) {
             float other_max = __shfl_xor_sync(0xffffffff, max_val, mask, THREADS_PER_ROW);
             int other_expert = __shfl_xor_sync(0xffffffff, expert, mask, THREADS_PER_ROW);
@@ -262,7 +272,9 @@ __launch_bounds__(WARPS_PER_CTA *WARP_SIZE) __global__ void topkGatingSigmoid(
 
     if (renormalize && thread_group_idx == 0) {
         const float inv = 1.0f / row_sum_for_renormalize;
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
         for (int k_idx = 0; k_idx < k; ++k_idx) {
             const int idx = k * thread_row + k_idx;
             output[idx] *= inv;
@@ -464,4 +476,4 @@ infiniStatus_t Descriptor::calculate(
 
 } // namespace op::moe_topk_sigmoid::nvidia
 
-#endif // ENABLE_NVIDIA_API
+#endif // ENABLE_NVIDIA_API || ENABLE_HYGON_API

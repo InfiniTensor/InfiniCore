@@ -7,7 +7,7 @@
  * Licensed under the Apache License, Version 2.0.
  */
 
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_HYGON_API)
 
 #include "moe_fused_gate_nvidia.cuh"
 
@@ -94,7 +94,11 @@ __device__ void moe_fused_gate_impl(
 
     float row_chunk[MAX_VPT];
     float bias_chunk[MAX_VPT];
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
+#endif
     for (int ii = 0; ii < MAX_VPT; ++ii) {
         if (ii < params.VPT) {
             const int expert = first_elt_read_by_thread + ii;
@@ -110,7 +114,11 @@ __device__ void moe_fused_gate_impl(
         int expert = first_elt_read_by_thread;
         float max_val = -FLT_MAX;
         float max_val_second = -FLT_MAX;
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
+#endif
         for (int ii = 0; ii < MAX_VPT; ++ii) {
             if (ii < params.VPT) {
                 const float val = bias_chunk[ii];
@@ -124,7 +132,11 @@ __device__ void moe_fused_gate_impl(
         }
         float max_sum = max_val + max_val_second;
 
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
+#endif
         for (int mask = params.THREADS_PER_ROW / 2; mask > 0; mask /= 2) {
             const float other_max_sum = __shfl_xor_sync(0xffffffff, max_sum, mask, params.THREADS_PER_ROW);
             const int other_expert = __shfl_xor_sync(0xffffffff, expert, mask, params.THREADS_PER_ROW);
@@ -136,7 +148,11 @@ __device__ void moe_fused_gate_impl(
 
         const int thread_to_clear_in_group = expert / params.VPT;
         if (thread_group_idx == thread_to_clear_in_group) {
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
+#endif
             for (int ii = 0; ii < MAX_VPT; ++ii) {
                 if (ii < params.VPT) {
                     bias_chunk[ii] = FLT_MAX;
@@ -152,7 +168,11 @@ __device__ void moe_fused_gate_impl(
         float max_val = bias_chunk[0];
         int expert = first_elt_read_by_thread;
         if (max_val != FLT_MAX) {
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
+#endif
             for (int ii = 1; ii < MAX_VPT; ++ii) {
                 if (ii < params.VPT) {
                     const float val = bias_chunk[ii];
@@ -166,7 +186,11 @@ __device__ void moe_fused_gate_impl(
             max_val = -FLT_MAX;
         }
 
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
+#endif
         for (int mask = params.THREADS_PER_ROW / 2; mask > 0; mask /= 2) {
             const float other_max = __shfl_xor_sync(0xffffffff, max_val, mask, params.THREADS_PER_ROW);
             const int other_expert = __shfl_xor_sync(0xffffffff, expert, mask, params.THREADS_PER_ROW);
@@ -201,7 +225,11 @@ __device__ void moe_fused_gate_impl(
     __syncthreads();
 
     if (thread_group_idx == 0) {
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
+#if !defined(ENABLE_ILUVATAR_API) && !defined(ENABLE_HYGON_API)
 #pragma unroll
+#endif
+#endif
         for (int ii = 0; ii < topk; ++ii) {
             const int64_t idx = topk * thread_row + ii;
             output[idx] = output[idx] / output_sum;
@@ -411,4 +439,4 @@ infiniStatus_t Descriptor::calculate(
 
 } // namespace op::moe_fused_gate::nvidia
 
-#endif // ENABLE_NVIDIA_API
+#endif // ENABLE_NVIDIA_API || ENABLE_HYGON_API

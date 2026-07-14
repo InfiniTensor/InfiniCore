@@ -1,4 +1,4 @@
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_HYGON_API)
 
 #include "moe_fused_dense_nvidia.cuh"
 
@@ -702,4 +702,4 @@ infiniStatus_t Descriptor::calculate(
 
 } // namespace op::moe_fused_dense::nvidia
 
-#endif // ENABLE_NVIDIA_API
+#endif // ENABLE_NVIDIA_API || ENABLE_HYGON_API

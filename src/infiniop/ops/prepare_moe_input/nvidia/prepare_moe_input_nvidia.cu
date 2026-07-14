@@ -1,4 +1,4 @@
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_HYGON_API)
 
 #include "prepare_moe_input_nvidia.cuh"
 
@@ -207,4 +207,4 @@ infiniStatus_t Descriptor::calculate(
 
 } // namespace op::prepare_moe_input::nvidia
 
-#endif // ENABLE_NVIDIA_API
+#endif // ENABLE_NVIDIA_API || ENABLE_HYGON_API
