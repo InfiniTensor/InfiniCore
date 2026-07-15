@@ -499,6 +499,67 @@ infiniStatus_t memcpyAsync(void *dst, const void *src, size_t size, infinirtMemc
     return INFINI_STATUS_SUCCESS;
 }
 
+#ifdef ENABLE_NVIDIA_API
+infiniStatus_t memcpyPeerAsync(
+    void *dst,
+    int dst_device_id,
+    const void *src,
+    int src_device_id,
+    size_t size,
+    infinirtStream_t stream) {
+    if (dst_device_id == src_device_id) {
+        auto copy_status = withDeviceGuard(dst_device_id, [&]() {
+            return cudaMemcpyAsync(
+                dst,
+                src,
+                size,
+                cudaMemcpyDeviceToDevice,
+                (cudaStream_t)stream);
+        });
+        CHECK_CUDART(copy_status);
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    int can_access_peer = 0;
+    CHECK_CUDART(cudaDeviceCanAccessPeer(
+        &can_access_peer, dst_device_id, src_device_id));
+    if (!can_access_peer) {
+        return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
+    }
+
+    static std::mutex peer_access_mutex;
+    static std::unordered_map<uint64_t, bool> enabled_peer_access;
+    const auto peer_key = (static_cast<uint64_t>(dst_device_id) << 32)
+                        | static_cast<uint32_t>(src_device_id);
+    {
+        std::lock_guard<std::mutex> lock(peer_access_mutex);
+        if (!enabled_peer_access[peer_key]) {
+            auto enable_status = withDeviceGuard(dst_device_id, [&]() {
+                return cudaDeviceEnablePeerAccess(src_device_id, 0);
+            });
+            if (enable_status == cudaErrorPeerAccessAlreadyEnabled) {
+                cudaGetLastError();
+                enable_status = cudaSuccess;
+            }
+            CHECK_CUDART(enable_status);
+            enabled_peer_access[peer_key] = true;
+        }
+    }
+
+    auto copy_status = withDeviceGuard(dst_device_id, [&]() {
+        return cudaMemcpyPeerAsync(
+            dst,
+            dst_device_id,
+            src,
+            src_device_id,
+            size,
+            (cudaStream_t)stream);
+    });
+    CHECK_CUDART(copy_status);
+    return INFINI_STATUS_SUCCESS;
+}
+#endif
+
 infiniStatus_t mallocAsync(void **p_ptr, size_t size, infinirtStream_t stream) {
     CHECK_CUDART(cudaMallocAsync(p_ptr, size, (cudaStream_t)stream));
     return INFINI_STATUS_SUCCESS;

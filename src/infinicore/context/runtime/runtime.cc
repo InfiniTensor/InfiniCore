@@ -122,6 +122,19 @@ void Runtime::memcpyD2D(void *dst, const void *src, size_t size, bool async) {
     }
 }
 
+void Runtime::memcpyPeerD2D(
+    void *dst, const void *src, Device src_device, size_t size) {
+    INFINICORE_CHECK_ERROR(infinirtMemcpyPeerAsync(
+        dst,
+        static_cast<infiniDevice_t>(device_.getType()),
+        static_cast<int>(device_.getIndex()),
+        src,
+        static_cast<infiniDevice_t>(src_device.getType()),
+        static_cast<int>(src_device.getIndex()),
+        size,
+        stream_));
+}
+
 void Runtime::setDeviceMemory(void *ptr, int value, size_t count) {
     INFINICORE_CHECK_ERROR(infinirtMemset(ptr, value, count));
 }

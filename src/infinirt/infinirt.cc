@@ -205,6 +205,36 @@ __INFINI_C infiniStatus_t infinirtMemcpyAsync(void *dst, const void *src, size_t
     INFINIRT_CALL_DEVICE_API(memcpyAsync, (dst, src, size, kind, stream));
 }
 
+__INFINI_C infiniStatus_t infinirtMemcpyPeerAsync(
+    void *dst,
+    infiniDevice_t dst_device,
+    int dst_device_id,
+    const void *src,
+    infiniDevice_t src_device,
+    int src_device_id,
+    size_t size,
+    infinirtStream_t stream) {
+    if (size == 0) {
+        return INFINI_STATUS_SUCCESS;
+    }
+    if (dst == nullptr || src == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    if (dst_device != src_device) {
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    }
+    if (dst_device != INFINI_DEVICE_NVIDIA) {
+        return INFINI_STATUS_NOT_IMPLEMENTED;
+    }
+    return infinirt::cuda::memcpyPeerAsync(
+        dst,
+        dst_device_id,
+        src,
+        src_device_id,
+        size,
+        stream);
+}
+
 __INFINI_C infiniStatus_t infinirtMallocAsync(void **p_ptr, size_t size, infinirtStream_t stream) {
     INFINIRT_CALL_DEVICE_API(mallocAsync, (p_ptr, size, stream));
 }

@@ -6,8 +6,19 @@
 namespace infinirt::cuda {
 #ifdef ENABLE_NVIDIA_API
 INFINIRT_DEVICE_API_IMPL
+infiniStatus_t memcpyPeerAsync(
+    void *dst,
+    int dst_device_id,
+    const void *src,
+    int src_device_id,
+    size_t size,
+    infinirtStream_t stream);
 #else
 INFINIRT_DEVICE_API_NOOP
+inline infiniStatus_t memcpyPeerAsync(
+    void *, int, const void *, int, size_t, infinirtStream_t) {
+    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+}
 #endif
 } // namespace infinirt::cuda
 

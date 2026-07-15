@@ -146,6 +146,12 @@ void memcpyD2D(void *dst, const void *src, size_t size, bool async) {
     return ContextImpl::singleton().getCurrentRuntime()->memcpyD2D(dst, src, size, async);
 }
 
+void memcpyPeerD2D(
+    void *dst, const void *src, Device src_device, size_t size) {
+    return ContextImpl::singleton().getCurrentRuntime()->memcpyPeerD2D(
+        dst, src, src_device, size);
+}
+
 void memcpyH2H(void *dst, const void *src, size_t size) {
     setDevice(Device::cpu());
     return ContextImpl::singleton().getCurrentRuntime()->memcpyD2D(dst, src, size);
