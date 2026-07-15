@@ -15,7 +15,7 @@ inline infiniStatus_t translate(::infini::rt::runtime::Error error) {
     }
 }
 
-inline ::infini::rt::Device::Type translate_to(infiniDevice_t device) {
+inline constexpr ::infini::rt::Device::Type translate_to(infiniDevice_t device) {
     switch (device) {
     case INFINI_DEVICE_CPU:
         return ::infini::rt::Device::Type::kCpu;
@@ -38,7 +38,7 @@ inline ::infini::rt::Device::Type translate_to(infiniDevice_t device) {
     }
 }
 
-inline infiniDevice_t translate_from(::infini::rt::Device::Type device) {
+inline constexpr infiniDevice_t translate_from(::infini::rt::Device::Type device) {
     switch (device) {
     case ::infini::rt::Device::Type::kCpu:
         return INFINI_DEVICE_CPU;
