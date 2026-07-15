@@ -39,10 +39,9 @@ void *plan(Tensor out,
 
 namespace {
 
-// Only support nv for now
-#if defined(ENABLE_FLASH_ATTN) && defined(ENABLE_NVIDIA_API)
 // MetaX/hpcc pip `flash_attn_2_cuda` exports `mha_fwd` at global scope (no namespace),
 // while NVIDIA `flash-attn-nvidia.so` uses `flash::mha_fwd`.
+#if defined(ENABLE_FLASH_ATTN) && (defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API))
 #if defined(ENABLE_METAX_API)
 #define INFINICORE_FLASH_OP(name) ::name
 #else
@@ -53,8 +52,7 @@ namespace {
 } // namespace
 
 void run(void *planned_meta) {
-// Only support nv for now
-#if defined(ENABLE_FLASH_ATTN) && defined(ENABLE_NVIDIA_API)
+#if defined(ENABLE_FLASH_ATTN) && (defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API))
     c10::cuda::CUDAStreamGuard guard(infinicore::adaptor::get_cuda_stream());
     auto *p = reinterpret_cast<PlannedMeta *>(planned_meta);
 
@@ -67,6 +65,9 @@ void run(void *planned_meta) {
     auto out_work = infinicore::adaptor::to_aten_tensor(out_work_ic);
     auto out = std::optional<at::Tensor>(out_work);
 
+#if defined(ENABLE_METAX_API)
+    std::optional<at::Tensor> softmax_lse = std::nullopt;
+#endif
     auto alibi_slopes = p->alibi_slopes ? std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(*p->alibi_slopes)) : std::nullopt;
     auto scale = p->scale;
     auto is_causal = p->is_causal;
@@ -81,6 +82,9 @@ void run(void *planned_meta) {
         k,
         v,
         out,
+#if defined(ENABLE_METAX_API)
+        softmax_lse,
+#endif
         alibi_slopes,
         0.0,
         scale,
