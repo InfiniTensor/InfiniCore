@@ -142,6 +142,7 @@
 #include "ops/vander.hpp"
 #include "ops/var.hpp"
 #include "ops/var_mean.hpp"
+#include "ops/w16a16_group_gemm.hpp"
 #include "ops/w4a8_group_gemm.hpp"
 #include "ops/w8a8_group_gemm.hpp"
 
@@ -249,6 +250,7 @@ inline void bind(py::module &m) {
     bind_vander(m);
     bind_w4a8_group_gemm(m);
     bind_w8a8_group_gemm(m);
+    bind_w16a16_group_gemm(m);
     bind_unfold(m);
     bind_rope(m);
     bind_rot(m);

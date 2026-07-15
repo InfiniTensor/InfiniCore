@@ -152,6 +152,7 @@ from infinicore.ops.var import var
 from infinicore.ops.var_mean import var_mean
 from infinicore.ops.w4a8_group_gemm import w4a8_group_gemm_
 from infinicore.ops.w8a8_group_gemm import w8a8_group_gemm_
+from infinicore.ops.w16a16_group_gemm import w16a16_group_gemm_
 from infinicore.tensor import (
     Tensor,
     empty,
@@ -232,6 +233,10 @@ __all__ = [
     "floor",
     "attention",
     "mrope",
+    "moe_argsort_bincount_with_inv_pos_",
+    "moe_expand_input_with_inv_pos_",
+    "moe_silu_and_mul_quant_",
+    "moe_sum_vllm_",
     "moe_topk_sigmoid_vllm",
     "moe_topk_softmax_vllm",
     "block_diag",
@@ -290,6 +295,7 @@ __all__ = [
     "rotm",
     "rotmg",
     "scal",
+    "scaled_mm_w4a8",
     "logcumsumexp",
     "logical_not",
     "logical_and",
@@ -313,6 +319,9 @@ __all__ = [
     "var_mean",
     "moore_mate_flash_attn_prefill",
     "moore_mate_flash_attn_decode",
+    "w4a8_group_gemm_",
+    "w8a8_group_gemm_",
+    "w16a16_group_gemm_",
     "var",
     "topk",
     "all",

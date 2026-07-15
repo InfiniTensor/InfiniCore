@@ -48,6 +48,7 @@
 #include "ops/nrm2.hpp"
 #include "ops/ones.hpp"
 #include "ops/paged_attention.hpp"
+#include "ops/paged_attention_mla.hpp"
 #include "ops/paged_attention_prefill.hpp"
 #include "ops/paged_caching.hpp"
 #include "ops/per_tensor_dequant_i8.hpp"
@@ -74,3 +75,4 @@
 #include "ops/swap.hpp"
 #include "ops/swiglu.hpp"
 #include "ops/topksoftmax.hpp"
+#include "ops/w16a16_group_gemm.hpp"
