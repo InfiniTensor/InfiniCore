@@ -1,6 +1,33 @@
 #include "infinicore.hpp"
 
 namespace infinicore {
+namespace {
+
+void destroy_event_on_device(
+    infinirtEvent_t event, Device device) noexcept {
+    if (event == nullptr) {
+        return;
+    }
+    try {
+        const auto previous_device = context::getDevice();
+        const bool changed_device = previous_device != device;
+        try {
+            context::setDevice(device);
+            context::destroyEvent(event);
+        } catch (...) {
+        }
+        try {
+            if (changed_device) {
+                context::setDevice(previous_device);
+            }
+        } catch (...) {
+        }
+    } catch (...) {
+        // Destructors and move assignment cannot surface context errors.
+    }
+}
+
+} // namespace
 
 DeviceEvent::DeviceEvent()
     : device_(context::getDevice()), is_recorded_(false) {
@@ -41,9 +68,7 @@ DeviceEvent::DeviceEvent(DeviceEvent &&other) noexcept
 DeviceEvent &DeviceEvent::operator=(DeviceEvent &&other) noexcept {
     if (this != &other) {
         // Clean up current resources
-        if (event_ != nullptr) {
-            context::destroyEvent(event_);
-        }
+        destroy_event_on_device(event_, device_);
 
         // Transfer ownership
         event_ = other.event_;
@@ -58,9 +83,7 @@ DeviceEvent &DeviceEvent::operator=(DeviceEvent &&other) noexcept {
 }
 
 DeviceEvent::~DeviceEvent() {
-    if (event_ != nullptr) {
-        context::destroyEvent(event_);
-    }
+    destroy_event_on_device(event_, device_);
 }
 
 void DeviceEvent::record() {
@@ -161,19 +184,34 @@ float DeviceEvent::elapsed_time(const DeviceEvent &other) const {
 }
 
 void DeviceEvent::wait(infinirtStream_t stream) const {
-    Device current_device = context::getDevice();
+    wait_on(device_, stream);
+}
 
-    // Ensure we're on the correct device
-    if (current_device != device_) {
-        context::setDevice(device_);
+void DeviceEvent::wait_on(Device stream_device,
+                          infinirtStream_t stream) const {
+    if (!is_recorded_) {
+        throw std::runtime_error("Cannot wait for an event before it is recorded");
     }
 
-    // Make the stream wait for this event
-    context::streamWaitEvent(stream, event_);
+    Device current_device = context::getDevice();
 
-    // Restore original device if we changed it
-    if (current_device != device_) {
-        context::setDevice(current_device);
+    if (current_device != stream_device) {
+        context::setDevice(stream_device);
+    }
+
+    try {
+        context::streamWaitEvent(stream, event_);
+        if (current_device != stream_device) {
+            context::setDevice(current_device);
+        }
+    } catch (...) {
+        try {
+            if (current_device != stream_device) {
+                context::setDevice(current_device);
+            }
+        } catch (...) {
+        }
+        throw;
     }
 }
 

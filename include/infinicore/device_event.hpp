@@ -104,6 +104,15 @@ public:
     void wait(infinirtStream_t stream = nullptr) const;
 
     /**
+     * @brief Make a stream on another device wait for this event.
+     *
+     * CUDA permits cross-device event waits, but the runtime call must be
+     * issued while the destination stream's device is current.
+     */
+    void wait_on(Device stream_device,
+                 infinirtStream_t stream = nullptr) const;
+
+    /**
      * @brief Get the device where this event was created.
      * @return Device associated with this event
      */

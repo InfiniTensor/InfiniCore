@@ -95,6 +95,14 @@ class DeviceEvent:
         """
         self._underlying.wait(stream)
 
+    def wait_on(self, device, stream=None):
+        """Make a stream on ``device`` wait for this event.
+
+        This is the cross-device producer/consumer primitive used by pipeline
+        transfers. ``stream=None`` selects that device's current stream.
+        """
+        self._underlying.wait_on(device._underlying, stream)
+
     @property
     def device(self):
         """Get the device where this event was created."""

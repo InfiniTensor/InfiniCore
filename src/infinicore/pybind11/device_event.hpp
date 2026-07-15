@@ -33,6 +33,10 @@ inline void bind(py::module &m) {
              "Make a stream wait for this event to complete",
              py::arg("stream") = nullptr)
 
+        .def("wait_on", &DeviceEvent::wait_on,
+             "Make a stream on a selected device wait for this event",
+             py::arg("device"), py::arg("stream") = nullptr)
+
         .def_property_readonly("device", &DeviceEvent::device,
                                "Get the device where this event was created")
         .def_property_readonly("is_recorded", &DeviceEvent::is_recorded,
