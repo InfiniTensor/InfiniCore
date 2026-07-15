@@ -82,6 +82,16 @@ ContextImpl::ContextImpl() {
         }
     }
 
+    if constexpr (infini::rt::DeviceEnabled<infini::rt::Device::Type::kIluvatar>::value) {
+        infini::rt::set_runtime_device_type(bridge::infini::rt::translate_to(INFINI_DEVICE_ILUVATAR));
+        INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::GetDeviceCount(&device_counter[static_cast<int>(Device::Type::ILUVATAR)])));
+        runtime_table_[static_cast<int>(Device::Type::ILUVATAR)].resize(device_counter[static_cast<int>(Device::Type::ILUVATAR)]);
+        if (device_counter[static_cast<int>(Device::Type::ILUVATAR)] > 0) {
+            runtime_table_[static_cast<int>(Device::Type::ILUVATAR)][0] = std::unique_ptr<Runtime>(new Runtime(Device(Device::Type::ILUVATAR, 0)));
+            current_runtime_ = runtime_table_[static_cast<int>(Device::Type::ILUVATAR)][0].get();
+        }
+    }
+
     if constexpr (infini::rt::DeviceEnabled<infini::rt::Device::Type::kAscend>::value) {
         infini::rt::set_runtime_device_type(bridge::infini::rt::translate_to(INFINI_DEVICE_ASCEND));
         INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::GetDeviceCount(&device_counter[static_cast<int>(Device::Type::ASCEND)])));
