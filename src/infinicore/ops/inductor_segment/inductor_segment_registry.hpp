@@ -69,10 +69,23 @@ struct PreAttnExternalWeights {
     at::Tensor k_norm_weight;
 };
 
+struct MoeExternalWeights {
+    at::Tensor gate_weight;
+    at::Tensor e_score_correction_bias;
+    at::Tensor w_gate_up;
+    at::Tensor w_down;
+    at::Tensor shared_gate_up;
+    at::Tensor shared_down;
+};
+
 using PreAttnWeightResolver = std::function<PreAttnExternalWeights(size_t layer_idx)>;
+using MoeWeightResolver = std::function<MoeExternalWeights(size_t layer_idx)>;
 
 void set_pre_attn_aten_weight_resolver(PreAttnWeightResolver resolver);
 PreAttnExternalWeights resolve_pre_attn_weights(size_t layer_idx);
+
+void set_moe_aten_weight_resolver(MoeWeightResolver resolver);
+MoeExternalWeights resolve_moe_weights(size_t layer_idx);
 
 void erase_inductor_runner(const SegmentKey &key);
 void clear_inductor_runners();

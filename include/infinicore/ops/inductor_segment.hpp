@@ -12,6 +12,7 @@ namespace infinicore::op {
 enum class PiecewiseInductorSegmentId : int {
     PreAttn = 0,
     PostAttnCg = 1,
+    Moe = 2,
 };
 
 INFINICORE_GRAPH_OP_CLASS(
@@ -48,6 +49,13 @@ void inductor_warmup_pre_attn_bucket(
     size_t bucket,
     size_t valid_len);
 
+/// Eager AOTI MiniCPM5 sparse MoE segment (weights via moe resolver). Not recorded into hcGraph yet.
+void inductor_moe_(
+    const Tensor &hidden_states,
+    Tensor &out,
+    size_t layer_idx,
+    size_t bucket);
+
 namespace inductor_segment_impl {
 
 struct PreAttnExternalWeightTensors {
@@ -57,6 +65,16 @@ struct PreAttnExternalWeightTensors {
     Tensor v_weight;
     Tensor q_norm_weight;
     Tensor k_norm_weight;
+};
+
+/// Layer-agnostic MoE external weights (bound at replay via resolver).
+struct MoeExternalWeightTensors {
+    Tensor gate_weight;              ///< [E, H]
+    Tensor e_score_correction_bias;  ///< [E]
+    Tensor w_gate_up;                ///< [E, 2*I, H]
+    Tensor w_down;                   ///< [E, H, I]
+    Tensor shared_gate_up;           ///< [2*I, H]
+    Tensor shared_down;              ///< [H, I]
 };
 
 void register_package(
@@ -78,6 +96,14 @@ void set_pre_attn_weight_resolver(
     std::function<PreAttnExternalWeightTensors(size_t layer_idx)> resolver);
 
 void clear_pre_attn_weight_resolver();
+
+void set_moe_weight_resolver(
+    std::function<MoeExternalWeightTensors(size_t layer_idx)> resolver);
+
+void clear_moe_weight_resolver();
+
+/// True after a non-null ``set_moe_weight_resolver`` (RankWorker or pybind).
+bool has_moe_weight_resolver();
 
 void set_lookup_tp_rank_override(size_t tp_rank);
 void clear_lookup_tp_rank_override();

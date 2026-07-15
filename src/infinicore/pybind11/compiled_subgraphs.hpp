@@ -17,6 +17,10 @@ std::mutex g_pre_attn_external_weights_mutex;
 std::unordered_map<size_t, infinicore::op::inductor_segment_impl::PreAttnExternalWeightTensors>
     g_pre_attn_external_weights;
 
+std::mutex g_moe_external_weights_mutex;
+std::unordered_map<size_t, infinicore::op::inductor_segment_impl::MoeExternalWeightTensors>
+    g_moe_external_weights;
+
 void ensure_py_pre_attn_weight_resolver() {
     static std::once_flag once;
     std::call_once(once, []() {
@@ -34,12 +38,33 @@ void ensure_py_pre_attn_weight_resolver() {
     });
 }
 
+void ensure_py_moe_weight_resolver() {
+    // RankWorker owns the global resolver at serve time — never overwrite it.
+    if (infinicore::op::inductor_segment_impl::has_moe_weight_resolver()) {
+        return;
+    }
+    infinicore::op::inductor_segment_impl::set_moe_weight_resolver(
+        [](size_t layer_idx) -> infinicore::op::inductor_segment_impl::MoeExternalWeightTensors {
+            std::lock_guard<std::mutex> lock(g_moe_external_weights_mutex);
+            auto it = g_moe_external_weights.find(layer_idx);
+            if (it == g_moe_external_weights.end()) {
+                throw std::runtime_error(
+                    "InductorSegment: moe external weights not registered for layer "
+                    + std::to_string(layer_idx));
+            }
+            return it->second;
+        });
+}
+
 infinicore::op::PiecewiseInductorSegmentId parse_segment_id(const std::string &segment) {
     if (segment == "pre_attn") {
         return infinicore::op::PiecewiseInductorSegmentId::PreAttn;
     }
     if (segment == "post_attn_cg") {
         return infinicore::op::PiecewiseInductorSegmentId::PostAttnCg;
+    }
+    if (segment == "moe") {
+        return infinicore::op::PiecewiseInductorSegmentId::Moe;
     }
     throw std::runtime_error("unknown piecewise segment: " + segment);
 }
@@ -126,12 +151,61 @@ inline void bind(py::module &m) {
     });
 
     m.def(
+        "register_moe_external_weights",
+        [](size_t layer_idx,
+           const infinicore::Tensor &gate_weight,
+           const infinicore::Tensor &e_score_correction_bias,
+           const infinicore::Tensor &w_gate_up,
+           const infinicore::Tensor &w_down,
+           const infinicore::Tensor &shared_gate_up,
+           const infinicore::Tensor &shared_down) {
+            ensure_py_moe_weight_resolver();
+            std::lock_guard<std::mutex> lock(g_moe_external_weights_mutex);
+            g_moe_external_weights[layer_idx] =
+                infinicore::op::inductor_segment_impl::MoeExternalWeightTensors{
+                    gate_weight,
+                    e_score_correction_bias,
+                    w_gate_up,
+                    w_down,
+                    shared_gate_up,
+                    shared_down,
+                };
+        },
+        py::arg("layer_idx"),
+        py::arg("gate_weight"),
+        py::arg("e_score_correction_bias"),
+        py::arg("w_gate_up"),
+        py::arg("w_down"),
+        py::arg("shared_gate_up"),
+        py::arg("shared_down"));
+
+    m.def("clear_moe_external_weights", []() {
+        // Clear the Python weight map only. Do not clear the RankWorker-owned
+        // C++ MoE resolver used at serve time.
+        std::lock_guard<std::mutex> lock(g_moe_external_weights_mutex);
+        g_moe_external_weights.clear();
+    });
+
+    m.def(
         "has_piecewise_inductor_package",
         [](const std::string &segment, size_t layer_idx, size_t bucket) {
             return infinicore::op::inductor_segment_impl::has_package(
                 parse_segment_id(segment), layer_idx, bucket);
         },
         py::arg("segment"),
+        py::arg("layer_idx"),
+        py::arg("bucket"));
+
+    m.def(
+        "inductor_moe_",
+        [](const infinicore::Tensor &hidden_states,
+           infinicore::Tensor &out,
+           size_t layer_idx,
+           size_t bucket) {
+            infinicore::op::inductor_moe_(hidden_states, out, layer_idx, bucket);
+        },
+        py::arg("hidden_states"),
+        py::arg("out"),
         py::arg("layer_idx"),
         py::arg("bucket"));
 

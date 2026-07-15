@@ -168,6 +168,71 @@ void run_pre_attn_segment(
     // Do not sync here: hcGraph capture/replay records InductorSegment as a graph op.
     // Eager callers (text_decoder_layer) sync after inductor_segment_ when not recording.
 }
+
+void run_moe_segment(
+    const infinicore::Tensor &hidden_states,
+    infinicore::Tensor &out,
+    size_t layer_idx,
+    size_t bucket,
+    size_t valid_len) {
+    const auto rank_device = hidden_states->device();
+    restore_cuda_context(rank_device);
+
+    bool layer_agnostic = false;
+    auto &runner = infinicore::op::inductor_segment_impl::InductorSegmentRegistry::instance().runner(
+        infinicore::op::PiecewiseInductorSegmentId::Moe,
+        layer_idx,
+        bucket,
+        &layer_agnostic);
+
+    auto hidden = infinicore::adaptor::to_aten_tensor(hidden_states);
+    at::Tensor hidden_padded = hidden;
+    if (hidden.dim() != 3) {
+        throw std::runtime_error("InductorSegment moe: expected hidden [B, S, H]");
+    }
+    const int64_t batch = hidden.size(0);
+    const int64_t seq = hidden.size(1);
+    const int64_t hidden_size = hidden.size(2);
+    valid_len = std::min(valid_len, static_cast<size_t>(seq));
+    if (static_cast<size_t>(seq) != bucket) {
+        hidden_padded = at::zeros(
+            {batch, static_cast<int64_t>(bucket), hidden_size},
+            hidden.options());
+        const int64_t copy_len = static_cast<int64_t>(std::min(valid_len, bucket));
+        if (copy_len > 0) {
+            hidden_padded.narrow(1, 0, copy_len).copy_(hidden.narrow(1, 0, copy_len));
+        }
+    }
+
+    std::vector<at::Tensor> inputs = {hidden_padded};
+    if (layer_agnostic) {
+        auto weights = infinicore::op::inductor_segment_impl::resolve_moe_weights(layer_idx);
+        inputs.push_back(weights.gate_weight);
+        inputs.push_back(weights.e_score_correction_bias);
+        inputs.push_back(weights.w_gate_up);
+        inputs.push_back(weights.w_down);
+        inputs.push_back(weights.shared_gate_up);
+        inputs.push_back(weights.shared_down);
+    }
+
+    std::vector<at::Tensor> outputs = runner.run(inputs, nullptr);
+    if (outputs.empty()) {
+        throw std::runtime_error("InductorSegment moe: expected >=1 output, got 0");
+    }
+
+    restore_cuda_context(rank_device);
+    auto out_aten = infinicore::adaptor::to_aten_tensor(out);
+    auto src = as_contiguous_on_device(outputs[0]);
+    if (out_aten.sizes() == src.sizes()) {
+        out_aten.copy_(src);
+    } else {
+        const int64_t copy_len = static_cast<int64_t>(std::min(valid_len, bucket));
+        if (copy_len > 0) {
+            out_aten.narrow(1, 0, copy_len).copy_(src.narrow(1, 0, copy_len));
+        }
+    }
+    restore_cuda_context(rank_device);
+}
 #endif // ENABLE_ATEN
 
 } // namespace
@@ -291,6 +356,29 @@ void inductor_warmup_pre_attn_bucket(
     (void)valid_len;
     throw std::runtime_error(
         "inductor_warmup_pre_attn_bucket requires ENABLE_ATEN InfiniCore build");
+#endif
+}
+
+void inductor_moe_(
+    const Tensor &hidden_states,
+    Tensor &out,
+    size_t layer_idx,
+    size_t bucket) {
+#ifdef ENABLE_ATEN
+    // Eager AOTI only in this phase; piecewise CG promotion is a follow-up.
+    if (context::isGraphRecording()) {
+        throw std::runtime_error(
+            "inductor_moe_: MoE AOTI is not yet recorded into hcGraph "
+            "(eager AOTI only; promote in a follow-up PR)");
+    }
+    const size_t valid_len = resolve_valid_seq_len(bucket, hidden_states);
+    run_moe_segment(hidden_states, out, layer_idx, bucket, valid_len);
+#else
+    (void)hidden_states;
+    (void)out;
+    (void)layer_idx;
+    (void)bucket;
+    throw std::runtime_error("inductor_moe_ requires ENABLE_ATEN InfiniCore build");
 #endif
 }
 
@@ -444,6 +532,19 @@ PreAttnExternalWeights to_aten_weights(const PreAttnExternalWeightTensors &ic) {
     return out;
 }
 
+std::function<MoeExternalWeightTensors(size_t)> g_moe_ic_resolver;
+
+MoeExternalWeights to_aten_moe_weights(const MoeExternalWeightTensors &ic) {
+    MoeExternalWeights out;
+    out.gate_weight = as_contiguous_aten(ic.gate_weight);
+    out.e_score_correction_bias = as_contiguous_aten(ic.e_score_correction_bias);
+    out.w_gate_up = as_contiguous_aten(ic.w_gate_up);
+    out.w_down = as_contiguous_aten(ic.w_down);
+    out.shared_gate_up = as_contiguous_aten(ic.shared_gate_up);
+    out.shared_down = as_contiguous_aten(ic.shared_down);
+    return out;
+}
+
 } // namespace
 
 void set_pre_attn_weight_resolver(
@@ -464,6 +565,30 @@ void set_pre_attn_weight_resolver(
 void clear_pre_attn_weight_resolver() {
     g_pre_attn_ic_resolver = nullptr;
     inductor_segment_impl::set_pre_attn_aten_weight_resolver(nullptr);
+}
+
+void set_moe_weight_resolver(
+    std::function<MoeExternalWeightTensors(size_t layer_idx)> resolver) {
+    g_moe_ic_resolver = std::move(resolver);
+    if (!g_moe_ic_resolver) {
+        inductor_segment_impl::set_moe_aten_weight_resolver(nullptr);
+        return;
+    }
+    inductor_segment_impl::set_moe_aten_weight_resolver([](size_t layer_idx) {
+        if (!g_moe_ic_resolver) {
+            throw std::runtime_error("InductorSegment: moe weight resolver cleared");
+        }
+        return to_aten_moe_weights(g_moe_ic_resolver(layer_idx));
+    });
+}
+
+void clear_moe_weight_resolver() {
+    g_moe_ic_resolver = nullptr;
+    inductor_segment_impl::set_moe_aten_weight_resolver(nullptr);
+}
+
+bool has_moe_weight_resolver() {
+    return static_cast<bool>(g_moe_ic_resolver);
 }
 
 } // namespace inductor_segment_impl

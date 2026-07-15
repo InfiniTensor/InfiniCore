@@ -17,6 +17,7 @@ ValidSeqLenResolver g_valid_seq_len_resolver = nullptr;
 
 #ifdef ENABLE_ATEN
 PreAttnWeightResolver g_pre_attn_weight_resolver;
+MoeWeightResolver g_moe_weight_resolver;
 #endif
 
 size_t normalize_register_layer_idx(size_t layer_idx, bool layer_agnostic) {
@@ -72,6 +73,18 @@ PreAttnExternalWeights resolve_pre_attn_weights(size_t layer_idx) {
             "InductorSegment: pre_attn weight resolver not registered (layer-agnostic package)");
     }
     return g_pre_attn_weight_resolver(layer_idx);
+}
+
+void set_moe_aten_weight_resolver(MoeWeightResolver resolver) {
+    g_moe_weight_resolver = std::move(resolver);
+}
+
+MoeExternalWeights resolve_moe_weights(size_t layer_idx) {
+    if (!g_moe_weight_resolver) {
+        throw std::runtime_error(
+            "InductorSegment: moe weight resolver not registered (layer-agnostic package)");
+    }
+    return g_moe_weight_resolver(layer_idx);
 }
 #endif
 

@@ -196,6 +196,10 @@ def _compile_missing_packages(
         aot_compile_piecewise_segments_multi_bucket,
         piecewise_inductor_package_path,
     )
+    from infinilm.compile.piecewise_moe_segment import (
+        SEGMENT_MOE,
+        aot_compile_minicpm5_moe_segment,
+    )
 
     import torch
 
@@ -228,7 +232,7 @@ def _compile_missing_packages(
             missing,
         )
         device = torch.device("cuda", dev_index)
-        if SEGMENT_PRE_ATTN in segments:
+        if SEGMENT_PRE_ATTN in segments and any(s == SEGMENT_PRE_ATTN for s, _ in missing):
             aot_compile_piecewise_segments_multi_bucket(
                 model_path=model_path,
                 segment=SEGMENT_PRE_ATTN,
@@ -241,6 +245,18 @@ def _compile_missing_packages(
                 tp_device_ids=tp_device_ids or list(range(tp_size)),
                 layer_agnostic=layer_agnostic,
             )
+        if SEGMENT_MOE in segments:
+            moe_buckets = sorted({int(b) for s, b in missing if s == SEGMENT_MOE})
+            for bucket in moe_buckets:
+                aot_compile_minicpm5_moe_segment(
+                    model_path=model_path,
+                    bucket=bucket,
+                    device=device,
+                    cache_root=cache_root,
+                    tp_size=tp_size,
+                    tp_rank=tp_rank,
+                    require_aot=True,
+                )
 
 
 def warmup_piecewise_inductor_packages(
@@ -379,6 +395,7 @@ def bootstrap_from_infinicore_device(
         expected_piecewise_package_count,
         piecewise_layer_agnostic_enabled,
     )
+    from infinilm.compile.piecewise_moe_segment import SEGMENT_MOE
 
     tp_size = max(1, int(tp_size))
     layer_agnostic = piecewise_layer_agnostic_enabled()
@@ -388,6 +405,10 @@ def bootstrap_from_infinicore_device(
         with open(config_path, "r", encoding="utf-8") as f:
             hf_config = json.load(f)
         num_layers = int(hf_config.get("num_hidden_layers", 0))
+    else:
+        config_path = os.path.join(model_path, "config.json")
+        with open(config_path, "r", encoding="utf-8") as f:
+            hf_config = json.load(f)
     if num_layers <= 0:
         raise ValueError(f"invalid num_hidden_layers for model_path={model_path}")
 
@@ -395,14 +416,48 @@ def bootstrap_from_infinicore_device(
         buckets = native_piecewise_capture_buckets(compile_max_seq_len())
 
     root = cache_root or piecewise_inductor_cache_root()
-    segments = (SEGMENT_PRE_ATTN,)
+    model_type = str(hf_config.get("model_type", ""))
+    # Track B MiniCPM5: register MoE packages (pre_attn optional / separate).
+    if model_type == "minicpm5_moe":
+        segments = (SEGMENT_MOE,)
+        # Union small MoE ladder with capture buckets so on-disk moe_B16/B64
+        # are registered; C++ pick_moe_bucket walks this same ladder.
+        moe_ladder = (16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192)
+        buckets = tuple(sorted({int(b) for b in buckets} | set(moe_ladder)))
+    else:
+        segments = (SEGMENT_PRE_ATTN,)
     layer_indices = range(num_layers)
-    expected = expected_piecewise_package_count(
-        num_layers=num_layers,
-        buckets=buckets,
-        tp_size=tp_size,
-        layer_agnostic=layer_agnostic,
-    )
+    # For MoE, "expected" is packages present on disk under the ladder (not
+    # every ladder slot). Avoid false strict-AOT failure when only B16/B64/B512
+    # have been compiled.
+    if model_type == "minicpm5_moe":
+        from infinilm.compile.piecewise_segments import (
+            LAYER_AGNOSTIC_IDX,
+            piecewise_inductor_package_path,
+        )
+
+        expected = 0
+        for bucket in buckets:
+            for tp_rank in range(tp_size):
+                pkg = piecewise_inductor_package_path(
+                    cache_root=root,
+                    model_path=model_path,
+                    segment=SEGMENT_MOE,
+                    layer_idx=LAYER_AGNOSTIC_IDX if layer_agnostic else 0,
+                    bucket=int(bucket),
+                    tp_size=tp_size,
+                    tp_rank=tp_rank,
+                    layer_agnostic=layer_agnostic,
+                )
+                if os.path.isfile(pkg):
+                    expected += 1 if layer_agnostic else num_layers
+    else:
+        expected = expected_piecewise_package_count(
+            num_layers=num_layers,
+            buckets=buckets,
+            tp_size=tp_size,
+            layer_agnostic=layer_agnostic,
+        ) * len(segments)
 
     compile_on_miss = compile_on_miss and piecewise_inductor_compile_on_miss()
     if compile_on_miss:
