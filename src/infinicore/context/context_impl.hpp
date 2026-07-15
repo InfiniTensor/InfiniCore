@@ -8,6 +8,9 @@
 namespace infinicore {
 class ContextImpl {
 private:
+    template <Device::Type device_type>
+    void initializeRuntime();
+
     // Table of runtimes for every device (type and index)
     std::array<std::vector<std::unique_ptr<Runtime>>, size_t(Device::Type::COUNT)> runtime_table_;
     // Active runtime for current thread. Can use "static thread local" because context is a process singleton.

@@ -61,46 +61,37 @@ ContextImpl &ContextImpl::singleton() {
     return instance;
 }
 
+template <Device::Type device_type>
+void ContextImpl::initializeRuntime() {
+    constexpr auto runtime_device_type = bridge::infini::rt::translate_to(
+        static_cast<infiniDevice_t>(device_type));
+    static_assert(runtime_device_type != infini::rt::Device::Type::kCount,
+                  "InfiniCore device does not map to an InfiniRT runtime");
+
+    if constexpr (infini::rt::DeviceEnabled<runtime_device_type>::value) {
+        constexpr auto device_index = static_cast<size_t>(device_type);
+        infini::rt::set_runtime_device_type(runtime_device_type);
+
+        int device_count = 0;
+        INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(
+            infini::rt::runtime::GetDeviceCount(&device_count)));
+
+        auto &runtimes = runtime_table_[device_index];
+        runtimes.resize(device_count);
+        if (device_count > 0) {
+            runtimes[0] = std::unique_ptr<Runtime>(new Runtime(Device(device_type, 0)));
+            if constexpr (device_type != Device::Type::CPU) {
+                current_runtime_ = runtimes[0].get();
+            }
+        }
+    }
+}
+
 ContextImpl::ContextImpl() {
-    std::vector<int> device_counter(static_cast<size_t>(Device::Type::COUNT), 0);
-
-    infini::rt::set_runtime_device_type(bridge::infini::rt::translate_to(INFINI_DEVICE_CPU));
-    INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::GetDeviceCount(&device_counter[static_cast<int>(Device::Type::CPU)])));
-
-    runtime_table_[static_cast<int>(Device::Type::CPU)].resize(device_counter[static_cast<int>(Device::Type::CPU)]);
-    if (device_counter[static_cast<int>(Device::Type::CPU)] > 0) {
-        runtime_table_[static_cast<int>(Device::Type::CPU)][0] = std::unique_ptr<Runtime>(new Runtime(Device(Device::Type::CPU, 0)));
-    }
-
-    if constexpr (infini::rt::DeviceEnabled<infini::rt::Device::Type::kNvidia>::value) {
-        infini::rt::set_runtime_device_type(bridge::infini::rt::translate_to(INFINI_DEVICE_NVIDIA));
-        INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::GetDeviceCount(&device_counter[static_cast<int>(Device::Type::NVIDIA)])));
-        runtime_table_[static_cast<int>(Device::Type::NVIDIA)].resize(device_counter[static_cast<int>(Device::Type::NVIDIA)]);
-        if (device_counter[static_cast<int>(Device::Type::NVIDIA)] > 0) {
-            runtime_table_[static_cast<int>(Device::Type::NVIDIA)][0] = std::unique_ptr<Runtime>(new Runtime(Device(Device::Type::NVIDIA, 0)));
-            current_runtime_ = runtime_table_[static_cast<int>(Device::Type::NVIDIA)][0].get();
-        }
-    }
-
-    if constexpr (infini::rt::DeviceEnabled<infini::rt::Device::Type::kIluvatar>::value) {
-        infini::rt::set_runtime_device_type(bridge::infini::rt::translate_to(INFINI_DEVICE_ILUVATAR));
-        INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::GetDeviceCount(&device_counter[static_cast<int>(Device::Type::ILUVATAR)])));
-        runtime_table_[static_cast<int>(Device::Type::ILUVATAR)].resize(device_counter[static_cast<int>(Device::Type::ILUVATAR)]);
-        if (device_counter[static_cast<int>(Device::Type::ILUVATAR)] > 0) {
-            runtime_table_[static_cast<int>(Device::Type::ILUVATAR)][0] = std::unique_ptr<Runtime>(new Runtime(Device(Device::Type::ILUVATAR, 0)));
-            current_runtime_ = runtime_table_[static_cast<int>(Device::Type::ILUVATAR)][0].get();
-        }
-    }
-
-    if constexpr (infini::rt::DeviceEnabled<infini::rt::Device::Type::kAscend>::value) {
-        infini::rt::set_runtime_device_type(bridge::infini::rt::translate_to(INFINI_DEVICE_ASCEND));
-        INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(infini::rt::runtime::GetDeviceCount(&device_counter[static_cast<int>(Device::Type::ASCEND)])));
-        runtime_table_[static_cast<int>(Device::Type::ASCEND)].resize(device_counter[static_cast<int>(Device::Type::ASCEND)]);
-        if (device_counter[static_cast<int>(Device::Type::ASCEND)] > 0) {
-            runtime_table_[static_cast<int>(Device::Type::ASCEND)][0] = std::unique_ptr<Runtime>(new Runtime(Device(Device::Type::ASCEND, 0)));
-            current_runtime_ = runtime_table_[static_cast<int>(Device::Type::ASCEND)][0].get();
-        }
-    }
+    initializeRuntime<Device::Type::CPU>();
+    initializeRuntime<Device::Type::NVIDIA>();
+    initializeRuntime<Device::Type::ILUVATAR>();
+    initializeRuntime<Device::Type::ASCEND>();
 
     if (current_runtime_ == nullptr && !runtime_table_[static_cast<int>(Device::Type::CPU)].empty()) {
         current_runtime_ = runtime_table_[static_cast<int>(Device::Type::CPU)][0].get();
