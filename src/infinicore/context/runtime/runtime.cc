@@ -60,6 +60,16 @@ void Runtime::syncDevice() {
     INFINICORE_CHECK_ERROR(infinirtDeviceSynchronize());
 }
 
+void Runtime::trimDeviceMemory() {
+    syncDevice();
+    if (isGraphRecording()) {
+        return;
+    }
+    if (device_memory_allocator_) {
+        device_memory_allocator_->trim();
+    }
+}
+
 std::shared_ptr<Memory> Runtime::allocateMemory(size_t size) {
     std::byte *data_ptr = device_memory_allocator_->allocate(size);
     return std::make_shared<Memory>(

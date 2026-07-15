@@ -11,5 +11,8 @@ public:
 
     virtual std::byte *allocate(size_t size) = 0;
     virtual void deallocate(std::byte *ptr) = 0;
+
+    /// Return idle pooled blocks to the driver (default: no-op).
+    virtual void trim() {}
 };
 } // namespace infinicore

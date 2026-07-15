@@ -15,7 +15,7 @@ public:
 
     virtual ~Module() = default;
 
-    const std::unordered_map<std::string, Parameter> &state_dict() const;
+    std::unordered_map<std::string, Parameter> state_dict() const;
 
     void load_state_dict(const std::unordered_map<std::string, Tensor> &_state_dict);
 

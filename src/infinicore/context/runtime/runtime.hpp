@@ -35,6 +35,10 @@ public:
     void syncStream();
     void syncDevice();
 
+    /// syncDevice then free idle device allocator blocks to the driver.
+    /// No-op while graph recording (pinned/frozen blocks must stay).
+    void trimDeviceMemory();
+
     std::shared_ptr<Memory> allocateMemory(size_t size);
     std::shared_ptr<Memory> allocatePinnedHostMemory(size_t size);
     std::shared_ptr<Memory> reinstantiateBlob(std::shared_ptr<Memory> blob);

@@ -36,8 +36,8 @@ public:
     // return the size of the block
     size_t mark_in_use_(void *ptr, bool in_use);
 
-    // trim cached blocks back to GPU (not pinned)
-    void trim();
+    // trim cached idle blocks back to the driver (skips frozen / in-use)
+    void trim() override;
 
 private:
     Device device_;

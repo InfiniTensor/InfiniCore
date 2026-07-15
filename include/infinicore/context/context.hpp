@@ -23,6 +23,9 @@ infiniopHandle_t getInfiniopHandle(Device device);
 void syncStream();
 void syncDevice();
 
+/// Sync then return idle InfiniCore device allocator blocks to the driver.
+void trimDeviceMemory();
+
 /// Free pinned-host allocations deferred while another device was active.
 void flushDeferredPinnedHostFrees();
 

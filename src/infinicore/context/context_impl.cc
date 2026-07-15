@@ -138,6 +138,10 @@ void syncDevice() {
     return ContextImpl::singleton().getCurrentRuntime()->syncDevice();
 }
 
+void trimDeviceMemory() {
+    return ContextImpl::singleton().getCurrentRuntime()->trimDeviceMemory();
+}
+
 void flushDeferredPinnedHostFrees() {
     return ContextImpl::singleton().getCurrentRuntime()->flushDeferredPinnedHostFrees();
 }

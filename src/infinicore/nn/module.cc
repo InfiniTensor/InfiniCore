@@ -3,12 +3,9 @@
 #include <stdexcept>
 
 namespace infinicore::nn {
-const std::unordered_map<std::string, Parameter> &Module::state_dict() const {
-    static std::unordered_map<std::string, Parameter> result;
-    result.clear();
-
+std::unordered_map<std::string, Parameter> Module::state_dict() const {
+    std::unordered_map<std::string, Parameter> result;
     collect_all_parameters(result, "");
-
     return result;
 }
 
