@@ -99,6 +99,7 @@
 #include "ops/selu.hpp"
 #include "ops/silu.hpp"
 #include "ops/silu_and_mul.hpp"
+#include "ops/moe_sum.hpp"
 #include "ops/sinh.hpp"
 #include "ops/smooth_l1_loss.hpp"
 #include "ops/softplus.hpp"
@@ -225,6 +226,7 @@ inline void bind(py::module &m) {
     bind_embedding(m);
     bind_linear_w8a8i8(m);
     bind_silu_and_mul(m);
+    bind_moe_sum(m);
     bind_sum(m);
     bind_var_mean(m);
     bind_var(m);

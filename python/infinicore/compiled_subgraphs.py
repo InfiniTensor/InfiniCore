@@ -360,6 +360,18 @@ def warmup_piecewise_inductor_packages(
     return warmed
 
 
+def _assert_moe_compile_on_miss_disabled() -> None:
+    from infinilm.tools.moe_serve_bootstrap import assert_moe_compile_on_miss_disabled
+
+    assert_moe_compile_on_miss_disabled()
+
+
+def _validate_minicpm5_moe_artifacts(*, model_path: str, cache_root: str) -> dict:
+    from infinilm.tools.moe_serve_bootstrap import validate_minicpm5_moe_artifacts
+
+    return validate_minicpm5_moe_artifacts(model_path=model_path, cache_root=cache_root)
+
+
 def bootstrap_from_infinicore_device(
     *,
     infini_device,
@@ -417,27 +429,38 @@ def bootstrap_from_infinicore_device(
 
     root = cache_root or piecewise_inductor_cache_root()
     model_type = str(hf_config.get("model_type", ""))
+    moe_artifact_info: Optional[dict] = None
     # Track B MiniCPM5: register MoE packages (pre_attn optional / separate).
     if model_type == "minicpm5_moe":
+        from infinilm.torch_llama.moe_ops import register_fused_moe_routed_op
+
+        register_fused_moe_routed_op()
+        # Strict: never compile-on-miss for MoE (ignore caller override + env=1).
+        _assert_moe_compile_on_miss_disabled()
+        compile_on_miss = False
+        moe_artifact_info = _validate_minicpm5_moe_artifacts(
+            model_path=model_path, cache_root=root
+        )
+
         segments = (SEGMENT_MOE,)
-        # Union small MoE ladder with capture buckets so on-disk moe_B16/B64
-        # are registered; C++ pick_moe_bucket walks this same ladder.
-        moe_ladder = (16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192)
+        # Full FusedMoE ladder from manifest (G3); union C++ pick_moe_bucket slots.
+        from infinilm.tools.pack_moe_artifacts import DEFAULT_BUCKETS
+
+        moe_ladder = tuple(DEFAULT_BUCKETS) + (8192,)
         buckets = tuple(sorted({int(b) for b in buckets} | set(moe_ladder)))
     else:
         segments = (SEGMENT_PRE_ATTN,)
     layer_indices = range(num_layers)
-    # For MoE, "expected" is packages present on disk under the ladder (not
-    # every ladder slot). Avoid false strict-AOT failure when only B16/B64/B512
-    # have been compiled.
+    # MoE: expect every manifest ladder bucket on disk (verified above).
     if model_type == "minicpm5_moe":
         from infinilm.compile.piecewise_segments import (
             LAYER_AGNOSTIC_IDX,
             piecewise_inductor_package_path,
         )
+        from infinilm.tools.pack_moe_artifacts import DEFAULT_BUCKETS
 
         expected = 0
-        for bucket in buckets:
+        for bucket in DEFAULT_BUCKETS:
             for tp_rank in range(tp_size):
                 pkg = piecewise_inductor_package_path(
                     cache_root=root,
@@ -449,8 +472,11 @@ def bootstrap_from_infinicore_device(
                     tp_rank=tp_rank,
                     layer_agnostic=layer_agnostic,
                 )
-                if os.path.isfile(pkg):
-                    expected += 1 if layer_agnostic else num_layers
+                if not os.path.isfile(pkg):
+                    raise RuntimeError(
+                        f"minicpm5_moe missing required package after verify: {pkg}"
+                    )
+                expected += 1 if layer_agnostic else num_layers
     else:
         expected = expected_piecewise_package_count(
             num_layers=num_layers,
@@ -459,7 +485,8 @@ def bootstrap_from_infinicore_device(
             layer_agnostic=layer_agnostic,
         ) * len(segments)
 
-    compile_on_miss = compile_on_miss and piecewise_inductor_compile_on_miss()
+    if model_type != "minicpm5_moe":
+        compile_on_miss = compile_on_miss and piecewise_inductor_compile_on_miss()
     if compile_on_miss:
         _compile_missing_packages(
             model_path=model_path,
@@ -505,10 +532,13 @@ def bootstrap_from_infinicore_device(
             layer_agnostic=layer_agnostic,
         )
 
-    if piecewise_inductor_require_aot() and registered < expected:
+    # MoE always requires a complete FusedMoE ladder; other models honor REQUIRE_AOT.
+    if registered < expected and (
+        model_type == "minicpm5_moe" or piecewise_inductor_require_aot()
+    ):
         raise RuntimeError(
             f"piecewise inductor strict AOT: registered={registered} expected={expected} "
-            f"cache={root} layer_agnostic={layer_agnostic}"
+            f"cache={root} layer_agnostic={layer_agnostic} model_type={model_type}"
         )
 
     logger.info(
@@ -535,9 +565,10 @@ def bootstrap_from_infinicore_device(
             "num_layers": num_layers,
             "buckets": list(buckets),
             "layer_agnostic": layer_agnostic,
+            "model_type": model_type,
         },
     )
-    return {
+    out = {
         "registered": registered,
         "warmed": warmed,
         "expected": expected,
@@ -545,4 +576,8 @@ def bootstrap_from_infinicore_device(
         "num_layers": num_layers,
         "buckets": list(buckets),
         "layer_agnostic": layer_agnostic,
+        "model_type": model_type,
     }
+    if moe_artifact_info is not None:
+        out["moe_artifacts"] = moe_artifact_info
+    return out

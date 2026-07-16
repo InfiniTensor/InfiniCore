@@ -56,6 +56,7 @@
 #include "ops/scal.hpp"
 #include "ops/silu.hpp"
 #include "ops/silu_and_mul.hpp"
+#include "ops/moe_sum.hpp"
 #include "ops/softmax.hpp"
 #include "ops/swap.hpp"
 #include "ops/swiglu.hpp"
