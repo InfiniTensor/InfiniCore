@@ -251,6 +251,11 @@ if has_config("aten") then
        and (has_config("nv-gpu") or has_config("metax-gpu") or has_config("qy-gpu") or has_config("hygon-dcu")) then
         add_defines("ENABLE_FLASH_ATTN")
     end
+    -- Ascend flash-attn: enabled when ascend-gpu + aten + flash-attn
+    if has_config("ascend-npu") and get_config("flash-attn") and get_config("flash-attn") ~= "" then
+        add_defines("ENABLE_FLASH_ATTN")
+        add_defines("ENABLE_ASCEND_FLASH_ATTN")
+    end
 end
 
 -- cuda graph
@@ -673,6 +678,16 @@ target("infinicore_cpp_api")
         local cuda_root = os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH") or get_config("cuda") or "/usr/local/cuda"
         add_includedirs(cuda_root .. "/include")
     end
+    if has_config("ascend-npu") then
+        local ASCEND_HOME = os.getenv("ASCEND_HOME") or os.getenv("ASCEND_TOOLKIT_HOME")
+        add_includedirs(ASCEND_HOME .. "/include")
+        add_includedirs(ASCEND_HOME .. "/include/aclnn")
+        add_includedirs(ASCEND_HOME .. "/include/aclnnop")
+        add_linkdirs(ASCEND_HOME .. "/lib64")
+        add_links("ascendcl", "nnopbase", "opapi", "runtime")
+        add_linkdirs(ASCEND_HOME .. "/../../driver/lib64/driver")
+        add_links("ascend_hal")
+    end
     if has_config("infiniops") then
         local infiniops_root = path.absolute(get_config("infiniops-root") or "submodules/InfiniOps", os.projectdir())
         if not os.isdir(infiniops_root) then
@@ -842,6 +857,33 @@ target("infinicore_cpp_api")
                     "-Wl,-rpath," .. pylib,
                     { force = true }
                 )
+            elseif has_config("ascend-npu") then
+                target:add(
+                    "links",
+                    "torch",
+                    "torch_cpu",
+                    "c10",
+                    { public = true }
+                )
+                -- Detect torch_npu install path
+                local npu_outdata = os.iorunv("python", {"-c", "import torch_npu, os; print(os.path.dirname(torch_npu.__file__))"}):trim()
+                local TORCH_NPU_DIR = npu_outdata
+                target:add(
+                    "linkdirs",
+                    path.join(TORCH_NPU_DIR, "lib"),
+                    { public = true }
+                )
+                target:add(
+                    "links",
+                    "torch_npu",
+                    { public = true }
+                )
+                target:add(
+                    "shflags",
+                    "-Wl,-rpath," .. path.join(TORCH_NPU_DIR, "lib"),
+                    "-Wl,-rpath," .. path.join(TORCH_DIR, "lib"),
+                    { force = true }
+                ) 
             elseif has_config("hygon-dcu") then
                 target:add(
                     "links",

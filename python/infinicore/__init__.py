@@ -113,6 +113,10 @@ from infinicore.ops.moore_mate_flash_attn import (
     moore_mate_flash_attn_prefill,
 )
 from infinicore.ops.mrope import mrope
+from infinicore.ops.ascend_flash_attn import (
+    ascend_flash_attn_decode,
+    ascend_flash_attn_prefill,
+)
 from infinicore.ops.mul import mul
 from infinicore.ops.mul_scalar import mul_scalar
 from infinicore.ops.narrow import narrow
@@ -292,6 +296,8 @@ __all__ = [
     "var_mean",
     "moore_mate_flash_attn_prefill",
     "moore_mate_flash_attn_decode",
+    "ascend_flash_attn_prefill",
+    "ascend_flash_attn_decode",
     "var",
     "topk",
     "all",

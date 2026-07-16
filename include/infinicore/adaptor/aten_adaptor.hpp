@@ -51,6 +51,11 @@ inline at::Device to_at_device(const Device &device) {
         return at::Device(at::DeviceType::PrivateUse1, device.getIndex());
     }
 #endif
+#if defined(ENABLE_ASCEND_FLASH_ATTN)
+    else if (device.getType() == Device::Type::ASCEND) {
+        return at::Device(at::DeviceType::PrivateUse1, device.getIndex());
+    }
+#endif
     else {
         throw std::runtime_error("Unsupported device type for ATen");
     }
