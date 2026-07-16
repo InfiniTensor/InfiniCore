@@ -27,6 +27,14 @@ INFINICORE_GRAPH_OP_CLASS(
     size_t,
     size_t);
 
+/// MoE AOTI segment as an hcGraph op (plan/run mirrors InductorSegment pre_attn).
+INFINICORE_GRAPH_OP_CLASS(
+    InductorMoe,
+    const Tensor &,
+    Tensor &,
+    size_t,
+    size_t);
+
 /// Run an AOTInductor piecewise segment inside hcGraph capture/replay.
 void inductor_segment_(
     const Tensor &positions,
@@ -49,7 +57,8 @@ void inductor_warmup_pre_attn_bucket(
     size_t bucket,
     size_t valid_len);
 
-/// Eager AOTI MiniCPM5 sparse MoE segment (weights via moe resolver). Not recorded into hcGraph yet.
+/// MiniCPM5 sparse MoE AOTI segment (weights via moe resolver).
+/// Eager by default; records into hcGraph when ``isGraphRecording()`` (P4 spike).
 void inductor_moe_(
     const Tensor &hidden_states,
     Tensor &out,

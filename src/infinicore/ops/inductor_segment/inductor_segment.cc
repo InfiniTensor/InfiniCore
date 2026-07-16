@@ -32,6 +32,13 @@ size_t resolve_valid_seq_len(size_t bucket, const infinicore::Tensor &hidden_sta
     if (infinicore::context::isGraphRecording()) {
         return recording_valid_seq_len(bucket);
     }
+    // Eager decode tools / microbench: honor INFINI_PIECEWISE_VALID_LEN even when
+    // hidden is already bucket-padded (shape[1]==bucket would otherwise hide valid=1).
+    if (const char *raw = std::getenv("INFINI_PIECEWISE_VALID_LEN")) {
+        if (raw[0] != '\0') {
+            return std::min(static_cast<size_t>(std::stoul(raw)), bucket);
+        }
+    }
     const size_t runtime_valid = infinicore::op::inductor_segment_impl::current_piecewise_valid_seq_len();
     if (runtime_valid > 0) {
         return std::min(runtime_valid, bucket);
@@ -169,6 +176,43 @@ void run_pre_attn_segment(
     // Eager callers (text_decoder_layer) sync after inductor_segment_ when not recording.
 }
 
+/// Reusable MoE pad scratch: skip ``at::zeros`` alloc when ``seq == bucket``;
+/// otherwise reuse a thread-local buffer (zero only the unused tail).
+thread_local at::Tensor g_moe_pad_scratch;
+
+at::Tensor pad_moe_hidden_fast(const at::Tensor &hidden, size_t bucket, size_t valid_len) {
+    if (hidden.dim() != 3) {
+        throw std::runtime_error("InductorSegment moe: expected hidden [B, S, H]");
+    }
+    const int64_t batch = hidden.size(0);
+    const int64_t seq = hidden.size(1);
+    const int64_t hidden_size = hidden.size(2);
+    // Already bucket-width (piecewise-padded decode or full-bucket prefill).
+    if (static_cast<size_t>(seq) == bucket) {
+        return hidden;
+    }
+    const int64_t bucket_i = static_cast<int64_t>(bucket);
+    const int64_t copy_len = static_cast<int64_t>(std::min(valid_len, bucket));
+    auto &scratch = g_moe_pad_scratch;
+    const bool need_alloc = !scratch.defined()
+                            || scratch.size(0) != batch
+                            || scratch.size(1) != bucket_i
+                            || scratch.size(2) != hidden_size
+                            || scratch.device() != hidden.device()
+                            || scratch.dtype() != hidden.dtype();
+    if (need_alloc) {
+        scratch = at::empty({batch, bucket_i, hidden_size}, hidden.options());
+        scratch.zero_();
+    } else if (copy_len < bucket_i) {
+        // Reuse: clear stale tail so padded tokens stay zeros.
+        scratch.narrow(1, copy_len, bucket_i - copy_len).zero_();
+    }
+    if (copy_len > 0) {
+        scratch.narrow(1, 0, copy_len).copy_(hidden.narrow(1, 0, copy_len));
+    }
+    return scratch;
+}
+
 void run_moe_segment(
     const infinicore::Tensor &hidden_states,
     infinicore::Tensor &out,
@@ -186,23 +230,16 @@ void run_moe_segment(
         &layer_agnostic);
 
     auto hidden = infinicore::adaptor::to_aten_tensor(hidden_states);
-    at::Tensor hidden_padded = hidden;
     if (hidden.dim() != 3) {
         throw std::runtime_error("InductorSegment moe: expected hidden [B, S, H]");
     }
-    const int64_t batch = hidden.size(0);
     const int64_t seq = hidden.size(1);
-    const int64_t hidden_size = hidden.size(2);
-    valid_len = std::min(valid_len, static_cast<size_t>(seq));
-    if (static_cast<size_t>(seq) != bucket) {
-        hidden_padded = at::zeros(
-            {batch, static_cast<int64_t>(bucket), hidden_size},
-            hidden.options());
-        const int64_t copy_len = static_cast<int64_t>(std::min(valid_len, bucket));
-        if (copy_len > 0) {
-            hidden_padded.narrow(1, 0, copy_len).copy_(hidden.narrow(1, 0, copy_len));
-        }
+    // Prefer piecewise.valid_seq_len (decode=1) over padded shape[1]==bucket.
+    valid_len = std::min(valid_len, bucket);
+    if (valid_len == 0 || valid_len > static_cast<size_t>(seq)) {
+        valid_len = std::min(static_cast<size_t>(seq), bucket);
     }
+    at::Tensor hidden_padded = pad_moe_hidden_fast(hidden, bucket, valid_len);
 
     std::vector<at::Tensor> inputs = {hidden_padded};
     if (layer_agnostic) {
@@ -359,20 +396,50 @@ void inductor_warmup_pre_attn_bucket(
 #endif
 }
 
+INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(InductorMoe);
+
+InductorMoe::InductorMoe(
+    const Tensor &hidden_states,
+    Tensor &out,
+    size_t layer_idx,
+    size_t bucket) {
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(hidden_states, out);
+    INFINICORE_GRAPH_OP_DISPATCH(
+        hidden_states->device().getType(),
+        hidden_states,
+        out,
+        layer_idx,
+        bucket);
+}
+
+void InductorMoe::execute(
+    const Tensor &hidden_states,
+    Tensor &out,
+    size_t layer_idx,
+    size_t bucket) {
+#ifdef ENABLE_ATEN
+    // Eager fast path (same pattern as InductorSegment pre_attn).
+    if (!context::isGraphRecording()) {
+        const size_t valid_len = resolve_valid_seq_len(bucket, hidden_states);
+        run_moe_segment(hidden_states, out, layer_idx, bucket, valid_len);
+        return;
+    }
+#endif
+    INFINICORE_GRAPH_OP_RECORD_OR_RUN(
+        InductorMoe,
+        hidden_states,
+        out,
+        layer_idx,
+        bucket);
+}
+
 void inductor_moe_(
     const Tensor &hidden_states,
     Tensor &out,
     size_t layer_idx,
     size_t bucket) {
 #ifdef ENABLE_ATEN
-    // Eager AOTI only in this phase; piecewise CG promotion is a follow-up.
-    if (context::isGraphRecording()) {
-        throw std::runtime_error(
-            "inductor_moe_: MoE AOTI is not yet recorded into hcGraph "
-            "(eager AOTI only; promote in a follow-up PR)");
-    }
-    const size_t valid_len = resolve_valid_seq_len(bucket, hidden_states);
-    run_moe_segment(hidden_states, out, layer_idx, bucket, valid_len);
+    InductorMoe::execute(hidden_states, out, layer_idx, bucket);
 #else
     (void)hidden_states;
     (void)out;
@@ -397,6 +464,57 @@ struct PlannedMeta {
     size_t bucket;
     size_t valid_len;
 };
+
+struct MoePlannedMeta {
+    graph::GraphTensor hidden_states;
+    graph::GraphTensor out;
+    size_t layer_idx;
+    size_t bucket;
+    size_t valid_len;
+};
+
+void *moe_plan(
+    const Tensor &hidden_states,
+    Tensor &out,
+    size_t layer_idx,
+    size_t bucket) {
+    const size_t valid_len = infinicore::context::isGraphRecording()
+        ? recording_valid_seq_len(bucket)
+        : resolve_valid_seq_len(bucket, hidden_states);
+    auto *meta = new MoePlannedMeta{
+        graph::GraphTensor(hidden_states),
+        graph::GraphTensor(out),
+        layer_idx,
+        bucket,
+        valid_len,
+    };
+    return meta;
+}
+
+void moe_run(void *planned_meta) {
+#ifdef ENABLE_ATEN
+    auto *meta = reinterpret_cast<MoePlannedMeta *>(planned_meta);
+    if (meta == nullptr) {
+        throw std::runtime_error("InductorMoe::run: null planned_meta");
+    }
+    Tensor hidden_states = meta->hidden_states->resume_from_blob_();
+    Tensor out = meta->out->resume_from_blob_();
+    run_moe_segment(
+        hidden_states,
+        out,
+        meta->layer_idx,
+        meta->bucket,
+        meta->valid_len);
+#else
+    (void)planned_meta;
+    throw std::runtime_error("InductorMoe requires ENABLE_ATEN build");
+#endif
+}
+
+void moe_cleanup(void **planned_meta_ptr) {
+    delete *reinterpret_cast<MoePlannedMeta **>(planned_meta_ptr);
+    *planned_meta_ptr = nullptr;
+}
 
 void *plan(const Tensor &positions,
            Tensor &hidden_states,
@@ -504,7 +622,18 @@ void warmup_pre_attn(
 }
 #endif
 
-INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(InductorSegment, &plan, &run, &cleanup);
+static bool registered_inductor_segment = []() {
+    InductorSegment::plan_dispatcher().registerAll(&plan, false);
+    InductorSegment::run_dispatcher().registerAll(&run, false);
+    InductorSegment::cleanup_dispatcher().registerAll(&cleanup, false);
+    return true;
+}();
+static bool registered_inductor_moe = []() {
+    InductorMoe::plan_dispatcher().registerAll(&moe_plan, false);
+    InductorMoe::run_dispatcher().registerAll(&moe_run, false);
+    InductorMoe::cleanup_dispatcher().registerAll(&moe_cleanup, false);
+    return true;
+}();
 
 namespace {
 
