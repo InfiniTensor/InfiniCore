@@ -134,13 +134,18 @@ void Graph::run() const {
 }
 
 bool Graph::has_device_exec() const {
+    return device_segment_count() > 0;
+}
+
+size_t Graph::device_segment_count() const {
+    size_t n = 0;
     for (const auto &step : replay_steps_) {
         if (step.kind == ReplayStep::Kind::DeviceSegment && step.device != nullptr
             && step.device->exec != nullptr) {
-            return true;
+            ++n;
         }
     }
-    return false;
+    return n;
 }
 
 std::string Graph::device_graph_log() const {

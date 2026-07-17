@@ -51,6 +51,9 @@ public:
     /// True when at least one capturable segment has a live device exec.
     bool has_device_exec() const;
 
+    /// Number of replay steps with a live device exec (MetaX launch count).
+    size_t device_segment_count() const;
+
     /// Instantiate-time log buffer (empty when all device segments succeeded).
     std::string device_graph_log() const;
 

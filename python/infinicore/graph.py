@@ -17,6 +17,9 @@ class Graph:
     def has_device_exec(self) -> bool:
         return self._graph.has_device_exec()
 
+    def device_segment_count(self) -> int:
+        return int(self._graph.device_segment_count())
+
     def device_graph_log(self) -> str:
         return self._graph.device_graph_log()
 
