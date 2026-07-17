@@ -54,6 +54,7 @@
 #include "ops/rotm.hpp"
 #include "ops/rotmg.hpp"
 #include "ops/scal.hpp"
+#include "ops/sigmoid.hpp"
 #include "ops/silu.hpp"
 #include "ops/silu_and_mul.hpp"
 #include "ops/moe_sum.hpp"
