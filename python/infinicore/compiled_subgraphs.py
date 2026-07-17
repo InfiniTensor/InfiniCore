@@ -432,9 +432,27 @@ def bootstrap_from_infinicore_device(
     moe_artifact_info: Optional[dict] = None
     # Track B MiniCPM5: register MoE packages (pre_attn optional / separate).
     if model_type == "minicpm5_moe":
-        from infinilm.torch_llama.moe_ops import register_fused_moe_routed_op
+        from infinilm.compile.piecewise_moe_segment import moe_routing_hparams
+        from infinilm.torch_llama.moe_ops import (
+            configure_moe_block_routing,
+            register_fused_moe_routed_op,
+        )
 
         register_fused_moe_routed_op()
+        hp = moe_routing_hparams(hf_config)
+        configure_moe_block_routing(
+            top_k=hp["num_experts_per_tok"],
+            n_group=hp["n_group"],
+            topk_group=hp["topk_group"],
+            norm_topk_prob=hp["norm_topk_prob"],
+            routed_scaling_factor=hp["routed_scaling_factor"],
+        )
+        # C++ eager-decode router reads these (defaults match MiniCPM5).
+        os.environ["INFINI_MOE_TOP_K"] = str(hp["num_experts_per_tok"])
+        os.environ["INFINI_MOE_N_GROUP"] = str(hp["n_group"])
+        os.environ["INFINI_MOE_TOPK_GROUP"] = str(hp["topk_group"])
+        os.environ["INFINI_MOE_ROUTED_SCALING"] = str(hp["routed_scaling_factor"])
+        os.environ["INFINI_MOE_NORM_TOPK"] = "1" if hp["norm_topk_prob"] else "0"
         # Strict: never compile-on-miss for MoE (ignore caller override + env=1).
         _assert_moe_compile_on_miss_disabled()
         compile_on_miss = False

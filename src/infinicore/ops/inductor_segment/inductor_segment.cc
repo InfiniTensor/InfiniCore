@@ -9,10 +9,13 @@
 
 #include "infinicore/context/context.hpp"
 
+#include <algorithm>
 #include <cstdlib>
 #include <sstream>
 #include <string>
 #include <stdexcept>
+#include <unordered_map>
+#include <utility>
 
 namespace {
 
@@ -33,6 +36,22 @@ size_t recording_valid_seq_len(size_t bucket) {
 bool moe_capture_safe_enabled() {
     const char *v = std::getenv("INFINI_MOE_CAPTURE_SAFE");
     return v != nullptr && v[0] != '\0' && std::string(v) != "0";
+}
+
+/// Decode-sized MoE: skip AOTI ``moe_B16/segment.pt2`` and call ``moe_block_eager``.
+/// Default max tokens = 16 (covers MC=1 decode). Set ``INFINI_MOE_EAGER_DECODE_MAX=0``
+/// to force the AOTI path.
+size_t moe_eager_decode_max_tokens() {
+    const char *v = std::getenv("INFINI_MOE_EAGER_DECODE_MAX");
+    if (v == nullptr || v[0] == '\0') {
+        return 16;
+    }
+    return static_cast<size_t>(std::stoul(v));
+}
+
+bool moe_eager_decode_enabled(size_t valid_len) {
+    const size_t max_tok = moe_eager_decode_max_tokens();
+    return max_tok > 0 && valid_len > 0 && valid_len <= max_tok;
 }
 
 size_t resolve_valid_seq_len(size_t bucket, const infinicore::Tensor &hidden_states) {
@@ -65,6 +84,10 @@ size_t resolve_valid_seq_len(size_t bucket, const infinicore::Tensor &hidden_sta
 #include "aot_package_runner.hpp"
 #include "infinicore/adaptor/aten_adaptor.hpp"
 #include "infinicore/context/context.hpp"
+
+#include <ATen/core/dispatch/Dispatcher.h>
+#include <ATen/Functions.h>
+#include <ATen/Tensor.h>
 #endif
 
 namespace {
@@ -220,6 +243,153 @@ at::Tensor pad_moe_hidden_fast(const at::Tensor &hidden, size_t bucket, size_t v
     return scratch;
 }
 
+/// Phase 2: decode MoE without AOTI — C++ router/shared + Triton ``fused_moe_routed``.
+at::Tensor call_fused_moe_routed(
+    const at::Tensor &x,
+    const at::Tensor &topk_w,
+    const at::Tensor &topk_ids,
+    const at::Tensor &w_gate_up,
+    const at::Tensor &w_down) {
+    static const c10::OperatorHandle op =
+        c10::Dispatcher::singleton().findSchemaOrThrow("infinilm::fused_moe_routed", "");
+    using Fn = at::Tensor(at::Tensor, at::Tensor, at::Tensor, at::Tensor, at::Tensor);
+    return op.typed<Fn>().call(x, topk_w, topk_ids, w_gate_up, w_down);
+}
+
+/// MiniCPM5 grouped-sigmoid top-k (mirrors ``grouped_sigmoid_topk`` in Python).
+std::pair<at::Tensor, at::Tensor> grouped_sigmoid_topk_aten(
+    const at::Tensor &logits,
+    const at::Tensor &bias,
+    int64_t top_k,
+    int64_t n_group,
+    int64_t topk_group,
+    bool norm_topk_prob,
+    double routed_scaling_factor) {
+    auto scores = at::sigmoid(logits.to(at::kFloat));
+    auto bias_f = bias.to(at::kFloat).reshape({1, -1});
+    auto choice = scores + bias_f;
+    // MiniCPM5 default: n_group=1 → skip group mask (no-op path).
+    if (n_group != 1) {
+        const int64_t t_tokens = choice.size(0);
+        const int64_t n_experts = choice.size(1);
+        const int64_t experts_per_group = n_experts / n_group;
+        auto choice_g = choice.view({t_tokens, n_group, experts_per_group});
+        const int64_t k2 = std::min<int64_t>(2, experts_per_group);
+        auto top2 = std::get<0>(at::topk(choice_g, k2, /*dim=*/-1));
+        auto group_scores = top2.sum(/*dim=*/-1);
+        auto group_idx = std::get<1>(at::topk(group_scores, topk_group, /*dim=*/-1));
+        auto keep = at::zeros({t_tokens, n_group}, choice.options().dtype(at::kBool));
+        keep.scatter_(1, group_idx, true);
+        auto mask = keep.unsqueeze(-1)
+                        .expand({t_tokens, n_group, experts_per_group})
+                        .reshape({t_tokens, n_experts});
+        choice = at::where(mask, choice, at::zeros_like(choice));
+    }
+    auto topk_ids = std::get<1>(at::topk(choice, top_k, /*dim=*/-1));
+    auto topk_weights = at::gather(scores, 1, topk_ids);
+    if (norm_topk_prob) {
+        topk_weights = topk_weights / (topk_weights.sum(/*dim=*/-1, /*keepdim=*/true) + 1e-20);
+    }
+    topk_weights = topk_weights * routed_scaling_factor;
+    // Match warmed Triton cubins (bf16 weights, int32 ids).
+    return {topk_weights, topk_ids.to(at::kInt)};
+}
+
+at::Tensor silu_mlp_aten(
+    const at::Tensor &x,
+    const at::Tensor &w_gate_up,
+    const at::Tensor &w_down) {
+    auto gu = at::linear(x, w_gate_up);
+    auto chunks = gu.chunk(2, /*dim=*/-1);
+    return at::linear(at::silu(chunks[0]) * chunks[1], w_down);
+}
+
+struct MoeRoutingConfig {
+    int64_t top_k = 16;
+    int64_t n_group = 1;
+    int64_t topk_group = 1;
+    bool norm_topk_prob = true;
+    double routed_scaling_factor = 3.66;
+};
+
+MoeRoutingConfig load_moe_routing_config() {
+    MoeRoutingConfig cfg;
+    if (const char *v = std::getenv("INFINI_MOE_TOP_K")) {
+        if (v[0] != '\0') {
+            cfg.top_k = static_cast<int64_t>(std::stoll(v));
+        }
+    }
+    if (const char *v = std::getenv("INFINI_MOE_N_GROUP")) {
+        if (v[0] != '\0') {
+            cfg.n_group = static_cast<int64_t>(std::stoll(v));
+        }
+    }
+    if (const char *v = std::getenv("INFINI_MOE_TOPK_GROUP")) {
+        if (v[0] != '\0') {
+            cfg.topk_group = static_cast<int64_t>(std::stoll(v));
+        }
+    }
+    if (const char *v = std::getenv("INFINI_MOE_ROUTED_SCALING")) {
+        if (v[0] != '\0') {
+            cfg.routed_scaling_factor = std::stod(v);
+        }
+    }
+    if (const char *v = std::getenv("INFINI_MOE_NORM_TOPK")) {
+        if (v[0] != '\0') {
+            cfg.norm_topk_prob = !(std::string(v) == "0" || std::string(v) == "false");
+        }
+    }
+    return cfg;
+}
+
+at::Tensor run_moe_eager_decode(
+    const at::Tensor &x,
+    const infinicore::op::inductor_segment_impl::MoeExternalWeights &weights) {
+    static const MoeRoutingConfig cfg = load_moe_routing_config();
+    // Cache fp32 gate/bias views once (router always runs in fp32).
+    struct GateFp32 {
+        at::Tensor gate;
+        at::Tensor bias;
+        void *gate_ptr = nullptr;
+        void *bias_ptr = nullptr;
+    };
+    static thread_local GateFp32 gate_fp32;
+    if (gate_fp32.gate_ptr != weights.gate_weight.data_ptr()
+        || gate_fp32.bias_ptr != weights.e_score_correction_bias.data_ptr()
+        || !gate_fp32.gate.defined()) {
+        gate_fp32.gate = weights.gate_weight.to(at::kFloat).contiguous();
+        gate_fp32.bias = weights.e_score_correction_bias.to(at::kFloat).contiguous();
+        gate_fp32.gate_ptr = weights.gate_weight.data_ptr();
+        gate_fp32.bias_ptr = weights.e_score_correction_bias.data_ptr();
+    }
+    auto logits = at::linear(x.to(at::kFloat), gate_fp32.gate);
+    auto topk = grouped_sigmoid_topk_aten(
+        logits,
+        gate_fp32.bias,
+        cfg.top_k,
+        cfg.n_group,
+        cfg.topk_group,
+        cfg.norm_topk_prob,
+        cfg.routed_scaling_factor);
+    auto topk_w = topk.first.to(x.dtype());
+    auto routed = call_fused_moe_routed(
+        x, topk_w, topk.second, weights.w_gate_up, weights.w_down);
+    auto shared = silu_mlp_aten(x, weights.shared_gate_up, weights.shared_down);
+    return routed + shared;
+}
+
+const infinicore::op::inductor_segment_impl::MoeExternalWeights &
+cached_moe_weights(size_t layer_idx) {
+    using W = infinicore::op::inductor_segment_impl::MoeExternalWeights;
+    static thread_local std::unordered_map<size_t, W> cache;
+    auto it = cache.find(layer_idx);
+    if (it != cache.end()) {
+        return it->second;
+    }
+    cache.emplace(layer_idx, infinicore::op::inductor_segment_impl::resolve_moe_weights(layer_idx));
+    return cache.at(layer_idx);
+}
+
 void run_moe_segment(
     const infinicore::Tensor &hidden_states,
     infinicore::Tensor &out,
@@ -229,6 +399,48 @@ void run_moe_segment(
     const auto rank_device = hidden_states->device();
     restore_cuda_context(rank_device);
 
+    auto hidden = infinicore::adaptor::to_aten_tensor(hidden_states);
+    if (hidden.dim() != 3) {
+        throw std::runtime_error("InductorSegment moe: expected hidden [B, S, H]");
+    }
+    const int64_t batch = hidden.size(0);
+    const int64_t seq = hidden.size(1);
+    const int64_t hidden_size = hidden.size(2);
+    // Prefer piecewise.valid_seq_len (decode=1) over padded shape[1]==bucket.
+    valid_len = std::min(valid_len, bucket);
+    if (valid_len == 0 || valid_len > static_cast<size_t>(seq)) {
+        valid_len = std::min(static_cast<size_t>(seq), bucket);
+    }
+
+    // Decode / small-batch: bypass moe_B* AOTI — C++ router + Triton + shared.
+    if (moe_eager_decode_enabled(valid_len)) {
+        const auto &weights = cached_moe_weights(layer_idx);
+        const int64_t t_tokens = batch * static_cast<int64_t>(valid_len);
+        at::Tensor x = hidden.narrow(1, 0, static_cast<int64_t>(valid_len))
+                           .reshape({t_tokens, hidden_size});
+        if (!x.is_contiguous()) {
+            x = x.contiguous();
+        }
+        at::Tensor y = run_moe_eager_decode(x, weights);
+        restore_cuda_context(rank_device);
+        auto out_aten = infinicore::adaptor::to_aten_tensor(out);
+        at::Tensor y3 = y.view({batch, static_cast<int64_t>(valid_len), hidden_size});
+        if (out_aten.sizes() == y3.sizes()) {
+            out_aten.copy_(y3);
+        } else {
+            out_aten.narrow(1, 0, static_cast<int64_t>(valid_len)).copy_(y3);
+            if (static_cast<size_t>(out_aten.size(1)) > valid_len) {
+                out_aten.narrow(
+                            1,
+                            static_cast<int64_t>(valid_len),
+                            out_aten.size(1) - static_cast<int64_t>(valid_len))
+                    .zero_();
+            }
+        }
+        restore_cuda_context(rank_device);
+        return;
+    }
+
     bool layer_agnostic = false;
     auto &runner = infinicore::op::inductor_segment_impl::InductorSegmentRegistry::instance().runner(
         infinicore::op::PiecewiseInductorSegmentId::Moe,
@@ -236,16 +448,6 @@ void run_moe_segment(
         bucket,
         &layer_agnostic);
 
-    auto hidden = infinicore::adaptor::to_aten_tensor(hidden_states);
-    if (hidden.dim() != 3) {
-        throw std::runtime_error("InductorSegment moe: expected hidden [B, S, H]");
-    }
-    const int64_t seq = hidden.size(1);
-    // Prefer piecewise.valid_seq_len (decode=1) over padded shape[1]==bucket.
-    valid_len = std::min(valid_len, bucket);
-    if (valid_len == 0 || valid_len > static_cast<size_t>(seq)) {
-        valid_len = std::min(static_cast<size_t>(seq), bucket);
-    }
     at::Tensor hidden_padded = pad_moe_hidden_fast(hidden, bucket, valid_len);
 
     std::vector<at::Tensor> inputs = {hidden_padded};
