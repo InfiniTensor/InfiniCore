@@ -12,6 +12,10 @@
 
 namespace infinicore {
 
+namespace graph {
+class CaptureArena;
+}
+
 namespace context {
 void setDevice(Device device);
 Device getDevice();
@@ -58,6 +62,10 @@ std::shared_ptr<graph::Graph> stopGraphRecording();
 /// ``EndCapture``. Host-break ops (e.g. Triton MoE) must not run on this path.
 bool isDeviceStreamCapturing();
 void setDeviceStreamCapturing(bool capturing);
+
+/// Active CaptureArena for the current thread (set around stream capture).
+graph::CaptureArena *currentCaptureArena();
+void setCurrentCaptureArena(graph::CaptureArena *arena);
 
 } // namespace context
 

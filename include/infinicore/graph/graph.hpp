@@ -63,6 +63,13 @@ public:
     uint64_t replay_device_ok() const;
     uint64_t replay_op_list_fallback() const;
 
+    /// Sum of InfiniCore capture-arena bytes retained across device segments.
+    size_t capture_arena_bytes() const;
+    /// Sum of IC arena blocks (allocated + tensor handles) across segments.
+    size_t capture_arena_blocks() const;
+    /// Sum of residual torch tensors retained in arenas (bridge count).
+    size_t capture_arena_retained_torch() const;
+
 protected:
     void add_operator(std::shared_ptr<GraphOperator> op);
     void instantiate();

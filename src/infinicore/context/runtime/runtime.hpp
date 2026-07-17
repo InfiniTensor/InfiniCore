@@ -66,6 +66,9 @@ public:
     void addGraphOperator(std::shared_ptr<graph::GraphOperator> op);
     std::shared_ptr<graph::Graph> stopGraphRecording();
 
+    /// Freeze/unfreeze device allocator blocks (capture arena + graph record).
+    void setDeviceAllocatorPinMode(bool pinned);
+
     std::string toString() const;
 
     friend class ContextImpl;

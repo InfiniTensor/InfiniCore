@@ -32,5 +32,14 @@ class Graph:
     def replay_op_list_fallback(self) -> int:
         return self._graph.replay_op_list_fallback()
 
+    def capture_arena_bytes(self) -> int:
+        return int(self._graph.capture_arena_bytes())
+
+    def capture_arena_blocks(self) -> int:
+        return int(self._graph.capture_arena_blocks())
+
+    def capture_arena_retained_torch(self) -> int:
+        return int(self._graph.capture_arena_retained_torch())
+
     def __repr__(self):
         return f"<Graph wrapper of {self._graph!r}>"

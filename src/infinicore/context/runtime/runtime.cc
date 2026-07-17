@@ -236,9 +236,16 @@ void Runtime::addGraphOperator(std::shared_ptr<graph::GraphOperator> op) {
 
 std::shared_ptr<graph::Graph> Runtime::stopGraphRecording() {
     // End pin_mode before instantiate warmup/replay; plan() already captured GraphTensor blobs.
+    // capture_device_segment_ re-enables pin via CaptureArena for segment temps.
     device_memory_allocator_->set_pin_mode(false);
     auto graph = graph_manager_->stop_recording();
     return graph;
+}
+
+void Runtime::setDeviceAllocatorPinMode(bool pinned) {
+    if (device_memory_allocator_) {
+        device_memory_allocator_->set_pin_mode(pinned);
+    }
 }
 
 std::string Runtime::toString() const {

@@ -2,11 +2,19 @@
 
 #include "../utils.hpp"
 #include "infinicore/context/context.hpp"
+#include "infinicore/graph/capture_arena.hpp"
 #include <cstdlib>
 #include <cstring>
 #include <infinirt.h>
 #include <string>
 #include <utility>
+
+#if defined(ENABLE_ATEN) \
+    && (defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API))
+#include <c10/cuda/CUDAGuard.h>
+#include "infinicore/adaptor/aten_adaptor.hpp"
+#define INFINI_TORCH_CAPTURE_STREAM_ALIGN 1
+#endif
 
 namespace infinicore::graph {
 
@@ -67,6 +75,8 @@ struct Graph::DeviceGraph {
     infinirtGraphExec_t exec{nullptr};
     infinirtGraphNode_t node{nullptr};
     std::vector<char> log_buffer;
+    /// Capture-lifetime MoE/ATen temps (IC-owned + residual torch retain).
+    std::unique_ptr<CaptureArena> capture_arena;
 
     DeviceGraph() {
         log_buffer.resize(4 * 1024);
@@ -79,6 +89,7 @@ struct Graph::DeviceGraph {
         if (graph) {
             infinirtGraphDestroy(graph);
         }
+        // capture_arena destroyed after graph exec (temps must outlive replay).
     }
 
     void launch() {
@@ -179,16 +190,73 @@ uint64_t Graph::replay_op_list_fallback() const {
     return replay_op_list_fallback_;
 }
 
+size_t Graph::capture_arena_bytes() const {
+    size_t n = 0;
+    for (const auto &step : replay_steps_) {
+        if (step.device != nullptr && step.device->capture_arena) {
+            n += step.device->capture_arena->bytes_allocated();
+        }
+    }
+    return n;
+}
+
+size_t Graph::capture_arena_blocks() const {
+    size_t n = 0;
+    for (const auto &step : replay_steps_) {
+        if (step.device != nullptr && step.device->capture_arena) {
+            n += step.device->capture_arena->num_blocks();
+        }
+    }
+    return n;
+}
+
+size_t Graph::capture_arena_retained_torch() const {
+    size_t n = 0;
+    for (const auto &step : replay_steps_) {
+        if (step.device != nullptr && step.device->capture_arena) {
+            n += step.device->capture_arena->num_retained_torch();
+        }
+    }
+    return n;
+}
+
 void Graph::add_operator(std::shared_ptr<GraphOperator> op) {
     op_list_.push_back(op);
 }
 
 void Graph::capture_device_segment_(ReplayStep &step) {
     step.device = std::make_unique<DeviceGraph>();
+    step.device->capture_arena = std::make_unique<CaptureArena>();
+
+#ifdef INFINI_TORCH_CAPTURE_STREAM_ALIGN
+    // Align Torch current stream with InfiniCore capture stream to avoid
+    // "legacy stream depend on a capturing blocking stream". Memory ownership
+    // is InfiniCore CaptureArena (no c10::cuda::MemPool).
+    const c10::cuda::CUDAStream torch_stream = infinicore::adaptor::get_cuda_stream();
+    c10::cuda::CUDAStreamGuard stream_guard(torch_stream);
+#endif
+
+    begin_capture_arena(*step.device->capture_arena);
+    struct ArenaGuard {
+        CaptureArena *arena;
+        bool active{true};
+        ~ArenaGuard() {
+            if (active && arena != nullptr) {
+                end_capture_arena(*arena);
+            }
+        }
+        void release() {
+            if (active && arena != nullptr) {
+                end_capture_arena(*arena);
+                active = false;
+            }
+        }
+    } arena_guard{step.device->capture_arena.get()};
 
     const auto capture_mode = graph_capture_mode();
     if (infinirtStreamBeginCapture(context::getStream(), capture_mode)
         != INFINI_STATUS_SUCCESS) {
+        arena_guard.release();
         if (graph_strict_replay_enabled()) {
             throw_graph_fatal("infinirtStreamBeginCapture failed (INFINI_GRAPH_STRICT_REPLAY=1)");
         }
@@ -201,6 +269,7 @@ void Graph::capture_device_segment_(ReplayStep &step) {
         run_ops_(step.ops);
     } catch (...) {
         context::setDeviceStreamCapturing(false);
+        arena_guard.release();
         (void)infinirtStreamEndCapture(context::getStream(), &step.device->graph);
         throw;
     }
@@ -208,11 +277,14 @@ void Graph::capture_device_segment_(ReplayStep &step) {
 
     if (infinirtStreamEndCapture(context::getStream(), &step.device->graph)
         != INFINI_STATUS_SUCCESS) {
+        arena_guard.release();
         if (graph_strict_replay_enabled()) {
             throw_graph_fatal("infinirtStreamEndCapture failed (INFINI_GRAPH_STRICT_REPLAY=1)");
         }
         return;
     }
+    // Keep arena allocations for DeviceGraph lifetime; only drop TLS / pin mode.
+    arena_guard.release();
 
     if (infinirtGraphInstantiate(
             &step.device->exec,

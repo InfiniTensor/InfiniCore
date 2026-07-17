@@ -227,6 +227,7 @@ std::shared_ptr<graph::Graph> stopGraphRecording() {
 
 namespace {
 thread_local bool g_device_stream_capturing = false;
+thread_local graph::CaptureArena *g_capture_arena = nullptr;
 } // namespace
 
 bool isDeviceStreamCapturing() {
@@ -235,6 +236,14 @@ bool isDeviceStreamCapturing() {
 
 void setDeviceStreamCapturing(bool capturing) {
     g_device_stream_capturing = capturing;
+}
+
+graph::CaptureArena *currentCaptureArena() {
+    return g_capture_arena;
+}
+
+void setCurrentCaptureArena(graph::CaptureArena *arena) {
+    g_capture_arena = arena;
 }
 
 std::shared_ptr<Memory> reinstantiateBlob(std::shared_ptr<Memory> blob) {

@@ -18,6 +18,10 @@ inline void bind(py::module_ &m) {
         .def("device_graph_log", &infinicore::graph::Graph::device_graph_log)
         .def("last_replay_used_device", &infinicore::graph::Graph::last_replay_used_device)
         .def("replay_device_ok", &infinicore::graph::Graph::replay_device_ok)
-        .def("replay_op_list_fallback", &infinicore::graph::Graph::replay_op_list_fallback);
+        .def("replay_op_list_fallback", &infinicore::graph::Graph::replay_op_list_fallback)
+        .def("capture_arena_bytes", &infinicore::graph::Graph::capture_arena_bytes)
+        .def("capture_arena_blocks", &infinicore::graph::Graph::capture_arena_blocks)
+        .def("capture_arena_retained_torch",
+             &infinicore::graph::Graph::capture_arena_retained_torch);
 }
 } // namespace infinicore::graph

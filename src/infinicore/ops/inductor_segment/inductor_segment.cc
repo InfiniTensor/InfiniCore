@@ -2,20 +2,27 @@
 
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
 #include <c10/cuda/CUDAGuard.h>
+#include <ATen/cuda/CUDAGraph.h>
 #endif
 
 #include "../../utils.hpp"
 #include "inductor_segment_registry.hpp"
 
 #include "infinicore/context/context.hpp"
+#include "infinicore/graph/capture_arena.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
+#include <cstring>
+#include <limits>
+#include <memory>
 #include <sstream>
 #include <string>
 #include <stdexcept>
 #include <unordered_map>
 #include <utility>
+#include <vector>
 
 namespace {
 
@@ -36,6 +43,18 @@ size_t recording_valid_seq_len(size_t bucket) {
 bool moe_capture_safe_enabled() {
     const char *v = std::getenv("INFINI_MOE_CAPTURE_SAFE");
     return v != nullptr && v[0] != '\0' && std::string(v) != "0";
+}
+
+/// Triton fused_moe_routed under MetaX stream capture (no aten body).
+/// Distinct from INFINI_MOE_CAPTURE_SAFE (aten index_select+bmm).
+bool moe_triton_capture_enabled() {
+    const char *v = std::getenv("INFINI_MOE_TRITON_CAPTURE");
+    return v != nullptr && v[0] != '\0' && std::string(v) != "0";
+}
+
+/// MoE may enter device capture (aten CAPTURE_SAFE or Triton TRITON_CAPTURE).
+bool moe_device_capturable() {
+    return moe_capture_safe_enabled() || moe_triton_capture_enabled();
 }
 
 /// Decode-sized MoE: skip AOTI ``moe_B16/segment.pt2`` and call ``moe_block_eager``.
@@ -295,6 +314,104 @@ std::pair<at::Tensor, at::Tensor> grouped_sigmoid_topk_aten(
     return {topk_weights, topk_ids.to(at::kInt)};
 }
 
+/// Eager decode: D2H logits + CPU top-k + H2D (avoids MetaX launch tax on tiny E).
+/// Only for ``n_group==1`` (MiniCPM5). Not capture-safe — caller must gate.
+std::pair<at::Tensor, at::Tensor> grouped_sigmoid_topk_host(
+    const at::Tensor &logits_gpu,
+    const at::Tensor &bias_cpu_f32,
+    int64_t top_k,
+    bool norm_topk_prob,
+    double routed_scaling_factor,
+    at::ScalarType weight_dtype) {
+    const int64_t t_tokens = logits_gpu.size(0);
+    const int64_t n_experts = logits_gpu.size(1);
+    auto logits_cpu = logits_gpu.to(at::Device(at::kCPU), /*non_blocking=*/false, /*copy=*/true)
+                          .to(at::kFloat)
+                          .contiguous();
+    const float *logits = logits_cpu.data_ptr<float>();
+    const float *bias = bias_cpu_f32.data_ptr<float>();
+
+    struct HostScratch {
+        std::vector<float> scores;
+        std::vector<float> choice;
+        std::vector<int32_t> idx;
+        std::vector<float> w_host;
+        std::vector<int32_t> id_host;
+        at::Tensor pinned_w;
+        at::Tensor pinned_ids;
+    };
+    static thread_local HostScratch hs;
+    hs.scores.resize(static_cast<size_t>(n_experts));
+    hs.choice.resize(static_cast<size_t>(n_experts));
+    hs.idx.resize(static_cast<size_t>(n_experts));
+    hs.w_host.resize(static_cast<size_t>(t_tokens * top_k));
+    hs.id_host.resize(static_cast<size_t>(t_tokens * top_k));
+
+    for (int64_t t = 0; t < t_tokens; ++t) {
+        const float *row = logits + t * n_experts;
+        for (int64_t e = 0; e < n_experts; ++e) {
+            const float x = row[e];
+            float s;
+            if (x >= 0.0f) {
+                const float z = std::exp(-x);
+                s = 1.0f / (1.0f + z);
+            } else {
+                const float z = std::exp(x);
+                s = z / (1.0f + z);
+            }
+            hs.scores[static_cast<size_t>(e)] = s;
+            hs.choice[static_cast<size_t>(e)] = s + bias[e];
+            hs.idx[static_cast<size_t>(e)] = static_cast<int32_t>(e);
+        }
+        const int64_t k = std::min(top_k, n_experts);
+        auto nth = hs.idx.begin() + static_cast<std::ptrdiff_t>(k);
+        std::nth_element(hs.idx.begin(), nth, hs.idx.end(), [&](int32_t a, int32_t b) {
+            return hs.choice[static_cast<size_t>(a)] > hs.choice[static_cast<size_t>(b)];
+        });
+        // Stable-ish order among top-k for determinism vs GPU topk (sort by choice desc).
+        std::sort(hs.idx.begin(), nth, [&](int32_t a, int32_t b) {
+            return hs.choice[static_cast<size_t>(a)] > hs.choice[static_cast<size_t>(b)];
+        });
+        float denom = 0.0f;
+        for (int64_t j = 0; j < k; ++j) {
+            const int32_t id = hs.idx[static_cast<size_t>(j)];
+            const float w = hs.scores[static_cast<size_t>(id)];
+            hs.w_host[static_cast<size_t>(t * top_k + j)] = w;
+            hs.id_host[static_cast<size_t>(t * top_k + j)] = id;
+            denom += w;
+        }
+        if (norm_topk_prob) {
+            const float inv = 1.0f / (denom + 1e-20f);
+            for (int64_t j = 0; j < k; ++j) {
+                hs.w_host[static_cast<size_t>(t * top_k + j)] *= inv;
+            }
+        }
+        const float scale = static_cast<float>(routed_scaling_factor);
+        for (int64_t j = 0; j < k; ++j) {
+            hs.w_host[static_cast<size_t>(t * top_k + j)] *= scale;
+        }
+    }
+
+    const int64_t n_out = t_tokens * top_k;
+    if (!hs.pinned_w.defined() || hs.pinned_w.numel() < n_out) {
+        hs.pinned_w = at::empty({n_out}, at::TensorOptions().dtype(at::kFloat).pinned_memory(true));
+        hs.pinned_ids = at::empty({n_out}, at::TensorOptions().dtype(at::kInt).pinned_memory(true));
+    }
+    std::memcpy(hs.pinned_w.data_ptr<float>(), hs.w_host.data(), sizeof(float) * static_cast<size_t>(n_out));
+    std::memcpy(hs.pinned_ids.data_ptr<int32_t>(), hs.id_host.data(), sizeof(int32_t) * static_cast<size_t>(n_out));
+
+    auto device = logits_gpu.device();
+    // Blocking H2D: Triton must not race with incomplete copies.
+    auto topk_w = hs.pinned_w.narrow(0, 0, n_out)
+                      .to(device, /*non_blocking=*/false)
+                      .to(weight_dtype)
+                      .view({t_tokens, top_k});
+    auto topk_ids = hs.pinned_ids.narrow(0, 0, n_out)
+                        .to(device, /*non_blocking=*/false)
+                        .view({t_tokens, top_k});
+    return {topk_w, topk_ids};
+}
+
 at::Tensor silu_mlp_aten(
     const at::Tensor &x,
     const at::Tensor &w_gate_up,
@@ -303,6 +420,140 @@ at::Tensor silu_mlp_aten(
     auto chunks = gu.chunk(2, /*dim=*/-1);
     return at::linear(at::silu(chunks[0]) * chunks[1], w_down);
 }
+
+/// Reuse intermediate buffers for decode shared-expert MLP (Phase 7).
+at::Tensor silu_mlp_aten_cached(
+    const at::Tensor &x,
+    const at::Tensor &w_gate_up,
+    const at::Tensor &w_down) {
+    struct Scratch {
+        at::Tensor gu;
+        at::Tensor mid;
+        at::Tensor out;
+        int64_t t = 0;
+        int64_t h = 0;
+        int64_t i2 = 0;
+        void *w_gu = nullptr;
+        void *w_d = nullptr;
+        at::Device device = at::kCPU;
+        at::ScalarType dtype = at::kFloat;
+    };
+    static thread_local Scratch sc;
+    const int64_t t = x.size(0);
+    const int64_t h = x.size(1);
+    const int64_t i2 = w_gate_up.size(0);
+    const bool need = !sc.gu.defined() || sc.t != t || sc.h != h || sc.i2 != i2
+                      || sc.w_gu != w_gate_up.data_ptr() || sc.w_d != w_down.data_ptr()
+                      || sc.device != x.device() || sc.dtype != x.scalar_type();
+    if (need) {
+        sc.gu = at::empty({t, i2}, x.options());
+        sc.mid = at::empty({t, i2 / 2}, x.options());
+        sc.out = at::empty({t, h}, x.options());
+        sc.t = t;
+        sc.h = h;
+        sc.i2 = i2;
+        sc.w_gu = w_gate_up.data_ptr();
+        sc.w_d = w_down.data_ptr();
+        sc.device = x.device();
+        sc.dtype = x.scalar_type();
+    }
+    at::matmul_out(sc.gu, x, w_gate_up.t());
+    auto gate = sc.gu.narrow(/*dim=*/1, /*start=*/0, /*length=*/i2 / 2);
+    auto up = sc.gu.narrow(/*dim=*/1, /*start=*/i2 / 2, /*length=*/i2 / 2);
+    at::silu_out(sc.mid, gate);
+    sc.mid.mul_(up);
+    at::matmul_out(sc.out, sc.mid, w_down.t());
+    return sc.out;
+}
+
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
+/// Per-layer CUDAGraph: gate GEMM + shared MLP (fixed decode shapes).
+struct DecodeAuxGraph {
+    std::unique_ptr<at::cuda::CUDAGraph> graph;
+    at::Tensor static_x;
+    at::Tensor logits_raw;   // [T, E] x.dtype
+    at::Tensor static_logits; // [T, E] float32
+    at::Tensor gu;
+    at::Tensor mid;
+    at::Tensor static_shared;
+    at::Tensor gate_w;
+    at::Tensor shared_gu;
+    at::Tensor shared_d;
+    int64_t t = 0;
+    int64_t h = 0;
+    int64_t e = 0;
+    int64_t i2 = 0;
+    bool ready = false;
+
+    void ensure(
+        const at::Tensor &x,
+        const at::Tensor &gate_w_in,
+        const at::Tensor &sgu,
+        const at::Tensor &sd) {
+        const int64_t tt = x.size(0);
+        const int64_t hh = x.size(1);
+        const int64_t ee = gate_w_in.size(0);
+        const int64_t ii2 = sgu.size(0);
+        const bool need = !ready || t != tt || h != hh || e != ee || i2 != ii2
+                          || gate_w.data_ptr() != gate_w_in.data_ptr()
+                          || shared_gu.data_ptr() != sgu.data_ptr()
+                          || shared_d.data_ptr() != sd.data_ptr()
+                          || static_x.scalar_type() != x.scalar_type()
+                          || static_x.device() != x.device();
+        if (!need) {
+            return;
+        }
+        ready = false;
+        graph.reset();
+        t = tt;
+        h = hh;
+        e = ee;
+        i2 = ii2;
+        gate_w = gate_w_in;
+        shared_gu = sgu;
+        shared_d = sd;
+        static_x = at::empty({t, h}, x.options());
+        logits_raw = at::empty({t, e}, x.options());
+        static_logits = at::empty({t, e}, x.options().dtype(at::kFloat));
+        gu = at::empty({t, i2}, x.options());
+        mid = at::empty({t, i2 / 2}, x.options());
+        static_shared = at::empty({t, h}, x.options());
+
+        auto run_body = [&]() {
+            at::matmul_out(logits_raw, static_x, gate_w.t());
+            static_logits.copy_(logits_raw);
+            at::matmul_out(gu, static_x, shared_gu.t());
+            auto gate = gu.narrow(1, 0, i2 / 2);
+            auto up = gu.narrow(1, i2 / 2, i2 / 2);
+            at::silu_out(mid, gate);
+            mid.mul_(up);
+            at::matmul_out(static_shared, mid, shared_d.t());
+        };
+
+        // Warmup outside capture (allocator / kernels).
+        static_x.copy_(x);
+        run_body();
+        at::cuda::device_synchronize();
+
+        graph = std::make_unique<at::cuda::CUDAGraph>();
+        static_x.copy_(x);
+        graph->capture_begin();
+        run_body();
+        graph->capture_end();
+        ready = true;
+    }
+
+    void replay(const at::Tensor &x) {
+        static_x.copy_(x);
+        graph->replay();
+    }
+};
+
+DecodeAuxGraph &decode_aux_graph_for(void *gate_ptr) {
+    static thread_local std::unordered_map<void *, DecodeAuxGraph> cache;
+    return cache[gate_ptr];
+}
+#endif
 
 struct MoeRoutingConfig {
     int64_t top_k = 16;
@@ -346,36 +597,108 @@ at::Tensor run_moe_eager_decode(
     const at::Tensor &x,
     const infinicore::op::inductor_segment_impl::MoeExternalWeights &weights) {
     static const MoeRoutingConfig cfg = load_moe_routing_config();
-    // Cache fp32 gate/bias views once (router always runs in fp32).
-    struct GateFp32 {
-        at::Tensor gate;
-        at::Tensor bias;
+    // Cache fp32 bias (CPU+GPU) and a same-dtype gate view for cheap decode GEMM.
+    struct GateCache {
+        at::Tensor gate_fp32;
+        at::Tensor gate_xdtype;
+        at::Tensor bias_fp32;
+        at::Tensor bias_cpu;
         void *gate_ptr = nullptr;
         void *bias_ptr = nullptr;
+        at::ScalarType xdtype = at::kFloat;
     };
-    static thread_local GateFp32 gate_fp32;
-    if (gate_fp32.gate_ptr != weights.gate_weight.data_ptr()
-        || gate_fp32.bias_ptr != weights.e_score_correction_bias.data_ptr()
-        || !gate_fp32.gate.defined()) {
-        gate_fp32.gate = weights.gate_weight.to(at::kFloat).contiguous();
-        gate_fp32.bias = weights.e_score_correction_bias.to(at::kFloat).contiguous();
-        gate_fp32.gate_ptr = weights.gate_weight.data_ptr();
-        gate_fp32.bias_ptr = weights.e_score_correction_bias.data_ptr();
+    static thread_local GateCache gate_cache;
+    if (gate_cache.gate_ptr != weights.gate_weight.data_ptr()
+        || gate_cache.bias_ptr != weights.e_score_correction_bias.data_ptr()
+        || !gate_cache.gate_fp32.defined()
+        || gate_cache.xdtype != x.scalar_type()) {
+        gate_cache.gate_fp32 = weights.gate_weight.to(at::kFloat).contiguous();
+        gate_cache.gate_xdtype = weights.gate_weight.to(x.scalar_type()).contiguous();
+        gate_cache.bias_fp32 = weights.e_score_correction_bias.to(at::kFloat).contiguous();
+        gate_cache.bias_cpu = gate_cache.bias_fp32.to(at::Device(at::kCPU)).contiguous();
+        gate_cache.gate_ptr = weights.gate_weight.data_ptr();
+        gate_cache.bias_ptr = weights.e_score_correction_bias.data_ptr();
+        gate_cache.xdtype = x.scalar_type();
     }
-    auto logits = at::linear(x.to(at::kFloat), gate_fp32.gate);
+
+    const bool capturing = infinicore::context::isGraphRecording();
+    const int64_t t_tokens = x.size(0);
+    // Phase 7: eager decode — host top-k for small T (not capture-safe).
+    const bool use_host_topk = !capturing && t_tokens > 0 && t_tokens <= 16 && cfg.n_group == 1
+                               && x.is_cuda();
+
+    at::Tensor logits;
+    at::Tensor topk_w;
+    at::Tensor topk_ids;
+    at::Tensor shared;
+    at::Tensor routed;
+    at::Tensor x_f;
+
+    if (use_host_topk) {
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
+        // Phase 7: CUDAGraph(gate GEMM + shared MLP) + host top-k + Triton routed.
+        auto &aux = decode_aux_graph_for(gate_cache.gate_xdtype.data_ptr());
+        aux.ensure(x, gate_cache.gate_xdtype, weights.shared_gate_up, weights.shared_down);
+        aux.replay(x);
+        auto topk = grouped_sigmoid_topk_host(
+            aux.static_logits,
+            gate_cache.bias_cpu,
+            cfg.top_k,
+            cfg.norm_topk_prob,
+            cfg.routed_scaling_factor,
+            x.scalar_type());
+        topk_w = topk.first;
+        topk_ids = topk.second;
+        routed = call_fused_moe_routed(
+            x, topk_w, topk_ids, weights.w_gate_up, weights.w_down);
+        return routed.add(aux.static_shared);
+#else
+        logits = at::linear(x, gate_cache.gate_xdtype).to(at::kFloat);
+        auto topk = grouped_sigmoid_topk_host(
+            logits,
+            gate_cache.bias_cpu,
+            cfg.top_k,
+            cfg.norm_topk_prob,
+            cfg.routed_scaling_factor,
+            x.scalar_type());
+        topk_w = topk.first;
+        topk_ids = topk.second;
+        shared = silu_mlp_aten_cached(x, weights.shared_gate_up, weights.shared_down);
+        routed = call_fused_moe_routed(
+            x, topk_w, topk_ids, weights.w_gate_up, weights.w_down);
+        return routed.add(shared);
+#endif
+    }
+
+    // Capture / large-T: fp32 router (matches AOTI numerics) + GPU top-k.
+    x_f = x.to(at::kFloat);
+    logits = at::linear(x_f, gate_cache.gate_fp32);
     auto topk = grouped_sigmoid_topk_aten(
         logits,
-        gate_fp32.bias,
+        gate_cache.bias_fp32,
         cfg.top_k,
         cfg.n_group,
         cfg.topk_group,
         cfg.norm_topk_prob,
         cfg.routed_scaling_factor);
-    auto topk_w = topk.first.to(x.dtype());
-    auto routed = call_fused_moe_routed(
-        x, topk_w, topk.second, weights.w_gate_up, weights.w_down);
-    auto shared = silu_mlp_aten(x, weights.shared_gate_up, weights.shared_down);
-    return routed + shared;
+    topk_w = topk.first.to(x.dtype());
+    topk_ids = topk.second;
+    routed = call_fused_moe_routed(
+        x, topk_w, topk_ids, weights.w_gate_up, weights.w_down);
+    shared = capturing ? silu_mlp_aten(x, weights.shared_gate_up, weights.shared_down)
+                       : silu_mlp_aten_cached(x, weights.shared_gate_up, weights.shared_down);
+    auto y = routed + shared;
+    if (auto *arena = infinicore::graph::current_capture_arena()) {
+        arena->retain(x_f);
+        arena->retain(logits);
+        arena->retain(topk.first);
+        arena->retain(topk_ids);
+        arena->retain(topk_w);
+        arena->retain(routed);
+        arena->retain(shared);
+        arena->retain(y);
+    }
+    return y;
 }
 
 const infinicore::op::inductor_segment_impl::MoeExternalWeights &
@@ -413,7 +736,8 @@ void run_moe_segment(
     }
 
     // Decode / small-batch: bypass moe_B* AOTI — C++ router + Triton + shared.
-    if (moe_eager_decode_enabled(valid_len)) {
+    // Under Triton capture always use eager decode (AOTI+opaque failed instantiate).
+    if (moe_eager_decode_enabled(valid_len) || moe_triton_capture_enabled()) {
         const auto &weights = cached_moe_weights(layer_idx);
         const int64_t t_tokens = batch * static_cast<int64_t>(valid_len);
         at::Tensor x = hidden.narrow(1, 0, static_cast<int64_t>(valid_len))
@@ -620,9 +944,9 @@ InductorMoe::InductorMoe(
         layer_idx,
         bucket);
     // CG-1 default: Triton fused_moe_routed is not stream-capture-safe → host break.
-    // CG-2 (INFINI_MOE_CAPTURE_SAFE=1): enter device capture; opaque op uses aten
-    // under isDeviceStreamCapturing and Triton on the eager path.
-    host_break_ = !moe_capture_safe_enabled();
+    // CG-2 (INFINI_MOE_CAPTURE_SAFE=1): device capture with aten body under capture.
+    // Triton-capture (INFINI_MOE_TRITON_CAPTURE=1): device capture with Triton body.
+    host_break_ = !moe_device_capturable();
 }
 
 void InductorMoe::execute(
@@ -632,13 +956,14 @@ void InductorMoe::execute(
     size_t bucket) {
 #ifdef ENABLE_ATEN
     // Eager fast path (same pattern as InductorSegment pre_attn).
-    // Refuse Triton under a live device-capture stream unless capture-safe mode
-    // (aten body inside fused_moe_routed).
+    // Refuse Triton under a live device-capture stream unless capturable mode
+    // (aten CAPTURE_SAFE or Triton TRITON_CAPTURE).
     if (!context::isGraphRecording()) {
-        if (context::isDeviceStreamCapturing() && !moe_capture_safe_enabled()) {
+        if (context::isDeviceStreamCapturing() && !moe_device_capturable()) {
             throw std::runtime_error(
                 "InductorMoe: refusing AOTI+Triton MoE under hcStream capture "
-                "(set INFINI_MOE_CAPTURE_SAFE=1 for aten body, or use host-break)");
+                "(set INFINI_MOE_TRITON_CAPTURE=1 for Triton body, "
+                "INFINI_MOE_CAPTURE_SAFE=1 for aten body, or use host-break)");
         }
         const size_t valid_len = resolve_valid_seq_len(bucket, hidden_states);
         run_moe_segment(hidden_states, out, layer_idx, bucket, valid_len);
@@ -713,11 +1038,12 @@ void *moe_plan(
 
 void moe_run(void *planned_meta) {
 #ifdef ENABLE_ATEN
-    if (infinicore::context::isDeviceStreamCapturing() && !moe_capture_safe_enabled()) {
+    if (infinicore::context::isDeviceStreamCapturing() && !moe_device_capturable()) {
         throw std::runtime_error(
             "InductorMoe::run: AOTI+Triton MoE must not run under hcStream capture "
             "(recorded as host_break; Graph splits device segments around MoE). "
-            "Set INFINI_MOE_CAPTURE_SAFE=1 for aten capture-safe body.");
+            "Set INFINI_MOE_TRITON_CAPTURE=1 for Triton body, or "
+            "INFINI_MOE_CAPTURE_SAFE=1 for aten capture-safe body.");
     }
     auto *meta = reinterpret_cast<MoePlannedMeta *>(planned_meta);
     if (meta == nullptr) {
