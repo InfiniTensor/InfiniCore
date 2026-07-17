@@ -40,7 +40,7 @@ __INFINI_C infiniStatus_t infiniopCreateFlashAttentionDescriptor(
 #endif
 #endif
 #if defined(ENABLE_ASCEND)
-    CREATE(INFINI_DEVICE_ASCEND, ascend);
+        CREATE(INFINI_DEVICE_ASCEND, ascend);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
