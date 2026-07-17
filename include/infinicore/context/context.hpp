@@ -54,6 +54,11 @@ void startGraphRecording();
 void addGraphOperator(std::shared_ptr<graph::GraphOperator> op);
 std::shared_ptr<graph::Graph> stopGraphRecording();
 
+/// True while ``Graph::instantiate`` is inside ``hcStreamBeginCapture``…
+/// ``EndCapture``. Host-break ops (e.g. Triton MoE) must not run on this path.
+bool isDeviceStreamCapturing();
+void setDeviceStreamCapturing(bool capturing);
+
 } // namespace context
 
 } // namespace infinicore

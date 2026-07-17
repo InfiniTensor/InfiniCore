@@ -16,6 +16,9 @@ MhaKVCache::MhaKVCache(Tensor out,
     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(out, q, k_cache, v_cache, seqlens_k, block_table);
     INFINICORE_GRAPH_OP_DISPATCH(out->device().getType(),
                                  out, q, k_cache, v_cache, seqlens_k, block_table, alibi_slopes, scale);
+    // MetaX FA2 mha_fwd_kvcache is not stream-capture-safe (HTC mem violation under
+    // hcStreamBeginCapture). Mirror MoE / prefill FA2 piecewise: eager between device segments.
+    host_break_ = true;
 }
 
 void MhaKVCache::execute(Tensor out,

@@ -225,6 +225,18 @@ std::shared_ptr<graph::Graph> stopGraphRecording() {
     return ContextImpl::singleton().getCurrentRuntime()->stopGraphRecording();
 }
 
+namespace {
+thread_local bool g_device_stream_capturing = false;
+} // namespace
+
+bool isDeviceStreamCapturing() {
+    return g_device_stream_capturing;
+}
+
+void setDeviceStreamCapturing(bool capturing) {
+    g_device_stream_capturing = capturing;
+}
+
 std::shared_ptr<Memory> reinstantiateBlob(std::shared_ptr<Memory> blob) {
     setDevice(blob->device());
     return ContextImpl::singleton().getCurrentRuntime()->reinstantiateBlob(blob);

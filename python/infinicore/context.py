@@ -61,6 +61,14 @@ def is_graph_recording():
     return _infinicore.is_graph_recording()
 
 
+def is_device_stream_capturing():
+    """True while Graph::instantiate is inside ``hcStreamBeginCapture``.
+
+    Used by capture-safe MoE (aten body) vs Triton eager fallback.
+    """
+    return bool(_infinicore.is_device_stream_capturing())
+
+
 def start_graph_recording(device=None):
     """Start recording the current graph."""
     if device is not None:

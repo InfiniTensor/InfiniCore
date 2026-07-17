@@ -6,6 +6,7 @@
 #include <cstring>
 #include <infinirt.h>
 #include <string>
+#include <utility>
 
 namespace infinicore::graph {
 
@@ -62,9 +63,9 @@ DispatchableGraphOperator::~DispatchableGraphOperator() {
  * ========================= */
 
 struct Graph::DeviceGraph {
-    infinirtGraph_t graph;
-    infinirtGraphExec_t exec;
-    infinirtGraphNode_t node;
+    infinirtGraph_t graph{nullptr};
+    infinirtGraphExec_t exec{nullptr};
+    infinirtGraphNode_t node{nullptr};
     std::vector<char> log_buffer;
 
     DeviceGraph() {
@@ -87,45 +88,78 @@ struct Graph::DeviceGraph {
     }
 };
 
-void Graph::run_op_list_() const {
-    for (auto &op : op_list_) {
+void Graph::run_ops_(const std::vector<std::shared_ptr<GraphOperator>> &ops) const {
+    for (auto &op : ops) {
         op->run();
     }
+}
+
+void Graph::run_op_list_() const {
+    run_ops_(op_list_);
 }
 
 Graph::Graph() {
 }
 
 void Graph::run() const {
-    if (device_graph_ != nullptr && device_graph_->exec != nullptr) {
-        if (infinirtGraphLuanch(device_graph_->exec, context::getStream()) == INFINI_STATUS_SUCCESS) {
-            ++replay_device_ok_;
-            last_replay_used_device_ = true;
-            return;
-        }
-        ++replay_op_list_fallback_;
-        last_replay_used_device_ = false;
-        spdlog::warn("hcGraphLaunch replay failed; falling back to op-list replay");
-        if (graph_strict_replay_enabled()) {
-            throw std::runtime_error("hcGraphLaunch replay failed (INFINI_GRAPH_STRICT_REPLAY=1)");
-        }
+    if (replay_steps_.empty()) {
         run_op_list_();
+        last_replay_used_device_ = false;
         return;
     }
-    run_op_list_();
+
+    bool used_device = false;
+    for (const auto &step : replay_steps_) {
+        if (step.kind == ReplayStep::Kind::HostOp) {
+            run_ops_(step.ops);
+            continue;
+        }
+        if (step.device != nullptr && step.device->exec != nullptr) {
+            if (infinirtGraphLuanch(step.device->exec, context::getStream()) == INFINI_STATUS_SUCCESS) {
+                ++replay_device_ok_;
+                used_device = true;
+                continue;
+            }
+            ++replay_op_list_fallback_;
+            spdlog::warn("hcGraphLaunch replay failed; falling back to op-list segment");
+            if (graph_strict_replay_enabled()) {
+                throw std::runtime_error("hcGraphLaunch replay failed (INFINI_GRAPH_STRICT_REPLAY=1)");
+            }
+            run_ops_(step.ops);
+            continue;
+        }
+        run_ops_(step.ops);
+    }
+    last_replay_used_device_ = used_device;
 }
 
 bool Graph::has_device_exec() const {
-    return device_graph_ != nullptr && device_graph_->exec != nullptr;
+    for (const auto &step : replay_steps_) {
+        if (step.kind == ReplayStep::Kind::DeviceSegment && step.device != nullptr
+            && step.device->exec != nullptr) {
+            return true;
+        }
+    }
+    return false;
 }
 
 std::string Graph::device_graph_log() const {
-    if (device_graph_ == nullptr) {
-        return {};
+    std::string out;
+    for (const auto &step : replay_steps_) {
+        if (step.device == nullptr) {
+            continue;
+        }
+        const auto &buf = step.device->log_buffer;
+        const size_t len = strnlen(buf.data(), buf.size());
+        if (len == 0) {
+            continue;
+        }
+        if (!out.empty()) {
+            out.push_back('\n');
+        }
+        out.append(buf.data(), len);
     }
-    const auto &buf = device_graph_->log_buffer;
-    const size_t len = strnlen(buf.data(), buf.size());
-    return std::string(buf.data(), len);
+    return out;
 }
 
 bool Graph::last_replay_used_device() const {
@@ -144,15 +178,8 @@ void Graph::add_operator(std::shared_ptr<GraphOperator> op) {
     op_list_.push_back(op);
 }
 
-void Graph::instantiate() {
-    // Reset device graph
-    device_graph_ = std::make_unique<DeviceGraph>();
-
-    // Pre-capture warmup: op-list only (device exec is null; avoid probing stale exec).
-    for (size_t iter = 0; iter < 5; ++iter) {
-        run_op_list_();
-    }
-    infinicore::context::syncStream();
+void Graph::capture_device_segment_(ReplayStep &step) {
+    step.device = std::make_unique<DeviceGraph>();
 
     const auto capture_mode = graph_capture_mode();
     if (infinirtStreamBeginCapture(context::getStream(), capture_mode)
@@ -163,12 +190,18 @@ void Graph::instantiate() {
         return;
     }
 
-    // Record op-list into hcGraph (exec still null during capture).
-    run_op_list_();
+    context::setDeviceStreamCapturing(true);
+    try {
+        // Host-break ops are never placed in DeviceSegment steps.
+        run_ops_(step.ops);
+    } catch (...) {
+        context::setDeviceStreamCapturing(false);
+        (void)infinirtStreamEndCapture(context::getStream(), &step.device->graph);
+        throw;
+    }
+    context::setDeviceStreamCapturing(false);
 
-    if (infinirtStreamEndCapture(
-            context::getStream(),
-            &device_graph_.get()->graph)
+    if (infinirtStreamEndCapture(context::getStream(), &step.device->graph)
         != INFINI_STATUS_SUCCESS) {
         if (graph_strict_replay_enabled()) {
             throw_graph_fatal("infinirtStreamEndCapture failed (INFINI_GRAPH_STRICT_REPLAY=1)");
@@ -177,36 +210,78 @@ void Graph::instantiate() {
     }
 
     if (infinirtGraphInstantiate(
-            &device_graph_.get()->exec,
-            device_graph_.get()->graph,
-            &device_graph_.get()->node,
-            device_graph_.get()->log_buffer.data(),
-            device_graph_.get()->log_buffer.size())
+            &step.device->exec,
+            step.device->graph,
+            &step.device->node,
+            step.device->log_buffer.data(),
+            step.device->log_buffer.size())
         != INFINI_STATUS_SUCCESS) {
-        const std::string log_msg = device_graph_log();
+        const size_t len = strnlen(step.device->log_buffer.data(), step.device->log_buffer.size());
+        const std::string log_msg(step.device->log_buffer.data(), len);
         if (graph_strict_replay_enabled()) {
             throw_graph_fatal(
                 "infinirtGraphInstantiate failed (INFINI_GRAPH_STRICT_REPLAY=1): " + log_msg);
         }
-        spdlog::warn("Fail to instantiate device graph (op-list replay fallback): {}", log_msg);
-    } else {
-        const bool probe_ok = device_graph_->exec == nullptr
-                              || infinirtGraphLuanch(device_graph_->exec, context::getStream())
-                                     == INFINI_STATUS_SUCCESS;
-        if (device_graph_->exec != nullptr && !probe_ok) {
-            if (graph_strict_replay_enabled()) {
-                infinirtGraphExecDestroy(device_graph_->exec);
-                device_graph_->exec = nullptr;
-                infinicore::context::syncStream();
-                throw_graph_fatal(
-                    "hcGraphLaunch instantiate probe failed (INFINI_GRAPH_STRICT_REPLAY=1)");
-            }
-            spdlog::warn("Device graph exec launch probe failed; op-list replay fallback");
-            infinirtGraphExecDestroy(device_graph_->exec);
-            device_graph_->exec = nullptr;
-            infinicore::context::syncStream();
-        }
+        spdlog::warn("Fail to instantiate device graph segment (op-list fallback): {}", log_msg);
+        return;
     }
+
+    const bool probe_ok = step.device->exec == nullptr
+                          || infinirtGraphLuanch(step.device->exec, context::getStream())
+                                 == INFINI_STATUS_SUCCESS;
+    if (step.device->exec != nullptr && !probe_ok) {
+        if (graph_strict_replay_enabled()) {
+            infinirtGraphExecDestroy(step.device->exec);
+            step.device->exec = nullptr;
+            infinicore::context::syncStream();
+            throw_graph_fatal(
+                "hcGraphLaunch instantiate probe failed (INFINI_GRAPH_STRICT_REPLAY=1)");
+        }
+        spdlog::warn("Device graph segment launch probe failed; op-list replay fallback");
+        infinirtGraphExecDestroy(step.device->exec);
+        step.device->exec = nullptr;
+        infinicore::context::syncStream();
+    }
+}
+
+void Graph::instantiate() {
+    replay_steps_.clear();
+
+    // Pre-capture warmup: full op-list (including host-break MoE) outside capture.
+    for (size_t iter = 0; iter < 5; ++iter) {
+        run_op_list_();
+    }
+    infinicore::context::syncStream();
+
+#ifdef USE_INFINIRT_GRAPH
+    // Split around host-break ops so Triton MoE never enters stream capture.
+    ReplayStep pending;
+    pending.kind = ReplayStep::Kind::DeviceSegment;
+    auto flush_device = [this](ReplayStep &seg) {
+        if (seg.ops.empty()) {
+            return;
+        }
+        capture_device_segment_(seg);
+        replay_steps_.push_back(std::move(seg));
+        seg = ReplayStep{};
+        seg.kind = ReplayStep::Kind::DeviceSegment;
+    };
+
+    for (auto &op : op_list_) {
+        if (op->is_host_break()) {
+            flush_device(pending);
+            ReplayStep host;
+            host.kind = ReplayStep::Kind::HostOp;
+            host.ops.push_back(op);
+            replay_steps_.push_back(std::move(host));
+            continue;
+        }
+        pending.ops.push_back(op);
+    }
+    flush_device(pending);
+#else
+    (void)0;
+#endif
 }
 
 Graph::~Graph() = default;

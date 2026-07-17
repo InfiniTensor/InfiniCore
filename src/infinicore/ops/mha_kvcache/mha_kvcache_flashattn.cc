@@ -1,6 +1,7 @@
 #include "infinicore/ops/mha_kvcache.hpp"
 
 #include "infinicore/adaptor/flash_attention_adaptor.hpp"
+#include "infinicore/context/context.hpp"
 
 #include <stdexcept>
 
@@ -45,6 +46,11 @@ void *plan(Tensor out,
 
 void run(void *planned_meta) {
 #ifdef ENABLE_FLASH_ATTN
+    if (infinicore::context::isDeviceStreamCapturing()) {
+        throw std::runtime_error(
+            "MhaKVCache::run: FA2 mha_fwd_kvcache must not run under hcStream capture "
+            "(recorded as host_break; Graph splits device segments around FA)");
+    }
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
     c10::cuda::CUDAStreamGuard guard(infinicore::adaptor::get_cuda_stream());
 #endif

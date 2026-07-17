@@ -14,6 +14,7 @@ from infinicore.context import (
     get_device,
     get_device_count,
     get_stream,
+    is_device_stream_capturing,
     is_graph_recording,
     set_device,
     start_graph_recording,
@@ -163,6 +164,7 @@ __all__ = [
     "sync_device",
     "sync_stream",
     "is_graph_recording",
+    "is_device_stream_capturing",
     "start_graph_recording",
     "stop_graph_recording",
     # Data Types.

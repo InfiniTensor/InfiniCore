@@ -27,6 +27,9 @@ inline void bind(py::module &m) {
 
     // Graph
     m.def("is_graph_recording", &isGraphRecording, "Check if graph recording is turned on");
+    m.def("is_device_stream_capturing",
+          &isDeviceStreamCapturing,
+          "True while Graph::instantiate is inside hcStreamBeginCapture");
     m.def("start_graph_recording", &startGraphRecording, "Start graph recording");
     m.def("stop_graph_recording", &stopGraphRecording, "Stop graph recording and return the graph");
 }

@@ -18,6 +18,10 @@ public:
 class GraphOperator {
 public:
     virtual void run() const = 0;
+    /// Ops that must not enter ``hcStreamBeginCapture`` (e.g. Triton MoE).
+    /// Instantiation splits the op-list around host breaks; replay runs them eager
+    /// between device-graph segment launches (FA2-style piecewise pattern).
+    virtual bool is_host_break() const { return false; }
     virtual ~GraphOperator() = default;
 };
 
@@ -26,12 +30,15 @@ public:
     void run() const override;
     ~DispatchableGraphOperator() override;
 
+    bool is_host_break() const override { return host_break_; }
+
 protected:
     using run_schema = void (*)(void *);
     using cleanup_schema = void (*)(void **);
     void *planned_meta_;
     run_schema runner_;
     cleanup_schema deleter_;
+    bool host_break_{false};
 };
 
 class Graph {
@@ -41,10 +48,10 @@ public:
 
     void run() const;
 
-    /// True when device graph instantiation succeeded (exec is non-null).
+    /// True when at least one capturable segment has a live device exec.
     bool has_device_exec() const;
 
-    /// Instantiate-time log buffer (empty when exec succeeded).
+    /// Instantiate-time log buffer (empty when all device segments succeeded).
     std::string device_graph_log() const;
 
     /// True iff the most recent ``run()`` with a device exec used ``hcGraphLaunch``.
@@ -62,9 +69,18 @@ protected:
 
 private:
     struct DeviceGraph;
-    std::unique_ptr<DeviceGraph> device_graph_;
+    struct ReplayStep {
+        enum class Kind { DeviceSegment, HostOp };
+        Kind kind{Kind::DeviceSegment};
+        std::unique_ptr<DeviceGraph> device;
+        std::vector<std::shared_ptr<GraphOperator>> ops;
+    };
+
+    std::vector<ReplayStep> replay_steps_;
 
     void run_op_list_() const;
+    void run_ops_(const std::vector<std::shared_ptr<GraphOperator>> &ops) const;
+    void capture_device_segment_(ReplayStep &step);
 
     mutable bool last_replay_used_device_{false};
     mutable uint64_t replay_device_ok_{0};

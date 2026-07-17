@@ -58,7 +58,10 @@ void inductor_warmup_pre_attn_bucket(
     size_t valid_len);
 
 /// MiniCPM5 sparse MoE AOTI segment (weights via moe resolver).
-/// Eager by default; records into hcGraph when ``isGraphRecording()`` (P4 spike).
+/// Default: records as a **host-break** graph op (Triton excluded from
+/// ``hcStreamBeginCapture``). With ``INFINI_MOE_CAPTURE_SAFE=1``, MoE is
+/// device-capturable: aten index_select+bmm under stream capture, Triton
+/// on the eager path (CG-2 spike).
 void inductor_moe_(
     const Tensor &hidden_states,
     Tensor &out,

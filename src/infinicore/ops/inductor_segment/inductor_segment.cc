@@ -11,6 +11,7 @@
 
 #include <cstdlib>
 #include <sstream>
+#include <string>
 #include <stdexcept>
 
 namespace {
@@ -26,6 +27,12 @@ size_t recording_valid_seq_len(size_t bucket) {
         return std::min(runtime_valid, bucket);
     }
     return bucket;
+}
+
+/// CG-2: aten MoE under stream capture; Triton remains the eager path.
+bool moe_capture_safe_enabled() {
+    const char *v = std::getenv("INFINI_MOE_CAPTURE_SAFE");
+    return v != nullptr && v[0] != '\0' && std::string(v) != "0";
 }
 
 size_t resolve_valid_seq_len(size_t bucket, const infinicore::Tensor &hidden_states) {
@@ -410,6 +417,10 @@ InductorMoe::InductorMoe(
         out,
         layer_idx,
         bucket);
+    // CG-1 default: Triton fused_moe_routed is not stream-capture-safe → host break.
+    // CG-2 (INFINI_MOE_CAPTURE_SAFE=1): enter device capture; opaque op uses aten
+    // under isDeviceStreamCapturing and Triton on the eager path.
+    host_break_ = !moe_capture_safe_enabled();
 }
 
 void InductorMoe::execute(
@@ -419,7 +430,14 @@ void InductorMoe::execute(
     size_t bucket) {
 #ifdef ENABLE_ATEN
     // Eager fast path (same pattern as InductorSegment pre_attn).
+    // Refuse Triton under a live device-capture stream unless capture-safe mode
+    // (aten body inside fused_moe_routed).
     if (!context::isGraphRecording()) {
+        if (context::isDeviceStreamCapturing() && !moe_capture_safe_enabled()) {
+            throw std::runtime_error(
+                "InductorMoe: refusing AOTI+Triton MoE under hcStream capture "
+                "(set INFINI_MOE_CAPTURE_SAFE=1 for aten body, or use host-break)");
+        }
         const size_t valid_len = resolve_valid_seq_len(bucket, hidden_states);
         run_moe_segment(hidden_states, out, layer_idx, bucket, valid_len);
         return;
@@ -493,6 +511,12 @@ void *moe_plan(
 
 void moe_run(void *planned_meta) {
 #ifdef ENABLE_ATEN
+    if (infinicore::context::isDeviceStreamCapturing() && !moe_capture_safe_enabled()) {
+        throw std::runtime_error(
+            "InductorMoe::run: AOTI+Triton MoE must not run under hcStream capture "
+            "(recorded as host_break; Graph splits device segments around MoE). "
+            "Set INFINI_MOE_CAPTURE_SAFE=1 for aten capture-safe body.");
+    }
     auto *meta = reinterpret_cast<MoePlannedMeta *>(planned_meta);
     if (meta == nullptr) {
         throw std::runtime_error("InductorMoe::run: null planned_meta");
