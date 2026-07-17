@@ -1,4 +1,3 @@
-import torch
 from infinicore.lib import _infinicore
 
 _infinicore_2_python_dict = {}

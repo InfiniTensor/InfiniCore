@@ -56,6 +56,10 @@ from infinicore.ops.addcmul import addcmul
 from infinicore.ops.addr import addr
 from infinicore.ops.all import all
 from infinicore.ops.argwhere import argwhere
+from infinicore.ops.ascend_flash_attn import (
+    ascend_flash_attn_decode,
+    ascend_flash_attn_prefill,
+)
 from infinicore.ops.asin import asin
 from infinicore.ops.asinh import asinh
 from infinicore.ops.asum import asum
@@ -113,10 +117,6 @@ from infinicore.ops.moore_mate_flash_attn import (
     moore_mate_flash_attn_prefill,
 )
 from infinicore.ops.mrope import mrope
-from infinicore.ops.ascend_flash_attn import (
-    ascend_flash_attn_decode,
-    ascend_flash_attn_prefill,
-)
 from infinicore.ops.mul import mul
 from infinicore.ops.mul_scalar import mul_scalar
 from infinicore.ops.narrow import narrow
