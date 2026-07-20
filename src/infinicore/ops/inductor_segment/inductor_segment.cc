@@ -2,7 +2,10 @@
 
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
 #include <c10/cuda/CUDAGuard.h>
+#include <c10/cuda/CUDAStream.h>
+#include <ATen/cuda/CUDAEvent.h>
 #include <ATen/cuda/CUDAGraph.h>
+#include <ATen/cuda/CUDAGraphsUtils.cuh>
 #endif
 
 #include "../../utils.hpp"
@@ -467,61 +470,87 @@ at::Tensor silu_mlp_aten_cached(
 }
 
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
-/// Per-layer CUDAGraph: gate GEMM + shared MLP (fixed decode shapes).
+/// Single-weight-set CUDAGraph (microbench): gate + GPU top-k + shared MLP.
+/// Multi-layer serve keeps host top-k (27 graphed replays thrashed MetaX).
 struct DecodeAuxGraph {
     std::unique_ptr<at::cuda::CUDAGraph> graph;
     at::Tensor static_x;
-    at::Tensor logits_raw;   // [T, E] x.dtype
-    at::Tensor static_logits; // [T, E] float32
+    at::Tensor logits_raw;
+    at::Tensor logits_f;
+    at::Tensor scores;
+    at::Tensor choice;
+    at::Tensor topk_w_f;
+    at::Tensor topk_w;
+    at::Tensor topk_ids;
     at::Tensor gu;
     at::Tensor mid;
     at::Tensor static_shared;
     at::Tensor gate_w;
+    at::Tensor bias_f;
     at::Tensor shared_gu;
     at::Tensor shared_d;
-    int64_t t = 0;
-    int64_t h = 0;
-    int64_t e = 0;
-    int64_t i2 = 0;
+    void *bias_src = nullptr;
+    int64_t t = 0, h = 0, e = 0, i2 = 0, top_k = 0;
+    bool norm_topk_prob = true;
+    double routed_scaling = 3.66;
     bool ready = false;
 
     void ensure(
         const at::Tensor &x,
         const at::Tensor &gate_w_in,
+        const at::Tensor &bias_fp32,
         const at::Tensor &sgu,
-        const at::Tensor &sd) {
-        const int64_t tt = x.size(0);
-        const int64_t hh = x.size(1);
-        const int64_t ee = gate_w_in.size(0);
-        const int64_t ii2 = sgu.size(0);
+        const at::Tensor &sd,
+        int64_t top_k_in,
+        bool norm_in,
+        double scale_in) {
+        const int64_t tt = x.size(0), hh = x.size(1), ee = gate_w_in.size(0), ii2 = sgu.size(0);
         const bool need = !ready || t != tt || h != hh || e != ee || i2 != ii2
+                          || top_k != top_k_in || norm_topk_prob != norm_in
+                          || routed_scaling != scale_in
                           || gate_w.data_ptr() != gate_w_in.data_ptr()
+                          || bias_src != bias_fp32.data_ptr()
                           || shared_gu.data_ptr() != sgu.data_ptr()
                           || shared_d.data_ptr() != sd.data_ptr()
                           || static_x.scalar_type() != x.scalar_type()
                           || static_x.device() != x.device();
-        if (!need) {
-            return;
-        }
+        if (!need) return;
         ready = false;
         graph.reset();
-        t = tt;
-        h = hh;
-        e = ee;
-        i2 = ii2;
+        t = tt; h = hh; e = ee; i2 = ii2; top_k = top_k_in;
+        norm_topk_prob = norm_in; routed_scaling = scale_in;
         gate_w = gate_w_in;
-        shared_gu = sgu;
-        shared_d = sd;
-        static_x = at::empty({t, h}, x.options());
+        bias_src = bias_fp32.data_ptr();
+        bias_f = bias_fp32.reshape({1, -1}).contiguous();
+        shared_gu = sgu; shared_d = sd;
+        // Prefer aliasing the live input when stable (cpp_pad reuses one buffer).
+        static_x = x;
         logits_raw = at::empty({t, e}, x.options());
-        static_logits = at::empty({t, e}, x.options().dtype(at::kFloat));
+        logits_f = at::empty({t, e}, x.options().dtype(at::kFloat));
+        scores = at::empty({t, e}, x.options().dtype(at::kFloat));
+        choice = at::empty({t, e}, x.options().dtype(at::kFloat));
+        topk_w_f = at::empty({t, top_k}, x.options().dtype(at::kFloat));
+        topk_w = at::empty({t, top_k}, x.options());
+        topk_ids = at::empty({t, top_k}, x.options().dtype(at::kInt));
         gu = at::empty({t, i2}, x.options());
         mid = at::empty({t, i2 / 2}, x.options());
         static_shared = at::empty({t, h}, x.options());
 
         auto run_body = [&]() {
             at::matmul_out(logits_raw, static_x, gate_w.t());
-            static_logits.copy_(logits_raw);
+            logits_f.copy_(logits_raw);
+            at::sigmoid_out(scores, logits_f);
+            at::add_out(choice, scores, bias_f);
+            auto topk_out = at::topk(choice, top_k, /*dim=*/-1);
+            auto ids = std::get<1>(topk_out);
+            topk_ids.copy_(ids);
+            at::gather_out(topk_w_f, scores, 1, ids);
+            if (norm_topk_prob) {
+                auto denom = topk_w_f.sum(/*dim=*/-1, /*keepdim=*/true) + 1e-20;
+                topk_w_f.div_(denom);
+            }
+            topk_w_f.mul_(routed_scaling);
+            topk_w.copy_(topk_w_f);
             at::matmul_out(gu, static_x, shared_gu.t());
             auto gate = gu.narrow(1, 0, i2 / 2);
             auto up = gu.narrow(1, i2 / 2, i2 / 2);
@@ -530,21 +559,24 @@ struct DecodeAuxGraph {
             at::matmul_out(static_shared, mid, shared_d.t());
         };
 
-        // Warmup outside capture (allocator / kernels).
-        static_x.copy_(x);
-        run_body();
-        at::cuda::device_synchronize();
-
-        graph = std::make_unique<at::cuda::CUDAGraph>();
-        static_x.copy_(x);
-        graph->capture_begin();
-        run_body();
-        graph->capture_end();
+        auto cap_stream = at::cuda::getStreamFromPool(/*isHighPriority=*/false);
+        {
+            c10::cuda::CUDAStreamGuard guard(cap_stream);
+            run_body();
+            cap_stream.synchronize();
+            graph = std::make_unique<at::cuda::CUDAGraph>();
+            graph->capture_begin();
+            run_body();
+            graph->capture_end();
+        }
         ready = true;
     }
 
     void replay(const at::Tensor &x) {
-        static_x.copy_(x);
+        // Skip H2D when the live buffer is the same storage (cpp_pad / stable decode).
+        if (x.data_ptr() != static_x.data_ptr()) {
+            static_x.copy_(x);
+        }
         graph->replay();
     }
 };
@@ -552,6 +584,27 @@ struct DecodeAuxGraph {
 DecodeAuxGraph &decode_aux_graph_for(void *gate_ptr) {
     static thread_local std::unordered_map<void *, DecodeAuxGraph> cache;
     return cache[gate_ptr];
+}
+
+bool moe_aux_cudagraph_enabled(void *gate_ptr) {
+    if (const char *v = std::getenv("INFINI_MOE_AUX_CUDAGRAPH")) {
+        if (v[0] != '\0') {
+            return !(std::string(v) == "0" || std::string(v) == "false");
+        }
+    }
+    // Auto: only when a single gate weight set is ever seen (cpp_pad microbench).
+    static thread_local void *only = nullptr;
+    static thread_local bool multi = false;
+    if (multi) return false;
+    if (only == nullptr) {
+        only = gate_ptr;
+        return true;
+    }
+    if (only != gate_ptr) {
+        multi = true;
+        return false;
+    }
+    return true;
 }
 #endif
 
@@ -622,10 +675,14 @@ at::Tensor run_moe_eager_decode(
     }
 
     const bool capturing = infinicore::context::isGraphRecording();
+    bool stream_capturing = false;
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
+    stream_capturing =
+        at::cuda::currentStreamCaptureStatus() != at::cuda::CaptureStatus::None;
+#endif
     const int64_t t_tokens = x.size(0);
-    // Phase 7: eager decode — host top-k for small T (not capture-safe).
-    const bool use_host_topk = !capturing && t_tokens > 0 && t_tokens <= 16 && cfg.n_group == 1
-                               && x.is_cuda();
+    const bool use_host_topk = !capturing && !stream_capturing && t_tokens > 0
+                               && t_tokens <= 16 && cfg.n_group == 1 && x.is_cuda();
 
     at::Tensor logits;
     at::Tensor topk_w;
@@ -636,12 +693,34 @@ at::Tensor run_moe_eager_decode(
 
     if (use_host_topk) {
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
-        // Phase 7: CUDAGraph(gate GEMM + shared MLP) + host top-k + Triton routed.
-        auto &aux = decode_aux_graph_for(gate_cache.gate_xdtype.data_ptr());
-        aux.ensure(x, gate_cache.gate_xdtype, weights.shared_gate_up, weights.shared_down);
-        aux.replay(x);
+        if (moe_aux_cudagraph_enabled(gate_cache.gate_xdtype.data_ptr())) {
+            // Microbench / single-weight: CUDAGraph(gate+topk+shared) + Triton.
+            auto &aux = decode_aux_graph_for(gate_cache.gate_xdtype.data_ptr());
+            aux.ensure(
+                x,
+                gate_cache.gate_xdtype,
+                gate_cache.bias_fp32,
+                weights.shared_gate_up,
+                weights.shared_down,
+                cfg.top_k,
+                cfg.norm_topk_prob,
+                cfg.routed_scaling_factor);
+            aux.replay(x);
+            routed = call_fused_moe_routed(
+                x, aux.topk_w, aux.topk_ids, weights.w_gate_up, weights.w_down);
+            return routed.add(aux.static_shared);
+        }
+        // Multi-layer serve: host top-k + overlap shared on cached side stream.
+        static thread_local at::cuda::CUDAStream shared_stream =
+            at::cuda::getStreamFromPool(/*isHighPriority=*/false);
+        at::Tensor shared_local;
+        {
+            c10::cuda::CUDAStreamGuard guard(shared_stream);
+            shared_local = silu_mlp_aten_cached(x, weights.shared_gate_up, weights.shared_down);
+        }
+        logits = at::linear(x, gate_cache.gate_xdtype).to(at::kFloat);
         auto topk = grouped_sigmoid_topk_host(
-            aux.static_logits,
+            logits,
             gate_cache.bias_cpu,
             cfg.top_k,
             cfg.norm_topk_prob,
@@ -651,7 +730,10 @@ at::Tensor run_moe_eager_decode(
         topk_ids = topk.second;
         routed = call_fused_moe_routed(
             x, topk_w, topk_ids, weights.w_gate_up, weights.w_down);
-        return routed.add(aux.static_shared);
+        at::cuda::CUDAEvent done;
+        done.record(shared_stream);
+        done.block(at::cuda::getCurrentCUDAStream());
+        return routed.add(shared_local);
 #else
         logits = at::linear(x, gate_cache.gate_xdtype).to(at::kFloat);
         auto topk = grouped_sigmoid_topk_host(
