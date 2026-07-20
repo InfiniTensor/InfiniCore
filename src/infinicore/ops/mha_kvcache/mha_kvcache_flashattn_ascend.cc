@@ -54,7 +54,7 @@ void *plan(Tensor out, const Tensor &q, const Tensor &k_cache,
                            graph::GraphTensor(seqlens_k),
                            graph::GraphTensor(block_table),
                            alibi_slopes ? std::optional<graph::GraphTensor>(
-                                              graph::GraphTensor(*alibi_slopes))
+                               graph::GraphTensor(*alibi_slopes))
                                         : std::nullopt,
                            scale};
 }
