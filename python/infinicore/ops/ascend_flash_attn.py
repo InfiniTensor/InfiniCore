@@ -159,12 +159,20 @@ if __name__ == "__main__":
 
     q = torch.randn(num_seqs, num_heads, head_size, dtype=torch.float16, device=device)
     k_cache = torch.randn(
-        num_blocks, block_size, num_kv_heads, head_size,
-        dtype=torch.float16, device=device,
+        num_blocks,
+        block_size,
+        num_kv_heads,
+        head_size,
+        dtype=torch.float16,
+        device=device,
     )
     v_cache = torch.randn(
-        num_blocks, block_size, num_kv_heads, head_size,
-        dtype=torch.float16, device=device,
+        num_blocks,
+        block_size,
+        num_kv_heads,
+        head_size,
+        dtype=torch.float16,
+        device=device,
     )
     block_tables = torch.zeros(num_seqs, 4, dtype=torch.int32, device=device)
     block_tables[0, 0] = 0
@@ -189,7 +197,9 @@ if __name__ == "__main__":
     total_q = 64  # sum of sequence lengths
     cu_seqlens_q = torch.tensor([0, 32, 64], dtype=torch.int32, device=device)
     cu_seqlens_k = torch.tensor([0, 32, 64], dtype=torch.int32, device=device)
-    q_prefill = torch.randn(total_q, num_heads, head_size, dtype=torch.float16, device=device)
+    q_prefill = torch.randn(
+        total_q, num_heads, head_size, dtype=torch.float16, device=device
+    )
     out_prefill = ascend_flash_attn_prefill(
         q=q_prefill,
         k_cache=k_cache,
@@ -204,5 +214,7 @@ if __name__ == "__main__":
         causal=True,
     )
     torch.npu.synchronize()
-    assert list(out_prefill.shape) == list(q_prefill.shape), f"Expected {q_prefill.shape}, got {out_prefill.shape}"
+    assert list(out_prefill.shape) == list(q_prefill.shape), (
+        f"Expected {q_prefill.shape}, got {out_prefill.shape}"
+    )
     print("ascend_flash_attn_prefill test passed")
