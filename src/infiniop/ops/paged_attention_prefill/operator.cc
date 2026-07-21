@@ -5,7 +5,7 @@
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ALI_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/paged_attention_prefill_nvidia.cuh"
 #endif
-#ifdef ENABLE_METAX_API
+#if defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API)
 #include "metax/paged_attention_prefill_metax.h"
 #endif
 #ifdef ENABLE_CAMBRICON_API
@@ -48,6 +48,9 @@ __INFINI_C infiniStatus_t infiniopCreatePagedAttentionPrefillDescriptor(
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, metax)
 #endif
+#ifdef ENABLE_MARS_API
+        CREATE(INFINI_DEVICE_MARS, metax)
+#endif
 #ifdef ENABLE_ALI_API
         CREATE(INFINI_DEVICE_ALI, nvidia)
 #endif
@@ -86,6 +89,9 @@ __INFINI_C infiniStatus_t infiniopGetPagedAttentionPrefillWorkspaceSize(
 #endif
 #ifdef ENABLE_METAX_API
         GET(INFINI_DEVICE_METAX, metax)
+#endif
+#ifdef ENABLE_MARS_API
+        GET(INFINI_DEVICE_MARS, metax)
 #endif
 #ifdef ENABLE_ALI_API
         GET(INFINI_DEVICE_ALI, nvidia)
@@ -133,6 +139,9 @@ __INFINI_C infiniStatus_t infiniopPagedAttentionPrefill(
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, metax)
 #endif
+#ifdef ENABLE_MARS_API
+        CALCULATE(INFINI_DEVICE_MARS, metax)
+#endif
 #ifdef ENABLE_ALI_API
         CALCULATE(INFINI_DEVICE_ALI, nvidia)
 #endif
@@ -170,6 +179,9 @@ __INFINI_C infiniStatus_t infiniopDestroyPagedAttentionPrefillDescriptor(
 #endif
 #ifdef ENABLE_METAX_API
         DESTROY(INFINI_DEVICE_METAX, metax)
+#endif
+#ifdef ENABLE_MARS_API
+        DESTROY(INFINI_DEVICE_MARS, metax)
 #endif
 #ifdef ENABLE_ALI_API
         DESTROY(INFINI_DEVICE_ALI, nvidia)

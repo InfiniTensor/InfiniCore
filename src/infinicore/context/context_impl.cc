@@ -97,6 +97,7 @@ ContextImpl::ContextImpl() {
     initializeRuntime<Device::Type::ILUVATAR>();
     initializeRuntime<Device::Type::HYGON>();
     initializeRuntime<Device::Type::ALI>();
+    initializeRuntime<Device::Type::MARS>();
 
     if (current_runtime_ == nullptr && !runtime_table_[static_cast<int>(Device::Type::CPU)].empty()) {
         current_runtime_ = runtime_table_[static_cast<int>(Device::Type::CPU)][0].get();

@@ -12,7 +12,7 @@
 #ifdef ENABLE_MOORE_API
 #include "moore/affine_grid_moore.h"
 #endif
-#ifdef ENABLE_METAX_API
+#if defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API)
 #include "metax/affine_grid_metax.h"
 #endif
 
@@ -45,6 +45,9 @@ __INFINI_C infiniStatus_t infiniopCreateAffineGridDescriptor(
 #endif
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MARS_API
+        CREATE(INFINI_DEVICE_MARS, metax);
 #endif
 #ifdef ENABLE_ILUVATAR_API
         CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
@@ -84,6 +87,9 @@ __INFINI_C infiniStatus_t infiniopGetAffineGridWorkspaceSize(infiniopAffineGridD
 #endif
 #ifdef ENABLE_METAX_API
         GET(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MARS_API
+        GET(INFINI_DEVICE_MARS, metax);
 #endif
 #ifdef ENABLE_QY_API
         GET(INFINI_DEVICE_QY, nvidia);
@@ -126,6 +132,9 @@ __INFINI_C infiniStatus_t infiniopAffineGrid(
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
+#ifdef ENABLE_MARS_API
+        CALCULATE(INFINI_DEVICE_MARS, metax);
+#endif
 #ifdef ENABLE_ILUVATAR_API
         CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
@@ -164,6 +173,9 @@ infiniopDestroyAffineGridDescriptor(infiniopAffineGridDescriptor_t desc) {
 #endif
 #ifdef ENABLE_METAX_API
         DELETE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MARS_API
+        DELETE(INFINI_DEVICE_MARS, metax);
 #endif
 #ifdef ENABLE_ILUVATAR_API
         DELETE(INFINI_DEVICE_ILUVATAR, nvidia);

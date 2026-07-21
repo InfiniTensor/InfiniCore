@@ -20,6 +20,7 @@ def get_supported_hardware_platforms():
         ("--ascend", "Huawei Ascend NPUs (requires torch_npu)"),
         ("--iluvatar", "Iluvatar GPUs"),
         ("--metax", "Metax GPUs"),
+        ("--mars", "Mars GPUs with HPCC support"),
         ("--moore", "Moore Threads GPUs (requires torch_musa)"),
         ("--kunlun", "Kunlun XPUs (requires torch_xmlir)"),
         ("--hygon", "Hygon DCUs"),
@@ -194,6 +195,14 @@ def get_test_devices(args):
             devices_to_test.append(InfiniDeviceEnum.METAX)
         except ImportError:
             print("Warning: Metax GPU support not available")
+
+    if args.mars:
+        try:
+            import torch
+
+            devices_to_test.append(InfiniDeviceEnum.MARS)
+        except ImportError:
+            print("Warning: Mars GPU support not available")
 
     if args.moore:
         try:
