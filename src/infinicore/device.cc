@@ -43,6 +43,8 @@ std::string Device::toString(const Type &type) {
         return "HYGON";
     case Type::ALI:
         return "ALI";
+    case Type::MARS:
+        return "MARS";
     case Type::COUNT:
         return "COUNT";
     default:

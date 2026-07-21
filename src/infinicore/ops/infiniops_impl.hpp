@@ -51,6 +51,8 @@ inline infini::ops::Device toInfiniOpsDevice(const Device &device) {
         return infini::ops::Device{infini::ops::Device::Type::kNvidia, static_cast<int>(device.getIndex())};
     case Device::Type::METAX:
         return infini::ops::Device{infini::ops::Device::Type::kMetax, static_cast<int>(device.getIndex())};
+    case Device::Type::MARS:
+        return infini::ops::Device{infini::ops::Device::Type::kMetax, static_cast<int>(device.getIndex())};
     case Device::Type::MOORE:
         return infini::ops::Device{infini::ops::Device::Type::kMoore, static_cast<int>(device.getIndex())};
     case Device::Type::ILUVATAR:
@@ -64,6 +66,7 @@ inline bool isSupportedDevice(Device::Type device_type) {
     switch (device_type) {
     case Device::Type::NVIDIA:
     case Device::Type::METAX:
+    case Device::Type::MARS:
     case Device::Type::MOORE:
     case Device::Type::ILUVATAR:
         return true;
@@ -76,6 +79,7 @@ template <typename Dispatcher, typename Function>
 void registerSupportedDevices(Dispatcher &dispatcher, Function function) {
     dispatcher.registerDevice(Device::Type::NVIDIA, function);
     dispatcher.registerDevice(Device::Type::METAX, function);
+    dispatcher.registerDevice(Device::Type::MARS, function);
     dispatcher.registerDevice(Device::Type::MOORE, function);
     dispatcher.registerDevice(Device::Type::ILUVATAR, function);
 }

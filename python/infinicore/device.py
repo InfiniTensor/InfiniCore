@@ -83,6 +83,7 @@ _TORCH_DEVICE_MAP = {
     _infinicore.Device.Type.HYGON: "cuda",
     _infinicore.Device.Type.QY: "cuda",
     _infinicore.Device.Type.ALI: "cuda",
+    _infinicore.Device.Type.MARS: "cuda",
 }
 
 

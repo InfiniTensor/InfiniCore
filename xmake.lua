@@ -149,23 +149,24 @@ option("metax-gpu")
     set_description("Whether to compile implementations for MetaX GPU")
 option_end()
 
-option("use-mc")
+option("mars-gpu")
     set_default(false)
     set_showmenu(true)
-    set_description("Use MC version")
+    set_description("Whether to compile implementations for Mars GPU with HPCC")
 option_end()
 
 if has_config("metax-gpu") then
-    add_defines("ENABLE_METAX_API")
-    if has_config("use-mc") then
-        add_defines("ENABLE_METAX_MC_API")
-        -- MACA torch build expects USE_MACA for ATen headers (e.g. C10_WARP_SIZE).
-        add_defines("USE_MACA")
-    else
-        -- HPCC torch build expects this for ATen headers on hpcc.
-        add_defines("USE_HPCC")
-    end
+    add_defines("ENABLE_METAX_API", "ENABLE_METAX_MC_API", "USE_MACA")
     includes("xmake/metax.lua")
+end
+
+if has_config("mars-gpu") then
+    add_defines("ENABLE_MARS_API", "USE_HPCC")
+    includes("xmake/mars.lua")
+end
+
+if has_config("metax-gpu") and has_config("mars-gpu") then
+    raise("--metax-gpu and --mars-gpu are separate backends and cannot be enabled together")
 end
 
 -- 摩尔线程
@@ -248,7 +249,7 @@ if has_config("aten") then
         add_defines("_GLIBCXX_USE_CXX11_ABI=0")
     end
     if get_config("flash-attn") and get_config("flash-attn") ~= ""
-       and (has_config("nv-gpu") or has_config("metax-gpu") or has_config("qy-gpu") or has_config("hygon-dcu")) then
+       and (has_config("nv-gpu") or has_config("metax-gpu") or has_config("mars-gpu") or has_config("qy-gpu") or has_config("hygon-dcu")) then
         add_defines("ENABLE_FLASH_ATTN")
     end
 end
@@ -372,6 +373,13 @@ local function add_external_infinirt()
             add_includedirs(maca_include, { public = true })
         end
     end
+    if has_config("mars-gpu") then
+        local hpcc_root = os.getenv("HPCC_PATH") or "/opt/hpcc"
+        local hpcc_include = path.join(hpcc_root, "include")
+        if os.isdir(hpcc_include) then
+            add_includedirs(hpcc_include, { public = true })
+        end
+    end
     add_links("infinirt")
 end
 
@@ -419,10 +427,11 @@ local function get_infiniops_backend_cmake_arg()
     end
     add_backend("nv-gpu", "-DWITH_NVIDIA=ON")
     add_backend("metax-gpu", "-DWITH_METAX=ON")
+    add_backend("mars-gpu", "-DWITH_MARS=ON")
     add_backend("iluvatar-gpu", "-DWITH_ILUVATAR=ON")
     add_backend("moore-gpu", "-DWITH_MOORE=ON")
     if #enabled == 0 then
-        raise("InfiniOps integration requires one of --nv-gpu, --metax-gpu, --iluvatar-gpu, or --moore-gpu")
+        raise("InfiniOps integration requires one of --nv-gpu, --metax-gpu, --mars-gpu, --iluvatar-gpu, or --moore-gpu")
     end
     if #enabled > 1 then
         raise("InfiniOps can build only one GPU backend at a time")
@@ -569,6 +578,9 @@ target("infiniop")
     if has_config("metax-gpu") then
         add_deps("infiniop-metax")
     end
+    if has_config("mars-gpu") then
+        add_deps("infiniop-mars")
+    end
     if has_config("moore-gpu") then
         add_deps("infiniop-moore")
     end
@@ -605,6 +617,9 @@ target("infiniccl")
     end
     if has_config("metax-gpu") then
         add_deps("infiniccl-metax")
+    end
+    if has_config("mars-gpu") then
+        add_deps("infiniccl-mars")
     end
     if has_config("iluvatar-gpu") then
         add_deps("infiniccl-iluvatar")
@@ -660,7 +675,7 @@ target("infinicore_cpp_api")
     local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
 
     add_includedirs("include")
-    if has_config("metax-gpu") and has_config("use-mc") and has_config("aten") then
+    if has_config("metax-gpu") and has_config("aten") then
         local maca_root = os.getenv("MACA_PATH") or os.getenv("MACA_HOME") or os.getenv("MACA_ROOT") or "/opt/maca"
         add_includedirs(maca_root .. "/include")
         add_includedirs(maca_root .. "/tools/cu-bridge/include")
@@ -719,6 +734,9 @@ target("infinicore_cpp_api")
         if has_config("metax-gpu") then
             add_deps("flash-attn-metax")
         end
+        if has_config("mars-gpu") then
+            add_deps("flash-attn-mars")
+        end
         if has_config("qy-gpu") then
             add_deps("flash-attn-qy")
         end
@@ -740,14 +758,10 @@ target("infinicore_cpp_api")
     end
 
     before_build(function (target)
-        -- MetaX + flash-attn: `flash_attn_2_cuda` may use a different `mha_fwd_kvcache` ABI
-        -- depending on the underlying stack version. When building with MACA (`--use-mc=y`),
-        -- the version file is typically `/opt/maca/Version.txt` (HPCC uses `/opt/hpcc/Version.txt`).
-        if has_config("metax-gpu") and get_config("flash-attn") and get_config("flash-attn") ~= "" then
-            local version_txt = "/opt/hpcc/Version.txt"
-            if not os.isfile(version_txt) and has_config("use-mc") then
-                version_txt = "/opt/maca/Version.txt"
-            end
+        -- Mars HPCC flash-attn uses the HPCC major version to select its ABI.
+        if has_config("mars-gpu") and get_config("flash-attn") and get_config("flash-attn") ~= "" then
+            local hpcc_root = os.getenv("HPCC_PATH") or "/opt/hpcc"
+            local version_txt = path.join(hpcc_root, "Version.txt")
             if os.isfile(version_txt) then
                 local content = os.iorunv("cat", {version_txt}) or ""
                 content = content:trim()
