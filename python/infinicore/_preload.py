@@ -1,9 +1,13 @@
 import ctypes
 import glob
+import importlib
 import importlib.util
 import os
 import sys
 from typing import Iterable, List
+
+
+_PRELOADED_HANDLES: List[ctypes.CDLL] = []
 
 
 def _candidate_prefixes(path: str) -> List[str]:
@@ -68,35 +72,35 @@ def preload_hpcc() -> None:
 
 def preload_torch_hip() -> None:
     """
-    Best-effort preload of torch HIP runtime libs with RTLD_GLOBAL.
+    Best-effort import of the torch HIP runtime.
 
-    This helps external extensions resolve c10::hip symbols when they are
-    not recorded as direct DT_NEEDED dependencies.
+    Loading torch's shared libraries individually with ctypes bypasses
+    Python's extension initialization order and can corrupt HIP teardown.
     """
-    spec = importlib.util.find_spec("torch")
-    if spec is None or not spec.origin:
-        return
-    torch_dir = os.path.dirname(spec.origin)
-    torch_libdir = os.path.join(torch_dir, "lib")
-    if not os.path.isdir(torch_libdir):
-        return
+    try:
+        importlib.import_module("torch")
+    except (ImportError, OSError):
+        pass
 
-    libs = [
-        "libtorch_global_deps.so",
-        "libc10.so",
-        "libc10_hip.so",
-        "libtorch_cpu.so",
-        "libtorch.so",
-        "libtorch_hip.so",
-    ]
-    for lib in libs:
-        full = os.path.join(torch_libdir, lib)
-        if os.path.exists(full):
-            try:
-                ctypes.CDLL(full, mode=ctypes.RTLD_GLOBAL)
-            except OSError:
-                # Best-effort preload, continue on errors.
-                pass
+
+def _import_extension_global(module_name: str, path: str) -> None:
+    module = sys.modules.get(module_name)
+    if module is None:
+        spec = importlib.util.spec_from_file_location(module_name, path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Cannot load extension module from {path}")
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[module_name] = module
+        try:
+            spec.loader.exec_module(module)
+        except Exception:
+            sys.modules.pop(module_name, None)
+            raise
+
+    module_path = getattr(module, "__file__", None) or path
+    _PRELOADED_HANDLES.append(
+        ctypes.CDLL(module_path, mode=ctypes.RTLD_GLOBAL)
+    )
 
 
 def preload_flash_attn() -> None:
@@ -145,9 +149,9 @@ def preload_flash_attn() -> None:
         if not os.path.exists(so_path):
             continue
         try:
-            ctypes.CDLL(so_path, mode=ctypes.RTLD_GLOBAL)
+            _import_extension_global("flash_attn_2_cuda", so_path)
             return
-        except OSError:
+        except (ImportError, OSError):
             continue
 
 
