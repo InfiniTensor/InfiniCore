@@ -8,8 +8,19 @@
 #include <ATen/cuda/CUDAGraphsUtils.cuh>
 #endif
 
+#if defined(ENABLE_METAX_API)
+#ifdef ENABLE_METAX_MC_API
+#include <mcr/mc_runtime_api.h>
+#else
+#include <hcr/hc_runtime_api.h>
+#endif
+#elif defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API)
+#include <cuda_runtime_api.h>
+#endif
+
 #include "../../utils.hpp"
 #include "inductor_segment_registry.hpp"
+#include "../../context/debug_session_log.hpp"
 
 #include "infinicore/context/context.hpp"
 #include "infinicore/graph/capture_arena.hpp"
@@ -115,6 +126,82 @@ size_t resolve_valid_seq_len(size_t bucket, const infinicore::Tensor &hidden_sta
 namespace {
 
 #ifdef ENABLE_ATEN
+
+/// Capture-safe device zero: ATen ``zero_()`` launches ``FillFunctor`` which HTC-faults
+/// under MetaX ``hcStream`` capture on InfiniCore-owned buffers. Prefer stream memset
+/// recorded into the capture graph (or skip when the whole tensor is overwritten).
+void capture_safe_device_zero_(void *ptr, size_t nbytes) {
+    if (ptr == nullptr || nbytes == 0) {
+        return;
+    }
+    auto stream = infinicore::context::getStream();
+#if defined(ENABLE_METAX_API) && defined(ENABLE_METAX_MC_API)
+    auto st = mcMemsetAsync(ptr, 0, nbytes, static_cast<mcStream_t>(stream));
+    if (st != mcSuccess) {
+        throw std::runtime_error("capture_safe_device_zero_: mcMemsetAsync failed");
+    }
+#elif defined(ENABLE_METAX_API)
+    auto st = hcMemsetAsync(ptr, 0, nbytes, static_cast<hcStream_t>(stream));
+    if (st != hcSuccess) {
+        throw std::runtime_error("capture_safe_device_zero_: hcMemsetAsync failed");
+    }
+#elif defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API)
+    auto st = cudaMemsetAsync(ptr, 0, nbytes, static_cast<cudaStream_t>(stream));
+    if (st != cudaSuccess) {
+        throw std::runtime_error("capture_safe_device_zero_: cudaMemsetAsync failed");
+    }
+#else
+    (void)stream;
+    std::memset(ptr, 0, nbytes);
+#endif
+}
+
+void capture_safe_aten_zero_(at::Tensor &t) {
+    if (!t.defined() || t.nbytes() == 0) {
+        return;
+    }
+    if (!infinicore::context::isDeviceStreamCapturing()) {
+        t.zero_();
+        return;
+    }
+    if (!t.is_contiguous()) {
+        // Non-contiguous under capture: fall back to ATen (may HTC); prefer contiguous scratch.
+        // #region agent log
+        infinicore::debug_session::log(
+            "A",
+            "inductor_segment.cc:capture_safe_aten_zero_",
+            "noncontig_zero_fallback_FillFunctor_risk",
+            std::string("{\"nbytes\":") + std::to_string(t.nbytes()) + "}");
+        // #endregion
+        t.zero_();
+        return;
+    }
+    capture_safe_device_zero_(t.data_ptr(), static_cast<size_t>(t.nbytes()));
+}
+
+/// Capture-safe dtype cast: MetaX ATen ``Tensor::to`` / ``_to_copy`` can launch
+/// ``FillFunctor<long>`` (HTC) under ``hcStream`` capture. Prefer CaptureArena empty
+/// + ``copy_`` (no fill kernel) when an arena is active; skip when dtype already matches.
+at::Tensor capture_safe_to_dtype(const at::Tensor &src, at::ScalarType dtype) {
+    if (!src.defined()) {
+        return src;
+    }
+    if (src.scalar_type() == dtype) {
+        return src;
+    }
+    if (!infinicore::context::isDeviceStreamCapturing()) {
+        return src.to(dtype);
+    }
+    if (auto *arena = infinicore::graph::current_capture_arena()) {
+        at::Tensor dst = arena->empty_aten(src.sizes(), src.options().dtype(dtype));
+        dst.copy_(src);
+        arena->retain(dst);
+        return dst;
+    }
+    // No arena: last resort (may HTC on MetaX).
+    return src.to(dtype);
+}
+
 void fill_positions_padded_into(
     infinicore::Tensor &positions_padded,
     const infinicore::Tensor &positions,
@@ -132,15 +219,24 @@ void fill_positions_padded_into(
     if (valid_len == 0) {
         valid_len = std::min(bucket, static_cast<size_t>(pos.size(0)));
     }
-    padded.zero_();
-    if (valid_len > 0) {
-        auto prefix = pos.narrow(0, 0, static_cast<int64_t>(valid_len)).unsqueeze(0);
-        const int64_t copy_len = std::min(static_cast<int64_t>(valid_len), padded.size(1));
+    const int64_t copy_len = std::min(static_cast<int64_t>(valid_len), padded.size(1));
+    // Decode M=1 with bucket==valid often overwrites the whole padded row — skip zero.
+    if (copy_len < padded.size(1)) {
+        capture_safe_aten_zero_(padded);
+    }
+    if (copy_len > 0) {
+        auto prefix = pos.narrow(0, 0, copy_len).unsqueeze(0);
         padded.narrow(1, 0, copy_len).copy_(prefix.narrow(1, 0, copy_len));
     }
 }
 
 void restore_cuda_context(const infinicore::Device &device) {
+    // Mid-capture / mid-record device switches trip "Switching device runtime during
+    // graph recording may break the graph!" and poison MetaX stream capture replay.
+    if (infinicore::context::isDeviceStreamCapturing()
+        || infinicore::context::isGraphRecording()) {
+        return;
+    }
     infinicore::context::setDevice(device);
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
     c10::cuda::CUDAGuard guard(static_cast<int>(device.getIndex()));
@@ -253,11 +349,22 @@ at::Tensor pad_moe_hidden_fast(const at::Tensor &hidden, size_t bucket, size_t v
                             || scratch.device() != hidden.device()
                             || scratch.dtype() != hidden.dtype();
     if (need_alloc) {
-        scratch = at::empty({batch, bucket_i, hidden_size}, hidden.options());
-        scratch.zero_();
+        if (auto *arena = infinicore::graph::current_capture_arena()) {
+            scratch = arena->empty_aten(
+                {batch, bucket_i, hidden_size},
+                hidden.options());
+        } else {
+            scratch = at::empty({batch, bucket_i, hidden_size}, hidden.options());
+        }
+        capture_safe_aten_zero_(scratch);
     } else if (copy_len < bucket_i) {
         // Reuse: clear stale tail so padded tokens stay zeros.
-        scratch.narrow(1, copy_len, bucket_i - copy_len).zero_();
+        // Under capture, prefer full-tensor stream memset (narrow may be non-contiguous).
+        if (infinicore::context::isDeviceStreamCapturing()) {
+            capture_safe_aten_zero_(scratch);
+        } else {
+            scratch.narrow(1, copy_len, bucket_i - copy_len).zero_();
+        }
     }
     if (copy_len > 0) {
         scratch.narrow(1, 0, copy_len).copy_(hidden.narrow(1, 0, copy_len));
@@ -287,11 +394,20 @@ std::pair<at::Tensor, at::Tensor> grouped_sigmoid_topk_aten(
     int64_t topk_group,
     bool norm_topk_prob,
     double routed_scaling_factor) {
-    auto scores = at::sigmoid(logits.to(at::kFloat));
-    auto bias_f = bias.to(at::kFloat).reshape({1, -1});
+    // Under capture: skip redundant ATen ``.to(kFloat)`` / Long→Int ``.to`` (FillFunctor HTC).
+    auto scores = at::sigmoid(capture_safe_to_dtype(logits, at::kFloat));
+    auto bias_f = capture_safe_to_dtype(bias, at::kFloat).reshape({1, -1});
     auto choice = scores + bias_f;
     // MiniCPM5 default: n_group=1 → skip group mask (no-op path).
     if (n_group != 1) {
+        // #region agent log
+        infinicore::debug_session::log(
+            "A",
+            "inductor_segment.cc:grouped_sigmoid_topk_aten",
+            "n_group_ne1_zeros_where_path",
+            std::string("{\"n_group\":") + std::to_string(n_group) + ",\"topk_group\":" +
+                std::to_string(topk_group) + "}");
+        // #endregion
         const int64_t t_tokens = choice.size(0);
         const int64_t n_experts = choice.size(1);
         const int64_t experts_per_group = n_experts / n_group;
@@ -306,15 +422,48 @@ std::pair<at::Tensor, at::Tensor> grouped_sigmoid_topk_aten(
                         .expand({t_tokens, n_group, experts_per_group})
                         .reshape({t_tokens, n_experts});
         choice = at::where(mask, choice, at::zeros_like(choice));
+        if (auto *arena = infinicore::graph::current_capture_arena()) {
+            arena->retain(top2);
+            arena->retain(group_scores);
+            arena->retain(group_idx);
+            arena->retain(keep);
+            arena->retain(mask);
+        }
     }
-    auto topk_ids = std::get<1>(at::topk(choice, top_k, /*dim=*/-1));
-    auto topk_weights = at::gather(scores, 1, topk_ids);
-    if (norm_topk_prob) {
-        topk_weights = topk_weights / (topk_weights.sum(/*dim=*/-1, /*keepdim=*/true) + 1e-20);
+    at::Tensor topk_weights;
+    at::Tensor topk_ids;
+    if (auto *arena = infinicore::graph::current_capture_arena()) {
+        // Arena out-buffers for topk — avoid ATen topk internal Long FillFunctor scratch.
+        const int64_t t_tokens = choice.size(0);
+        auto vals = arena->empty_aten({t_tokens, top_k}, choice.options());
+        auto inds_long = arena->empty_aten(
+            {t_tokens, top_k}, choice.options().dtype(at::kLong));
+        at::topk_out(vals, inds_long, choice, top_k, /*dim=*/-1, /*largest=*/true, /*sorted=*/true);
+        topk_weights = at::gather(scores, 1, inds_long);
+        if (norm_topk_prob) {
+            topk_weights =
+                topk_weights / (topk_weights.sum(/*dim=*/-1, /*keepdim=*/true) + 1e-20);
+        }
+        topk_weights = topk_weights * routed_scaling_factor;
+        topk_ids = capture_safe_to_dtype(inds_long, at::kInt);
+        arena->retain(scores);
+        arena->retain(bias_f);
+        arena->retain(choice);
+        arena->retain(vals);
+        arena->retain(inds_long);
+        arena->retain(topk_weights);
+        arena->retain(topk_ids);
+    } else {
+        auto topk_ids_long = std::get<1>(at::topk(choice, top_k, /*dim=*/-1));
+        topk_weights = at::gather(scores, 1, topk_ids_long);
+        if (norm_topk_prob) {
+            topk_weights =
+                topk_weights / (topk_weights.sum(/*dim=*/-1, /*keepdim=*/true) + 1e-20);
+        }
+        topk_weights = topk_weights * routed_scaling_factor;
+        topk_ids = topk_ids_long.to(at::kInt);
     }
-    topk_weights = topk_weights * routed_scaling_factor;
-    // Match warmed Triton cubins (bf16 weights, int32 ids).
-    return {topk_weights, topk_ids.to(at::kInt)};
+    return {topk_weights, topk_ids};
 }
 
 /// Eager decode: D2H logits + CPU top-k + H2D (avoids MetaX launch tax on tiny E).
@@ -421,7 +570,16 @@ at::Tensor silu_mlp_aten(
     const at::Tensor &w_down) {
     auto gu = at::linear(x, w_gate_up);
     auto chunks = gu.chunk(2, /*dim=*/-1);
-    return at::linear(at::silu(chunks[0]) * chunks[1], w_down);
+    auto mid = at::silu(chunks[0]) * chunks[1];
+    auto out = at::linear(mid, w_down);
+    if (auto *arena = infinicore::graph::current_capture_arena()) {
+        arena->retain(gu);
+        arena->retain(chunks[0]);
+        arena->retain(chunks[1]);
+        arena->retain(mid);
+        arena->retain(out);
+    }
+    return out;
 }
 
 /// Reuse intermediate buffers for decode shared-expert MLP (Phase 7).
@@ -661,26 +819,50 @@ at::Tensor run_moe_eager_decode(
         at::ScalarType xdtype = at::kFloat;
     };
     static thread_local GateCache gate_cache;
-    if (gate_cache.gate_ptr != weights.gate_weight.data_ptr()
-        || gate_cache.bias_ptr != weights.e_score_correction_bias.data_ptr()
-        || !gate_cache.gate_fp32.defined()
-        || gate_cache.xdtype != x.scalar_type()) {
-        gate_cache.gate_fp32 = weights.gate_weight.to(at::kFloat).contiguous();
-        gate_cache.gate_xdtype = weights.gate_weight.to(x.scalar_type()).contiguous();
-        gate_cache.bias_fp32 = weights.e_score_correction_bias.to(at::kFloat).contiguous();
-        gate_cache.bias_cpu = gate_cache.bias_fp32.to(at::Device(at::kCPU)).contiguous();
-        gate_cache.gate_ptr = weights.gate_weight.data_ptr();
-        gate_cache.bias_ptr = weights.e_score_correction_bias.data_ptr();
-        gate_cache.xdtype = x.scalar_type();
-    }
-
-    const bool capturing = infinicore::context::isGraphRecording();
+    const bool capturing = infinicore::context::isGraphRecording()
+                           || infinicore::context::isDeviceStreamCapturing();
     bool stream_capturing = false;
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
     stream_capturing =
         at::cuda::currentStreamCaptureStatus() != at::cuda::CaptureStatus::None;
 #endif
+    if (gate_cache.gate_ptr != weights.gate_weight.data_ptr()
+        || gate_cache.bias_ptr != weights.e_score_correction_bias.data_ptr()
+        || !gate_cache.gate_fp32.defined()
+        || gate_cache.xdtype != x.scalar_type()) {
+        // Under stream capture: prefer same-dtype views (no ATen ``.to`` FillFunctor,
+        // no full-gate fp32 copy into the capture graph). Eager keeps ``.to`` + CPU bias.
+        if (capturing || stream_capturing) {
+            if (weights.gate_weight.scalar_type() == x.scalar_type()) {
+                gate_cache.gate_xdtype = weights.gate_weight;
+            } else {
+                gate_cache.gate_xdtype =
+                    capture_safe_to_dtype(weights.gate_weight, x.scalar_type());
+            }
+            // Capture path uses gate_xdtype only; keep gate_fp32 defined for cache key.
+            gate_cache.gate_fp32 = gate_cache.gate_xdtype;
+            if (weights.e_score_correction_bias.scalar_type() == at::kFloat) {
+                gate_cache.bias_fp32 = weights.e_score_correction_bias;
+            } else {
+                gate_cache.bias_fp32 = capture_safe_to_dtype(
+                    weights.e_score_correction_bias, at::kFloat);
+            }
+            gate_cache.bias_cpu = at::Tensor();
+        } else {
+            gate_cache.gate_fp32 = weights.gate_weight.to(at::kFloat).contiguous();
+            gate_cache.gate_xdtype = weights.gate_weight.to(x.scalar_type()).contiguous();
+            gate_cache.bias_fp32 = weights.e_score_correction_bias.to(at::kFloat).contiguous();
+            gate_cache.bias_cpu = gate_cache.bias_fp32.to(at::Device(at::kCPU)).contiguous();
+        }
+        gate_cache.gate_ptr = weights.gate_weight.data_ptr();
+        gate_cache.bias_ptr = weights.e_score_correction_bias.data_ptr();
+        gate_cache.xdtype = x.scalar_type();
+    }
+
     const int64_t t_tokens = x.size(0);
+    // Host top-k does D2H/H2D + CPU work — illegal under hcStream capture.
+    // Note: device-segment capture runs after GraphManager stops recording, so
+    // isGraphRecording() is false; must also check isDeviceStreamCapturing().
     const bool use_host_topk = !capturing && !stream_capturing && t_tokens > 0
                                && t_tokens <= 16 && cfg.n_group == 1 && x.is_cuda();
 
@@ -752,9 +934,15 @@ at::Tensor run_moe_eager_decode(
 #endif
     }
 
-    // Capture / large-T: fp32 router (matches AOTI numerics) + GPU top-k.
-    x_f = x.to(at::kFloat);
-    logits = at::linear(x_f, gate_cache.gate_fp32);
+    // Capture / large-T: GPU top-k. Under stream capture keep gate/x dtype aligned
+    // (no ``x.to(kFloat)`` FillFunctor); non-capture keeps fp32 router for AOTI parity.
+    if (capturing || stream_capturing) {
+        logits = at::linear(x, gate_cache.gate_xdtype);
+        x_f = at::Tensor(); // unused under capture
+    } else {
+        x_f = x.to(at::kFloat);
+        logits = at::linear(x_f, gate_cache.gate_fp32);
+    }
     auto topk = grouped_sigmoid_topk_aten(
         logits,
         gate_cache.bias_fp32,
@@ -763,7 +951,7 @@ at::Tensor run_moe_eager_decode(
         cfg.topk_group,
         cfg.norm_topk_prob,
         cfg.routed_scaling_factor);
-    topk_w = topk.first.to(x.dtype());
+    topk_w = capture_safe_to_dtype(topk.first, x.scalar_type());
     topk_ids = topk.second;
     routed = call_fused_moe_routed(
         x, topk_w, topk_ids, weights.w_gate_up, weights.w_down);
@@ -771,7 +959,9 @@ at::Tensor run_moe_eager_decode(
                        : silu_mlp_aten_cached(x, weights.shared_gate_up, weights.shared_down);
     auto y = routed + shared;
     if (auto *arena = infinicore::graph::current_capture_arena()) {
-        arena->retain(x_f);
+        if (x_f.defined()) {
+            arena->retain(x_f);
+        }
         arena->retain(logits);
         arena->retain(topk.first);
         arena->retain(topk_ids);
@@ -836,11 +1026,27 @@ void run_moe_segment(
         } else {
             out_aten.narrow(1, 0, static_cast<int64_t>(valid_len)).copy_(y3);
             if (static_cast<size_t>(out_aten.size(1)) > valid_len) {
-                out_aten.narrow(
-                            1,
-                            static_cast<int64_t>(valid_len),
-                            out_aten.size(1) - static_cast<int64_t>(valid_len))
-                    .zero_();
+                if (infinicore::context::isDeviceStreamCapturing()) {
+                    if (!out_aten.is_contiguous()) {
+                        throw std::runtime_error(
+                            "InductorMoe: non-contiguous MoE out under capture; cannot stream-memset pad");
+                    }
+                    const size_t elem = static_cast<size_t>(out_aten.element_size());
+                    const size_t row = static_cast<size_t>(hidden_size) * elem;
+                    const size_t prefix = static_cast<size_t>(valid_len) * row;
+                    const size_t total = static_cast<size_t>(out_aten.size(1)) * row;
+                    for (int64_t b = 0; b < batch; ++b) {
+                        auto *base = static_cast<char *>(out_aten.data_ptr())
+                                     + static_cast<size_t>(b) * total;
+                        capture_safe_device_zero_(base + prefix, total - prefix);
+                    }
+                } else {
+                    out_aten.narrow(
+                                1,
+                                static_cast<int64_t>(valid_len),
+                                out_aten.size(1) - static_cast<int64_t>(valid_len))
+                        .zero_();
+                }
             }
         }
         restore_cuda_context(rank_device);

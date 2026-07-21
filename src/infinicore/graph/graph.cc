@@ -1,13 +1,21 @@
 #include "graph_manager.hpp"
 
 #include "../utils.hpp"
+#include "../context/debug_session_log.hpp"
 #include "infinicore/context/context.hpp"
 #include "infinicore/graph/capture_arena.hpp"
 #include <cstdlib>
 #include <cstring>
 #include <infinirt.h>
+#include <sstream>
 #include <string>
+#include <typeinfo>
 #include <utility>
+
+#if defined(__GNUC__) || defined(__clang__)
+#include <cxxabi.h>
+#include <memory>
+#endif
 
 #if defined(ENABLE_ATEN) \
     && (defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API))
@@ -23,6 +31,31 @@ namespace {
 bool graph_strict_replay_enabled() {
     const char *v = std::getenv("INFINI_GRAPH_STRICT_REPLAY");
     return v != nullptr && v[0] != '\0' && std::string(v) != "0";
+}
+
+/// Temporary FULL-decode audit: per-segment op names + faulting op index.
+bool graph_capture_audit_enabled() {
+    const char *v = std::getenv("INFINI_GRAPH_CAPTURE_AUDIT");
+    return v != nullptr && v[0] != '\0' && std::string(v) != "0";
+}
+
+std::string demangle_type_name(const char *mangled) {
+    if (mangled == nullptr) {
+        return "unknown";
+    }
+#if defined(__GNUC__) || defined(__clang__)
+    int status = 0;
+    std::unique_ptr<char, void (*)(void *)> demangled(
+        abi::__cxa_demangle(mangled, nullptr, nullptr, &status), std::free);
+    if (status == 0 && demangled) {
+        return demangled.get();
+    }
+#endif
+    return mangled;
+}
+
+std::string op_type_name(const GraphOperator &op) {
+    return demangle_type_name(typeid(op).name());
 }
 
 infinirtStreamCaptureMode_t graph_capture_mode() {
@@ -228,6 +261,23 @@ void Graph::capture_device_segment_(ReplayStep &step) {
     step.device = std::make_unique<DeviceGraph>();
     step.device->capture_arena = std::make_unique<CaptureArena>();
 
+    const bool audit = graph_capture_audit_enabled();
+    const size_t seg_idx = replay_steps_.size();
+    if (audit) {
+        std::ostringstream names;
+        for (size_t i = 0; i < step.ops.size(); ++i) {
+            if (i > 0) {
+                names << ", ";
+            }
+            names << i << ':' << op_type_name(*step.ops[i]);
+        }
+        spdlog::warn(
+            "[capture_audit] BeginCapture seg={} op_count={} ops=[{}]",
+            seg_idx,
+            step.ops.size(),
+            names.str());
+    }
+
 #ifdef INFINI_TORCH_CAPTURE_STREAM_ALIGN
     // Align Torch current stream with InfiniCore capture stream to avoid
     // "legacy stream depend on a capturing blocking stream". Memory ownership
@@ -253,6 +303,9 @@ void Graph::capture_device_segment_(ReplayStep &step) {
         }
     } arena_guard{step.device->capture_arena.get()};
 
+    // Drain recording-time work before stream capture (RoPE no longer syncs via D2H).
+    infinicore::context::syncStream();
+
     const auto capture_mode = graph_capture_mode();
     if (infinirtStreamBeginCapture(context::getStream(), capture_mode)
         != INFINI_STATUS_SUCCESS) {
@@ -264,9 +317,82 @@ void Graph::capture_device_segment_(ReplayStep &step) {
     }
 
     context::setDeviceStreamCapturing(true);
+    // #region agent log
+    infinicore::debug_session::log(
+        "B",
+        "graph.cc:capture_device_segment_",
+        "BeginCapture_stream_capturing_on",
+        std::string("{\"seg\":") + std::to_string(seg_idx) + ",\"op_count\":" +
+            std::to_string(step.ops.size()) + "}");
+    // #endregion
+    // Diagnostic: INFINI_GRAPH_CAPTURE_MAX_OPS=N captures only the first N ops
+    // (binary-narrow Class B probe poison without changing the recorded op list).
+    size_t capture_op_limit = step.ops.size();
+    if (const char *lim = std::getenv("INFINI_GRAPH_CAPTURE_MAX_OPS")) {
+        if (lim[0] != '\0') {
+            const size_t n = static_cast<size_t>(std::strtoul(lim, nullptr, 10));
+            if (n > 0 && n < capture_op_limit) {
+                capture_op_limit = n;
+                spdlog::warn(
+                    "[capture_audit] seg={} CAPTURE_MAX_OPS={} (of {})",
+                    seg_idx,
+                    capture_op_limit,
+                    step.ops.size());
+                // #region agent log
+                infinicore::debug_session::log(
+                    "K",
+                    "graph.cc:capture_device_segment_",
+                    "capture_max_ops_applied",
+                    std::string("{\"seg\":") + std::to_string(seg_idx) + ",\"limit\":" +
+                        std::to_string(capture_op_limit) + ",\"full\":" +
+                        std::to_string(step.ops.size()) + "}");
+                // #endregion
+            }
+        }
+    }
     try {
         // Host-break ops are never placed in DeviceSegment steps.
-        run_ops_(step.ops);
+        // Audit path logs each op so HTC/IllegalAddress stacks pin the first bad op.
+        if (audit) {
+            for (size_t i = 0; i < capture_op_limit; ++i) {
+                const auto &op = step.ops[i];
+                const std::string name = op_type_name(*op);
+                spdlog::warn(
+                    "[capture_audit] seg={} running op[{}/{}] type={}",
+                    seg_idx,
+                    i,
+                    step.ops.size(),
+                    name);
+                try {
+                    op->run();
+                } catch (...) {
+                    // #region agent log
+                    infinicore::debug_session::log(
+                        "A",
+                        "graph.cc:capture_device_segment_",
+                        "FAULT_during_op_run",
+                        std::string("{\"seg\":") + std::to_string(seg_idx) + ",\"op_idx\":" +
+                            std::to_string(i) + ",\"type\":\"" + name + "\"}");
+                    // #endregion
+                    spdlog::error(
+                        "[capture_audit] FAULT seg={} op_idx={} type={} (exception during capture)",
+                        seg_idx,
+                        i,
+                        name);
+                    throw;
+                }
+                spdlog::warn(
+                    "[capture_audit] seg={} done op[{}/{}] type={}",
+                    seg_idx,
+                    i,
+                    step.ops.size(),
+                    name);
+            }
+        } else {
+            for (size_t i = 0; i < capture_op_limit; ++i) {
+                step.ops[i]->run();
+            }
+        }
     } catch (...) {
         context::setDeviceStreamCapturing(false);
         arena_guard.release();
@@ -275,13 +401,33 @@ void Graph::capture_device_segment_(ReplayStep &step) {
     }
     context::setDeviceStreamCapturing(false);
 
+    if (audit) {
+        spdlog::warn("[capture_audit] seg={} EndCapture begin (ops done)", seg_idx);
+    }
+    // #region agent log
+    infinicore::debug_session::log(
+        "B",
+        "graph.cc:capture_device_segment_",
+        "EndCapture_begin",
+        std::string("{\"seg\":") + std::to_string(seg_idx) + "}");
+    // #endregion
     if (infinirtStreamEndCapture(context::getStream(), &step.device->graph)
         != INFINI_STATUS_SUCCESS) {
+        // #region agent log
+        infinicore::debug_session::log(
+            "B",
+            "graph.cc:capture_device_segment_",
+            "EndCapture_FAIL",
+            std::string("{\"seg\":") + std::to_string(seg_idx) + "}");
+        // #endregion
         arena_guard.release();
         if (graph_strict_replay_enabled()) {
             throw_graph_fatal("infinirtStreamEndCapture failed (INFINI_GRAPH_STRICT_REPLAY=1)");
         }
         return;
+    }
+    if (audit) {
+        spdlog::warn("[capture_audit] seg={} EndCapture ok; Instantiate begin", seg_idx);
     }
     // Keep arena allocations for DeviceGraph lifetime; only drop TLS / pin mode.
     arena_guard.release();
@@ -293,6 +439,13 @@ void Graph::capture_device_segment_(ReplayStep &step) {
             step.device->log_buffer.data(),
             step.device->log_buffer.size())
         != INFINI_STATUS_SUCCESS) {
+        // #region agent log
+        infinicore::debug_session::log(
+            "B",
+            "graph.cc:capture_device_segment_",
+            "Instantiate_FAIL",
+            std::string("{\"seg\":") + std::to_string(seg_idx) + "}");
+        // #endregion
         const size_t len = strnlen(step.device->log_buffer.data(), step.device->log_buffer.size());
         const std::string log_msg(step.device->log_buffer.data(), len);
         if (graph_strict_replay_enabled()) {
@@ -302,11 +455,47 @@ void Graph::capture_device_segment_(ReplayStep &step) {
         spdlog::warn("Fail to instantiate device graph segment (op-list fallback): {}", log_msg);
         return;
     }
+    if (audit) {
+        spdlog::warn("[capture_audit] seg={} Instantiate ok; probe launch begin", seg_idx);
+    }
+    // #region agent log
+    infinicore::debug_session::log(
+        "B",
+        "graph.cc:capture_device_segment_",
+        "Instantiate_ok_probe_begin",
+        std::string("{\"seg\":") + std::to_string(seg_idx) + "}");
+    // #endregion
 
-    const bool probe_ok = step.device->exec == nullptr
-                          || infinirtGraphLuanch(step.device->exec, context::getStream())
-                                 == INFINI_STATUS_SUCCESS;
-    if (step.device->exec != nullptr && !probe_ok) {
+    // Optional: skip instantiate probe (INFINI_GRAPH_SKIP_PROBE=1) for diagnosis.
+    const char *skip_probe = std::getenv("INFINI_GRAPH_SKIP_PROBE");
+    const bool do_probe = !(skip_probe && skip_probe[0] == '1');
+    bool probe_ok = true;
+    if (do_probe) {
+        probe_ok = step.device->exec == nullptr
+                   || infinirtGraphLuanch(step.device->exec, context::getStream())
+                          == INFINI_STATUS_SUCCESS;
+        // MetaX GraphLaunch is async — sync so a bad graph ATU is attributed here, and so
+        // the next BeginCapture does not race a still-running probe (TRITON=0 multi-seg).
+        if (step.device->exec != nullptr && probe_ok) {
+            infinicore::context::syncStream();
+        }
+        // #region agent log
+        infinicore::debug_session::log(
+            "B",
+            "graph.cc:capture_device_segment_",
+            probe_ok ? "probe_ok_after_sync" : "probe_launch_api_FAIL",
+            std::string("{\"seg\":") + std::to_string(seg_idx) + "}");
+        // #endregion
+    } else if (audit) {
+        spdlog::warn("[capture_audit] seg={} probe SKIPPED (INFINI_GRAPH_SKIP_PROBE=1)", seg_idx);
+    }
+    if (audit && do_probe) {
+        spdlog::warn(
+            "[capture_audit] seg={} probe launch {}",
+            seg_idx,
+            probe_ok ? "ok" : "FAIL");
+    }
+    if (do_probe && step.device->exec != nullptr && !probe_ok) {
         if (graph_strict_replay_enabled()) {
             infinirtGraphExecDestroy(step.device->exec);
             step.device->exec = nullptr;

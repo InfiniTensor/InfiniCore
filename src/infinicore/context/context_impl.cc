@@ -1,9 +1,11 @@
 #include "context_impl.hpp"
 #include "internal.hpp"
+#include "debug_session_log.hpp"
 
 #include "../utils.hpp"
 
 #include <chrono>
+#include <cstdlib>
 #include <fstream>
 
 namespace infinicore {
@@ -39,27 +41,27 @@ void ContextImpl::setDevice(Device device) {
         return;
     }
 
-    thread_local bool warn_switch_runtime = false;
-    if (getCurrentRuntime()->isGraphRecording() && !warn_switch_runtime) {
-        spdlog::warn("Switching device runtime during graph recording may break the graph!");
-        warn_switch_runtime = true;
+    const bool recording = getCurrentRuntime()->isGraphRecording();
+    const bool stream_cap = context::isDeviceStreamCapturing();
+    if (recording || stream_cap) {
         // #region agent log
         {
             const auto from_dev = getCurrentRuntime()->device().toString();
             const auto to_dev = device.toString();
-            std::ofstream dbg("/workspace/.cursor/debug-66a1a9.log", std::ios::app);
-            if (dbg) {
-                const auto ts = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                    std::chrono::system_clock::now().time_since_epoch())
-                                    .count();
-                dbg << "{\"sessionId\":\"66a1a9\",\"runId\":\"repro\",\"hypothesisId\":\"B\","
-                    << "\"location\":\"context_impl.cc:setDevice\","
-                    << "\"message\":\"device_switch_during_graph_recording\","
-                    << "\"data\":{\"from\":\"" << from_dev << "\",\"to\":\"" << to_dev << "\"},"
-                    << "\"timestamp\":" << ts << "}\n";
-            }
+            infinicore::debug_session::log(
+                "C",
+                "context_impl.cc:setDevice",
+                "device_switch_under_capture_or_recording",
+                std::string("{\"from\":\"") + from_dev + "\",\"to\":\"" + to_dev +
+                    "\",\"recording\":" + (recording ? "true" : "false") +
+                    ",\"streamCapturing\":" + (stream_cap ? "true" : "false") + "}");
         }
         // #endregion
+    }
+    thread_local bool warn_switch_runtime = false;
+    if (recording && !warn_switch_runtime) {
+        spdlog::warn("Switching device runtime during graph recording may break the graph!");
+        warn_switch_runtime = true;
     }
 
     if (runtime_table_[int(device.getType())][device.getIndex()] == nullptr) {
@@ -236,6 +238,18 @@ bool isDeviceStreamCapturing() {
 
 void setDeviceStreamCapturing(bool capturing) {
     g_device_stream_capturing = capturing;
+    // Mirror to env so Infiniop (separate DSO) can force capture-safe PagedAttention
+    // dispatch (no split-kv multi-launch / hcGetDevice) while the stream is capturing.
+    // #region agent log
+    {
+        setenv("INFINI_DEVICE_STREAM_CAPTURING", capturing ? "1" : "0", 1);
+        infinicore::debug_session::log(
+            "P1",
+            "context_impl.cc:setDeviceStreamCapturing",
+            capturing ? "stream_capturing_on" : "stream_capturing_off",
+            std::string("{\"capturing\":") + (capturing ? "true" : "false") + "}");
+    }
+    // #endregion
 }
 
 graph::CaptureArena *currentCaptureArena() {

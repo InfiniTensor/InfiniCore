@@ -109,8 +109,18 @@ infiniStatus_t Descriptor::calculate(
     const void *block_tables, const void *cache_lens, const void *alibi_slopes,
     void *stream_) const {
 
+    // Under InfiniCore hcStream capture, force non-split decode: MetaX GraphLaunch
+    // ATUs on hd128 default split-kv (multi-kernel + workspace) during probe/replay.
+    // Env mirrored from context::setDeviceStreamCapturing.
+    const bool under_stream_capture = [] {
+        const char *c = std::getenv("INFINI_DEVICE_STREAM_CAPTURING");
+        return c != nullptr && c[0] == '1';
+    }();
+
     bool need_workspace = false;
-    if (const char *env = std::getenv("INFINIOP_FLASH_DECODE_SPLITKV")) {
+    if (under_stream_capture) {
+        need_workspace = false;
+    } else if (const char *env = std::getenv("INFINIOP_FLASH_DECODE_SPLITKV")) {
         // "auto" may enable split-kv depending on the runtime heuristic.
         need_workspace = (std::strcmp(env, "auto") == 0) || (std::strcmp(env, "1") == 0) || (std::strcmp(env, "true") == 0);
     } else {

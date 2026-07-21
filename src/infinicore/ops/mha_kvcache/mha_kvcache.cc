@@ -1,7 +1,21 @@
 #include "infinicore/ops/mha_kvcache.hpp"
 #include "../../utils.hpp"
 
+#include <cstdlib>
+#include <string>
+
 namespace infinicore::op {
+
+namespace {
+
+/// Diagnose-only (P8a): force FA into hcStreamBeginCapture. Default off — MetaX FA2
+/// historically HTC / IllegalAddress under capture. Never set in production serve.
+bool fa_force_capture_enabled() {
+    const char *v = std::getenv("INFINI_FA_FORCE_CAPTURE");
+    return v != nullptr && v[0] != '\0' && std::string(v) != "0";
+}
+
+} // namespace
 
 INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(MhaKVCache);
 
@@ -18,7 +32,8 @@ MhaKVCache::MhaKVCache(Tensor out,
                                  out, q, k_cache, v_cache, seqlens_k, block_table, alibi_slopes, scale);
     // MetaX FA2 mha_fwd_kvcache is not stream-capture-safe (HTC mem violation under
     // hcStreamBeginCapture). Mirror MoE / prefill FA2 piecewise: eager between device segments.
-    host_break_ = true;
+    // Opt-in INFINI_FA_FORCE_CAPTURE=1 for fa_capture_smoke diagnose only.
+    host_break_ = !fa_force_capture_enabled();
 }
 
 void MhaKVCache::execute(Tensor out,

@@ -23,7 +23,7 @@ std::byte *DevicePinnedHostAllocator::allocate(size_t size) {
     if (owner_ != active) {
         // #region agent log
         infinicore::debug_session::log(
-            "H3",
+            "C",
             "device_pinned_allocator.cc:allocate",
             "owner_active_mismatch",
             std::string("{\"owner\":") + std::to_string(owner_.getIndex()) + ",\"active\":" +

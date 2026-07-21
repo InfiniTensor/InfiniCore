@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <chrono>
 
 #include "../../../devices/metax/metax_common.h"
 #include "../../../devices/metax/metax_kernel_common.h"
@@ -486,7 +487,36 @@ infiniStatus_t launch_decode_hd128_impl(
 
     bool use_split = true;
     bool use_split_auto = false;
-    if (const char *env = std::getenv("INFINIOP_FLASH_DECODE_SPLITKV")) {
+    // MetaX stream capture: never take split-kv (multi-kernel + getSmCount/hcGetDevice).
+    // Captured graph must be a single decode kernel for GraphLaunch probe/replay.
+    const bool under_stream_capture = [] {
+        const char *c = std::getenv("INFINI_DEVICE_STREAM_CAPTURING");
+        return c != nullptr && c[0] == '1';
+    }();
+    if (under_stream_capture) {
+        use_split = false;
+        use_split_auto = false;
+        // #region agent log
+        {
+            static int once = 0;
+            if (once++ < 4) {
+                FILE *f = std::fopen("/opt/offline/infinilm-metax-20260622/.cursor/debug-11084d.log", "a");
+                if (f) {
+                    std::fprintf(f,
+                                 "{\"sessionId\":\"11084d\",\"hypothesisId\":\"P1\",\"location\":\"paged_attention_hd128.maca\","
+                                 "\"message\":\"force_nonsplit_under_capture\",\"data\":{\"use_split\":0,\"num_heads\":%zu,\"num_seqs\":%zu},"
+                                 "\"timestamp\":%lld}\n",
+                                 num_heads, num_seqs,
+                                 static_cast<long long>(
+                                     std::chrono::duration_cast<std::chrono::milliseconds>(
+                                         std::chrono::system_clock::now().time_since_epoch())
+                                         .count()));
+                    std::fclose(f);
+                }
+            }
+        }
+        // #endregion
+    } else if (const char *env = std::getenv("INFINIOP_FLASH_DECODE_SPLITKV")) {
         if (std::strcmp(env, "auto") == 0) {
             use_split_auto = true;
             use_split = false;

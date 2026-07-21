@@ -1,6 +1,7 @@
 #include "infinicore/nn/rope.hpp"
 #include "../../utils.h"
 #include "../utils.hpp"
+#include "infinicore/context/context.hpp"
 #include "infinicore/ops.hpp"
 #include <algorithm>
 #include <cmath>
@@ -29,6 +30,12 @@ int64_t max_position_id(const Tensor &pos) {
 }
 
 void assert_position_in_cache(const Tensor &pos, size_t max_seq_len) {
+    // D2H + setDevice(CPU) under graph recording / stream capture trips
+    // "Switching device runtime during graph recording" (28 layers × 2 RoPE)
+    // and can poison MetaX monolithic decode CG probe/replay.
+    if (context::isGraphRecording() || context::isDeviceStreamCapturing()) {
+        return;
+    }
     const int64_t max_pos = max_position_id(pos);
     if (max_pos < 0) {
         return;

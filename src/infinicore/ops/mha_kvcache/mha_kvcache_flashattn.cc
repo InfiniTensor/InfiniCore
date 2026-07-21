@@ -3,7 +3,9 @@
 #include "infinicore/adaptor/flash_attention_adaptor.hpp"
 #include "infinicore/context/context.hpp"
 
+#include <cstdlib>
 #include <stdexcept>
+#include <string>
 
 #ifdef ENABLE_FLASH_ATTN
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
@@ -46,10 +48,16 @@ void *plan(Tensor out,
 
 void run(void *planned_meta) {
 #ifdef ENABLE_FLASH_ATTN
+    // Soft refuse unless diagnose-only INFINI_FA_FORCE_CAPTURE=1 (P8a smoke).
     if (infinicore::context::isDeviceStreamCapturing()) {
-        throw std::runtime_error(
-            "MhaKVCache::run: FA2 mha_fwd_kvcache must not run under hcStream capture "
-            "(recorded as host_break; Graph splits device segments around FA)");
+        const char *force = std::getenv("INFINI_FA_FORCE_CAPTURE");
+        const bool force_on =
+            force != nullptr && force[0] != '\0' && std::string(force) != "0";
+        if (!force_on) {
+            throw std::runtime_error(
+                "MhaKVCache::run: FA2 mha_fwd_kvcache must not run under hcStream capture "
+                "(recorded as host_break; Graph splits device segments around FA)");
+        }
     }
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
     c10::cuda::CUDAStreamGuard guard(infinicore::adaptor::get_cuda_stream());

@@ -2,6 +2,7 @@
 #include "infinicore/dtype.hpp"
 #include "infinicore/ops.hpp"
 #include "infinicore/tensor.hpp"
+#include "../context/debug_session_log.hpp"
 
 #include <algorithm>
 #include <cstdint>
@@ -34,6 +35,16 @@ void TensorImpl::copy_from(Tensor src) {
         size_t copy_size = std::min(this->nbytes(), src->nbytes());
         if (this->device().getType() == Device::Type::CPU) {
             if (this->is_contiguous()) {
+                // #region agent log
+                if (context::isDeviceStreamCapturing()
+                    || context::isGraphRecording()) {
+                    infinicore::debug_session::log(
+                        "C",
+                        "copy.cc:copy_from",
+                        "setDevice_before_D2H",
+                        std::string("{\"copy_size\":") + std::to_string(copy_size) + "}");
+                }
+                // #endregion
                 context::setDevice(src->device());
                 context::memcpyD2H(this->data(), src->data(), copy_size);
             } else {
@@ -43,6 +54,16 @@ void TensorImpl::copy_from(Tensor src) {
                 op::rearrange_(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()), local_src);
             }
         } else if (src->device().getType() == Device::Type::CPU) {
+            // #region agent log
+            if (context::isDeviceStreamCapturing()
+                || context::isGraphRecording()) {
+                infinicore::debug_session::log(
+                    "C",
+                    "copy.cc:copy_from",
+                    "setDevice_before_H2D",
+                    std::string("{\"copy_size\":") + std::to_string(copy_size) + "}");
+            }
+            // #endregion
             context::setDevice(this->device());
             if (this->is_contiguous()) {
                 context::memcpyH2D(this->data(), src->data(), copy_size, false);
