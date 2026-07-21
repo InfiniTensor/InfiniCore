@@ -6,6 +6,11 @@
 #include "../../devices/metax/metax_kernel_common.h"
 #include "elementwise_metax_api.h"
 
+#include <cstdlib>
+#include <cstring>
+#include <memory>
+#include <vector>
+
 namespace op::elementwise::metax {
 template <typename T>
 __device__ __forceinline__ const T *typedInputPtr(const void *ptr) {
@@ -136,6 +141,18 @@ struct DeviceImpl::Opaque {
     }
 
 private:
+    // MetaX GraphLaunch re-reads the host VA recorded for H2D. Stack-backed
+    // vector::data() from launchElementwiseKernel is gone by then → ATU.
+    // Under stream capture, retain one unique host buffer per calculate so
+    // shared Descriptors (same shape, many Mul/Add instances) each keep a
+    // stable address for the graph lifetime.
+    mutable std::vector<std::unique_ptr<const void *[]>> capture_inputs_arena_;
+
+    static bool underDeviceStreamCapture() {
+        const char *c = std::getenv("INFINI_DEVICE_STREAM_CAPTURING");
+        return c != nullptr && c[0] == '1';
+    }
+
     template <size_t N>
     infiniStatus_t infoToDevice(
         const op::elementwise::ElementwiseInfo &info,
@@ -156,8 +173,16 @@ private:
         const int8_t *info_meta_start = info.getMetaStart();
         const int8_t *d_meta_start = reinterpret_cast<int8_t *>(workspace) + input_arr_size;
 
+        const void *const *h_src = h_inputs_arr;
+        if (underDeviceStreamCapture()) {
+            auto buf = std::make_unique<const void *[]>(N);
+            std::memcpy(buf.get(), h_inputs_arr, input_arr_size);
+            h_src = buf.get();
+            capture_inputs_arena_.push_back(std::move(buf));
+        }
+
         // copy the input pointer array and meta to device
-        CHECK_METAX(hcMemcpyAsync(workspace, h_inputs_arr, input_arr_size, hcMemcpyHostToDevice, stream));
+        CHECK_METAX(hcMemcpyAsync(workspace, h_src, input_arr_size, hcMemcpyHostToDevice, stream));
         CHECK_METAX(hcMemcpyAsync((void *)d_meta_start, info_meta_start, info.getMetaMemSize(), hcMemcpyHostToDevice, stream));
 
         // offset/assign the pointers

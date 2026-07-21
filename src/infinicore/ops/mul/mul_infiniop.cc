@@ -8,6 +8,9 @@ INFINIOP_CACHABLE_DESCRIPTOR(Descriptor, Mul, 100);
 
 struct PlannedMeta {
     std::shared_ptr<Descriptor> descriptor;
+    // GraphTensor(workspace) is to_blob_ (no-op deleter). Keep an owning
+    // Tensor so free-list reuse cannot alias workspace under graph replay.
+    Tensor workspace_own;
     graph::GraphTensor workspace, c, a, b;
 };
 
@@ -22,6 +25,7 @@ void *plan(Tensor c, const Tensor &a, const Tensor &b) {
 
     return new PlannedMeta{
         descriptor,
+        workspace,
         graph::GraphTensor(workspace),
         graph::GraphTensor(c),
         graph::GraphTensor(a),
