@@ -47,7 +47,8 @@ void calculate(Tensor x, Tensor y, Tensor param) {
 static bool registered = []() {
     Rotm::dispatcher().registerDevice({Device::Type::CPU,
                                        Device::Type::CAMBRICON,
-                                       Device::Type::METAX},
+                                       Device::Type::METAX,
+                                       Device::Type::MARS},
                                       &calculate,
                                       false);
     return true;

@@ -10,6 +10,7 @@ class InfiniDeviceEnum:
     HYGON = 8
     QY = 9
     ALI = 10
+    MARS = 11
 
 
 InfiniDeviceNames = {
@@ -24,6 +25,7 @@ InfiniDeviceNames = {
     InfiniDeviceEnum.HYGON: "Hygon",
     InfiniDeviceEnum.QY: "QY",
     InfiniDeviceEnum.ALI: "Ali",
+    InfiniDeviceEnum.MARS: "Mars",
 }
 
 # Mapping that maps InfiniDeviceEnum to torch device string
@@ -39,4 +41,5 @@ torch_device_map = {
     InfiniDeviceEnum.HYGON: "cuda",
     InfiniDeviceEnum.QY: "cuda",
     InfiniDeviceEnum.ALI: "cuda",
+    InfiniDeviceEnum.MARS: "cuda",
 }

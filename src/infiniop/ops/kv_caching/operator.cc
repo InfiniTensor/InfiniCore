@@ -5,7 +5,7 @@
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_ALI_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/kv_caching_nvidia.cuh"
 #endif
-#if defined(ENABLE_METAX_API)
+#if defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API)
 #include "metax/kv_caching_metax.h"
 #endif
 
@@ -49,6 +49,9 @@ __INFINI_C infiniStatus_t infiniopCreateKVCachingDescriptor(
 #if defined(ENABLE_METAX_API)
         CREATE(INFINI_DEVICE_METAX, metax);
 #endif
+#if defined(ENABLE_MARS_API)
+        CREATE(INFINI_DEVICE_MARS, metax);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -86,6 +89,9 @@ __INFINI_C infiniStatus_t infiniopGetKVCachingWorkspaceSize(
 #endif
 #if defined(ENABLE_METAX_API)
         GET_SIZE(INFINI_DEVICE_METAX, metax);
+#endif
+#if defined(ENABLE_MARS_API)
+        GET_SIZE(INFINI_DEVICE_MARS, metax);
 #endif
 
     default:
@@ -131,6 +137,9 @@ __INFINI_C infiniStatus_t infiniopKVCaching(
 #if defined(ENABLE_METAX_API)
         CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
+#if defined(ENABLE_MARS_API)
+        CALCULATE(INFINI_DEVICE_MARS, metax);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -166,6 +175,9 @@ __INFINI_C infiniStatus_t infiniopDestroyKVCachingDescriptor(
 #endif
 #if defined(ENABLE_METAX_API)
         DELETE(INFINI_DEVICE_METAX, metax);
+#endif
+#if defined(ENABLE_MARS_API)
+        DELETE(INFINI_DEVICE_MARS, metax);
 #endif
 
     default:

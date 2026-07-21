@@ -11,7 +11,7 @@
 #ifdef ENABLE_MOORE_API
 #include "moore/hardswish_moore.h"
 #endif
-#ifdef ENABLE_METAX_API
+#if defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API)
 #include "metax/hardswish_metax.h"
 #endif
 
@@ -46,6 +46,9 @@ __INFINI_C infiniStatus_t infiniopCreateHardSwishDescriptor(
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, metax);
 #endif
+#ifdef ENABLE_MARS_API
+        CREATE(INFINI_DEVICE_MARS, metax);
+#endif
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
@@ -79,6 +82,9 @@ __INFINI_C infiniStatus_t infiniopGetHardSwishWorkspaceSize(infiniopHardSwishDes
 #endif
 #ifdef ENABLE_METAX_API
         GET(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MARS_API
+        GET(INFINI_DEVICE_MARS, metax);
 #endif
 #ifdef ENABLE_HYGON_API
         GET(INFINI_DEVICE_HYGON, nvidia);
@@ -122,6 +128,9 @@ __INFINI_C infiniStatus_t infiniopHardSwish(
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
+#ifdef ENABLE_MARS_API
+        CALCULATE(INFINI_DEVICE_MARS, metax);
+#endif
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
@@ -156,6 +165,9 @@ __INFINI_C infiniStatus_t infiniopDestroyHardSwishDescriptor(infiniopHardSwishDe
 #endif
 #ifdef ENABLE_METAX_API
         DELETE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MARS_API
+        DELETE(INFINI_DEVICE_MARS, metax);
 #endif
 #ifdef ENABLE_HYGON_API
         DELETE(INFINI_DEVICE_HYGON, nvidia);

@@ -53,6 +53,7 @@ inline at::Device to_at_device(const Device &device) {
     // Treat CUDA-compatible vendor devices as CUDA devices for ATen tensor interoperability.
     if (device.getType() == Device::Type::NVIDIA
         || device.getType() == Device::Type::METAX
+        || device.getType() == Device::Type::MARS
         || device.getType() == Device::Type::QY
         || device.getType() == Device::Type::ILUVATAR
         || device.getType() == Device::Type::ALI
