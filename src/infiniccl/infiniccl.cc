@@ -1,5 +1,6 @@
 #include "infiniccl.h"
 
+#include "../utils.h"
 #include "./ascend/infiniccl_ascend.h"
 #include "./cambricon/infiniccl_cambricon.h"
 #include "./cuda/infiniccl_cuda.h"
@@ -33,6 +34,61 @@ __INFINI_C infiniStatus_t infinicclCommInitAll(
     }
 
 #undef COMM_INIT_ALL
+}
+
+__INFINI_C infiniStatus_t infinicclGetUniqueId(
+    infinicclUniqueId_t *unique_id) {
+    if (unique_id == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+
+    infiniDevice_t device_type;
+    CHECK_STATUS(infinirtGetDevice(&device_type, nullptr));
+
+#define GET_UNIQUE_ID(CASE_, NAMESPACE_) \
+    case CASE_:                          \
+        return infiniccl::NAMESPACE_::getUniqueId(unique_id)
+
+    switch (device_type) {
+        GET_UNIQUE_ID(INFINI_DEVICE_NVIDIA, cuda);
+        GET_UNIQUE_ID(INFINI_DEVICE_ILUVATAR, cuda);
+        GET_UNIQUE_ID(INFINI_DEVICE_QY, cuda);
+        GET_UNIQUE_ID(INFINI_DEVICE_HYGON, cuda);
+        GET_UNIQUE_ID(INFINI_DEVICE_ALI, cuda);
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    }
+
+#undef GET_UNIQUE_ID
+}
+
+__INFINI_C infiniStatus_t infinicclCommInitRank(
+    infinicclComm_t *comm,
+    int nranks,
+    infinicclUniqueId_t comm_id,
+    int rank) {
+    if (comm == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+
+    infiniDevice_t device_type;
+    CHECK_STATUS(infinirtGetDevice(&device_type, nullptr));
+
+#define COMM_INIT_RANK(CASE_, NAMESPACE_) \
+    case CASE_:                           \
+        return infiniccl::NAMESPACE_::commInitRank(comm, nranks, comm_id, rank)
+
+    switch (device_type) {
+        COMM_INIT_RANK(INFINI_DEVICE_NVIDIA, cuda);
+        COMM_INIT_RANK(INFINI_DEVICE_ILUVATAR, cuda);
+        COMM_INIT_RANK(INFINI_DEVICE_QY, cuda);
+        COMM_INIT_RANK(INFINI_DEVICE_HYGON, cuda);
+        COMM_INIT_RANK(INFINI_DEVICE_ALI, cuda);
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    }
+
+#undef COMM_INIT_RANK
 }
 
 __INFINI_C infiniStatus_t infinicclCommDestroy(infinicclComm_t comm) {
@@ -149,6 +205,94 @@ __INFINI_C infiniStatus_t infinicclAllReduce(
     }
 
 #undef ALL_REDUCE
+}
+
+__INFINI_C infiniStatus_t infinicclBroadcast(
+    const void *sendbuf,
+    void *recvbuf,
+    size_t count,
+    infiniDtype_t datatype,
+    int root,
+    infinicclComm_t comm,
+    infinirtStream_t stream) {
+
+    if (comm == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+
+#define BROADCAST(CASE_, NAMESPACE_) \
+    case CASE_:                      \
+        return infiniccl::NAMESPACE_::broadcast(sendbuf, recvbuf, count, datatype, root, comm, stream)
+
+    switch (comm->device_type) {
+        BROADCAST(INFINI_DEVICE_NVIDIA, cuda);
+        BROADCAST(INFINI_DEVICE_ILUVATAR, cuda);
+        BROADCAST(INFINI_DEVICE_QY, cuda);
+        BROADCAST(INFINI_DEVICE_HYGON, cuda);
+        BROADCAST(INFINI_DEVICE_ALI, cuda);
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    }
+
+#undef BROADCAST
+}
+
+__INFINI_C infiniStatus_t infinicclSend(
+    const void *sendbuf,
+    size_t count,
+    infiniDtype_t datatype,
+    int peer,
+    infinicclComm_t comm,
+    infinirtStream_t stream) {
+
+    if (comm == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+
+#define SEND(CASE_, NAMESPACE_) \
+    case CASE_:                 \
+        return infiniccl::NAMESPACE_::send(sendbuf, count, datatype, peer, comm, stream)
+
+    switch (comm->device_type) {
+        SEND(INFINI_DEVICE_NVIDIA, cuda);
+        SEND(INFINI_DEVICE_ILUVATAR, cuda);
+        SEND(INFINI_DEVICE_QY, cuda);
+        SEND(INFINI_DEVICE_HYGON, cuda);
+        SEND(INFINI_DEVICE_ALI, cuda);
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    }
+
+#undef SEND
+}
+
+__INFINI_C infiniStatus_t infinicclRecv(
+    void *recvbuf,
+    size_t count,
+    infiniDtype_t datatype,
+    int peer,
+    infinicclComm_t comm,
+    infinirtStream_t stream) {
+
+    if (comm == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+
+#define RECV(CASE_, NAMESPACE_) \
+    case CASE_:                 \
+        return infiniccl::NAMESPACE_::recv(recvbuf, count, datatype, peer, comm, stream)
+
+    switch (comm->device_type) {
+        RECV(INFINI_DEVICE_NVIDIA, cuda);
+        RECV(INFINI_DEVICE_ILUVATAR, cuda);
+        RECV(INFINI_DEVICE_QY, cuda);
+        RECV(INFINI_DEVICE_HYGON, cuda);
+        RECV(INFINI_DEVICE_ALI, cuda);
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    }
+
+#undef RECV
 }
 
 __INFINI_C infiniStatus_t infinicclAllGather(
