@@ -6,31 +6,9 @@ from __future__ import annotations
 import json
 import logging
 import os
-import time
 from typing import Iterable, Optional, Sequence
 
 logger = logging.getLogger(__name__)
-
-_DEBUG_LOG = "/opt/offline/infinilm-metax-20260622/.cursor/debug-9ddc7d.log"
-
-
-def _agent_log(location: str, message: str, hypothesis_id: str, data: dict) -> None:
-    # #region agent log
-    payload = {
-        "sessionId": "9ddc7d",
-        "location": location,
-        "message": message,
-        "hypothesisId": hypothesis_id,
-        "data": data,
-        "timestamp": int(time.time() * 1000),
-    }
-    try:
-        with open(_DEBUG_LOG, "a", encoding="utf-8") as f:
-            f.write(json.dumps(payload) + "\n")
-    except OSError:
-        pass
-    # #endregion
-
 
 def piecewise_inductor_segment_enabled() -> bool:
     from infinilm.compile.env import piecewise_inductor_segment_enabled as _enabled
@@ -123,17 +101,6 @@ def register_piecewise_inductor_packages(
                         layer_agnostic=True,
                     )
                     registered += 1
-        _agent_log(
-            "compiled_subgraphs.py:register_piecewise_inductor_packages",
-            "registered_packages",
-            "H3",
-            {
-                "registered": registered,
-                "tp_size": tp_size,
-                "ranks": ranks,
-                "layer_agnostic": True,
-            },
-        )
         return registered
 
     for segment in segments:
@@ -171,92 +138,7 @@ def register_piecewise_inductor_packages(
                         layer_agnostic=False,
                     )
                     registered += 1
-    _agent_log(
-        "compiled_subgraphs.py:register_piecewise_inductor_packages",
-        "registered_packages",
-        "H3",
-        {"registered": registered, "tp_size": tp_size, "ranks": ranks},
-    )
     return registered
-
-
-def _compile_missing_packages(
-    *,
-    model_path: str,
-    segments: Sequence[str],
-    buckets: Sequence[int],
-    cache_root: str,
-    tp_size: int,
-    tp_device_ids: Optional[Sequence[int]],
-    layer_agnostic: bool,
-) -> None:
-    from infinilm.compile.piecewise_segments import (
-        LAYER_AGNOSTIC_IDX,
-        SEGMENT_PRE_ATTN,
-        aot_compile_piecewise_segments_multi_bucket,
-        piecewise_inductor_package_path,
-    )
-    from infinilm.compile.piecewise_moe_segment import (
-        SEGMENT_MOE,
-        aot_compile_minicpm5_moe_segment,
-    )
-
-    import torch
-
-    for tp_rank in range(tp_size):
-        dev_index = (
-            int(tp_device_ids[tp_rank])
-            if tp_device_ids is not None and tp_rank < len(tp_device_ids)
-            else tp_rank
-        )
-        missing = []
-        for segment in segments:
-            for bucket in buckets:
-                pkg = piecewise_inductor_package_path(
-                    cache_root=cache_root,
-                    model_path=model_path,
-                    segment=segment,
-                    layer_idx=LAYER_AGNOSTIC_IDX if layer_agnostic else 0,
-                    bucket=int(bucket),
-                    tp_size=tp_size,
-                    tp_rank=tp_rank,
-                    layer_agnostic=layer_agnostic,
-                )
-                if not os.path.isfile(pkg):
-                    missing.append((segment, bucket))
-        if not missing:
-            continue
-        logger.info(
-            "piecewise inductor compile-on-miss: tp_rank=%s missing=%s",
-            tp_rank,
-            missing,
-        )
-        device = torch.device("cuda", dev_index)
-        if SEGMENT_PRE_ATTN in segments and any(s == SEGMENT_PRE_ATTN for s, _ in missing):
-            aot_compile_piecewise_segments_multi_bucket(
-                model_path=model_path,
-                segment=SEGMENT_PRE_ATTN,
-                buckets=[int(b) for b in buckets],
-                device=device,
-                cache_root=cache_root,
-                require_aot=True,
-                tp_size=tp_size,
-                tp_rank=tp_rank,
-                tp_device_ids=tp_device_ids or list(range(tp_size)),
-                layer_agnostic=layer_agnostic,
-            )
-        if SEGMENT_MOE in segments:
-            moe_buckets = sorted({int(b) for s, b in missing if s == SEGMENT_MOE})
-            for bucket in moe_buckets:
-                aot_compile_minicpm5_moe_segment(
-                    model_path=model_path,
-                    bucket=bucket,
-                    device=device,
-                    cache_root=cache_root,
-                    tp_size=tp_size,
-                    tp_rank=tp_rank,
-                    require_aot=True,
-                )
 
 
 def warmup_piecewise_inductor_packages(
@@ -384,10 +266,16 @@ def bootstrap_from_infinicore_device(
     cache_root: Optional[str] = None,
     tp_size: int = 1,
     tp_device_ids: Optional[Sequence[int]] = None,
-    compile_on_miss: bool = True,
+    compile_on_miss: bool = False,
 ) -> dict:
-    """Register (and optionally warm up) piecewise AOT packages for server init."""
+    """Register (and optionally warm up) piecewise AOT packages for server init.
+
+    Register-only: never compile-on-miss. Missing packages raise unless
+    ``INFINI_AOT_CHECK_SKIP=1``. Offline compile via
+    ``python -m infinilm.server.entry --phase compile|all``.
+    """
     del hidden_size, dtype  # reserved for future post_attn segment example inputs
+    del compile_on_miss  # deprecated; InferEngine never compiles
     if not piecewise_inductor_segment_enabled():
         return {"registered": 0, "warmed": 0}
 
@@ -395,42 +283,41 @@ def bootstrap_from_infinicore_device(
         raise ValueError("bootstrap_from_infinicore_device requires model_path")
 
     from infinilm.compile.env import (
-        compile_max_seq_len,
-        native_piecewise_capture_buckets,
-        piecewise_inductor_cache_root,
+        aot_check_skip,
         piecewise_inductor_compile_on_miss,
-        piecewise_inductor_require_aot,
+        piecewise_inductor_cache_root,
         prefill_native_cg_enabled,
     )
-    from infinilm.compile.piecewise_segments import (
-        SEGMENT_PRE_ATTN,
-        expected_piecewise_package_count,
-        piecewise_layer_agnostic_enabled,
+    from infinilm.compile.piecewise_bootstrap_plan import (
+        build_piecewise_bootstrap_plan,
+        missing_packages_error_message,
     )
-    from infinilm.compile.piecewise_moe_segment import SEGMENT_MOE
+
+    # Trigger one-shot DeprecationWarning if COM=1; always ignored.
+    piecewise_inductor_compile_on_miss()
+
+    if aot_check_skip():
+        logger.warning(
+            "INFINI_AOT_CHECK_SKIP=1: skipping piecewise AOT register/check"
+        )
+        return {"registered": 0, "warmed": 0, "skipped": True}
 
     tp_size = max(1, int(tp_size))
-    layer_agnostic = piecewise_layer_agnostic_enabled()
-
-    if num_layers is None:
-        config_path = os.path.join(model_path, "config.json")
-        with open(config_path, "r", encoding="utf-8") as f:
-            hf_config = json.load(f)
-        num_layers = int(hf_config.get("num_hidden_layers", 0))
-    else:
-        config_path = os.path.join(model_path, "config.json")
-        with open(config_path, "r", encoding="utf-8") as f:
-            hf_config = json.load(f)
-    if num_layers <= 0:
-        raise ValueError(f"invalid num_hidden_layers for model_path={model_path}")
-
-    if buckets is None:
-        buckets = native_piecewise_capture_buckets(compile_max_seq_len())
-
     root = cache_root or piecewise_inductor_cache_root()
-    model_type = str(hf_config.get("model_type", ""))
+    plan = build_piecewise_bootstrap_plan(
+        model_path=model_path,
+        tp_size=tp_size,
+        buckets=buckets,
+        cache_root=root,
+        num_layers=num_layers,
+    )
+    model_type = plan.model_type
+    num_layers = plan.num_layers
+    buckets = plan.buckets
+    segments = plan.segments
+    layer_agnostic = plan.layer_agnostic
     moe_artifact_info: Optional[dict] = None
-    # Track B MiniCPM5: register MoE packages (pre_attn optional / separate).
+
     if model_type == "minicpm5_moe":
         from infinilm.compile.piecewise_moe_segment import moe_routing_hparams
         from infinilm.torch_llama.moe_ops import (
@@ -439,6 +326,9 @@ def bootstrap_from_infinicore_device(
         )
 
         register_fused_moe_routed_op()
+        config_path = os.path.join(model_path, "config.json")
+        with open(config_path, "r", encoding="utf-8") as f:
+            hf_config = json.load(f)
         hp = moe_routing_hparams(hf_config)
         configure_moe_block_routing(
             top_k=hp["num_experts_per_tok"],
@@ -447,74 +337,34 @@ def bootstrap_from_infinicore_device(
             norm_topk_prob=hp["norm_topk_prob"],
             routed_scaling_factor=hp["routed_scaling_factor"],
         )
-        # C++ eager-decode router reads these (defaults match MiniCPM5).
         os.environ["INFINI_MOE_TOP_K"] = str(hp["num_experts_per_tok"])
         os.environ["INFINI_MOE_N_GROUP"] = str(hp["n_group"])
         os.environ["INFINI_MOE_TOPK_GROUP"] = str(hp["topk_group"])
         os.environ["INFINI_MOE_ROUTED_SCALING"] = str(hp["routed_scaling_factor"])
         os.environ["INFINI_MOE_NORM_TOPK"] = "1" if hp["norm_topk_prob"] else "0"
-        # Strict: never compile-on-miss for MoE (ignore caller override + env=1).
         _assert_moe_compile_on_miss_disabled()
-        compile_on_miss = False
         moe_artifact_info = _validate_minicpm5_moe_artifacts(
             model_path=model_path, cache_root=root
         )
 
-        segments = (SEGMENT_MOE,)
-        # Full FusedMoE ladder from manifest (G3); union C++ pick_moe_bucket slots.
-        from infinilm.tools.pack_moe_artifacts import DEFAULT_BUCKETS
+    missing = (
+        plan.missing_required()
+        if model_type == "minicpm5_moe"
+        else plan.missing_packages()
+    )
+    if missing:
+        raise RuntimeError(missing_packages_error_message(plan, missing))
 
-        moe_ladder = tuple(DEFAULT_BUCKETS) + (8192,)
-        buckets = tuple(sorted({int(b) for b in buckets} | set(moe_ladder)))
-    else:
-        segments = (SEGMENT_PRE_ATTN,)
+    # register_piecewise uses layer_indices only when not layer-agnostic.
     layer_indices = range(num_layers)
-    # MoE: expect every manifest ladder bucket on disk (verified above).
-    if model_type == "minicpm5_moe":
-        from infinilm.compile.piecewise_segments import (
-            LAYER_AGNOSTIC_IDX,
-            piecewise_inductor_package_path,
-        )
-        from infinilm.tools.pack_moe_artifacts import DEFAULT_BUCKETS
 
-        expected = 0
-        for bucket in DEFAULT_BUCKETS:
-            for tp_rank in range(tp_size):
-                pkg = piecewise_inductor_package_path(
-                    cache_root=root,
-                    model_path=model_path,
-                    segment=SEGMENT_MOE,
-                    layer_idx=LAYER_AGNOSTIC_IDX if layer_agnostic else 0,
-                    bucket=int(bucket),
-                    tp_size=tp_size,
-                    tp_rank=tp_rank,
-                    layer_agnostic=layer_agnostic,
-                )
-                if not os.path.isfile(pkg):
-                    raise RuntimeError(
-                        f"minicpm5_moe missing required package after verify: {pkg}"
-                    )
-                expected += 1 if layer_agnostic else num_layers
+    if model_type == "minicpm5_moe" and plan.required_buckets:
+        # Strict count for DEFAULT_BUCKETS × ranks (layer-agnostic: one pkg per bucket×rank).
+        expected = len(plan.required_buckets) * (
+            1 if layer_agnostic else num_layers
+        ) * tp_size
     else:
-        expected = expected_piecewise_package_count(
-            num_layers=num_layers,
-            buckets=buckets,
-            tp_size=tp_size,
-            layer_agnostic=layer_agnostic,
-        ) * len(segments)
-
-    if model_type != "minicpm5_moe":
-        compile_on_miss = compile_on_miss and piecewise_inductor_compile_on_miss()
-    if compile_on_miss:
-        _compile_missing_packages(
-            model_path=model_path,
-            segments=segments,
-            buckets=list(buckets),
-            cache_root=root,
-            tp_size=tp_size,
-            tp_device_ids=tp_device_ids,
-            layer_agnostic=layer_agnostic,
-        )
+        expected = plan.expected_count
 
     registered = register_piecewise_inductor_packages(
         model_path=model_path,
@@ -550,13 +400,11 @@ def bootstrap_from_infinicore_device(
             layer_agnostic=layer_agnostic,
         )
 
-    # MoE always requires a complete FusedMoE ladder; other models honor REQUIRE_AOT.
-    if registered < expected and (
-        model_type == "minicpm5_moe" or piecewise_inductor_require_aot()
-    ):
+    if registered < expected:
         raise RuntimeError(
             f"piecewise inductor strict AOT: registered={registered} expected={expected} "
-            f"cache={root} layer_agnostic={layer_agnostic} model_type={model_type}"
+            f"cache={root} layer_agnostic={layer_agnostic} model_type={model_type}. "
+            f"Run: python -m infinilm.server.entry --phase compile|all --model {model_path}"
         )
 
     logger.info(
@@ -570,21 +418,6 @@ def bootstrap_from_infinicore_device(
         list(buckets),
         root,
         layer_agnostic,
-    )
-    _agent_log(
-        "compiled_subgraphs.py:bootstrap_from_infinicore_device",
-        "bootstrap_done",
-        "H3",
-        {
-            "registered": registered,
-            "warmed": warmed,
-            "expected": expected,
-            "tp_size": tp_size,
-            "num_layers": num_layers,
-            "buckets": list(buckets),
-            "layer_agnostic": layer_agnostic,
-            "model_type": model_type,
-        },
     )
     out = {
         "registered": registered,

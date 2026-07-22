@@ -1,7 +1,6 @@
 #include "graph_manager.hpp"
 
 #include "../utils.hpp"
-#include "../context/debug_session_log.hpp"
 #include "infinicore/context/context.hpp"
 #include "infinicore/graph/capture_arena.hpp"
 #include <cstdlib>
@@ -153,15 +152,18 @@ void Graph::run() const {
     }
 
     bool used_device = false;
+    size_t step_i = 0;
     for (const auto &step : replay_steps_) {
         if (step.kind == ReplayStep::Kind::HostOp) {
             run_ops_(step.ops);
+            ++step_i;
             continue;
         }
         if (step.device != nullptr && step.device->exec != nullptr) {
             if (infinirtGraphLuanch(step.device->exec, context::getStream()) == INFINI_STATUS_SUCCESS) {
                 ++replay_device_ok_;
                 used_device = true;
+                ++step_i;
                 continue;
             }
             ++replay_op_list_fallback_;
@@ -170,9 +172,11 @@ void Graph::run() const {
                 throw std::runtime_error("hcGraphLaunch replay failed (INFINI_GRAPH_STRICT_REPLAY=1)");
             }
             run_ops_(step.ops);
+            ++step_i;
             continue;
         }
         run_ops_(step.ops);
+        ++step_i;
     }
     last_replay_used_device_ = used_device;
 }
@@ -317,14 +321,6 @@ void Graph::capture_device_segment_(ReplayStep &step) {
     }
 
     context::setDeviceStreamCapturing(true);
-    // #region agent log
-    infinicore::debug_session::log(
-        "B",
-        "graph.cc:capture_device_segment_",
-        "BeginCapture_stream_capturing_on",
-        std::string("{\"seg\":") + std::to_string(seg_idx) + ",\"op_count\":" +
-            std::to_string(step.ops.size()) + "}");
-    // #endregion
     // Diagnostic: INFINI_GRAPH_CAPTURE_MAX_OPS=N captures only the first N ops
     // (binary-narrow Class B probe poison without changing the recorded op list).
     size_t capture_op_limit = step.ops.size();
@@ -338,15 +334,6 @@ void Graph::capture_device_segment_(ReplayStep &step) {
                     seg_idx,
                     capture_op_limit,
                     step.ops.size());
-                // #region agent log
-                infinicore::debug_session::log(
-                    "K",
-                    "graph.cc:capture_device_segment_",
-                    "capture_max_ops_applied",
-                    std::string("{\"seg\":") + std::to_string(seg_idx) + ",\"limit\":" +
-                        std::to_string(capture_op_limit) + ",\"full\":" +
-                        std::to_string(step.ops.size()) + "}");
-                // #endregion
             }
         }
     }
@@ -366,14 +353,6 @@ void Graph::capture_device_segment_(ReplayStep &step) {
                 try {
                     op->run();
                 } catch (...) {
-                    // #region agent log
-                    infinicore::debug_session::log(
-                        "A",
-                        "graph.cc:capture_device_segment_",
-                        "FAULT_during_op_run",
-                        std::string("{\"seg\":") + std::to_string(seg_idx) + ",\"op_idx\":" +
-                            std::to_string(i) + ",\"type\":\"" + name + "\"}");
-                    // #endregion
                     spdlog::error(
                         "[capture_audit] FAULT seg={} op_idx={} type={} (exception during capture)",
                         seg_idx,
@@ -404,22 +383,8 @@ void Graph::capture_device_segment_(ReplayStep &step) {
     if (audit) {
         spdlog::warn("[capture_audit] seg={} EndCapture begin (ops done)", seg_idx);
     }
-    // #region agent log
-    infinicore::debug_session::log(
-        "B",
-        "graph.cc:capture_device_segment_",
-        "EndCapture_begin",
-        std::string("{\"seg\":") + std::to_string(seg_idx) + "}");
-    // #endregion
     if (infinirtStreamEndCapture(context::getStream(), &step.device->graph)
         != INFINI_STATUS_SUCCESS) {
-        // #region agent log
-        infinicore::debug_session::log(
-            "B",
-            "graph.cc:capture_device_segment_",
-            "EndCapture_FAIL",
-            std::string("{\"seg\":") + std::to_string(seg_idx) + "}");
-        // #endregion
         arena_guard.release();
         if (graph_strict_replay_enabled()) {
             throw_graph_fatal("infinirtStreamEndCapture failed (INFINI_GRAPH_STRICT_REPLAY=1)");
@@ -439,13 +404,6 @@ void Graph::capture_device_segment_(ReplayStep &step) {
             step.device->log_buffer.data(),
             step.device->log_buffer.size())
         != INFINI_STATUS_SUCCESS) {
-        // #region agent log
-        infinicore::debug_session::log(
-            "B",
-            "graph.cc:capture_device_segment_",
-            "Instantiate_FAIL",
-            std::string("{\"seg\":") + std::to_string(seg_idx) + "}");
-        // #endregion
         const size_t len = strnlen(step.device->log_buffer.data(), step.device->log_buffer.size());
         const std::string log_msg(step.device->log_buffer.data(), len);
         if (graph_strict_replay_enabled()) {
@@ -458,13 +416,6 @@ void Graph::capture_device_segment_(ReplayStep &step) {
     if (audit) {
         spdlog::warn("[capture_audit] seg={} Instantiate ok; probe launch begin", seg_idx);
     }
-    // #region agent log
-    infinicore::debug_session::log(
-        "B",
-        "graph.cc:capture_device_segment_",
-        "Instantiate_ok_probe_begin",
-        std::string("{\"seg\":") + std::to_string(seg_idx) + "}");
-    // #endregion
 
     // Optional: skip instantiate probe (INFINI_GRAPH_SKIP_PROBE=1) for diagnosis.
     const char *skip_probe = std::getenv("INFINI_GRAPH_SKIP_PROBE");
@@ -479,13 +430,6 @@ void Graph::capture_device_segment_(ReplayStep &step) {
         if (step.device->exec != nullptr && probe_ok) {
             infinicore::context::syncStream();
         }
-        // #region agent log
-        infinicore::debug_session::log(
-            "B",
-            "graph.cc:capture_device_segment_",
-            probe_ok ? "probe_ok_after_sync" : "probe_launch_api_FAIL",
-            std::string("{\"seg\":") + std::to_string(seg_idx) + "}");
-        // #endregion
     } else if (audit) {
         spdlog::warn("[capture_audit] seg={} probe SKIPPED (INFINI_GRAPH_SKIP_PROBE=1)", seg_idx);
     }

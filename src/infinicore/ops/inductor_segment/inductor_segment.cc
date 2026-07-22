@@ -20,7 +20,6 @@
 
 #include "../../utils.hpp"
 #include "inductor_segment_registry.hpp"
-#include "../../context/debug_session_log.hpp"
 
 #include "infinicore/context/context.hpp"
 #include "infinicore/graph/capture_arena.hpp"
@@ -61,9 +60,10 @@ bool moe_capture_safe_enabled() {
 
 /// Triton fused_moe_routed under MetaX stream capture (no aten body).
 /// Distinct from INFINI_MOE_CAPTURE_SAFE (aten index_select+bmm).
+/// Prefer ``INFINI_CUDAGRAPH_POLICY`` + decode phase over bare TRITON_CAPTURE;
+/// explicit ``INFINI_MOE_TRITON_CAPTURE`` still wins when set.
 bool moe_triton_capture_enabled() {
-    const char *v = std::getenv("INFINI_MOE_TRITON_CAPTURE");
-    return v != nullptr && v[0] != '\0' && std::string(v) != "0";
+    return infinicore::context::moeTritonCaptureAllowed();
 }
 
 /// MoE may enter device capture (aten CAPTURE_SAFE or Triton TRITON_CAPTURE).
@@ -166,13 +166,6 @@ void capture_safe_aten_zero_(at::Tensor &t) {
     }
     if (!t.is_contiguous()) {
         // Non-contiguous under capture: fall back to ATen (may HTC); prefer contiguous scratch.
-        // #region agent log
-        infinicore::debug_session::log(
-            "A",
-            "inductor_segment.cc:capture_safe_aten_zero_",
-            "noncontig_zero_fallback_FillFunctor_risk",
-            std::string("{\"nbytes\":") + std::to_string(t.nbytes()) + "}");
-        // #endregion
         t.zero_();
         return;
     }
@@ -400,14 +393,6 @@ std::pair<at::Tensor, at::Tensor> grouped_sigmoid_topk_aten(
     auto choice = scores + bias_f;
     // MiniCPM5 default: n_group=1 → skip group mask (no-op path).
     if (n_group != 1) {
-        // #region agent log
-        infinicore::debug_session::log(
-            "A",
-            "inductor_segment.cc:grouped_sigmoid_topk_aten",
-            "n_group_ne1_zeros_where_path",
-            std::string("{\"n_group\":") + std::to_string(n_group) + ",\"topk_group\":" +
-                std::to_string(topk_group) + "}");
-        // #endregion
         const int64_t t_tokens = choice.size(0);
         const int64_t n_experts = choice.size(1);
         const int64_t experts_per_group = n_experts / n_group;

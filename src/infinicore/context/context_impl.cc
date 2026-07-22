@@ -1,12 +1,10 @@
 #include "context_impl.hpp"
 #include "internal.hpp"
-#include "debug_session_log.hpp"
 
 #include "../utils.hpp"
 
-#include <chrono>
 #include <cstdlib>
-#include <fstream>
+#include <string>
 
 namespace infinicore {
 
@@ -42,22 +40,6 @@ void ContextImpl::setDevice(Device device) {
     }
 
     const bool recording = getCurrentRuntime()->isGraphRecording();
-    const bool stream_cap = context::isDeviceStreamCapturing();
-    if (recording || stream_cap) {
-        // #region agent log
-        {
-            const auto from_dev = getCurrentRuntime()->device().toString();
-            const auto to_dev = device.toString();
-            infinicore::debug_session::log(
-                "C",
-                "context_impl.cc:setDevice",
-                "device_switch_under_capture_or_recording",
-                std::string("{\"from\":\"") + from_dev + "\",\"to\":\"" + to_dev +
-                    "\",\"recording\":" + (recording ? "true" : "false") +
-                    ",\"streamCapturing\":" + (stream_cap ? "true" : "false") + "}");
-        }
-        // #endregion
-    }
     thread_local bool warn_switch_runtime = false;
     if (recording && !warn_switch_runtime) {
         spdlog::warn("Switching device runtime during graph recording may break the graph!");
@@ -230,7 +212,66 @@ std::shared_ptr<graph::Graph> stopGraphRecording() {
 namespace {
 thread_local bool g_device_stream_capturing = false;
 thread_local graph::CaptureArena *g_capture_arena = nullptr;
+thread_local InferencePhase g_inference_phase = InferencePhase::Unknown;
+
+bool env_truthy_(const char *name) {
+    const char *v = std::getenv(name);
+    return v != nullptr && v[0] != '\0' && std::string(v) != "0";
+}
 } // namespace
+
+void setInferencePhase(InferencePhase phase) {
+    g_inference_phase = phase;
+}
+
+InferencePhase getInferencePhase() {
+    return g_inference_phase;
+}
+
+const char *cudagraphPolicy() {
+    const char *v = std::getenv("INFINI_CUDAGRAPH_POLICY");
+    if (v == nullptr || v[0] == '\0') {
+        return "";
+    }
+    const std::string s(v);
+    if (s == "eager") {
+        return "eager";
+    }
+    if (s == "full_and_piecewise") {
+        return "full_and_piecewise";
+    }
+    // Reject unknown / track_b — fall back to legacy (empty).
+    return "";
+}
+
+bool faInGraphAllowed() {
+    // MetaX: folding FA2 into monolithic decode CG poisons subsequent InfiniLM FA
+    // (eager mha_varlen / piecewise dry-run) — SIGSEGV on first chat or during
+    // native prefill capture after decode FULL. Known-good FA FULL smokes used
+    // torch PREFILL_COMPILE (no InfiniLM FA). Keep FA host-break unless the
+    // diagnose-only override is set.
+    if (env_truthy_("INFINI_FA_FORCE_CAPTURE")) {
+        return true;
+    }
+    return false;
+}
+
+bool moeTritonCaptureAllowed() {
+    const char *raw = std::getenv("INFINI_MOE_TRITON_CAPTURE");
+    if (raw != nullptr && raw[0] != '\0') {
+        return std::string(raw) != "0";
+    }
+    const std::string policy(cudagraphPolicy());
+    if (policy == "eager" || policy.empty()) {
+        return false;
+    }
+    if (policy != "full_and_piecewise") {
+        return false;
+    }
+    // Prefill: AOT MoE outside FA segments (no Triton-under-capture).
+    // Decode / Unknown (FULL instantiate): allow Triton in-graph.
+    return getInferencePhase() != InferencePhase::Prefill;
+}
 
 bool isDeviceStreamCapturing() {
     return g_device_stream_capturing;
@@ -240,16 +281,7 @@ void setDeviceStreamCapturing(bool capturing) {
     g_device_stream_capturing = capturing;
     // Mirror to env so Infiniop (separate DSO) can force capture-safe PagedAttention
     // dispatch (no split-kv multi-launch / hcGetDevice) while the stream is capturing.
-    // #region agent log
-    {
-        setenv("INFINI_DEVICE_STREAM_CAPTURING", capturing ? "1" : "0", 1);
-        infinicore::debug_session::log(
-            "P1",
-            "context_impl.cc:setDeviceStreamCapturing",
-            capturing ? "stream_capturing_on" : "stream_capturing_off",
-            std::string("{\"capturing\":") + (capturing ? "true" : "false") + "}");
-    }
-    // #endregion
+    setenv("INFINI_DEVICE_STREAM_CAPTURING", capturing ? "1" : "0", 1);
 }
 
 graph::CaptureArena *currentCaptureArena() {

@@ -1,21 +1,8 @@
 #include "infinicore/ops/mha_kvcache.hpp"
 #include "../../utils.hpp"
-
-#include <cstdlib>
-#include <string>
+#include "infinicore/context/context.hpp"
 
 namespace infinicore::op {
-
-namespace {
-
-/// Diagnose-only (P8a): force FA into hcStreamBeginCapture. Default off — MetaX FA2
-/// historically HTC / IllegalAddress under capture. Never set in production serve.
-bool fa_force_capture_enabled() {
-    const char *v = std::getenv("INFINI_FA_FORCE_CAPTURE");
-    return v != nullptr && v[0] != '\0' && std::string(v) != "0";
-}
-
-} // namespace
 
 INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(MhaKVCache);
 
@@ -30,10 +17,11 @@ MhaKVCache::MhaKVCache(Tensor out,
     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(out, q, k_cache, v_cache, seqlens_k, block_table);
     INFINICORE_GRAPH_OP_DISPATCH(out->device().getType(),
                                  out, q, k_cache, v_cache, seqlens_k, block_table, alibi_slopes, scale);
-    // MetaX FA2 mha_fwd_kvcache is not stream-capture-safe (HTC mem violation under
-    // hcStreamBeginCapture). Mirror MoE / prefill FA2 piecewise: eager between device segments.
-    // Opt-in INFINI_FA_FORCE_CAPTURE=1 for fa_capture_smoke diagnose only.
-    host_break_ = !fa_force_capture_enabled();
+    // MetaX FA2 mha_fwd_kvcache is not stream-capture-safe by default (HTC under
+    // hcStreamBeginCapture). Prefer phase-scoped policy: FULL decode may fold FA
+    // in-graph under INFINI_CUDAGRAPH_POLICY=full_and_piecewise; prefill / eager
+    // stay host-break. Diagnose-only INFINI_FA_FORCE_CAPTURE still forces in-graph.
+    host_break_ = !context::faInGraphAllowed();
 }
 
 void MhaKVCache::execute(Tensor out,

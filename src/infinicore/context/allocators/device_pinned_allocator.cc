@@ -1,7 +1,5 @@
 #include "device_pinned_allocator.hpp"
 
-#include "../debug_session_log.hpp"
-
 #include <infinirt.h>
 
 #include "../../utils.hpp"
@@ -21,14 +19,6 @@ std::byte *DevicePinnedHostAllocator::allocate(size_t size) {
     }
     const Device active = context::getDevice();
     if (owner_ != active) {
-        // #region agent log
-        infinicore::debug_session::log(
-            "C",
-            "device_pinned_allocator.cc:allocate",
-            "owner_active_mismatch",
-            std::string("{\"owner\":") + std::to_string(owner_.getIndex()) + ",\"active\":" +
-                std::to_string(active.getIndex()) + ",\"size\":" + std::to_string(size) + "}");
-        // #endregion
         context::setDevice(owner_);
     }
     void *ptr;
