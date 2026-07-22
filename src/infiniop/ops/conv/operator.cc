@@ -13,6 +13,10 @@
 #include "nvidia/conv_nvidia.cuh"
 #endif
 
+#ifdef ENABLE_METAX_API
+#include "metax/conv_metax.h"
+#endif
+
 __INFINI_C __export infiniStatus_t infiniopCreateConvDescriptor(infiniopHandle_t handle,
                                                                 infiniopConvDescriptor_t *desc_ptr,
                                                                 infiniopTensorDescriptor_t y_desc,
@@ -58,6 +62,9 @@ __INFINI_C __export infiniStatus_t infiniopCreateConvDescriptor(infiniopHandle_t
 #ifdef ENABLE_CAMBRICON_API
         CREATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -97,6 +104,9 @@ infiniopGetConvWorkspaceSize(
 #endif
 #ifdef ENABLE_CAMBRICON_API
         GET(INFINI_DEVICE_CAMBRICON, bang);
+#endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax);
 #endif
 
     default:
@@ -146,6 +156,9 @@ __INFINI_C infiniStatus_t infiniopConv(
 #ifdef ENABLE_CAMBRICON_API
         CALCULATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -181,6 +194,9 @@ infiniopDestroyConvDescriptor(infiniopConvDescriptor_t desc) {
 #endif
 #ifdef ENABLE_CAMBRICON_API
         DELETE(INFINI_DEVICE_CAMBRICON, bang);
+#endif
+#ifdef ENABLE_METAX_API
+        DELETE(INFINI_DEVICE_METAX, metax);
 #endif
 
     default:

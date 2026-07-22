@@ -1,0 +1,284 @@
+#include "../../../devices/metax/metax_common.h"
+#include "../../../devices/metax/metax_kernel_common.h"
+#include "conv_metax.h"
+
+namespace op::conv::metax {
+namespace {
+
+template <typename T>
+__device__ __forceinline__ float load_as_float(const T *ptr, ptrdiff_t offset) {
+    return static_cast<float>(ptr[offset]);
+}
+
+template <>
+__device__ __forceinline__ float load_as_float<half>(const half *ptr, ptrdiff_t offset) {
+    return __half2float(ptr[offset]);
+}
+
+template <>
+__device__ __forceinline__ float load_as_float<cuda_bfloat16>(const cuda_bfloat16 *ptr, ptrdiff_t offset) {
+    return __bfloat162float(ptr[offset]);
+}
+
+template <typename T>
+__device__ __forceinline__ T cast_from_float(float x) {
+    return static_cast<T>(x);
+}
+
+template <>
+__device__ __forceinline__ half cast_from_float<half>(float x) {
+    return __float2half(x);
+}
+
+template <>
+__device__ __forceinline__ cuda_bfloat16 cast_from_float<cuda_bfloat16>(float x) {
+    return __float2bfloat16(x);
+}
+
+template <typename T, int BLOCK_SIZE>
+__global__ void direct_conv2d_kernel(
+    T *y,
+    const T *x,
+    const T *w,
+    const T *bias,
+    size_t batch,
+    size_t in_channels,
+    size_t out_channels,
+    size_t in_h,
+    size_t in_w,
+    size_t kernel_h,
+    size_t kernel_w,
+    size_t out_h,
+    size_t out_w,
+    size_t pad_h,
+    size_t pad_w,
+    ptrdiff_t stride_h,
+    ptrdiff_t stride_w,
+    size_t dilation_h,
+    size_t dilation_w) {
+    const size_t out_idx = static_cast<size_t>(blockIdx.x);
+    const size_t total_outputs = batch * out_channels * out_h * out_w;
+    if (out_idx >= total_outputs) {
+        return;
+    }
+
+    size_t tmp = out_idx;
+    const size_t ow = tmp % out_w;
+    tmp /= out_w;
+    const size_t oh = tmp % out_h;
+    tmp /= out_h;
+    const size_t oc = tmp % out_channels;
+    const size_t n = tmp / out_channels;
+
+    const size_t reduce_elems = in_channels * kernel_h * kernel_w;
+    float acc = 0.0f;
+    for (size_t i = threadIdx.x; i < reduce_elems; i += BLOCK_SIZE) {
+        const size_t kw = i % kernel_w;
+        const size_t kh = (i / kernel_w) % kernel_h;
+        const size_t ic = i / (kernel_h * kernel_w);
+
+        const ptrdiff_t ih = static_cast<ptrdiff_t>(oh) * stride_h
+                           + static_cast<ptrdiff_t>(kh * dilation_h)
+                           - static_cast<ptrdiff_t>(pad_h);
+        const ptrdiff_t iw = static_cast<ptrdiff_t>(ow) * stride_w
+                           + static_cast<ptrdiff_t>(kw * dilation_w)
+                           - static_cast<ptrdiff_t>(pad_w);
+        if (ih < 0 || iw < 0 || ih >= static_cast<ptrdiff_t>(in_h) || iw >= static_cast<ptrdiff_t>(in_w)) {
+            continue;
+        }
+
+        const size_t x_idx = ((n * in_channels + ic) * in_h + static_cast<size_t>(ih)) * in_w + static_cast<size_t>(iw);
+        const size_t w_idx = ((oc * in_channels + ic) * kernel_h + kh) * kernel_w + kw;
+        acc += load_as_float(x, static_cast<ptrdiff_t>(x_idx)) * load_as_float(w, static_cast<ptrdiff_t>(w_idx));
+    }
+
+    __shared__ float reduce[BLOCK_SIZE];
+    reduce[threadIdx.x] = acc;
+    __syncthreads();
+
+    for (int stride = BLOCK_SIZE / 2; stride > 0; stride >>= 1) {
+        if (threadIdx.x < stride) {
+            reduce[threadIdx.x] += reduce[threadIdx.x + stride];
+        }
+        __syncthreads();
+    }
+
+    if (threadIdx.x == 0) {
+        float value = reduce[0];
+        if (bias != nullptr) {
+            value += load_as_float(bias, static_cast<ptrdiff_t>(oc));
+        }
+        y[out_idx] = cast_from_float<T>(value);
+    }
+}
+
+template <typename T, int BLOCK_SIZE>
+__global__ void patch_embed_conv3d_kernel(
+    T *y,
+    const T *x,
+    const T *w,
+    const T *bias,
+    size_t batch,
+    size_t in_channels,
+    size_t out_channels,
+    size_t kt,
+    size_t kh,
+    size_t kw) {
+    const size_t out_idx = static_cast<size_t>(blockIdx.x);
+    const size_t total_outputs = batch * out_channels;
+    if (out_idx >= total_outputs) {
+        return;
+    }
+
+    const size_t n = out_idx / out_channels;
+    const size_t oc = out_idx - n * out_channels;
+    const size_t patch_elems = in_channels * kt * kh * kw;
+
+    float acc = 0.0f;
+    for (size_t i = threadIdx.x; i < patch_elems; i += BLOCK_SIZE) {
+        acc += load_as_float(x, static_cast<ptrdiff_t>(n * patch_elems + i)) * load_as_float(w, static_cast<ptrdiff_t>(oc * patch_elems + i));
+    }
+
+    __shared__ float reduce[BLOCK_SIZE];
+    reduce[threadIdx.x] = acc;
+    __syncthreads();
+
+    for (int stride = BLOCK_SIZE / 2; stride > 0; stride >>= 1) {
+        if (threadIdx.x < stride) {
+            reduce[threadIdx.x] += reduce[threadIdx.x + stride];
+        }
+        __syncthreads();
+    }
+
+    if (threadIdx.x == 0) {
+        float value = reduce[0];
+        if (bias != nullptr) {
+            value += load_as_float(bias, static_cast<ptrdiff_t>(oc));
+        }
+        y[out_idx] = cast_from_float<T>(value);
+    }
+}
+
+template <typename T>
+infiniStatus_t launch_typed_direct_conv2d(
+    void *y,
+    const void *x,
+    const void *w,
+    const void *bias,
+    const ConvInfo &info,
+    hcStream_t stream) {
+    constexpr int BLOCK_SIZE = 256;
+    const size_t total_outputs = info.batch() * info.out_channels() * info.output_dim(0) * info.output_dim(1);
+    if (total_outputs == 0) {
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    direct_conv2d_kernel<T, BLOCK_SIZE><<<static_cast<unsigned int>(total_outputs), BLOCK_SIZE, 0, stream>>>(
+        static_cast<T *>(y),
+        static_cast<const T *>(x),
+        static_cast<const T *>(w),
+        static_cast<const T *>(bias),
+        info.batch(),
+        info.in_channels(),
+        info.out_channels(),
+        info.input_dim(0),
+        info.input_dim(1),
+        info.kernel_dim(0),
+        info.kernel_dim(1),
+        info.output_dim(0),
+        info.output_dim(1),
+        info.pad_info(0),
+        info.pad_info(1),
+        info.stride_info(0),
+        info.stride_info(1),
+        info.dilation_info(0),
+        info.dilation_info(1));
+    CHECK_METAX(hcGetLastError());
+    return INFINI_STATUS_SUCCESS;
+}
+
+template <typename T>
+infiniStatus_t launch_typed_patch_embed_conv3d(
+    void *y,
+    const void *x,
+    const void *w,
+    const void *bias,
+    size_t batch,
+    size_t in_channels,
+    size_t out_channels,
+    size_t kt,
+    size_t kh,
+    size_t kw,
+    hcStream_t stream) {
+    constexpr int BLOCK_SIZE = 256;
+    const size_t total_outputs = batch * out_channels;
+    if (total_outputs == 0) {
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    patch_embed_conv3d_kernel<T, BLOCK_SIZE><<<static_cast<unsigned int>(total_outputs), BLOCK_SIZE, 0, stream>>>(
+        static_cast<T *>(y),
+        static_cast<const T *>(x),
+        static_cast<const T *>(w),
+        static_cast<const T *>(bias),
+        batch,
+        in_channels,
+        out_channels,
+        kt,
+        kh,
+        kw);
+    CHECK_METAX(hcGetLastError());
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace
+
+infiniStatus_t launchDirectConv2d(
+    infiniDtype_t dtype,
+    const ConvInfo &info,
+    void *y,
+    const void *x,
+    const void *w,
+    const void *bias,
+    void *stream) {
+    auto hc_stream = reinterpret_cast<hcStream_t>(stream);
+    switch (dtype) {
+    case INFINI_DTYPE_F16:
+        return launch_typed_direct_conv2d<half>(y, x, w, bias, info, hc_stream);
+    case INFINI_DTYPE_BF16:
+        return launch_typed_direct_conv2d<cuda_bfloat16>(y, x, w, bias, info, hc_stream);
+    case INFINI_DTYPE_F32:
+        return launch_typed_direct_conv2d<float>(y, x, w, bias, info, hc_stream);
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+}
+
+infiniStatus_t launchPatchEmbedConv3d(
+    infiniDtype_t dtype,
+    const ConvInfo &info,
+    void *y,
+    const void *x,
+    const void *w,
+    const void *bias,
+    void *stream) {
+    auto hc_stream = reinterpret_cast<hcStream_t>(stream);
+    switch (dtype) {
+    case INFINI_DTYPE_F16:
+        return launch_typed_patch_embed_conv3d<half>(
+            y, x, w, bias, info.batch(), info.in_channels(), info.out_channels(),
+            info.kernel_dim(0), info.kernel_dim(1), info.kernel_dim(2), hc_stream);
+    case INFINI_DTYPE_BF16:
+        return launch_typed_patch_embed_conv3d<cuda_bfloat16>(
+            y, x, w, bias, info.batch(), info.in_channels(), info.out_channels(),
+            info.kernel_dim(0), info.kernel_dim(1), info.kernel_dim(2), hc_stream);
+    case INFINI_DTYPE_F32:
+        return launch_typed_patch_embed_conv3d<float>(
+            y, x, w, bias, info.batch(), info.in_channels(), info.out_channels(),
+            info.kernel_dim(0), info.kernel_dim(1), info.kernel_dim(2), hc_stream);
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+}
+
+} // namespace op::conv::metax
