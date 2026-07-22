@@ -21,6 +21,11 @@ git submodule sync --recursive
 git submodule update --init --recursive
 ```
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution and validation
+guidelines.
+
 ## License
 
 InfiniCore is licensed under the MIT License. See [LICENSE](LICENSE).
