@@ -22,7 +22,9 @@ void validate_concat_and_cache_mla(const Tensor &kv_c,
         throw std::runtime_error("concat_and_cache_mla expects non-empty kv_c, k_pe, kv_cache, slot_mapping, and scale tensors");
     }
     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(kv_c, k_pe, kv_cache, slot_mapping, scale);
-    if (kv_cache_dtype != "auto" && kv_cache_dtype != "fp8" && kv_cache_dtype != "fp8_e4m3" && kv_cache_dtype != "fp8_e5m2") {
+    if (kv_cache_dtype != "auto" && kv_cache_dtype != "fp8"
+        && kv_cache_dtype != "fp8_e4m3" && kv_cache_dtype != "fp8_e5m2"
+        && kv_cache_dtype != "fp8_ds_mla") {
         throw std::runtime_error("concat_and_cache_mla expects kv_cache_dtype to be auto/fp8/fp8_e4m3/fp8_e5m2");
     }
     if (kv_c->ndim() != 2 || k_pe->ndim() != 2) {
@@ -32,8 +34,18 @@ void validate_concat_and_cache_mla(const Tensor &kv_c,
         throw std::runtime_error("concat_and_cache_mla expects kv_c/k_pe tokens to match slot_mapping numel");
     }
     const auto head_dim = kv_c->size(1) + k_pe->size(1);
-    if (kv_cache->ndim() < 3 || kv_cache->size(kv_cache->ndim() - 1) != head_dim) {
-        throw std::runtime_error("concat_and_cache_mla expects kv_cache last dim == kv_c.shape[-1] + k_pe.shape[-1]");
+    if (kv_cache_dtype == "fp8_ds_mla") {
+        const auto cache_stride = kv_c->size(1) + 4 * sizeof(float)
+                                + k_pe->size(1) * sizeof(uint16_t);
+        if (kv_cache->ndim() < 3 || kv_cache->dtype() != DataType::U8
+            || kv_cache->size(kv_cache->ndim() - 1) != cache_stride) {
+            throw std::runtime_error(
+                "concat_and_cache_mla expects fp8_ds_mla uint8 cache with value/scales/rope layout");
+        }
+    } else if (kv_cache->ndim() < 3
+               || kv_cache->size(kv_cache->ndim() - 1) != head_dim) {
+        throw std::runtime_error(
+            "concat_and_cache_mla expects kv_cache last dim == kv_c.shape[-1] + k_pe.shape[-1]");
     }
     if (slot_mapping->dtype() != DataType::I64 && slot_mapping->dtype() != DataType::I32) {
         throw std::runtime_error("concat_and_cache_mla expects slot_mapping dtype int64 or int32");

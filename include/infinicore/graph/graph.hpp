@@ -17,6 +17,12 @@ public:
 class GraphOperator {
 public:
     virtual void run() const = 0;
+    virtual bool is_device_graph_capture_safe() const {
+        return true;
+    }
+    virtual bool requires_stream_sync_after_run() const {
+        return false;
+    }
     virtual ~GraphOperator() = default;
 };
 
@@ -49,7 +55,8 @@ protected:
 
 private:
     struct DeviceGraph;
-    std::unique_ptr<DeviceGraph> device_graph_;
+    struct ReplayStep;
+    std::vector<std::unique_ptr<ReplayStep>> replay_steps_;
 };
 } // namespace infinicore::graph
 

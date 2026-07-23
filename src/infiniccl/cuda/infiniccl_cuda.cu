@@ -9,6 +9,13 @@
 
 #define CHECK_NCCL(API__) CHECK_INTERNAL(API__, ncclSuccess)
 
+// CoreX exports NCCL-compatible P2P entry points but omits their declarations
+// from its nccl.h. Keep the ABI declarations local to this backend.
+extern "C" ncclResult_t ncclSend(
+    const void *, size_t, ncclDataType_t, int, ncclComm_t, cudaStream_t);
+extern "C" ncclResult_t ncclRecv(
+    void *, size_t, ncclDataType_t, int, ncclComm_t, cudaStream_t);
+
 inline cudaStream_t getCudaStream(infinirtStream_t stream) {
     if (stream == nullptr) {
         return 0;
@@ -93,6 +100,40 @@ infiniStatus_t groupEnd(infinicclComm_t) {
     return INFINI_STATUS_SUCCESS;
 }
 
+infiniStatus_t send(
+    const void *sendbuf,
+    size_t count,
+    infiniDtype_t datatype,
+    int peer,
+    infinicclComm_t comm,
+    infinirtStream_t stream) {
+    CHECK_DTYPE(datatype, INFINI_DTYPE_F32, INFINI_DTYPE_F16,
+                INFINI_DTYPE_BF16, INFINI_DTYPE_I32, INFINI_DTYPE_I64,
+                INFINI_DTYPE_U32, INFINI_DTYPE_U64);
+    CHECK_OR_DO(peer >= 0 && peer < comm->world_size,
+                return INFINI_STATUS_BAD_PARAM);
+    CHECK_NCCL(ncclSend(sendbuf, count, getNcclDtype(datatype), peer,
+                        getNcclComm(comm), getCudaStream(stream)));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t recv(
+    void *recvbuf,
+    size_t count,
+    infiniDtype_t datatype,
+    int peer,
+    infinicclComm_t comm,
+    infinirtStream_t stream) {
+    CHECK_DTYPE(datatype, INFINI_DTYPE_F32, INFINI_DTYPE_F16,
+                INFINI_DTYPE_BF16, INFINI_DTYPE_I32, INFINI_DTYPE_I64,
+                INFINI_DTYPE_U32, INFINI_DTYPE_U64);
+    CHECK_OR_DO(peer >= 0 && peer < comm->world_size,
+                return INFINI_STATUS_BAD_PARAM);
+    CHECK_NCCL(ncclRecv(recvbuf, count, getNcclDtype(datatype), peer,
+                        getNcclComm(comm), getCudaStream(stream)));
+    return INFINI_STATUS_SUCCESS;
+}
+
 infiniStatus_t allReduce(
     void *sendbuf,
     void *recvbuf,
@@ -102,7 +143,8 @@ infiniStatus_t allReduce(
     infinicclComm_t comm,
     infinirtStream_t stream) {
 
-    CHECK_DTYPE(datatype, INFINI_DTYPE_F32, INFINI_DTYPE_F16, INFINI_DTYPE_BF16);
+    CHECK_DTYPE(datatype, INFINI_DTYPE_F32, INFINI_DTYPE_F16, INFINI_DTYPE_BF16,
+                INFINI_DTYPE_I32, INFINI_DTYPE_I64, INFINI_DTYPE_U32, INFINI_DTYPE_U64);
 
     CHECK_NCCL(ncclAllReduce(sendbuf, recvbuf, count, getNcclDtype(datatype),
                              getNcclRedOp(op), getNcclComm(comm), getCudaStream(stream)));

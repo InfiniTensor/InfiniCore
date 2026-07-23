@@ -35,6 +35,7 @@ from infinicore.dtype import (
     double,
     dtype,
     float,
+    float8,
     float16,
     float32,
     float64,
@@ -84,6 +85,17 @@ from infinicore.ops.cross_entropy import cross_entropy
 from infinicore.ops.diff import diff
 from infinicore.ops.digamma import digamma
 from infinicore.ops.dist import dist
+from infinicore.ops.dsa import (
+    compute_block_sparse_mqa_logits_,
+    fused_deepseek_v2_indexer_postprocess_,
+    indexer_k_cache_,
+    map_decode_request_block_indices_,
+    map_prefill_request_block_indices_,
+    select_decode_topk_block_indices_,
+    select_prefill_topk_block_indices_,
+    sparse_flash_mla_,
+    topk_indices_context_lens_,
+)
 from infinicore.ops.dynamic_scaled_int8_quant import dynamic_scaled_int8_quant
 from infinicore.ops.equal import equal
 from infinicore.ops.flipud import flipud
@@ -199,6 +211,7 @@ __all__ = [
     "double",
     "float",
     "float16",
+    "float8",
     "float32",
     "float64",
     "half",
@@ -211,6 +224,15 @@ __all__ = [
     "short",
     "uint8",
     # Operations.
+    "compute_block_sparse_mqa_logits_",
+    "fused_deepseek_v2_indexer_postprocess_",
+    "indexer_k_cache_",
+    "map_decode_request_block_indices_",
+    "map_prefill_request_block_indices_",
+    "select_decode_topk_block_indices_",
+    "select_prefill_topk_block_indices_",
+    "sparse_flash_mla_",
+    "topk_indices_context_lens_",
     "addcmul",
     "atanh",
     "binary_cross_entropy_with_logits",

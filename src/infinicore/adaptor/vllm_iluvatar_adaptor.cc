@@ -24,6 +24,7 @@ namespace infinicore::adaptor::vllm_iluvatar {
 namespace {
 
 using fused_add_rms_norm_fn = void (*)(at::Tensor &, at::Tensor &, at::Tensor &, float);
+using rotary_embedding_fn = void (*)(at::Tensor &, at::Tensor &, std::optional<at::Tensor>, int64_t, at::Tensor &, bool);
 using dynamic_scaled_int8_quant_fn = void (*)(at::Tensor &, at::Tensor &, const at::Tensor &);
 using concat_mla_q_fn = void (*)(at::Tensor &, at::Tensor &, at::Tensor &);
 using concat_and_cache_mla_fn = void (*)(at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &, const std::string &, at::Tensor &);
@@ -65,10 +66,23 @@ void record_or_run(Fn &&fn) {
     }
 }
 using moe_sum_vllm_fn = void (*)(at::Tensor &, const at::Tensor &, std::optional<at::Tensor>, std::optional<at::Tensor>, double, double);
+using fused_indexer_postprocess_fn = void (*)(at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &, const at::Tensor &, const at::Tensor &, const at::Tensor &, const at::Tensor &, const at::Tensor &, const at::Tensor &, const at::Tensor &, int64_t, bool, double, double);
+using indexer_k_cache_fn = void (*)(const at::Tensor &, at::Tensor &, const at::Tensor &);
+using indexer_k_quant_and_cache_fn = void (*)(at::Tensor &, at::Tensor &, at::Tensor &, int64_t, const std::string &);
+using block_sparse_logits_fn = void (*)(const at::Tensor &, const at::Tensor &, const at::Tensor &, const at::Tensor &, const at::Tensor &, const at::Tensor &, at::Tensor &, int64_t, int64_t, int64_t);
+using select_prefill_topk_fn = void (*)(const at::Tensor &, const at::Tensor &, const at::Tensor &, at::Tensor &);
+using select_decode_topk_fn = void (*)(const at::Tensor &, const at::Tensor &, at::Tensor &);
+using map_prefill_result = std::tuple<at::Tensor, std::optional<at::Tensor>>;
+using map_prefill_indices_fn = map_prefill_result (*)(const at::Tensor &, const at::Tensor &, const at::Tensor &, int64_t, bool, std::optional<at::Tensor>, std::optional<at::Tensor>, bool, std::optional<at::Tensor>);
+using map_decode_indices_fn = at::Tensor (*)(const at::Tensor &, const at::Tensor &, const at::Tensor &, int64_t, std::optional<at::Tensor>);
+using sparse_flash_attn_fn = void (*)(at::Tensor &, const at::Tensor &, const at::Tensor &, const at::Tensor &, double);
+using topk_indices_context_lens_fn = void (*)(at::Tensor &, const at::Tensor &);
+using flash_mla_sparse_v2_fn = void (*)(at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &, at::Tensor &, float, const std::optional<at::Tensor> &);
 
 struct Symbols {
     void *handle = nullptr;
     fused_add_rms_norm_fn fused_add_rms_norm = nullptr;
+    rotary_embedding_fn rotary_embedding = nullptr;
     dynamic_scaled_int8_quant_fn dynamic_scaled_int8_quant = nullptr;
     concat_mla_q_fn concat_mla_q = nullptr;
     concat_and_cache_mla_fn concat_and_cache_mla = nullptr;
@@ -86,7 +100,20 @@ struct Symbols {
     expand_moe_input_with_inv_pos_fn expand_moe_input_with_inv_pos = nullptr;
     silu_and_mul_quant_fn silu_and_mul_quant = nullptr;
     moe_sum_vllm_fn moe_sum_vllm = nullptr;
+    fused_indexer_postprocess_fn fused_indexer_postprocess = nullptr;
+    indexer_k_cache_fn indexer_k_cache = nullptr;
+    indexer_k_quant_and_cache_fn indexer_k_quant_and_cache = nullptr;
+    block_sparse_logits_fn block_sparse_logits = nullptr;
+    select_prefill_topk_fn select_prefill_topk = nullptr;
+    select_decode_topk_fn select_decode_topk = nullptr;
+    map_prefill_indices_fn map_prefill_indices = nullptr;
+    map_decode_indices_fn map_decode_indices = nullptr;
+    sparse_flash_attn_fn sparse_flash_attn = nullptr;
+    void *ix_handle = nullptr;
+    topk_indices_context_lens_fn topk_indices_context_lens = nullptr;
+    flash_mla_sparse_v2_fn flash_mla_sparse_v2 = nullptr;
     std::string error;
+    std::string ix_error;
 };
 
 Symbols &symbols() {
@@ -112,6 +139,8 @@ Symbols &symbols() {
             }
             auto fused_fn = reinterpret_cast<fused_add_rms_norm_fn>(
                 dlsym(handle, "_ZN7pyinfer4perf18fused_add_rms_normERN2at6TensorES3_S3_f"));
+            auto rotary_embedding_fn_ptr = reinterpret_cast<rotary_embedding_fn>(
+                dlsym(handle, "_ZN7pyinfer4perf16rotary_embeddingERN2at6TensorES3_St8optionalIS2_ElS3_b"));
             auto quant_fn = reinterpret_cast<dynamic_scaled_int8_quant_fn>(
                 dlsym(handle, "_ZN7pyinfer4perf25dynamic_scaled_int8_quantERN2at6TensorES3_RKS2_"));
             auto concat_mla_q_fn_ptr = reinterpret_cast<concat_mla_q_fn>(
@@ -146,13 +175,32 @@ Symbols &symbols() {
                 dlsym(handle, "_ZN7pyinfer4perf18silu_and_mul_quantERN2at6TensorESt8optionalIS2_ERKS2_l"));
             auto moe_sum_vllm_fn_ptr = reinterpret_cast<moe_sum_vllm_fn>(
                 dlsym(handle, "_ZN7pyinfer4perf7moe_sumERN2at6TensorERKS2_St8optionalIS2_ES7_dd"));
-            if (!fused_fn && !quant_fn && !concat_mla_q_fn_ptr && !concat_and_cache_mla_fn_ptr && !concat_and_cache_mla_int8_fn_ptr && !paged_attention_mla_fn_ptr && !topk_softmax_fn_ptr && !topk_sigmoid_fn_ptr && !grouped_topk_fn_ptr && !scaled_mm_w4a8_fn_ptr && !scaled_mm_w8a8_fn_ptr && !w4a8_group_gemm_fn_ptr && !w8a8_group_gemm_fn_ptr && !w16a16_group_gemm_fn_ptr && !argsort_bincount_with_inv_pos_fn_ptr && !expand_moe_input_with_inv_pos_fn_ptr && !silu_and_mul_quant_fn_ptr && !moe_sum_vllm_fn_ptr) {
+            auto fused_indexer_postprocess_fn_ptr = reinterpret_cast<fused_indexer_postprocess_fn>(
+                dlsym(handle, "_ZN7pyinfer4perf37fused_deepseek_v2_indexer_postprocessERN2at6TensorES3_S3_S3_RKS2_S5_S5_S5_S5_S5_S5_lbdd"));
+            auto indexer_k_cache_fn_ptr = reinterpret_cast<indexer_k_cache_fn>(
+                dlsym(handle, "_ZN7pyinfer4perf15indexer_k_cacheERKN2at6TensorERS2_S4_"));
+            auto indexer_k_quant_and_cache_fn_ptr = reinterpret_cast<indexer_k_quant_and_cache_fn>(
+                dlsym(handle, "_ZN7pyinfer4perf25indexer_k_quant_and_cacheERN2at6TensorES3_S3_lRKSs"));
+            auto block_sparse_logits_fn_ptr = reinterpret_cast<block_sparse_logits_fn>(
+                dlsym(handle, "_ZN7pyinfer4perf31compute_block_sparse_mqa_logitsERKN2at6TensorES4_S4_S4_S4_S4_RS2_lll"));
+            auto select_prefill_topk_fn_ptr = reinterpret_cast<select_prefill_topk_fn>(
+                dlsym(handle, "_ZN7pyinfer4perf33select_prefill_topk_block_indicesERKN2at6TensorES4_S4_RS2_"));
+            auto select_decode_topk_fn_ptr = reinterpret_cast<select_decode_topk_fn>(
+                dlsym(handle, "_ZN7pyinfer4perf32select_decode_topk_block_indicesERKN2at6TensorES4_RS2_"));
+            auto map_prefill_indices_fn_ptr = reinterpret_cast<map_prefill_indices_fn>(
+                dlsym(handle, "_ZN7pyinfer4perf50map_prefill_request_block_indices_to_global_blocksERKN2at6TensorES4_S4_lbSt8optionalIS2_ES6_bS6_"));
+            auto map_decode_indices_fn_ptr = reinterpret_cast<map_decode_indices_fn>(
+                dlsym(handle, "_ZN7pyinfer4perf49map_decode_request_block_indices_to_global_blocksERKN2at6TensorES4_S4_lSt8optionalIS2_E"));
+            auto sparse_flash_attn_fn_ptr = reinterpret_cast<sparse_flash_attn_fn>(
+                dlsym(handle, "_ZN7pyinfer7cuinfer17sparse_flash_attnERN2at6TensorERKS2_S5_S5_d"));
+            if (!fused_fn && !rotary_embedding_fn_ptr && !quant_fn && !concat_mla_q_fn_ptr && !concat_and_cache_mla_fn_ptr && !concat_and_cache_mla_int8_fn_ptr && !paged_attention_mla_fn_ptr && !topk_softmax_fn_ptr && !topk_sigmoid_fn_ptr && !grouped_topk_fn_ptr && !scaled_mm_w4a8_fn_ptr && !scaled_mm_w8a8_fn_ptr && !w4a8_group_gemm_fn_ptr && !w8a8_group_gemm_fn_ptr && !w16a16_group_gemm_fn_ptr && !argsort_bincount_with_inv_pos_fn_ptr && !expand_moe_input_with_inv_pos_fn_ptr && !silu_and_mul_quant_fn_ptr && !moe_sum_vllm_fn_ptr) {
                 syms.error = dlerror();
                 dlclose(handle);
                 continue;
             }
             syms.handle = handle;
             syms.fused_add_rms_norm = fused_fn;
+            syms.rotary_embedding = rotary_embedding_fn_ptr;
             syms.dynamic_scaled_int8_quant = quant_fn;
             syms.concat_mla_q = concat_mla_q_fn_ptr;
             syms.concat_and_cache_mla = concat_and_cache_mla_fn_ptr;
@@ -170,11 +218,54 @@ Symbols &symbols() {
             syms.expand_moe_input_with_inv_pos = expand_moe_input_with_inv_pos_fn_ptr;
             syms.silu_and_mul_quant = silu_and_mul_quant_fn_ptr;
             syms.moe_sum_vllm = moe_sum_vllm_fn_ptr;
+            syms.fused_indexer_postprocess = fused_indexer_postprocess_fn_ptr;
+            syms.indexer_k_cache = indexer_k_cache_fn_ptr;
+            syms.indexer_k_quant_and_cache = indexer_k_quant_and_cache_fn_ptr;
+            syms.block_sparse_logits = block_sparse_logits_fn_ptr;
+            syms.select_prefill_topk = select_prefill_topk_fn_ptr;
+            syms.select_decode_topk = select_decode_topk_fn_ptr;
+            syms.map_prefill_indices = map_prefill_indices_fn_ptr;
+            syms.map_decode_indices = map_decode_indices_fn_ptr;
+            syms.sparse_flash_attn = sparse_flash_attn_fn_ptr;
             syms.error.clear();
-            return;
+            break;
         }
-        if (syms.error.empty()) {
+        if (!syms.handle && syms.error.empty()) {
             syms.error = "vllm_iluvatar extension not found";
+        }
+
+        const char *ix_env_path = std::getenv("INFINICORE_IXTRITURBO_OPS_SO");
+        const char *ix_paths[] = {
+            ix_env_path,
+            "/usr/local/corex-4.5.0.20260619/lib64/python3/dist-packages/ixtriturbo/_C/ops.cpython-312-x86_64-linux-gnu.so",
+        };
+        for (const char *path : ix_paths) {
+            if (path == nullptr || path[0] == '\0') {
+                continue;
+            }
+            void *handle = dlopen(path, RTLD_LAZY | RTLD_LOCAL);
+            if (!handle) {
+                syms.ix_error = dlerror();
+                continue;
+            }
+            auto lens_fn = reinterpret_cast<topk_indices_context_lens_fn>(
+                dlsym(handle, "_ZN7pyinfer4perf25topk_indices_context_lensERN2at6TensorERKS2_"));
+            auto sparse_v2_fn = reinterpret_cast<flash_mla_sparse_v2_fn>(
+                dlsym(handle, "_ZN7pyinfer4perf19flash_mla_sparse_v2ERN2at6TensorES3_S3_S3_S3_fRKSt8optionalIS2_E"));
+            if (!lens_fn || !sparse_v2_fn) {
+                const char *error = dlerror();
+                syms.ix_error = error ? error : "ixtriturbo sparse MLA symbols not found";
+                dlclose(handle);
+                continue;
+            }
+            syms.ix_handle = handle;
+            syms.topk_indices_context_lens = lens_fn;
+            syms.flash_mla_sparse_v2 = sparse_v2_fn;
+            syms.ix_error.clear();
+            break;
+        }
+        if (!syms.ix_handle && syms.ix_error.empty()) {
+            syms.ix_error = "ixtriturbo ops extension not found";
         }
 #else
             syms.error = "InfiniCore was not built with ENABLE_ILUVATAR_API";
@@ -187,6 +278,10 @@ Symbols &symbols() {
 
 bool available() {
     return symbols().fused_add_rms_norm != nullptr;
+}
+
+bool rotary_embedding_available() {
+    return symbols().rotary_embedding != nullptr;
 }
 
 bool dynamic_scaled_int8_quant_available() {
@@ -257,6 +352,17 @@ bool moe_sum_vllm_available() {
     return symbols().moe_sum_vllm != nullptr;
 }
 
+bool fused_deepseek_v2_indexer_postprocess_available() { return symbols().fused_indexer_postprocess != nullptr; }
+bool indexer_k_cache_available() { return symbols().indexer_k_cache != nullptr; }
+bool indexer_k_quant_and_cache_available() { return symbols().indexer_k_quant_and_cache != nullptr; }
+bool compute_block_sparse_mqa_logits_available() { return symbols().block_sparse_logits != nullptr; }
+bool select_prefill_topk_block_indices_available() { return symbols().select_prefill_topk != nullptr; }
+bool select_decode_topk_block_indices_available() { return symbols().select_decode_topk != nullptr; }
+bool map_prefill_request_block_indices_available() { return symbols().map_prefill_indices != nullptr; }
+bool map_decode_request_block_indices_available() { return symbols().map_decode_indices != nullptr; }
+bool sparse_flash_mla_available() { return symbols().flash_mla_sparse_v2 != nullptr || symbols().sparse_flash_attn != nullptr; }
+bool topk_indices_context_lens_available() { return symbols().topk_indices_context_lens != nullptr; }
+
 void fused_add_rms_norm(at::Tensor &input, at::Tensor &residual, at::Tensor &weight, float epsilon) {
     auto &syms = symbols();
     if (!syms.fused_add_rms_norm) {
@@ -266,6 +372,23 @@ void fused_add_rms_norm(at::Tensor &input, at::Tensor &residual, at::Tensor &wei
         INFINICORE_VLLM_ILUVATAR_STREAM_GUARD();
         auto &run_syms = symbols();
         run_syms.fused_add_rms_norm(input, residual, weight, epsilon);
+    });
+}
+
+void rotary_embedding(at::Tensor &positions,
+                      at::Tensor &query,
+                      std::optional<at::Tensor> key,
+                      int64_t head_size,
+                      at::Tensor &cos_sin_cache,
+                      bool is_neox) {
+    auto &syms = symbols();
+    if (!syms.rotary_embedding) {
+        throw std::runtime_error("vllm_iluvatar rotary_embedding unavailable: " + syms.error);
+    }
+    record_or_run([=]() mutable {
+        INFINICORE_VLLM_ILUVATAR_STREAM_GUARD();
+        auto &run_syms = symbols();
+        run_syms.rotary_embedding(positions, query, key, head_size, cos_sin_cache, is_neox);
     });
 }
 
@@ -480,6 +603,85 @@ void moe_sum_vllm(at::Tensor &output, const at::Tensor &input, std::optional<at:
         INFINICORE_VLLM_ILUVATAR_STREAM_GUARD();
         auto &run_syms = symbols();
         run_syms.moe_sum_vllm(output, input, topk_weights, extra_residual, routed_scale, residual_scale);
+    });
+}
+
+void fused_deepseek_v2_indexer_postprocess(at::Tensor &q_out, at::Tensor &k_out, at::Tensor &weights_out, at::Tensor &kv_cache, const at::Tensor &slot_mapping, const at::Tensor &q, const at::Tensor &kw, const at::Tensor &norm_weight, const at::Tensor &norm_bias, const at::Tensor &positions, const at::Tensor &cos_sin_cache, int64_t num_cache_tokens, bool is_neox, double eps, double weights_scale) {
+    if (!symbols().fused_indexer_postprocess) {
+        throw std::runtime_error("vllm_iluvatar fused indexer postprocess unavailable: " + symbols().error);
+    }
+    record_or_run([=]() mutable { INFINICORE_VLLM_ILUVATAR_STREAM_GUARD(); symbols().fused_indexer_postprocess(q_out, k_out, weights_out, kv_cache, slot_mapping, q, kw, norm_weight, norm_bias, positions, cos_sin_cache, num_cache_tokens, is_neox, eps, weights_scale); });
+}
+
+void indexer_k_cache(const at::Tensor &k, at::Tensor &kv_cache, const at::Tensor &slot_mapping) {
+    if (!symbols().indexer_k_cache) {
+        throw std::runtime_error("vllm_iluvatar indexer_k_cache unavailable: " + symbols().error);
+    }
+    record_or_run([=]() mutable { INFINICORE_VLLM_ILUVATAR_STREAM_GUARD(); symbols().indexer_k_cache(k, kv_cache, slot_mapping); });
+}
+
+void indexer_k_quant_and_cache(at::Tensor &k, at::Tensor &kv_cache, at::Tensor &slot_mapping, int64_t quant_block_size, const std::string &scale_fmt) {
+    if (!symbols().indexer_k_quant_and_cache) {
+        throw std::runtime_error("vllm_iluvatar indexer_k_quant_and_cache unavailable: " + symbols().error);
+    }
+    record_or_run([=]() mutable { INFINICORE_VLLM_ILUVATAR_STREAM_GUARD(); symbols().indexer_k_quant_and_cache(k, kv_cache, slot_mapping, quant_block_size, scale_fmt); });
+}
+
+void compute_block_sparse_mqa_logits(const at::Tensor &q, const at::Tensor &kv_cache, const at::Tensor &cu_seqlens_q, const at::Tensor &cu_seqlens_kv, const at::Tensor &block_table, const at::Tensor &weights, at::Tensor &logits, int64_t max_q_len, int64_t max_kv_len, int64_t max_context_len) {
+    if (!symbols().block_sparse_logits) {
+        throw std::runtime_error("vllm_iluvatar block sparse logits unavailable: " + symbols().error);
+    }
+    record_or_run([=]() mutable { INFINICORE_VLLM_ILUVATAR_STREAM_GUARD(); symbols().block_sparse_logits(q, kv_cache, cu_seqlens_q, cu_seqlens_kv, block_table, weights, logits, max_q_len, max_kv_len, max_context_len); });
+}
+
+void select_prefill_topk_block_indices(const at::Tensor &logits, const at::Tensor &cu_seqlen_ks, const at::Tensor &cu_seqlen_ke, at::Tensor &topk_indices) {
+    if (!symbols().select_prefill_topk) {
+        throw std::runtime_error("vllm_iluvatar prefill topk unavailable: " + symbols().error);
+    }
+    record_or_run([=]() mutable { INFINICORE_VLLM_ILUVATAR_STREAM_GUARD(); symbols().select_prefill_topk(logits, cu_seqlen_ks, cu_seqlen_ke, topk_indices); });
+}
+
+void select_decode_topk_block_indices(const at::Tensor &logits, const at::Tensor &seq_lens, at::Tensor &topk_indices) {
+    if (!symbols().select_decode_topk) {
+        throw std::runtime_error("vllm_iluvatar decode topk unavailable: " + symbols().error);
+    }
+    record_or_run([=]() mutable { INFINICORE_VLLM_ILUVATAR_STREAM_GUARD(); symbols().select_decode_topk(logits, seq_lens, topk_indices); });
+}
+
+void map_prefill_request_block_indices(at::Tensor &output, const at::Tensor &req_id, const at::Tensor &block_table, const at::Tensor &token_indices, int64_t block_size, bool has_prefill_workspace, std::optional<at::Tensor> prefill_workspace_request_ids, std::optional<at::Tensor> prefill_workspace_starts) {
+    if (!symbols().map_prefill_indices) {
+        throw std::runtime_error("vllm_iluvatar prefill index mapping unavailable: " + symbols().error);
+    }
+    record_or_run([=]() mutable { INFINICORE_VLLM_ILUVATAR_STREAM_GUARD(); (void)symbols().map_prefill_indices(req_id, block_table, token_indices, block_size, has_prefill_workspace, prefill_workspace_request_ids, prefill_workspace_starts, false, output); });
+}
+
+void map_decode_request_block_indices(at::Tensor &output, const at::Tensor &req_id, const at::Tensor &block_table, const at::Tensor &token_indices, int64_t block_size) {
+    if (!symbols().map_decode_indices) {
+        throw std::runtime_error("vllm_iluvatar decode index mapping unavailable: " + symbols().error);
+    }
+    record_or_run([=]() mutable { INFINICORE_VLLM_ILUVATAR_STREAM_GUARD(); (void)symbols().map_decode_indices(req_id, block_table, token_indices, block_size, output); });
+}
+
+void topk_indices_context_lens(at::Tensor &topk_lens, const at::Tensor &indices) {
+    if (!symbols().topk_indices_context_lens) {
+        throw std::runtime_error("ixtriturbo topk_indices_context_lens unavailable: " + symbols().ix_error);
+    }
+    record_or_run([=]() mutable { INFINICORE_VLLM_ILUVATAR_STREAM_GUARD(); symbols().topk_indices_context_lens(topk_lens, indices); });
+}
+
+void sparse_flash_mla(at::Tensor &output, at::Tensor &query, at::Tensor &kv_cache, at::Tensor &indices, at::Tensor &topk_lens, float scale, std::optional<at::Tensor> attn_sink) {
+    auto &syms = symbols();
+    if (!syms.flash_mla_sparse_v2 && !syms.sparse_flash_attn) {
+        throw std::runtime_error("Iluvatar sparse FlashMLA unavailable: " + syms.error + "; " + syms.ix_error);
+    }
+    record_or_run([=]() mutable {
+        INFINICORE_VLLM_ILUVATAR_STREAM_GUARD();
+        auto &run_syms = symbols();
+        if (run_syms.flash_mla_sparse_v2) {
+            run_syms.flash_mla_sparse_v2(output, query, kv_cache, indices, topk_lens, scale, attn_sink);
+        } else {
+            run_syms.sparse_flash_attn(output, query, kv_cache, indices, scale);
+        }
     });
 }
 

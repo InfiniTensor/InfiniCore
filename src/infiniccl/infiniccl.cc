@@ -115,6 +115,52 @@ __INFINI_C infiniStatus_t infinicclGroupEnd(infinicclComm_t comm) {
 #undef GROUP_END
 }
 
+__INFINI_C infiniStatus_t infinicclSend(
+    const void *sendbuf,
+    size_t count,
+    infiniDtype_t datatype,
+    int peer,
+    infinicclComm_t comm,
+    infinirtStream_t stream) {
+    if (comm == nullptr || sendbuf == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    switch (comm->device_type) {
+    case INFINI_DEVICE_NVIDIA:
+    case INFINI_DEVICE_ILUVATAR:
+    case INFINI_DEVICE_QY:
+    case INFINI_DEVICE_HYGON:
+    case INFINI_DEVICE_ALI:
+        return infiniccl::cuda::send(
+            sendbuf, count, datatype, peer, comm, stream);
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    }
+}
+
+__INFINI_C infiniStatus_t infinicclRecv(
+    void *recvbuf,
+    size_t count,
+    infiniDtype_t datatype,
+    int peer,
+    infinicclComm_t comm,
+    infinirtStream_t stream) {
+    if (comm == nullptr || recvbuf == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    switch (comm->device_type) {
+    case INFINI_DEVICE_NVIDIA:
+    case INFINI_DEVICE_ILUVATAR:
+    case INFINI_DEVICE_QY:
+    case INFINI_DEVICE_HYGON:
+    case INFINI_DEVICE_ALI:
+        return infiniccl::cuda::recv(
+            recvbuf, count, datatype, peer, comm, stream);
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    }
+}
+
 __INFINI_C infiniStatus_t infinicclAllReduce(
     void *sendbuf,
     void *recvbuf,

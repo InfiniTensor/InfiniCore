@@ -27,6 +27,22 @@ __INFINI_C __export infiniStatus_t infinicclGroupStart(infinicclComm_t comm);
 
 __INFINI_C __export infiniStatus_t infinicclGroupEnd(infinicclComm_t comm);
 
+__INFINI_C __export infiniStatus_t infinicclSend(
+    const void *sendbuf,
+    size_t count,
+    infiniDtype_t datatype,
+    int peer,
+    infinicclComm_t comm,
+    infinirtStream_t stream);
+
+__INFINI_C __export infiniStatus_t infinicclRecv(
+    void *recvbuf,
+    size_t count,
+    infiniDtype_t datatype,
+    int peer,
+    infinicclComm_t comm,
+    infinirtStream_t stream);
+
 __INFINI_C __export infiniStatus_t infinicclAllReduce(
     void *sendbuf,
     void *recvbuf,

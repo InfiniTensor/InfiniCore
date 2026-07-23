@@ -4,6 +4,11 @@
 #include "infinicore/context/context.hpp"
 #include "infinicore/dtype.hpp"
 
+#include <array>
+#include <cstdint>
+#include <cstring>
+#include <stdexcept>
+
 #include <spdlog/spdlog.h>
 
 namespace {
@@ -252,8 +257,88 @@ std::shared_ptr<TensorImpl> TensorImpl::ones(const Shape &shape,
                                              const DataType &dtype,
                                              const Device &device,
                                              bool pin_memory) {
-    // TODO: Implement this.
-    return empty(shape, dtype, device, pin_memory);
+    auto result = empty(shape, dtype, device, pin_memory);
+    if (result->nbytes() == 0) {
+        return result;
+    }
+
+    std::array<std::byte, 16> one{};
+    auto set_pattern = [&](const auto &value) {
+        if (sizeof(value) != result->element_size()) {
+            throw std::runtime_error("Invalid one pattern size for "
+                                     + toString(dtype));
+        }
+        std::memcpy(one.data(), &value, sizeof(value));
+    };
+
+    switch (dtype) {
+    case DataType::BYTE:
+    case DataType::BOOL:
+    case DataType::I8:
+    case DataType::U8:
+        set_pattern(uint8_t{1});
+        break;
+    case DataType::F8:
+        set_pattern(uint8_t{0x38});
+        break;
+    case DataType::I16:
+    case DataType::U16:
+        set_pattern(uint16_t{1});
+        break;
+    case DataType::F16:
+        set_pattern(uint16_t{0x3c00});
+        break;
+    case DataType::BF16:
+        set_pattern(uint16_t{0x3f80});
+        break;
+    case DataType::I32:
+    case DataType::U32:
+        set_pattern(uint32_t{1});
+        break;
+    case DataType::F32:
+        set_pattern(float{1.0f});
+        break;
+    case DataType::I64:
+    case DataType::U64:
+        set_pattern(uint64_t{1});
+        break;
+    case DataType::F64:
+        set_pattern(double{1.0});
+        break;
+    case DataType::C16: {
+        const uint8_t value[2] = {0x38, 0};
+        set_pattern(value);
+        break;
+    }
+    case DataType::C32: {
+        const uint16_t value[2] = {0x3c00, 0};
+        set_pattern(value);
+        break;
+    }
+    case DataType::C64: {
+        const float value[2] = {1.0f, 0.0f};
+        set_pattern(value);
+        break;
+    }
+    case DataType::C128: {
+        const double value[2] = {1.0, 0.0};
+        set_pattern(value);
+        break;
+    }
+    }
+
+    std::vector<std::byte> host(result->nbytes());
+    for (size_t i = 0; i < result->numel(); ++i) {
+        std::memcpy(host.data() + i * result->element_size(),
+                    one.data(),
+                    result->element_size());
+    }
+    if (device.getType() == Device::Type::CPU) {
+        std::memcpy(result->data(), host.data(), host.size());
+    } else {
+        context::memcpyH2D(result->data(), host.data(), host.size(), false);
+    }
+    return result;
 }
 
 std::shared_ptr<TensorImpl> TensorImpl::from_blob(

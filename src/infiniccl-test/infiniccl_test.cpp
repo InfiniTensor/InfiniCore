@@ -1,6 +1,8 @@
 #include "infiniccl_test.hpp"
 
 #include <chrono>
+#include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <numeric>
@@ -20,7 +22,12 @@ const size_t TEST_COUNTS[] = {
     MAX_COUNT,
 };
 
-const infiniDtype_t TEST_DTYPES[] = {INFINI_DTYPE_F32, INFINI_DTYPE_F16, INFINI_DTYPE_BF16};
+const infiniDtype_t TEST_DTYPES[] = {
+    INFINI_DTYPE_F32,
+    INFINI_DTYPE_F16,
+    INFINI_DTYPE_BF16,
+    INFINI_DTYPE_I32,
+};
 
 const size_t WARM_UPS = 10;
 
@@ -41,6 +48,12 @@ struct ThreadArgs {
 
 void setData(infiniDtype_t dtype, void *data, size_t count, float val) {
     switch (dtype) {
+    case INFINI_DTYPE_I32:
+        for (size_t i = 0; i < count; i++) {
+            static_cast<int32_t *>(data)[i] = static_cast<int32_t>(val);
+        }
+        break;
+
     case INFINI_DTYPE_F32:
         for (size_t i = 0; i < count; i++) {
             ((float *)data)[i] = val;
@@ -90,6 +103,8 @@ int checkData(const T *actual_, const T *expected_, size_t count) {
 
 int checkData(const void *actual, const void *expected, infiniDtype_t dtype, size_t count) {
     switch (dtype) {
+    case INFINI_DTYPE_I32:
+        return checkData(static_cast<const int32_t *>(actual), static_cast<const int32_t *>(expected), count);
     case INFINI_DTYPE_F32:
         return checkData((const float *)actual, (const float *)expected, count);
     case INFINI_DTYPE_F16:
@@ -160,10 +175,20 @@ int testAllReduce(infiniDevice_t device_type, int ndevice) {
         device_ids[i] = i;
     }
 
+    const char *dtype_filter = std::getenv("INFINICCL_TEST_DTYPE");
+    const char *count_filter = std::getenv("INFINICCL_TEST_COUNT");
+
     for (infiniDtype_t dtype : TEST_DTYPES) {
+        if (dtype_filter != nullptr && infiniDtypeToString(dtype) != dtype_filter) {
+            continue;
+        }
         setData(dtype, data, MAX_COUNT, 1.0f);
         setData(dtype, ans, MAX_COUNT, 1.0f * ndevice);
         for (size_t count : TEST_COUNTS) {
+            if (count_filter != nullptr
+                && count != static_cast<size_t>(std::stoull(count_filter))) {
+                continue;
+            }
             TEST_INFINI(infinicclCommInitAll(device_type, comms.data(), ndevice, device_ids.data()));
             std::cout << "Testing AllReduce with " << count << " elements of " << infiniDtypeToString(dtype) << std::endl;
             for (int rank = 0; rank < ndevice; rank++) {

@@ -192,9 +192,19 @@ void Runtime::addGraphOperator(std::shared_ptr<graph::GraphOperator> op) {
 }
 
 std::shared_ptr<graph::Graph> Runtime::stopGraphRecording() {
-    auto graph = graph_manager_->stop_recording();
+    try {
+        auto graph = graph_manager_->stop_recording();
+        device_memory_allocator_->set_pin_mode(false);
+        return graph;
+    } catch (...) {
+        device_memory_allocator_->set_pin_mode(false);
+        throw;
+    }
+}
+
+void Runtime::cancelGraphRecording() {
+    graph_manager_->cancel_recording();
     device_memory_allocator_->set_pin_mode(false);
-    return graph;
 }
 
 std::string Runtime::toString() const {

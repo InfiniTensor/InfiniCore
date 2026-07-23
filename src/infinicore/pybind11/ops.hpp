@@ -44,6 +44,7 @@
 #include "ops/diff.hpp"
 #include "ops/digamma.hpp"
 #include "ops/dist.hpp"
+#include "ops/dsa.hpp"
 #include "ops/dynamic_scaled_int8_quant.hpp"
 #include "ops/embedding.hpp"
 #include "ops/equal.hpp"
@@ -54,6 +55,8 @@
 #include "ops/floor_divide.hpp"
 #include "ops/fmin.hpp"
 #include "ops/fmod.hpp"
+#include "ops/fp8_indexer_quant.hpp"
+#include "ops/fp8_mla_rmsnorm_cache.hpp"
 #include "ops/fused_gated_delta_net_gating.hpp"
 #include "ops/gaussian_nll_loss.hpp"
 #include "ops/grouped_topk_vllm.hpp"
@@ -182,7 +185,10 @@ inline void bind(py::module &m) {
     bind_digamma(m);
     bind_dist(m);
     bind_dynamic_scaled_int8_quant(m);
+    bind_dsa(m);
     bind_flash_attention(m);
+    bind_fp8_indexer_quant(m);
+    bind_fp8_mla_rmsnorm_cache(m);
     bind_hinge_embedding_loss(m);
     bind_kv_caching(m);
     bind_fmod(m);

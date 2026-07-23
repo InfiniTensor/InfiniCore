@@ -1,5 +1,6 @@
 #include "infinicore/ops/grouped_topk_vllm.hpp"
 #include "../../utils.hpp"
+#include "infinicore/ops/mul_scalar.hpp"
 #include <stdexcept>
 #if defined(ENABLE_ATEN) && defined(ENABLE_ILUVATAR_API)
 #include "infinicore/adaptor/aten_adaptor.hpp"
@@ -72,7 +73,7 @@ void grouped_topk_vllm_(Tensor topk_weights, Tensor topk_ids, const Tensor &scor
         }
         adaptor::vllm_iluvatar::grouped_topk(w, ids, s, b, num_expert_group, topk_group, scoring_func, renormalize);
         if (routed_scaling_factor != 1.0f) {
-            w.mul_(routed_scaling_factor);
+            mul_scalar_(topk_weights, topk_weights, routed_scaling_factor);
         }
         return;
     }

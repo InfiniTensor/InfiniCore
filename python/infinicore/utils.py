@@ -13,6 +13,8 @@ def to_torch_dtype(infini_dtype):
     """Convert infinicore data type to PyTorch data type"""
     if infini_dtype == infinicore.float16:
         return torch.float16
+    elif infini_dtype == infinicore.float8:
+        return torch.float8_e4m3fn
     elif infini_dtype == infinicore.float32:
         return torch.float32
     elif infini_dtype == infinicore.float64:
@@ -39,6 +41,8 @@ def to_infinicore_dtype(torch_dtype):
     """Convert PyTorch data type to infinicore data type"""
     if torch_dtype == torch.float32:
         return infinicore.float32
+    elif torch_dtype == torch.float8_e4m3fn:
+        return infinicore.float8
     elif torch_dtype == torch.float16:
         return infinicore.float16
     elif torch_dtype == torch.bfloat16:

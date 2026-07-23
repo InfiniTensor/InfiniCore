@@ -24,6 +24,22 @@ struct InfinicclComm {
                                                            \
     infiniStatus_t groupEnd(infinicclComm_t comm) IMPL;    \
                                                            \
+    infiniStatus_t send(                                   \
+        const void *sendbuf,                               \
+        size_t count,                                      \
+        infiniDtype_t datatype,                            \
+        int peer,                                          \
+        infinicclComm_t comm,                              \
+        infinirtStream_t stream) IMPL;                     \
+                                                           \
+    infiniStatus_t recv(                                   \
+        void *recvbuf,                                     \
+        size_t count,                                      \
+        infiniDtype_t datatype,                            \
+        int peer,                                          \
+        infinicclComm_t comm,                              \
+        infinirtStream_t stream) IMPL;                     \
+                                                           \
     infiniStatus_t allReduce(                              \
         void *sendbuf,                                     \
         void *recvbuf,                                     \
