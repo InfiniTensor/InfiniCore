@@ -1,6 +1,5 @@
 #include "conv_metax.h"
 #include "../../../devices/metax/metax_common.h"
-#include "mcdnn/mcdnn.h" // Metax DNN Library Header
 #include <stdexcept>
 #include <vector>
 
@@ -11,28 +10,28 @@ namespace op::conv::metax {
 // ---------------------------------------------------------------------------
 
 /**
- * @brief Maps InfiniCore data types to mcDNN data types.
+ * @brief Maps InfiniCore data types to hcDNN data types.
  * @param dtype The InfiniCore data type.
- * @return The corresponding mcDNN data type.
+ * @return The corresponding hcDNN data type.
  */
-inline mcdnnDataType_t toMcDNNDataType(infiniDtype_t dtype) {
+inline hcdnnDataType_t toHcDNNDataType(infiniDtype_t dtype) {
     switch (dtype) {
     case INFINI_DTYPE_F32:
-        return MCDNN_DATA_FLOAT;
+        return HCDNN_DATA_FLOAT;
     case INFINI_DTYPE_F16:
-        return MCDNN_DATA_HALF;
+        return HCDNN_DATA_HALF;
     case INFINI_DTYPE_BF16:
-        return MCDNN_DATA_BFLOAT16;
+        return HCDNN_DATA_BFLOAT16;
     default:
-        return MCDNN_DATA_FLOAT;
+        return HCDNN_DATA_FLOAT;
     }
 }
 
 /**
- * @brief Checks mcDNN API return status and converts to InfiniCore status.
+ * @brief Checks hcDNN API return status and converts to InfiniCore status.
  */
-inline infiniStatus_t checkMcDNNStatus(mcdnnStatus_t status) {
-    if (status == MCDNN_STATUS_SUCCESS) {
+inline infiniStatus_t checkHcDNNStatus(hcdnnStatus_t status) {
+    if (status == HCDNN_STATUS_SUCCESS) {
         return INFINI_STATUS_SUCCESS;
     }
     // Log the error if a logging mechanism is available
@@ -40,38 +39,38 @@ inline infiniStatus_t checkMcDNNStatus(mcdnnStatus_t status) {
 }
 
 struct Descriptor::Opaque {
-    mcdnnHandle_t mcdnn_handle = nullptr;
-    mcdnnConvolutionDescriptor_t conv_desc = nullptr;
-    mcdnnFilterDescriptor_t filter_desc = nullptr;
-    mcdnnTensorDescriptor_t input_desc = nullptr;
-    mcdnnTensorDescriptor_t output_desc = nullptr;
-    mcdnnTensorDescriptor_t bias_desc = nullptr;
-    mcdnnActivationDescriptor_t activation_desc = nullptr;
-    mcdnnConvolutionFwdAlgo_t algo = MCDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM;
+    hcdnnHandle_t hcdnn_handle = nullptr;
+    hcdnnConvolutionDescriptor_t conv_desc = nullptr;
+    hcdnnFilterDescriptor_t filter_desc = nullptr;
+    hcdnnTensorDescriptor_t input_desc = nullptr;
+    hcdnnTensorDescriptor_t output_desc = nullptr;
+    hcdnnTensorDescriptor_t bias_desc = nullptr;
+    hcdnnActivationDescriptor_t activation_desc = nullptr;
+    hcdnnConvolutionFwdAlgo_t algo = HCDNN_CONVOLUTION_FWD_ALGO_IMPLICIT_GEMM;
     bool direct_conv2d_kernel = false;
     bool patch_embed_kernel = false;
 
     ~Opaque() {
-        if (mcdnn_handle) {
-            mcdnnDestroy(mcdnn_handle);
+        if (hcdnn_handle) {
+            hcdnnDestroy(hcdnn_handle);
         }
         if (conv_desc) {
-            mcdnnDestroyConvolutionDescriptor(conv_desc);
+            hcdnnDestroyConvolutionDescriptor(conv_desc);
         }
         if (filter_desc) {
-            mcdnnDestroyFilterDescriptor(filter_desc);
+            hcdnnDestroyFilterDescriptor(filter_desc);
         }
         if (input_desc) {
-            mcdnnDestroyTensorDescriptor(input_desc);
+            hcdnnDestroyTensorDescriptor(input_desc);
         }
         if (output_desc) {
-            mcdnnDestroyTensorDescriptor(output_desc);
+            hcdnnDestroyTensorDescriptor(output_desc);
         }
         if (bias_desc) {
-            mcdnnDestroyTensorDescriptor(bias_desc);
+            hcdnnDestroyTensorDescriptor(bias_desc);
         }
         if (activation_desc) {
-            mcdnnDestroyActivationDescriptor(activation_desc);
+            hcdnnDestroyActivationDescriptor(activation_desc);
         }
     }
 };
@@ -102,7 +101,7 @@ infiniStatus_t Descriptor::create(
 
     size_t workspace_size = 0;
     auto opaque = new Opaque();
-    mcdnnStatus_t status;
+    hcdnnStatus_t status;
 
     const bool can_use_direct_conv2d_kernel = info.ndim() == 2;
 
@@ -125,9 +124,9 @@ infiniStatus_t Descriptor::create(
     }
 
     do {
-        // 1. Create mcDNN Handle
-        status = mcdnnCreate(&opaque->mcdnn_handle);
-        if (status != MCDNN_STATUS_SUCCESS) {
+        // 1. Create hcDNN Handle
+        status = hcdnnCreate(&opaque->hcdnn_handle);
+        if (status != HCDNN_STATUS_SUCCESS) {
             break;
         }
 
@@ -141,15 +140,15 @@ infiniStatus_t Descriptor::create(
             dilation_vec[i] = static_cast<int>(info.dilation_info(i));
         }
 
-        status = mcdnnCreateConvolutionDescriptor(&opaque->conv_desc);
-        if (status != MCDNN_STATUS_SUCCESS) {
+        status = hcdnnCreateConvolutionDescriptor(&opaque->conv_desc);
+        if (status != HCDNN_STATUS_SUCCESS) {
             break;
         }
 
-        status = mcdnnSetConvolutionNdDescriptor(
+        status = hcdnnSetConvolutionNdDescriptor(
             opaque->conv_desc, info.ndim(), pad_vec.data(), stride_vec.data(),
-            dilation_vec.data(), MCDNN_CONVOLUTION, toMcDNNDataType(dtype));
-        if (status != MCDNN_STATUS_SUCCESS) {
+            dilation_vec.data(), HCDNN_CONVOLUTION, toHcDNNDataType(dtype));
+        if (status != HCDNN_STATUS_SUCCESS) {
             break;
         }
 
@@ -161,15 +160,15 @@ infiniStatus_t Descriptor::create(
             filter_dim[i + 2] = info.kernel_dim(i);
         }
 
-        status = mcdnnCreateFilterDescriptor(&opaque->filter_desc);
-        if (status != MCDNN_STATUS_SUCCESS) {
+        status = hcdnnCreateFilterDescriptor(&opaque->filter_desc);
+        if (status != HCDNN_STATUS_SUCCESS) {
             break;
         }
 
-        status = mcdnnSetFilterNdDescriptor(
-            opaque->filter_desc, toMcDNNDataType(dtype), MCDNN_TENSOR_NCHW,
+        status = hcdnnSetFilterNdDescriptor(
+            opaque->filter_desc, toHcDNNDataType(dtype), HCDNN_TENSOR_NCHW,
             info.ndim() + 2, filter_dim.data());
-        if (status != MCDNN_STATUS_SUCCESS) {
+        if (status != HCDNN_STATUS_SUCCESS) {
             break;
         }
 
@@ -181,14 +180,14 @@ infiniStatus_t Descriptor::create(
             input_dim[i + 2] = info.input_dim(i);
         }
 
-        status = mcdnnCreateTensorDescriptor(&opaque->input_desc);
-        if (status != MCDNN_STATUS_SUCCESS) {
+        status = hcdnnCreateTensorDescriptor(&opaque->input_desc);
+        if (status != HCDNN_STATUS_SUCCESS) {
             break;
         }
 
-        status = mcdnnSetTensorNdDescriptor(opaque->input_desc, toMcDNNDataType(dtype),
+        status = hcdnnSetTensorNdDescriptor(opaque->input_desc, toHcDNNDataType(dtype),
                                             info.ndim() + 2, input_dim.data(), nullptr);
-        if (status != MCDNN_STATUS_SUCCESS) {
+        if (status != HCDNN_STATUS_SUCCESS) {
             break;
         }
 
@@ -199,14 +198,14 @@ infiniStatus_t Descriptor::create(
             output_dim[i + 2] = info.output_dim(i);
         }
 
-        status = mcdnnCreateTensorDescriptor(&opaque->output_desc);
-        if (status != MCDNN_STATUS_SUCCESS) {
+        status = hcdnnCreateTensorDescriptor(&opaque->output_desc);
+        if (status != HCDNN_STATUS_SUCCESS) {
             break;
         }
 
-        status = mcdnnSetTensorNdDescriptor(opaque->output_desc, toMcDNNDataType(dtype),
+        status = hcdnnSetTensorNdDescriptor(opaque->output_desc, toHcDNNDataType(dtype),
                                             info.ndim() + 2, output_dim.data(), nullptr);
-        if (status != MCDNN_STATUS_SUCCESS) {
+        if (status != HCDNN_STATUS_SUCCESS) {
             break;
         }
 
@@ -214,29 +213,29 @@ infiniStatus_t Descriptor::create(
             std::vector<int> bias_dim(info.ndim() + 2, 1);
             bias_dim[1] = info.out_channels(); // 1xCx1x1
 
-            status = mcdnnCreateTensorDescriptor(&opaque->bias_desc);
-            if (status != MCDNN_STATUS_SUCCESS) {
+            status = hcdnnCreateTensorDescriptor(&opaque->bias_desc);
+            if (status != HCDNN_STATUS_SUCCESS) {
                 break;
             }
 
-            status = mcdnnSetTensorNdDescriptor(
+            status = hcdnnSetTensorNdDescriptor(
                 opaque->bias_desc,
-                toMcDNNDataType(dtype),
+                toHcDNNDataType(dtype),
                 info.ndim() + 2,
                 bias_dim.data(),
                 nullptr);
-            if (status != MCDNN_STATUS_SUCCESS) {
+            if (status != HCDNN_STATUS_SUCCESS) {
                 break;
             }
         }
 
         // 5. Get Workspace Size
-        status = mcdnnGetConvolutionForwardWorkspaceSize(
-            opaque->mcdnn_handle,
+        status = hcdnnGetConvolutionForwardWorkspaceSize(
+            opaque->hcdnn_handle,
             opaque->input_desc, opaque->filter_desc, opaque->conv_desc,
             opaque->output_desc, opaque->algo, &workspace_size);
 
-        if (status != MCDNN_STATUS_SUCCESS) {
+        if (status != HCDNN_STATUS_SUCCESS) {
             workspace_size = 0;
         }
 
@@ -251,7 +250,7 @@ infiniStatus_t Descriptor::create(
 
     // Error Handling: Cleanup
     if (opaque) {
-        // auto clean mcdnn_handle and descriptors
+        // auto clean hcdnn_handle and descriptors
         delete opaque;
     }
     return INFINI_STATUS_INTERNAL_ERROR;
@@ -278,15 +277,15 @@ infiniStatus_t Descriptor::calculate(
         return launchPatchEmbedConv3d(_dtype, _info, y, x, w, bias, stream);
     }
 
-    mcdnnStatus_t status;
+    hcdnnStatus_t status;
     float alpha = 1.0f;
     float beta = 0.0f;
 
     // ---------------------------------------------------------------
     // Step 1:  y = conv(x, w)
     // ---------------------------------------------------------------
-    status = mcdnnConvolutionForward(
-        _opaque->mcdnn_handle,
+    status = hcdnnConvolutionForward(
+        _opaque->hcdnn_handle,
         &alpha,
         _opaque->input_desc, x,
         _opaque->filter_desc, w,
@@ -296,25 +295,25 @@ infiniStatus_t Descriptor::calculate(
         &beta,
         _opaque->output_desc, y);
 
-    CHECK_STATUS(checkMcDNNStatus(status));
+    CHECK_STATUS(checkHcDNNStatus(status));
 
     // ---------------------------------------------------------------
     // Step 2: y = y + bias
     // ---------------------------------------------------------------
     if (bias != nullptr) {
-        // mcdnnAddTensor: y = alpha * bias + beta * y
+        // hcdnnAddTensor: y = alpha * bias + beta * y
         // we need do: y = 1.0 * bias + 1.0 * y_old
         float alpha_add = 1.0f;
         float beta_add = 1.0f;
 
-        status = mcdnnAddTensor(
-            _opaque->mcdnn_handle,
+        status = hcdnnAddTensor(
+            _opaque->hcdnn_handle,
             &alpha_add,
             _opaque->bias_desc, bias,
             &beta_add,
             _opaque->output_desc, y);
 
-        CHECK_STATUS(checkMcDNNStatus(status));
+        CHECK_STATUS(checkHcDNNStatus(status));
     }
 
     return INFINI_STATUS_SUCCESS;
