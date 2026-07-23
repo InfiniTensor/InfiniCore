@@ -10,6 +10,7 @@ from .op_register import OpRegister
 from .structs import *
 
 INFINI_ROOT = os.getenv("INFINI_ROOT") or str(Path.home() / ".infini")
+INFINI_RT_ROOT = os.getenv("INFINI_RT_ROOT")
 
 
 class InfiniLib:
@@ -28,11 +29,9 @@ class InfiniLib:
 
 # Open operators library
 def open_lib():
-    def find_library_in_ld_path(subdir, library_name):
-        ld_library_path = os.path.join(INFINI_ROOT, subdir)
-        paths = ld_library_path.split(os.pathsep)
-        for path in paths:
-            full_path = os.path.join(path, library_name)
+    def find_library(root, subdirs, library_name):
+        for subdir in subdirs:
+            full_path = os.path.join(root, subdir, library_name)
             if os.path.isfile(full_path):
                 return full_path
         return None
@@ -40,17 +39,23 @@ def open_lib():
     system_name = platform.system()
     # Load the library
     if system_name == "Windows":
-        libop_path = find_library_in_ld_path("bin", "infiniop.dll")
-        librt_path = find_library_in_ld_path("bin", "infinirt.dll")
+        libop_path = find_library(INFINI_ROOT, ("bin",), "infiniop.dll")
+        librt_root = INFINI_RT_ROOT or INFINI_ROOT
+        librt_path = find_library(librt_root, ("bin",), "infinirt.dll")
     elif system_name == "Linux":
-        libop_path = find_library_in_ld_path("lib", "libinfiniop.so")
-        librt_path = find_library_in_ld_path("lib", "libinfinirt.so")
+        libop_path = find_library(INFINI_ROOT, ("lib", "lib64"), "libinfiniop.so")
+        librt_root = INFINI_RT_ROOT or INFINI_ROOT
+        librt_path = find_library(
+            librt_root, ("lib", "lib64"), "libinfinirt.so"
+        )
+    else:
+        raise RuntimeError(f"Unsupported platform: {system_name}")
 
     assert libop_path is not None, (
         "Cannot find infiniop.dll or libinfiniop.so. Check if INFINI_ROOT is set correctly."
     )
     assert librt_path is not None, (
-        "Cannot find infinirt.dll or libinfinirt.so. Check if INFINI_ROOT is set correctly."
+        "Cannot find infinirt.dll or libinfinirt.so. Check INFINI_RT_ROOT or INFINI_ROOT."
     )
 
     librt = ctypes.CDLL(librt_path)

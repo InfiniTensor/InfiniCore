@@ -3,10 +3,9 @@
 
 #include <cstddef>
 #include <cstdint>
-// On MetaX these headers do not exist; the equivalents come from
-// devices/metax/metax_kernel_common.h, which the .maca translation unit
-// includes before this one.
-#if !defined(ENABLE_METAX_API)
+// MetaX and Mars provide these types through their backend kernel headers,
+// which their translation units include before this shared implementation.
+#if !defined(ENABLE_METAX_API) && !defined(ENABLE_MARS_API)
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
 #endif
