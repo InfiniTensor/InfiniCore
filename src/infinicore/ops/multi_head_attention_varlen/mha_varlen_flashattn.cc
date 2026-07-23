@@ -138,7 +138,7 @@ void run(void *planned_meta) {
     auto alibi_slopes = p->alibi_slopes ? std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(*p->alibi_slopes)) : std::nullopt;
     auto scale = p->scale;
 
-#ifdef INFINICORE_FLASH_ATTN_MARS_EXT
+#if defined(INFINICORE_FLASH_ATTN_MARS_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_S_AUX)
     std::optional<at::Tensor> s_aux = std::nullopt;
 #endif
 
@@ -165,7 +165,7 @@ void run(void *planned_meta) {
         0.0,
         false,
         std::nullopt
-#ifdef INFINICORE_FLASH_ATTN_MARS_EXT
+#if defined(INFINICORE_FLASH_ATTN_MARS_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_S_AUX)
         ,
         s_aux
 #endif
