@@ -97,8 +97,8 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
 | `--nv-gpu=[y\|n]`        | 是否编译英伟达 GPU 接口实现       | n
 | `--ascend-npu=[y\|n]`    | 是否编译昇腾 NPU 接口实现         | n
 | `--cambricon-mlu=[y\|n]` | 是否编译寒武纪 MLU 接口实现       | n
-| `--metax-gpu=[y\|n]`     | 是否编译沐曦 GPU 接口实现         | n
-| `--use-mc=[y\|n]`        | 是否沐曦 GPU 接口实现使用maca SDK | n
+| `--metax-gpu=[y\|n]`     | 是否编译 MetaX/MACA GPU 接口实现  | n
+| `--mars-gpu=[y\|n]`      | 是否编译 Mars/HPCC GPU 接口实现   | n
 | `--moore-gpu=[y\|n]`     | 是否编译摩尔线程 GPU 接口实现     | n
 | `--iluvatar-gpu=[y\|n]`  | 是否编译天数 GPU 接口实现         | n
 | `--qy-gpu=[y\|n]`        | 是否编译QY GPU 接口实现           | n
@@ -108,6 +108,12 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
 | `--ninetoothed=[y\|n]`   | 是否编译九齿实现                 | n
 | `--ccl=[y\|n]`           | 是否编译 InfiniCCL 通信库接口实现 | n
 | `--graph=[y\|n]`         | 是否编译 cuda graph 接口实现      | n
+| `--mars-flash-attn-abi=[detect\|standard\|extended]` | Mars flash-attn ABI；默认检查实际扩展库符号 | detect
+
+Mars/HPCC 当前不支持 standalone InfiniOps 后端；配置 Mars 时请使用
+`--mars-gpu=true --infiniops=false`。
+使用独立 InfiniRT 安装时应设置 `INFINI_RT_ROOT` 或 `--infinirt-root`；如果
+显式前缀中缺少 `include/infini/rt.h` 或 `lib{,64}/libinfinirt.so`，配置会直接失败。
 
 ##### 手动安装底层库
 
@@ -268,9 +274,9 @@ pip install -e .
 
 ```bash
 # 测试单算子
-python test/infinicore/ops/[operator].py [--bench | --debug | --verbose] [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun | --Hygon | --ali]
+python test/infinicore/ops/[operator].py [--bench | --debug | --verbose] [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --mars | --moore | --kunlun | --Hygon | --ali]
 # 测试全部算子
-python test/infinicore/run.py [--bench | --debug | --verbose] [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun | --ali]
+python test/infinicore/run.py [--bench | --debug | --verbose] [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --mars | --moore | --kunlun | --ali]
 ```
 
 使用 -h 查看更多参数。
@@ -279,9 +285,9 @@ python test/infinicore/run.py [--bench | --debug | --verbose] [--cpu | --nvidia 
 
 ```shell
 # 测试单算子
-python test/infiniop/[operator].py [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun | --Hygon | --ali]
+python test/infiniop/[operator].py [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --mars | --moore | --kunlun | --Hygon | --ali]
 # 测试全部算子
-python scripts/python_test.py [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun | --Hygon | --ali]
+python scripts/python_test.py [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --mars | --moore | --kunlun | --Hygon | --ali]
 ```
 
 #### 通信库（InfiniCCL）测试

@@ -8,15 +8,12 @@ def _first_existing_dir(paths: list[str]) -> str:
     return ""
 
 
-def _metax_toolkit_root(use_mc: bool) -> str:
-    """Return toolkit root for MetaX builds (MACA when use-mc; otherwise HPCC)."""
-    if use_mc:
-        for key in ("MACA_PATH", "MACA_HOME", "MACA_ROOT"):
-            v = os.environ.get(key, "").strip()
-            if v:
-                return v
-        return _first_existing_dir(["/opt/maca"])
-    return _first_existing_dir(["/opt/hpcc"])
+def _toolkit_root(env_names: tuple[str, ...], fallback: str) -> str:
+    for key in env_names:
+        value = os.environ.get(key, "").strip()
+        if value:
+            return value
+    return _first_existing_dir([fallback])
 
 
 def _prepend_path_var(name: str, prefixes: list[str]) -> None:
@@ -37,16 +34,14 @@ def set_env_for_metax_gpu(
     """
     Prepend compiler include paths needed when building ATen-enabled C++ against torch headers.
 
-    This chooses paths based on xmake backend flags (e.g. --metax-gpu) and toolkit selection
-    (e.g. MetaX HPCC vs MACA when --use-mc=y).
+    MetaX always uses the MACA SDK. Mars/HPCC is configured separately.
     """
     d = parse_xmake_cli_flag_values(flags)
     if not truthy_flag_value(d.get("aten", "n")):
         return
 
     if truthy_flag_value(d.get("metax-gpu", "n")):
-        use_mc = truthy_flag_value(d.get("use-mc", "n"))
-        root = _metax_toolkit_root(use_mc=use_mc)
+        root = _toolkit_root(("MACA_PATH", "MACA_HOME", "MACA_ROOT"), "/opt/maca")
         if not root:
             return
         dirs = [
@@ -64,4 +59,32 @@ def set_env_for_metax_gpu(
         ]
         for var in ("CPATH", "CPLUS_INCLUDE_PATH", "C_INCLUDE_PATH"):
             _prepend_path_var(var, dirs)
+
+
+def set_env_for_mars_gpu(
+    flags: str,
+    *,
+    parse_xmake_cli_flag_values,
+    truthy_flag_value,
+) -> None:
+    """Prepend HPCC compatibility headers for ATen-enabled Mars builds."""
+    d = parse_xmake_cli_flag_values(flags)
+    if not truthy_flag_value(d.get("aten", "n")):
         return
+    if not truthy_flag_value(d.get("mars-gpu", "n")):
+        return
+
+    root = _toolkit_root(("HPCC_PATH", "HPCC_HOME"), "/opt/hpcc")
+    if not root:
+        return
+    dirs = [
+        os.path.join(root, "tools", "cu-bridge", "include"),
+        os.path.join(root, "include", "hcr"),
+        os.path.join(root, "include", "common"),
+        os.path.join(root, "include", "hcsparse"),
+        os.path.join(root, "include", "hcblas"),
+        os.path.join(root, "include", "hcsolver"),
+        os.path.join(root, "include"),
+    ]
+    for var in ("CPATH", "CPLUS_INCLUDE_PATH", "C_INCLUDE_PATH"):
+        _prepend_path_var(var, dirs)
