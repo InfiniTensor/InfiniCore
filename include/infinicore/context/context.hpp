@@ -86,9 +86,9 @@ const char *cudagraphPolicy();
 /// ``full_and_piecewise`` ∧ decode phase only. Default / eager → host-break.
 bool faInGraphAllowed();
 
-/// Triton MoE under stream capture: explicit ``INFINI_MOE_TRITON_CAPTURE``, else
-/// ``full_and_piecewise`` ∧ decode. Explicit ``eager`` / unset policy without
-/// the legacy env → false.
+/// Triton MoE under stream capture: diagnose-only ``INFINI_MOE_TRITON_CAPTURE=1``.
+/// Under ``full_and_piecewise`` default is host-break (MetaX Gate C: native
+/// piecewise + MoE-in-graph garbles). Explicit ``=0`` also forces host-break.
 bool moeTritonCaptureAllowed();
 
 /// RAII restore of ``InferencePhase`` for graph capture / forward scopes.

@@ -257,20 +257,17 @@ bool faInGraphAllowed() {
 }
 
 bool moeTritonCaptureAllowed() {
+    // Explicit override wins (including =0 to force host-break under diagnose).
     const char *raw = std::getenv("INFINI_MOE_TRITON_CAPTURE");
     if (raw != nullptr && raw[0] != '\0') {
         return std::string(raw) != "0";
     }
-    const std::string policy(cudagraphPolicy());
-    if (policy == "eager" || policy.empty()) {
-        return false;
-    }
-    if (policy != "full_and_piecewise") {
-        return false;
-    }
-    // Prefill: AOT MoE outside FA segments (no Triton-under-capture).
-    // Decode / Unknown (FULL instantiate): allow Triton in-graph.
-    return getInferencePhase() != InferencePhase::Prefill;
+    // MetaX contract under full_and_piecewise: MoE stays host-break whenever
+    // native piecewise CG is enabled. MoE-under-hcStream + native piecewise
+    // coexistence garbles (Gate C bisect: native+MoE-HB PASS; native+MoE-in-graph
+    // GARBLE). FULL decode still captures non-MoE ops; MoE host-break splits
+    // like FA. Restore in-graph only via diagnose INFINI_MOE_TRITON_CAPTURE=1.
+    return false;
 }
 
 bool isDeviceStreamCapturing() {

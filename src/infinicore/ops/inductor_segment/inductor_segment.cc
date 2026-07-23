@@ -60,8 +60,9 @@ bool moe_capture_safe_enabled() {
 
 /// Triton fused_moe_routed under MetaX stream capture (no aten body).
 /// Distinct from INFINI_MOE_CAPTURE_SAFE (aten index_select+bmm).
-/// Prefer ``INFINI_CUDAGRAPH_POLICY`` + decode phase over bare TRITON_CAPTURE;
-/// explicit ``INFINI_MOE_TRITON_CAPTURE`` still wins when set.
+/// Prefer ``INFINI_CUDAGRAPH_POLICY`` + diagnose ``INFINI_MOE_TRITON_CAPTURE``;
+/// under ``full_and_piecewise`` MetaX default is MoE host-break (Gate C).
+/// Explicit ``INFINI_MOE_TRITON_CAPTURE`` still wins when set.
 bool moe_triton_capture_enabled() {
     return infinicore::context::moeTritonCaptureAllowed();
 }
