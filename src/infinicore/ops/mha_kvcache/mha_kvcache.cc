@@ -18,9 +18,11 @@ MhaKVCache::MhaKVCache(Tensor out,
     INFINICORE_GRAPH_OP_DISPATCH(out->device().getType(),
                                  out, q, k_cache, v_cache, seqlens_k, block_table, alibi_slopes, scale);
     // MetaX FA2 mha_fwd_kvcache is not stream-capture-safe by default (HTC under
-    // hcStreamBeginCapture). Prefer phase-scoped policy: FULL decode may fold FA
-    // in-graph under INFINI_CUDAGRAPH_POLICY=full_and_piecewise; prefill / eager
-    // stay host-break. Diagnose-only INFINI_FA_FORCE_CAPTURE still forces in-graph.
+    // hcStreamBeginCapture). Production keeps FA host_break_; in-graph is
+    // FORCE-only via INFINI_FA_FORCE_CAPTURE (faInGraphAllowed is not
+    // phase-adaptive). H4: host_break only skips hcStreamBeginCapture — HostOp
+    // still runs mha_kvcache_flashattn::run via non-owning to_aten_tensor
+    // (from_blob); not a vLLM FX “attn outside torch graph” split.
     host_break_ = !context::faInGraphAllowed();
 }
 

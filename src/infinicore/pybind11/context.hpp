@@ -39,6 +39,7 @@ inline void bind(py::module &m) {
     m.def("moe_triton_capture_allowed",
           &moeTritonCaptureAllowed,
           "Phase-adaptive MoE under stream capture (Decode + non-eager; "
+          "FORCE-only under non-eager (INFINI_MOE_FORCE_CAPTURE); "
           "INFINI_MOE_FORCE_HOST_BREAK forces false)");
     m.def(
         "set_inference_phase",

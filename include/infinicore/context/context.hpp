@@ -68,7 +68,8 @@ void setDeviceStreamCapturing(bool capturing);
 graph::CaptureArena *currentCaptureArena();
 void setCurrentCaptureArena(graph::CaptureArena *arena);
 
-/// Engine TLS inference phase for phase-scoped FA / MoE capture policy.
+/// Engine TLS inference phase for phase-scoped MoE capture policy.
+/// FA is FORCE-only (``faInGraphAllowed``); phase does not gate FA.
 enum class InferencePhase : uint8_t {
     Unknown = 0,
     Prefill = 1,
@@ -82,15 +83,17 @@ InferencePhase getInferencePhase();
 /// Unknown values (including ``track_b``) are treated as empty / legacy.
 const char *cudagraphPolicy();
 
-/// FA may enter a device segment: diagnose ``INFINI_FA_FORCE_CAPTURE=1``, else
-/// host-break (MetaX prod). Default / eager → host-break.
+/// FA may enter a device segment: diagnose ``INFINI_FA_FORCE_CAPTURE=1`` only.
+/// Not phase-adaptive under ``full_and_piecewise``. Prod / default → host-break.
+/// H4: host_break ≠ FX attn split; HostOp still uses non-owning ``to_aten_tensor``.
 bool faInGraphAllowed();
 
-/// Triton MoE under stream capture (phase-adaptive).
-/// ``INFINI_MOE_FORCE_HOST_BREAK=1`` → always host-break (bisect escape).
+/// Triton MoE under stream capture — FORCE-only (not phase-adaptive).
+/// ``INFINI_MOE_FORCE_HOST_BREAK=1`` → always host-break.
 /// ``eager`` policy → host-break.
-/// Non-eager + ``InferencePhase::Decode`` → in-graph (FULL decode).
-/// Prefill / Unknown → host-break (native piecewise coexistence).
+/// Default under ``full_and_piecewise`` → host-break (Gate C: Decode-phase
+/// MoE-in-graph under native garbles; see FA adaptive + paged fullpw logs).
+/// Diagnose ``INFINI_MOE_FORCE_CAPTURE=1`` → allow Triton MoE in-graph.
 bool moeTritonCaptureAllowed();
 
 /// RAII restore of ``InferencePhase`` for graph capture / forward scopes.

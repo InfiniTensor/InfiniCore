@@ -246,11 +246,12 @@ const char *cudagraphPolicy() {
 }
 
 bool faInGraphAllowed() {
-    // MetaX: folding FA2 into monolithic decode CG poisons subsequent InfiniLM FA
-    // (eager mha_varlen / piecewise dry-run) — SIGSEGV on first chat or during
-    // native prefill capture after decode FULL. Known-good FA FULL smokes used
-    // torch PREFILL_COMPILE (no InfiniLM FA). Keep FA host-break unless the
-    // diagnose-only override is set.
+    // FORCE-only (not phase-adaptive). H3 REJECTED: iso
+    // (bench_results/dev_infinilm_fa_h3h4_*) shows eager mha_varlen OK after
+    // FA kvcache capture through the same adaptor — dual-entry is not the
+    // poison. Keep prod FA host-break; do not ship owning ATen / TLS fence as
+    // an H3 fix. FA-in-graph under true native full_and_piecewise may still
+    // fail for other reasons (hcGraph vs torch CG, full-model capture, MoE).
     if (env_truthy_("INFINI_FA_FORCE_CAPTURE")) {
         return true;
     }
@@ -266,10 +267,15 @@ bool moeTritonCaptureAllowed() {
     if (std::strcmp(cudagraphPolicy(), "eager") == 0) {
         return false;
     }
-    // Phase-adaptive: Decode FULL may fold Triton MoE in-graph; Prefill /
-    // Unknown keep host-break so native piecewise + MoE-under-hcStream do not
-    // coexist (Gate C: blanket MoE-in-graph with native garbles).
-    return getInferencePhase() == InferencePhase::Decode;
+    // FORCE-only (not phase-adaptive) — mirrors faInGraphAllowed.
+    // Gate C evidence: Decode-phase MoE-in-graph under native full_and_piecewise
+    // garbles (FA adaptive 101041 segs=29; paged adaptive fullpw_paged segs=1 /
+    // host_ops=0 / device_ops=453). Prefill HB alone is not enough.
+    // Diagnose-only: INFINI_MOE_FORCE_CAPTURE=1 folds Triton MoE in-graph.
+    if (env_truthy_("INFINI_MOE_FORCE_CAPTURE")) {
+        return true;
+    }
+    return false;
 }
 
 bool isDeviceStreamCapturing() {

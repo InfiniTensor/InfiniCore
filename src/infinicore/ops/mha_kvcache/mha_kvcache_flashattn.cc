@@ -47,15 +47,15 @@ void *plan(Tensor out,
 
 void run(void *planned_meta) {
 #ifdef ENABLE_FLASH_ATTN
-    // Soft refuse unless FA is policy-allowed in-graph (FORCE diagnose, or
-    // full_and_piecewise ∧ decode). Prefill / eager stay host-break.
+    // Soft refuse unless diagnose-only INFINI_FA_FORCE_CAPTURE (faInGraphAllowed
+    // is FORCE-only; not phase-adaptive under full_and_piecewise). HostOp FA
+    // still uses this run path via non-owning to_aten_tensor (H4).
     if (infinicore::context::isDeviceStreamCapturing()
         && !infinicore::context::faInGraphAllowed()) {
         throw std::runtime_error(
             "MhaKVCache::run: FA2 mha_fwd_kvcache must not run under hcStream capture "
             "(recorded as host_break; Graph splits device segments around FA; "
-            "use INFINI_CUDAGRAPH_POLICY=full_and_piecewise decode or "
-            "INFINI_FA_FORCE_CAPTURE=1 diagnose-only)");
+            "use INFINI_FA_FORCE_CAPTURE=1 diagnose-only)");
     }
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
     c10::cuda::CUDAStreamGuard guard(infinicore::adaptor::get_cuda_stream());

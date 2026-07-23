@@ -60,8 +60,8 @@ bool moe_capture_safe_enabled() {
 
 /// Triton fused_moe_routed under MetaX stream capture (no aten body).
 /// Distinct from INFINI_MOE_CAPTURE_SAFE (aten index_select+bmm).
-/// Capture follows ``moeTritonCaptureAllowed()``: non-eager + Decode phase;
-/// ``INFINI_MOE_FORCE_HOST_BREAK=1`` forces host-break.
+/// Capture follows ``moeTritonCaptureAllowed()``: FORCE-only
+/// (``INFINI_MOE_FORCE_CAPTURE``); ``INFINI_MOE_FORCE_HOST_BREAK=1`` forces host-break.
 bool moe_triton_capture_enabled() {
     return infinicore::context::moeTritonCaptureAllowed();
 }
@@ -1217,8 +1217,8 @@ InductorMoe::InductorMoe(
         layer_idx,
         bucket);
     // CG-1 default: Triton fused_moe_routed is not stream-capture-safe → host break
-    // unless phase-adaptive Decode allow (or CAPTURE_SAFE aten body).
-    // INFINI_MOE_FORCE_HOST_BREAK=1 forces host-break even in Decode.
+    // unless FORCE capture (or CAPTURE_SAFE aten body).
+    // INFINI_MOE_FORCE_HOST_BREAK=1 forces host-break even if FORCE_CAPTURE is set.
     host_break_ = !moe_device_capturable();
 }
 
