@@ -165,10 +165,6 @@ if has_config("mars-gpu") then
     includes("xmake/mars.lua")
 end
 
-if has_config("metax-gpu") and has_config("mars-gpu") then
-    raise("--metax-gpu and --mars-gpu are separate backends and cannot be enabled together")
-end
-
 -- 摩尔线程
 option("moore-gpu")
     set_default(false)
@@ -241,6 +237,13 @@ option("flash-attn")
     set_default(nil)
     set_showmenu(true)
     set_description("Path to flash-attention repo. If not set, flash-attention will not used.")
+option_end()
+
+option("mars-flash-attn-abi")
+    set_default("detect")
+    set_values("detect", "standard", "extended")
+    set_showmenu(true)
+    set_description("Mars flash-attn ABI: detect from the library, standard, or extended")
 option_end()
 
 if has_config("aten") then
@@ -334,9 +337,113 @@ local function find_infinirt_library(infinirt_root, xmake_os)
         infinirt_library = path.join(infinirt_root, "lib64", "libinfinirt.so")
     end
     if not xmake_os.isfile(infinirt_library) then
-        raise("InfiniRT library not found under: " .. infinirt_root)
+        xmake_os.raise("InfiniRT library not found under: " .. infinirt_root)
     end
     return infinirt_library
+end
+
+local function validate_infinirt_root(xmake_os)
+    local infinirt_root = get_infinirt_root()
+    if not infinirt_root or infinirt_root == "" then
+        return
+    end
+
+    local public_header = path.join(infinirt_root, "include", "infini", "rt.h")
+    if not xmake_os.isfile(public_header) then
+        xmake_os.raise("InfiniRT public header not found: " .. public_header)
+    end
+    find_infinirt_library(infinirt_root, xmake_os)
+end
+
+local function find_mars_flash_attn_library(xmake_os)
+    local configured = os.getenv("FLASH_ATTN_2_CUDA_SO")
+    if configured and configured ~= "" then
+        configured = configured:trim()
+        if not xmake_os.isfile(configured) then
+            xmake_os.raise("Mars flash-attn library not found: " .. configured)
+        end
+        return configured
+    end
+
+    local find_spec_script =
+        "import importlib.util; s = importlib.util.find_spec('flash_attn_2_cuda'); print(s.origin if s and s.origin else '')"
+    local discovered = xmake_os.iorunv("python", {"-c", find_spec_script}):trim()
+    if discovered ~= "" and xmake_os.isfile(discovered) then
+        return discovered
+    end
+
+    local fallback = os.getenv("FLASH_ATTN_MARS_CUDA_SO_CONTAINER")
+        or "/opt/conda/lib/python3.10/site-packages/flash_attn_2_cuda.cpython-310-aarch64-linux-gnu.so"
+    if not xmake_os.isfile(fallback) then
+        xmake_os.raise("Mars flash-attn library not found; set FLASH_ATTN_2_CUDA_SO")
+    end
+    return fallback
+end
+
+-- HPCC and flash-attn are versioned independently, so inspect the extension's
+-- exported C++ signatures instead of deriving its ABI from the SDK version.
+local function mars_flash_attn_uses_extended_abi(xmake_os)
+    local abi = get_config("mars-flash-attn-abi") or "detect"
+    if abi == "extended" then
+        return true
+    elseif abi == "standard" then
+        return false
+    end
+
+    local flash_attn_library = find_mars_flash_attn_library(xmake_os)
+    local symbols = xmake_os.iorunv("nm", {"-D", "-C", flash_attn_library})
+    local mha_fwd_symbol = nil
+    local mha_varlen_fwd_symbol = nil
+    local mha_fwd_kvcache_symbol = nil
+    for line in symbols:gmatch("[^\r\n]+") do
+        if line:find(" mha_fwd(", 1, true) then
+            mha_fwd_symbol = line
+        elseif line:find(" mha_varlen_fwd(", 1, true) then
+            mha_varlen_fwd_symbol = line
+        elseif line:find(" mha_fwd_kvcache(", 1, true) then
+            mha_fwd_kvcache_symbol = line
+        end
+    end
+
+    if mha_fwd_symbol and mha_varlen_fwd_symbol and mha_fwd_kvcache_symbol then
+        local has_attention_mask = mha_fwd_symbol:find(
+            "std::optional<at::Tensor>&, std::optional<at::Tensor>&, std::optional<at::Tensor>&, float, float",
+            1,
+            true
+        ) ~= nil
+        local fwd_has_s_aux = mha_fwd_symbol:find(
+            "std::optional<at::Generator>, std::optional<at::Tensor>&)",
+            1,
+            true
+        ) ~= nil
+        local varlen_has_s_aux = mha_varlen_fwd_symbol:find(
+            "std::optional<at::Generator>, std::optional<at::Tensor>&)",
+            1,
+            true
+        ) ~= nil
+        local kvcache_has_s_aux = mha_fwd_kvcache_symbol:match(
+            ", int, std::optional<at::Tensor>&%)$"
+        ) ~= nil
+        if has_attention_mask
+            and fwd_has_s_aux
+            and varlen_has_s_aux
+            and kvcache_has_s_aux
+        then
+            return true
+        elseif not has_attention_mask
+            and mha_fwd_symbol:find("std::optional<at::Generator>)", 1, true)
+            and mha_varlen_fwd_symbol:find("std::optional<at::Generator>)", 1, true)
+            and mha_fwd_kvcache_symbol:match(", int%)$")
+        then
+            return false
+        end
+    end
+
+    xmake_os.raise(
+        "Unable to detect the Mars flash-attn ABI from "
+        .. flash_attn_library
+        .. "; set --mars-flash-attn-abi=standard or extended"
+    )
 end
 
 local function add_external_infinirt()
@@ -374,7 +481,7 @@ local function add_external_infinirt()
         end
     end
     if has_config("mars-gpu") then
-        local hpcc_root = os.getenv("HPCC_PATH") or "/opt/hpcc"
+        local hpcc_root = os.getenv("HPCC_PATH") or os.getenv("HPCC_HOME") or "/opt/hpcc"
         local hpcc_include = path.join(hpcc_root, "include")
         if os.isdir(hpcc_include) then
             add_includedirs(hpcc_include, { public = true })
@@ -418,7 +525,12 @@ local function filter_infiniops_ops_for_backend(infiniops_ops)
     return table.concat(filtered, ",")
 end
 
-local function get_infiniops_backend_cmake_arg()
+local function get_infiniops_backend_cmake_arg(xmake_os)
+    if has_config("mars-gpu") then
+        xmake_os.raise(
+            "standalone InfiniOps does not expose a distinct Mars backend; configure with --infiniops=false"
+        )
+    end
     local enabled = {}
     local function add_backend(config, cmake_arg)
         if has_config(config) then
@@ -427,14 +539,15 @@ local function get_infiniops_backend_cmake_arg()
     end
     add_backend("nv-gpu", "-DWITH_NVIDIA=ON")
     add_backend("metax-gpu", "-DWITH_METAX=ON")
-    add_backend("mars-gpu", "-DWITH_MARS=ON")
     add_backend("iluvatar-gpu", "-DWITH_ILUVATAR=ON")
     add_backend("moore-gpu", "-DWITH_MOORE=ON")
     if #enabled == 0 then
-        raise("InfiniOps integration requires one of --nv-gpu, --metax-gpu, --mars-gpu, --iluvatar-gpu, or --moore-gpu")
+        xmake_os.raise(
+            "InfiniOps integration requires one of --nv-gpu, --metax-gpu, --iluvatar-gpu, or --moore-gpu"
+        )
     end
     if #enabled > 1 then
-        raise("InfiniOps can build only one GPU backend at a time")
+        xmake_os.raise("InfiniOps can build only one GPU backend at a time")
     end
     return enabled[1]
 end
@@ -446,12 +559,15 @@ local function build_infiniops_external(xmake_os)
     local infiniops_root = path.absolute(get_config("infiniops-root") or "submodules/InfiniOps", os.projectdir())
     local infiniops_builddir = path.join(infiniops_root, "build")
     local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
+    if not xmake_os.isdir(infiniops_root) then
+        xmake_os.raise("InfiniOps root not found: " .. infiniops_root)
+    end
     local infinirt_root = get_infinirt_root()
     local cmake_config_args = {
         "-S", infiniops_root,
         "-B", infiniops_builddir,
         "-DWITH_CPU=ON",
-        get_infiniops_backend_cmake_arg(),
+        get_infiniops_backend_cmake_arg(xmake_os),
         "-DGENERATE_OPERATOR_CALL_INSTANTIATIONS=ON",
         "-DGENERATE_PYTHON_BINDINGS=OFF",
         "-DCMAKE_BUILD_TYPE=Release"
@@ -500,6 +616,12 @@ end
 target("infini-utils")
     set_kind("static")
     on_install(function (target) end)
+    on_load(function (target)
+        if has_config("metax-gpu") and has_config("mars-gpu") then
+            os.raise("--metax-gpu and --mars-gpu are separate backends and cannot be enabled together")
+        end
+        validate_infinirt_root(os)
+    end)
     set_languages("cxx17")
 
     set_warnings("all", "error")
@@ -671,6 +793,18 @@ target("infinicore_cpp_api")
     add_deps("infiniop", "infiniccl")
     set_languages("cxx17")
     set_symbols("visibility")
+    on_load(function (target)
+        if has_config("infiniops") then
+            build_infiniops_external(os)
+        end
+        if has_config("mars-gpu")
+            and get_config("flash-attn")
+            and get_config("flash-attn") ~= ""
+            and mars_flash_attn_uses_extended_abi(os)
+        then
+            target:add("defines", "INFINICORE_FLASH_ATTN_MARS_EXT=1")
+        end
+    end)
 
     local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
 
@@ -682,6 +816,17 @@ target("infinicore_cpp_api")
         for _, include_dir in ipairs(os.dirs(maca_root .. "/include/*")) do
             add_includedirs(include_dir)
         end
+    end
+    if has_config("mars-gpu") and has_config("aten") then
+        local hpcc_root = os.getenv("HPCC_PATH") or os.getenv("HPCC_HOME") or "/opt/hpcc"
+        add_includedirs(hpcc_root .. "/include")
+        add_includedirs(hpcc_root .. "/tools/cu-bridge/include")
+        for _, include_dir in ipairs(os.dirs(hpcc_root .. "/include/*")) do
+            add_includedirs(include_dir)
+        end
+    end
+    if has_config("aten") and (has_config("metax-gpu") or has_config("mars-gpu")) then
+        -- The CUDA-compatibility SDK headers may shadow the system limits header.
         add_cxflags("-include", "climits")
         add_cxxflags("-includeclimits", {force = true})
         add_defines("CHAR_BIT=8", "INT_MIN=(-2147483647 - 1)", "INT_MAX=2147483647", "UINT_MAX=4294967295U")
@@ -694,10 +839,6 @@ target("infinicore_cpp_api")
     end
     if has_config("infiniops") then
         local infiniops_root = path.absolute(get_config("infiniops-root") or "submodules/InfiniOps", os.projectdir())
-        if not os.isdir(infiniops_root) then
-            raise("InfiniOps root not found: " .. infiniops_root)
-        end
-        get_infiniops_backend_cmake_arg()
         local infinirt_root = get_infinirt_root()
         if infinirt_root and infinirt_root ~= "" then
             add_includedirs(infinirt_root .. "/include")
@@ -708,9 +849,6 @@ target("infinicore_cpp_api")
         add_defines("ENABLE_INFINIOPS_API")
         add_links("infiniops")
         add_rpathdirs(INFINI_ROOT .. "/lib")
-        on_load(function (target)
-            build_infiniops_external(os)
-        end)
         after_install(function (target)
             local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
             local infinirt_root = get_infinirt_root()
@@ -746,8 +884,7 @@ target("infinicore_cpp_api")
     end
 
     -- Flash pip `.so` link flags: `before_link` runs in an xmake sandbox that cannot see helpers
-    -- from other included scripts; MetaX and QY each register their own hook in `xmake/metax.lua`
-    -- and `xmake/qy.lua`.
+    -- from other included scripts; platform scripts register their own hooks.
 
     -- Moore mate: 
     -- enable Python bridge macro for flash-attn Moore path
@@ -758,26 +895,6 @@ target("infinicore_cpp_api")
     end
 
     before_build(function (target)
-        -- Mars HPCC flash-attn uses the HPCC major version to select its ABI.
-        if has_config("mars-gpu") and get_config("flash-attn") and get_config("flash-attn") ~= "" then
-            local hpcc_root = os.getenv("HPCC_PATH") or "/opt/hpcc"
-            local version_txt = path.join(hpcc_root, "Version.txt")
-            if os.isfile(version_txt) then
-                local content = os.iorunv("cat", {version_txt}) or ""
-                content = content:trim()
-                local major_str = content:match("Version:(%d+)") or content:match("^(%d+)")
-                if major_str and major_str ~= "" then
-                    local major = tonumber(major_str)
-                    if major then
-                        local define = "INFINICORE_HPCC_VERSION_MAJOR=" .. tostring(major)
-                        target:add("defines", define)
-                        target:add("cxflags", "-D" .. define)
-                        target:add("cxxflags", "-D" .. define)
-                    end
-                end
-            end
-        end
-
         if has_config("aten") then
             local outdata = os.iorunv("python", {"-c", "import torch, os; print(os.path.dirname(torch.__file__))"}):trim()
             local TORCH_DIR = outdata

@@ -4,19 +4,29 @@ local FLASH_ATTN_ROOT = get_config("flash-attn")
 local FLASH_ATTN_MARS_CUDA_SO_CONTAINER_DEFAULT =
     "/opt/conda/lib/python3.10/site-packages/flash_attn_2_cuda.cpython-310-aarch64-linux-gnu.so"
 
-local function mars_flash_attn_cuda_so_path()
-    local env_path = os.getenv("FLASH_ATTN_2_CUDA_SO")
+local function mars_flash_attn_cuda_so_path(xmake_os)
+    local env_path = xmake_os.getenv("FLASH_ATTN_2_CUDA_SO")
     if env_path and env_path ~= "" then
         env_path = env_path:trim()
-        if os.isfile(env_path) then
+        if xmake_os.isfile(env_path) then
             return env_path
         end
-        print(string.format("warning: mars+flash-attn: FLASH_ATTN_2_CUDA_SO is not a file: %s", env_path))
+        xmake_os.raise(string.format("mars+flash-attn: FLASH_ATTN_2_CUDA_SO is not a file: %s", env_path))
     end
 
-    local container_path = os.getenv("FLASH_ATTN_MARS_CUDA_SO_CONTAINER")
+    local find_spec_script =
+        "import importlib.util; s = importlib.util.find_spec('flash_attn_2_cuda'); print(s.origin if s and s.origin else '')"
+    local discovered = xmake_os.iorunv("python", {"-c", find_spec_script}):trim()
+    if discovered ~= "" and xmake_os.isfile(discovered) then
+        return discovered
+    end
+
+    local container_path = xmake_os.getenv("FLASH_ATTN_MARS_CUDA_SO_CONTAINER")
     if not container_path or container_path == "" then
         container_path = FLASH_ATTN_MARS_CUDA_SO_CONTAINER_DEFAULT
+    end
+    if not xmake_os.isfile(container_path) then
+        xmake_os.raise(string.format("mars+flash-attn: library not found: %s", container_path))
     end
     return container_path
 end
@@ -24,7 +34,7 @@ end
 target("infinicore_cpp_api")
     if FLASH_ATTN_ROOT and FLASH_ATTN_ROOT ~= "" then
         before_link(function (target)
-            local flash_so = mars_flash_attn_cuda_so_path()
+            local flash_so = mars_flash_attn_cuda_so_path(os)
             local flash_dir = path.directory(flash_so)
             local flash_name = path.filename(flash_so)
             target:add(

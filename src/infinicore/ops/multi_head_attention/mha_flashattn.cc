@@ -5,7 +5,7 @@
 #include <stdexcept>
 
 #ifdef ENABLE_FLASH_ATTN
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API) || defined(ENABLE_QY_API)
 #include <c10/cuda/CUDAGuard.h>
 #endif
 #endif
@@ -39,11 +39,10 @@ void *plan(Tensor out,
 
 namespace {
 
-// Only support nv for now
-#if defined(ENABLE_FLASH_ATTN) && defined(ENABLE_NVIDIA_API)
-// MetaX/hpcc pip `flash_attn_2_cuda` exports `mha_fwd` at global scope (no namespace),
+#if defined(ENABLE_FLASH_ATTN) && (defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API) || defined(ENABLE_QY_API))
+// MetaX/Mars `flash_attn_2_cuda` exports `mha_fwd` at global scope,
 // while NVIDIA `flash-attn-nvidia.so` uses `flash::mha_fwd`.
-#if defined(ENABLE_METAX_API)
+#if defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API)
 #define INFINICORE_FLASH_OP(name) ::name
 #else
 #define INFINICORE_FLASH_OP(name) flash::name
@@ -53,8 +52,7 @@ namespace {
 } // namespace
 
 void run(void *planned_meta) {
-// Only support nv for now
-#if defined(ENABLE_FLASH_ATTN) && defined(ENABLE_NVIDIA_API)
+#if defined(ENABLE_FLASH_ATTN) && (defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API) || defined(ENABLE_QY_API))
     c10::cuda::CUDAStreamGuard guard(infinicore::adaptor::get_cuda_stream());
     auto *p = reinterpret_cast<PlannedMeta *>(planned_meta);
 
@@ -71,8 +69,9 @@ void run(void *planned_meta) {
     auto scale = p->scale;
     auto is_causal = p->is_causal;
 
-#if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
-    std::optional<at::Tensor> flash_attn_mars_ext = std::nullopt;
+#ifdef INFINICORE_FLASH_ATTN_MARS_EXT
+    std::optional<at::Tensor> attn_mask = std::nullopt;
+    std::optional<at::Tensor> s_aux = std::nullopt;
 #endif
 
     INFINICORE_FLASH_OP(mha_fwd)
@@ -82,6 +81,9 @@ void run(void *planned_meta) {
         v,
         out,
         alibi_slopes,
+#ifdef INFINICORE_FLASH_ATTN_MARS_EXT
+        attn_mask,
+#endif
         0.0,
         scale,
         is_causal,
@@ -90,9 +92,9 @@ void run(void *planned_meta) {
         0.0,
         false,
         std::nullopt
-#if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
+#ifdef INFINICORE_FLASH_ATTN_MARS_EXT
         ,
-        flash_attn_mars_ext
+        s_aux
 #endif
     );
 

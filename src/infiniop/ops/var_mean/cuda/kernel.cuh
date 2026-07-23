@@ -22,7 +22,7 @@ __inline__ __device__ half Nan<half>() {
 
 #if defined(ENABLE_MOORE_API)
 using bf16_t = __mt_bfloat16;
-#elif defined(ENABLE_METAX_API)
+#elif defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API)
 using bf16_t = __hpcc_bfloat16;
 #else
 using bf16_t = __nv_bfloat16;

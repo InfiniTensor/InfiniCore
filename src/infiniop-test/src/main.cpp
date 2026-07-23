@@ -22,7 +22,7 @@ void printUsage() {
     std::cout << "    Path to the test gguf file" << std::endl
               << std::endl;
     std::cout << "  --<device>[:id]" << std::endl;
-    std::cout << "    (Optional) Specify the device type --(cpu|nvidia|cambricon|ascend|metax|moore|iluvatar|qy|kunlun|hygon|ali) and device ID (optional). CPU by default." << std::endl
+    std::cout << "    (Optional) Specify the device type --(cpu|nvidia|cambricon|ascend|metax|mars|moore|iluvatar|qy|kunlun|hygon|ali) and device ID (optional). CPU by default." << std::endl
               << std::endl;
     std::cout << "  --warmup <warmups>" << std::endl;
     std::cout << "    (Optional) Number of warmups to perform before timing. Default to 0." << std::endl
@@ -75,6 +75,7 @@ ParsedArgs parseArgs(int argc, char *argv[]) {
             PARSE_DEVICE("--cambricon", INFINI_DEVICE_CAMBRICON)
             PARSE_DEVICE("--ascend", INFINI_DEVICE_ASCEND)
             PARSE_DEVICE("--metax", INFINI_DEVICE_METAX)
+            PARSE_DEVICE("--mars", INFINI_DEVICE_MARS)
             PARSE_DEVICE("--moore", INFINI_DEVICE_MOORE)
             PARSE_DEVICE("--iluvatar", INFINI_DEVICE_ILUVATAR)
             PARSE_DEVICE("--qy", INFINI_DEVICE_QY)
