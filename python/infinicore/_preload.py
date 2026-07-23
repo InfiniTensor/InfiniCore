@@ -43,6 +43,13 @@ def _try_load(paths: Iterable[str], name: str) -> bool:
         return False
 
 
+def preload_torch() -> None:
+    """
+    Import torch so its shared libraries are available to ATen-based backends.
+    """
+    import torch  # noqa: F401 - imported for shared-library loading side effects
+
+
 def preload_hpcc() -> None:
     """
     Best-effort preload of key HPCC runtime libs with RTLD_GLOBAL.
@@ -158,8 +165,8 @@ def _should_preload_device(device_type: str) -> bool:
     device_env_map = {
         "METAX": ["HPCC_PATH", "INFINICORE_PRELOAD_HPCC"],  # HPCC/METAX
         "HYGON": ["DTK_ROOT", "INFINICORE_PRELOAD_TORCH_HIP"],
+        "ASCEND": ["ASCEND_HOME", "ASCEND_TOOLKIT_HOME"],
         # Add other device types here as needed:
-        # "ASCEND": ["ASCEND_PATH"],
         # "CAMBRICON": ["NEUWARE_HOME"],
     }
 
@@ -183,12 +190,14 @@ def preload_device(device_type: str) -> None:
     """
     if device_type == "METAX":
         preload_hpcc()
+        preload_torch()
     elif device_type == "HYGON":
+        preload_torch()
         preload_torch_hip()
         preload_flash_attn()
+    elif device_type == "ASCEND":
+        preload_torch()
     # Add other device preload functions here as needed:
-    # elif device_type == "ASCEND":
-    #     preload_ascend()
     # etc.
 
 
@@ -205,8 +214,8 @@ def preload() -> None:
     device_types = [
         "METAX",  # HPCC/METAX
         "HYGON",
+        "ASCEND",
         # Add other device types here as they are implemented:
-        # "ASCEND",
         # "CAMBRICON",
         # etc.
     ]

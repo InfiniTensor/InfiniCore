@@ -1,3 +1,4 @@
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
 #include "infinicore/ops/mha_varlen.hpp"
 
 #ifdef ENABLE_ATEN
@@ -65,10 +66,7 @@ namespace {
 } // namespace
 
 void run(void *planned_meta) {
-#if defined(ENABLE_ASCEND_FLASH_ATTN)
-    (void)planned_meta;
-    throw std::runtime_error("[mha_varlen/flashattn] Ascend path should use flashattn_ascend impl");
-#elif !defined(ENABLE_ATEN)
+#if !defined(ENABLE_ATEN)
     (void)planned_meta;
     throw std::runtime_error("ATen is not enabled in this build");
 #else
@@ -193,3 +191,4 @@ void cleanup(void **planned_meta_ptr) {
 INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(MultiheadAttentionVarlen, &plan, &run, &cleanup);
 
 } // namespace infinicore::op::mha_varlen_impl::flashattn
+#endif

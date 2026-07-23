@@ -1,3 +1,4 @@
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
 #include "infinicore/ops/mha_kvcache.hpp"
 
 #include "infinicore/adaptor/flash_attention_adaptor.hpp"
@@ -44,12 +45,7 @@ void *plan(Tensor out,
 }
 
 void run(void *planned_meta) {
-#if defined(ENABLE_ASCEND_FLASH_ATTN)
-    // Ascend path: delegate to the dedicated _ascend.cc implementation.
-    // This should never be reached because the Ascend implementation registers
-    // its own plan/run/cleanup for Device::Type::ASCEND. If it does, throw.
-    throw std::runtime_error("[mha_kvcache/flashattn] Ascend path should use flashattn_ascend impl");
-#elif defined(ENABLE_FLASH_ATTN)
+#if defined(ENABLE_FLASH_ATTN)
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
     c10::cuda::CUDAStreamGuard guard(infinicore::adaptor::get_cuda_stream());
 #endif
@@ -139,3 +135,4 @@ void cleanup(void **planned_meta_ptr) {
 INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(MhaKVCache, &plan, &run, &cleanup);
 
 } // namespace infinicore::op::mha_kvcache_impl::flashattn
+#endif

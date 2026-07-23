@@ -942,9 +942,6 @@ target("infinicore_cpp_api")
         -- Hygon links against a prebuilt flash-attn extension with a different ABI.
         -- Keep the platform-specific implementation under each op's hygon/ folder.
         add_files("src/infinicore/adaptor/flash_attn/hygon/*.cc")
-        remove_files("src/infinicore/ops/multi_head_attention/mha_flashattn.cc")
-        remove_files("src/infinicore/ops/multi_head_attention_varlen/mha_varlen_flashattn.cc")
-        remove_files("src/infinicore/ops/mha_kvcache/mha_kvcache_flashattn.cc")
     else
         remove_files("src/infinicore/ops/*/hygon/*.cc")
     end

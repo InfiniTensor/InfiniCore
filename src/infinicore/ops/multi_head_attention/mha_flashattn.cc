@@ -1,3 +1,4 @@
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
 #include "infinicore/ops/mha.hpp"
 
 #include "infinicore/adaptor/flash_attention_adaptor.hpp"
@@ -117,3 +118,4 @@ void cleanup(void **planned_meta_ptr) {
 INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(MultiheadAttention, &plan, &run, &cleanup);
 
 } // namespace infinicore::op::mha_impl::flashattn
+#endif
