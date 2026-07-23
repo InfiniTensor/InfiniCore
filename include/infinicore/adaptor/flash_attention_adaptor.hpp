@@ -21,8 +21,8 @@ mha_fwd(at::Tensor &q,                   // batch_size x seqlen_q x num_heads x 
         std::optional<at::Tensor> &softmax_lse_, // MetaX flash-attn dense fwd ABI includes an optional preallocated LSE tensor
 #endif
         std::optional<at::Tensor> &alibi_slopes_, // num_heads or batch_size x num_heads
-#ifdef INFINICORE_FLASH_ATTN_MARS_EXT
-        // Mars extensions accept an attention mask before the scalar options.
+#if defined(INFINICORE_FLASH_ATTN_MARS_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_EXT)
+        // Extended device ABIs accept an attention mask before the scalar options.
         std::optional<at::Tensor> &attn_mask_,
 #endif
         const float p_dropout,
@@ -33,8 +33,8 @@ mha_fwd(at::Tensor &q,                   // batch_size x seqlen_q x num_heads x 
         const float softcap,
         const bool return_softmax,
         std::optional<at::Generator> gen_
-#ifdef INFINICORE_FLASH_ATTN_MARS_EXT
-        // Mars extensions append an auxiliary tensor after the generator.
+#if defined(INFINICORE_FLASH_ATTN_MARS_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_S_AUX)
+        // Some device extensions append an auxiliary tensor after the generator.
         ,
         std::optional<at::Tensor> &s_aux_
 #endif
@@ -62,8 +62,8 @@ mha_varlen_fwd(at::Tensor &q,                               // total_q x num_hea
                const float softcap,
                const bool return_softmax,
                std::optional<at::Generator> gen_
-#ifdef INFINICORE_FLASH_ATTN_MARS_EXT
-               // Mars extensions append an auxiliary tensor.
+#if defined(INFINICORE_FLASH_ATTN_MARS_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_S_AUX)
+               // Some device extensions append an auxiliary tensor.
                ,
                std::optional<at::Tensor> &s_aux_
 #endif
@@ -137,8 +137,8 @@ mha_fwd_kvcache(at::Tensor &q,                                     // batch_size
                 const float softcap,
                 bool is_rotary_interleaved, // if true, rotary combines indices 0 & 1, else indices 0 & rotary_dim / 2
                 int num_splits
-#ifdef INFINICORE_FLASH_ATTN_MARS_EXT
-                // Mars extensions append an auxiliary tensor.
+#if defined(INFINICORE_FLASH_ATTN_MARS_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_S_AUX)
+                // Some device extensions append an auxiliary tensor.
                 ,
                 std::optional<at::Tensor> &s_aux_
 #endif

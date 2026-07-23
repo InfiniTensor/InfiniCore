@@ -73,8 +73,10 @@ void run(void *planned_meta) {
     auto scale = p->scale;
     auto is_causal = p->is_causal;
 
-#ifdef INFINICORE_FLASH_ATTN_MARS_EXT
+#if defined(INFINICORE_FLASH_ATTN_MARS_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_EXT)
     std::optional<at::Tensor> attn_mask = std::nullopt;
+#endif
+#if defined(INFINICORE_FLASH_ATTN_MARS_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_S_AUX)
     std::optional<at::Tensor> s_aux = std::nullopt;
 #endif
 
@@ -88,7 +90,7 @@ void run(void *planned_meta) {
         softmax_lse,
 #endif
         alibi_slopes,
-#ifdef INFINICORE_FLASH_ATTN_MARS_EXT
+#if defined(INFINICORE_FLASH_ATTN_MARS_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_EXT)
         attn_mask,
 #endif
         0.0,
@@ -99,7 +101,7 @@ void run(void *planned_meta) {
         0.0,
         false,
         std::nullopt
-#ifdef INFINICORE_FLASH_ATTN_MARS_EXT
+#if defined(INFINICORE_FLASH_ATTN_MARS_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_S_AUX)
         ,
         s_aux
 #endif
