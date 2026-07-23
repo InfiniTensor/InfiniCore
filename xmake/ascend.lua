@@ -5,6 +5,7 @@ local SOC_VERSION = os.getenv("SOC_VERSION")
 -- Add include dirs
 add_includedirs(ASCEND_HOME .. "/include")
 add_includedirs(ASCEND_HOME .. "/include/aclnn")
+add_includedirs(ASCEND_HOME .. "/include/aclnnop")
 add_linkdirs(ASCEND_HOME .. "/lib64")
 add_links("libascendcl.so")
 add_links("libnnopbase.so")

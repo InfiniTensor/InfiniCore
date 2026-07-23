@@ -1,3 +1,4 @@
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
 #include "infinicore/ops/mha_varlen.hpp"
 
 #ifdef ENABLE_ATEN
@@ -65,7 +66,7 @@ namespace {
 } // namespace
 
 void run(void *planned_meta) {
-#ifndef ENABLE_ATEN
+#if !defined(ENABLE_ATEN)
     (void)planned_meta;
     throw std::runtime_error("ATen is not enabled in this build");
 #else
@@ -120,7 +121,8 @@ void run(void *planned_meta) {
             std::nullopt,
             0.0,
             true,
-            std::optional<double>(static_cast<double>(p->scale)));
+            static_cast<double>(p->scale),
+            num_heads != num_kv_heads);
         out_work.copy_(result.permute({0, 2, 1, 3}).reshape({q.size(0), num_heads, value_dim}));
         if (out_need_copy_back) {
             p->out->copy_from(out_work_ic);
@@ -189,3 +191,4 @@ void cleanup(void **planned_meta_ptr) {
 INFINICORE_GRAPH_OP_REGISTER_ALLDEVICE(MultiheadAttentionVarlen, &plan, &run, &cleanup);
 
 } // namespace infinicore::op::mha_varlen_impl::flashattn
+#endif

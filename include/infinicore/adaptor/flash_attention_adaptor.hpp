@@ -5,7 +5,12 @@
 // NVIDIA flash-attn-nvidia.so uses namespace flash. The pip/MetaX flash_attn_2_cuda extension
 // exports the same entry points at global scope (no namespace), matching FLASH_NAMESPACE builds
 // where the namespace is empty.
-#if !defined(ENABLE_METAX_API)
+//
+// Ascend (aclnn C API path) does NOT use the flash:: namespace at all — the aclnn kernels are
+// called directly from the dedicated *._ascend.cc implementation files, so this header is only
+// included by the NVIDIA/MetaX/QY code paths.  We still guard the namespace below so that
+// existing code compiles unchanged when ENABLE_ASCEND_FLASH_ATTN is defined.
+#if !defined(ENABLE_METAX_API) && !defined(ENABLE_ASCEND_FLASH_ATTN)
 namespace flash {
 #endif
 std::vector<at::Tensor>
@@ -136,7 +141,7 @@ mha_fwd_kvcache(at::Tensor &q,                                     // batch_size
 #endif
 );
 
-#if !defined(ENABLE_METAX_API)
+#if !defined(ENABLE_METAX_API) && !defined(ENABLE_ASCEND_FLASH_ATTN)
 } // namespace flash
 #endif
 #endif // ENABLE_FLASH_ATTN
