@@ -1,0 +1,188 @@
+#include "../../../devices/metax/metax_common.h"
+#include "../../../devices/metax/metax_handle.h"
+#include "../../../devices/metax/metax_kernel_common.h"
+#include "softmax_metax.h"
+#include <cmath>
+#include <limits>
+
+namespace op::softmax::metax {
+namespace {
+
+__device__ __forceinline__ float to_float(float val) { return val; }
+__device__ __forceinline__ float to_float(double val) { return static_cast<float>(val); }
+__device__ __forceinline__ float to_float(__half val) { return __half2float(val); }
+__device__ __forceinline__ float to_float(cuda_bfloat16 val) { return __bfloat162float(val); }
+
+template <typename T>
+__device__ __forceinline__ T from_float(float val) { return static_cast<T>(val); }
+
+template <>
+__device__ __forceinline__ __half from_float<__half>(float val) { return __float2half(val); }
+
+template <>
+__device__ __forceinline__ cuda_bfloat16 from_float<cuda_bfloat16>(float val) { return __float2bfloat16(val); }
+
+template <typename T>
+__device__ __forceinline__ T warp_reduce_max(T val) {
+    for (int offset = 16; offset > 0; offset /= 2) {
+        T shuffled = __shfl_down_sync(0xffffffff, val, offset);
+        val = val > shuffled ? val : shuffled;
+    }
+    return val;
+}
+
+template <typename T>
+__device__ __forceinline__ T warp_reduce_sum(T val) {
+    for (int offset = 16; offset > 0; offset /= 2) {
+        val += __shfl_down_sync(0xffffffff, val, offset);
+    }
+    return val;
+}
+
+__device__ __forceinline__ float block_reduce_max(float val) {
+    __shared__ float shared[32];
+    int lane = threadIdx.x & 31;
+    int wid = threadIdx.x >> 5;
+    val = warp_reduce_max(val);
+    if (lane == 0) {
+        shared[wid] = val;
+    }
+    __syncthreads();
+    val = (threadIdx.x < ((blockDim.x + 31) >> 5)) ? shared[lane] : -INFINITY;
+    if (wid == 0) {
+        val = warp_reduce_max(val);
+    }
+    return val;
+}
+
+__device__ __forceinline__ float block_reduce_sum(float val) {
+    __shared__ float shared[32];
+    int lane = threadIdx.x & 31;
+    int wid = threadIdx.x >> 5;
+    val = warp_reduce_sum(val);
+    if (lane == 0) {
+        shared[wid] = val;
+    }
+    __syncthreads();
+    val = (threadIdx.x < ((blockDim.x + 31) >> 5)) ? shared[lane] : 0.0f;
+    if (wid == 0) {
+        val = warp_reduce_sum(val);
+    }
+    return val;
+}
+
+template <typename T>
+__global__ void softmax_kernel(
+    T *__restrict__ output,
+    const T *__restrict__ input,
+    size_t othersize,
+    size_t dimsize,
+    ptrdiff_t stride) {
+    const size_t other_idx = static_cast<size_t>(blockIdx.x);
+    if (other_idx >= othersize) {
+        return;
+    }
+
+    const size_t inner_idx = other_idx % static_cast<size_t>(stride);
+    const size_t outer_idx = other_idx / static_cast<size_t>(stride);
+    const size_t base_offset = outer_idx * dimsize * static_cast<size_t>(stride) + inner_idx;
+
+    float local_max = -INFINITY;
+    for (size_t i = threadIdx.x; i < dimsize; i += blockDim.x) {
+        const float val = to_float(input[base_offset + i * stride]);
+        local_max = local_max > val ? local_max : val;
+    }
+
+    __shared__ float s_max;
+    __shared__ float s_sum;
+    const float max_val = block_reduce_max(local_max);
+    if (threadIdx.x == 0) {
+        s_max = max_val;
+    }
+    __syncthreads();
+
+    float local_sum = 0.0f;
+    for (size_t i = threadIdx.x; i < dimsize; i += blockDim.x) {
+        local_sum += expf(to_float(input[base_offset + i * stride]) - s_max);
+    }
+
+    const float sum_val = block_reduce_sum(local_sum);
+    if (threadIdx.x == 0) {
+        s_sum = sum_val;
+    }
+    __syncthreads();
+
+    const float inv_sum = 1.0f / s_sum;
+    for (size_t i = threadIdx.x; i < dimsize; i += blockDim.x) {
+        const size_t idx = base_offset + i * stride;
+        output[idx] = from_float<T>(expf(to_float(input[idx]) - s_max) * inv_sum);
+    }
+}
+
+template <typename T>
+void launch_kernel(void *output, const void *input, const SoftmaxInfo &info, void *stream) {
+    auto hc_stream = reinterpret_cast<hcStream_t>(stream);
+    unsigned int threads_per_block = 256;
+    if (info.dimsize < 256) {
+        threads_per_block = 128;
+    }
+    if (info.dimsize < 128) {
+        threads_per_block = 64;
+    }
+    if (info.dimsize < 64) {
+        threads_per_block = 32;
+    }
+    softmax_kernel<T><<<info.othersize, threads_per_block, 0, hc_stream>>>(
+        reinterpret_cast<T *>(output),
+        reinterpret_cast<const T *>(input),
+        info.othersize,
+        info.dimsize,
+        info.stride);
+}
+
+} // namespace
+
+struct Descriptor::Opaque {};
+
+Descriptor::~Descriptor() {
+    delete _opaque;
+}
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t y_desc,
+    infiniopTensorDescriptor_t x_desc,
+    int axis) {
+    auto handle = reinterpret_cast<device::metax::Handle *>(handle_);
+    auto info = SoftmaxInfo::create(y_desc, x_desc, axis);
+    CHECK_RESULT(info);
+    *desc_ptr = new Descriptor(new Opaque(), info.take(), 0, handle->device, handle->device_id);
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *y,
+    const void *x,
+    void *stream) const {
+    (void)workspace;
+    (void)workspace_size;
+    switch (_info.dtype) {
+    case INFINI_DTYPE_F16:
+        launch_kernel<__half>(y, x, _info, stream);
+        break;
+    case INFINI_DTYPE_BF16:
+        launch_kernel<cuda_bfloat16>(y, x, _info, stream);
+        break;
+    case INFINI_DTYPE_F32:
+        launch_kernel<float>(y, x, _info, stream);
+        break;
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace op::softmax::metax
