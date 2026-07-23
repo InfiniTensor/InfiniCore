@@ -1,13 +1,14 @@
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import infinicore
 import infinicore.nn.functional as F
 import torch
-from framework import BaseOperatorTest, TensorSpec, TestCase, GenericTestRunner
+from framework import BaseOperatorTest, GenericTestRunner, TensorSpec, TestCase
 from framework.tensor import TensorInitializer
+
+import infinicore
 
 # ==============================================================================
 # Operator-specific configuration
@@ -65,7 +66,7 @@ def parse_test_cases():
                     output_spec=None,
                     comparison_target=None,
                     tolerance=tolerance,
-                    description=f"RandomSample - OUT_OF_PLACE",
+                    description="RandomSample - OUT_OF_PLACE",
                 )
             )
 
@@ -79,7 +80,7 @@ def parse_test_cases():
                     ),
                     comparison_target="out",
                     tolerance=tolerance,
-                    description=f"RandomSample - INPLACE(out)",
+                    description="RandomSample - INPLACE(out)",
                 )
             )
 
@@ -226,6 +227,7 @@ class OpTest(BaseOperatorTest):
             from framework.utils.tensor_utils import (
                 convert_infinicore_to_torch,
                 infinicore_tensor_from_torch,
+                synchronize_device,
             )
 
             inputs, kwargs = self.prepare_pytorch_inputs_and_kwargs(test_case, device)
@@ -249,7 +251,9 @@ class OpTest(BaseOperatorTest):
 
             # Run both operators
             torch_result = self.torch_operator(*inputs, **kwargs)
+            synchronize_device(device)
             infini_result = self.infinicore_operator(*infini_inputs, **infini_kwargs)
+            infinicore.sync_stream()
 
             # Extract indices from results
             comparison_target = test_case.comparison_target

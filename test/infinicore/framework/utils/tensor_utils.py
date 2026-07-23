@@ -1,5 +1,7 @@
 import torch
+
 import infinicore
+
 from ..datatypes import to_infinicore_dtype, to_torch_dtype
 
 # =================================================================
@@ -71,6 +73,7 @@ def convert_infinicore_to_torch(infini_result):
         )
     temp_tensor = infinicore_tensor_from_torch(torch_result_from_infini)
     temp_tensor.copy_(infini_result)
+    infinicore.sync_stream()
     return torch_result_from_infini
 
 

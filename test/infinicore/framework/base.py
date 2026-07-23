@@ -3,21 +3,23 @@ Core base classes for operator testing framework.
 Contains TestConfig, TestRunner, and BaseOperatorTest classes.
 """
 
-import torch
-import infinicore
 import traceback
 from abc import ABC, abstractmethod
 
-from .results import CaseResult
-from .datatypes import to_torch_dtype, to_infinicore_dtype
+import torch
+
+import infinicore
+
+from .benchmark import BenchmarkUtils
 from .devices import InfiniDeviceNames, torch_device_map
-from .tensor import TensorSpec, TensorInitializer
+from .results import CaseResult
+from .tensor import TensorSpec
+from .utils.compare_utils import create_test_comparator
 from .utils.tensor_utils import (
     clone_torch_tensor,
     infinicore_tensor_from_torch,
+    synchronize_device,
 )
-from .utils.compare_utils import create_test_comparator
-from .benchmark import BenchmarkUtils
 
 
 class TestConfig:
@@ -49,9 +51,7 @@ class TestRunner:
         self.failed_tests = []
         self.skipped_tests = []  # Track skipped tests (both operators not implemented)
         self.partial_tests = []  # Track partial tests (one operator not implemented)
-        self.passed_tests = (
-            []
-        )  # Track passed tests (both operators implemented and passed)
+        self.passed_tests = []  # Track passed tests (both operators implemented and passed)
         # Add benchmark timing statistics
         self.benchmark_times = {
             "torch_host_total": 0.0,
@@ -76,9 +76,9 @@ class TestRunner:
             bool: True if no tests failed, False otherwise
         """
         for device in devices:
-            print(f"\n{'='*60}")
+            print(f"\n{'=' * 60}")
             print(f"Testing {test_type} on {InfiniDeviceNames[device]}")
-            print(f"{'='*60}")
+            print(f"{'=' * 60}")
 
             # Keep InfiniCore's runtime aligned with the selected test device.
             infinicore.set_device(infinicore.device(torch_device_map[device], 0))
@@ -96,7 +96,7 @@ class TestRunner:
                         self.passed_tests.append(
                             f"{test_case} - {InfiniDeviceNames[device]}"
                         )
-                        print(f"\033[92m✓\033[0m Passed")
+                        print("\033[92m✓\033[0m Passed")
                     elif test_result.return_code == -1:
                         # Test failed - use the actual error message from test_result
                         fail_msg = f"{test_case} - {InfiniDeviceNames[device]} - {test_result.error_message}"
@@ -153,11 +153,11 @@ class TestRunner:
         """
         total_tests = len(self.test_cases)
         passed_count = len(self.passed_tests)
-        skipped_count = len(self.skipped_tests)
+        # skipped_count = len(self.skipped_tests)
         partial_count = len(self.partial_tests)
         failed_count = len(self.failed_tests)
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print("TEST SUMMARY")
         print(f"Total tests: {total_tests}")
         print(f"\033[92mPassed: {passed_count}\033[0m")
@@ -179,10 +179,10 @@ class TestRunner:
             # If there are skipped or partial tests, show appropriate message
             if self.skipped_tests or self.partial_tests:
                 print(
-                    f"\n\033[93mTests completed with some implementations missing\033[0m"
+                    "\n\033[93mTests completed with some implementations missing\033[0m"
                 )
             else:
-                print(f"\n\033[92mAll tests passed!\033[0m")
+                print("\n\033[92mAll tests passed!\033[0m")
 
         # Print benchmark summary if benchmarking was enabled
         if self.config.bench and (
@@ -193,12 +193,12 @@ class TestRunner:
         ):
             self._print_benchmark_summary()
 
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         return result
 
     def _print_benchmark_summary(self):
         """Print benchmark timing summary"""
-        print(f"{'-'*60}")
+        print(f"{'-' * 60}")
         print("BENCHMARK SUMMARY")
 
         torch_host_total = self.benchmark_times["torch_host_total"]
@@ -437,6 +437,7 @@ class BaseOperatorTest(ABC):
 
         try:
             torch_result = self.torch_operator(*inputs, **kwargs)
+            synchronize_device(device_str)
             if torch_result is None:
                 torch_implemented = False
         except NotImplementedError as e:
@@ -448,6 +449,7 @@ class BaseOperatorTest(ABC):
 
         try:
             infini_result = self.infinicore_operator(*infini_inputs, **infini_kwargs)
+            infinicore.sync_stream()
             if infini_result is None:
                 infini_implemented = False
         except NotImplementedError as e:
@@ -621,7 +623,7 @@ class BaseOperatorTest(ABC):
 
             is_valid = compare_fn(infini_comparison, torch_comparison)
             if not is_valid:
-                raise AssertionError(f"Result comparison failed.")
+                raise AssertionError("Result comparison failed.")
 
         # ==========================================================================
         # UNIFIED BENCHMARKING LOGIC
@@ -653,15 +655,15 @@ class BaseOperatorTest(ABC):
             if hasattr(config, "_test_runner") and config._test_runner:
                 # Accumulate total times
                 config._test_runner.benchmark_times["torch_host_total"] += torch_host
-                config._test_runner.benchmark_times[
-                    "torch_device_total"
-                ] += torch_device
-                config._test_runner.benchmark_times[
-                    "infinicore_host_total"
-                ] += infini_host
-                config._test_runner.benchmark_times[
-                    "infinicore_device_total"
-                ] += infini_device
+                config._test_runner.benchmark_times["torch_device_total"] += (
+                    torch_device
+                )
+                config._test_runner.benchmark_times["infinicore_host_total"] += (
+                    infini_host
+                )
+                config._test_runner.benchmark_times["infinicore_device_total"] += (
+                    infini_device
+                )
 
         # Test passed successfully
         test_result.success = True
