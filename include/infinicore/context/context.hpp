@@ -83,12 +83,14 @@ InferencePhase getInferencePhase();
 const char *cudagraphPolicy();
 
 /// FA may enter a device segment: diagnose ``INFINI_FA_FORCE_CAPTURE=1``, else
-/// ``full_and_piecewise`` ∧ decode phase only. Default / eager → host-break.
+/// host-break (MetaX prod). Default / eager → host-break.
 bool faInGraphAllowed();
 
-/// Triton MoE under stream capture: diagnose-only ``INFINI_MOE_TRITON_CAPTURE=1``.
-/// Under ``full_and_piecewise`` default is host-break (MetaX Gate C: native
-/// piecewise + MoE-in-graph garbles). Explicit ``=0`` also forces host-break.
+/// Triton MoE under stream capture (phase-adaptive).
+/// ``INFINI_MOE_FORCE_HOST_BREAK=1`` → always host-break (bisect escape).
+/// ``eager`` policy → host-break.
+/// Non-eager + ``InferencePhase::Decode`` → in-graph (FULL decode).
+/// Prefill / Unknown → host-break (native piecewise coexistence).
 bool moeTritonCaptureAllowed();
 
 /// RAII restore of ``InferencePhase`` for graph capture / forward scopes.

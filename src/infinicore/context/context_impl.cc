@@ -4,6 +4,7 @@
 #include "../utils.hpp"
 
 #include <cstdlib>
+#include <cstring>
 #include <string>
 
 namespace infinicore {
@@ -257,17 +258,18 @@ bool faInGraphAllowed() {
 }
 
 bool moeTritonCaptureAllowed() {
-    // Explicit override wins (including =0 to force host-break under diagnose).
-    const char *raw = std::getenv("INFINI_MOE_TRITON_CAPTURE");
-    if (raw != nullptr && raw[0] != '\0') {
-        return std::string(raw) != "0";
+    // Bisect escape: force MoE host-break even under Decode FULL capture.
+    if (env_truthy_("INFINI_MOE_FORCE_HOST_BREAK")) {
+        return false;
     }
-    // MetaX contract under full_and_piecewise: MoE stays host-break whenever
-    // native piecewise CG is enabled. MoE-under-hcStream + native piecewise
-    // coexistence garbles (Gate C bisect: native+MoE-HB PASS; native+MoE-in-graph
-    // GARBLE). FULL decode still captures non-MoE ops; MoE host-break splits
-    // like FA. Restore in-graph only via diagnose INFINI_MOE_TRITON_CAPTURE=1.
-    return false;
+    // Eager policy never captures MoE into device graphs.
+    if (std::strcmp(cudagraphPolicy(), "eager") == 0) {
+        return false;
+    }
+    // Phase-adaptive: Decode FULL may fold Triton MoE in-graph; Prefill /
+    // Unknown keep host-break so native piecewise + MoE-under-hcStream do not
+    // coexist (Gate C: blanket MoE-in-graph with native garbles).
+    return getInferencePhase() == InferencePhase::Decode;
 }
 
 bool isDeviceStreamCapturing() {

@@ -36,6 +36,36 @@ inline void bind(py::module &m) {
     m.def("is_device_stream_capturing",
           &isDeviceStreamCapturing,
           "True while Graph::instantiate is inside hcStreamBeginCapture");
+    m.def("moe_triton_capture_allowed",
+          &moeTritonCaptureAllowed,
+          "Phase-adaptive MoE under stream capture (Decode + non-eager; "
+          "INFINI_MOE_FORCE_HOST_BREAK forces false)");
+    m.def(
+        "set_inference_phase",
+        [](const std::string &phase) {
+            if (phase == "decode" || phase == "Decode") {
+                setInferencePhase(InferencePhase::Decode);
+            } else if (phase == "prefill" || phase == "Prefill") {
+                setInferencePhase(InferencePhase::Prefill);
+            } else {
+                setInferencePhase(InferencePhase::Unknown);
+            }
+        },
+        py::arg("phase"),
+        "Set TLS InferencePhase: decode | prefill | unknown");
+    m.def(
+        "get_inference_phase",
+        []() -> std::string {
+            switch (getInferencePhase()) {
+            case InferencePhase::Decode:
+                return "decode";
+            case InferencePhase::Prefill:
+                return "prefill";
+            default:
+                return "unknown";
+            }
+        },
+        "Current TLS InferencePhase string");
     m.def("start_graph_recording", &startGraphRecording, "Start graph recording");
     m.def("stop_graph_recording", &stopGraphRecording, "Stop graph recording and return the graph");
 

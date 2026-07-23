@@ -60,14 +60,13 @@ bool moe_capture_safe_enabled() {
 
 /// Triton fused_moe_routed under MetaX stream capture (no aten body).
 /// Distinct from INFINI_MOE_CAPTURE_SAFE (aten index_select+bmm).
-/// Prefer ``INFINI_CUDAGRAPH_POLICY`` + diagnose ``INFINI_MOE_TRITON_CAPTURE``;
-/// under ``full_and_piecewise`` MetaX default is MoE host-break (Gate C).
-/// Explicit ``INFINI_MOE_TRITON_CAPTURE`` still wins when set.
+/// Capture follows ``moeTritonCaptureAllowed()``: non-eager + Decode phase;
+/// ``INFINI_MOE_FORCE_HOST_BREAK=1`` forces host-break.
 bool moe_triton_capture_enabled() {
     return infinicore::context::moeTritonCaptureAllowed();
 }
 
-/// MoE may enter device capture (aten CAPTURE_SAFE or Triton TRITON_CAPTURE).
+/// MoE may enter device capture (aten CAPTURE_SAFE or phase-adaptive Triton).
 bool moe_device_capturable() {
     return moe_capture_safe_enabled() || moe_triton_capture_enabled();
 }
@@ -1217,9 +1216,9 @@ InductorMoe::InductorMoe(
         out,
         layer_idx,
         bucket);
-    // CG-1 default: Triton fused_moe_routed is not stream-capture-safe → host break.
-    // CG-2 (INFINI_MOE_CAPTURE_SAFE=1): device capture with aten body under capture.
-    // Triton-capture (INFINI_MOE_TRITON_CAPTURE=1): device capture with Triton body.
+    // CG-1 default: Triton fused_moe_routed is not stream-capture-safe → host break
+    // unless phase-adaptive Decode allow (or CAPTURE_SAFE aten body).
+    // INFINI_MOE_FORCE_HOST_BREAK=1 forces host-break even in Decode.
     host_break_ = !moe_device_capturable();
 }
 
@@ -1231,13 +1230,14 @@ void InductorMoe::execute(
 #ifdef ENABLE_ATEN
     // Eager fast path (same pattern as InductorSegment pre_attn).
     // Refuse Triton under a live device-capture stream unless capturable mode
-    // (aten CAPTURE_SAFE or Triton TRITON_CAPTURE).
+    // (aten CAPTURE_SAFE or phase-adaptive Decode MoE).
     if (!context::isGraphRecording()) {
         if (context::isDeviceStreamCapturing() && !moe_device_capturable()) {
             throw std::runtime_error(
                 "InductorMoe: refusing AOTI+Triton MoE under hcStream capture "
-                "(set INFINI_MOE_TRITON_CAPTURE=1 for Triton body, "
-                "INFINI_MOE_CAPTURE_SAFE=1 for aten body, or use host-break)");
+                "(need InferencePhase::Decode under non-eager policy, "
+                "INFINI_MOE_CAPTURE_SAFE=1 for aten body, or use host-break; "
+                "INFINI_MOE_FORCE_HOST_BREAK=1 forces host-break)");
         }
         const size_t valid_len = resolve_valid_seq_len(bucket, hidden_states);
         run_moe_segment(hidden_states, out, layer_idx, bucket, valid_len);
@@ -1316,7 +1316,7 @@ void moe_run(void *planned_meta) {
         throw std::runtime_error(
             "InductorMoe::run: AOTI+Triton MoE must not run under hcStream capture "
             "(recorded as host_break; Graph splits device segments around MoE). "
-            "Set INFINI_MOE_TRITON_CAPTURE=1 for Triton body, or "
+            "Need InferencePhase::Decode under non-eager policy for Triton body, or "
             "INFINI_MOE_CAPTURE_SAFE=1 for aten capture-safe body.");
     }
     auto *meta = reinterpret_cast<MoePlannedMeta *>(planned_meta);
