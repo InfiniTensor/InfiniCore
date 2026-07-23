@@ -355,12 +355,12 @@ local function validate_infinirt_root(xmake_os)
     find_infinirt_library(infinirt_root, xmake_os)
 end
 
-local function find_mars_flash_attn_library(xmake_os)
+local function find_flash_attn_library(xmake_os)
     local configured = os.getenv("FLASH_ATTN_2_CUDA_SO")
     if configured and configured ~= "" then
         configured = configured:trim()
         if not xmake_os.isfile(configured) then
-            xmake_os.raise("Mars flash-attn library not found: " .. configured)
+            xmake_os.raise("flash-attn library not found: " .. configured)
         end
         return configured
     end
@@ -372,25 +372,23 @@ local function find_mars_flash_attn_library(xmake_os)
         return discovered
     end
 
-    local fallback = os.getenv("FLASH_ATTN_MARS_CUDA_SO_CONTAINER")
-        or "/opt/conda/lib/python3.10/site-packages/flash_attn_2_cuda.cpython-310-aarch64-linux-gnu.so"
+    local fallback
+    if has_config("mars-gpu") then
+        fallback = os.getenv("FLASH_ATTN_MARS_CUDA_SO_CONTAINER")
+            or "/opt/conda/lib/python3.10/site-packages/flash_attn_2_cuda.cpython-310-aarch64-linux-gnu.so"
+    else
+        fallback = "/opt/conda/lib/python3.10/site-packages/flash_attn_2_cuda.cpython-310-x86_64-linux-gnu.so"
+    end
     if not xmake_os.isfile(fallback) then
-        xmake_os.raise("Mars flash-attn library not found; set FLASH_ATTN_2_CUDA_SO")
+        xmake_os.raise("flash-attn library not found; set FLASH_ATTN_2_CUDA_SO")
     end
     return fallback
 end
 
--- HPCC and flash-attn are versioned independently, so inspect the extension's
--- exported C++ signatures instead of deriving its ABI from the SDK version.
-local function mars_flash_attn_uses_extended_abi(xmake_os)
-    local abi = get_config("mars-flash-attn-abi") or "detect"
-    if abi == "extended" then
-        return true
-    elseif abi == "standard" then
-        return false
-    end
-
-    local flash_attn_library = find_mars_flash_attn_library(xmake_os)
+-- Device SDK and flash-attn are versioned independently, so inspect the
+-- extension's exported C++ signatures instead of deriving its ABI from the SDK.
+local function detect_flash_attn_abi(xmake_os)
+    local flash_attn_library = find_flash_attn_library(xmake_os)
     local symbols = xmake_os.iorunv("nm", {"-D", "-C", flash_attn_library})
     local mha_fwd_symbol = nil
     local mha_varlen_fwd_symbol = nil
@@ -429,21 +427,47 @@ local function mars_flash_attn_uses_extended_abi(xmake_os)
             and varlen_has_s_aux
             and kvcache_has_s_aux
         then
-            return true
+            return "extended"
+        elseif not has_attention_mask
+            and fwd_has_s_aux
+            and varlen_has_s_aux
+            and kvcache_has_s_aux
+        then
+            return "s_aux"
         elseif not has_attention_mask
             and mha_fwd_symbol:find("std::optional<at::Generator>)", 1, true)
             and mha_varlen_fwd_symbol:find("std::optional<at::Generator>)", 1, true)
             and mha_fwd_kvcache_symbol:match(", int%)$")
         then
-            return false
+            return "standard"
         end
     end
 
     xmake_os.raise(
-        "Unable to detect the Mars flash-attn ABI from "
+        "Unable to detect the flash-attn ABI from "
         .. flash_attn_library
-        .. "; set --mars-flash-attn-abi=standard or extended"
     )
+end
+
+local function mars_flash_attn_uses_extended_abi(xmake_os)
+    local abi = get_config("mars-flash-attn-abi") or "detect"
+    if abi == "extended" then
+        return true
+    elseif abi == "standard" then
+        return false
+    end
+
+    local detected = detect_flash_attn_abi(xmake_os)
+    if detected == "extended" then
+        return true
+    elseif detected == "standard" then
+        return false
+    end
+    xmake_os.raise("Mars flash-attn does not support detected ABI: " .. detected)
+end
+
+local function metax_flash_attn_abi(xmake_os)
+    return detect_flash_attn_abi(xmake_os)
 end
 
 local function add_external_infinirt()
@@ -803,6 +827,17 @@ target("infinicore_cpp_api")
             and mars_flash_attn_uses_extended_abi(os)
         then
             target:add("defines", "INFINICORE_FLASH_ATTN_MARS_EXT=1")
+        end
+        if has_config("metax-gpu")
+            and get_config("flash-attn")
+            and get_config("flash-attn") ~= ""
+        then
+            local abi = metax_flash_attn_abi(os)
+            if abi == "extended" then
+                target:add("defines", "INFINICORE_FLASH_ATTN_METAX_EXT=1")
+            elseif abi == "s_aux" then
+                target:add("defines", "INFINICORE_FLASH_ATTN_METAX_S_AUX=1")
+            end
         end
     end)
 
