@@ -4,6 +4,7 @@
 #include "infinicore/context/context.hpp"
 #include "infinicore/dtype.hpp"
 
+#include <cstring>
 #include <spdlog/spdlog.h>
 
 namespace {
@@ -242,7 +243,14 @@ std::shared_ptr<TensorImpl> TensorImpl::zeros(const Shape &shape,
                                               const DataType &dtype,
                                               const Device &device,
                                               bool pin_memory) {
-
+    // MetaX device-side integer zeros is unreliable (does not actually clear),
+    // so construct zeros on CPU and copy over. Other backends use the faster
+    // device-side byte memset.
+    if (device.getType() == Device::Type::METAX) {
+        auto cpu = empty(shape, dtype, Device(Device::Type::CPU), false);
+        std::memset(cpu->data(), 0, cpu->nbytes());
+        return cpu->to(device).impl_;
+    }
     auto result = empty(shape, dtype, device, pin_memory);
     context::setDeviceMemoryAsync(result->data(), 0, result->nbytes(), context::getStream());
     return result;
