@@ -1862,6 +1862,19 @@ infiniStatus_t Descriptor::calculate(
         return INFINI_STATUS_BAD_PARAM;                                                                                                                                                                                                                                                                                                \
     } while (false)
 
+#define DISPATCH_FLOAT_KERNEL(Tindex)                                                                                                                        \
+    return launch_prefill_warp<Tindex, float>(                                                                                                               \
+        static_cast<float *>(out), static_cast<const float *>(q),                                                                                            \
+        static_cast<const float *>(k_cache), static_cast<const float *>(v_cache),                                                                            \
+        static_cast<const Tindex *>(block_tables), static_cast<const Tindex *>(total_kv_lens_ptr), static_cast<const Tindex *>(cu_seqlens_q_ptr), alibi_ptr, \
+        _info.num_heads, _info.num_seqs, _info.num_kv_heads, _info.total_q_tokens,                                                                           \
+        _info.head_size, _info.scale, _info.max_num_blocks_per_seq, _info.page_block_size,                                                                   \
+        _info.block_table_batch_stride,                                                                                                                      \
+        _info.q_stride, _info.q_head_stride,                                                                                                                 \
+        _info.k_batch_stride, _info.k_row_stride, _info.k_head_stride,                                                                                       \
+        _info.v_batch_stride, _info.v_row_stride, _info.v_head_stride,                                                                                       \
+        _info.o_stride, _info.o_head_stride, stream)
+
 #define DISPATCH_INDEX(Tindex)                             \
     do {                                                   \
         if (_info.dtype == INFINI_DTYPE_F16) {             \
@@ -1869,6 +1882,9 @@ infiniStatus_t Descriptor::calculate(
         }                                                  \
         if (_info.dtype == INFINI_DTYPE_BF16) {            \
             DISPATCH_KERNEL(Tindex, __nv_bfloat16, float); \
+        }                                                  \
+        if (_info.dtype == INFINI_DTYPE_F32) {             \
+            DISPATCH_FLOAT_KERNEL(Tindex);                 \
         }                                                  \
         return INFINI_STATUS_BAD_TENSOR_DTYPE;             \
     } while (false)
