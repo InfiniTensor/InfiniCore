@@ -1,0 +1,211 @@
+#ifdef ENABLE_METAX_MC_API
+#include <mc_runtime.h>
+#else
+#include <hc_runtime.h>
+#endif
+
+#include <cmath>
+#include <cstdint>
+
+#include "../../../devices/metax/metax_common.h"
+#include "../../../devices/metax/metax_kernel_common.h"
+#include "nsa_paged_attention_metax.h"
+
+#include "../cuda/kernel.cuh"
+
+namespace op::nsa_paged_attention::metax {
+
+namespace {
+
+template <typename Tindex, typename Tdata, typename Tgate>
+INFINIOP_METAX_KERNEL launchNsaPagedDecodeHd128(
+    Tdata *out,
+    const Tdata *q,
+    const Tdata *k_cmp,
+    const Tdata *v_cmp,
+    const Tdata *k_cache,
+    const Tdata *v_cache,
+    const Tindex *block_tables,
+    const Tindex *cache_lens,
+    const Tgate *gates,
+    size_t num_heads,
+    size_t num_kv_heads,
+    float scale,
+    size_t max_num_blocks_per_seq,
+    size_t page_block_size,
+    size_t subblocks_per_page,
+    int nsa_block_size,
+    int window_size,
+    int select_blocks,
+    ptrdiff_t q_stride,
+    ptrdiff_t q_head_stride,
+    ptrdiff_t k_cmp_block_stride,
+    ptrdiff_t k_cmp_head_stride,
+    ptrdiff_t v_cmp_block_stride,
+    ptrdiff_t v_cmp_head_stride,
+    ptrdiff_t k_batch_stride,
+    ptrdiff_t k_head_stride,
+    ptrdiff_t k_row_stride,
+    ptrdiff_t v_batch_stride,
+    ptrdiff_t v_head_stride,
+    ptrdiff_t v_row_stride,
+    ptrdiff_t o_stride,
+    ptrdiff_t o_head_stride,
+    ptrdiff_t block_table_batch_stride,
+    ptrdiff_t cache_lens_stride,
+    ptrdiff_t gates_seq_stride,
+    ptrdiff_t gates_branch_stride,
+    ptrdiff_t gates_head_stride) {
+    op::nsa_paged_attention::cuda::nsaPagedDecodeHd128Kernel<Tindex, Tdata, Tgate>(
+        out, q, k_cmp, v_cmp, k_cache, v_cache, block_tables, cache_lens, gates, num_heads, num_kv_heads, scale,
+        max_num_blocks_per_seq, page_block_size, subblocks_per_page, nsa_block_size, window_size, select_blocks, q_stride, q_head_stride,
+        k_cmp_block_stride, k_cmp_head_stride, v_cmp_block_stride, v_cmp_head_stride,
+        k_batch_stride, k_head_stride, k_row_stride, v_batch_stride, v_head_stride, v_row_stride,
+        o_stride, o_head_stride, block_table_batch_stride, cache_lens_stride, gates_seq_stride,
+        gates_branch_stride, gates_head_stride);
+}
+
+template <typename Tindex, typename Tdata, typename Tgate>
+infiniStatus_t launchTyped(
+    void *out,
+    const void *q,
+    const void *k_cmp,
+    const void *v_cmp,
+    const void *k_cache,
+    const void *v_cache,
+    const void *block_tables,
+    const void *cache_lens,
+    const void *gates,
+    const NsaPagedAttentionInfo &info,
+    hcStream_t stream) {
+    dim3 grid(info.num_seqs, info.num_heads);
+    dim3 block(128);
+    launchNsaPagedDecodeHd128<Tindex, Tdata, Tgate><<<grid, block, 0, stream>>>(
+        static_cast<Tdata *>(out),
+        static_cast<const Tdata *>(q),
+        static_cast<const Tdata *>(k_cmp),
+        static_cast<const Tdata *>(v_cmp),
+        static_cast<const Tdata *>(k_cache),
+        static_cast<const Tdata *>(v_cache),
+        static_cast<const Tindex *>(block_tables),
+        static_cast<const Tindex *>(cache_lens),
+        static_cast<const Tgate *>(gates),
+        info.num_heads,
+        info.num_kv_heads,
+        info.scale,
+        info.max_num_blocks_per_seq,
+        info.page_block_size,
+        info.subblocks_per_page,
+        info.nsa_block_size,
+        info.window_size,
+        info.select_blocks,
+        info.q_stride,
+        info.q_head_stride,
+        info.k_cmp_block_stride,
+        info.k_cmp_head_stride,
+        info.v_cmp_block_stride,
+        info.v_cmp_head_stride,
+        info.k_batch_stride,
+        info.k_head_stride,
+        info.k_row_stride,
+        info.v_batch_stride,
+        info.v_head_stride,
+        info.v_row_stride,
+        info.o_stride,
+        info.o_head_stride,
+        info.block_table_batch_stride,
+        info.cache_lens_stride,
+        info.gates_seq_stride,
+        info.gates_branch_stride,
+        info.gates_head_stride);
+    return INFINI_STATUS_SUCCESS;
+}
+
+template <typename Tindex, typename Tdata>
+infiniStatus_t launchByGate(
+    void *out, const void *q, const void *k_cmp, const void *v_cmp, const void *k_cache, const void *v_cache,
+    const void *block_tables, const void *cache_lens, const void *gates,
+    const NsaPagedAttentionInfo &info, hcStream_t stream) {
+    if (info.gates_dtype == INFINI_DTYPE_F16) {
+        return launchTyped<Tindex, Tdata, __half>(out, q, k_cmp, v_cmp, k_cache, v_cache, block_tables, cache_lens, gates, info, stream);
+    }
+    if (info.gates_dtype == INFINI_DTYPE_BF16) {
+        return launchTyped<Tindex, Tdata, __nv_bfloat16>(out, q, k_cmp, v_cmp, k_cache, v_cache, block_tables, cache_lens, gates, info, stream);
+    }
+    if (info.gates_dtype == INFINI_DTYPE_F32) {
+        return launchTyped<Tindex, Tdata, float>(out, q, k_cmp, v_cmp, k_cache, v_cache, block_tables, cache_lens, gates, info, stream);
+    }
+    return INFINI_STATUS_BAD_TENSOR_DTYPE;
+}
+
+} // namespace
+
+struct Descriptor::Opaque {
+    std::shared_ptr<device::metax::Handle::Internal> internal;
+};
+
+Descriptor::~Descriptor() {
+    delete _opaque;
+}
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t out_desc,
+    infiniopTensorDescriptor_t q_desc,
+    infiniopTensorDescriptor_t k_cmp_desc,
+    infiniopTensorDescriptor_t v_cmp_desc,
+    infiniopTensorDescriptor_t k_cache_desc,
+    infiniopTensorDescriptor_t v_cache_desc,
+    infiniopTensorDescriptor_t block_tables_desc,
+    infiniopTensorDescriptor_t cache_lens_desc,
+    infiniopTensorDescriptor_t gates_desc,
+    float scale,
+    int nsa_block_size,
+    int window_size,
+    int select_blocks) {
+    auto info_res = NsaPagedAttentionInfo::create(out_desc, q_desc, k_cmp_desc, v_cmp_desc, k_cache_desc, v_cache_desc,
+                                                  block_tables_desc, cache_lens_desc, gates_desc, scale, nsa_block_size, window_size, select_blocks);
+    CHECK_RESULT(info_res);
+    *desc_ptr = new Descriptor(
+        new Opaque{reinterpret_cast<device::metax::Handle *>(handle)->internal()},
+        info_res.take(), 0, handle->device, handle->device_id);
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *out,
+    const void *q,
+    const void *k_cmp,
+    const void *v_cmp,
+    const void *k_cache,
+    const void *v_cache,
+    const void *block_tables,
+    const void *cache_lens,
+    const void *gates,
+    void *stream_) const {
+    (void)workspace;
+    (void)workspace_size;
+    auto stream = static_cast<hcStream_t>(stream_);
+
+    if (_info.dtype == INFINI_DTYPE_F16) {
+        if (_info.index_dtype == INFINI_DTYPE_I64) {
+            return launchByGate<int64_t, __half>(out, q, k_cmp, v_cmp, k_cache, v_cache, block_tables, cache_lens, gates, _info, stream);
+        }
+        if (_info.index_dtype == INFINI_DTYPE_I32) {
+            return launchByGate<int32_t, __half>(out, q, k_cmp, v_cmp, k_cache, v_cache, block_tables, cache_lens, gates, _info, stream);
+        }
+        return launchByGate<uint32_t, __half>(out, q, k_cmp, v_cmp, k_cache, v_cache, block_tables, cache_lens, gates, _info, stream);
+    }
+    if (_info.index_dtype == INFINI_DTYPE_I64) {
+        return launchByGate<int64_t, __nv_bfloat16>(out, q, k_cmp, v_cmp, k_cache, v_cache, block_tables, cache_lens, gates, _info, stream);
+    }
+    if (_info.index_dtype == INFINI_DTYPE_I32) {
+        return launchByGate<int32_t, __nv_bfloat16>(out, q, k_cmp, v_cmp, k_cache, v_cache, block_tables, cache_lens, gates, _info, stream);
+    }
+    return launchByGate<uint32_t, __nv_bfloat16>(out, q, k_cmp, v_cmp, k_cache, v_cache, block_tables, cache_lens, gates, _info, stream);
+}
+
+} // namespace op::nsa_paged_attention::metax
