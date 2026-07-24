@@ -34,6 +34,8 @@ inline ::infini::rt::Device::Type translate(infiniDevice_t device) {
         return ::infini::rt::Device::Type::kIluvatar;
     case INFINI_DEVICE_HYGON:
         return ::infini::rt::Device::Type::kHygon;
+    case INFINI_DEVICE_ALI:
+        return ::infini::rt::Device::Type::kThead;
     default:
         return ::infini::rt::Device::Type::kCount;
     }
@@ -57,6 +59,8 @@ inline infiniDevice_t translate(::infini::rt::Device::Type device) {
         return INFINI_DEVICE_ILUVATAR;
     case ::infini::rt::Device::Type::kHygon:
         return INFINI_DEVICE_HYGON;
+    case ::infini::rt::Device::Type::kThead:
+        return INFINI_DEVICE_ALI;
     default:
         return INFINI_DEVICE_TYPE_COUNT;
     }

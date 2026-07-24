@@ -338,6 +338,39 @@ local function add_ascend_runtime_sdk_dirs()
     add_rpathdirs(path.join(ascend_home, "lib64"))
 end
 
+local function get_ali_cuda_root()
+    local ali_cuda_root = os.getenv("ALI_CUDA_ROOT") or os.getenv("PPU_CUDA_ROOT")
+    local ppu_sdk_root = os.getenv("PPU_SDK_ROOT")
+    if (not ali_cuda_root or ali_cuda_root == "") and ppu_sdk_root and ppu_sdk_root ~= "" then
+        ali_cuda_root = path.join(ppu_sdk_root, "CUDA_SDK")
+    end
+    return ali_cuda_root or get_config("cuda") or "/usr/local/PPU_SDK/CUDA_SDK"
+end
+
+local function add_ali_runtime_sdk_dirs()
+    if not has_config("ali-ppu") then
+        return
+    end
+    local ali_cuda_root = get_ali_cuda_root()
+    for _, include_dir in ipairs({
+        path.join(ali_cuda_root, "include"),
+        path.join(ali_cuda_root, "targets", "x86_64-linux", "include"),
+    }) do
+        if os.isdir(include_dir) then
+            add_includedirs(include_dir)
+        end
+    end
+    for _, link_dir in ipairs({
+        path.join(ali_cuda_root, "lib64"),
+        path.join(ali_cuda_root, "targets", "x86_64-linux", "lib"),
+    }) do
+        if os.isdir(link_dir) then
+            add_linkdirs(link_dir)
+            add_rpathdirs(link_dir)
+        end
+    end
+end
+
 local function get_infiniops_cuda_architectures()
     local arch_opt = get_config("cuda_arch")
     if not arch_opt or arch_opt == "" then
@@ -503,6 +536,7 @@ target("infiniop")
     add_moore_runtime_sdk_dirs()
     add_metax_runtime_sdk_dirs()
     add_ascend_runtime_sdk_dirs()
+    add_ali_runtime_sdk_dirs()
 
     local public_cuda_root = get_config("cuda") or os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH")
     if public_cuda_root and public_cuda_root ~= "" then
@@ -667,6 +701,7 @@ target("infinicore_cpp_api")
     add_moore_runtime_sdk_dirs()
     add_metax_runtime_sdk_dirs()
     add_ascend_runtime_sdk_dirs()
+    add_ali_runtime_sdk_dirs()
     if has_config("nv-gpu") or has_config("iluvatar-gpu") then
         local default_cuda_root = has_config("iluvatar-gpu") and "/usr/local/corex" or "/usr/local/cuda"
         local cuda_root = os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH") or get_config("cuda") or default_cuda_root
@@ -947,6 +982,7 @@ target("_infinicore")
     add_moore_runtime_sdk_dirs()
     add_metax_runtime_sdk_dirs()
     add_ascend_runtime_sdk_dirs()
+    add_ali_runtime_sdk_dirs()
     if has_config("iluvatar-gpu") then
         local cuda_root = os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH") or get_config("cuda") or "/usr/local/corex"
         add_cxxflags("-idirafter", cuda_root .. "/include", {force = true})

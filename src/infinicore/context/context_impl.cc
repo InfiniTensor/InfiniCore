@@ -88,6 +88,7 @@ ContextImpl::ContextImpl() {
     INIT_RUNTIME(infini::rt::Device::Type::kMoore, INFINI_DEVICE_MOORE);
     INIT_RUNTIME(infini::rt::Device::Type::kIluvatar, INFINI_DEVICE_ILUVATAR);
     INIT_RUNTIME(infini::rt::Device::Type::kHygon, INFINI_DEVICE_HYGON);
+    INIT_RUNTIME(infini::rt::Device::Type::kThead, INFINI_DEVICE_ALI);
 
 #undef INIT_RUNTIME
 
