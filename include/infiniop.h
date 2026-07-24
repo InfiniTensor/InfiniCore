@@ -75,6 +75,7 @@
 #include "infiniop/ops/kron.h"
 #include "infiniop/ops/kthvalue.h"
 #include "infiniop/ops/kv_caching.h"
+#include "infiniop/ops/kimi_delta_attention.h"
 #include "infiniop/ops/layer_norm.h"
 #include "infiniop/ops/ldexp.h"
 #include "infiniop/ops/lerp.h"
