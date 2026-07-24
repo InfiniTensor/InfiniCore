@@ -275,10 +275,14 @@ bool moeTritonCaptureAllowed() {
     // of MoE-containing segments, not the eager MoE op sequence.
     // H5 paged MAX_OPS (20260724 hyp_hcgraph_fix/maxops_paged): last_good N=34
     // (through pre-MoE AddRMSNorm; Mul@31 OK in-graph); first_bad N=35 folds
-    // first InductorMoe@34 into GraphExec → GARBLE/crash. Keep HostOp/tail
-    // Graph::run sync for HB races, but do NOT fold MoE into device graphs unless
-    // the operator explicitly opts into INFINI_MOE_METAX_CAPTURE_UNSAFE=1.
-    // Production MetaX FULL correctness path: MoE host-break (segs≈28).
+    // first InductorMoe@34 into GraphExec → GARBLE/crash.
+    // H7 (20260724 session 961725): root cause was unreained torch
+    // ``contiguous()`` of bucket-padded MoE ``x`` under hcStream capture;
+    // CaptureArena materialize of ``x`` makes paged FORCE+UNSAFE segs=1
+    // token-exact. Keep HostOp/tail Graph::run sync for HB races. Prod still
+    // requires INFINI_MOE_METAX_CAPTURE_UNSAFE=1 to fold MoE into device graphs
+    // (wall not auto-relaxed). Production MetaX FULL correctness path without
+    // UNSAFE: MoE host-break (segs≈28).
     if (!env_truthy_("INFINI_MOE_METAX_CAPTURE_UNSAFE")) {
         return false;
     }

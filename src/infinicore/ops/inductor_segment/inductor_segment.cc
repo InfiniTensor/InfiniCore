@@ -29,7 +29,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
-#include <fstream>
 #include <limits>
 #include <memory>
 #include <sstream>
@@ -601,38 +600,6 @@ at::Tensor routed_experts_aten_capture(
     } else {
         acc = at::zeros({t_tokens, hidden}, x.options());
     }
-    // #region agent log
-    {
-        static thread_local int moe_cpp_logs = 0;
-        if (moe_cpp_logs < 32) {
-            ++moe_cpp_logs;
-            try {
-                std::ofstream ofs(
-                    "/opt/offline/infinilm-metax-20260622/.cursor/debug-688e02.log",
-                    std::ios::app);
-                if (ofs) {
-                    const char *env_cap = std::getenv("INFINI_DEVICE_STREAM_CAPTURING");
-                    ofs << "{\"sessionId\":\"688e02\",\"runId\":\"smoke-ladder\","
-                           "\"hypothesisId\":\"H3\",\"location\":\"inductor_segment.cc:"
-                           "routed_experts_aten_capture\",\"message\":\"cpp_aten_moe\","
-                           "\"data\":{\"T\":"
-                        << t_tokens << ",\"K\":" << top_k
-                        << ",\"arena\":" << (arena != nullptr ? "true" : "false")
-                        << ",\"retained_torch\":"
-                        << (arena != nullptr
-                                ? static_cast<long long>(arena->num_retained_torch())
-                                : -1LL)
-                        << ",\"tls_capturing\":"
-                        << (infinicore::context::isDeviceStreamCapturing() ? "true"
-                                                                            : "false")
-                        << ",\"env_cap\":\"" << (env_cap ? env_cap : "")
-                        << "\"},\"timestamp\":0}\n";
-                }
-            } catch (...) {
-            }
-        }
-    }
-    // #endregion
     // Bisect H15: identity MoE body under capture — if Gate C garble tokens
     // unchanged, poison is outside routed experts (topk/shared/graph); if
     // tokens change, body/index_select path is implicated.
@@ -645,32 +612,6 @@ at::Tensor routed_experts_aten_capture(
             if (arena != nullptr) {
                 arena->retain(out);
             }
-            // #region agent log
-            {
-                static thread_local int id_logs = 0;
-                if (id_logs < 8) {
-                    ++id_logs;
-                    try {
-                        std::ofstream ofs(
-                            "/opt/offline/infinilm-metax-20260622/.cursor/debug-688e02.log",
-                            std::ios::app);
-                        if (ofs) {
-                            ofs << "{\"sessionId\":\"688e02\",\"runId\":\"smoke-ladder\","
-                                   "\"hypothesisId\":\"H3\",\"location\":\"inductor_segment.cc:"
-                                   "CAPTURE_IDENTITY\",\"message\":\"moe_capture_identity\","
-                                   "\"data\":{\"T\":" << t_tokens
-                                << ",\"arena\":" << (arena != nullptr ? "true" : "false")
-                                << ",\"retained_torch\":"
-                                << (arena != nullptr
-                                        ? static_cast<long long>(arena->num_retained_torch())
-                                        : -1LL)
-                                << "},\"timestamp\":0}\n";
-                        }
-                    } catch (...) {
-                    }
-                }
-            }
-            // #endregion
             return out;
         }
     }
@@ -1018,28 +959,6 @@ at::Tensor run_moe_eager_decode(
                 } else {
                     out = x.clone();
                 }
-                // #region agent log
-                {
-                    static thread_local int nop_logs = 0;
-                    if (nop_logs < 8) {
-                        ++nop_logs;
-                        try {
-                            std::ofstream ofs(
-                                "/opt/offline/infinilm-metax-20260622/.cursor/debug-688e02.log",
-                                std::ios::app);
-                            if (ofs) {
-                                ofs << "{\"sessionId\":\"688e02\",\"runId\":\"smoke-ladder\","
-                                       "\"hypothesisId\":\"H4\",\"location\":\"inductor_segment.cc:CAPTURE_NOP\","
-                                       "\"message\":\"moe_capture_nop\",\"data\":{\"T\":"
-                                    << t_tokens
-                                    << ",\"arena\":" << (arena != nullptr ? "true" : "false")
-                                    << "},\"timestamp\":0}\n";
-                            }
-                        } catch (...) {
-                        }
-                    }
-                }
-                // #endregion
                 return out;
             }
         }
@@ -1148,33 +1067,6 @@ at::Tensor run_moe_eager_decode(
                     arena->retain(shared);
                     arena->retain(y);
                 }
-                // #region agent log
-                {
-                    static thread_local int fx_logs = 0;
-                    if (fx_logs < 8) {
-                        ++fx_logs;
-                        try {
-                            std::ofstream ofs(
-                                "/opt/offline/infinilm-metax-20260622/.cursor/debug-688e02.log",
-                                std::ios::app);
-                            if (ofs) {
-                                ofs << "{\"sessionId\":\"688e02\",\"runId\":\"smoke-ladder\","
-                                       "\"hypothesisId\":\"H2\",\"location\":\"inductor_segment.cc:"
-                                       "FIXED_TOPK\",\"message\":\"moe_capture_fixed_topk\","
-                                       "\"data\":{\"T\":" << t_tokens
-                                    << ",\"top_k\":" << cfg.top_k
-                                    << ",\"arena\":" << (arena != nullptr ? "true" : "false")
-                                    << ",\"retained_torch\":"
-                                    << (arena != nullptr
-                                            ? static_cast<long long>(arena->num_retained_torch())
-                                            : -1LL)
-                                    << "},\"timestamp\":0}\n";
-                            }
-                        } catch (...) {
-                        }
-                    }
-                }
-                // #endregion
                 return y;
             }
         }
@@ -1217,32 +1109,6 @@ at::Tensor run_moe_eager_decode(
         arena->retain(routed);
         arena->retain(shared);
         arena->retain(y);
-        // #region agent log
-        {
-            static thread_local int def_logs = 0;
-            if (def_logs < 8) {
-                ++def_logs;
-                try {
-                    std::ofstream ofs(
-                        "/opt/offline/infinilm-metax-20260622/.cursor/debug-688e02.log",
-                        std::ios::app);
-                    if (ofs) {
-                        ofs << "{\"sessionId\":\"688e02\",\"runId\":\"smoke-ladder\","
-                               "\"hypothesisId\":\"H1\",\"location\":\"inductor_segment.cc:"
-                               "moe_default_capture\",\"message\":\"moe_capture_default\","
-                               "\"data\":{\"T\":" << t_tokens
-                            << ",\"capturing\":" << (capturing ? "true" : "false")
-                            << ",\"stream_capturing\":"
-                            << (stream_capturing ? "true" : "false")
-                            << ",\"retained_torch\":"
-                            << static_cast<long long>(arena->num_retained_torch())
-                            << "},\"timestamp\":0}\n";
-                    }
-                } catch (...) {
-                }
-            }
-        }
-        // #endregion
     }
     return y;
 }
@@ -1288,7 +1154,20 @@ void run_moe_segment(
         const int64_t t_tokens = batch * static_cast<int64_t>(valid_len);
         at::Tensor x = hidden.narrow(1, 0, static_cast<int64_t>(valid_len))
                            .reshape({t_tokens, hidden_size});
-        if (!x.is_contiguous()) {
+        // H7: bucket-padded decode hidden makes narrow/reshape non-contiguous,
+        // so ``x.contiguous()`` allocates a torch CachingAllocator temp. Under hcStream
+        // capture that temp is NOT in CaptureArena — GraphExec replays dangling reads.
+        // Materialize into the arena instead.
+        if (infinicore::context::isDeviceStreamCapturing()) {
+            if (auto *arena = infinicore::graph::current_capture_arena()) {
+                at::Tensor x_a = arena->empty_aten({t_tokens, hidden_size}, x.options());
+                x_a.copy_(x);
+                arena->retain(x_a);
+                x = x_a;
+            } else if (!x.is_contiguous()) {
+                x = x.contiguous();
+            }
+        } else if (!x.is_contiguous()) {
             x = x.contiguous();
         }
         at::Tensor y = run_moe_eager_decode(x, weights);
@@ -1323,56 +1202,6 @@ void run_moe_segment(
                 }
             }
         }
-        // #region agent log
-        // Layer parity dump: host-safe only (D2H illegal under hcStream capture).
-        if (const char *dump = std::getenv("INFINI_MOE_LAYER_PARITY_DUMP")) {
-            if (dump[0] != '\0' && std::string(dump) != "0"
-                && !infinicore::context::isDeviceStreamCapturing()) {
-                static thread_local int dump_n = 0;
-                if (dump_n < 64) {
-                    ++dump_n;
-                    try {
-                        auto y_f = y.detach().to(at::kDouble).contiguous().cpu();
-                        const double *p = y_f.data_ptr<double>();
-                        const int64_t n = y_f.numel();
-                        double sum = 0.0, absmax = 0.0;
-                        for (int64_t i = 0; i < n; ++i) {
-                            sum += p[i];
-                            absmax = std::max(absmax, std::abs(p[i]));
-                        }
-                        uint64_t h = 1469598103934665603ull;
-                        const int64_t take = std::min<int64_t>(n, 64);
-                        for (int64_t i = 0; i < take; ++i) {
-                            uint64_t bits = 0;
-                            std::memcpy(&bits, p + i, sizeof(double));
-                            h ^= bits;
-                            h *= 1099511628211ull;
-                        }
-                        // Debug session ca8c72 only (do not dual-write legacy 688e02).
-                        std::ofstream ofs(
-                            "/opt/offline/infinilm-metax-20260622/.cursor/debug-ca8c72.log",
-                            std::ios::app);
-                        if (ofs) {
-                            ofs << "{\"sessionId\":\"ca8c72\",\"runId\":\"layer-parity\","
-                                   "\"hypothesisId\":\"H-D\",\"location\":\"inductor_segment.cc:"
-                                   "run_moe_segment\",\"message\":\"moe_layer_dump\","
-                                   "\"data\":{\"layer\":" << layer_idx
-                                << ",\"T\":" << t_tokens << ",\"mean\":" << (sum / std::max<int64_t>(n, 1))
-                                << ",\"absmax\":" << absmax << ",\"fnv\":" << h
-                                << ",\"recording\":"
-                                << (infinicore::context::isGraphRecording() ? "true" : "false")
-                                << ",\"force\":"
-                                << (moe_triton_capture_enabled() ? "true" : "false")
-                                << ",\"safe\":"
-                                << (moe_capture_safe_enabled() ? "true" : "false")
-                                << "},\"timestamp\":0}\n";
-                        }
-                    } catch (...) {
-                    }
-                }
-            }
-        }
-        // #endregion
         restore_cuda_context(rank_device);
         return;
     }

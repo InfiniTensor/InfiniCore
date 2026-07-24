@@ -6,8 +6,6 @@
 #include <cstdlib>
 #include <cstring>
 #include <algorithm>
-#include <chrono>
-#include <fstream>
 #include <infinirt.h>
 #include <sstream>
 #include <string>
@@ -58,6 +56,17 @@ std::string demangle_type_name(const char *mangled) {
 
 std::string op_type_name(const GraphOperator &op) {
     return demangle_type_name(typeid(op).name());
+}
+
+bool is_inductor_moe_op(const GraphOperator &op) {
+    const std::string n = op_type_name(op);
+    return n.find("InductorMoe") != std::string::npos;
+}
+
+/// Diagnose: HostOp-split every non-MoE; only InductorMoe enters DeviceSegments.
+bool graph_moe_only_capture_enabled() {
+    const char *v = std::getenv("INFINI_GRAPH_MOE_ONLY_CAPTURE");
+    return v != nullptr && v[0] != '\0' && std::string(v) != "0";
 }
 
 infinirtStreamCaptureMode_t graph_capture_mode() {
@@ -184,24 +193,6 @@ void Graph::run() const {
                 if (cap_n > 0 && cap_n < step.ops.size()) {
                     infinicore::context::syncStream();
                     device_launched_since_sync = false;
-                    // #region agent log
-                    {
-                        static thread_local int rem_logs = 0;
-                        if (rem_logs < 8) {
-                            ++rem_logs;
-                            std::ofstream ofs(
-                                "/opt/offline/infinilm-metax-20260622/.cursor/debug-ca8c72.log",
-                                std::ios::app);
-                            if (ofs) {
-                                ofs << "{\"sessionId\":\"ca8c72\",\"runId\":\"maxops-paged\","
-                                       "\"hypothesisId\":\"H-A\",\"location\":\"graph.cc:run_remainder\","
-                                       "\"message\":\"maxops_eager_remainder\",\"data\":{\"captured\":"
-                                    << cap_n << ",\"total\":" << step.ops.size()
-                                    << "},\"timestamp\":0}\n";
-                            }
-                        }
-                    }
-                    // #endregion
                     for (size_t i = cap_n; i < step.ops.size(); ++i) {
                         step.ops[i]->run();
                     }
@@ -225,34 +216,9 @@ void Graph::run() const {
     // MoE D2H sync points. hcGraphLaunch is async — without a stream sync,
     // logits are read while the graph is still in flight → deterministic garble
     // (Cell B). Host-break MoE (segs≈28) accidentally synchronized via topk D2H.
-    // #region agent log
     if (used_device && device_launched_since_sync) {
-        try {
-            static thread_local int sync_logs = 0;
-            const auto t0 = std::chrono::steady_clock::now();
-            infinicore::context::syncStream();
-            const auto ms = std::chrono::duration<double, std::milli>(
-                                std::chrono::steady_clock::now() - t0)
-                                .count();
-            if (sync_logs < 16) {
-                ++sync_logs;
-                // Debug session ca8c72 only (do not dual-write legacy 688e02).
-                std::ofstream ofs(
-                    "/opt/offline/infinilm-metax-20260622/.cursor/debug-ca8c72.log",
-                    std::ios::app);
-                if (ofs) {
-                    ofs << "{\"sessionId\":\"ca8c72\",\"runId\":\"h5-paged\","
-                           "\"hypothesisId\":\"H-E\",\"location\":\"graph.cc:run_sync\","
-                           "\"message\":\"graph_run_sync\",\"data\":{\"sync_ms\":"
-                        << ms << ",\"steps\":" << replay_steps_.size()
-                        << "},\"timestamp\":0}\n";
-                }
-            }
-        } catch (...) {
-            infinicore::context::syncStream();
-        }
+        infinicore::context::syncStream();
     }
-    // #endregion
     last_replay_used_device_ = used_device;
 }
 
@@ -351,20 +317,6 @@ void Graph::capture_device_segment_(ReplayStep &step) {
                 "[capture_audit] FORCE_OP_LIST=1: skip device capture ({} ops); "
                 "eager op-list replay",
                 step.ops.size());
-            // #region agent log
-            try {
-                std::ofstream ofs(
-                    "/opt/offline/infinilm-metax-20260622/.cursor/debug-688e02.log",
-                    std::ios::app);
-                if (ofs) {
-                    ofs << "{\"sessionId\":\"688e02\",\"runId\":\"smoke-ladder\","
-                           "\"hypothesisId\":\"H5\",\"location\":\"graph.cc:FORCE_OP_LIST\","
-                           "\"message\":\"force_op_list\",\"data\":{\"ops\":"
-                        << step.ops.size() << "},\"timestamp\":0}\n";
-                }
-            } catch (...) {
-            }
-            // #endregion
             return;
         }
     }
@@ -571,6 +523,8 @@ void Graph::instantiate() {
 
 #ifdef USE_INFINIRT_GRAPH
     // Split around host-break ops so Triton MoE never enters stream capture.
+    // INFINI_GRAPH_MOE_ONLY_CAPTURE=1: also HostOp-split every non-InductorMoe
+    // so MoE GraphExec runs in isolation (moe_alone_ge iso cell).
     ReplayStep pending;
     pending.kind = ReplayStep::Kind::DeviceSegment;
     size_t max_ops_per_seg = 0;
@@ -578,6 +532,11 @@ void Graph::instantiate() {
         if (raw[0] != '\0') {
             max_ops_per_seg = static_cast<size_t>(std::strtoul(raw, nullptr, 10));
         }
+    }
+    const bool moe_only = graph_moe_only_capture_enabled();
+    if (moe_only) {
+        spdlog::warn(
+            "[capture_audit] MOE_ONLY_CAPTURE=1: HostOp all non-InductorMoe");
     }
     auto flush_device = [this, max_ops_per_seg](ReplayStep &seg) {
         if (seg.ops.empty()) {
@@ -613,7 +572,9 @@ void Graph::instantiate() {
     };
 
     for (auto &op : op_list_) {
-        if (op->is_host_break()) {
+        const bool treat_as_host
+            = op->is_host_break() || (moe_only && !is_inductor_moe_op(*op));
+        if (treat_as_host) {
             flush_device(pending);
             ReplayStep host;
             host.kind = ReplayStep::Kind::HostOp;
@@ -624,6 +585,35 @@ void Graph::instantiate() {
         pending.ops.push_back(op);
     }
     flush_device(pending);
+    {
+        size_t host_n = 0, dev_n = 0, moe_alone_segs = 0, multi_with_moe = 0;
+        for (const auto &step : replay_steps_) {
+            if (step.kind == ReplayStep::Kind::HostOp) {
+                ++host_n;
+                continue;
+            }
+            ++dev_n;
+            size_t moe_n = 0;
+            for (const auto &o : step.ops) {
+                if (is_inductor_moe_op(*o)) {
+                    ++moe_n;
+                }
+            }
+            if (moe_n > 0 && moe_n == step.ops.size()) {
+                ++moe_alone_segs;
+            } else if (moe_n > 0) {
+                ++multi_with_moe;
+            }
+        }
+        spdlog::warn(
+            "[capture_audit] instantiate done host={} device={} moe_alone={} "
+            "multi_moe={} device_segment_count={}",
+            host_n,
+            dev_n,
+            moe_alone_segs,
+            multi_with_moe,
+            device_segment_count());
+    }
 #else
     (void)0;
 #endif
