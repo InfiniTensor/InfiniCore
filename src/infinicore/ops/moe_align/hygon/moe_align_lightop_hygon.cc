@@ -86,10 +86,6 @@ void run(void *planned_meta) {
     auto expert_ids = infinicore::adaptor::to_aten_tensor(p->expert_ids);
     auto num_tokens_post_padded = infinicore::adaptor::to_aten_tensor(p->num_tokens_post_padded);
 
-    if (p->pad_sorted_token_ids) {
-        sorted_token_ids.fill_(topk_ids.numel());
-    }
-
     const std::optional<at::Tensor> none = std::nullopt;
     infinicore::adaptor::lightop::moe_align_block_size(
         topk_ids,
@@ -102,7 +98,7 @@ void run(void *planned_meta) {
         none,
         none,
         false,
-        false);
+        p->pad_sorted_token_ids);
 }
 
 void cleanup(void **planned_meta_ptr) {
