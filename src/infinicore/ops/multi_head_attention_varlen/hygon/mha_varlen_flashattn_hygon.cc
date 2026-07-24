@@ -125,25 +125,40 @@ void run(void *planned_meta) {
     auto k_work = k.contiguous();
     auto v_work = v.contiguous();
     if (block_table.has_value() && k.dim() == 4 && v.dim() == 4) {
-        const int64_t num_blocks = k.size(0);
-        const int64_t block_size = k.size(1);
-        const int64_t num_kv_heads = k.size(2);
-        const int64_t head_dim = k.size(3);
-        if (block_size % 64 != 0) {
-            throw std::runtime_error("[mha_varlen/hygon] flash-attn requires paged KV block size to be divisible by 64");
-        }
-        const int64_t pages_per_block = block_size / 64;
-        k_work = k_work.reshape({num_blocks, pages_per_block, 64, num_kv_heads, head_dim})
-                     .reshape({num_blocks * pages_per_block, 64, num_kv_heads, head_dim})
-                     .contiguous();
-        v_work = v_work.reshape({num_blocks, pages_per_block, 64, num_kv_heads, head_dim})
-                     .reshape({num_blocks * pages_per_block, 64, num_kv_heads, head_dim})
-                     .contiguous();
-        if (pages_per_block != 1) {
-            auto offsets = at::arange(pages_per_block, block_table->options()).view({1, 1, pages_per_block});
-            block_table = ((*block_table).unsqueeze(-1) * pages_per_block + offsets)
-                              .reshape({block_table->size(0), block_table->size(1) * pages_per_block})
-                              .contiguous();
+        const bool vllm_cache_layout =
+            k.size(0) == v.size(0)
+            && k.size(1) == v.size(1)
+            && k.size(2) == v.size(3)
+            && k.size(3) == v.size(2);
+        if (vllm_cache_layout) {
+            if (k.size(2) != 64) {
+                throw std::runtime_error("[mha_varlen/hygon] vLLM cache layout requires block size 64");
+            }
+            // LightOP paged attention stores K/V as BHSD/BHDS, while the
+            // flash-attn varlen prefill ABI consumes BSHD for both caches.
+            k_work = k.permute({0, 2, 1, 3}).contiguous();
+            v_work = v.permute({0, 3, 1, 2}).contiguous();
+        } else {
+            const int64_t num_blocks = k.size(0);
+            const int64_t block_size = k.size(1);
+            const int64_t num_kv_heads = k.size(2);
+            const int64_t head_dim = k.size(3);
+            if (block_size % 64 != 0) {
+                throw std::runtime_error("[mha_varlen/hygon] flash-attn requires paged KV block size to be divisible by 64");
+            }
+            const int64_t pages_per_block = block_size / 64;
+            k_work = k_work.reshape({num_blocks, pages_per_block, 64, num_kv_heads, head_dim})
+                         .reshape({num_blocks * pages_per_block, 64, num_kv_heads, head_dim})
+                         .contiguous();
+            v_work = v_work.reshape({num_blocks, pages_per_block, 64, num_kv_heads, head_dim})
+                         .reshape({num_blocks * pages_per_block, 64, num_kv_heads, head_dim})
+                         .contiguous();
+            if (pages_per_block != 1) {
+                auto offsets = at::arange(pages_per_block, block_table->options()).view({1, 1, pages_per_block});
+                block_table = ((*block_table).unsqueeze(-1) * pages_per_block + offsets)
+                                  .reshape({block_table->size(0), block_table->size(1) * pages_per_block})
+                                  .contiguous();
+            }
         }
     }
     auto result = flash::vllm_mha_varlen_fwd(

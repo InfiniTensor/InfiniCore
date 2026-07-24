@@ -41,6 +41,8 @@ void preload_silu_and_mul();
 
 void preload_rms_rotary_embedding();
 
+void preload_reshape_and_cache_cuda();
+
 void fuse_silu_and_mul(
     at::Tensor &input,
     at::Tensor &output);
@@ -57,6 +59,16 @@ void rms_rotary_embedding_fuse(
     const std::optional<at::Tensor> &q_bias = std::nullopt,
     const std::optional<at::Tensor> &k_bias = std::nullopt,
     double epsilon = 1e-6);
+
+void reshape_and_cache_cuda(
+    at::Tensor &key,
+    at::Tensor &value,
+    at::Tensor &key_cache,
+    at::Tensor &value_cache,
+    at::Tensor &slot_mapping,
+    const std::string &kv_cache_dtype,
+    at::Tensor &k_scale,
+    at::Tensor &v_scale);
 
 void moe_sum(
     at::Tensor &input,

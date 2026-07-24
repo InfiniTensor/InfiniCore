@@ -34,6 +34,8 @@ constexpr const char *kFuseSiluAndMulSymbol =
     "_ZN2at6native17fuse_silu_and_mulERNS_6TensorES2_";
 constexpr const char *kRmsRotaryEmbeddingFuseSymbol =
     "_ZN2at6native25rms_rotary_embedding_fuseERNS_6TensorES2_S2_lS2_bS1_S1_St8optionalIS1_ES4_d";
+constexpr const char *kReshapeAndCacheCudaSymbol =
+    "_ZN2at6native22reshape_and_cache_cudaERNS_6TensorES2_S2_S2_S2_RKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES2_S2_";
 constexpr const char *kMoeSumSymbol =
     "_ZN2at6native7moe_sumERNS_6TensorES2_RKSt8optionalIS1_ES6_S6_fi";
 constexpr const char *kMoeAlignBlockSizeSymbol =
@@ -776,6 +778,15 @@ using RmsRotaryEmbeddingFuseFn = void (*)(
     std::optional<at::Tensor>,
     std::optional<at::Tensor>,
     double);
+using ReshapeAndCacheCudaFn = void (*)(
+    at::Tensor &,
+    at::Tensor &,
+    at::Tensor &,
+    at::Tensor &,
+    at::Tensor &,
+    const std::string &,
+    at::Tensor &,
+    at::Tensor &);
 using MoeSumFn = void (*)(
     at::Tensor &,
     at::Tensor &,
@@ -869,6 +880,11 @@ FuseSiluAndMulFn fuse_silu_and_mul_fn() {
 
 RmsRotaryEmbeddingFuseFn rms_rotary_embedding_fuse_fn() {
     static auto fn = resolve<RmsRotaryEmbeddingFuseFn>(kRmsRotaryEmbeddingFuseSymbol);
+    return fn;
+}
+
+ReshapeAndCacheCudaFn reshape_and_cache_cuda_fn() {
+    static auto fn = resolve<ReshapeAndCacheCudaFn>(kReshapeAndCacheCudaSymbol);
     return fn;
 }
 
@@ -976,6 +992,10 @@ void preload_rms_rotary_embedding() {
     (void)rms_rotary_embedding_fuse_fn();
 }
 
+void preload_reshape_and_cache_cuda() {
+    (void)reshape_and_cache_cuda_fn();
+}
+
 void preload_w8a8_linear_ops() {
     (void)per_token_dynamic_quant_int8_fn();
     (void)blaslt_w8a8_bf16_fn();
@@ -1009,6 +1029,25 @@ void rms_rotary_embedding_fuse(at::Tensor &positions,
         q_bias,
         k_bias,
         epsilon);
+}
+
+void reshape_and_cache_cuda(at::Tensor &key,
+                            at::Tensor &value,
+                            at::Tensor &key_cache,
+                            at::Tensor &value_cache,
+                            at::Tensor &slot_mapping,
+                            const std::string &kv_cache_dtype,
+                            at::Tensor &k_scale,
+                            at::Tensor &v_scale) {
+    reshape_and_cache_cuda_fn()(
+        key,
+        value,
+        key_cache,
+        value_cache,
+        slot_mapping,
+        kv_cache_dtype,
+        k_scale,
+        v_scale);
 }
 
 void moe_sum(at::Tensor &input,

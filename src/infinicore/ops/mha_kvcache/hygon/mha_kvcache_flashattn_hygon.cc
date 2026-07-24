@@ -6,6 +6,10 @@
 
 #include <c10/hip/HIPGuard.h>
 
+#include <limits>
+#include <stdexcept>
+#include <string>
+
 namespace infinicore::op::mha_kvcache_impl::flashattn {
 
 struct PlannedMeta {
@@ -44,11 +48,55 @@ void run(void *planned_meta) {
     auto q = infinicore::adaptor::to_aten_tensor(p->q);
     auto k_cache = infinicore::adaptor::to_aten_tensor(p->k_cache);
     auto v_cache = infinicore::adaptor::to_aten_tensor(p->v_cache);
-    auto seqlens_k = std::optional<const at::Tensor>(infinicore::adaptor::to_aten_tensor(p->seqlens_k));
-    auto block_table = std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(p->block_table));
+    auto seqlens_k_tensor = infinicore::adaptor::to_aten_tensor(p->seqlens_k);
+    auto block_table_tensor = infinicore::adaptor::to_aten_tensor(p->block_table);
+    auto seqlens_k = std::optional<const at::Tensor>(seqlens_k_tensor);
+    auto block_table = std::optional<at::Tensor>(block_table_tensor);
     auto alibi_slopes = p->alibi_slopes
                           ? std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(*p->alibi_slopes))
                           : std::nullopt;
+
+    const bool use_paged_attention =
+        q.dim() == 4 && q.size(1) == 1
+        && k_cache.dim() == 4 && v_cache.dim() == 4
+        && k_cache.size(0) == v_cache.size(0)
+        && k_cache.size(1) == v_cache.size(1)
+        && k_cache.size(2) == v_cache.size(3)
+        && k_cache.size(3) == v_cache.size(2)
+        && k_cache.size(2) == 64
+        && q.size(2) % k_cache.size(1) == 0
+        && q.size(3) == k_cache.size(3)
+        && q.is_contiguous() && k_cache.is_contiguous() && v_cache.is_contiguous()
+        && seqlens_k_tensor.dim() == 1 && block_table_tensor.dim() == 2
+        && !alibi_slopes.has_value();
+    if (use_paged_attention) {
+        const auto max_context_len_64 = block_table_tensor.size(1) * k_cache.size(2);
+        if (max_context_len_64 > std::numeric_limits<int>::max()) {
+            throw std::runtime_error("paged_attention max context length exceeds int range");
+        }
+        auto paged_out = out_tensor.view({q.size(0), q.size(2), q.size(3)});
+        const std::optional<at::Tensor> none = std::nullopt;
+        static const std::string kv_cache_dtype = "auto";
+        flash::paged_attention(
+            paged_out,
+            q,
+            k_cache,
+            v_cache,
+            p->scale,
+            block_table_tensor,
+            seqlens_k_tensor,
+            none,
+            kv_cache_dtype,
+            none,
+            none,
+            none,
+            static_cast<int>(max_context_len_64),
+            none);
+        if (out_need_copy_back) {
+            p->out->copy_from(out_work);
+        }
+        return;
+    }
 
     std::optional<const at::Tensor> k_new = std::nullopt;
     std::optional<const at::Tensor> v_new = std::nullopt;
