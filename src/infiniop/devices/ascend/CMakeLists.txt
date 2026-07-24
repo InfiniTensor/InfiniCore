@@ -28,6 +28,7 @@ ascendc_library(ascend_kernels STATIC
     ../../ops/rope/ascend/rope_ascend_kernel.cpp
     ../../ops/random_sample/ascend/random_sample_kernel.cpp
     ../../ops/rms_norm/ascend/cast_kernel.cpp
+    ../../ops/kv_caching/ascend/kv_caching_ascend_kernel.cpp
     ../../ops/paged_caching/ascend/paged_caching_ascend_kernel.cpp
     ../../ops/paged_attention/ascend/paged_attention_ascend_kernel.cpp
     ../../ops/paged_attention_prefill/ascend/paged_attention_prefill_ascend_kernel.cpp
