@@ -17,7 +17,7 @@
 
 #include "utils.h"
 
-#include <dlpack/dlpack.h>
+#include "../dlpack/dlpack.h"
 #include <tvm/ffi/extra/c_env_api.h>
 
 #include <concepts>

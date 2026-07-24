@@ -162,7 +162,7 @@ def quantize_weights(
         w_s if group_size is not None else None,
         maybe_w_zp,
     )
-    
+
 def permute_rows(
     q_w: torch.Tensor,
     w_ref: torch.Tensor,
@@ -274,7 +274,7 @@ def sort_weights(q_w: torch.Tensor, g_idx: torch.Tensor):
         g_idx.to(device=orig_device),
         sort_indices.to(device=orig_device),
     )
-    
+
 def get_weight_perm(num_bits: int, is_a_8bit: bool = False):
     perm_list: list[int] = []
     if is_a_8bit:
@@ -387,15 +387,15 @@ def gptq_marlin_repack_torch(b_weight, size_k, size_n, group_size, quant_type, a
         q_w, size_k, size_n, quant_type.size_bits, weight_perm, is_a_8bit
     )
     return q_w_gptq, sort_indices, marlin_q_w_1
-    
+
 def test(
     handle,
     device,
-    k_chunk, 
-    n_chunk, 
-    quant_type, 
+    k_chunk,
+    n_chunk,
+    quant_type,
     act_order,
-    is_a_8bit, 
+    is_a_8bit,
     nk_factors,
     group_size=128,
     dtype=InfiniDtype.F16,
@@ -421,11 +421,11 @@ def test(
     if group_size == -1:
         group_size = size_k
     assert group_size <= size_k
-    
+
     test_dtype = to_torch_dtype(dtype)
     device_str = torch_device_map[device]
     b_weight = torch.randn((size_k, size_n), dtype=test_dtype, device=device_str) #must be randn
-    
+
     q_w_gptq, sort_indices, ans = gptq_marlin_repack_torch(b_weight, size_k, size_n, group_size, quant_type, act_order, is_a_8bit)
 
     input = TestTensor(
@@ -444,7 +444,7 @@ def test(
         mode="manual",
         set_tensor=sort_indices,
     )
-    
+
     output = TestTensor(ans.shape, None, InfiniDtype.I32, device, mode="zeros")
 
     if sync is not None:
@@ -477,7 +477,7 @@ def test(
         )
     )
     workspace = TestWorkspace(workspace_size.value, device)
-    
+
     def lib_gptq_marlin_repack():
         check_error(
             LIBINFINIOP.infiniopGptqMarlinRepack(
@@ -492,7 +492,7 @@ def test(
         )
 
     lib_gptq_marlin_repack()
-    
+
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:
         debug(output.actual_tensor(), ans, atol=atol, rtol=rtol)

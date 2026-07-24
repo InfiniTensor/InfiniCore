@@ -19,6 +19,24 @@
 
 namespace infinicore::op::mha_kvcache_impl::flashattn {
 
+namespace {
+
+std::optional<at::Tensor> to_optional_aten_tensor(const Tensor &tensor) {
+    if (!tensor || tensor->numel() == 0) {
+        return std::nullopt;
+    }
+    return infinicore::adaptor::to_aten_tensor(tensor);
+}
+
+std::optional<const at::Tensor> to_optional_const_aten_tensor(const Tensor &tensor) {
+    if (!tensor || tensor->numel() == 0) {
+        return std::nullopt;
+    }
+    return infinicore::adaptor::to_aten_tensor(tensor);
+}
+
+} // namespace
+
 struct PlannedMeta {
     graph::GraphTensor out, q, k_cache, v_cache, seqlens_k, block_table;
     std::optional<graph::GraphTensor> alibi_slopes;
@@ -65,10 +83,10 @@ void run(void *planned_meta) {
     auto k_cache = infinicore::adaptor::to_aten_tensor(k_cache_work);
     auto v_cache = infinicore::adaptor::to_aten_tensor(v_cache_work);
 #endif
-    auto seqlens_k = std::optional<const at::Tensor>(infinicore::adaptor::to_aten_tensor(p->seqlens_k));
-    auto block_table = std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(p->block_table));
+    auto seqlens_k = to_optional_const_aten_tensor(p->seqlens_k);
+    auto block_table = to_optional_aten_tensor(p->block_table);
     auto alibi_slopes = p->alibi_slopes
-                          ? std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(*p->alibi_slopes))
+                          ? to_optional_aten_tensor(*p->alibi_slopes)
                           : std::nullopt;
 
     std::optional<const at::Tensor> k_new = std::nullopt;

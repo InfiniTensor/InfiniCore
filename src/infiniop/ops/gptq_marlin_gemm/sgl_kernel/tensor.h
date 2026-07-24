@@ -3,7 +3,7 @@
 #pragma once
 #include "utils.h"
 
-#include <dlpack/dlpack.h>
+#include "../dlpack/dlpack.h"
 #include <tvm/ffi/container/tensor.h>
 #include <tvm/ffi/dtype.h>
 

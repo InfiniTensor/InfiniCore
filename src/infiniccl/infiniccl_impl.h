@@ -9,6 +9,8 @@ struct InfinicclComm {
     void *comm;    // the actual communicator
     int rank = 0;
     int world_size = 1;
+    infinicclAllReduceBackend_t allreduce_backend = INFINICCL_ALLREDUCE_BACKEND_NCCL;
+    void *custom_allreduce_context = nullptr;
 };
 
 #define INFINICCL_DEVICE_API(NAMSPACE, IMPL)               \
@@ -19,6 +21,22 @@ struct InfinicclComm {
         const int *device_ids) IMPL;                       \
                                                            \
     infiniStatus_t commDestroy(infinicclComm_t comm) IMPL; \
+                                                           \
+    infiniStatus_t registerAllReduceBuffers(               \
+        infinicclComm_t *comms,                            \
+        int ndevice,                                       \
+        void **buffers,                                    \
+        size_t bytes) IMPL;                                \
+                                                           \
+    infiniStatus_t registerAllReduceBuffer(                \
+        infinicclComm_t comm,                              \
+        const char *key,                                   \
+        void *buffer,                                      \
+        size_t bytes) IMPL;                                \
+                                                           \
+    infiniStatus_t clearAllReduceBuffers(                  \
+        infinicclComm_t *comms,                            \
+        int ndevice) IMPL;                                 \
                                                            \
     infiniStatus_t groupStart(infinicclComm_t comm) IMPL;  \
                                                            \

@@ -1,5 +1,6 @@
 #include "infiniccl.h"
 
+#include "./infiniccl_impl.h"
 #include "./ascend/infiniccl_ascend.h"
 #include "./cambricon/infiniccl_cambricon.h"
 #include "./cuda/infiniccl_cuda.h"
@@ -59,6 +60,158 @@ __INFINI_C infiniStatus_t infinicclCommDestroy(infinicclComm_t comm) {
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
 #undef COMM_DESTROY
+}
+
+__INFINI_C infiniStatus_t infinicclCommSetAllReduceBackend(
+    infinicclComm_t comm,
+    infinicclAllReduceBackend_t backend) {
+
+    if (comm == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+
+    switch (backend) {
+    case INFINICCL_ALLREDUCE_BACKEND_AUTO:
+    case INFINICCL_ALLREDUCE_BACKEND_NCCL:
+    case INFINICCL_ALLREDUCE_BACKEND_CUSTOM:
+        comm->allreduce_backend = backend;
+        return INFINI_STATUS_SUCCESS;
+    default:
+        return INFINI_STATUS_BAD_PARAM;
+    }
+}
+
+__INFINI_C infiniStatus_t infinicclCommGetAllReduceBackend(
+    infinicclComm_t comm,
+    infinicclAllReduceBackend_t *backend) {
+
+    if (comm == nullptr || backend == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+
+    *backend = comm->allreduce_backend;
+    return INFINI_STATUS_SUCCESS;
+}
+
+__INFINI_C infiniStatus_t infinicclCommRegisterAllReduceBuffers(
+    infinicclComm_t *comms,
+    int ndevice,
+    void **buffers,
+    size_t bytes) {
+
+    if (comms == nullptr || buffers == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    if (ndevice <= 0 || bytes == 0 || comms[0] == nullptr) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    const auto device_type = comms[0]->device_type;
+    for (int i = 0; i < ndevice; ++i) {
+        if (comms[i] == nullptr || buffers[i] == nullptr) {
+            return INFINI_STATUS_NULL_POINTER;
+        }
+        if (comms[i]->device_type != device_type) {
+            return INFINI_STATUS_BAD_PARAM;
+        }
+    }
+
+#define REGISTER_ALLREDUCE_BUFFERS(CASE_, NAMESPACE_) \
+    case CASE_:                                       \
+        return infiniccl::NAMESPACE_::registerAllReduceBuffers(comms, ndevice, buffers, bytes)
+
+    switch (device_type) {
+        REGISTER_ALLREDUCE_BUFFERS(INFINI_DEVICE_NVIDIA, cuda);
+        REGISTER_ALLREDUCE_BUFFERS(INFINI_DEVICE_ILUVATAR, cuda);
+        REGISTER_ALLREDUCE_BUFFERS(INFINI_DEVICE_QY, cuda);
+        REGISTER_ALLREDUCE_BUFFERS(INFINI_DEVICE_HYGON, cuda);
+        REGISTER_ALLREDUCE_BUFFERS(INFINI_DEVICE_ASCEND, ascend);
+        REGISTER_ALLREDUCE_BUFFERS(INFINI_DEVICE_CAMBRICON, cambricon);
+        REGISTER_ALLREDUCE_BUFFERS(INFINI_DEVICE_METAX, metax);
+        REGISTER_ALLREDUCE_BUFFERS(INFINI_DEVICE_MOORE, moore);
+        REGISTER_ALLREDUCE_BUFFERS(INFINI_DEVICE_KUNLUN, kunlun);
+        REGISTER_ALLREDUCE_BUFFERS(INFINI_DEVICE_ALI, cuda);
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    }
+
+#undef REGISTER_ALLREDUCE_BUFFERS
+}
+
+__INFINI_C infiniStatus_t infinicclCommRegisterAllReduceBuffer(
+    infinicclComm_t comm,
+    const char *key,
+    void *buffer,
+    size_t bytes) {
+
+    if (comm == nullptr || key == nullptr || buffer == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    if (bytes == 0 || key[0] == '\0') {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+#define REGISTER_ALLREDUCE_BUFFER(CASE_, NAMESPACE_) \
+    case CASE_:                                      \
+        return infiniccl::NAMESPACE_::registerAllReduceBuffer(comm, key, buffer, bytes)
+
+    switch (comm->device_type) {
+        REGISTER_ALLREDUCE_BUFFER(INFINI_DEVICE_NVIDIA, cuda);
+        REGISTER_ALLREDUCE_BUFFER(INFINI_DEVICE_ILUVATAR, cuda);
+        REGISTER_ALLREDUCE_BUFFER(INFINI_DEVICE_QY, cuda);
+        REGISTER_ALLREDUCE_BUFFER(INFINI_DEVICE_HYGON, cuda);
+        REGISTER_ALLREDUCE_BUFFER(INFINI_DEVICE_ASCEND, ascend);
+        REGISTER_ALLREDUCE_BUFFER(INFINI_DEVICE_CAMBRICON, cambricon);
+        REGISTER_ALLREDUCE_BUFFER(INFINI_DEVICE_METAX, metax);
+        REGISTER_ALLREDUCE_BUFFER(INFINI_DEVICE_MOORE, moore);
+        REGISTER_ALLREDUCE_BUFFER(INFINI_DEVICE_KUNLUN, kunlun);
+        REGISTER_ALLREDUCE_BUFFER(INFINI_DEVICE_ALI, cuda);
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    }
+
+#undef REGISTER_ALLREDUCE_BUFFER
+}
+
+__INFINI_C infiniStatus_t infinicclCommClearAllReduceBuffers(
+    infinicclComm_t *comms,
+    int ndevice) {
+
+    if (comms == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    if (ndevice <= 0 || comms[0] == nullptr) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    const auto device_type = comms[0]->device_type;
+    for (int i = 0; i < ndevice; ++i) {
+        if (comms[i] == nullptr) {
+            return INFINI_STATUS_NULL_POINTER;
+        }
+        if (comms[i]->device_type != device_type) {
+            return INFINI_STATUS_BAD_PARAM;
+        }
+    }
+
+#define CLEAR_ALLREDUCE_BUFFERS(CASE_, NAMESPACE_) \
+    case CASE_:                                    \
+        return infiniccl::NAMESPACE_::clearAllReduceBuffers(comms, ndevice)
+
+    switch (device_type) {
+        CLEAR_ALLREDUCE_BUFFERS(INFINI_DEVICE_NVIDIA, cuda);
+        CLEAR_ALLREDUCE_BUFFERS(INFINI_DEVICE_ILUVATAR, cuda);
+        CLEAR_ALLREDUCE_BUFFERS(INFINI_DEVICE_QY, cuda);
+        CLEAR_ALLREDUCE_BUFFERS(INFINI_DEVICE_HYGON, cuda);
+        CLEAR_ALLREDUCE_BUFFERS(INFINI_DEVICE_ASCEND, ascend);
+        CLEAR_ALLREDUCE_BUFFERS(INFINI_DEVICE_CAMBRICON, cambricon);
+        CLEAR_ALLREDUCE_BUFFERS(INFINI_DEVICE_METAX, metax);
+        CLEAR_ALLREDUCE_BUFFERS(INFINI_DEVICE_MOORE, moore);
+        CLEAR_ALLREDUCE_BUFFERS(INFINI_DEVICE_KUNLUN, kunlun);
+        CLEAR_ALLREDUCE_BUFFERS(INFINI_DEVICE_ALI, cuda);
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    }
+
+#undef CLEAR_ALLREDUCE_BUFFERS
 }
 
 __INFINI_C infiniStatus_t infinicclGroupStart(infinicclComm_t comm) {

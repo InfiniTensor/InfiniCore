@@ -181,6 +181,20 @@ target("infiniop-nvidia")
     end
 
     local arch_opt = get_config("cuda_arch")
+    local TVM_FFI_ROOT = path.join(os.projectdir(), "third_party/tvm-ffi")
+    if os.isdir(TVM_FFI_ROOT) then
+        add_includedirs(TVM_FFI_ROOT .. "/include")
+    end
+    local DLPACK_ROOT = path.join(os.projectdir(), "third_party/dlpack")
+    if os.isdir(DLPACK_ROOT) then
+        add_includedirs(DLPACK_ROOT .. "/include")
+    end
+    if TVM_ROOT == nil and arch_opt then
+        local sgl_arch = arch_opt:match("sm_(%d+)")
+        if sgl_arch then
+            add_defines("SGL_CUDA_ARCH=" .. tostring(tonumber(sgl_arch) * 10))
+        end
+    end
     if TVM_ROOT ~= nil then
         add_defines("ENABLE_TVM_API")
         add_includedirs(TVM_ROOT, TVM_ROOT .. "/include", TVM_ROOT .. "/3rdparty/dlpack/include/")
