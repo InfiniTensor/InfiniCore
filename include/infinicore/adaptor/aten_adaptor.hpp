@@ -8,7 +8,7 @@
 #if defined(ENABLE_HYGON_API)
 #include <c10/hip/HIPGuard.h>
 #include <c10/hip/HIPStream.h>
-#elif defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
+#elif defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API) || defined(ENABLE_QY_API)
 #include <ATen/cuda/CUDAContext.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <c10/cuda/CUDAStream.h>
@@ -40,8 +40,8 @@ inline at::ScalarType to_at_dtype(DataType dtype) {
 
 inline at::Device to_at_device(const Device &device) {
     // PyTorch ATen only exposes standard device types (e.g. kCPU/kCUDA).
-    // Treat MetaX/QY devices as CUDA devices for ATen tensor interoperability.
-    if (device.getType() == Device::Type::NVIDIA || device.getType() == Device::Type::METAX || device.getType() == Device::Type::QY || device.getType() == Device::Type::HYGON) {
+    // Treat CUDA-compatible devices as CUDA devices for ATen interoperability.
+    if (device.getType() == Device::Type::NVIDIA || device.getType() == Device::Type::METAX || device.getType() == Device::Type::MARS || device.getType() == Device::Type::QY || device.getType() == Device::Type::HYGON) {
         return at::Device(at::kCUDA, device.getIndex());
     } else if (device.getType() == Device::Type::CPU) {
         return at::Device(at::kCPU);
@@ -60,7 +60,7 @@ at::Tensor to_aten_tensor(const infinicore::Tensor &t);
 
 #if defined(ENABLE_HYGON_API)
 c10::hip::HIPStream get_hip_stream();
-#elif defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
+#elif defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API) || defined(ENABLE_QY_API)
 c10::cuda::CUDAStream get_cuda_stream();
 #endif
 

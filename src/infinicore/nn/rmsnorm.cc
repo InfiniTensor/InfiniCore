@@ -30,6 +30,7 @@ void RMSNorm::forward_inplace(Tensor &x, Tensor &residual) const {
             || device_.getType() == Device::Type::NVIDIA
             || device_.getType() == Device::Type::ILUVATAR
             || device_.getType() == Device::Type::METAX
+            || device_.getType() == Device::Type::MARS
             || device_.getType() == Device::Type::MOORE
             || device_.getType() == Device::Type::ALI
             || device_.getType() == Device::Type::CAMBRICON

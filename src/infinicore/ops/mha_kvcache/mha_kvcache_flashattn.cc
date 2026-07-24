@@ -5,12 +5,12 @@
 #include <stdexcept>
 
 #ifdef ENABLE_FLASH_ATTN
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API) || defined(ENABLE_QY_API)
 #include <c10/cuda/CUDAGuard.h>
 #endif
 #endif
 
-#if defined(ENABLE_METAX_API)
+#if defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API)
 #define INFINICORE_FLASH_OP(name) ::name
 #else
 #define INFINICORE_FLASH_OP(name) flash::name
@@ -45,7 +45,7 @@ void *plan(Tensor out,
 
 void run(void *planned_meta) {
 #ifdef ENABLE_FLASH_ATTN
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API) || defined(ENABLE_QY_API)
     c10::cuda::CUDAStreamGuard guard(infinicore::adaptor::get_cuda_stream());
 #endif
     auto *p = reinterpret_cast<PlannedMeta *>(planned_meta);
@@ -55,7 +55,7 @@ void run(void *planned_meta) {
     Tensor out_work = out_need_copy_back ? p->out->contiguous() : Tensor(p->out);
     auto out_tensor = infinicore::adaptor::to_aten_tensor(out_work);
     auto q = infinicore::adaptor::to_aten_tensor(p->q);
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API)
     auto k_cache = infinicore::adaptor::to_aten_tensor(p->k_cache);
     auto v_cache = infinicore::adaptor::to_aten_tensor(p->v_cache);
 #elif defined(ENABLE_QY_API)
@@ -84,8 +84,8 @@ void run(void *planned_meta) {
     auto out = use_dynamic_out ? std::optional<at::Tensor>(std::nullopt)
                                : std::optional<at::Tensor>(out_tensor);
 
-#if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
-    std::optional<at::Tensor> flash_attn_mars_ext = std::nullopt;
+#if defined(INFINICORE_FLASH_ATTN_MARS_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_S_AUX)
+    std::optional<at::Tensor> s_aux = std::nullopt;
 #endif
 
     auto result = INFINICORE_FLASH_OP(mha_fwd_kvcache)(
@@ -109,9 +109,9 @@ void run(void *planned_meta) {
         0.0f,
         false,
         0
-#if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
+#if defined(INFINICORE_FLASH_ATTN_MARS_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_S_AUX)
         ,
-        flash_attn_mars_ext
+        s_aux
 #endif
     );
 

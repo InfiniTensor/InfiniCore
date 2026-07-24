@@ -18,6 +18,7 @@ void printUsage() {
               << "  cambricon" << std::endl
               << "  ascend" << std::endl
               << "  metax" << std::endl
+              << "  mars" << std::endl
               << "  moore" << std::endl
               << "  iluvatar" << std::endl
               << "  qy" << std::endl
@@ -51,6 +52,7 @@ ParsedArgs parseArgs(int argc, char *argv[]) {
         else PARSE_DEVICE("--cambricon", INFINI_DEVICE_CAMBRICON)
         else PARSE_DEVICE("--ascend", INFINI_DEVICE_ASCEND)
         else PARSE_DEVICE("--metax", INFINI_DEVICE_METAX)
+        else PARSE_DEVICE("--mars", INFINI_DEVICE_MARS)
         else PARSE_DEVICE("--moore", INFINI_DEVICE_MOORE)
         else PARSE_DEVICE("--iluvatar", INFINI_DEVICE_ILUVATAR)
         else PARSE_DEVICE("--qy", INFINI_DEVICE_QY)

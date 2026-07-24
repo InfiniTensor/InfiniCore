@@ -23,6 +23,9 @@
 #ifdef ENABLE_METAX_API
 #include "metax/metax_handle.h"
 #endif
+#ifdef ENABLE_MARS_API
+#include "mars/mars_handle.h"
+#endif
 
 __INFINI_C infiniStatus_t infiniopSetRuntimeDevice(infiniDevice_t device, int device_id) {
     auto rt_device = infinicore::bridge::infini::rt::translate_to(device);
@@ -83,6 +86,9 @@ __INFINI_C infiniStatus_t infiniopCreateHandle(infiniopHandle_t *handle_ptr) {
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, metax);
 #endif
+#ifdef ENABLE_MARS_API
+        CREATE(INFINI_DEVICE_MARS, mars);
+#endif
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, hygon);
 #endif
@@ -131,6 +137,9 @@ __INFINI_C infiniStatus_t infiniopDestroyHandle(infiniopHandle_t handle) {
 #endif
 #ifdef ENABLE_METAX_API
         DELETE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MARS_API
+        DELETE(INFINI_DEVICE_MARS, mars);
 #endif
 #ifdef ENABLE_HYGON_API
         DELETE(INFINI_DEVICE_HYGON, hygon);

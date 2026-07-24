@@ -61,6 +61,7 @@ xmake build infinicore-test
 ./infinicore-test --cambricon
 ./infinicore-test --ascend
 ./infinicore-test --metax
+./infinicore-test --mars
 ./infinicore-test --moore
 ./infinicore-test --iluvatar
 ./infinicore-test --qy

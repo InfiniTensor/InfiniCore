@@ -8,7 +8,7 @@
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/avg_pool1d_nvidia.cuh"
 #endif
-#ifdef ENABLE_METAX_API
+#if defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API)
 #include "metax/avg_pool1d_metax.h"
 #endif
 #ifdef ENABLE_MOORE_API
@@ -57,6 +57,9 @@ __INFINI_C infiniStatus_t infiniopCreateAvgPool1dDescriptor(
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, metax);
 #endif
+#ifdef ENABLE_MARS_API
+        CREATE(INFINI_DEVICE_MARS, metax);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -92,6 +95,9 @@ __INFINI_C infiniStatus_t infiniopGetAvgPool1dWorkspaceSize(infiniopAvgPool1dDes
 #endif
 #ifdef ENABLE_METAX_API
         GET(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MARS_API
+        GET(INFINI_DEVICE_MARS, metax);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -135,6 +141,9 @@ __INFINI_C infiniStatus_t infiniopAvgPool1d(
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
+#ifdef ENABLE_MARS_API
+        CALCULATE(INFINI_DEVICE_MARS, metax);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -171,6 +180,9 @@ infiniopDestroyAvgPool1dDescriptor(infiniopAvgPool1dDescriptor_t desc) {
 #endif
 #ifdef ENABLE_METAX_API
         DELETE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MARS_API
+        DELETE(INFINI_DEVICE_MARS, metax);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

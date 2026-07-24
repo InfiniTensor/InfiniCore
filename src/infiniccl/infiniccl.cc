@@ -4,6 +4,7 @@
 #include "./cambricon/infiniccl_cambricon.h"
 #include "./cuda/infiniccl_cuda.h"
 #include "./kunlun/infiniccl_kunlun.h"
+#include "./mars/infiniccl_mars.h"
 #include "./metax/infiniccl_metax.h"
 #include "./moore/infiniccl_moore.h"
 
@@ -25,6 +26,7 @@ __INFINI_C infiniStatus_t infinicclCommInitAll(
         COMM_INIT_ALL(INFINI_DEVICE_ASCEND, ascend);
         COMM_INIT_ALL(INFINI_DEVICE_CAMBRICON, cambricon);
         COMM_INIT_ALL(INFINI_DEVICE_METAX, metax);
+        COMM_INIT_ALL(INFINI_DEVICE_MARS, mars);
         COMM_INIT_ALL(INFINI_DEVICE_MOORE, moore);
         COMM_INIT_ALL(INFINI_DEVICE_KUNLUN, kunlun);
         COMM_INIT_ALL(INFINI_DEVICE_ALI, cuda);
@@ -52,6 +54,7 @@ __INFINI_C infiniStatus_t infinicclCommDestroy(infinicclComm_t comm) {
         COMM_DESTROY(INFINI_DEVICE_ASCEND, ascend);
         COMM_DESTROY(INFINI_DEVICE_CAMBRICON, cambricon);
         COMM_DESTROY(INFINI_DEVICE_METAX, metax);
+        COMM_DESTROY(INFINI_DEVICE_MARS, mars);
         COMM_DESTROY(INFINI_DEVICE_MOORE, moore);
         COMM_DESTROY(INFINI_DEVICE_KUNLUN, kunlun);
         COMM_DESTROY(INFINI_DEVICE_ALI, cuda);
@@ -78,6 +81,7 @@ __INFINI_C infiniStatus_t infinicclGroupStart(infinicclComm_t comm) {
         GROUP_START(INFINI_DEVICE_ASCEND, ascend);
         GROUP_START(INFINI_DEVICE_CAMBRICON, cambricon);
         GROUP_START(INFINI_DEVICE_METAX, metax);
+        GROUP_START(INFINI_DEVICE_MARS, mars);
         GROUP_START(INFINI_DEVICE_MOORE, moore);
         GROUP_START(INFINI_DEVICE_KUNLUN, kunlun);
         GROUP_START(INFINI_DEVICE_ALI, cuda);
@@ -105,6 +109,7 @@ __INFINI_C infiniStatus_t infinicclGroupEnd(infinicclComm_t comm) {
         GROUP_END(INFINI_DEVICE_ASCEND, ascend);
         GROUP_END(INFINI_DEVICE_CAMBRICON, cambricon);
         GROUP_END(INFINI_DEVICE_METAX, metax);
+        GROUP_END(INFINI_DEVICE_MARS, mars);
         GROUP_END(INFINI_DEVICE_MOORE, moore);
         GROUP_END(INFINI_DEVICE_KUNLUN, kunlun);
         GROUP_END(INFINI_DEVICE_ALI, cuda);
@@ -140,6 +145,7 @@ __INFINI_C infiniStatus_t infinicclAllReduce(
         ALL_REDUCE(INFINI_DEVICE_ASCEND, ascend);
         ALL_REDUCE(INFINI_DEVICE_CAMBRICON, cambricon);
         ALL_REDUCE(INFINI_DEVICE_METAX, metax);
+        ALL_REDUCE(INFINI_DEVICE_MARS, mars);
         ALL_REDUCE(INFINI_DEVICE_MOORE, moore);
         ALL_REDUCE(INFINI_DEVICE_KUNLUN, kunlun);
         ALL_REDUCE(INFINI_DEVICE_ALI, cuda);
@@ -175,6 +181,7 @@ __INFINI_C infiniStatus_t infinicclAllGather(
         ALL_GATHER(INFINI_DEVICE_ASCEND, ascend);
         ALL_GATHER(INFINI_DEVICE_CAMBRICON, cambricon);
         ALL_GATHER(INFINI_DEVICE_METAX, metax);
+        ALL_GATHER(INFINI_DEVICE_MARS, mars);
         ALL_GATHER(INFINI_DEVICE_MOORE, moore);
         ALL_GATHER(INFINI_DEVICE_KUNLUN, kunlun);
         ALL_GATHER(INFINI_DEVICE_ALI, cuda);
@@ -211,6 +218,7 @@ __INFINI_C infiniStatus_t infinicclAllGatherV(
         ALL_GATHER_V(INFINI_DEVICE_ASCEND, ascend);
         ALL_GATHER_V(INFINI_DEVICE_CAMBRICON, cambricon);
         ALL_GATHER_V(INFINI_DEVICE_METAX, metax);
+        ALL_GATHER_V(INFINI_DEVICE_MARS, mars);
         ALL_GATHER_V(INFINI_DEVICE_MOORE, moore);
         ALL_GATHER_V(INFINI_DEVICE_KUNLUN, kunlun);
         ALL_GATHER_V(INFINI_DEVICE_ALI, cuda);
@@ -247,6 +255,7 @@ __INFINI_C infiniStatus_t infinicclReduceScatter(
         REDUCE_SCATTER(INFINI_DEVICE_ASCEND, ascend);
         REDUCE_SCATTER(INFINI_DEVICE_CAMBRICON, cambricon);
         REDUCE_SCATTER(INFINI_DEVICE_METAX, metax);
+        REDUCE_SCATTER(INFINI_DEVICE_MARS, mars);
         REDUCE_SCATTER(INFINI_DEVICE_MOORE, moore);
         REDUCE_SCATTER(INFINI_DEVICE_KUNLUN, kunlun);
         REDUCE_SCATTER(INFINI_DEVICE_ALI, cuda);
@@ -284,6 +293,7 @@ __INFINI_C infiniStatus_t infinicclReduceScatterV(
         REDUCE_SCATTER_V(INFINI_DEVICE_ASCEND, ascend);
         REDUCE_SCATTER_V(INFINI_DEVICE_CAMBRICON, cambricon);
         REDUCE_SCATTER_V(INFINI_DEVICE_METAX, metax);
+        REDUCE_SCATTER_V(INFINI_DEVICE_MARS, mars);
         REDUCE_SCATTER_V(INFINI_DEVICE_MOORE, moore);
         REDUCE_SCATTER_V(INFINI_DEVICE_KUNLUN, kunlun);
         REDUCE_SCATTER_V(INFINI_DEVICE_ALI, cuda);

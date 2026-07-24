@@ -5,7 +5,7 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/blas_copy_cpu.h"
 #endif
-#ifdef ENABLE_METAX_API
+#if defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API)
 #include "metax/blas_copy_metax.h"
 #endif
 #ifdef ENABLE_CAMBRICON_API
@@ -32,6 +32,9 @@ __INFINI_C infiniStatus_t infiniopCreateBlasCopyDescriptor(
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, metax);
 #endif
+#ifdef ENABLE_MARS_API
+        CREATE(INFINI_DEVICE_MARS, metax);
+#endif
 #ifdef ENABLE_CAMBRICON_API
         CREATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
@@ -55,6 +58,9 @@ __INFINI_C infiniStatus_t infiniopGetBlasCopyWorkspaceSize(infiniopBlasCopyDescr
 #endif
 #ifdef ENABLE_METAX_API
         GET(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MARS_API
+        GET(INFINI_DEVICE_MARS, metax);
 #endif
 #ifdef ENABLE_CAMBRICON_API
         GET(INFINI_DEVICE_CAMBRICON, bang);
@@ -86,6 +92,9 @@ __INFINI_C infiniStatus_t infiniopBlasCopy(
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
+#ifdef ENABLE_MARS_API
+        CALCULATE(INFINI_DEVICE_MARS, metax);
+#endif
 #ifdef ENABLE_CAMBRICON_API
         CALCULATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
@@ -109,6 +118,9 @@ __INFINI_C infiniStatus_t infiniopDestroyBlasCopyDescriptor(infiniopBlasCopyDesc
 #endif
 #ifdef ENABLE_METAX_API
         DELETE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MARS_API
+        DELETE(INFINI_DEVICE_MARS, metax);
 #endif
 #ifdef ENABLE_CAMBRICON_API
         DELETE(INFINI_DEVICE_CAMBRICON, bang);
