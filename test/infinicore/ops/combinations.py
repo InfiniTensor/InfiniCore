@@ -60,9 +60,9 @@ class OpTest(BaseOperatorTest):
     def torch_operator(self, *args, **kwargs):
         return torch.combinations(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
+    def infinicore_operator(self, *args, **kwargs):
     #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.combinations(*args, **kwargs)
+        return infinicore.combinations(*args, **kwargs)
 
 
 def main():
