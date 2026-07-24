@@ -1,5 +1,5 @@
 add_defines("ENABLE_ASCEND_API")
-local ASCEND_HOME = os.getenv("ASCEND_HOME") or os.getenv("ASCEND_TOOLKIT_HOME")
+local ASCEND_HOME = os.getenv("ASCEND_HOME") or os.getenv("ASCEND_TOOLKIT_HOME") or "/usr/local/Ascend/ascend-toolkit/latest"
 local SOC_VERSION = os.getenv("SOC_VERSION")
 
 -- Add include dirs
@@ -58,6 +58,7 @@ target_end()
 
 target("infinirt-ascend")
     set_kind("static")
+    set_default(false)
     set_languages("cxx17")
     on_install(function (target) end)
     add_deps("infini-utils")
@@ -69,7 +70,6 @@ target_end()
 
 target("infiniccl-ascend")
     set_kind("static")
-    add_deps("infinirt")
     add_deps("infini-utils")
     set_warnings("all", "error")
     set_languages("cxx17")
