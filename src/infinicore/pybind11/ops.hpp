@@ -61,6 +61,7 @@
 #include "ops/index_copy.hpp"
 #include "ops/inner.hpp"
 #include "ops/interpolate.hpp"
+#include "ops/kimi_delta_attention.hpp"
 #include "ops/kron.hpp"
 #include "ops/kthvalue.hpp"
 #include "ops/kv_caching.hpp"
@@ -170,6 +171,7 @@ inline void bind(py::module &m) {
     bind_flash_attention(m);
     bind_hinge_embedding_loss(m);
     bind_kv_caching(m);
+    bind_kimi_delta_attention(m);
     bind_fmod(m);
     bind_fused_gated_delta_net_gating(m);
     bind_fmin(m);

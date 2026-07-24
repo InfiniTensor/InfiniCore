@@ -35,6 +35,7 @@
 #include "ops/hardswish.hpp"
 #include "ops/hardtanh.hpp"
 #include "ops/kv_caching.hpp"
+#include "ops/kimi_delta_attention.hpp"
 #include "ops/layer_norm.hpp"
 #include "ops/linear.hpp"
 #include "ops/mamba_selective_scan.hpp"

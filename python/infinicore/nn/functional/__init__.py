@@ -18,6 +18,7 @@ from .hardtanh import hardtanh
 from .hinge_embedding_loss import hinge_embedding_loss
 from .huber_loss import huber_loss
 from .interpolate import interpolate
+from .kimi_delta_attention import kimi_delta_attention
 from .layer_norm import layer_norm
 from .linear import linear
 from .linear_w8a8i8 import linear_w8a8i8
@@ -56,6 +57,7 @@ __all__ = [
     "fused_gated_delta_net_gating",
     "gaussian_nll_loss",
     "interpolate",
+    "kimi_delta_attention",
     "linear",
     "binary_cross_entropy_with_logits",
     "random_sample",
