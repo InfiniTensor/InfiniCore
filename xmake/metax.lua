@@ -147,6 +147,7 @@ target_end()
 
 target("infinirt-metax")
     set_kind("static")
+    set_default(false)
     set_languages("cxx17")
     on_install(function (target) end)
     add_deps("infini-utils")
