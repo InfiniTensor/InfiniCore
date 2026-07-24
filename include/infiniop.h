@@ -57,6 +57,7 @@
 #include "infiniop/ops/fmin.h"
 #include "infiniop/ops/fmod.h"
 #include "infiniop/ops/fused_gated_delta_net_gating.h"
+#include "infiniop/ops/fused_moe.h"
 #include "infiniop/ops/gelu.h"
 #include "infiniop/ops/gelutanh.h"
 #include "infiniop/ops/gemm.h"
