@@ -26,8 +26,10 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <limits>
 #include <memory>
 #include <sstream>
@@ -68,6 +70,16 @@ bool moe_triton_capture_enabled() {
 
 /// MoE may enter device capture (aten CAPTURE_SAFE or phase-adaptive Triton).
 bool moe_device_capturable() {
+#if defined(ENABLE_METAX_API)
+    // MetaX wall: any in-graph MoE fold (FORCE/Triton OR CAPTURE_SAFE aten) needs
+    // INFINI_MOE_METAX_CAPTURE_UNSAFE=1. Step1: CAPTURE_SAFE under hcGraph also
+    // Cell-B garbles; only FORCE_OP_LIST (skip device capture) stayed OK. Do not
+    // treat CAPTURE_SAFE as a correctness escape on MetaX.
+    const char *unsafe = std::getenv("INFINI_MOE_METAX_CAPTURE_UNSAFE");
+    if (unsafe == nullptr || unsafe[0] == '\0' || std::string(unsafe) == "0") {
+        return false;
+    }
+#endif
     return moe_capture_safe_enabled() || moe_triton_capture_enabled();
 }
 
@@ -555,16 +567,156 @@ at::Tensor silu_mlp_aten(
     const at::Tensor &w_down) {
     auto gu = at::linear(x, w_gate_up);
     auto chunks = gu.chunk(2, /*dim=*/-1);
-    auto mid = at::silu(chunks[0]) * chunks[1];
+    auto silu_g = at::silu(chunks[0]);
+    auto mid = silu_g * chunks[1];
     auto out = at::linear(mid, w_down);
     if (auto *arena = infinicore::graph::current_capture_arena()) {
         arena->retain(gu);
         arena->retain(chunks[0]);
         arena->retain(chunks[1]);
+        arena->retain(silu_g);
         arena->retain(mid);
         arena->retain(out);
     }
     return out;
+}
+
+/// Decode / capture MoE body in C++ (arena-backed) — host-break parity without
+/// Python ``fused_moe_routed``. Python cannot see CaptureArena when InfiniLM and
+/// ``_infinicore`` load duplicate TLS copies of libinfinicore (Gate C garble).
+at::Tensor routed_experts_aten_capture(
+    const at::Tensor &x,
+    const at::Tensor &topk_w,
+    const at::Tensor &topk_ids,
+    const at::Tensor &w_gate_up,
+    const at::Tensor &w_down) {
+    const int64_t top_k = topk_ids.size(1);
+    const int64_t t_tokens = x.size(0);
+    const int64_t hidden = x.size(1);
+    auto *arena = infinicore::graph::current_capture_arena();
+    at::Tensor acc;
+    if (arena != nullptr) {
+        acc = arena->empty_aten({t_tokens, hidden}, x.options());
+        capture_safe_aten_zero_(acc);
+    } else {
+        acc = at::zeros({t_tokens, hidden}, x.options());
+    }
+    // #region agent log
+    {
+        static thread_local int moe_cpp_logs = 0;
+        if (moe_cpp_logs < 32) {
+            ++moe_cpp_logs;
+            try {
+                std::ofstream ofs(
+                    "/opt/offline/infinilm-metax-20260622/.cursor/debug-688e02.log",
+                    std::ios::app);
+                if (ofs) {
+                    const char *env_cap = std::getenv("INFINI_DEVICE_STREAM_CAPTURING");
+                    ofs << "{\"sessionId\":\"688e02\",\"runId\":\"smoke-ladder\","
+                           "\"hypothesisId\":\"H3\",\"location\":\"inductor_segment.cc:"
+                           "routed_experts_aten_capture\",\"message\":\"cpp_aten_moe\","
+                           "\"data\":{\"T\":"
+                        << t_tokens << ",\"K\":" << top_k
+                        << ",\"arena\":" << (arena != nullptr ? "true" : "false")
+                        << ",\"retained_torch\":"
+                        << (arena != nullptr
+                                ? static_cast<long long>(arena->num_retained_torch())
+                                : -1LL)
+                        << ",\"tls_capturing\":"
+                        << (infinicore::context::isDeviceStreamCapturing() ? "true"
+                                                                            : "false")
+                        << ",\"env_cap\":\"" << (env_cap ? env_cap : "")
+                        << "\"},\"timestamp\":0}\n";
+                }
+            } catch (...) {
+            }
+        }
+    }
+    // #endregion
+    // Bisect H15: identity MoE body under capture — if Gate C garble tokens
+    // unchanged, poison is outside routed experts (topk/shared/graph); if
+    // tokens change, body/index_select path is implicated.
+    if (const char *id = std::getenv("INFINI_MOE_CAPTURE_IDENTITY")) {
+        if (id[0] != '\0' && std::string(id) != "0") {
+            at::Tensor out = arena != nullptr
+                ? arena->empty_aten({t_tokens, hidden}, x.options())
+                : at::empty({t_tokens, hidden}, x.options());
+            out.copy_(x);
+            if (arena != nullptr) {
+                arena->retain(out);
+            }
+            // #region agent log
+            {
+                static thread_local int id_logs = 0;
+                if (id_logs < 8) {
+                    ++id_logs;
+                    try {
+                        std::ofstream ofs(
+                            "/opt/offline/infinilm-metax-20260622/.cursor/debug-688e02.log",
+                            std::ios::app);
+                        if (ofs) {
+                            ofs << "{\"sessionId\":\"688e02\",\"runId\":\"smoke-ladder\","
+                                   "\"hypothesisId\":\"H3\",\"location\":\"inductor_segment.cc:"
+                                   "CAPTURE_IDENTITY\",\"message\":\"moe_capture_identity\","
+                                   "\"data\":{\"T\":" << t_tokens
+                                << ",\"arena\":" << (arena != nullptr ? "true" : "false")
+                                << ",\"retained_torch\":"
+                                << (arena != nullptr
+                                        ? static_cast<long long>(arena->num_retained_torch())
+                                        : -1LL)
+                                << "},\"timestamp\":0}\n";
+                        }
+                    } catch (...) {
+                    }
+                }
+            }
+            // #endregion
+            return out;
+        }
+    }
+    for (int64_t k = 0; k < top_k; ++k) {
+        auto idx = topk_ids.select(/*dim=*/1, /*index=*/k);
+        auto w_gu = w_gate_up.index_select(/*dim=*/0, idx);
+        auto w_d = w_down.index_select(/*dim=*/0, idx);
+        auto x3 = x.unsqueeze(-1);
+        auto gu3 = at::bmm(w_gu, x3);
+        auto gu = gu3.squeeze(-1);
+        auto chunks = gu.chunk(2, /*dim=*/-1);
+        // Retain silu temp explicitly — ``silu(a)*b`` leaves an unretained silu
+        // output that MetaX CG replay can dangle on (H10).
+        auto silu_g = at::silu(chunks[0]);
+        auto mid = silu_g * chunks[1];
+        auto mid3 = mid.unsqueeze(-1);
+        auto y3 = at::bmm(w_d, mid3);
+        auto y = y3.squeeze(-1);
+        auto w = topk_w.select(/*dim=*/1, /*index=*/k).unsqueeze(-1);
+        if (w.scalar_type() != x.scalar_type()) {
+            w = capture_safe_to_dtype(w, x.scalar_type());
+        }
+        auto contrib = y * w;
+        acc.add_(contrib);
+        if (arena != nullptr) {
+            arena->retain(idx);
+            arena->retain(w_gu);
+            arena->retain(w_d);
+            arena->retain(x3);
+            arena->retain(gu3);
+            arena->retain(gu);
+            arena->retain(chunks[0]);
+            arena->retain(chunks[1]);
+            arena->retain(silu_g);
+            arena->retain(mid);
+            arena->retain(mid3);
+            arena->retain(y3);
+            arena->retain(y);
+            arena->retain(w);
+            arena->retain(contrib);
+        }
+    }
+    if (arena != nullptr) {
+        arena->retain(acc);
+    }
+    return acc;
 }
 
 /// Reuse intermediate buffers for decode shared-expert MLP (Phase 7).
@@ -851,6 +1003,48 @@ at::Tensor run_moe_eager_decode(
     const bool use_host_topk = !capturing && !stream_capturing && t_tokens > 0
                                && t_tokens <= 16 && cfg.n_group == 1 && x.is_cuda();
 
+    // Bisect H16: skip ALL MoE compute under capture (no topk/shared/body).
+    // If Gate C still Cell-B-garble → poison is non-MoE; if tokens change →
+    // MoE-in-graph scaffolding (topk/shared/body) is the poison surface.
+    if ((capturing || stream_capturing)) {
+        if (const char *nop = std::getenv("INFINI_MOE_CAPTURE_NOP")) {
+            if (nop[0] != '\0' && std::string(nop) != "0") {
+                auto *arena = infinicore::graph::current_capture_arena();
+                at::Tensor out;
+                if (arena != nullptr) {
+                    out = arena->empty_aten(x.sizes().vec(), x.options());
+                    out.copy_(x);
+                    arena->retain(out);
+                } else {
+                    out = x.clone();
+                }
+                // #region agent log
+                {
+                    static thread_local int nop_logs = 0;
+                    if (nop_logs < 8) {
+                        ++nop_logs;
+                        try {
+                            std::ofstream ofs(
+                                "/opt/offline/infinilm-metax-20260622/.cursor/debug-688e02.log",
+                                std::ios::app);
+                            if (ofs) {
+                                ofs << "{\"sessionId\":\"688e02\",\"runId\":\"smoke-ladder\","
+                                       "\"hypothesisId\":\"H4\",\"location\":\"inductor_segment.cc:CAPTURE_NOP\","
+                                       "\"message\":\"moe_capture_nop\",\"data\":{\"T\":"
+                                    << t_tokens
+                                    << ",\"arena\":" << (arena != nullptr ? "true" : "false")
+                                    << "},\"timestamp\":0}\n";
+                            }
+                        } catch (...) {
+                        }
+                    }
+                }
+                // #endregion
+                return out;
+            }
+        }
+    }
+
     at::Tensor logits;
     at::Tensor topk_w;
     at::Tensor topk_ids;
@@ -922,6 +1116,68 @@ at::Tensor run_moe_eager_decode(
     // Capture / large-T: GPU top-k. Under stream capture keep gate/x dtype aligned
     // (no ``x.to(kFloat)`` FillFunctor); non-capture keeps fp32 router for AOTI parity.
     if (capturing || stream_capturing) {
+        // Bisect H22: skip GPU topk under capture — fixed expert ids + equal weights.
+        // If Gate C PASSes, poison is GPU topk under MetaX capture; if still Cell-B
+        // garble, poison is MoE body / shared under capture.
+        if (const char *fx = std::getenv("INFINI_MOE_CAPTURE_FIXED_TOPK")) {
+            if (fx[0] != '\0' && std::string(fx) != "0") {
+                auto *arena = infinicore::graph::current_capture_arena();
+                topk_w = arena
+                    ? arena->empty_aten({t_tokens, cfg.top_k}, x.options())
+                    : at::empty({t_tokens, cfg.top_k}, x.options());
+                topk_ids = arena
+                    ? arena->empty_aten(
+                          {t_tokens, cfg.top_k},
+                          x.options().dtype(at::kInt))
+                    : at::empty({t_tokens, cfg.top_k}, x.options().dtype(at::kInt));
+                topk_w.fill_(static_cast<float>(cfg.routed_scaling_factor) / static_cast<float>(cfg.top_k));
+                // Experts 0..top_k-1
+                for (int64_t k = 0; k < cfg.top_k; ++k) {
+                    topk_ids.select(1, k).fill_(static_cast<int>(k));
+                }
+                if (arena) {
+                    arena->retain(topk_w);
+                    arena->retain(topk_ids);
+                }
+                routed = routed_experts_aten_capture(
+                    x, topk_w, topk_ids, weights.w_gate_up, weights.w_down);
+                shared = silu_mlp_aten(x, weights.shared_gate_up, weights.shared_down);
+                auto y = routed + shared;
+                if (arena) {
+                    arena->retain(routed);
+                    arena->retain(shared);
+                    arena->retain(y);
+                }
+                // #region agent log
+                {
+                    static thread_local int fx_logs = 0;
+                    if (fx_logs < 8) {
+                        ++fx_logs;
+                        try {
+                            std::ofstream ofs(
+                                "/opt/offline/infinilm-metax-20260622/.cursor/debug-688e02.log",
+                                std::ios::app);
+                            if (ofs) {
+                                ofs << "{\"sessionId\":\"688e02\",\"runId\":\"smoke-ladder\","
+                                       "\"hypothesisId\":\"H2\",\"location\":\"inductor_segment.cc:"
+                                       "FIXED_TOPK\",\"message\":\"moe_capture_fixed_topk\","
+                                       "\"data\":{\"T\":" << t_tokens
+                                    << ",\"top_k\":" << cfg.top_k
+                                    << ",\"arena\":" << (arena != nullptr ? "true" : "false")
+                                    << ",\"retained_torch\":"
+                                    << (arena != nullptr
+                                            ? static_cast<long long>(arena->num_retained_torch())
+                                            : -1LL)
+                                    << "},\"timestamp\":0}\n";
+                            }
+                        } catch (...) {
+                        }
+                    }
+                }
+                // #endregion
+                return y;
+            }
+        }
         logits = at::linear(x, gate_cache.gate_xdtype);
         x_f = at::Tensor(); // unused under capture
     } else {
@@ -938,8 +1194,15 @@ at::Tensor run_moe_eager_decode(
         cfg.routed_scaling_factor);
     topk_w = capture_safe_to_dtype(topk.first, x.scalar_type());
     topk_ids = topk.second;
-    routed = call_fused_moe_routed(
-        x, topk_w, topk_ids, weights.w_gate_up, weights.w_down);
+    // Under live stream capture: C++ aten MoE body + CaptureArena (skip Python
+    // fused_moe_routed — Python cannot see arena across duplicate TLS).
+    if (capturing || stream_capturing) {
+        routed = routed_experts_aten_capture(
+            x, topk_w, topk_ids, weights.w_gate_up, weights.w_down);
+    } else {
+        routed = call_fused_moe_routed(
+            x, topk_w, topk_ids, weights.w_gate_up, weights.w_down);
+    }
     shared = capturing ? silu_mlp_aten(x, weights.shared_gate_up, weights.shared_down)
                        : silu_mlp_aten_cached(x, weights.shared_gate_up, weights.shared_down);
     auto y = routed + shared;
@@ -954,6 +1217,32 @@ at::Tensor run_moe_eager_decode(
         arena->retain(routed);
         arena->retain(shared);
         arena->retain(y);
+        // #region agent log
+        {
+            static thread_local int def_logs = 0;
+            if (def_logs < 8) {
+                ++def_logs;
+                try {
+                    std::ofstream ofs(
+                        "/opt/offline/infinilm-metax-20260622/.cursor/debug-688e02.log",
+                        std::ios::app);
+                    if (ofs) {
+                        ofs << "{\"sessionId\":\"688e02\",\"runId\":\"smoke-ladder\","
+                               "\"hypothesisId\":\"H1\",\"location\":\"inductor_segment.cc:"
+                               "moe_default_capture\",\"message\":\"moe_capture_default\","
+                               "\"data\":{\"T\":" << t_tokens
+                            << ",\"capturing\":" << (capturing ? "true" : "false")
+                            << ",\"stream_capturing\":"
+                            << (stream_capturing ? "true" : "false")
+                            << ",\"retained_torch\":"
+                            << static_cast<long long>(arena->num_retained_torch())
+                            << "},\"timestamp\":0}\n";
+                    }
+                } catch (...) {
+                }
+            }
+        }
+        // #endregion
     }
     return y;
 }
@@ -1034,6 +1323,56 @@ void run_moe_segment(
                 }
             }
         }
+        // #region agent log
+        // Layer parity dump: host-safe only (D2H illegal under hcStream capture).
+        if (const char *dump = std::getenv("INFINI_MOE_LAYER_PARITY_DUMP")) {
+            if (dump[0] != '\0' && std::string(dump) != "0"
+                && !infinicore::context::isDeviceStreamCapturing()) {
+                static thread_local int dump_n = 0;
+                if (dump_n < 64) {
+                    ++dump_n;
+                    try {
+                        auto y_f = y.detach().to(at::kDouble).contiguous().cpu();
+                        const double *p = y_f.data_ptr<double>();
+                        const int64_t n = y_f.numel();
+                        double sum = 0.0, absmax = 0.0;
+                        for (int64_t i = 0; i < n; ++i) {
+                            sum += p[i];
+                            absmax = std::max(absmax, std::abs(p[i]));
+                        }
+                        uint64_t h = 1469598103934665603ull;
+                        const int64_t take = std::min<int64_t>(n, 64);
+                        for (int64_t i = 0; i < take; ++i) {
+                            uint64_t bits = 0;
+                            std::memcpy(&bits, p + i, sizeof(double));
+                            h ^= bits;
+                            h *= 1099511628211ull;
+                        }
+                        // Debug session ca8c72 only (do not dual-write legacy 688e02).
+                        std::ofstream ofs(
+                            "/opt/offline/infinilm-metax-20260622/.cursor/debug-ca8c72.log",
+                            std::ios::app);
+                        if (ofs) {
+                            ofs << "{\"sessionId\":\"ca8c72\",\"runId\":\"layer-parity\","
+                                   "\"hypothesisId\":\"H-D\",\"location\":\"inductor_segment.cc:"
+                                   "run_moe_segment\",\"message\":\"moe_layer_dump\","
+                                   "\"data\":{\"layer\":" << layer_idx
+                                << ",\"T\":" << t_tokens << ",\"mean\":" << (sum / std::max<int64_t>(n, 1))
+                                << ",\"absmax\":" << absmax << ",\"fnv\":" << h
+                                << ",\"recording\":"
+                                << (infinicore::context::isGraphRecording() ? "true" : "false")
+                                << ",\"force\":"
+                                << (moe_triton_capture_enabled() ? "true" : "false")
+                                << ",\"safe\":"
+                                << (moe_capture_safe_enabled() ? "true" : "false")
+                                << "},\"timestamp\":0}\n";
+                        }
+                    } catch (...) {
+                    }
+                }
+            }
+        }
+        // #endregion
         restore_cuda_context(rank_device);
         return;
     }

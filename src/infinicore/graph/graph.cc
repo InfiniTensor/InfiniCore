@@ -5,6 +5,9 @@
 #include "infinicore/graph/capture_arena.hpp"
 #include <cstdlib>
 #include <cstring>
+#include <algorithm>
+#include <chrono>
+#include <fstream>
 #include <infinirt.h>
 #include <sstream>
 #include <string>
@@ -109,6 +112,9 @@ struct Graph::DeviceGraph {
     std::vector<char> log_buffer;
     /// Capture-lifetime MoE/ATen temps (IC-owned + residual torch retain).
     std::unique_ptr<CaptureArena> capture_arena;
+    /// When INFINI_GRAPH_CAPTURE_MAX_OPS truncates capture, only this many ops
+    /// are in the GraphExec; Graph::run eagerly runs ops[captured_op_count:].
+    size_t captured_op_count{0};
 
     DeviceGraph() {
         log_buffer.resize(4 * 1024);
@@ -152,9 +158,17 @@ void Graph::run() const {
     }
 
     bool used_device = false;
+    bool device_launched_since_sync = false;
     size_t step_i = 0;
     for (const auto &step : replay_steps_) {
         if (step.kind == ReplayStep::Kind::HostOp) {
+            // Host MoE (and other HB ops) must see prior device-segment outputs.
+            // Host-topk D2H used to imply a sync; aten MoE under FORCE_CAPTURE does
+            // not — without this, segs≈28 races and garbles (post-fix19: all-118).
+            if (device_launched_since_sync) {
+                infinicore::context::syncStream();
+                device_launched_since_sync = false;
+            }
             run_ops_(step.ops);
             ++step_i;
             continue;
@@ -163,6 +177,35 @@ void Graph::run() const {
             if (infinirtGraphLuanch(step.device->exec, context::getStream()) == INFINI_STATUS_SUCCESS) {
                 ++replay_device_ok_;
                 used_device = true;
+                device_launched_since_sync = true;
+                // MAX_OPS truncate: GraphExec has only first captured_op_count ops;
+                // run the remainder eagerly so token-oracle bisect stays valid.
+                const size_t cap_n = step.device->captured_op_count;
+                if (cap_n > 0 && cap_n < step.ops.size()) {
+                    infinicore::context::syncStream();
+                    device_launched_since_sync = false;
+                    // #region agent log
+                    {
+                        static thread_local int rem_logs = 0;
+                        if (rem_logs < 8) {
+                            ++rem_logs;
+                            std::ofstream ofs(
+                                "/opt/offline/infinilm-metax-20260622/.cursor/debug-ca8c72.log",
+                                std::ios::app);
+                            if (ofs) {
+                                ofs << "{\"sessionId\":\"ca8c72\",\"runId\":\"maxops-paged\","
+                                       "\"hypothesisId\":\"H-A\",\"location\":\"graph.cc:run_remainder\","
+                                       "\"message\":\"maxops_eager_remainder\",\"data\":{\"captured\":"
+                                    << cap_n << ",\"total\":" << step.ops.size()
+                                    << "},\"timestamp\":0}\n";
+                            }
+                        }
+                    }
+                    // #endregion
+                    for (size_t i = cap_n; i < step.ops.size(); ++i) {
+                        step.ops[i]->run();
+                    }
+                }
                 ++step_i;
                 continue;
             }
@@ -178,6 +221,38 @@ void Graph::run() const {
         run_ops_(step.ops);
         ++step_i;
     }
+    // Gate C / MetaX: monolithic FULL (segs=1, MoE in-graph) has no HostOp
+    // MoE D2H sync points. hcGraphLaunch is async — without a stream sync,
+    // logits are read while the graph is still in flight → deterministic garble
+    // (Cell B). Host-break MoE (segs≈28) accidentally synchronized via topk D2H.
+    // #region agent log
+    if (used_device && device_launched_since_sync) {
+        try {
+            static thread_local int sync_logs = 0;
+            const auto t0 = std::chrono::steady_clock::now();
+            infinicore::context::syncStream();
+            const auto ms = std::chrono::duration<double, std::milli>(
+                                std::chrono::steady_clock::now() - t0)
+                                .count();
+            if (sync_logs < 16) {
+                ++sync_logs;
+                // Debug session ca8c72 only (do not dual-write legacy 688e02).
+                std::ofstream ofs(
+                    "/opt/offline/infinilm-metax-20260622/.cursor/debug-ca8c72.log",
+                    std::ios::app);
+                if (ofs) {
+                    ofs << "{\"sessionId\":\"ca8c72\",\"runId\":\"h5-paged\","
+                           "\"hypothesisId\":\"H-E\",\"location\":\"graph.cc:run_sync\","
+                           "\"message\":\"graph_run_sync\",\"data\":{\"sync_ms\":"
+                        << ms << ",\"steps\":" << replay_steps_.size()
+                        << "},\"timestamp\":0}\n";
+                }
+            }
+        } catch (...) {
+            infinicore::context::syncStream();
+        }
+    }
+    // #endregion
     last_replay_used_device_ = used_device;
 }
 
@@ -265,6 +340,35 @@ void Graph::capture_device_segment_(ReplayStep &step) {
     step.device = std::make_unique<DeviceGraph>();
     step.device->capture_arena = std::make_unique<CaptureArena>();
 
+    // Bisect H20 / Step1 hyp_capture_body: skip hcStream capture / GraphExec —
+    // replay via eager op-list. Band C FORCE+UNSAFE + FORCE_OP_LIST=1 → tokens OK
+    // with 453 ops including InductorMoe; same recipe without FORCE_OP_LIST
+    // (hcGraph segs=1) → Cell-B GARBLE. MoE-in-graph op sequence is fine; MetaX
+    // hcGraph capture/replay of the monolithic MoE-containing segment is poison.
+    if (const char *fol = std::getenv("INFINI_GRAPH_FORCE_OP_LIST")) {
+        if (fol[0] != '\0' && std::string(fol) != "0") {
+            spdlog::warn(
+                "[capture_audit] FORCE_OP_LIST=1: skip device capture ({} ops); "
+                "eager op-list replay",
+                step.ops.size());
+            // #region agent log
+            try {
+                std::ofstream ofs(
+                    "/opt/offline/infinilm-metax-20260622/.cursor/debug-688e02.log",
+                    std::ios::app);
+                if (ofs) {
+                    ofs << "{\"sessionId\":\"688e02\",\"runId\":\"smoke-ladder\","
+                           "\"hypothesisId\":\"H5\",\"location\":\"graph.cc:FORCE_OP_LIST\","
+                           "\"message\":\"force_op_list\",\"data\":{\"ops\":"
+                        << step.ops.size() << "},\"timestamp\":0}\n";
+                }
+            } catch (...) {
+            }
+            // #endregion
+            return;
+        }
+    }
+
     const bool audit = graph_capture_audit_enabled();
     const size_t seg_idx = replay_steps_.size();
     if (audit) {
@@ -323,6 +427,7 @@ void Graph::capture_device_segment_(ReplayStep &step) {
     context::setDeviceStreamCapturing(true);
     // Diagnostic: INFINI_GRAPH_CAPTURE_MAX_OPS=N captures only the first N ops
     // (binary-narrow Class B probe poison without changing the recorded op list).
+    // Graph::run then eagerly executes ops[N:] so token oracles remain meaningful.
     size_t capture_op_limit = step.ops.size();
     if (const char *lim = std::getenv("INFINI_GRAPH_CAPTURE_MAX_OPS")) {
         if (lim[0] != '\0') {
@@ -337,6 +442,7 @@ void Graph::capture_device_segment_(ReplayStep &step) {
             }
         }
     }
+    step.device->captured_op_count = capture_op_limit;
     try {
         // Host-break ops are never placed in DeviceSegment steps.
         // Audit path logs each op so HTC/IllegalAddress stacks pin the first bad op.
@@ -467,12 +573,41 @@ void Graph::instantiate() {
     // Split around host-break ops so Triton MoE never enters stream capture.
     ReplayStep pending;
     pending.kind = ReplayStep::Kind::DeviceSegment;
-    auto flush_device = [this](ReplayStep &seg) {
+    size_t max_ops_per_seg = 0;
+    if (const char *raw = std::getenv("INFINI_GRAPH_MAX_OPS_PER_SEGMENT")) {
+        if (raw[0] != '\0') {
+            max_ops_per_seg = static_cast<size_t>(std::strtoul(raw, nullptr, 10));
+        }
+    }
+    auto flush_device = [this, max_ops_per_seg](ReplayStep &seg) {
         if (seg.ops.empty()) {
             return;
         }
-        capture_device_segment_(seg);
-        replay_steps_.push_back(std::move(seg));
+        auto capture_one = [this](std::vector<std::shared_ptr<GraphOperator>> ops) {
+            ReplayStep chunk;
+            chunk.kind = ReplayStep::Kind::DeviceSegment;
+            chunk.ops = std::move(ops);
+            capture_device_segment_(chunk);
+            replay_steps_.push_back(std::move(chunk));
+        };
+        // H21: MetaX monolithic FULL+MoE (453 ops) hcGraph-replays garble; eager
+        // op-list of the same ops is exact. Chunk into smaller GraphExecs so MoE
+        // stays device-capturable (not host-break) while each hcGraph stays small.
+        if (max_ops_per_seg == 0 || seg.ops.size() <= max_ops_per_seg) {
+            capture_one(std::move(seg.ops));
+        } else {
+            spdlog::warn(
+                "[capture_audit] split device segment ops={} max_ops_per_seg={}",
+                seg.ops.size(),
+                max_ops_per_seg);
+            for (size_t i = 0; i < seg.ops.size(); i += max_ops_per_seg) {
+                const size_t end = std::min(i + max_ops_per_seg, seg.ops.size());
+                std::vector<std::shared_ptr<GraphOperator>> slice(
+                    seg.ops.begin() + static_cast<std::ptrdiff_t>(i),
+                    seg.ops.begin() + static_cast<std::ptrdiff_t>(end));
+                capture_one(std::move(slice));
+            }
+        }
         seg = ReplayStep{};
         seg.kind = ReplayStep::Kind::DeviceSegment;
     };

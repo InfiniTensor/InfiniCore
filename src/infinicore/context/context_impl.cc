@@ -267,13 +267,27 @@ bool moeTritonCaptureAllowed() {
     if (std::strcmp(cudagraphPolicy(), "eager") == 0) {
         return false;
     }
-    // FORCE-only (not phase-adaptive) — mirrors faInGraphAllowed.
-    // Gate C evidence: Decode-phase MoE-in-graph under native full_and_piecewise
-    // garbles (FA adaptive 101041 segs=29; paged adaptive fullpw_paged segs=1 /
-    // host_ops=0 / device_ops=453). Prefill HB alone is not enough.
-    // Diagnose-only: INFINI_MOE_FORCE_CAPTURE=1 folds Triton MoE in-graph.
-    if (env_truthy_("INFINI_MOE_FORCE_CAPTURE")) {
-        return true;
+#if defined(ENABLE_METAX_API)
+    // MetaX: MoE under hcStream capture / hcGraph replay garbles (Gate C Cell B +
+    // 20260724 Band C FA_FORCE+MoE-in-graph segs=1). Step1 A/B (hyp_capture_body):
+    // FORCE+UNSAFE and CAPTURE_SAFE+UNSAFE both GARBLE with segs=1; FORCE_OP_LIST
+    // eager replay of the same 453-op list is OK → poison is hcGraph capture/replay
+    // of MoE-containing segments, not the eager MoE op sequence.
+    // H5 paged MAX_OPS (20260724 hyp_hcgraph_fix/maxops_paged): last_good N=34
+    // (through pre-MoE AddRMSNorm; Mul@31 OK in-graph); first_bad N=35 folds
+    // first InductorMoe@34 into GraphExec → GARBLE/crash. Keep HostOp/tail
+    // Graph::run sync for HB races, but do NOT fold MoE into device graphs unless
+    // the operator explicitly opts into INFINI_MOE_METAX_CAPTURE_UNSAFE=1.
+    // Production MetaX FULL correctness path: MoE host-break (segs≈28).
+    if (!env_truthy_("INFINI_MOE_METAX_CAPTURE_UNSAFE")) {
+        return false;
+    }
+#endif
+    // Diagnose-only Decode fold: FORCE_CAPTURE (TRITON_CAPTURE is a deprecated
+    // alias). Prefill stays host-break. MetaX also needs METAX_CAPTURE_UNSAFE.
+    if (env_truthy_("INFINI_MOE_FORCE_CAPTURE") ||
+        env_truthy_("INFINI_MOE_TRITON_CAPTURE")) {
+        return getInferencePhase() == InferencePhase::Decode;
     }
     return false;
 }
