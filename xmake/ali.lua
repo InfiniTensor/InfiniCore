@@ -80,6 +80,7 @@ target_end()
 
 target("infinirt-ali")
     set_kind("static")
+    set_default(false)
     add_deps("infini-utils")
     on_install(function (target) end)
 
