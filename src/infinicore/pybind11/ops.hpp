@@ -82,6 +82,7 @@
 #include "ops/mha.hpp"
 #include "ops/mha_kvcache.hpp"
 #include "ops/mha_varlen.hpp"
+#include "ops/moe_fused_dense.hpp"
 #include "ops/moe_topk_softmax.hpp"
 #include "ops/mrope.hpp"
 #include "ops/mul.hpp"
@@ -192,6 +193,7 @@ inline void bind(py::module &m) {
     bind_mha_kvcache(m);
     bind_mha_varlen(m);
     bind_mha(m);
+    bind_moe_fused_dense(m);
     bind_moe_topk_softmax(m);
     bind_mrope(m);
     bind_hardswish(m);
