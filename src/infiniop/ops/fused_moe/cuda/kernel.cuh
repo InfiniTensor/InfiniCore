@@ -1,7 +1,6 @@
 #ifndef __FUSED_MOE_KERNEL_CUH__
 #define __FUSED_MOE_KERNEL_CUH__
 
-#include <math_constants.h>
 #include <stdint.h>
 
 template <typename T>
