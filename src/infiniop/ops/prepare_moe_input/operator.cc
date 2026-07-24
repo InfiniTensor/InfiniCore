@@ -6,6 +6,10 @@
 #include "nvidia/prepare_moe_input_nvidia.cuh"
 #endif
 
+#ifdef ENABLE_METAX_API
+#include "metax/prepare_moe_input_metax.h"
+#endif
+
 __INFINI_C infiniStatus_t infiniopCreatePrepareMoeInputDescriptor(
     infiniopHandle_t handle,
     infiniopPrepareMoeInputDescriptor_t *desc_ptr,
@@ -40,6 +44,9 @@ __INFINI_C infiniStatus_t infiniopCreatePrepareMoeInputDescriptor(
 #ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -59,6 +66,9 @@ __INFINI_C infiniStatus_t infiniopGetPrepareMoeInputWorkspaceSize(
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API
         GET(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -90,6 +100,9 @@ __INFINI_C infiniStatus_t infiniopPrepareMoeInput(
 #ifdef ENABLE_NVIDIA_API
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -108,6 +121,9 @@ __INFINI_C infiniStatus_t infiniopDestroyPrepareMoeInputDescriptor(
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API
         DESTROY(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        DESTROY(INFINI_DEVICE_METAX, metax);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
