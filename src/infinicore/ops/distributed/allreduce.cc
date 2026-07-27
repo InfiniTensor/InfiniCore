@@ -34,6 +34,11 @@ void AllReduce::run() const {
                                               infinicore::context::getStream()));
 }
 
+bool AllReduce::supports_device_graph_capture() const {
+    const auto *meta = reinterpret_cast<const PlannedMeta *>(planned_meta_);
+    return meta->input->device().getType() != Device::Type::HYGON;
+}
+
 void AllReduce::execute(Tensor output, const Tensor &input, infinicclReduceOp_t op, infinicclComm_t communicator) {
     INFINICORE_GRAPH_OP_RECORD_OR_RUN(AllReduce, output, input, op, communicator);
 }

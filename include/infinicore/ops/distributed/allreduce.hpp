@@ -12,6 +12,7 @@ public:
     AllReduce(Tensor output, const Tensor &input, infinicclReduceOp_t op, infinicclComm_t communicator);
     ~AllReduce();
     void run() const override;
+    bool supports_device_graph_capture() const override;
     static void execute(Tensor output, const Tensor &input, infinicclReduceOp_t op, infinicclComm_t communicator);
 
 private:

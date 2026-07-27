@@ -226,6 +226,7 @@ struct HygonVmmAllocation {
     void *ptr = nullptr;
     size_t size = 0;
     CUmemGenericAllocationHandle handle = 0;
+    bool hip_uncached = false;
 };
 
 struct HygonTp2AllReduceState {
@@ -251,13 +252,19 @@ struct HygonTp2AllReduceState {
             if (rank_data[rank] != nullptr) cudaFree(rank_data[rank]);
             if (signal_hosts[rank] != nullptr) cudaFreeHost(signal_hosts[rank]);
             auto &driver = hygon_cuda_driver_api();
-            if (driver.available && stages[rank].ptr != nullptr) {
+            if (driver.available && stages[rank].handle != 0) {
                 const auto address = reinterpret_cast<CUdeviceptr>(stages[rank].ptr);
                 driver.mem_unmap(address, stages[rank].size);
                 driver.mem_address_free(address, stages[rank].size);
-            }
-            if (driver.available && stages[rank].handle != 0) {
                 driver.mem_release(stages[rank].handle);
+            } else if (stages[rank].hip_uncached &&
+                       stages[rank].ptr != nullptr) {
+                auto &hip = hygon_hip_ext_api();
+                if (hip.available) {
+                    hip.free(stages[rank].ptr);
+                }
+            } else if (stages[rank].ptr != nullptr) {
+                cudaFree(stages[rank].ptr);
             }
         }
         if (restore_device) cudaSetDevice(previous_device);
@@ -450,10 +457,8 @@ __global__ __launch_bounds__(512, 1) void hygon_tp2_bf16_allreduce_kernel(
         }
         __syncthreads();
     }
-    if (pack_offset == 0) {
-        hygon_tp2_end_sync<num_ranks>(
-            rank_signals, self_signal, rank, sync_flag);
-    }
+    hygon_tp2_end_sync<num_ranks>(
+        rank_signals, self_signal, rank, sync_flag);
 }
 
 std::shared_ptr<HygonTp2AllReduceState> create_hygon_tp2_state(
@@ -470,9 +475,37 @@ std::shared_ptr<HygonTp2AllReduceState> create_hygon_tp2_state(
     };
     const size_t stage_bytes = kHygonTp2StageCapacityElements * sizeof(__nv_bfloat16);
     for (int rank = 0; rank < 2; ++rank) {
-        if (cudaSetDevice(device_ids[rank]) != cudaSuccess ||
-            !allocate_hygon_vmm(state->stages[rank], device_ids[rank],
-                                state->device_ids, stage_bytes)) return fail();
+        if (cudaSetDevice(device_ids[rank]) != cudaSuccess) return fail();
+        const int peer = 1 - rank;
+        int can_access_peer = 0;
+        if (cudaDeviceCanAccessPeer(
+                &can_access_peer,
+                device_ids[rank],
+                device_ids[peer]) != cudaSuccess ||
+            can_access_peer == 0) {
+            return fail();
+        }
+        const cudaError_t enable_status =
+            cudaDeviceEnablePeerAccess(device_ids[peer], 0);
+        if (enable_status == cudaErrorPeerAccessAlreadyEnabled) {
+            (void)cudaGetLastError();
+        } else if (enable_status != cudaSuccess) {
+            return fail();
+        }
+        auto &hip = hygon_hip_ext_api();
+        if (!hip.available) return fail();
+        state->stages[rank].size = stage_bytes;
+        if (hip.ext_malloc_with_flags(
+                &state->stages[rank].ptr,
+                stage_bytes,
+                kHygonHipDeviceMallocUncached) != kHygonHipSuccess) {
+            return fail();
+        }
+        state->stages[rank].hip_uncached = true;
+        if (hip.memset(
+                state->stages[rank].ptr,
+                0,
+                stage_bytes) != kHygonHipSuccess) return fail();
         void *signal_host = nullptr;
         if (cudaHostAlloc(&signal_host, sizeof(HygonTp2Signal),
                           cudaHostAllocMapped) != cudaSuccess) return fail();
