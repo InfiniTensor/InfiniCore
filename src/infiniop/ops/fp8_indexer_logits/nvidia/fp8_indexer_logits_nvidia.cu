@@ -1,4 +1,3 @@
-#include "../../../../utils.h"
 #include "../../../devices/nvidia/nvidia_common.cuh"
 #include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 #include "../../../tensor.h"
@@ -9,8 +8,7 @@
 
 namespace {
 constexpr size_t THREADS = 256;
-constexpr size_t LANES_PER_KEY = 4;
-
+template <size_t LANES_PER_KEY>
 INFINIOP_CUDA_KERNEL fp8IndexerLogitsKernel(
     float *__restrict__ logits,
     const cuda_fp8_e4m3 *__restrict__ q_fp8,
@@ -28,9 +26,13 @@ INFINIOP_CUDA_KERNEL fp8IndexerLogitsKernel(
     size_t max_blocks_per_request,
     size_t max_context_len) {
     const size_t token = blockIdx.x;
-    const size_t logical_block = blockIdx.y;
+    constexpr size_t KEYS_PER_TILE = THREADS / LANES_PER_KEY;
+    const size_t tiles_per_block = (block_size + KEYS_PER_TILE - 1) / KEYS_PER_TILE;
+    const size_t tile_in_block = blockIdx.y % tiles_per_block;
+    const size_t logical_block = blockIdx.y / tiles_per_block;
     const size_t lane = threadIdx.x % LANES_PER_KEY;
-    const size_t key_in_block = threadIdx.x / LANES_PER_KEY;
+    const size_t key_in_block = tile_in_block * KEYS_PER_TILE
+                              + threadIdx.x / LANES_PER_KEY;
 
     extern __shared__ uint8_t shared_bytes[];
     auto *shared_q = reinterpret_cast<cuda_fp8_e4m3 *>(shared_bytes);
@@ -62,26 +64,36 @@ INFINIOP_CUDA_KERNEL fp8IndexerLogitsKernel(
              && static_cast<size_t>(physical_block) < num_cache_blocks;
     }
 
+    const uint8_t *cache_block = valid
+                                   ? kv_cache
+                                         + static_cast<size_t>(physical_block) * block_size * cache_stride
+                                   : nullptr;
+    const auto *key = valid
+                        ? reinterpret_cast<const cuda_fp8_e4m3 *>(
+                            cache_block + key_in_block * head_dim)
+                        : nullptr;
+    const float key_scale = valid
+                              ? *reinterpret_cast<const float *>(
+                                  cache_block + block_size * head_dim
+                                  + key_in_block * sizeof(float))
+                              : 0.0f;
     float acc = 0.0f;
-    if (valid) {
-        const uint8_t *cache_block = kv_cache
-                                   + static_cast<size_t>(physical_block) * block_size * cache_stride;
-        const auto *key = reinterpret_cast<const cuda_fp8_e4m3 *>(
-            cache_block + key_in_block * head_dim);
-        const float key_scale = *reinterpret_cast<const float *>(
-            cache_block + block_size * head_dim + key_in_block * sizeof(float));
-        for (size_t head = 0; head < num_heads; ++head) {
-            float dot = 0.0f;
+    for (size_t head = 0; head < num_heads; ++head) {
+        float dot = 0.0f;
+        if (valid) {
             const auto *query = shared_q + head * head_dim;
             for (size_t column = lane; column < head_dim; column += LANES_PER_KEY) {
                 dot += static_cast<float>(query[column])
                      * static_cast<float>(key[column]);
             }
-            dot += __shfl_xor_sync(0xffffffffu, dot, 1, LANES_PER_KEY);
-            dot += __shfl_xor_sync(0xffffffffu, dot, 2, LANES_PER_KEY);
-            if (lane == 0) {
-                acc += fmaxf(dot * key_scale, 0.0f) * shared_weights[head];
-            }
+        }
+        // Every thread named by the full-warp mask must execute the shuffle,
+        // including invalid keys in a partial tile and graph-padding requests.
+        for (size_t offset = 1; offset < LANES_PER_KEY; offset <<= 1) {
+            dot += __shfl_xor_sync(0xffffffffu, dot, offset, LANES_PER_KEY);
+        }
+        if (valid && lane == 0) {
+            acc += fmaxf(dot * key_scale, 0.0f) * shared_weights[head];
         }
     }
     if (lane == 0 && key_position < max_context_len) {
@@ -155,20 +167,42 @@ infiniStatus_t Descriptor::calculate(
     const void *positions,
     const void *request_ids,
     void *stream) const {
+    // Pure decode has one token per active request. Use wide key tiling for
+    // decode batches up to eight while keeping prefill and mixed batches narrow.
+    const bool use_wide_decode = _num_tokens == _num_requests
+                              && _num_tokens <= 8;
+    const size_t lanes_per_key = use_wide_decode ? 8 : 4;
+    const size_t keys_per_tile = THREADS / lanes_per_key;
+    const size_t tiles_per_block = (_block_size + keys_per_tile - 1) / keys_per_tile;
     const dim3 grid(
         static_cast<unsigned int>(_num_tokens),
-        static_cast<unsigned int>((_max_context_len + _block_size - 1) / _block_size));
+        static_cast<unsigned int>((_max_context_len + _block_size - 1) / _block_size * tiles_per_block));
     const size_t smem = _num_heads * _head_dim + _num_heads * sizeof(float);
-    fp8IndexerLogitsKernel<<<grid, THREADS, smem, reinterpret_cast<cudaStream_t>(stream)>>>(
-        reinterpret_cast<float *>(logits),
-        reinterpret_cast<const cuda_fp8_e4m3 *>(q_fp8),
-        reinterpret_cast<const uint8_t *>(kv_cache),
-        reinterpret_cast<const int32_t *>(block_tables),
-        reinterpret_cast<const float *>(weights_fp32),
-        reinterpret_cast<const int64_t *>(positions),
-        reinterpret_cast<const int32_t *>(request_ids),
-        _num_heads, _head_dim, _num_cache_blocks, _block_size, _cache_stride,
-        _num_requests, _max_blocks_per_request, _max_context_len);
+    if (use_wide_decode) {
+        fp8IndexerLogitsKernel<8><<<
+            grid, THREADS, smem, reinterpret_cast<cudaStream_t>(stream)>>>(
+            reinterpret_cast<float *>(logits),
+            reinterpret_cast<const cuda_fp8_e4m3 *>(q_fp8),
+            reinterpret_cast<const uint8_t *>(kv_cache),
+            reinterpret_cast<const int32_t *>(block_tables),
+            reinterpret_cast<const float *>(weights_fp32),
+            reinterpret_cast<const int64_t *>(positions),
+            reinterpret_cast<const int32_t *>(request_ids),
+            _num_heads, _head_dim, _num_cache_blocks, _block_size, _cache_stride,
+            _num_requests, _max_blocks_per_request, _max_context_len);
+    } else {
+        fp8IndexerLogitsKernel<4><<<
+            grid, THREADS, smem, reinterpret_cast<cudaStream_t>(stream)>>>(
+            reinterpret_cast<float *>(logits),
+            reinterpret_cast<const cuda_fp8_e4m3 *>(q_fp8),
+            reinterpret_cast<const uint8_t *>(kv_cache),
+            reinterpret_cast<const int32_t *>(block_tables),
+            reinterpret_cast<const float *>(weights_fp32),
+            reinterpret_cast<const int64_t *>(positions),
+            reinterpret_cast<const int32_t *>(request_ids),
+            _num_heads, _head_dim, _num_cache_blocks, _block_size, _cache_stride,
+            _num_requests, _max_blocks_per_request, _max_context_len);
+    }
     return cudaGetLastError() == cudaSuccess
              ? INFINI_STATUS_SUCCESS
              : INFINI_STATUS_INTERNAL_ERROR;
