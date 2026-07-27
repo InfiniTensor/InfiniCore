@@ -1,7 +1,6 @@
 #include "rms_norm_aclnn.h"
 #include "../../../devices/ascend/common_ascend.h"
 #include <aclnnop/aclnn_rms_norm.h>
-#include <cstdio>
 
 extern "C" infiniStatus_t rms_norm_cast_w_launch(
     void *dst, const void *src,
@@ -57,24 +56,17 @@ infiniStatus_t Descriptor::create(
 
     auto handle_ascend = reinterpret_cast<device::ascend::Handle *>(handle);
 
-    std::vector<int64_t> slice_shape = {static_cast<int64_t>(info.dim())};
-    auto slice_stride = std::vector<int64_t>(1, 1);
-
-    aclnnTensorDescriptor_t y = new aclnnTensorDescriptor(toAclDataType(info.atype), slice_shape, slice_stride);
-    aclnnTensorDescriptor_t x = new aclnnTensorDescriptor(toAclDataType(info.atype), slice_shape, slice_stride);
+    aclnnTensorDescriptor_t y = new aclnnTensorDescriptor(y_desc);
+    aclnnTensorDescriptor_t x = new aclnnTensorDescriptor(x_desc);
 
     // 仅在跨半精度组合时需要将 w cast 到 atype
     // (F16 atype + BF16 w, 或 BF16 atype + F16 w)
     bool needs_cast_w = (info.atype != info.wtype && info.wtype != INFINI_DTYPE_F32);
     aclnnTensorDescriptor_t w = nullptr;
-    std::vector<int64_t> w_shape_i64_dbg;
-    std::vector<int64_t> w_strides_i64_dbg;
     if (needs_cast_w) {
         // 规避 constructor #2 的 ndim 内存 corruption 问题
         // 先用 constructor #1 从 w_desc 正确构造，再替换 tensor 为正确的 dtype
         w = new aclnnTensorDescriptor(w_desc);
-        w_shape_i64_dbg = w->shape;
-        w_strides_i64_dbg = w->strides;
         if (w->tensor) {
             aclDestroyTensor(w->tensor);
         }
@@ -86,8 +78,15 @@ infiniStatus_t Descriptor::create(
         w = new aclnnTensorDescriptor(w_desc);
     }
 
-    auto rstd_shape = std::vector<int64_t>(1, 1);
-    auto rstd_strides = std::vector<int64_t>(1, 1);
+    std::vector<int64_t> rstd_shape;
+    rstd_shape.reserve(info.ndim() - 1);
+    for (size_t i = 0; i + 1 < info.ndim(); ++i) {
+        rstd_shape.push_back(static_cast<int64_t>(info.shape[i]));
+    }
+    std::vector<int64_t> rstd_strides(rstd_shape.size(), 1);
+    for (ptrdiff_t i = static_cast<ptrdiff_t>(rstd_shape.size()) - 2; i >= 0; --i) {
+        rstd_strides[i] = rstd_strides[i + 1] * rstd_shape[i + 1];
+    }
     aclnnTensorDescriptor_t rstd = new aclnnTensorDescriptor(toAclDataType(INFINI_DTYPE_F32), rstd_shape, rstd_strides);
 
     size_t workspace_size = 0;
@@ -134,51 +133,29 @@ infiniStatus_t Descriptor::calculate(
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
 
-    auto tw = _opaque->w->tensor;
-    auto tx = _opaque->x->tensor;
-    auto ty = _opaque->y->tensor;
-    auto trstd = _opaque->rstd->tensor;
-
-    void *rstdPtr = (void *)((uint8_t *)workspace + _opaque->workspaceSize);
+    void *rstd_ptr = static_cast<uint8_t *>(workspace) + _opaque->workspaceSize;
     void *w_ptr = nullptr;
-
     if (_opaque->needs_cast_w) {
-        void *cast_w_ptr = (void *)((uint8_t *)workspace + _opaque->cast_w_offset);
-        void *w_padded_src = (void *)((uint8_t *)workspace + _opaque->w_padded_offset);
+        void *cast_w_ptr = static_cast<uint8_t *>(workspace) + _opaque->cast_w_offset;
+        void *w_padded_src = static_cast<uint8_t *>(workspace) + _opaque->w_padded_offset;
         size_t w_bytes = _info.dim() * infiniSizeOf(_info.wtype);
-        aclrtMemcpyAsync(w_padded_src, _opaque->w_padded_size, (void *)w, w_bytes,
-                         ACL_MEMCPY_DEVICE_TO_DEVICE, (aclrtStream)stream);
-        rms_norm_cast_w_launch(cast_w_ptr, w_padded_src, _info.wtype, INFINI_DTYPE_F32, _info.dim(), stream);
+        CHECK_ACL(aclrtMemcpyAsync(
+            w_padded_src, _opaque->w_padded_size, const_cast<void *>(w), w_bytes,
+            ACL_MEMCPY_DEVICE_TO_DEVICE, static_cast<aclrtStream>(stream)));
+        CHECK_STATUS(rms_norm_cast_w_launch(
+            cast_w_ptr, w_padded_src, _info.wtype, INFINI_DTYPE_F32,
+            _info.dim(), stream));
         w_ptr = cast_w_ptr;
     } else {
-        w_ptr = (void *)w;
+        w_ptr = const_cast<void *>(w);
     }
 
-    auto unit = infiniSizeOf(_info.atype);
-
-    AclSetTensorAddr(_opaque->executor, 1, tw, w_ptr);
-    AclSetTensorAddr(_opaque->executor, 3, trstd, rstdPtr);
-
-    auto ndim = _info.ndim();
-    size_t outer = ndim == 2 ? 1 : _info.shape[0];
-    size_t inner = ndim == 2 ? _info.shape[0] : _info.shape[1];
-
-    for (size_t b = 0; b < outer; ++b) {
-        for (size_t s = 0; s < inner; ++s) {
-            ptrdiff_t x_offset, y_offset;
-            if (ndim == 2) {
-                x_offset = s * _info.x_strides[0];
-                y_offset = s * _info.y_strides[0];
-            } else {
-                x_offset = b * _info.x_strides[0] + s * _info.x_strides[1];
-                y_offset = b * _info.y_strides[0] + s * _info.y_strides[1];
-            }
-            AclSetTensorAddr(_opaque->executor, 0, tx, ((char *)x) + x_offset * unit);
-            AclSetTensorAddr(_opaque->executor, 2, ty, ((char *)y) + y_offset * unit);
-            CHECK_ACL(aclnnRmsNorm(workspace, _opaque->workspaceSize, _opaque->executor, stream));
-        }
-    }
-
+    CHECK_ACL(AclSetTensorAddr(_opaque->executor, 0, _opaque->x->tensor, const_cast<void *>(x)));
+    CHECK_ACL(AclSetTensorAddr(_opaque->executor, 1, _opaque->w->tensor, w_ptr));
+    CHECK_ACL(AclSetTensorAddr(_opaque->executor, 2, _opaque->y->tensor, y));
+    CHECK_ACL(AclSetTensorAddr(_opaque->executor, 3, _opaque->rstd->tensor, rstd_ptr));
+    CHECK_ACL(aclnnRmsNorm(
+        workspace, _opaque->workspaceSize, _opaque->executor, stream));
     return INFINI_STATUS_SUCCESS;
 }
 

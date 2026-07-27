@@ -22,6 +22,8 @@ _TEST_CASES_DATA = [
     (1, 1, 128, 256, [(260, 73), (1, 1)]),
     (8, 2, 128, 256, [(250,), (7,)]),
     (8, 2, 128, 256, [(260, 73), (1, 1)]),
+    (6, 1, 256, 256, [(250,), (7,)]),
+    (6, 1, 256, 256, [(260, 73), (1, 1)]),
 ]
 
 _MAX_SEQUENCE_LENGTH = 8192
@@ -338,8 +340,11 @@ class OpTest(BaseOperatorTest):
             key = k_cache
             value = v_cache
         else:
-            key = k_cache.permute([0, 2, 1, 3])
-            value = v_cache.permute([0, 2, 1, 3])
+            if query.device.type == "npu":
+                key, value = k_cache, v_cache
+            else:
+                key = k_cache.permute([0, 2, 1, 3])
+                value = v_cache.permute([0, 2, 1, 3])
         out = infinicore.mha_varlen(
             query,
             key,

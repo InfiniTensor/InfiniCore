@@ -2,6 +2,7 @@
 
 #include "infinicore/context/context.hpp"
 #include "infinicore/ops/mha_kvcache.hpp"
+#include "infinicore/ops/paged_attention.hpp"
 #include "native/ascend/workspace_pool_.h"
 
 #include <acl/acl.h>
@@ -9,8 +10,10 @@
 #include <aclnnop/aclnn_fused_infer_attention_score_v4.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstring>
 #include <stdexcept>
+#include <unordered_map>
 #include <vector>
 
 namespace infinicore::op::mha_kvcache_impl::flashattn_ascend {
@@ -36,6 +39,39 @@ static aclDataType to_acl_dtype(DataType dtype) {
 static aclIntArray *
 host_vector_to_acl_int_array(const std::vector<int64_t> &vec) {
     return aclCreateIntArray(vec.data(), vec.size());
+}
+
+// FIA workspace is scratch storage. Calls submitted to the same ACL stream are
+// ordered, so one process-lifetime buffer per stream can be reused without a
+// host synchronization. Buffers are intentionally retained until process exit;
+// the serving process owns only a small number of streams.
+struct StreamWorkspace {
+    void *ptr = nullptr;
+    uint64_t capacity = 0;
+    std::vector<void *> retired;
+};
+
+static void *acquire_stream_workspace(aclrtStream stream, uint64_t bytes) {
+    if (bytes == 0) {
+        return nullptr;
+    }
+    thread_local std::unordered_map<aclrtStream, StreamWorkspace> workspaces;
+    auto &workspace = workspaces[stream];
+    if (workspace.capacity < bytes) {
+        void *new_ptr = nullptr;
+        auto ret = aclrtMalloc(&new_ptr, bytes, ACL_MEM_MALLOC_HUGE_FIRST);
+        if (ret != ACL_SUCCESS) {
+            throw std::runtime_error(
+                std::string("[mha_kvcache/ascend] cached workspace allocation failed: ")
+                + std::to_string(ret));
+        }
+        if (workspace.ptr) {
+            workspace.retired.push_back(workspace.ptr);
+        }
+        workspace.ptr = new_ptr;
+        workspace.capacity = bytes;
+    }
+    return workspace.ptr;
 }
 
 struct PlannedMeta {
@@ -72,9 +108,9 @@ void run(void *planned_meta) {
     // q/out are BSND [batch, 1, num_heads, head_size] in InfiniCore. For
     // decode S=1, the same memory can be described to FIA as BNSD
     // [batch, num_heads, 1, head_size].
-    auto q_shape = p->q->shape();
-    auto k_shape = p->k_cache->shape();
-    auto v_shape = p->v_cache->shape();
+    const auto q_shape = p->q->shape();
+    const auto k_shape = p->k_cache->shape();
+    const auto v_shape = p->v_cache->shape();
 
     if (q_shape.size() != 4 || k_shape.size() != 4 || v_shape.size() != 4) {
         throw std::runtime_error("[mha_kvcache/ascend] flash attention expects q "
@@ -84,9 +120,10 @@ void run(void *planned_meta) {
     const int64_t batch_size = q_shape[0];
     const int64_t num_heads = q_shape[2];
     const int64_t head_size = q_shape[3];
+    // Ascend paged KV cache is physical BnNBsD.
     const int64_t num_blocks = k_shape[0];
-    const int64_t block_size_val = k_shape[1];
-    const int64_t num_kv_heads = k_shape[2];
+    const int64_t num_kv_heads = k_shape[1];
+    const int64_t block_size_val = k_shape[2];
     const int64_t v_head_size = v_shape[3];
 
     if (k_shape[3] != static_cast<size_t>(head_size)) {
@@ -108,18 +145,78 @@ void run(void *planned_meta) {
                        : p->block_table->contiguous();
     Tensor out_work = p->out->is_contiguous() ? Tensor(p->out) : p->out->contiguous();
 
-    aclDataType q_dtype = to_acl_dtype(q_work->dtype());
+    // FIA V4 supports Qwen3.5's D=256 paged decode with BNSD query and
+    // contiguous BnBsH cache. Keep the hand-written path as an emergency
+    // diagnostic fallback only.
+    const char *disable_fia_head256 = std::getenv("INFINICORE_ASCEND_DISABLE_FIA_HEAD256");
+    const bool use_paged_fallback = disable_fia_head256 != nullptr
+                                 && std::strcmp(disable_fia_head256, "1") == 0;
+    if (head_size == 256 && use_paged_fallback) {
+        auto q_strides = q_work->strides();
+        auto k_strides = k_work->strides();
+        auto v_strides = v_work->strides();
+        auto out_strides = out_work->strides();
 
-    // Read seqlens_k to host
+        Tensor q_view = Tensor::strided_from_blob(
+            const_cast<void *>(reinterpret_cast<const void *>(q_work->data())),
+            {static_cast<size_t>(batch_size),
+             static_cast<size_t>(num_heads),
+             static_cast<size_t>(head_size)},
+            {q_strides[0], q_strides[2], q_strides[3]},
+            q_work->dtype(), q_work->device());
+        Tensor out_view = Tensor::strided_from_blob(
+            const_cast<void *>(reinterpret_cast<const void *>(out_work->data())),
+            {static_cast<size_t>(batch_size),
+             static_cast<size_t>(num_heads),
+             static_cast<size_t>(v_head_size)},
+            {out_strides[0], out_strides[2], out_strides[3]},
+            out_work->dtype(), out_work->device());
+        Tensor k_view = Tensor::strided_from_blob(
+            const_cast<void *>(reinterpret_cast<const void *>(k_work->data())),
+            {static_cast<size_t>(num_blocks),
+             static_cast<size_t>(num_kv_heads),
+             static_cast<size_t>(block_size_val),
+             static_cast<size_t>(head_size)},
+            {k_strides[0], k_strides[1], k_strides[2], k_strides[3]},
+            k_work->dtype(), k_work->device());
+        Tensor v_view = Tensor::strided_from_blob(
+            const_cast<void *>(reinterpret_cast<const void *>(v_work->data())),
+            {static_cast<size_t>(num_blocks),
+             static_cast<size_t>(num_kv_heads),
+             static_cast<size_t>(block_size_val),
+             static_cast<size_t>(v_head_size)},
+            {v_strides[0], v_strides[1], v_strides[2], v_strides[3]},
+            v_work->dtype(), v_work->device());
+
+        Tensor seqlens_k(p->seqlens_k);
+        paged_attention_(
+            out_view, q_view, k_view, v_view, bt_work, seqlens_k,
+            p->alibi_slopes, p->scale);
+        if (!p->out->is_contiguous()) {
+            p->out->copy_from(out_work);
+        }
+        return;
+    }
+
+    aclDataType q_dtype = to_acl_dtype(q_work->dtype());
     auto seqlens_k_shape = p->seqlens_k->shape();
     int64_t seqlens_k_len = seqlens_k_shape[0];
     std::vector<int32_t> seqlens_k_host(seqlens_k_len);
-    auto copy_ret = aclrtMemcpy(seqlens_k_host.data(), seqlens_k_len * sizeof(int32_t),
-                                reinterpret_cast<const void *>(p->seqlens_k->data()),
-                                seqlens_k_len * sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
-    if (copy_ret != ACL_SUCCESS) {
-        throw std::runtime_error(
-            std::string("[mha_kvcache/ascend] copy seqlens_k to host failed: ") + std::to_string(copy_ret));
+
+    const bool seqlens_on_host = p->seqlens_k->device().getType() == Device::Type::CPU;
+    if (seqlens_on_host) {
+        std::memcpy(seqlens_k_host.data(), p->seqlens_k->data(),
+                    seqlens_k_len * sizeof(int32_t));
+    } else {
+        auto copy_ret = aclrtMemcpy(
+            seqlens_k_host.data(), seqlens_k_len * sizeof(int32_t),
+            reinterpret_cast<const void *>(p->seqlens_k->data()),
+            seqlens_k_len * sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
+        if (copy_ret != ACL_SUCCESS) {
+            throw std::runtime_error(
+                std::string("[mha_kvcache/ascend] copy seqlens_k to host failed: ")
+                + std::to_string(copy_ret));
+        }
     }
 
     // Build actual_seq vectors
@@ -140,22 +237,24 @@ void run(void *planned_meta) {
         q_dims.data(), q_dims.size(),
         const_cast<void *>(reinterpret_cast<const void *>(q_work->data())));
 
-    // The physical BnBsND cache is contiguous in N and D, so expose it to FIA
-    // as BnBsH without copying.
-    std::vector<int64_t> k_dims = {num_blocks, block_size_val,
-                                   num_kv_heads * head_size};
-    std::vector<int64_t> k_strides = {block_size_val * num_kv_heads * head_size,
-                                      num_kv_heads * head_size, 1};
+    // Physical BnNBsD avoids flattening N into H and is the preferred Ascend
+    // paged-attention cache layout.
+    std::vector<int64_t> k_dims = {
+        num_blocks, num_kv_heads, block_size_val, head_size};
+    std::vector<int64_t> k_strides = {
+        num_kv_heads * block_size_val * head_size,
+        block_size_val * head_size, head_size, 1};
     aclTensor *k_acl_tensor = aclCreateTensor(
         k_dims.data(), k_dims.size(), q_dtype, k_strides.data(), 0, ACL_FORMAT_ND,
         k_dims.data(), k_dims.size(),
         const_cast<void *>(reinterpret_cast<const void *>(k_work->data())));
     aclTensorList *key_acl = aclCreateTensorList(&k_acl_tensor, 1);
 
-    std::vector<int64_t> v_dims = {num_blocks, block_size_val,
-                                   num_kv_heads * v_head_size};
-    std::vector<int64_t> v_strides = {block_size_val * num_kv_heads * v_head_size,
-                                      num_kv_heads * v_head_size, 1};
+    std::vector<int64_t> v_dims = {
+        num_blocks, num_kv_heads, block_size_val, v_head_size};
+    std::vector<int64_t> v_strides = {
+        num_kv_heads * block_size_val * v_head_size,
+        block_size_val * v_head_size, v_head_size, 1};
     aclTensor *v_acl_tensor = aclCreateTensor(
         v_dims.data(), v_dims.size(), q_dtype, v_strides.data(), 0, ACL_FORMAT_ND,
         v_dims.data(), v_dims.size(),
@@ -184,8 +283,18 @@ void run(void *planned_meta) {
     aclIntArray *seqlens_q_acl = host_vector_to_acl_int_array(actual_seq_q_vec);
     aclIntArray *seqlens_k_acl = host_vector_to_acl_int_array(actual_seq_k_vec);
 
+    aclrtStream stream = static_cast<aclrtStream>(infinicore::context::getStream());
+    static const bool async_all_batch = []() {
+        const char *value = std::getenv("INFINICORE_ASCEND_FIA_ASYNC_ALL_BATCH");
+        return value == nullptr || std::strcmp(value, "0") != 0;
+    }();
+    const bool async_fast_path = seqlens_on_host && (async_all_batch || batch_size <= 2)
+                              && p->q->is_contiguous()
+                              && p->k_cache->is_contiguous() && p->v_cache->is_contiguous()
+                              && p->block_table->is_contiguous() && p->out->is_contiguous();
+
     // Call CANN API with Paged Attention
-    // inputLayout="BNSD": query/out=[B,N,S,D], KV cache is BnBsH for paged
+    // inputLayout="BNSD": query/out=[B,N,S,D], KV cache is BnNBsD for paged
     // attention. sparse_mode=0: no mask needed for decode (Q_S=1,
     // IncreFlashAttention branch)
     uint64_t workspace_size = 0;

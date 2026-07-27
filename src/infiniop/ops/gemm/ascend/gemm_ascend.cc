@@ -5,6 +5,7 @@
 
 #include <cstring>
 #include <unordered_map>
+#include <utility>
 
 // Custom hash function for alpha beta pair<float, float>
 struct FloatPairHash {
@@ -27,6 +28,7 @@ namespace op::gemm::ascend {
 
 struct Descriptor::Opaque {
     aclnnTensorDescriptor_t c, a, b;
+    bool transa, transb;
     // cubeMathType
     // see doc:
     // https://www.hiascend.com/document/detail/zh/CANNCommunityEdition/80RC3alpha002/apiref/appdevgapi/context/aclnnBatchMatMul.md
@@ -64,15 +66,36 @@ infiniStatus_t Descriptor::create(
     CHECK_RESULT(result);
     auto info = result.take();
 
+    // aclnnGemm accepts physical row-major tensors plus transpose flags. Passing
+    // a transposed view directly makes ACLNN materialize that view with a
+    // Transpose kernel on every invocation, which is especially expensive for
+    // immutable linear weights. Describe the same storage as a contiguous
+    // physical matrix and let Cube consume it with the corresponding flag.
+    auto make_tensor = [](infiniDtype_t dtype, const BlasMatrix &matrix) {
+        // CANN 8.5.1 produces incorrect results for the F32 transpose-flag path.
+        bool transposed = dtype != INFINI_DTYPE_F32
+                       && matrix.row_stride == 1 && matrix.col_stride != 1;
+        if (transposed) {
+            return std::make_pair(
+                new aclnnTensorDescriptor(
+                    toAclDataType(dtype),
+                    {static_cast<int64_t>(matrix.cols), static_cast<int64_t>(matrix.rows)},
+                    {matrix.col_stride, matrix.row_stride}),
+                true);
+        }
+        return std::make_pair(
+            new aclnnTensorDescriptor(
+                toAclDataType(dtype),
+                {static_cast<int64_t>(matrix.rows), static_cast<int64_t>(matrix.cols)},
+                {matrix.row_stride, matrix.col_stride}),
+            false);
+    };
+
     auto c = new aclnnTensorDescriptor(toAclDataType(c_desc->dtype()),
                                        {static_cast<int64_t>(info.m), static_cast<int64_t>(info.n)},
                                        {info.c_matrix.row_stride, info.c_matrix.col_stride});
-    auto a = new aclnnTensorDescriptor(toAclDataType(a_desc->dtype()),
-                                       {static_cast<int64_t>(info.a_matrix.rows), static_cast<int64_t>(info.a_matrix.cols)},
-                                       {info.a_matrix.row_stride, info.a_matrix.col_stride});
-    auto b = new aclnnTensorDescriptor(toAclDataType(b_desc->dtype()),
-                                       {static_cast<int64_t>(info.b_matrix.rows), static_cast<int64_t>(info.b_matrix.cols)},
-                                       {info.b_matrix.row_stride, info.b_matrix.col_stride});
+    auto [a, transa] = make_tensor(a_desc->dtype(), info.a_matrix);
+    auto [b, transb] = make_tensor(b_desc->dtype(), info.b_matrix);
 
     auto tc = c->tensor,
          ta = a->tensor,
@@ -82,10 +105,10 @@ infiniStatus_t Descriptor::create(
     aclOpExecutor *executor = nullptr;
     size_t workspace_size = 0;
     int8_t mt = 1;
-    CHECK_ACL(aclnnGemmGetWorkspaceSize(ta, tb, tc, 1., 0., 0, 0, tc, mt, &workspace_size, &executor));
+    CHECK_ACL(aclnnGemmGetWorkspaceSize(ta, tb, tc, 1., 0., transa, transb, tc, mt, &workspace_size, &executor));
     CHECK_ACL(aclSetAclOpExecutorRepeatable(executor));
     lookup[std::make_pair(1.0f, 0.0f)] = executor;
-    CHECK_ACL(aclnnGemmGetWorkspaceSize(ta, tb, tc, 1., 1., 0, 0, tc, mt, &workspace_size, &executor));
+    CHECK_ACL(aclnnGemmGetWorkspaceSize(ta, tb, tc, 1., 1., transa, transb, tc, mt, &workspace_size, &executor));
     CHECK_ACL(aclSetAclOpExecutorRepeatable(executor));
     lookup[std::make_pair(1.0f, 1.0f)] = executor;
 
@@ -95,6 +118,8 @@ infiniStatus_t Descriptor::create(
             c,
             a,
             b,
+            transa,
+            transb,
             mt,
             std::move(lookup)},
         handle->device, handle->device_id);
@@ -123,7 +148,7 @@ infiniStatus_t Descriptor::calculate(
         executor = _opaque->lookup[key];
     } else {
         CHECK_ACL(aclnnGemmGetWorkspaceSize(
-            ta, tb, tc, alpha, beta, 0, 0, tc, _opaque->mt,
+            ta, tb, tc, alpha, beta, _opaque->transa, _opaque->transb, tc, _opaque->mt,
             &workspace_size, &executor));
         CHECK_ACL(aclSetAclOpExecutorRepeatable(executor));
         _opaque->lookup[key] = executor;

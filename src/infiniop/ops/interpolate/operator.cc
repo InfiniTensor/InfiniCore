@@ -1,6 +1,7 @@
 #include "../../operator.h"
 #include "../../handle.h"
 #include "infiniop/ops/interpolate.h"
+#include <cstring>
 
 #ifdef ENABLE_CPU_API
 #include "cpu/interpolate_cpu.h"
@@ -13,6 +14,9 @@
 #endif
 #ifdef ENABLE_MOORE_API
 #include "moore/interpolate_moore.h"
+#endif
+#ifdef ENABLE_ASCEND_API
+#include "../upsample_bilinear/ascend/upsample_bilinear_ascend.h"
 #endif
 
 __INFINI_C infiniStatus_t infiniopCreateInterpolateDescriptor(
@@ -57,6 +61,15 @@ __INFINI_C infiniStatus_t infiniopCreateInterpolateDescriptor(
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_ASCEND_API
+    case INFINI_DEVICE_ASCEND:
+        if (mode == nullptr || std::strcmp(mode, "bilinear") != 0) {
+            return INFINI_STATUS_BAD_PARAM;
+        }
+        return op::upsample_bilinear::ascend::Descriptor::create(
+            handle, reinterpret_cast<op::upsample_bilinear::ascend::Descriptor **>(desc_ptr),
+            y_desc, x_desc, align_corners);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -90,6 +103,11 @@ __INFINI_C infiniStatus_t infiniopGetInterpolateWorkspaceSize(infiniopInterpolat
 #endif
 #ifdef ENABLE_HYGON_API
         GET(INFINI_DEVICE_HYGON, nvidia)
+#endif
+#ifdef ENABLE_ASCEND_API
+    case INFINI_DEVICE_ASCEND:
+        *size = reinterpret_cast<op::upsample_bilinear::ascend::Descriptor *>(desc)->workspaceSize();
+        return INFINI_STATUS_SUCCESS;
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -132,6 +150,11 @@ __INFINI_C infiniStatus_t infiniopInterpolate(
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_ASCEND_API
+    case INFINI_DEVICE_ASCEND:
+        return reinterpret_cast<const op::upsample_bilinear::ascend::Descriptor *>(desc)
+            ->calculate(workspace, workspace_size, y, x, stream);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -167,6 +190,11 @@ infiniopDestroyInterpolateDescriptor(infiniopInterpolateDescriptor_t desc) {
 #endif
 #ifdef ENABLE_HYGON_API
         DELETE(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_ASCEND_API
+    case INFINI_DEVICE_ASCEND:
+        delete reinterpret_cast<const op::upsample_bilinear::ascend::Descriptor *>(desc);
+        return INFINI_STATUS_SUCCESS;
 #endif
 
     default:

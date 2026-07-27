@@ -18,7 +18,9 @@ size_t aclnnTensorDescriptor::numel() const {
     return std::accumulate(shape.begin(), shape.end(), (size_t)1, std::multiplies<size_t>());
 }
 
-aclnnTensorDescriptor::aclnnTensorDescriptor(infiniopTensorDescriptor_t desc, void *data) {
+aclnnTensorDescriptor::aclnnTensorDescriptor(infiniopTensorDescriptor_t desc,
+                                             void *data,
+                                             aclFormat format) {
     this->ndim = desc->ndim();
     this->shape = std::vector<int64_t>(ndim);
     this->strides = std::vector<int64_t>(ndim);
@@ -28,8 +30,7 @@ aclnnTensorDescriptor::aclnnTensorDescriptor(infiniopTensorDescriptor_t desc, vo
     }
     this->storageShape = inferStorageShape(this->shape, this->strides);
     this->dataType = toAclDataType(desc->dtype());
-    // TODO: support other formats
-    this->format = aclFormat::ACL_FORMAT_ND;
+    this->format = format;
     this->tensor = aclCreateTensor(this->shape.data(),
                                    this->ndim,
                                    this->dataType,

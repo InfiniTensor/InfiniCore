@@ -12,6 +12,9 @@
 #include "moore/fused_gated_delta_net_gating_moore.h"
 #endif
 
+#ifdef ENABLE_ASCEND_API
+#include "ascend/fused_gated_delta_net_gating_ascend.h"
+#endif
 __INFINI_C __export infiniStatus_t
 infiniopCreateFusedGatedDeltaNetGatingDescriptor(
     infiniopHandle_t handle,
@@ -46,6 +49,9 @@ infiniopCreateFusedGatedDeltaNetGatingDescriptor(
 #endif
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_ASCEND_API
+        CREATE(INFINI_DEVICE_ASCEND, ascend);
 #endif
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, metax);
@@ -85,6 +91,9 @@ infiniopGetFusedGatedDeltaNetGatingWorkspaceSize(
 #endif
 #ifdef ENABLE_HYGON_API
         GET(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_ASCEND_API
+        GET(INFINI_DEVICE_ASCEND, ascend);
 #endif
 #ifdef ENABLE_METAX_API
         GET(INFINI_DEVICE_METAX, metax);
@@ -133,6 +142,9 @@ infiniopFusedGatedDeltaNetGating(
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_ASCEND_API
+        CALCULATE(INFINI_DEVICE_ASCEND, ascend);
+#endif
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
@@ -170,6 +182,9 @@ infiniopDestroyFusedGatedDeltaNetGatingDescriptor(
 #endif
 #ifdef ENABLE_HYGON_API
         DELETE(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_ASCEND_API
+        DELETE(INFINI_DEVICE_ASCEND, ascend);
 #endif
 #ifdef ENABLE_METAX_API
         DELETE(INFINI_DEVICE_METAX, metax);

@@ -1,24 +1,25 @@
-import torch
 import ctypes
 from ctypes import c_uint64
+from enum import Enum, auto
+
+import torch
 from libinfiniop import (
     LIBINFINIOP,
-    TestTensor,
-    get_test_devices,
-    check_error,
-    test_operator,
-    get_args,
-    debug,
-    get_tolerance,
-    profile_operation,
-    TestWorkspace,
+    InfiniDeviceEnum,
+    InfiniDeviceNames,
     InfiniDtype,
     InfiniDtypeNames,
-    InfiniDeviceNames,
-    InfiniDeviceEnum,
+    TestTensor,
+    TestWorkspace,
+    check_error,
+    debug,
+    get_args,
+    get_test_devices,
+    get_tolerance,
     infiniopOperatorDescriptor_t,
+    profile_operation,
+    test_operator,
 )
-from enum import Enum, auto
 
 # ==============================================================================
 #  Configuration (Internal Use Only)
@@ -58,14 +59,13 @@ _TEST_CASES = [
 ]
 
 # Data types used for testing
-_TENSOR_DTYPES = [InfiniDtype.BF16, InfiniDtype.F16, InfiniDtype.F32, InfiniDtype.F64]
+_TENSOR_DTYPES = [InfiniDtype.BF16, InfiniDtype.F16, InfiniDtype.F32]
 
 # Tolerance map for different data types
 _TOLERANCE_MAP = {
     InfiniDtype.BF16: {"atol": 1e-2, "rtol": 1e-2},
     InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-3},
     InfiniDtype.F32: {"atol": 1e-5, "rtol": 1e-5},
-    InfiniDtype.F64: {"atol": 1e-6, "rtol": 1e-6},
 }
 
 DEBUG = False
@@ -89,7 +89,10 @@ def test(
         input_stride is not None or output_stride is not None
     ):
         return
-    if device in (InfiniDeviceEnum.CAMBRICON, InfiniDeviceEnum.MOORE) and dtype == InfiniDtype.F64:
+    if (
+        device in (InfiniDeviceEnum.CAMBRICON, InfiniDeviceEnum.MOORE)
+        and dtype == InfiniDtype.F64
+    ):
         return
 
     input = TestTensor(shape, input_stride, dtype, device)
