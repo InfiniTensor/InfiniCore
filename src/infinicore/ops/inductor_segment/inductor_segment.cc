@@ -27,6 +27,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <limits>
@@ -53,33 +54,43 @@ size_t recording_valid_seq_len(size_t bucket) {
     return bucket;
 }
 
-/// CG-2: aten MoE under stream capture; Triton remains the eager path.
-bool moe_capture_safe_enabled() {
+/// Deprecated: ``INFINI_MOE_CAPTURE_SAFE`` no longer selects an aten MoE body
+/// (Phase 1). Truthy values are ignored with a one-shot stderr warning.
+bool moe_capture_safe_deprecated_set() {
     const char *v = std::getenv("INFINI_MOE_CAPTURE_SAFE");
-    return v != nullptr && v[0] != '\0' && std::string(v) != "0";
+    if (v == nullptr || v[0] == '\0' || std::string(v) == "0") {
+        return false;
+    }
+    static bool warned = false;
+    if (!warned) {
+        warned = true;
+        fprintf(stderr,
+                "[InductorMoe] INFINI_MOE_CAPTURE_SAFE is deprecated (aten "
+                "index_select+bmm capture escape removed). Use FORCE_CAPTURE + "
+                "Triton fused_moe_routed, or host-break. Ignoring.\n");
+    }
+    return true;
 }
 
 /// Triton fused_moe_routed under MetaX stream capture (no aten body).
-/// Distinct from INFINI_MOE_CAPTURE_SAFE (aten index_select+bmm).
 /// Capture follows ``moeTritonCaptureAllowed()``: FORCE-only
 /// (``INFINI_MOE_FORCE_CAPTURE``); ``INFINI_MOE_FORCE_HOST_BREAK=1`` forces host-break.
 bool moe_triton_capture_enabled() {
     return infinicore::context::moeTritonCaptureAllowed();
 }
 
-/// MoE may enter device capture (aten CAPTURE_SAFE or phase-adaptive Triton).
+/// MoE may enter device capture (phase-adaptive Triton under FORCE_CAPTURE).
 bool moe_device_capturable() {
+    // Surface deprecated CAPTURE_SAFE once (no aten body, does not enable capture).
+    (void)moe_capture_safe_deprecated_set();
 #if defined(ENABLE_METAX_API)
-    // MetaX wall: any in-graph MoE fold (FORCE/Triton OR CAPTURE_SAFE aten) needs
-    // INFINI_MOE_METAX_CAPTURE_UNSAFE=1. Step1: CAPTURE_SAFE under hcGraph also
-    // Cell-B garbles; only FORCE_OP_LIST (skip device capture) stayed OK. Do not
-    // treat CAPTURE_SAFE as a correctness escape on MetaX.
+    // MetaX wall: any in-graph MoE fold needs INFINI_MOE_METAX_CAPTURE_UNSAFE=1.
     const char *unsafe = std::getenv("INFINI_MOE_METAX_CAPTURE_UNSAFE");
     if (unsafe == nullptr || unsafe[0] == '\0' || std::string(unsafe) == "0") {
         return false;
     }
 #endif
-    return moe_capture_safe_enabled() || moe_triton_capture_enabled();
+    return moe_triton_capture_enabled();
 }
 
 /// Decode-sized MoE: skip AOTI ``moe_B16/segment.pt2`` and call ``moe_block_eager``.
@@ -580,86 +591,6 @@ at::Tensor silu_mlp_aten(
     return out;
 }
 
-/// Decode / capture MoE body in C++ (arena-backed) — host-break parity without
-/// Python ``fused_moe_routed``. Python cannot see CaptureArena when InfiniLM and
-/// ``_infinicore`` load duplicate TLS copies of libinfinicore (Gate C garble).
-at::Tensor routed_experts_aten_capture(
-    const at::Tensor &x,
-    const at::Tensor &topk_w,
-    const at::Tensor &topk_ids,
-    const at::Tensor &w_gate_up,
-    const at::Tensor &w_down) {
-    const int64_t top_k = topk_ids.size(1);
-    const int64_t t_tokens = x.size(0);
-    const int64_t hidden = x.size(1);
-    auto *arena = infinicore::graph::current_capture_arena();
-    at::Tensor acc;
-    if (arena != nullptr) {
-        acc = arena->empty_aten({t_tokens, hidden}, x.options());
-        capture_safe_aten_zero_(acc);
-    } else {
-        acc = at::zeros({t_tokens, hidden}, x.options());
-    }
-    // Bisect H15: identity MoE body under capture — if Gate C garble tokens
-    // unchanged, poison is outside routed experts (topk/shared/graph); if
-    // tokens change, body/index_select path is implicated.
-    if (const char *id = std::getenv("INFINI_MOE_CAPTURE_IDENTITY")) {
-        if (id[0] != '\0' && std::string(id) != "0") {
-            at::Tensor out = arena != nullptr
-                ? arena->empty_aten({t_tokens, hidden}, x.options())
-                : at::empty({t_tokens, hidden}, x.options());
-            out.copy_(x);
-            if (arena != nullptr) {
-                arena->retain(out);
-            }
-            return out;
-        }
-    }
-    for (int64_t k = 0; k < top_k; ++k) {
-        auto idx = topk_ids.select(/*dim=*/1, /*index=*/k);
-        auto w_gu = w_gate_up.index_select(/*dim=*/0, idx);
-        auto w_d = w_down.index_select(/*dim=*/0, idx);
-        auto x3 = x.unsqueeze(-1);
-        auto gu3 = at::bmm(w_gu, x3);
-        auto gu = gu3.squeeze(-1);
-        auto chunks = gu.chunk(2, /*dim=*/-1);
-        // Retain silu temp explicitly — ``silu(a)*b`` leaves an unretained silu
-        // output that MetaX CG replay can dangle on (H10).
-        auto silu_g = at::silu(chunks[0]);
-        auto mid = silu_g * chunks[1];
-        auto mid3 = mid.unsqueeze(-1);
-        auto y3 = at::bmm(w_d, mid3);
-        auto y = y3.squeeze(-1);
-        auto w = topk_w.select(/*dim=*/1, /*index=*/k).unsqueeze(-1);
-        if (w.scalar_type() != x.scalar_type()) {
-            w = capture_safe_to_dtype(w, x.scalar_type());
-        }
-        auto contrib = y * w;
-        acc.add_(contrib);
-        if (arena != nullptr) {
-            arena->retain(idx);
-            arena->retain(w_gu);
-            arena->retain(w_d);
-            arena->retain(x3);
-            arena->retain(gu3);
-            arena->retain(gu);
-            arena->retain(chunks[0]);
-            arena->retain(chunks[1]);
-            arena->retain(silu_g);
-            arena->retain(mid);
-            arena->retain(mid3);
-            arena->retain(y3);
-            arena->retain(y);
-            arena->retain(w);
-            arena->retain(contrib);
-        }
-    }
-    if (arena != nullptr) {
-        arena->retain(acc);
-    }
-    return acc;
-}
-
 /// Reuse intermediate buffers for decode shared-expert MLP (Phase 7).
 at::Tensor silu_mlp_aten_cached(
     const at::Tensor &x,
@@ -1058,7 +989,8 @@ at::Tensor run_moe_eager_decode(
                     arena->retain(topk_w);
                     arena->retain(topk_ids);
                 }
-                routed = routed_experts_aten_capture(
+                // Jul21 / Phase 1: Triton fused MoE under capture (aten deleted).
+                routed = call_fused_moe_routed(
                     x, topk_w, topk_ids, weights.w_gate_up, weights.w_down);
                 shared = silu_mlp_aten(x, weights.shared_gate_up, weights.shared_down);
                 auto y = routed + shared;
@@ -1086,15 +1018,9 @@ at::Tensor run_moe_eager_decode(
         cfg.routed_scaling_factor);
     topk_w = capture_safe_to_dtype(topk.first, x.scalar_type());
     topk_ids = topk.second;
-    // Under live stream capture: C++ aten MoE body + CaptureArena (skip Python
-    // fused_moe_routed — Python cannot see arena across duplicate TLS).
-    if (capturing || stream_capturing) {
-        routed = routed_experts_aten_capture(
-            x, topk_w, topk_ids, weights.w_gate_up, weights.w_down);
-    } else {
-        routed = call_fused_moe_routed(
-            x, topk_w, topk_ids, weights.w_gate_up, weights.w_down);
-    }
+    // Jul21 / Phase 1: Triton fused_moe_routed under capture (aten body deleted).
+    routed = call_fused_moe_routed(
+        x, topk_w, topk_ids, weights.w_gate_up, weights.w_down);
     shared = capturing ? silu_mlp_aten(x, weights.shared_gate_up, weights.shared_down)
                        : silu_mlp_aten_cached(x, weights.shared_gate_up, weights.shared_down);
     auto y = routed + shared;
@@ -1385,7 +1311,7 @@ InductorMoe::InductorMoe(
         layer_idx,
         bucket);
     // CG-1 default: Triton fused_moe_routed is not stream-capture-safe → host break
-    // unless FORCE capture (or CAPTURE_SAFE aten body).
+    // unless FORCE capture (Jul21 Triton-under-capture). CAPTURE_SAFE aten removed.
     // INFINI_MOE_FORCE_HOST_BREAK=1 forces host-break even if FORCE_CAPTURE is set.
     host_break_ = !moe_device_capturable();
 }
@@ -1398,14 +1324,15 @@ void InductorMoe::execute(
 #ifdef ENABLE_ATEN
     // Eager fast path (same pattern as InductorSegment pre_attn).
     // Refuse Triton under a live device-capture stream unless capturable mode
-    // (aten CAPTURE_SAFE or phase-adaptive Decode MoE).
+    // (FORCE_CAPTURE + Decode-phase Triton; CAPTURE_SAFE aten removed Phase 1).
     if (!context::isGraphRecording()) {
         if (context::isDeviceStreamCapturing() && !moe_device_capturable()) {
             throw std::runtime_error(
                 "InductorMoe: refusing AOTI+Triton MoE under hcStream capture "
-                "(need InferencePhase::Decode under non-eager policy, "
-                "INFINI_MOE_CAPTURE_SAFE=1 for aten body, or use host-break; "
-                "INFINI_MOE_FORCE_HOST_BREAK=1 forces host-break)");
+                "(need InferencePhase::Decode + INFINI_MOE_FORCE_CAPTURE (+ MetaX "
+                "INFINI_MOE_METAX_CAPTURE_UNSAFE), or use host-break; "
+                "INFINI_MOE_FORCE_HOST_BREAK=1 forces host-break). "
+                "INFINI_MOE_CAPTURE_SAFE aten body is removed.");
         }
         const size_t valid_len = resolve_valid_seq_len(bucket, hidden_states);
         run_moe_segment(hidden_states, out, layer_idx, bucket, valid_len);
@@ -1484,8 +1411,8 @@ void moe_run(void *planned_meta) {
         throw std::runtime_error(
             "InductorMoe::run: AOTI+Triton MoE must not run under hcStream capture "
             "(recorded as host_break; Graph splits device segments around MoE). "
-            "Need InferencePhase::Decode under non-eager policy for Triton body, or "
-            "INFINI_MOE_CAPTURE_SAFE=1 for aten capture-safe body.");
+            "Need InferencePhase::Decode + INFINI_MOE_FORCE_CAPTURE for Triton body "
+            "(INFINI_MOE_CAPTURE_SAFE aten body removed Phase 1).");
     }
     auto *meta = reinterpret_cast<MoePlannedMeta *>(planned_meta);
     if (meta == nullptr) {

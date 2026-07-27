@@ -59,9 +59,10 @@ void inductor_warmup_pre_attn_bucket(
 
 /// MiniCPM5 sparse MoE AOTI segment (weights via moe resolver).
 /// Default: records as a **host-break** graph op (Triton excluded from
-/// ``hcStreamBeginCapture``). Device-capturable modes:
-/// - ``INFINI_MOE_TRITON_CAPTURE=1``: Triton ``fused_moe_routed`` under capture
-/// - ``INFINI_MOE_CAPTURE_SAFE=1``: aten index_select+bmm under capture (CG-2)
+/// ``hcStreamBeginCapture``). Device-capturable: ``INFINI_MOE_FORCE_CAPTURE=1``
+/// (Decode-phase Triton ``fused_moe_routed``; MetaX also needs
+/// ``INFINI_MOE_METAX_CAPTURE_UNSAFE=1``). ``INFINI_MOE_CAPTURE_SAFE`` aten
+/// body is removed (Phase 1).
 void inductor_moe_(
     const Tensor &hidden_states,
     Tensor &out,
