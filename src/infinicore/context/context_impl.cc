@@ -90,15 +90,18 @@ void ContextImpl::initializeRuntime() {
 ContextImpl::ContextImpl() {
     initializeRuntime<Device::Type::CPU>();
     initializeRuntime<Device::Type::NVIDIA>();
+    initializeRuntime<Device::Type::CAMBRICON>();
+    initializeRuntime<Device::Type::ASCEND>();
+    initializeRuntime<Device::Type::METAX>();
+    initializeRuntime<Device::Type::MOORE>();
     initializeRuntime<Device::Type::ILUVATAR>();
     initializeRuntime<Device::Type::HYGON>();
-    initializeRuntime<Device::Type::ASCEND>();
+    initializeRuntime<Device::Type::ALI>();
 
     if (current_runtime_ == nullptr && !runtime_table_[static_cast<int>(Device::Type::CPU)].empty()) {
         current_runtime_ = runtime_table_[static_cast<int>(Device::Type::CPU)][0].get();
     }
 }
-
 namespace context {
 
 void setDevice(Device device) {

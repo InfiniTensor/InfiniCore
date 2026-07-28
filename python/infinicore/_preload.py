@@ -6,7 +6,6 @@ import os
 import sys
 from typing import Iterable, List
 
-
 _PRELOADED_HANDLES: List[ctypes.CDLL] = []
 
 
@@ -98,9 +97,7 @@ def _import_extension_global(module_name: str, path: str) -> None:
             raise
 
     module_path = getattr(module, "__file__", None) or path
-    _PRELOADED_HANDLES.append(
-        ctypes.CDLL(module_path, mode=ctypes.RTLD_GLOBAL)
-    )
+    _PRELOADED_HANDLES.append(ctypes.CDLL(module_path, mode=ctypes.RTLD_GLOBAL))
 
 
 def preload_flash_attn() -> None:

@@ -306,6 +306,71 @@ local function get_infinirt_root()
     return nil
 end
 
+local function add_moore_runtime_sdk_dirs()
+    if not has_config("moore-gpu") then
+        return
+    end
+    local musa_root = os.getenv("MUSA_ROOT") or os.getenv("MUSA_HOME") or os.getenv("MUSA_PATH") or "/usr/local/musa"
+    add_includedirs(path.join(musa_root, "include"))
+    add_linkdirs(
+        path.join(musa_root, "lib"),
+        path.join(musa_root, "lib64"))
+    add_rpathdirs(path.join(musa_root, "lib"), path.join(musa_root, "lib64"))
+end
+
+local function add_metax_runtime_sdk_dirs()
+    if not has_config("metax-gpu") then
+        return
+    end
+    local maca_root = os.getenv("MACA_PATH") or os.getenv("MACA_HOME") or os.getenv("MACA_ROOT") or "/opt/maca"
+    add_includedirs(path.join(maca_root, "include"))
+    add_linkdirs(path.join(maca_root, "lib"), path.join(maca_root, "lib64"))
+    add_rpathdirs(path.join(maca_root, "lib"), path.join(maca_root, "lib64"))
+end
+
+local function add_ascend_runtime_sdk_dirs()
+    if not has_config("ascend-npu") then
+        return
+    end
+    local ascend_home = os.getenv("ASCEND_HOME") or os.getenv("ASCEND_TOOLKIT_HOME") or "/usr/local/Ascend/ascend-toolkit/latest"
+    add_includedirs(path.join(ascend_home, "include"), path.join(ascend_home, "include", "aclnn"))
+    add_linkdirs(path.join(ascend_home, "lib64"))
+    add_rpathdirs(path.join(ascend_home, "lib64"))
+end
+
+local function get_ali_cuda_root()
+    local ali_cuda_root = os.getenv("ALI_CUDA_ROOT") or os.getenv("PPU_CUDA_ROOT")
+    local ppu_sdk_root = os.getenv("PPU_SDK_ROOT")
+    if (not ali_cuda_root or ali_cuda_root == "") and ppu_sdk_root and ppu_sdk_root ~= "" then
+        ali_cuda_root = path.join(ppu_sdk_root, "CUDA_SDK")
+    end
+    return ali_cuda_root or get_config("cuda") or "/usr/local/PPU_SDK/CUDA_SDK"
+end
+
+local function add_ali_runtime_sdk_dirs()
+    if not has_config("ali-ppu") then
+        return
+    end
+    local ali_cuda_root = get_ali_cuda_root()
+    for _, include_dir in ipairs({
+        path.join(ali_cuda_root, "include"),
+        path.join(ali_cuda_root, "targets", "x86_64-linux", "include"),
+    }) do
+        if os.isdir(include_dir) then
+            add_includedirs(include_dir)
+        end
+    end
+    for _, link_dir in ipairs({
+        path.join(ali_cuda_root, "lib64"),
+        path.join(ali_cuda_root, "targets", "x86_64-linux", "lib"),
+    }) do
+        if os.isdir(link_dir) then
+            add_linkdirs(link_dir)
+            add_rpathdirs(link_dir)
+        end
+    end
+end
+
 local function get_infiniops_cuda_architectures()
     local arch_opt = get_config("cuda_arch")
     if not arch_opt or arch_opt == "" then
@@ -508,6 +573,10 @@ target_end()
 target("infiniop")
     set_kind("shared")
     add_external_infinirt()
+    add_moore_runtime_sdk_dirs()
+    add_metax_runtime_sdk_dirs()
+    add_ascend_runtime_sdk_dirs()
+    add_ali_runtime_sdk_dirs()
 
     local public_cuda_root = get_config("cuda") or os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH")
     if public_cuda_root and public_cuda_root ~= "" then
@@ -529,6 +598,9 @@ target("infiniop")
         end
     elseif has_config("nv-gpu") then
         add_includedirs(path.join("/usr/local/cuda", "include"))
+    elseif has_config("iluvatar-gpu") then
+        add_includedirs(path.join("/usr/local/corex", "include"))
+        add_linkdirs(path.join("/usr/local/corex", "lib64"))
     end
 
     if has_config("cpu") then
@@ -625,6 +697,7 @@ target("infiniccl")
 
     add_files("src/infiniccl/*.cc")
     add_installfiles("include/infiniccl.h", {prefixdir = "include"})
+    add_installfiles("include/infinirt.h", {prefixdir = "include"})
 
     set_installdir(os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini"))
 target_end()
@@ -666,8 +739,13 @@ target("infinicore_cpp_api")
     end
     add_includedirs(INFINI_ROOT.."/include", { public = true })
     add_external_infinirt()
-    if has_config("nv-gpu") then
-        local cuda_root = os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH") or get_config("cuda") or "/usr/local/cuda"
+    add_moore_runtime_sdk_dirs()
+    add_metax_runtime_sdk_dirs()
+    add_ascend_runtime_sdk_dirs()
+    add_ali_runtime_sdk_dirs()
+    if has_config("nv-gpu") or has_config("iluvatar-gpu") then
+        local default_cuda_root = has_config("iluvatar-gpu") and "/usr/local/corex" or "/usr/local/cuda"
+        local cuda_root = os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH") or get_config("cuda") or default_cuda_root
         add_includedirs(cuda_root .. "/include")
     end
     if has_config("infiniops") then
@@ -910,6 +988,7 @@ target("infinicore_cpp_api")
     add_installfiles("include/infinicore/(**/*.hpp)",{prefixdir = "include/infinicore"})
     add_installfiles("include/infinicore.h",          {prefixdir = "include"})
     add_installfiles("include/infinicore.hpp",        {prefixdir = "include"})
+    add_installfiles("include/infinirt.h",            {prefixdir = "include"})
     after_build(function (target) print(YELLOW .. "[Congratulations!] Now you can install the libraries with \"xmake install\"" .. NC) end)
 target_end()
 
@@ -932,6 +1011,14 @@ target("_infinicore")
     local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
     add_includedirs(INFINI_ROOT.."/include", { public = true })
     add_external_infinirt()
+    add_moore_runtime_sdk_dirs()
+    add_metax_runtime_sdk_dirs()
+    add_ascend_runtime_sdk_dirs()
+    add_ali_runtime_sdk_dirs()
+    if has_config("iluvatar-gpu") then
+        local cuda_root = os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH") or get_config("cuda") or "/usr/local/corex"
+        add_cxxflags("-idirafter", cuda_root .. "/include", {force = true})
+    end
 
     add_linkdirs(INFINI_ROOT.."/lib")
     add_links("infiniop", "infiniccl")
