@@ -62,7 +62,7 @@ infiniStatus_t calculateRotm(
             param);
     }
 
-    cnrtQueueSync(queue);
+    device::bang::syncQueueIfNotCapturing(queue);
     return INFINI_STATUS_SUCCESS;
 }
 

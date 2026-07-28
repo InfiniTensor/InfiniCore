@@ -545,7 +545,7 @@ struct Algo {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
 
-        cnrtQueueSync(queue);
+        device::bang::syncQueueIfNotCapturing(queue);
         return INFINI_STATUS_SUCCESS;
     }
 
@@ -618,7 +618,7 @@ struct Algo {
         } else {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
-        cnrtQueueSync(queue);
+        device::bang::syncQueueIfNotCapturing(queue);
 
         return INFINI_STATUS_SUCCESS;
     }

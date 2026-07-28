@@ -88,7 +88,7 @@ infiniStatus_t launchPagedCaching(
         info.v_cache_head_stride,
         info.k_cache_slot_stride,
         info.v_cache_slot_stride);
-    cnrtQueueSync(queue);
+    CHECK_STATUS(device::bang::syncQueueIfNotCapturing(queue));
     return INFINI_STATUS_SUCCESS;
 }
 

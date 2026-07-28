@@ -65,6 +65,9 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
                     cls.free_blocks.pop_back();
                     block->in_use = true;
                     block->use_count = 1;
+                    // A cached eager block may become graph-visible when reused
+                    // in pin mode. Freeze it so trim cannot invalidate that pointer.
+                    block->frozen = block->frozen || pinned_mode_;
                     return reinterpret_cast<std::byte *>(block->ptr);
                 }
             }

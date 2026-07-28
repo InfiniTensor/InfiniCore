@@ -68,7 +68,8 @@ public:
     auto info_result = op::elementwise::ElementwiseInfo::create(OUT_DESC, INPUT_DESC_VEC);   \
     CHECK_RESULT(info_result);                                                               \
     auto info = info_result.take();                                                          \
-    auto workspace_size = info.getMetaMemSize() + info.getInputSize() * sizeof(void *);      \
+    /* Input pointers are kernel arguments; workspace contains metadata only. */             \
+    auto workspace_size = info.getMetaMemSize();                                             \
                                                                                              \
     auto device_impl_result = op::elementwise::bang::DeviceImpl::create(HANDLE->internal()); \
     CHECK_RESULT(device_impl_result);                                                        \

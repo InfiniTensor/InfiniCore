@@ -52,7 +52,6 @@ struct DeviceImpl::Opaque {
         }
 
         // Device pointers for metadata
-        const void **d_inputs_arr = nullptr;
         const bool *d_input_contiguous = nullptr;
         const bool *d_input_broadcasted = nullptr;
         const size_t *d_output_shape = nullptr;
@@ -60,11 +59,14 @@ struct DeviceImpl::Opaque {
         const size_t *d_input_shapes = nullptr;
         const ptrdiff_t *d_input_strides = nullptr;
 
-        // Copy metadata to device and setup pointers
-        CHECK_STATUS(infoToDevice<N>(info, workspace, inputs.data(), d_inputs_arr,
+        // inputs is a temporary host vector, so its pointer array cannot be a
+        // replay-time H2D source. Capture the stable device pointers as kernel
+        // arguments and reserve workspace only for descriptor-owned metadata.
+        CHECK_STATUS(infoToDevice<N>(info, workspace,
                                      d_input_contiguous, d_input_broadcasted,
                                      d_output_shape, d_output_strides,
-                                     d_input_shapes, d_input_strides));
+                                     d_input_shapes, d_input_strides,
+                                     queue));
 
         // Launch the elementwise kernel
         Op::template launch<Tdata>(
@@ -78,13 +80,13 @@ struct DeviceImpl::Opaque {
             reinterpret_cast<const void *>(d_output_strides),
             reinterpret_cast<const void *>(d_input_strides),
             output,
-            reinterpret_cast<const void *const *>(d_inputs_arr),
+            inputs.data(),
             queue,
             internal,
             args...);
 
         // Synchronize queue to ensure completion
-        CNRT_CHECK(cnrtQueueSync(queue));
+        CHECK_STATUS(device::bang::syncQueueIfNotCapturing(queue));
 
         return INFINI_STATUS_SUCCESS;
     }
@@ -97,8 +99,6 @@ private:
      *
      * @param info                   Elementwise operation metadata.
      * @param workspace              Device workspace memory.
-     * @param h_inputs_arr           Host array of input pointers.
-     * @param d_inputs_arr           Output reference to device input pointers.
      * @param d_input_contiguous     Output reference to contiguous flags.
      * @param d_input_broadcasted    Output reference to broadcast flags.
      * @param d_output_shape         Output reference to output shape.
@@ -111,27 +111,30 @@ private:
     infiniStatus_t infoToDevice(
         const op::elementwise::ElementwiseInfo &info,
         void *workspace,
-        const void *const *h_inputs_arr,
-        const void **&d_inputs_arr,
         const bool *&d_input_contiguous,
         const bool *&d_input_broadcasted,
         const size_t *&d_output_shape,
         const ptrdiff_t *&d_output_strides,
         const size_t *&d_input_shapes,
-        const ptrdiff_t *&d_input_strides) const {
+        const ptrdiff_t *&d_input_strides,
+        cnrtQueue_t queue) const {
 
         constexpr auto input_size = N;
         const auto ndim = info.getNdim();
-        constexpr auto input_arr_size = N * sizeof(*h_inputs_arr);
         const int8_t *info_meta_start = info.getMetaStart();
-        const int8_t *d_meta_start = reinterpret_cast<int8_t *>(workspace) + input_arr_size;
+        const int8_t *d_meta_start = reinterpret_cast<int8_t *>(workspace);
 
-        // Copy input pointer array and metadata to device
-        CNRT_CHECK(cnrtMemcpy(workspace, (void *)h_inputs_arr, input_arr_size, cnrtMemcpyHostToDev));
-        CNRT_CHECK(cnrtMemcpy((void *)d_meta_start, (void *)info_meta_start, info.getMetaMemSize(), cnrtMemcpyHostToDev));
+        // Record the metadata copy in TaskTopo so graph workspaces can be
+        // shared safely across shapes. The descriptor owns the host metadata
+        // for the lifetime of the captured graph.
+        CNRT_CHECK(cnrtMemcpyAsync_V2(
+            (void *)d_meta_start,
+            (void *)info_meta_start,
+            info.getMetaMemSize(),
+            queue,
+            cnrtMemcpyHostToDev));
 
         // Setup pointers to device memory regions
-        d_inputs_arr = reinterpret_cast<const void **>(workspace);
         d_output_shape = reinterpret_cast<const size_t *>(d_meta_start);
         d_output_strides = reinterpret_cast<const ptrdiff_t *>(d_output_shape + ndim);
         d_input_shapes = reinterpret_cast<const size_t *>(d_output_strides + ndim);
