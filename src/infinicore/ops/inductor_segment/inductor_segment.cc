@@ -25,11 +25,13 @@
 #include "infinicore/graph/capture_arena.hpp"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <limits>
 #include <memory>
 #include <sstream>
@@ -1072,6 +1074,38 @@ void run_moe_segment(
     if (valid_len == 0 || valid_len > static_cast<size_t>(seq)) {
         valid_len = std::min(static_cast<size_t>(seq), bucket);
     }
+
+    // #region agent log
+    {
+        static int moe_run_dumps = 0;
+        if (moe_run_dumps < 4 && (layer_idx == 0 || static_cast<size_t>(seq) != bucket || valid_len != bucket)) {
+            ++moe_run_dumps;
+            try {
+                const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                                    std::chrono::system_clock::now().time_since_epoch())
+                                    .count();
+                std::ostringstream dj;
+                dj << "{\"layer\":" << layer_idx << ",\"seq\":" << seq << ",\"bucket\":" << bucket
+                   << ",\"valid_len\":" << valid_len
+                   << ",\"eager_decode\":" << (moe_eager_decode_enabled(valid_len) ? 1 : 0) << "}";
+                std::ostringstream line;
+                line << "{\"sessionId\":\"8b13ee\",\"runId\":\"moe-bisect\",\"hypothesisId\":\"A\""
+                     << ",\"location\":\"inductor_segment.cc:run_moe_segment\""
+                     << ",\"message\":\"moe_run_valid_len\",\"data\":" << dj.str()
+                     << ",\"timestamp\":" << ms << "}\n";
+                const std::string s = line.str();
+                std::fprintf(stderr, "[8b13ee] %s", s.c_str());
+                std::fflush(stderr);
+                std::ofstream ofs("/opt/offline/infinilm-metax-20260622/.cursor/debug-8b13ee.log",
+                                  std::ios::app);
+                if (ofs) {
+                    ofs << s;
+                }
+            } catch (...) {
+            }
+        }
+    }
+    // #endregion
 
     // Decode / small-batch: bypass moe_B* AOTI — C++ router + Triton + shared.
     // Under Triton capture always use eager decode (AOTI+opaque failed instantiate).
