@@ -25,16 +25,13 @@
 #include "infinicore/graph/capture_arena.hpp"
 
 #include <algorithm>
-#include <chrono>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <fstream>
 #include <limits>
 #include <memory>
-#include <sstream>
 #include <string>
 #include <stdexcept>
 #include <unordered_map>
@@ -109,6 +106,21 @@ size_t moe_eager_decode_max_tokens() {
 bool moe_eager_decode_enabled(size_t valid_len) {
     const size_t max_tok = moe_eager_decode_max_tokens();
     return max_tok > 0 && valid_len > 0 && valid_len <= max_tok;
+}
+
+/// Pad-up (valid_len < bucket): moe_B* AOTI packages diverge vs eager on partial
+/// sequences (sparse 651→1024 tok0=16431; valid-only eager → 6805). Prefer
+/// valid-only Triton MoE. Set INFINI_MOE_PAD_UP_AOT=1 to force AOT+scratch pad.
+bool moe_pad_up_use_eager(size_t valid_len, size_t bucket) {
+    if (valid_len == 0 || bucket == 0 || valid_len >= bucket) {
+        return false;
+    }
+    if (const char *v = std::getenv("INFINI_MOE_PAD_UP_AOT")) {
+        if (v[0] == '1' && v[1] == '\0') {
+            return false;
+        }
+    }
+    return true;
 }
 
 size_t resolve_valid_seq_len(size_t bucket, const infinicore::Tensor &hidden_states) {
@@ -336,6 +348,24 @@ void run_pre_attn_segment(
     copy_tensor_if_needed(q_rope, outputs[2]);
     copy_tensor_if_needed(k_rope, outputs[3]);
     copy_tensor_if_needed(v_rope, outputs[4]);
+    // Qwen3 piecewise pad-up: zero staging tails after pre-attn so pad Q/K/V
+    // never leak into FA / later residual (inductor AOT runs at full bucket).
+    if (valid_len < bucket) {
+        auto q_aten = infinicore::adaptor::to_aten_tensor(q_rope);
+        auto k_aten = infinicore::adaptor::to_aten_tensor(k_rope);
+        auto v_aten = infinicore::adaptor::to_aten_tensor(v_rope);
+        const int64_t vl = static_cast<int64_t>(valid_len);
+        const int64_t tail = static_cast<int64_t>(bucket - valid_len);
+        if (q_aten.dim() >= 2 && q_aten.size(1) > vl) {
+            q_aten.narrow(1, vl, tail).zero_();
+        }
+        if (k_aten.dim() >= 2 && k_aten.size(1) > vl) {
+            k_aten.narrow(1, vl, tail).zero_();
+        }
+        if (v_aten.dim() >= 2 && v_aten.size(1) > vl) {
+            v_aten.narrow(1, vl, tail).zero_();
+        }
+    }
     restore_cuda_context(rank_device);
     // Do not sync here: hcGraph capture/replay records InductorSegment as a graph op.
     // Eager callers (text_decoder_layer) sync after inductor_segment_ when not recording.
@@ -353,7 +383,25 @@ at::Tensor pad_moe_hidden_fast(const at::Tensor &hidden, size_t bucket, size_t v
     const int64_t seq = hidden.size(1);
     const int64_t hidden_size = hidden.size(2);
     // Already bucket-width (piecewise-padded decode or full-bucket prefill).
+    // When valid_len < bucket (pad-up), still zero the pad tail in-place so MoE
+    // AOT at full bucket width does not route on stale pad tokens.
     if (static_cast<size_t>(seq) == bucket) {
+        if (valid_len < bucket) {
+            at::Tensor mutable_hidden = hidden; // alias same storage
+            const int64_t copy_len = static_cast<int64_t>(valid_len);
+            const int64_t bucket_i = static_cast<int64_t>(bucket);
+            auto tail = mutable_hidden.narrow(1, copy_len, bucket_i - copy_len);
+            if (infinicore::context::isDeviceStreamCapturing()) {
+                // Prefer full-buffer memset only when contiguous; else ATen zero_.
+                if (tail.is_contiguous()) {
+                    capture_safe_aten_zero_(tail);
+                } else {
+                    tail.zero_();
+                }
+            } else {
+                tail.zero_();
+            }
+        }
         return hidden;
     }
     const int64_t bucket_i = static_cast<int64_t>(bucket);
@@ -1075,41 +1123,11 @@ void run_moe_segment(
         valid_len = std::min(static_cast<size_t>(seq), bucket);
     }
 
-    // #region agent log
-    {
-        static int moe_run_dumps = 0;
-        if (moe_run_dumps < 4 && (layer_idx == 0 || static_cast<size_t>(seq) != bucket || valid_len != bucket)) {
-            ++moe_run_dumps;
-            try {
-                const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-                                    std::chrono::system_clock::now().time_since_epoch())
-                                    .count();
-                std::ostringstream dj;
-                dj << "{\"layer\":" << layer_idx << ",\"seq\":" << seq << ",\"bucket\":" << bucket
-                   << ",\"valid_len\":" << valid_len
-                   << ",\"eager_decode\":" << (moe_eager_decode_enabled(valid_len) ? 1 : 0) << "}";
-                std::ostringstream line;
-                line << "{\"sessionId\":\"8b13ee\",\"runId\":\"moe-bisect\",\"hypothesisId\":\"A\""
-                     << ",\"location\":\"inductor_segment.cc:run_moe_segment\""
-                     << ",\"message\":\"moe_run_valid_len\",\"data\":" << dj.str()
-                     << ",\"timestamp\":" << ms << "}\n";
-                const std::string s = line.str();
-                std::fprintf(stderr, "[8b13ee] %s", s.c_str());
-                std::fflush(stderr);
-                std::ofstream ofs("/opt/offline/infinilm-metax-20260622/.cursor/debug-8b13ee.log",
-                                  std::ios::app);
-                if (ofs) {
-                    ofs << s;
-                }
-            } catch (...) {
-            }
-        }
-    }
-    // #endregion
-
     // Decode / small-batch: bypass moe_B* AOTI — C++ router + Triton + shared.
     // Under Triton capture always use eager decode (AOTI+opaque failed instantiate).
-    if (moe_eager_decode_enabled(valid_len) || moe_triton_capture_enabled()) {
+    // Pad-up: also bypass AOTI (moe_B1024 pad-up tok0 mismatch; see moe_pad_up_use_eager).
+    if (moe_eager_decode_enabled(valid_len) || moe_triton_capture_enabled()
+        || moe_pad_up_use_eager(valid_len, bucket)) {
         const auto &weights = cached_moe_weights(layer_idx);
         const int64_t t_tokens = batch * static_cast<int64_t>(valid_len);
         at::Tensor x = hidden.narrow(1, 0, static_cast<int64_t>(valid_len))
@@ -1194,12 +1212,25 @@ void run_moe_segment(
     restore_cuda_context(rank_device);
     auto out_aten = infinicore::adaptor::to_aten_tensor(out);
     auto src = as_contiguous_on_device(outputs[0]);
-    if (out_aten.sizes() == src.sizes()) {
-        out_aten.copy_(src);
-    } else {
-        const int64_t copy_len = static_cast<int64_t>(std::min(valid_len, bucket));
+    // Prefill pad-up: MoE AOT may return [B,bucket,H] while caller out is either
+    // [B,bucket,H] or [B,valid,H] (narrowed). Always commit only the valid prefix;
+    // zero pad on out only when out itself is wider than valid_len.
+    {
+        const int64_t copy_len = static_cast<int64_t>(
+            std::min(valid_len, static_cast<size_t>(std::min(src.size(1), out_aten.size(1)))));
         if (copy_len > 0) {
-            out_aten.narrow(1, 0, copy_len).copy_(src.narrow(1, 0, copy_len));
+            if (out_aten.sizes() == src.sizes() && valid_len >= static_cast<size_t>(src.size(1))) {
+                out_aten.copy_(src);
+            } else {
+                out_aten.narrow(1, 0, copy_len).copy_(src.narrow(1, 0, copy_len));
+            }
+        }
+        if (static_cast<size_t>(out_aten.size(1)) > valid_len) {
+            out_aten.narrow(
+                        1,
+                        static_cast<int64_t>(valid_len),
+                        out_aten.size(1) - static_cast<int64_t>(valid_len))
+                .zero_();
         }
     }
     restore_cuda_context(rank_device);
