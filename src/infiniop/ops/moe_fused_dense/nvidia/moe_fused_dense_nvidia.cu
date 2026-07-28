@@ -71,7 +71,6 @@ size_t workspace_size(const MoeFusedDenseInfo &info) {
     bytes += align_up(info.num_experts * sizeof(cutlass::gemm::GemmCoord), 16);
     bytes += align_up(info.num_experts * sizeof(void *), 16) * 4;
     bytes += align_up(info.num_experts * sizeof(int64_t), 16) * 4;
-    bytes += align_up(sizeof(int), 16);
     return bytes + 256;
 #endif
 }
@@ -291,29 +290,59 @@ __global__ void setup_prefill_gemm2_kernel(cutlass::gemm::GemmCoord *problems,
 }
 
 template <typename T>
-__global__ void setup_decode_gemm1_aligned_compact_kernel(cutlass::gemm::GemmCoord *problems,
-                                                          void **ptr_a,
-                                                          void **ptr_b,
-                                                          void **ptr_c,
-                                                          void **ptr_d,
-                                                          int64_t *lda,
-                                                          int64_t *ldb,
-                                                          int64_t *ldc,
-                                                          int64_t *ldd,
-                                                          int *active_count,
-                                                          int *output_permutation,
-                                                          const T *hidden,
-                                                          const T *w13,
-                                                          T *gate_up,
-                                                          const int *sorted_token_ids,
-                                                          const int *expert_ids,
-                                                          const int *num_tokens_post_padded,
-                                                          int pairs,
-                                                          int topk,
-                                                          int num_experts,
-                                                          int hidden_size,
-                                                          int intermediate_size,
-                                                          int block_size) {
+__global__ void setup_decode_gemm1_defaults_kernel(cutlass::gemm::GemmCoord *problems,
+                                                   void **ptr_a,
+                                                   void **ptr_b,
+                                                   void **ptr_c,
+                                                   void **ptr_d,
+                                                   int64_t *lda,
+                                                   int64_t *ldb,
+                                                   int64_t *ldc,
+                                                   int64_t *ldd,
+                                                   const T *hidden,
+                                                   const T *w13,
+                                                   T *gate_up,
+                                                   int topk,
+                                                   int hidden_size,
+                                                   int intermediate_size) {
+    int route = blockIdx.x * blockDim.x + threadIdx.x;
+    if (route >= topk) {
+        return;
+    }
+    problems[route] = cutlass::gemm::GemmCoord(1, intermediate_size * 2, hidden_size);
+    ptr_a[route] = const_cast<T *>(hidden);
+    ptr_b[route] = const_cast<T *>(w13);
+    ptr_c[route] = gate_up + static_cast<size_t>(route) * intermediate_size * 2;
+    ptr_d[route] = gate_up + static_cast<size_t>(route) * intermediate_size * 2;
+    lda[route] = hidden_size;
+    ldb[route] = hidden_size;
+    ldc[route] = intermediate_size * 2;
+    ldd[route] = intermediate_size * 2;
+}
+
+template <typename T>
+__global__ void setup_decode_gemm1_local_kernel(cutlass::gemm::GemmCoord *problems,
+                                                void **ptr_a,
+                                                void **ptr_b,
+                                                void **ptr_c,
+                                                void **ptr_d,
+                                                int64_t *lda,
+                                                int64_t *ldb,
+                                                int64_t *ldc,
+                                                int64_t *ldd,
+                                                int *output_permutation,
+                                                const T *hidden,
+                                                const T *w13,
+                                                T *gate_up,
+                                                const int *sorted_token_ids,
+                                                const int *expert_ids,
+                                                const int *num_tokens_post_padded,
+                                                int pairs,
+                                                int topk,
+                                                int num_experts,
+                                                int hidden_size,
+                                                int intermediate_size,
+                                                int block_size) {
     int row = blockIdx.x * blockDim.x + threadIdx.x;
     int total_rows = *num_tokens_post_padded;
     if (row >= total_rows) {
@@ -328,7 +357,7 @@ __global__ void setup_decode_gemm1_aligned_compact_kernel(cutlass::gemm::GemmCoo
         return;
     }
 
-    int idx = atomicAdd(active_count, 1);
+    int idx = pair;
     int token = pair / topk;
     output_permutation[pair] = idx;
     problems[idx] = cutlass::gemm::GemmCoord(1, intermediate_size * 2, hidden_size);
@@ -343,27 +372,58 @@ __global__ void setup_decode_gemm1_aligned_compact_kernel(cutlass::gemm::GemmCoo
 }
 
 template <typename T>
-__global__ void setup_decode_gemm2_aligned_compact_kernel(cutlass::gemm::GemmCoord *problems,
-                                                          void **ptr_a,
-                                                          void **ptr_b,
-                                                          void **ptr_c,
-                                                          void **ptr_d,
-                                                          int64_t *lda,
-                                                          int64_t *ldb,
-                                                          int64_t *ldc,
-                                                          int64_t *ldd,
-                                                          const T *activated,
-                                                          const T *w2,
-                                                          T *expert_out,
-                                                          const int *sorted_token_ids,
-                                                          const int *expert_ids,
-                                                          const int *num_tokens_post_padded,
-                                                          const int *output_permutation,
-                                                          int pairs,
-                                                          int num_experts,
-                                                          int hidden_size,
-                                                          int intermediate_size,
-                                                          int block_size) {
+__global__ void setup_decode_gemm2_defaults_kernel(cutlass::gemm::GemmCoord *problems,
+                                                   void **ptr_a,
+                                                   void **ptr_b,
+                                                   void **ptr_c,
+                                                   void **ptr_d,
+                                                   int64_t *lda,
+                                                   int64_t *ldb,
+                                                   int64_t *ldc,
+                                                   int64_t *ldd,
+                                                   const T *activated,
+                                                   const T *w2,
+                                                   T *expert_out,
+                                                   int topk,
+                                                   int hidden_size,
+                                                   int intermediate_size) {
+    int route = blockIdx.x * blockDim.x + threadIdx.x;
+    if (route >= topk) {
+        return;
+    }
+    problems[route] = cutlass::gemm::GemmCoord(1, hidden_size, intermediate_size);
+    ptr_a[route] = const_cast<T *>(activated + static_cast<size_t>(route) * intermediate_size);
+    ptr_b[route] = const_cast<T *>(w2);
+    ptr_c[route] = expert_out + static_cast<size_t>(route) * hidden_size;
+    ptr_d[route] = expert_out + static_cast<size_t>(route) * hidden_size;
+    lda[route] = intermediate_size;
+    ldb[route] = intermediate_size;
+    ldc[route] = hidden_size;
+    ldd[route] = hidden_size;
+}
+
+template <typename T>
+__global__ void setup_decode_gemm2_local_kernel(cutlass::gemm::GemmCoord *problems,
+                                                void **ptr_a,
+                                                void **ptr_b,
+                                                void **ptr_c,
+                                                void **ptr_d,
+                                                int64_t *lda,
+                                                int64_t *ldb,
+                                                int64_t *ldc,
+                                                int64_t *ldd,
+                                                const T *activated,
+                                                const T *w2,
+                                                T *expert_out,
+                                                const int *sorted_token_ids,
+                                                const int *expert_ids,
+                                                const int *num_tokens_post_padded,
+                                                const int *output_permutation,
+                                                int pairs,
+                                                int num_experts,
+                                                int hidden_size,
+                                                int intermediate_size,
+                                                int block_size) {
     int row = blockIdx.x * blockDim.x + threadIdx.x;
     int total_rows = *num_tokens_post_padded;
     if (row >= total_rows) {
@@ -521,9 +581,7 @@ infiniStatus_t calculate_typed(const MoeFusedDenseInfo &info,
     auto grouped_ldb = reinterpret_cast<int64_t *>(advance_workspace(ptr, remaining, static_cast<size_t>(num_experts) * sizeof(int64_t), alignof(int64_t)));
     auto grouped_ldc = reinterpret_cast<int64_t *>(advance_workspace(ptr, remaining, static_cast<size_t>(num_experts) * sizeof(int64_t), alignof(int64_t)));
     auto grouped_ldd = reinterpret_cast<int64_t *>(advance_workspace(ptr, remaining, static_cast<size_t>(num_experts) * sizeof(int64_t), alignof(int64_t)));
-    auto active_count = reinterpret_cast<int *>(advance_workspace(ptr, remaining, sizeof(int), alignof(int)));
-
-    if (!counts || !offsets || !output_permutation || !packed_hidden || !gate_up || !activated || !expert_out || !grouped_problems || !grouped_ptr_a || !grouped_ptr_b || !grouped_ptr_c || !grouped_ptr_d || !grouped_lda || !grouped_ldb || !grouped_ldc || !grouped_ldd || !active_count) {
+    if (!counts || !offsets || !output_permutation || !packed_hidden || !gate_up || !activated || !expert_out || !grouped_problems || !grouped_ptr_a || !grouped_ptr_b || !grouped_ptr_c || !grouped_ptr_d || !grouped_lda || !grouped_ldb || !grouped_ldc || !grouped_ldd) {
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
 
@@ -531,26 +589,34 @@ infiniStatus_t calculate_typed(const MoeFusedDenseInfo &info,
     auto w2_t = reinterpret_cast<const T *>(w2);
     if (num_tokens == 1 && topk <= num_experts) {
         cudaMemsetAsync(output_permutation, 0xff, pairs * sizeof(int), stream);
-        cudaMemsetAsync(active_count, 0, sizeof(int), stream);
-        setup_decode_gemm1_aligned_compact_kernel<T><<<(max_num_tokens_padded + 255) / 256, 256, 0, stream>>>(
+        setup_decode_gemm1_defaults_kernel<T><<<(topk + 255) / 256, 256, 0, stream>>>(
             grouped_problems, grouped_ptr_a, grouped_ptr_b, grouped_ptr_c, grouped_ptr_d,
-            grouped_lda, grouped_ldb, grouped_ldc, grouped_ldd, active_count, output_permutation,
+            grouped_lda, grouped_ldb, grouped_ldc, grouped_ldd,
+            reinterpret_cast<const T *>(hidden_states), w13_t, gate_up,
+            topk, hidden_size, intermediate_size);
+        setup_decode_gemm1_local_kernel<T><<<(max_num_tokens_padded + 255) / 256, 256, 0, stream>>>(
+            grouped_problems, grouped_ptr_a, grouped_ptr_b, grouped_ptr_c, grouped_ptr_d,
+            grouped_lda, grouped_ldb, grouped_ldc, grouped_ldd, output_permutation,
             reinterpret_cast<const T *>(hidden_states), w13_t, gate_up,
             reinterpret_cast<const int *>(sorted_token_ids),
             reinterpret_cast<const int *>(expert_ids),
             reinterpret_cast<const int *>(num_tokens_post_padded),
             pairs, topk, num_experts, hidden_size, intermediate_size, block_size);
 
-        // Decode has one token and exactly one valid aligned row for each of
-        // its top-k routes, so the compact problem count is always topk.
-        // A D2H count copy and stream sync cannot be captured for replay.
+        // Keep the problem count fixed at topk for graph replay. Routes owned
+        // by another EP rank retain valid dummy descriptors and are ignored
+        // by output_permutation when local expert outputs are combined.
         CHECK_STATUS(launch_cutlass_gemm_grouped_device_meta<CutlassT>(
             topk, grouped_problems, grouped_ptr_a, grouped_ptr_b, grouped_ptr_c, grouped_ptr_d,
             grouped_lda, grouped_ldb, grouped_ldc, grouped_ldd, stream));
 
         swiglu_kernel<T><<<(topk * intermediate_size + 255) / 256, 256, 0, stream>>>(gate_up, activated, topk, intermediate_size);
 
-        setup_decode_gemm2_aligned_compact_kernel<T><<<(max_num_tokens_padded + 255) / 256, 256, 0, stream>>>(
+        setup_decode_gemm2_defaults_kernel<T><<<(topk + 255) / 256, 256, 0, stream>>>(
+            grouped_problems, grouped_ptr_a, grouped_ptr_b, grouped_ptr_c, grouped_ptr_d,
+            grouped_lda, grouped_ldb, grouped_ldc, grouped_ldd,
+            activated, w2_t, expert_out, topk, hidden_size, intermediate_size);
+        setup_decode_gemm2_local_kernel<T><<<(max_num_tokens_padded + 255) / 256, 256, 0, stream>>>(
             grouped_problems, grouped_ptr_a, grouped_ptr_b, grouped_ptr_c, grouped_ptr_d,
             grouped_lda, grouped_ldb, grouped_ldc, grouped_ldd, activated, w2_t, expert_out,
             reinterpret_cast<const int *>(sorted_token_ids),

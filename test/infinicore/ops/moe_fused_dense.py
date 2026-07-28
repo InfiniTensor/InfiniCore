@@ -115,6 +115,8 @@ def torch_moe_fused_dense(
     for token in range(num_tokens):
         for route in range(topk):
             expert = int(ids[token, route].item())
+            if expert < 0 or expert >= w13f.shape[0]:
+                continue
             gate_up = F.linear(hidden[token], w13f[expert])
             gate, up = gate_up.chunk(2, dim=-1)
             activated = F.silu(gate) * up
@@ -135,6 +137,19 @@ def parse_test_cases():
                 num_experts=8,
                 topk=3,
                 topk_ids=torch.tensor([[6, 2, 4]], dtype=torch.int32),
+                block_size=4,
+            ),
+        ),
+        (
+            "decode EP-filtered routes",
+            _make_case(
+                20260728,
+                num_tokens=1,
+                hidden_size=32,
+                intermediate_size=64,
+                num_experts=4,
+                topk=4,
+                topk_ids=torch.tensor([[6, 1, 3, 7]], dtype=torch.int32),
                 block_size=4,
             ),
         ),
