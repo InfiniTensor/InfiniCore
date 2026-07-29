@@ -367,9 +367,9 @@ at::Tensor pad_moe_hidden_fast(const at::Tensor &hidden, size_t bucket, size_t v
     const int64_t batch = hidden.size(0);
     const int64_t seq = hidden.size(1);
     const int64_t hidden_size = hidden.size(2);
-    // Already bucket-width (piecewise-padded decode or full-bucket prefill).
-    // When valid_len < bucket (pad-up), still zero the pad tail in-place so MoE
-    // AOT at full bucket width does not route on stale pad tokens.
+    // Already Triton-bucket width (piecewise pad-up or exact-bucket prefill).
+    // When valid_len < bucket (pad-up), zero the pad tail in-place so stale
+    // tokens never reach the router if a caller drops the valid-prefix mask.
     if (static_cast<size_t>(seq) == bucket) {
         if (valid_len < bucket) {
             at::Tensor mutable_hidden = hidden; // alias same storage
@@ -1102,113 +1102,49 @@ void run_moe_segment(
     const int64_t batch = hidden.size(0);
     const int64_t seq = hidden.size(1);
     const int64_t hidden_size = hidden.size(2);
-    // Prefer piecewise.valid_seq_len (decode=1) over padded shape[1]==bucket.
-    valid_len = std::min(valid_len, bucket);
-    if (valid_len == 0 || valid_len > static_cast<size_t>(seq)) {
-        valid_len = std::min(static_cast<size_t>(seq), bucket);
+
+    // Triton at CG staging width (== hidden S == capture bucket).
+    //   pad-up  (valid_len < staging): zero pad tail, Triton on valid prefix
+    //   exact   (valid_len == staging): same Triton path (no moe_B* AOT)
+    // Never remap staging up to a larger moe_B* size (768→1024 → tok0 16431).
+    const size_t staging = static_cast<size_t>(seq);
+    const size_t triton_bucket = staging;
+    (void)bucket; // must equal staging; ignore remapped AOT sizes from callers
+    // Prefer piecewise.valid_seq_len (decode=1 / pad-up L) over padded shape.
+    valid_len = std::min(valid_len, triton_bucket);
+    if (valid_len == 0 || valid_len > staging) {
+        valid_len = std::min(staging, triton_bucket);
     }
 
-    // 1) Decode / Triton-capture: valid-only C++ router + Triton (unchanged).
-    // Under Triton capture always use eager decode (AOTI+opaque failed instantiate).
-    if (moe_eager_decode_enabled(valid_len) || moe_triton_capture_enabled()) {
-        const auto &weights = cached_moe_weights(layer_idx);
-        const int64_t t_tokens = batch * static_cast<int64_t>(valid_len);
-        at::Tensor x = hidden.narrow(1, 0, static_cast<int64_t>(valid_len))
-                           .reshape({t_tokens, hidden_size});
-        // H7: bucket-padded decode hidden makes narrow/reshape non-contiguous,
-        // so ``x.contiguous()`` allocates a torch CachingAllocator temp. Under hcStream
-        // capture that temp is NOT in CaptureArena — GraphExec replays dangling reads.
-        // Materialize into the arena instead.
-        if (infinicore::context::isDeviceStreamCapturing()) {
-            if (auto *arena = infinicore::graph::current_capture_arena()) {
-                at::Tensor x_a = arena->empty_aten({t_tokens, hidden_size}, x.options());
-                x_a.copy_(x);
-                arena->retain(x_a);
-                x = x_a;
-            } else if (!x.is_contiguous()) {
-                x = x.contiguous();
-            }
+    const auto &weights = cached_moe_weights(layer_idx);
+    at::Tensor hidden_padded = pad_moe_hidden_fast(hidden, triton_bucket, valid_len);
+    const int64_t staging_i = static_cast<int64_t>(triton_bucket);
+    const int64_t valid_i = static_cast<int64_t>(valid_len);
+    const int64_t t_staging = batch * staging_i;
+    const int64_t t_valid = batch * valid_i;
+    at::Tensor x_pad = hidden_padded.reshape({t_staging, hidden_size});
+    // Router mask: Triton experts see valid tokens only (pad retained on staging).
+    at::Tensor x = x_pad.narrow(0, 0, t_valid);
+    if (infinicore::context::isDeviceStreamCapturing()) {
+        if (auto *arena = infinicore::graph::current_capture_arena()) {
+            at::Tensor x_a = arena->empty_aten({t_valid, hidden_size}, x.options());
+            x_a.copy_(x);
+            arena->retain(x_a);
+            x = x_a;
         } else if (!x.is_contiguous()) {
             x = x.contiguous();
         }
-        at::Tensor y = run_moe_eager_decode(x, weights);
-        restore_cuda_context(rank_device);
-        auto out_aten = infinicore::adaptor::to_aten_tensor(out);
-        at::Tensor y3 = y.view({batch, static_cast<int64_t>(valid_len), hidden_size});
-        if (out_aten.sizes() == y3.sizes()) {
-            out_aten.copy_(y3);
-        } else {
-            out_aten.narrow(1, 0, static_cast<int64_t>(valid_len)).copy_(y3);
-            if (static_cast<size_t>(out_aten.size(1)) > valid_len) {
-                if (infinicore::context::isDeviceStreamCapturing()) {
-                    if (!out_aten.is_contiguous()) {
-                        throw std::runtime_error(
-                            "InductorMoe: non-contiguous MoE out under capture; cannot stream-memset pad");
-                    }
-                    const size_t elem = static_cast<size_t>(out_aten.element_size());
-                    const size_t row = static_cast<size_t>(hidden_size) * elem;
-                    const size_t prefix = static_cast<size_t>(valid_len) * row;
-                    const size_t total = static_cast<size_t>(out_aten.size(1)) * row;
-                    for (int64_t b = 0; b < batch; ++b) {
-                        auto *base = static_cast<char *>(out_aten.data_ptr())
-                                     + static_cast<size_t>(b) * total;
-                        capture_safe_device_zero_(base + prefix, total - prefix);
-                    }
-                } else {
-                    out_aten.narrow(
-                                1,
-                                static_cast<int64_t>(valid_len),
-                                out_aten.size(1) - static_cast<int64_t>(valid_len))
-                        .zero_();
-                }
-            }
-        }
-        restore_cuda_context(rank_device);
-        return;
+    } else if (!x.is_contiguous()) {
+        x = x.contiguous();
     }
-
-    // 2) Prefill pad-up (valid_len < bucket): pad-to-bucket staging then Triton.
-    // moe_B* AOT under pad-up diverges (sparse 651→1024 tok0=16431 vs eager 6805).
-    // Product: do not call MoE AOT registry. Zero-pad tokens still route via gate
-    // bias and poison moe_align packing / get_moe_config_for_m → tok0 16431; mask
-    // pad out of the Triton expert body (valid-prefix) while I/O stays bucket-width.
-    if (valid_len < bucket) {
-        const auto &weights = cached_moe_weights(layer_idx);
-        at::Tensor hidden_padded = pad_moe_hidden_fast(hidden, bucket, valid_len);
-        const int64_t bucket_i = static_cast<int64_t>(bucket);
-        const int64_t valid_i = static_cast<int64_t>(valid_len);
-        const int64_t t_bucket = batch * bucket_i;
-        const int64_t t_valid = batch * valid_i;
-        at::Tensor x_pad = hidden_padded.reshape({t_bucket, hidden_size});
-        // Router mask: experts see valid tokens only (pad staging retained above).
-        at::Tensor x = x_pad.narrow(0, 0, t_valid);
-        if (infinicore::context::isDeviceStreamCapturing()) {
-            if (auto *arena = infinicore::graph::current_capture_arena()) {
-                at::Tensor x_a = arena->empty_aten({t_valid, hidden_size}, x.options());
-                x_a.copy_(x);
-                arena->retain(x_a);
-                x = x_a;
-            } else if (!x.is_contiguous()) {
-                x = x.contiguous();
-            }
-        } else if (!x.is_contiguous()) {
-            x = x.contiguous();
-        }
-        at::Tensor y = run_moe_eager_decode(x, weights);
-        restore_cuda_context(rank_device);
-        auto out_aten = infinicore::adaptor::to_aten_tensor(out);
-        at::Tensor y3 = y.view({batch, valid_i, hidden_size});
-        if (out_aten.size(1) == bucket_i) {
-            out_aten.narrow(1, 0, valid_i).copy_(y3);
-        } else if (out_aten.sizes() == y3.sizes()) {
-            out_aten.copy_(y3);
-        } else {
-            const int64_t copy_len = std::min(valid_i, out_aten.size(1));
-            if (copy_len > 0) {
-                out_aten.narrow(1, 0, copy_len).copy_(y3.narrow(1, 0, copy_len));
-            }
-        }
-        // Re-zero [L:B) for safety (pad rows must not leak into later layers).
+    at::Tensor y = run_moe_eager_decode(x, weights);
+    restore_cuda_context(rank_device);
+    auto out_aten = infinicore::adaptor::to_aten_tensor(out);
+    at::Tensor y3 = y.view({batch, valid_i, hidden_size});
+    if (out_aten.sizes() == y3.sizes()) {
+        out_aten.copy_(y3);
+    } else {
+        out_aten.narrow(1, 0, valid_i).copy_(y3);
         if (static_cast<size_t>(out_aten.size(1)) > valid_len) {
             if (infinicore::context::isDeviceStreamCapturing()) {
                 if (!out_aten.is_contiguous()) {
@@ -1231,59 +1167,6 @@ void run_moe_segment(
                             out_aten.size(1) - static_cast<int64_t>(valid_len))
                     .zero_();
             }
-        }
-        restore_cuda_context(rank_device);
-        return;
-    }
-
-    // 3) Exact-bucket prefill: moe_B* AOT (pad_moe_hidden_fast is no-op / early return).
-    bool layer_agnostic = false;
-    auto &runner = infinicore::op::inductor_segment_impl::InductorSegmentRegistry::instance().runner(
-        infinicore::op::PiecewiseInductorSegmentId::Moe,
-        layer_idx,
-        bucket,
-        &layer_agnostic);
-
-    at::Tensor hidden_padded = pad_moe_hidden_fast(hidden, bucket, valid_len);
-
-    std::vector<at::Tensor> inputs = {hidden_padded};
-    if (layer_agnostic) {
-        auto weights = infinicore::op::inductor_segment_impl::resolve_moe_weights(layer_idx);
-        inputs.push_back(weights.gate_weight);
-        inputs.push_back(weights.e_score_correction_bias);
-        inputs.push_back(weights.w_gate_up);
-        inputs.push_back(weights.w_down);
-        inputs.push_back(weights.shared_gate_up);
-        inputs.push_back(weights.shared_down);
-    }
-
-    std::vector<at::Tensor> outputs = runner.run(inputs, nullptr);
-    if (outputs.empty()) {
-        throw std::runtime_error("InductorSegment moe: expected >=1 output, got 0");
-    }
-
-    restore_cuda_context(rank_device);
-    auto out_aten = infinicore::adaptor::to_aten_tensor(out);
-    auto src = as_contiguous_on_device(outputs[0]);
-    // Prefill pad-up: MoE AOT may return [B,bucket,H] while caller out is either
-    // [B,bucket,H] or [B,valid,H] (narrowed). Always commit only the valid prefix;
-    // zero pad on out only when out itself is wider than valid_len.
-    {
-        const int64_t copy_len = static_cast<int64_t>(
-            std::min(valid_len, static_cast<size_t>(std::min(src.size(1), out_aten.size(1)))));
-        if (copy_len > 0) {
-            if (out_aten.sizes() == src.sizes() && valid_len >= static_cast<size_t>(src.size(1))) {
-                out_aten.copy_(src);
-            } else {
-                out_aten.narrow(1, 0, copy_len).copy_(src.narrow(1, 0, copy_len));
-            }
-        }
-        if (static_cast<size_t>(out_aten.size(1)) > valid_len) {
-            out_aten.narrow(
-                        1,
-                        static_cast<int64_t>(valid_len),
-                        out_aten.size(1) - static_cast<int64_t>(valid_len))
-                .zero_();
         }
     }
     restore_cuda_context(rank_device);
@@ -1538,12 +1421,16 @@ void moe_run(void *planned_meta) {
     }
     Tensor hidden_states = meta->hidden_states->resume_from_blob_();
     Tensor out = meta->out->resume_from_blob_();
+    // Re-resolve at HostOp replay: capture-time meta->valid_len is the full
+    // CG bucket (warmup). Pad-up needs piecewise.valid_seq_len (e.g. 651) or
+    // Triton sees zero-pad tokens → tok0 16431.
+    const size_t valid_len = resolve_valid_seq_len(meta->bucket, hidden_states);
     run_moe_segment(
         hidden_states,
         out,
         meta->layer_idx,
         meta->bucket,
-        meta->valid_len);
+        valid_len);
 #else
     (void)planned_meta;
     throw std::runtime_error("InductorMoe requires ENABLE_ATEN build");
