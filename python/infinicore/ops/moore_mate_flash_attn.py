@@ -12,26 +12,43 @@ Provides three entry points:
 
 import torch
 
-try:
-    from flash_attn import flash_attn_with_kvcache, get_scheduler_metadata
+# Mate is an optional native extension. Delay loading it so an incompatible
+# build cannot break unrelated InfiniCore paths during package import.
+_MATE_FUNCTIONS = None
+_MATE_IMPORT_ERROR = None
 
-    _MATE_AVAILABLE = True
-except ImportError:
-    _MATE_AVAILABLE = False
+
+def _load_mate():
+    """Import the optional Mate extension only when a Mate kernel is used."""
+    global _MATE_FUNCTIONS, _MATE_IMPORT_ERROR
+
+    if _MATE_FUNCTIONS is None and _MATE_IMPORT_ERROR is None:
+        try:
+            from flash_attn import flash_attn_with_kvcache, get_scheduler_metadata
+        except ImportError as error:
+            _MATE_IMPORT_ERROR = error
+        else:
+            _MATE_FUNCTIONS = (
+                flash_attn_with_kvcache,
+                get_scheduler_metadata,
+            )
+
+    if _MATE_FUNCTIONS is None:
+        raise RuntimeError(
+            "flash_attn (Mate) could not be imported. "
+            "Please install a compatible MooreThreads/mate build."
+        ) from _MATE_IMPORT_ERROR
+
+    return _MATE_FUNCTIONS
 
 
 def is_available() -> bool:
-    """Return True if mate / flash_attn is installed and importable."""
-    return _MATE_AVAILABLE
-
-
-def _check_mate_available():
-    """Raise a clear error if mate is not installed."""
-    if not _MATE_AVAILABLE:
-        raise RuntimeError(
-            "flash_attn (mate) is not installed. "
-            "Please build and install MooreThreads/mate first."
-        )
+    """Return True if mate / flash_attn can be imported."""
+    try:
+        _load_mate()
+    except RuntimeError:
+        return False
+    return True
 
 
 # =============================================================================
@@ -54,7 +71,7 @@ def moore_mate_flash_attn_decode(
     Decode entry point with native flash_attn KV cache layout (B, P, H, D).
     No layout conversion is performed.
     """
-    _check_mate_available()
+    flash_attn_with_kvcache, get_scheduler_metadata = _load_mate()
 
     num_seqs, num_heads, head_size = q.shape
     num_kv_heads = k_cache.shape[2]
@@ -122,7 +139,7 @@ def moore_mate_flash_attn_prefill(
     Variable-length prefill entry point. Layout follows flash_attn (B, P, H, D).
     Intended to be called from the C++ mha_varlen Moore branch.
     """
-    _check_mate_available()
+    flash_attn_with_kvcache, get_scheduler_metadata = _load_mate()
 
     cu_seqlens_q = cu_seqlens_q.to(torch.int32)
     cu_seqlens_k = cu_seqlens_k.to(torch.int32)
