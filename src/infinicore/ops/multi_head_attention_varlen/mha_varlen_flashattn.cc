@@ -3,7 +3,7 @@
 #ifdef ENABLE_ATEN
 #include "infinicore/adaptor/aten_adaptor.hpp"
 #include <ATen/ops/scaled_dot_product_attention.h>
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API) || defined(ENABLE_QY_API)
 #include <c10/cuda/CUDAGuard.h>
 #endif
 #endif
@@ -53,9 +53,9 @@ void *plan(Tensor out,
 namespace {
 
 #ifdef ENABLE_FLASH_ATTN
-// MetaX/hpcc pip `flash_attn_2_cuda` exports `mha_varlen_fwd` at global scope (no namespace),
+// MetaX/Mars `flash_attn_2_cuda` exports `mha_varlen_fwd` at global scope,
 // while NVIDIA `flash-attn-nvidia.so` uses `flash::mha_varlen_fwd`.
-#if defined(ENABLE_METAX_API)
+#if defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API)
 #define INFINICORE_FLASH_OP(name) ::name
 #else
 #define INFINICORE_FLASH_OP(name) flash::name
@@ -69,7 +69,7 @@ void run(void *planned_meta) {
     (void)planned_meta;
     throw std::runtime_error("ATen is not enabled in this build");
 #else
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API) || defined(ENABLE_QY_API)
     c10::cuda::CUDAStreamGuard guard(infinicore::adaptor::get_cuda_stream());
 #endif
     auto *p = reinterpret_cast<PlannedMeta *>(planned_meta);
@@ -138,8 +138,8 @@ void run(void *planned_meta) {
     auto alibi_slopes = p->alibi_slopes ? std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(*p->alibi_slopes)) : std::nullopt;
     auto scale = p->scale;
 
-#if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
-    std::optional<at::Tensor> flash_attn_mars_ext = std::nullopt;
+#if defined(INFINICORE_FLASH_ATTN_MARS_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_S_AUX)
+    std::optional<at::Tensor> s_aux = std::nullopt;
 #endif
 
     INFINICORE_FLASH_OP(mha_varlen_fwd)
@@ -165,9 +165,9 @@ void run(void *planned_meta) {
         0.0,
         false,
         std::nullopt
-#if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
+#if defined(INFINICORE_FLASH_ATTN_MARS_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_S_AUX)
         ,
-        flash_attn_mars_ext
+        s_aux
 #endif
     );
 

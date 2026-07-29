@@ -1,9 +1,9 @@
-import torch
-from infinicore.lib import _infinicore
-from infinicore.utils import to_torch_dtype
 import numpy as np
+import torch
 
 import infinicore
+from infinicore.lib import _infinicore
+from infinicore.utils import to_torch_dtype
 
 
 def test():
@@ -186,10 +186,11 @@ def func6_initialize_device_relationship():
         _infinicore.Device.Type.KUNLUN,  # 7  "cuda"
         _infinicore.Device.Type.HYGON,  # 8  "cuda"
         _infinicore.Device.Type.ALI,  # 10 "cuda"
+        _infinicore.Device.Type.MARS,  # 11 "cuda"
     ]
     if True:
         print("\n ---------- 测试 CPU")
-        all_device_count = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        all_device_count = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         infinicore_2_python_dict, python_2_infinicore_dict = (
             _initialize_device_relationship(all_device_types, all_device_count)
         )
@@ -197,15 +198,25 @@ def func6_initialize_device_relationship():
         print("python_2_infinicore_dict: ", python_2_infinicore_dict)
 
         print("\n ---------- 测试 CPU+NVIDIA")
-        all_device_count = [1, 2, 0, 0, 0, 0, 0, 0, 0, 0]
+        all_device_count = [1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
         infinicore_2_python_dict, python_2_infinicore_dict = (
             _initialize_device_relationship(all_device_types, all_device_count)
         )
         print("infinicore_2_python_dict", infinicore_2_python_dict)
         print("python_2_infinicore_dict: ", python_2_infinicore_dict)
 
+        print("\n ---------- 测试 CPU+MARS")
+        all_device_count = [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2]
+        infinicore_2_python_dict, python_2_infinicore_dict = (
+            _initialize_device_relationship(all_device_types, all_device_count)
+        )
+        assert len(infinicore_2_python_dict[_infinicore.Device.Type.MARS]) == 2
+        assert len(python_2_infinicore_dict["cuda"]) == 2
+        print("infinicore_2_python_dict", infinicore_2_python_dict)
+        print("python_2_infinicore_dict: ", python_2_infinicore_dict)
+
         print("\n ---------- 测试 CPU+NVIDIA+HYGON")
-        all_device_count = [1, 2, 0, 0, 0, 0, 0, 0, 0, 2]
+        all_device_count = [1, 2, 0, 0, 0, 0, 0, 0, 0, 2, 0, 0]
         infinicore_2_python_dict, python_2_infinicore_dict = (
             _initialize_device_relationship(all_device_types, all_device_count)
         )
@@ -213,7 +224,7 @@ def func6_initialize_device_relationship():
         print("python_2_infinicore_dict: ", python_2_infinicore_dict)
 
         print("\n ---------- 测试 CPU+NVIDIA+HYGON+CAMBRICON+ASCEND")
-        all_device_count = [1, 2, 2, 2, 0, 0, 0, 0, 0, 2]
+        all_device_count = [1, 2, 2, 2, 0, 0, 0, 0, 0, 2, 0, 0]
         infinicore_2_python_dict, python_2_infinicore_dict = (
             _initialize_device_relationship(all_device_types, all_device_count)
         )
