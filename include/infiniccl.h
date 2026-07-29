@@ -11,6 +11,12 @@ typedef enum {
     INFINICCL_AVG = 4,
 } infinicclReduceOp_t;
 
+typedef enum {
+    INFINICCL_ALLREDUCE_BACKEND_AUTO = 0,
+    INFINICCL_ALLREDUCE_BACKEND_NCCL = 1,
+    INFINICCL_ALLREDUCE_BACKEND_CUSTOM = 2,
+} infinicclAllReduceBackend_t;
+
 struct InfinicclComm;
 
 typedef struct InfinicclComm *infinicclComm_t;
@@ -22,6 +28,30 @@ __INFINI_C __export infiniStatus_t infinicclCommInitAll(
     const int *device_ids);
 
 __INFINI_C __export infiniStatus_t infinicclCommDestroy(infinicclComm_t comm);
+
+__INFINI_C __export infiniStatus_t infinicclCommSetAllReduceBackend(
+    infinicclComm_t comm,
+    infinicclAllReduceBackend_t backend);
+
+__INFINI_C __export infiniStatus_t infinicclCommGetAllReduceBackend(
+    infinicclComm_t comm,
+    infinicclAllReduceBackend_t *backend);
+
+__INFINI_C __export infiniStatus_t infinicclCommRegisterAllReduceBuffers(
+    infinicclComm_t *comms,
+    int ndevice,
+    void **buffers,
+    size_t bytes);
+
+__INFINI_C __export infiniStatus_t infinicclCommRegisterAllReduceBuffer(
+    infinicclComm_t comm,
+    const char *key,
+    void *buffer,
+    size_t bytes);
+
+__INFINI_C __export infiniStatus_t infinicclCommClearAllReduceBuffers(
+    infinicclComm_t *comms,
+    int ndevice);
 
 __INFINI_C __export infiniStatus_t infinicclGroupStart(infinicclComm_t comm);
 

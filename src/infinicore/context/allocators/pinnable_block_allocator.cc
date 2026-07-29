@@ -135,7 +135,10 @@ void PinnableBlockAllocator::deallocate(std::byte *ptr) {
     block->in_use = false;
     for (auto &cls : size_classes_) {
         if (block->size == cls.block_size) {
-            cls.free_blocks.push_back(block);
+            auto it = std::find(cls.free_blocks.begin(), cls.free_blocks.end(), block);
+            if (it == cls.free_blocks.end()) {
+                cls.free_blocks.push_back(block);
+            }
             break;
         }
     }
@@ -151,6 +154,18 @@ size_t PinnableBlockAllocator::mark_in_use_(void *ptr, bool in_use) {
 
     auto block = it->second;
     if (in_use) {
+        // Graph blob reinstantiation can resurrect a cached size-class block
+        // without going through allocate(). Once active again, it must not stay
+        // in the free list, otherwise trim() can release the same pointer twice.
+        if (!block->in_use) {
+            for (auto &cls : size_classes_) {
+                if (block->size == cls.block_size) {
+                    auto free_it = std::remove(cls.free_blocks.begin(), cls.free_blocks.end(), block);
+                    cls.free_blocks.erase(free_it, cls.free_blocks.end());
+                    break;
+                }
+            }
+        }
         block->in_use = true;
         ++block->use_count;
     } else if (block->use_count > 0) {
@@ -190,11 +205,10 @@ void PinnableBlockAllocator::trim() {
 // ------------------- Destructor -------------------
 PinnableBlockAllocator::~PinnableBlockAllocator() {
     std::lock_guard<std::mutex> lock(mutex_);
-    for (auto &p : all_blocks_) {
-        if (p.second->ptr) {
-            infinirtFree(p.second->ptr);
-        }
-    }
+    // Do not call infinirtFree during process shutdown. This allocator is owned
+    // by the process-wide runtime; by the time the runtime singleton is
+    // destructed, CUDA graph/runtime teardown order can make individual frees
+    // unsafe. The driver reclaims the remaining process allocations on exit.
     all_blocks_.clear();
     large_blocks_.clear();
     for (auto &cls : size_classes_) {

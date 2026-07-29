@@ -38,11 +38,32 @@ DeviceEvent::DeviceEvent(DeviceEvent &&other) noexcept
     other.is_recorded_ = false;
 }
 
+namespace {
+
+void destroy_event_on_device(infinirtEvent_t event, const Device &device) noexcept {
+    try {
+        Device current_device = context::getDevice();
+        bool switched_device = current_device != device;
+        if (switched_device) {
+            context::setDevice(device);
+        }
+        context::destroyEvent(event);
+        if (switched_device) {
+            context::setDevice(current_device);
+        }
+    } catch (...) {
+        // Event cleanup can happen during interpreter shutdown; do not throw
+        // from destructors or noexcept move assignment cleanup.
+    }
+}
+
+} // namespace
+
 DeviceEvent &DeviceEvent::operator=(DeviceEvent &&other) noexcept {
     if (this != &other) {
         // Clean up current resources
         if (event_ != nullptr) {
-            context::destroyEvent(event_);
+            destroy_event_on_device(event_, device_);
         }
 
         // Transfer ownership
@@ -59,7 +80,7 @@ DeviceEvent &DeviceEvent::operator=(DeviceEvent &&other) noexcept {
 
 DeviceEvent::~DeviceEvent() {
     if (event_ != nullptr) {
-        context::destroyEvent(event_);
+        destroy_event_on_device(event_, device_);
     }
 }
 

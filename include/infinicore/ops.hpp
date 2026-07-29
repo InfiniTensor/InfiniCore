@@ -26,6 +26,7 @@
 #include "ops/cross_entropy.hpp"
 #include "ops/deepseek_moe.hpp"
 #include "ops/embedding.hpp"
+#include "ops/ernie45_rope.hpp"
 #include "ops/flash_attention.hpp"
 #include "ops/fmin.hpp"
 #include "ops/fmod.hpp"

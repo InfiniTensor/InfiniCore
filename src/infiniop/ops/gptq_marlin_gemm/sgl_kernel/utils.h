@@ -48,7 +48,7 @@
 
 #include <concepts>
 #include <cstddef>
-#include <dlpack/dlpack.h>
+#include "../dlpack/dlpack.h"
 #include <ostream>
 #include <ranges>
 #include <sstream>

@@ -1,4 +1,5 @@
 #include "infiniccl_cuda.h"
+#include "custom_allreduce.hpp"
 
 #include <cuda_runtime.h>
 #include <iostream>
@@ -71,16 +72,46 @@ infiniStatus_t commInitAll(
     CHECK_NCCL(ncclCommInitAll(nccl_comms.data(), ndevice, (int const *)device_ids));
 
     for (int i = 0; i < ndevice; i++) {
-        comms[i] = new InfinicclComm{INFINI_DEVICE_NVIDIA, device_ids[i], (void *)(nccl_comms[i]), i, ndevice};
+        auto *comm = new InfinicclComm{INFINI_DEVICE_NVIDIA, device_ids[i], (void *)(nccl_comms[i]), i, ndevice};
+        comm->custom_allreduce_context = createCustomAllReduceContext(i, ndevice, device_ids[i], device_ids);
+        comms[i] = comm;
     }
+    initializeCustomAllReduceContexts(comms, ndevice, device_ids);
 
     return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t commDestroy(infinicclComm_t comm) {
+    destroyCustomAllReduceContext(static_cast<CustomAllReduceContext *>(comm->custom_allreduce_context));
+    comm->custom_allreduce_context = nullptr;
     CHECK_NCCL(ncclCommDestroy(getNcclComm(comm)));
     delete comm;
     return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t registerAllReduceBuffers(
+    infinicclComm_t *comms,
+    int ndevice,
+    void **buffers,
+    size_t bytes) {
+
+    return registerCustomAllReduceBuffers(comms, ndevice, buffers, bytes);
+}
+
+infiniStatus_t registerAllReduceBuffer(
+    infinicclComm_t comm,
+    const char *key,
+    void *buffer,
+    size_t bytes) {
+
+    return registerCustomAllReduceBuffer(comm, key, buffer, bytes);
+}
+
+infiniStatus_t clearAllReduceBuffers(
+    infinicclComm_t *comms,
+    int ndevice) {
+
+    return clearCustomAllReduceBuffers(comms, ndevice);
 }
 
 infiniStatus_t groupStart(infinicclComm_t) {
@@ -103,6 +134,18 @@ infiniStatus_t allReduce(
     infinirtStream_t stream) {
 
     CHECK_DTYPE(datatype, INFINI_DTYPE_F32, INFINI_DTYPE_F16, INFINI_DTYPE_BF16);
+
+    if (comm->allreduce_backend != INFINICCL_ALLREDUCE_BACKEND_NCCL) {
+        bool handled = false;
+        auto *custom_ctx = static_cast<CustomAllReduceContext *>(comm->custom_allreduce_context);
+        auto status = tryCustomAllReduce(custom_ctx, sendbuf, recvbuf, count, datatype, op, stream, &handled);
+        if (status != INFINI_STATUS_SUCCESS) {
+            return status;
+        }
+        if (handled) {
+            return INFINI_STATUS_SUCCESS;
+        }
+    }
 
     CHECK_NCCL(ncclAllReduce(sendbuf, recvbuf, count, getNcclDtype(datatype),
                              getNcclRedOp(op), getNcclComm(comm), getCudaStream(stream)));

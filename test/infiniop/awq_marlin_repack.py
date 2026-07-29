@@ -322,10 +322,10 @@ def awq_marlin_repack_torch(b_weight, size_k, size_n, group_size, quant_type, is
 def test(
     handle,
     device,
-    k_chunk, 
-    n_chunk, 
-    quant_type, 
-    is_a_8bit, 
+    k_chunk,
+    n_chunk,
+    quant_type,
+    is_a_8bit,
     nk_factors,
     group_size=128,
     dtype=InfiniDtype.F16,
@@ -341,14 +341,14 @@ def test(
 
 
     b_weight = TestTensor((size_k, size_n), None, dtype, device)
-    
+
     w_ref, q_w, s, zp = quantize_weights(
         b_weight.torch_tensor(), quant_type, group_size, zero_points=True
     )
 
     # Pack to AWQ format
     q_w_awq = awq_pack(q_w, quant_type.size_bits, size_k, size_n)
-    
+
     ans = awq_marlin_repack_torch(b_weight.torch_tensor(), size_k, size_n, group_size, quant_type, is_a_8bit)
 
     input = TestTensor(

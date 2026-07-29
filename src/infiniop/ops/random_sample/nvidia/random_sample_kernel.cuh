@@ -3,6 +3,7 @@
 #include <cub/device/device_radix_sort.cuh>
 #include <cub/device/device_reduce.cuh>
 #include <cub/device/device_scan.cuh>
+#include <cstdint>
 
 namespace op::random_sample::nvidia {
 
@@ -50,6 +51,23 @@ static cudaError inclusiveSum(
 }
 
 // ↑↑↑ 重新封装 cub api，减少模板参数，方便调用
+// ↓↓↓ random sampling keeps token indices in 32-bit workspace and casts only at the output boundary.
+
+template <class Tidx>
+struct InternalSampleIndex {
+    using Type = Tidx;
+};
+
+template <>
+struct InternalSampleIndex<int64_t> {
+    using Type = int32_t;
+};
+
+template <>
+struct InternalSampleIndex<uint64_t> {
+    using Type = uint32_t;
+};
+
 // ↓↓↓ 计算 workspace
 
 // 地址对齐到 256
@@ -59,6 +77,7 @@ static constexpr size_t align256(size_t size) {
 
 template <class Tidx, class Tval>
 utils::Result<size_t> calculateWorkspace(size_t n_) {
+    using TworkIdx = typename InternalSampleIndex<Tidx>::Type;
     const auto n = static_cast<int>(n_);
 
     size_t argmax;
@@ -70,14 +89,14 @@ utils::Result<size_t> calculateWorkspace(size_t n_) {
     argmax += 256;
 
     // indices
-    size_t size_random = align256(sizeof(Tidx) * n);
+    size_t size_random = align256(sizeof(TworkIdx) * n);
     // sorted
     size_random += align256(sizeof(Tval) * n);
     // indices_out
-    size_random += align256(sizeof(Tidx) * n);
+    size_random += align256(sizeof(TworkIdx) * n);
     // cub device api
     size_t size_radix_sort;
-    CHECK_CUDA((radixSort<Tval, Tidx>(
+    CHECK_CUDA((radixSort<Tval, TworkIdx>(
         nullptr, size_radix_sort,
         nullptr, nullptr,
         nullptr, nullptr,
@@ -158,9 +177,9 @@ static __global__ void setSoftmaxMaxKernel(
 
 // 直接 for 循环遍历采样
 // 这个 kernel 仅用于避免将数据拷贝到 cpu
-template <class Tval, class Tidx>
+template <class Tval, class Tout, class Tidx>
 static __global__ void randomSampleKernel(
-    Tidx *__restrict__ result,
+    Tout *__restrict__ result,
     const Tval *__restrict__ sorted,
     const Tidx *__restrict__ indices_out,
     size_t n,
@@ -174,7 +193,7 @@ static __global__ void randomSampleKernel(
 #endif
     for (size_t i = 0;; ++i) {
         if ((sorted[i]) >= p) {
-            *result = indices_out[i];
+            *result = static_cast<Tout>(indices_out[i]);
             return;
         }
     }
@@ -218,6 +237,7 @@ struct Algo {
         void *stream_) const {
 
         using Tval = typename CudaTval<Tval_>::Type;
+        using TworkIdx = typename InternalSampleIndex<Tidx>::Type;
 
         auto stream = (cudaStream_t)stream_;
         auto logits = (Tval *)probs;
@@ -226,14 +246,14 @@ struct Algo {
         auto workspace = reinterpret_cast<size_t>(workspace_);
         auto workspace_end = workspace + workspace_size;
 
-        auto indices = reinterpret_cast<Tidx *>(workspace);
-        workspace += align256(sizeof(Tidx) * n);
+        auto indices = reinterpret_cast<TworkIdx *>(workspace);
+        workspace += align256(sizeof(TworkIdx) * n);
 
         auto sorted = reinterpret_cast<Tval *>(workspace);
         workspace += align256(sizeof(Tval) * n);
 
-        auto indices_out = reinterpret_cast<Tidx *>(workspace);
-        workspace += align256(sizeof(Tidx) * n);
+        auto indices_out = reinterpret_cast<TworkIdx *>(workspace);
+        workspace += align256(sizeof(TworkIdx) * n);
 
         workspace_ = reinterpret_cast<void *>(workspace);
         workspace_size = workspace_end - workspace;
@@ -244,23 +264,25 @@ struct Algo {
 #endif
         auto grid = (n + block - 1) / block;
         // sort
-        fillIndices<<<static_cast<unsigned int>(grid), static_cast<unsigned int>(block), 0, stream>>>(indices, static_cast<int>(n));
-        CHECK_CUDA(radixSort(
+        fillIndices<TworkIdx><<<static_cast<unsigned int>(grid), static_cast<unsigned int>(block), 0, stream>>>(
+            indices, static_cast<int>(n));
+        CHECK_CUDA((radixSort<Tval, TworkIdx>(
             workspace_, workspace_size,
             logits, sorted,
             indices, indices_out,
             static_cast<int>(n),
-            stream));
+            stream)));
         // softmax
-        partialSoftmaxKernel<<<static_cast<unsigned int>(grid), static_cast<unsigned int>(block), 0, stream>>>(sorted, static_cast<int>(n), temperature);
-        setSoftmaxMaxKernel<<<1, 1, 0, stream>>>(sorted);
+        partialSoftmaxKernel<Tval><<<static_cast<unsigned int>(grid), static_cast<unsigned int>(block), 0, stream>>>(
+            sorted, static_cast<int>(n), temperature);
+        setSoftmaxMaxKernel<Tval><<<1, 1, 0, stream>>>(sorted);
         // sum
-        CHECK_CUDA(inclusiveSum(
-            workspace_, workspace,
+        CHECK_CUDA(inclusiveSum<Tval>(
+            workspace_, workspace_size,
             sorted, static_cast<int>(n),
             stream));
         // sample
-        randomSampleKernel<<<1, 1, 0, stream>>>(
+        randomSampleKernel<Tval, Tidx, TworkIdx><<<1, 1, 0, stream>>>(
             result,
             sorted, indices_out, n,
             random_val, topp, topk);

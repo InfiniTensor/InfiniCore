@@ -4,7 +4,7 @@
 #include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 #include "../gptq_marlin_gemm.h"
 #include "gptq_marlin_gemm_nvidia.cuh"
-#if defined ENABLE_TVM_API
+#if defined ENABLE_NVIDIA_API
 #include "../marlin/kernel.h"
 #include "../marlin/marlin_template.h"
 #include "../sgl_kernel/scalar_type.hpp"
@@ -1113,7 +1113,6 @@ Descriptor::calculate(
     bool use_fp32_reduce,
     bool is_zp_float,
     void *stream_) const {
-#if defined ENABLE_TVM_API
     cudaStream_t stream = (cudaStream_t)stream_;
     int64_t M = static_cast<int64_t>(_info.M);
     int64_t K = static_cast<int64_t>(_info.K);
@@ -1132,8 +1131,6 @@ Descriptor::calculate(
     } else {
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
-#endif
-    return INFINI_STATUS_SUCCESS;
 }
 
 } // namespace op::gptq_marlin_gemm::nvidia
