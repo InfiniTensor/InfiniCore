@@ -2,6 +2,7 @@
 
 #include "infinicore/context/context.hpp"
 #include "infinicore/ops/mha_varlen.hpp"
+#include "native/ascend/workspace_pool_.h"
 
 #include <acl/acl.h>
 #include <aclnnop/aclnn_fused_infer_attention_score.h>
@@ -9,7 +10,9 @@
 
 #include <algorithm>
 #include <cstring>
+#include <mutex>
 #include <stdexcept>
+#include <unordered_map>
 #include <vector>
 
 namespace infinicore::op::mha_varlen_impl::flashattn_ascend {
@@ -43,36 +46,105 @@ struct PlannedMeta {
     int max_seqlen_q, max_seqlen_k;
     std::optional<graph::GraphTensor> alibi_slopes;
     float scale;
-    // Per-device causal mask (each PlannedMeta gets its own)
-    void *mask_dev = nullptr;
+    // Each layer owns only its aclTensor descriptor. The immutable device
+    // buffer is shared by every prefill layer on the same Ascend device.
     aclTensor *mask_acl = nullptr;
 };
+
+static constexpr int64_t kCausalMaskSide = 2048;
+static constexpr size_t kCausalMaskBytes = kCausalMaskSide * kCausalMaskSide * sizeof(uint8_t);
+
+static const std::vector<uint8_t> &causal_mask_host_template() {
+    static const std::vector<uint8_t> mask = [] {
+        std::vector<uint8_t> value(kCausalMaskBytes, 0);
+        for (int64_t i = 0; i < kCausalMaskSide; ++i) {
+            for (int64_t j = i + 1; j < kCausalMaskSide; ++j) {
+                value[i * kCausalMaskSide + j] = 1;
+            }
+        }
+        return value;
+    }();
+    return mask;
+}
+
+namespace {
+
+class CausalMaskCache {
+public:
+    void *get_or_create(int32_t device_id) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        auto found = masks_.find(device_id);
+        if (found != masks_.end()) {
+            return found->second;
+        }
+
+        int32_t current_device = -1;
+        auto ret = aclrtGetDevice(&current_device);
+        if (ret != ACL_SUCCESS || current_device != device_id) {
+            throw std::runtime_error(
+                "[mha_varlen/ascend] current device does not match causal "
+                "mask device");
+        }
+
+        void *device_mask = nullptr;
+        ret = aclrtMalloc(&device_mask, kCausalMaskBytes,
+                          ACL_MEM_MALLOC_HUGE_FIRST);
+        if (ret == ACL_SUCCESS) {
+            const auto &host_mask = causal_mask_host_template();
+            ret = aclrtMemcpy(device_mask, kCausalMaskBytes, host_mask.data(),
+                              kCausalMaskBytes, ACL_MEMCPY_HOST_TO_DEVICE);
+        }
+        if (ret != ACL_SUCCESS) {
+            if (device_mask != nullptr) {
+                aclrtFree(device_mask);
+            }
+            throw std::runtime_error(
+                "[mha_varlen/ascend] initialize shared causal mask failed: "
+                + std::to_string(ret));
+        }
+
+        masks_.emplace(device_id, device_mask);
+        return device_mask;
+    }
+
+    ~CausalMaskCache() {
+        int32_t previous_device = -1;
+        if (aclrtGetDevice(&previous_device) != ACL_SUCCESS) {
+            // ACL Runtime may already be finalized during static teardown.
+            return;
+        }
+        for (const auto &[device_id, device_mask] : masks_) {
+            if (aclrtSetDevice(device_id) == ACL_SUCCESS) {
+                aclrtFree(device_mask);
+            }
+        }
+        aclrtSetDevice(previous_device);
+    }
+
+private:
+    std::mutex mutex_;
+    std::unordered_map<int32_t, void *> masks_;
+};
+
+CausalMaskCache &causal_mask_cache() {
+    static CausalMaskCache cache;
+    return cache;
+}
+
+} // namespace
 
 static aclTensor *create_causal_mask(PlannedMeta *p) {
     if (p->mask_acl != nullptr) {
         return p->mask_acl;
     }
 
-    int64_t mask_size = 2048 * 2048;
-
-    std::vector<uint8_t> mask_host(mask_size, 0);
-    for (int64_t i = 0; i < 2048; ++i) {
-        for (int64_t j = 0; j < 2048; ++j) {
-            if (j > i) {
-                mask_host[i * 2048 + j] = 1;
-            }
-        }
-    }
-
-    aclrtMalloc(&p->mask_dev, mask_size, ACL_MEM_MALLOC_HUGE_FIRST);
-    aclrtMemcpy(p->mask_dev, mask_size, mask_host.data(), mask_size,
-                ACL_MEMCPY_HOST_TO_DEVICE);
-
-    std::vector<int64_t> mask_dims = {2048, 2048};
-    std::vector<int64_t> mask_strides = {2048, 1};
+    const int32_t device_id = static_cast<int32_t>(p->q->device().getIndex());
+    void *mask_dev = causal_mask_cache().get_or_create(device_id);
+    std::vector<int64_t> mask_dims = {kCausalMaskSide, kCausalMaskSide};
+    std::vector<int64_t> mask_strides = {kCausalMaskSide, 1};
     p->mask_acl = aclCreateTensor(
         mask_dims.data(), mask_dims.size(), ACL_UINT8, mask_strides.data(), 0,
-        ACL_FORMAT_ND, mask_dims.data(), mask_dims.size(), p->mask_dev);
+        ACL_FORMAT_ND, mask_dims.data(), mask_dims.size(), mask_dev);
     return p->mask_acl;
 }
 
@@ -264,32 +336,16 @@ void run(void *planned_meta) {
             + std::to_string(ret) + ", msg: " + (err_msg ? err_msg : "(null)"));
     }
 
+    aclrtStream stream = static_cast<aclrtStream>(infinicore::context::getStream());
     void *workspace = nullptr;
     if (workspace_size > 0) {
-        aclError alloc_ret = aclrtMalloc(&workspace, workspace_size, ACL_MEM_MALLOC_HUGE_FIRST);
-        if (alloc_ret != ACL_SUCCESS) {
-            aclDestroyTensor(query_acl);
-            aclDestroyTensorList(key_acl);
-            aclDestroyTensorList(value_acl);
-            if (block_table_acl) {
-                aclDestroyTensor(block_table_acl);
-            }
-            aclDestroyTensor(out_acl);
-            aclDestroyIntArray(actual_seq_q_acl);
-            aclDestroyIntArray(actual_seq_k_acl);
-            throw std::runtime_error(
-                std::string("[mha_varlen/ascend] aclrtMalloc workspace failed: ") + std::to_string(alloc_ret));
-        }
+        workspace = infini::ops::ascend::GetWorkspacePool()
+                        .Ensure(stream, workspace_size, "fia")
+                        .buf;
     }
 
-    aclrtStream stream = static_cast<aclrtStream>(infinicore::context::getStream());
     ret = aclnnFusedInferAttentionScoreV4(workspace, workspace_size, executor,
                                           stream);
-    aclrtSynchronizeStream(stream);
-
-    if (workspace) {
-        aclrtFree(workspace);
-    }
 
     // Release aclTensor/aclTensorList/aclIntArray resources
     aclDestroyTensor(query_acl);
@@ -318,9 +374,6 @@ void run(void *planned_meta) {
 
 void cleanup(void **planned_meta_ptr) {
     auto *p = *reinterpret_cast<PlannedMeta **>(planned_meta_ptr);
-    if (p->mask_dev) {
-        aclrtFree(p->mask_dev);
-    }
     if (p->mask_acl) {
         aclDestroyTensor(p->mask_acl);
     }

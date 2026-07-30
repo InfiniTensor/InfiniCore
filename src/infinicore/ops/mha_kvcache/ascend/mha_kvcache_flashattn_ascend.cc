@@ -2,6 +2,7 @@
 
 #include "infinicore/context/context.hpp"
 #include "infinicore/ops/mha_kvcache.hpp"
+#include "native/ascend/workspace_pool_.h"
 
 #include <acl/acl.h>
 #include <aclnnop/aclnn_fused_infer_attention_score.h>
@@ -54,7 +55,7 @@ void *plan(Tensor out, const Tensor &q, const Tensor &k_cache,
                            graph::GraphTensor(seqlens_k),
                            graph::GraphTensor(block_table),
                            alibi_slopes ? std::optional<graph::GraphTensor>(
-                               graph::GraphTensor(*alibi_slopes))
+                                              graph::GraphTensor(*alibi_slopes))
                                         : std::nullopt,
                            scale};
 }
@@ -239,30 +240,16 @@ void run(void *planned_meta) {
             + std::to_string(ret) + ", msg: " + (err_msg ? err_msg : "(null)"));
     }
 
+    aclrtStream stream = static_cast<aclrtStream>(infinicore::context::getStream());
     void *workspace = nullptr;
     if (workspace_size > 0) {
-        aclError alloc_ret = aclrtMalloc(&workspace, workspace_size, ACL_MEM_MALLOC_HUGE_FIRST);
-        if (alloc_ret != ACL_SUCCESS) {
-            aclDestroyTensor(query_acl);
-            aclDestroyTensorList(key_acl);
-            aclDestroyTensorList(value_acl);
-            aclDestroyTensor(block_table_acl);
-            aclDestroyTensor(out_acl);
-            aclDestroyIntArray(seqlens_q_acl);
-            aclDestroyIntArray(seqlens_k_acl);
-            throw std::runtime_error(
-                std::string("[mha_kvcache/ascend] aclrtMalloc workspace failed: ") + std::to_string(alloc_ret));
-        }
+        workspace = infini::ops::ascend::GetWorkspacePool()
+                        .Ensure(stream, workspace_size, "fia")
+                        .buf;
     }
 
-    aclrtStream stream = static_cast<aclrtStream>(infinicore::context::getStream());
     ret = aclnnFusedInferAttentionScoreV4(workspace, workspace_size, executor,
                                           stream);
-    aclrtSynchronizeStream(stream);
-
-    if (workspace) {
-        aclrtFree(workspace);
-    }
 
     // Release aclTensor/aclTensorList/aclIntArray resources
     aclDestroyTensor(query_acl);
