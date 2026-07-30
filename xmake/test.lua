@@ -14,7 +14,7 @@ target("infiniop-test")
     add_deps("infini-utils")
     set_default(false)
 
-    local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
+    local INFINI_ROOT = os.getenv("INFINI_ROOT") or path.join(os.projectdir(), "build/linux/x86_64/release")
 
     set_languages("cxx17")
     set_warnings("all", "error")
