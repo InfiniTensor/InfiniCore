@@ -1,9 +1,9 @@
 ﻿#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 #include "infinicore.h"
+#include <cstdint>
 #include <cub/device/device_radix_sort.cuh>
 #include <cub/device/device_reduce.cuh>
 #include <cub/device/device_scan.cuh>
-#include <cstdint>
 
 namespace op::random_sample::nvidia {
 
@@ -51,7 +51,7 @@ static cudaError inclusiveSum(
 }
 
 // ↑↑↑ 重新封装 cub api，减少模板参数，方便调用
-// ↓↓↓ random sampling keeps token indices in 32-bit workspace and casts only at the output boundary.
+// ↓↓↓ Random sampling keeps token indices in a 32-bit workspace and casts only at the output boundary.
 
 template <class Tidx>
 struct InternalSampleIndex {

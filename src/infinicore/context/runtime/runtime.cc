@@ -74,7 +74,7 @@ std::shared_ptr<Memory> Runtime::allocatePinnedHostMemory(size_t size) {
     }
     std::byte *data_ptr = pinned_host_memory_allocator_->allocate(size);
     return std::make_shared<Memory>(
-        data_ptr, size, device_,
+        data_ptr, size, Device::cpu(),
         [alloc = pinned_host_memory_allocator_.get()](std::byte *p) {
             alloc->deallocate(p);
         },
@@ -110,8 +110,12 @@ void Runtime::memcpyH2D(void *dst, const void *src, size_t size, bool async) {
     }
 }
 
-void Runtime::memcpyD2H(void *dst, const void *src, size_t size) {
-    INFINICORE_CHECK_ERROR(infinirtMemcpy(dst, src, size, INFINIRT_MEMCPY_D2H));
+void Runtime::memcpyD2H(void *dst, const void *src, size_t size, bool async) {
+    if (async) {
+        INFINICORE_CHECK_ERROR(infinirtMemcpyAsync(dst, src, size, INFINIRT_MEMCPY_D2H, stream_));
+    } else {
+        INFINICORE_CHECK_ERROR(infinirtMemcpy(dst, src, size, INFINIRT_MEMCPY_D2H));
+    }
 }
 
 void Runtime::memcpyD2D(void *dst, const void *src, size_t size, bool async) {

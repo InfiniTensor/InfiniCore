@@ -21,7 +21,8 @@ inline void bind(py::module &m) {
              "Record the event on a specific stream", py::arg("stream"))
 
         .def("synchronize", &DeviceEvent::synchronize,
-             "Wait for the event to complete (blocking)")
+             "Wait for the event to complete (blocking)",
+             py::call_guard<py::gil_scoped_release>())
         .def("query", &DeviceEvent::query,
              "Check if the event has been completed")
 

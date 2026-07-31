@@ -22,7 +22,9 @@ inline void bind(py::module &m) {
     m.def("get_stream", &getStream, "Get the current stream");
 
     // Synchronization
-    m.def("sync_stream", &syncStream, "Synchronize the current stream");
+    m.def("sync_stream", &syncStream,
+          "Synchronize the current stream",
+          py::call_guard<py::gil_scoped_release>());
     m.def("sync_device", &syncDevice, "Synchronize the current device");
 
     // Graph
