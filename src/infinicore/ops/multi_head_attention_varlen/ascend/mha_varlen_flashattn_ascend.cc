@@ -392,7 +392,6 @@ void run(void *planned_meta) {
             + std::to_string(ret) + ", msg: " + (err_msg ? err_msg : "(null)"));
     }
 
-    aclrtStream stream = static_cast<aclrtStream>(infinicore::context::getStream());
     void *workspace = nullptr;
     if (workspace_size > 0) {
         workspace = infini::ops::ascend::GetWorkspacePool()

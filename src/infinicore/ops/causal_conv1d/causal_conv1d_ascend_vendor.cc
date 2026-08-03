@@ -266,14 +266,20 @@ void run(void *planned_meta) {
         bias_acl = make_contiguous_acl_tensor(bias, {channels});
     }
 
-    std::vector<int64_t> initial_state_mode(
-        p->cache_indices.size(), p->decode ? 1 : 0);
     aclIntArray *query_start_loc_acl = aclCreateIntArray(
         p->query_start_loc.data(), p->query_start_loc.size());
     aclIntArray *cache_indices_acl = aclCreateIntArray(
         p->cache_indices.data(), p->cache_indices.size());
-    aclIntArray *initial_state_mode_acl = aclCreateIntArray(
-        initial_state_mode.data(), initial_state_mode.size());
+
+    // vLLM-Ascend only accepts initialStateMode in runMode=0
+    // (prefill/FN). In decode mode it must be absent.
+    std::vector<int64_t> initial_state_mode(
+        p->cache_indices.size(), 0);
+    aclIntArray *initial_state_mode_acl = nullptr;
+    if (!p->decode) {
+        initial_state_mode_acl = aclCreateIntArray(
+            initial_state_mode.data(), initial_state_mode.size());
+    }
 
     uint64_t workspace_size = 0;
     aclOpExecutor *executor = nullptr;
@@ -288,7 +294,7 @@ void run(void *planned_meta) {
         initial_state_mode_acl,
         nullptr,
         p->fuse_silu ? 1 : 0,
-        0,
+        -1,
         p->decode ? 1 : 0,
         out_acl,
         &workspace_size,
@@ -315,7 +321,9 @@ void run(void *planned_meta) {
     }
     aclDestroyIntArray(query_start_loc_acl);
     aclDestroyIntArray(cache_indices_acl);
-    aclDestroyIntArray(initial_state_mode_acl);
+    if (initial_state_mode_acl != nullptr) {
+        aclDestroyIntArray(initial_state_mode_acl);
+    }
 
     if (ret != 0) {
         const char *message = aclGetRecentErrMsg();
