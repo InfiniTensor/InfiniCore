@@ -148,7 +148,6 @@ void Graph::instantiate() {
         spdlog::info("device graph segments disabled; replaying recorded operators");
         return;
     }
-#endif
 
     for (const auto &op : op_list_) {
         const bool capture_safe = is_hygon || op->is_device_graph_capture_safe();
