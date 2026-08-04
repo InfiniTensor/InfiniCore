@@ -1,6 +1,8 @@
 #pragma once
 
+#include <cstdint>
 #include <memory>
+#include <unordered_map>
 #include <vector>
 
 #include "../tensor.hpp"
@@ -17,20 +19,33 @@ public:
 class GraphOperator {
 public:
     virtual void run() const = 0;
+    virtual bool requires_task_update() const {
+        return false;
+    }
     virtual ~GraphOperator() = default;
 };
 
 class DispatchableGraphOperator : public GraphOperator {
 public:
     void run() const override;
+    bool requires_task_update() const override {
+        return requires_task_update_;
+    }
     ~DispatchableGraphOperator() override;
 
 protected:
+    void enable_task_update() {
+        requires_task_update_ = true;
+    }
+
     using run_schema = void (*)(void *);
     using cleanup_schema = void (*)(void **);
-    void *planned_meta_;
-    run_schema runner_;
-    cleanup_schema deleter_;
+    void *planned_meta_ = nullptr;
+    run_schema runner_ = nullptr;
+    cleanup_schema deleter_ = nullptr;
+
+private:
+    bool requires_task_update_ = false;
 };
 
 class Graph {
@@ -39,6 +54,10 @@ public:
     ~Graph();
 
     void run() const;
+    void update_host_int_array(
+        const Tensor &device_tensor,
+        const int32_t *host_values,
+        size_t count);
 
 protected:
     void add_operator(std::shared_ptr<GraphOperator> op);
@@ -50,7 +69,21 @@ protected:
 private:
     struct DeviceGraph;
     std::unique_ptr<DeviceGraph> device_graph_;
+    std::unordered_map<const void *, std::vector<int64_t>> host_int_arrays_;
 };
+
+bool is_task_updating();
+bool is_task_group_capturing();
+void begin_task_group_capture();
+void end_task_group_capture();
+void begin_task_update();
+void end_task_update();
+void stage_task_update_host_int_array(
+    const Tensor &device_tensor,
+    const int32_t *host_values,
+    size_t count);
+const std::vector<int64_t> *lookup_task_update_host_int_array(
+    const Tensor &tensor);
 } // namespace infinicore::graph
 
 #define INFINICORE_GRAPH_OP_CLASS(__OP_NAME__, ...)                        \
