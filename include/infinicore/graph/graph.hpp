@@ -73,7 +73,6 @@ private:
     struct DeviceGraph;
     struct Segment;
     std::vector<std::unique_ptr<Segment>> segments_;
-    std::unique_ptr<DeviceGraph> device_graph_;
     std::unordered_map<const void *, std::vector<int64_t>> host_int_arrays_;
 };
 
