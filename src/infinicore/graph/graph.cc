@@ -121,6 +121,25 @@ struct Graph::DeviceGraph {
     }
 };
 
+struct Graph::Segment {
+    bool capture_safe;
+    std::vector<std::shared_ptr<GraphOperator>> ops;
+    std::unique_ptr<DeviceGraph> device_graph;
+
+    explicit Segment(bool capture_safe_) : capture_safe(capture_safe_) {
+    }
+
+    void run() const {
+        if (device_graph) {
+            device_graph->launch();
+            return;
+        }
+        for (const auto &op : ops) {
+            op->run();
+        }
+    }
+};
+
 Graph::Graph()
     : host_int_arrays_(std::move(staged_host_int_arrays)) {
     staged_host_int_arrays.clear();
@@ -135,8 +154,9 @@ void Graph::run() const {
         }
         device_graph_.get()->launch();
     } else {
-        for (auto &op : op_list_) {
-            op->run();
+        if (segments_.empty()) {
+            for (const auto &op : op_list_) {
+                op->run();
         }
     }
 }

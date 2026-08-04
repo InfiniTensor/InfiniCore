@@ -19,6 +19,9 @@ public:
 class GraphOperator {
 public:
     virtual void run() const = 0;
+    virtual bool is_device_graph_capture_safe() const {
+        return true;
+    }
     virtual bool requires_task_update() const {
         return false;
     }
@@ -68,6 +71,8 @@ protected:
 
 private:
     struct DeviceGraph;
+    struct Segment;
+    std::vector<std::unique_ptr<Segment>> segments_;
     std::unique_ptr<DeviceGraph> device_graph_;
     std::unordered_map<const void *, std::vector<int64_t>> host_int_arrays_;
 };
