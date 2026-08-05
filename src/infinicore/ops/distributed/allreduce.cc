@@ -34,7 +34,7 @@ void AllReduce::run() const {
                                               infinicore::context::getStream()));
 }
 
-bool AllReduce::supports_device_graph_capture() const {
+bool AllReduce::is_device_graph_capture_safe() const {
     const auto *meta = reinterpret_cast<const PlannedMeta *>(planned_meta_);
     return meta->input->device().getType() != Device::Type::HYGON;
 }
