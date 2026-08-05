@@ -108,12 +108,6 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
 | `--ninetoothed=[y\|n]`   | 是否编译九齿实现                 | n
 | `--ccl=[y\|n]`           | 是否编译 InfiniCCL 通信库接口实现 | n
 | `--graph=[y\|n]`         | 是否编译 cuda graph 接口实现      | n
-| `--mars-flash-attn-abi=[detect\|standard\|extended]` | Mars flash-attn ABI；默认检查实际扩展库符号 | detect
-
-Mars/HPCC 当前不支持 standalone InfiniOps 后端；配置 Mars 时请使用
-`--mars-gpu=true --infiniops=false`。
-使用独立 InfiniRT 安装时应设置 `INFINI_RT_ROOT` 或 `--infinirt-root`；如果
-显式前缀中缺少 `include/infini/rt.h` 或 `lib{,64}/libinfinirt.so`，配置会直接失败。
 
 ##### 手动安装底层库
 

@@ -11,7 +11,8 @@ _PRELOADED_HANDLES: List[ctypes.CDLL] = []
 
 def _candidate_prefixes(path: str) -> List[str]:
     """
-    Return unique runtime install prefixes to search for libraries.
+    Return HPCC install prefixes to search for libs.
+    Prefer HPCC_PATH; if absent and explicitly opted-in, fall back to /opt/hpcc.
     """
     prefixes: List[str] = []
     if path:
@@ -29,15 +30,14 @@ def _candidate_prefixes(path: str) -> List[str]:
 def _try_load(paths: Iterable[str], name: str) -> bool:
     """Try to load a shared library from given paths or system search path."""
     for path in paths:
-        for subdir in ("lib", "lib64"):
-            full = os.path.join(path, subdir, name)
-            if os.path.exists(full):
-                try:
-                    ctypes.CDLL(full, mode=ctypes.RTLD_GLOBAL)
-                    return True
-                except OSError:
-                    # Try next candidate
-                    continue
+        full = os.path.join(path, "lib", name)
+        if os.path.exists(full):
+            try:
+                ctypes.CDLL(full, mode=ctypes.RTLD_GLOBAL)
+                return True
+            except OSError:
+                # Try next candidate
+                continue
     # Last resort: rely on loader search path
     try:
         ctypes.CDLL(name, mode=ctypes.RTLD_GLOBAL)
@@ -60,9 +60,7 @@ def preload_hpcc() -> None:
     This mirrors the behavior of torch's HPCC build that loads libtorch_global_deps.so,
     but avoids introducing a hard torch dependency. All failures are swallowed.
     """
-    hpcc_path = os.getenv("HPCC_PATH") or os.getenv("HPCC_HOME")
-    if not hpcc_path and os.getenv("INFINICORE_PRELOAD_HPCC"):
-        hpcc_path = "/opt/hpcc"
+    hpcc_path = os.getenv("HPCC_PATH")
     if not hpcc_path:
         return
 
@@ -177,7 +175,7 @@ def _should_preload_device(device_type: str) -> bool:
     Check if preload is needed for a specific device type.
     """
     device_env_map = {
-        "MARS": ["HPCC_PATH", "HPCC_HOME", "INFINICORE_PRELOAD_HPCC"],
+        "METAX": ["HPCC_PATH", "INFINICORE_PRELOAD_HPCC"],  # HPCC/METAX
         "HYGON": ["DTK_ROOT", "INFINICORE_PRELOAD_TORCH_HIP"],
         "ASCEND": ["ASCEND_HOME", "ASCEND_TOOLKIT_HOME"],
         "CAMBRICON": ["NEUWARE_HOME", "INFINICORE_PRELOAD_CAMBRICON"],
@@ -202,9 +200,9 @@ def preload_device(device_type: str) -> None:
     Preload runtime libraries for a specific device type if needed.
 
     Args:
-        device_type: Device type name (e.g., "MARS" or "HYGON")
+        device_type: Device type name (e.g., "METAX", "ASCEND", etc.)
     """
-    if device_type == "MARS":
+    if device_type == "METAX":
         preload_hpcc()
         preload_torch()
     elif device_type == "HYGON":
@@ -226,11 +224,11 @@ def preload() -> None:
     This function detects available device types and preloads their runtime libraries
     if the environment indicates they are needed.
     """
-    # Device types that may require preload. Gate each preload by its own
-    # environment markers so CUDA-compatible platforms do not load one another's
-    # runtime libraries during package import.
+    # Device types that may require preload. Keep Hygon-only preloads gated by
+    # Hygon environment markers so other CUDA-compatible platforms do not load
+    # unrelated torch/flash-attn libraries during package import.
     device_types = [
-        "MARS",
+        "METAX",  # HPCC/METAX
         "HYGON",
         "ASCEND",
         "CAMBRICON",

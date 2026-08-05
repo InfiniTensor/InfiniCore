@@ -8,11 +8,12 @@
 #include <cstdlib>
 #include <vector>
 
+// Mars is the device backend; HPCC exposes its collective API as hccl*.
 #define CHECK_HCCL(API__) CHECK_INTERNAL(API__, hcclSuccess)
 
 namespace {
 
-hcStream_t getMarsStream(infinirtStream_t stream) {
+hcStream_t getHpccStream(infinirtStream_t stream) {
     return stream == nullptr ? nullptr : static_cast<hcStream_t>(stream);
 }
 
@@ -84,7 +85,7 @@ infiniStatus_t allReduce(void *sendbuf,
                              getHcclDtype(datatype),
                              getHcclRedOp(op),
                              getHcclComm(comm),
-                             getMarsStream(stream)));
+                             getHpccStream(stream)));
     return INFINI_STATUS_SUCCESS;
 }
 

@@ -255,13 +255,6 @@ option("flash-attn")
     set_description("Path to flash-attention repo. If not set, flash-attention will not used.")
 option_end()
 
-option("mars-flash-attn-abi")
-    set_default("detect")
-    set_values("detect", "standard", "extended")
-    set_showmenu(true)
-    set_description("Mars flash-attn ABI: detect from the library, standard, or extended")
-option_end()
-
 if has_config("aten") then
     add_defines("ENABLE_ATEN")
     if has_config("iluvatar-gpu") then
@@ -536,13 +529,6 @@ local function detect_flash_attn_abi(xmake_os)
 end
 
 local function mars_flash_attn_uses_extended_abi(xmake_os)
-    local abi = get_config("mars-flash-attn-abi") or "detect"
-    if abi == "extended" then
-        return true
-    elseif abi == "standard" then
-        return false
-    end
-
     local detected = detect_flash_attn_abi(xmake_os)
     if detected == "extended" then
         return true
