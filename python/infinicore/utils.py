@@ -19,6 +19,8 @@ def to_torch_dtype(infini_dtype):
         return torch.float64
     elif infini_dtype == infinicore.bfloat16:
         return torch.bfloat16
+    elif infini_dtype == infinicore.float8:
+        return torch.float8_e4m3fn
     elif infini_dtype == infinicore.int8:
         return torch.int8
     elif infini_dtype == infinicore.int16:
@@ -43,6 +45,8 @@ def to_infinicore_dtype(torch_dtype):
         return infinicore.float16
     elif torch_dtype == torch.bfloat16:
         return infinicore.bfloat16
+    elif torch_dtype == torch.float8_e4m3fn:
+        return infinicore.float8
     elif torch_dtype == torch.int8:
         return infinicore.int8
     elif torch_dtype == torch.int16:

@@ -6,6 +6,10 @@
 #include "nvidia/nsa_paged_attention_nvidia.cuh"
 #endif
 
+#ifdef ENABLE_METAX_API
+#include "metax/nsa_paged_attention_metax.h"
+#endif
+
 __INFINI_C infiniStatus_t infiniopCreateNsaPagedAttentionDescriptor(
     infiniopHandle_t handle,
     infiniopNsaPagedAttentionDescriptor_t *desc_ptr,
@@ -44,6 +48,9 @@ __INFINI_C infiniStatus_t infiniopCreateNsaPagedAttentionDescriptor(
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia)
 #endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -69,6 +76,9 @@ __INFINI_C infiniStatus_t infiniopGetNsaPagedAttentionWorkspaceSize(
 #endif
 #ifdef ENABLE_HYGON_API
         GET(INFINI_DEVICE_HYGON, nvidia)
+#endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -107,6 +117,9 @@ __INFINI_C infiniStatus_t infiniopNsaPagedAttention(
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia)
 #endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -131,6 +144,9 @@ __INFINI_C infiniStatus_t infiniopDestroyNsaPagedAttentionDescriptor(
 #endif
 #ifdef ENABLE_HYGON_API
         DESTROY(INFINI_DEVICE_HYGON, nvidia)
+#endif
+#ifdef ENABLE_METAX_API
+        DESTROY(INFINI_DEVICE_METAX, metax)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

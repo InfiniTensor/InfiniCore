@@ -1,0 +1,90 @@
+#include "../../../devices/metax/metax_common.h"
+#include "../../../devices/metax/metax_kernel_common.h"
+#include "mxfp4_dequantize_metax.h"
+
+#include "../../mxfp4_common/cuda/mxfp4_kernel.cuh"
+
+namespace op::mxfp4_dequantize::metax {
+namespace {
+
+template <typename T>
+INFINIOP_METAX_KERNEL dequantize_kernel(
+    T *out,
+    const uint8_t *packed,
+    const uint8_t *scales,
+    size_t packed_numel,
+    size_t packed_width,
+    size_t scales_width) {
+    const size_t index = blockIdx.x * blockDim.x + threadIdx.x;
+    if (index >= packed_numel) {
+        return;
+    }
+
+    const size_t row = index / packed_width;
+    const size_t packed_col = index - row * packed_width;
+    float low;
+    float high;
+    mxfp4DecodePair(packed[index], scales[row * scales_width + packed_col / 16], low, high);
+
+    const size_t out_index = index * 2;
+    out[out_index] = mxfp4Store<T>(low);
+    out[out_index + 1] = mxfp4Store<T>(high);
+}
+
+template <typename T>
+void launch(T *out,
+            const uint8_t *packed,
+            const uint8_t *scales,
+            const Mxfp4DequantizeInfo &info,
+            hcStream_t stream) {
+    constexpr size_t block_size = 256;
+    const size_t grid_size = (info.packed_numel + block_size - 1) / block_size;
+    dequantize_kernel<<<grid_size, block_size, 0, stream>>>(
+        out, packed, scales, info.packed_numel,
+        info.logical_width / 2, info.logical_width / 32);
+}
+
+} // namespace
+
+struct Descriptor::Opaque {
+    std::shared_ptr<device::metax::Handle::Internal> internal;
+};
+
+Descriptor::~Descriptor() { delete _opaque; }
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t out_desc,
+    infiniopTensorDescriptor_t packed_desc,
+    infiniopTensorDescriptor_t scales_desc) {
+    auto info = Mxfp4DequantizeInfo::create(out_desc, packed_desc, scales_desc);
+    CHECK_RESULT(info);
+    auto metax_handle = reinterpret_cast<device::metax::Handle *>(handle);
+    *desc_ptr = new Descriptor(
+        new Opaque{metax_handle->internal()}, info.take(), handle->device, handle->device_id);
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *, size_t, void *out,
+    const void *packed, const void *scales, void *stream) const {
+    auto metax_stream = reinterpret_cast<hcStream_t>(stream);
+    auto packed_ptr = reinterpret_cast<const uint8_t *>(packed);
+    auto scales_ptr = reinterpret_cast<const uint8_t *>(scales);
+    switch (_info.output_dtype) {
+    case INFINI_DTYPE_F16:
+        launch(reinterpret_cast<half *>(out), packed_ptr, scales_ptr, _info, metax_stream);
+        return INFINI_STATUS_SUCCESS;
+    case INFINI_DTYPE_BF16:
+        launch(reinterpret_cast<__nv_bfloat16 *>(out), packed_ptr, scales_ptr, _info, metax_stream);
+        return INFINI_STATUS_SUCCESS;
+    case INFINI_DTYPE_F32:
+        launch(reinterpret_cast<float *>(out), packed_ptr, scales_ptr, _info, metax_stream);
+        return INFINI_STATUS_SUCCESS;
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+}
+
+} // namespace op::mxfp4_dequantize::metax

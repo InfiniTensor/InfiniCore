@@ -17,6 +17,9 @@ public:
 class GraphOperator {
 public:
     virtual void run() const = 0;
+    virtual bool is_device_graph_capture_safe() const {
+        return true;
+    }
     virtual ~GraphOperator() = default;
 };
 
@@ -49,7 +52,8 @@ protected:
 
 private:
     struct DeviceGraph;
-    std::unique_ptr<DeviceGraph> device_graph_;
+    struct Segment;
+    std::vector<std::unique_ptr<Segment>> segments_;
 };
 } // namespace infinicore::graph
 

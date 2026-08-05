@@ -162,15 +162,34 @@ infiniStatus_t freeAsync(void *ptr, infinirtStream_t stream) {
 }
 
 infiniStatus_t streamBeginCapture(infinirtStream_t stream, infinirtStreamCaptureMode_t mode) {
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    aclmdlRICaptureMode acl_mode;
+    switch (mode) {
+    case INFINIRT_STREAM_CAPTURE_MODE_GLOBAL:
+        acl_mode = ACL_MODEL_RI_CAPTURE_MODE_GLOBAL;
+        break;
+    case INFINIRT_STREAM_CAPTURE_MODE_THREAD_LOCAL:
+        acl_mode = ACL_MODEL_RI_CAPTURE_MODE_THREAD_LOCAL;
+        break;
+    case INFINIRT_STREAM_CAPTURE_MODE_RELAXED:
+        acl_mode = ACL_MODEL_RI_CAPTURE_MODE_RELAXED;
+        break;
+    default:
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    CHECK_ACLRT(aclmdlRICaptureBegin((aclrtStream)stream, acl_mode));
+    return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t streamEndCapture(infinirtStream_t stream, infinirtGraph_t *graph_ptr) {
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    aclmdlRI modelRI = nullptr;
+    CHECK_ACLRT(aclmdlRICaptureEnd((aclrtStream)stream, &modelRI));
+    *graph_ptr = (infinirtGraph_t)modelRI;
+    return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t graphDestroy(infinirtGraph_t graph) {
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    (void)graph;
+    return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t graphInstantiate(
@@ -179,15 +198,21 @@ infiniStatus_t graphInstantiate(
     infinirtGraphNode_t *node_ptr,
     char *log_buffer,
     size_t buffer_size) {
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    *graph_exec_ptr = (infinirtGraphExec_t)graph;
+    if (node_ptr) {
+        *node_ptr = nullptr;
+    }
+    return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t graphExecDestroy(infinirtGraphExec_t graph_exec) {
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    CHECK_ACLRT(aclmdlRIDestroy((aclmdlRI)graph_exec));
+    return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t graphLuanch(infinirtGraphExec_t graph_exec, infinirtStream_t stream) {
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    CHECK_ACLRT(aclmdlRIExecuteAsync((aclmdlRI)graph_exec, (aclrtStream)stream));
+    return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t getMemInfo(int device_id, size_t *free_bytes, size_t *total_bytes) {

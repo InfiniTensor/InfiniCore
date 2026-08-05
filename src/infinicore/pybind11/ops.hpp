@@ -30,7 +30,9 @@
 #include "ops/blas_copy.hpp"
 #include "ops/blas_dot.hpp"
 #include "ops/block_diag.hpp"
+#include "ops/bmm_strided.hpp"
 #include "ops/broadcast_to.hpp"
+#include "ops/cast.hpp"
 #include "ops/cat.hpp"
 #include "ops/causal_conv1d.hpp"
 #include "ops/causal_softmax.hpp"
@@ -50,7 +52,13 @@
 #include "ops/floor_divide.hpp"
 #include "ops/fmin.hpp"
 #include "ops/fmod.hpp"
+#include "ops/fp8_indexer_logits.hpp"
+#include "ops/fp8_indexer_quant.hpp"
+#include "ops/fp8_mla_rmsnorm_cache.hpp"
+#include "ops/fp8_sparse_mla.hpp"
 #include "ops/fused_gated_delta_net_gating.hpp"
+#include "ops/fused_moe.hpp"
+#include "ops/fused_moe_mxfp4.hpp"
 #include "ops/gaussian_nll_loss.hpp"
 #include "ops/hardswish.hpp"
 #include "ops/hardtanh.hpp"
@@ -61,6 +69,7 @@
 #include "ops/index_copy.hpp"
 #include "ops/inner.hpp"
 #include "ops/interpolate.hpp"
+#include "ops/kimi_delta_attention.hpp"
 #include "ops/kron.hpp"
 #include "ops/kthvalue.hpp"
 #include "ops/kv_caching.hpp"
@@ -68,6 +77,7 @@
 #include "ops/ldexp.hpp"
 #include "ops/lerp.hpp"
 #include "ops/linear.hpp"
+#include "ops/linear_mxfp4.hpp"
 #include "ops/linear_w8a8i8.hpp"
 #include "ops/log_softmax.hpp"
 #include "ops/logaddexp.hpp"
@@ -82,6 +92,7 @@
 #include "ops/mha.hpp"
 #include "ops/mha_kvcache.hpp"
 #include "ops/mha_varlen.hpp"
+#include "ops/moe_fused_dense.hpp"
 #include "ops/moe_topk_softmax.hpp"
 #include "ops/mrope.hpp"
 #include "ops/mul.hpp"
@@ -107,6 +118,7 @@
 #include "ops/rwkv5_wkv.hpp"
 #include "ops/scal.hpp"
 #include "ops/scatter.hpp"
+#include "ops/select_last_token_hidden.hpp"
 #include "ops/selu.hpp"
 #include "ops/sigmoid.hpp"
 #include "ops/silu.hpp"
@@ -120,6 +132,7 @@
 #include "ops/swiglu.hpp"
 #include "ops/take.hpp"
 #include "ops/tan.hpp"
+#include "ops/tanh.hpp"
 #include "ops/tanhshrink.hpp"
 #include "ops/topk.hpp"
 #include "ops/topksoftmax.hpp"
@@ -131,12 +144,55 @@
 #include "ops/vander.hpp"
 #include "ops/var.hpp"
 #include "ops/var_mean.hpp"
+#include "ops/vocab_parallel_embedding.hpp"
+
+#ifdef ENABLE_VENDOR_OPS
+#include "ops/concat_and_cache_mla.hpp"
+#include "ops/concat_and_cache_mla_int8.hpp"
+#include "ops/concat_mla_q.hpp"
+#include "ops/dsa.hpp"
+#include "ops/dynamic_scaled_int8_quant.hpp"
+#include "ops/fused_rotary_embedding.hpp"
+#include "ops/grouped_topk_vendor.hpp"
+#include "ops/moe_argsort_bincount.hpp"
+#include "ops/moe_expand_input.hpp"
+#include "ops/moe_silu_and_mul_quant.hpp"
+#include "ops/moe_sum_vendor.hpp"
+#include "ops/moe_topk_vendor.hpp"
+#include "ops/paged_attention_mla.hpp"
+#include "ops/scaled_mm_w4a8.hpp"
+#include "ops/scaled_mm_w8a8.hpp"
+#include "ops/w16a16_group_gemm.hpp"
+#include "ops/w4a8_group_gemm.hpp"
+#include "ops/w8a8_group_gemm.hpp"
+#endif
 
 namespace py = pybind11;
 
 namespace infinicore::ops {
 
 inline void bind(py::module &m) {
+#ifdef ENABLE_VENDOR_OPS
+    bind_concat_and_cache_mla(m);
+    bind_concat_and_cache_mla_int8(m);
+    bind_concat_mla_q(m);
+    bind_dsa(m);
+    bind_dynamic_scaled_int8_quant(m);
+    bind_fused_rotary_embedding(m);
+    bind_grouped_topk_vendor(m);
+    bind_moe_argsort_bincount(m);
+    bind_moe_expand_input(m);
+    bind_moe_silu_and_mul_quant(m);
+    bind_moe_sum_vendor(m);
+    bind_moe_topk_vendor(m);
+    bind_paged_attention_mla(m);
+    bind_scaled_mm_w4a8(m);
+    bind_scaled_mm_w8a8(m);
+    bind_w16a16_group_gemm(m);
+    bind_w4a8_group_gemm(m);
+    bind_w8a8_group_gemm(m);
+#endif
+
     bind_adaptive_max_pool1d(m);
     bind_add(m);
     bind_adaptive_avg_pool3d(m);
@@ -161,6 +217,7 @@ inline void bind(py::module &m) {
     bind_blas_copy(m);
     bind_blas_dot(m);
     bind_block_diag(m);
+    bind_bmm_strided(m);
     bind_bitwise_right_shift(m);
     bind_causal_conv1d(m);
     bind_causal_softmax(m);
@@ -170,9 +227,17 @@ inline void bind(py::module &m) {
     bind_flash_attention(m);
     bind_hinge_embedding_loss(m);
     bind_kv_caching(m);
+    bind_kimi_delta_attention(m);
     bind_fmod(m);
+    bind_fp8_indexer_logits(m);
+    bind_fp8_indexer_quant(m);
+    bind_fp8_mla_rmsnorm_cache(m);
+    bind_fp8_sparse_mla(m);
     bind_fused_gated_delta_net_gating(m);
+    bind_fused_moe(m);
+    bind_fused_moe_mxfp4(m);
     bind_fmin(m);
+    bind_cast(m);
     bind_cat(m);
     bind_causal_softmax(m);
     bind_inner(m);
@@ -182,6 +247,7 @@ inline void bind(py::module &m) {
     bind_logaddexp(m);
     bind_logaddexp2(m);
     bind_linear(m);
+    bind_linear_mxfp4(m);
     bind_logdet(m);
     bind_matmul(m);
     bind_mamba_selective_scan(m);
@@ -192,6 +258,7 @@ inline void bind(py::module &m) {
     bind_mha_kvcache(m);
     bind_mha_varlen(m);
     bind_mha(m);
+    bind_moe_fused_dense(m);
     bind_moe_topk_softmax(m);
     bind_mrope(m);
     bind_hardswish(m);
@@ -219,11 +286,13 @@ inline void bind(py::module &m) {
     bind_silu(m);
     bind_swiglu(m);
     bind_tan(m);
+    bind_tanh(m);
     bind_tanhshrink(m);
     bind_logcumsumexp(m);
     bind_logical_and(m);
     bind_logical_not(m);
     bind_vander(m);
+    bind_vocab_parallel_embedding(m);
     bind_unfold(m);
     bind_rope(m);
     bind_rot(m);
@@ -266,6 +335,7 @@ inline void bind(py::module &m) {
     bind_lerp(m);
     bind_triplet_margin_loss(m);
     bind_selu(m);
+    bind_select_last_token_hidden(m);
     bind_swap(m);
     bind_sinh(m);
     bind_layer_norm(m);

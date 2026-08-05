@@ -14,6 +14,9 @@
 #ifdef ENABLE_MOORE_API
 #include "moore/ones_moore.h"
 #endif
+#ifdef ENABLE_CAMBRICON_API
+#include "bang/ones_bang.h"
+#endif
 
 __INFINI_C infiniStatus_t infiniopCreateOnesDescriptor(
     infiniopHandle_t handle,
@@ -48,6 +51,9 @@ __INFINI_C infiniStatus_t infiniopCreateOnesDescriptor(
 #endif
 #ifdef ENABLE_MOORE_API
         CREATE(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_CAMBRICON_API
+        CREATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
 #ifdef ENABLE_ALI_API
         CREATE(INFINI_DEVICE_ALI, nvidia);
@@ -88,6 +94,9 @@ __INFINI_C infiniStatus_t infiniopGetOnesWorkspaceSize(infiniopOnesDescriptor_t 
 #endif
 #ifdef ENABLE_MOORE_API
         GET(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_CAMBRICON_API
+        GET(INFINI_DEVICE_CAMBRICON, bang);
 #endif
 #ifdef ENABLE_ALI_API
         GET(INFINI_DEVICE_ALI, nvidia);
@@ -137,6 +146,9 @@ __INFINI_C infiniStatus_t infiniopOnes(
 #ifdef ENABLE_MOORE_API
         CALCULATE(INFINI_DEVICE_MOORE, moore);
 #endif
+#ifdef ENABLE_CAMBRICON_API
+        CALCULATE(INFINI_DEVICE_CAMBRICON, bang);
+#endif
 #ifdef ENABLE_ALI_API
         CALCULATE(INFINI_DEVICE_ALI, nvidia);
 #endif
@@ -178,6 +190,9 @@ infiniopDestroyOnesDescriptor(infiniopOnesDescriptor_t desc) {
 #endif
 #ifdef ENABLE_MOORE_API
         DELETE(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_CAMBRICON_API
+        DELETE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
 #ifdef ENABLE_ALI_API
         DELETE(INFINI_DEVICE_ALI, nvidia);

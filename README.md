@@ -156,6 +156,36 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
      xmake f --ascend-npu=true -cv
      ```
 
+##### 试验功能 -- 使用寒武纪平台预编译 Flash Attention 能力
+
+  ~~~shell
+  # 寒武纪直接链接当前 Python 环境中已安装的 flash_attn_2_bang 扩展。
+  # --flash-attn 指向包含 flash_attn_2_bang*.so 的 site-packages 目录。
+  python -c "import flash_attn_2_bang; print(flash_attn_2_bang.__file__)"
+
+  export FLASH_ATTN_2_BANG_SO=/torch/venv3/pytorch/lib/python3.10/site-packages/flash_attn_2_bang.cpython-310-x86_64-linux-gnu.so
+  xmake f --cambricon-mlu=true --ccl=true --graph=true --aten=true \
+      --flash-attn=/torch/venv3/pytorch/lib/python3.10/site-packages -cv
+
+  xmake build
+  xmake install
+  xmake build _infinicore
+  xmake install _infinicore
+  pip install -e .
+
+  # 当前 PyTorch/torch_mlu 使用 C++ ABI 0；依赖 InfiniCore 的 C++ 扩展
+  # 也必须使用相同 ABI。以 InfiniLM 为例：
+  cd ../InfiniLM
+  xmake f --cxxflags=-D_GLIBCXX_USE_CXX11_ABI=0 -c
+  xmake -r _infinilm
+  xmake install _infinilm
+
+  # 当前寒武纪 wheel 不导出专用 KV-cache 符号。分页路径仅收集
+  # block table 中的有效 KV token，随后调用 wheel 的 mha_varlen_fwd。
+  # head dimension 超过 wheel 限制或 Q/K/V 末维不一致时使用 ATen SDPA。
+  ~~~
+
+
 ##### 试验功能 -- 使用英伟达平台 flash attention 库中的算子
 
   ```shell
@@ -196,6 +226,31 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
   xmake f --moore-gpu=y --aten=y --flash-attn=y -cv
   ```
 
+##### 试验功能 -- 使用天数智芯平台 Flash Attention 能力
+
+  ```shell
+  # 天数智芯的 MHA、MHA VarLen 和 MHA KVCache 实现依赖 ATen，
+  # 可通过以下任一种方式启用：
+
+  # 方式一：使用 vendor operators 提供的 Flash Attention 实现。
+  xmake f --iluvatar-gpu=true --cuda=$CUDA_HOME --aten=true \
+      --use-vendor-ops=true -cv
+
+  # 方式二：指定包含 _C.cpython-*.so 的 vllm_iluvatar 预编译扩展目录。
+  # eg. --flash-attn=/usr/local/lib/python3.12/site-packages/vllm_iluvatar
+  xmake f --iluvatar-gpu=true --cuda=$CUDA_HOME --aten=true \
+      --flash-attn=<path-to-fa2> \
+      -cv
+
+  # 两种方式都会自动启用天数智芯 Flash Attention 实现，无需手动定义编译宏。
+  # 如需指定架构，可追加例如：--iluvatar_arch=ivcore11。
+
+  # 按需编译并安装 C++/Python 封装：
+  xmake build _infinicore
+  xmake install _infinicore
+  pip install -e .
+  ```
+
 
 ##### 试验功能 -- 使用海光 DCU 平台预编译 flash-attn 能力
 
@@ -218,6 +273,24 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
   # 编译 Python/C++ 封装：
   xmake build _infinicore
   xmake install _infinicore
+  ```
+
+##### 试验功能 -- 使用阿里 PPU 平台预编译 flash-attn 能力
+
+  ```shell
+  # 阿里 PPU 直接链接当前 Python 环境中已安装的 flash_attn_2_cuda 扩展。
+  # --flash-attn 指向包含 flash_attn_2_cuda*.so 的 site-packages 目录。
+  python -c "import flash_attn_2_cuda; print(flash_attn_2_cuda.__file__)"
+
+  export FLASH_ATTN_2_CUDA_SO=/usr/local/lib/python3.12/site-packages/flash_attn_2_cuda.cpython-312-x86_64-linux-gnu.so
+  xmake f --ali-ppu=true --ccl=true --graph=true --aten=true \
+      --flash-attn=/usr/local/lib/python3.12/site-packages -cv
+
+  xmake build
+  xmake install
+  xmake build _infinicore
+  xmake install _infinicore
+  pip install -e .
   ```
 
 ##### 试验功能 -- 编译marlin相关算子

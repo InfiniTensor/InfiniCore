@@ -1,10 +1,6 @@
 #ifndef __QUICKGELU_CUDA_H__
 #define __QUICKGELU_CUDA_H__
 
-#include "../../../elementwise/nvidia/elementwise_nvidia.cuh"
-#include <cuda_bf16.h>
-#include <cuda_fp16.h>
-
 namespace op::quickgelu::cuda {
 
 typedef struct QuickGeluOp {
@@ -29,7 +25,7 @@ public:
             half sigmoid = hrcp(denominator);
             return __hmul(x, sigmoid);
 
-        } else if constexpr (std::is_same_v<T, __nv_bfloat16>) {
+        } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
             float xf = __bfloat162float(x);
             float ax = alpha * xf;
             float s = 1.0f / (1.0f + __expf(-ax));

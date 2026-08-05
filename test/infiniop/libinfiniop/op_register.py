@@ -134,6 +134,46 @@ def addcmul_(lib):
 
 
 @OpRegister.operator
+def fused_moe_(lib):
+    lib.infiniopCreateFusedMoeDescriptor.restype = c_int32
+    lib.infiniopCreateFusedMoeDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        c_void_p,
+        c_void_p,
+        c_int32,
+    ]
+    lib.infiniopGetFusedMoeWorkspaceSize.restype = c_int32
+    lib.infiniopGetFusedMoeWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopFusedMoe.restype = c_int32
+    lib.infiniopFusedMoe.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyFusedMoeDescriptor.restype = c_int32
+    lib.infiniopDestroyFusedMoeDescriptor.argtypes = [infiniopOperatorDescriptor_t]
+
+
+@OpRegister.operator
 def fused_gated_delta_net_gating_(lib):
     lib.infiniopCreateFusedGatedDeltaNetGatingDescriptor.restype = c_int32
     lib.infiniopCreateFusedGatedDeltaNetGatingDescriptor.argtypes = [
@@ -1163,6 +1203,35 @@ def sigmoid_(lib):
 
 
 @OpRegister.operator
+def quickgelu_(lib):
+    lib.infiniopCreateQuickGeluDescriptor.restype = c_int32
+    lib.infiniopCreateQuickGeluDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+    lib.infiniopGetQuickGeluWorkspaceSize.restype = c_int32
+    lib.infiniopGetQuickGeluWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopQuickGelu.restype = c_int32
+    lib.infiniopQuickGelu.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyQuickGeluDescriptor.restype = c_int32
+    lib.infiniopDestroyQuickGeluDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def topksoftmax_(lib):
     lib.infiniopCreateTopksoftmaxDescriptor.restype = c_int32
     lib.infiniopCreateTopksoftmaxDescriptor.argtypes = [
@@ -1290,6 +1359,37 @@ def dequantize_gptq_(lib):
     ]
     lib.infiniopDestroyDequantizeGPTQDescriptor.restype = c_int32
     lib.infiniopDestroyDequantizeGPTQDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
+def mxfp4_dequantize_(lib):
+    lib.infiniopCreateMxfp4DequantizeDescriptor.restype = c_int32
+    lib.infiniopCreateMxfp4DequantizeDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+    lib.infiniopGetMxfp4DequantizeWorkspaceSize.restype = c_int32
+    lib.infiniopGetMxfp4DequantizeWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopMxfp4Dequantize.restype = c_int32
+    lib.infiniopMxfp4Dequantize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyMxfp4DequantizeDescriptor.restype = c_int32
+    lib.infiniopDestroyMxfp4DequantizeDescriptor.argtypes = [
         infiniopOperatorDescriptor_t,
     ]
 

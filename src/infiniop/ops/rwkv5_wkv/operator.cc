@@ -6,6 +6,10 @@
 #include "nvidia/rwkv5_wkv_nvidia.cuh"
 #endif
 
+#ifdef ENABLE_METAX_API
+#include "metax/rwkv5_wkv_metax.h"
+#endif
+
 __INFINI_C infiniStatus_t infiniopCreateRwkv5WkvDescriptor(
     infiniopHandle_t handle,
     infiniopRwkv5WkvDescriptor_t *desc_ptr,
@@ -40,6 +44,9 @@ __INFINI_C infiniStatus_t infiniopCreateRwkv5WkvDescriptor(
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -70,6 +77,9 @@ __INFINI_C infiniStatus_t infiniopGetRwkv5WkvWorkspaceSize(
 #endif
 #ifdef ENABLE_HYGON_API
         GET(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -112,6 +122,9 @@ __INFINI_C infiniStatus_t infiniopRwkv5Wkv(
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -141,6 +154,9 @@ __INFINI_C infiniStatus_t infiniopDestroyRwkv5WkvDescriptor(
 #endif
 #ifdef ENABLE_HYGON_API
         DESTROY(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        DESTROY(INFINI_DEVICE_METAX, metax);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

@@ -15,11 +15,26 @@ struct InfinicclComm;
 
 typedef struct InfinicclComm *infinicclComm_t;
 
+#define INFINICCL_UNIQUE_ID_BYTES 128
+
+typedef struct {
+    char internal[INFINICCL_UNIQUE_ID_BYTES];
+} infinicclUniqueId_t;
+
 __INFINI_C __export infiniStatus_t infinicclCommInitAll(
     infiniDevice_t device_type,
     infinicclComm_t *comms,
     int ndevice,
     const int *device_ids);
+
+__INFINI_C __export infiniStatus_t infinicclGetUniqueId(
+    infinicclUniqueId_t *unique_id);
+
+__INFINI_C __export infiniStatus_t infinicclCommInitRank(
+    infinicclComm_t *comm,
+    int nranks,
+    infinicclUniqueId_t comm_id,
+    int rank);
 
 __INFINI_C __export infiniStatus_t infinicclCommDestroy(infinicclComm_t comm);
 
@@ -33,6 +48,31 @@ __INFINI_C __export infiniStatus_t infinicclAllReduce(
     size_t count,
     infiniDtype_t dataype,
     infinicclReduceOp_t op,
+    infinicclComm_t comm,
+    infinirtStream_t stream);
+
+__INFINI_C __export infiniStatus_t infinicclBroadcast(
+    const void *sendbuf,
+    void *recvbuf,
+    size_t count,
+    infiniDtype_t datatype,
+    int root,
+    infinicclComm_t comm,
+    infinirtStream_t stream);
+
+__INFINI_C __export infiniStatus_t infinicclSend(
+    const void *sendbuf,
+    size_t count,
+    infiniDtype_t datatype,
+    int peer,
+    infinicclComm_t comm,
+    infinirtStream_t stream);
+
+__INFINI_C __export infiniStatus_t infinicclRecv(
+    void *recvbuf,
+    size_t count,
+    infiniDtype_t datatype,
+    int peer,
     infinicclComm_t comm,
     infinirtStream_t stream);
 

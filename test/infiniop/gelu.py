@@ -89,7 +89,7 @@ def test(
         input_stride is not None or output_stride is not None
     ):
         return
-    if device == InfiniDeviceEnum.CAMBRICON and dtype == InfiniDtype.F64:
+    if device in (InfiniDeviceEnum.CAMBRICON, InfiniDeviceEnum.MOORE) and dtype == InfiniDtype.F64:
         return
 
     input = TestTensor(shape, input_stride, dtype, device)

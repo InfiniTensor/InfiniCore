@@ -3,8 +3,13 @@
 
 #include <cstddef>
 #include <cstdint>
+// On MetaX these headers do not exist; the equivalents come from
+// devices/metax/metax_kernel_common.h, which the .maca translation unit
+// includes before this one.
+#if !defined(ENABLE_METAX_API)
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
+#endif
 
 namespace op::nsa_compress_paged_cache::cuda {
 

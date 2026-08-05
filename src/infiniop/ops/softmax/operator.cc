@@ -10,6 +10,10 @@
 #include "nvidia/softmax_nvidia.cuh"
 #endif
 
+#ifdef ENABLE_METAX_API
+#include "metax/softmax_metax.h"
+#endif
+
 __INFINI_C infiniStatus_t infiniopCreateSoftmaxDescriptor(
     infiniopHandle_t handle,
     infiniopSoftmaxDescriptor_t *desc_ptr,
@@ -44,6 +48,9 @@ __INFINI_C infiniStatus_t infiniopCreateSoftmaxDescriptor(
 #ifdef ENABLE_CAMBRICON_API
         CREATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -74,6 +81,9 @@ __INFINI_C infiniStatus_t infiniopGetSoftmaxWorkspaceSize(infiniopSoftmaxDescrip
 #endif
 #ifdef ENABLE_CAMBRICON_API
         GET(INFINI_DEVICE_CAMBRICON, bang);
+#endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -111,6 +121,9 @@ __INFINI_C infiniStatus_t infiniopSoftmax(
 #ifdef ENABLE_CAMBRICON_API
         CALCULATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -141,6 +154,9 @@ __INFINI_C infiniStatus_t infiniopDestroySoftmaxDescriptor(infiniopSoftmaxDescri
 #endif
 #ifdef ENABLE_CAMBRICON_API
         DESTROY(INFINI_DEVICE_CAMBRICON, bang);
+#endif
+#ifdef ENABLE_METAX_API
+        DESTROY(INFINI_DEVICE_METAX, metax);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

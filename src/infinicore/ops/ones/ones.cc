@@ -1,13 +1,21 @@
 #include "infinicore/ops/ones.hpp"
 
+#include "../../utils.hpp"
+
 namespace infinicore::op {
 
-common::OpDispatcher<Ones::schema> &Ones::dispatcher() {
-    static common::OpDispatcher<Ones::schema> dispatcher_;
-    return dispatcher_;
-};
+INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(Ones);
+
+Ones::Ones(Tensor output) {
+    INFINICORE_GRAPH_OP_DISPATCH(output->device().getType(), output);
+}
 
 void Ones::execute(Tensor output) {
+    INFINICORE_GRAPH_OP_RECORD_OR_RUN(Ones, output);
+}
+
+void ones_(Tensor output) {
+    Ones::execute(output);
 }
 
 } // namespace infinicore::op

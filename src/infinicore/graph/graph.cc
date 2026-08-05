@@ -5,6 +5,7 @@
 #include "infinicore/context/context.hpp"
 
 #ifdef USE_INFINIRT_GRAPH
+#include <cstdlib>
 #include <infini/rt.h>
 #endif
 
@@ -62,8 +63,28 @@ struct Graph::DeviceGraph {
         INFINICORE_CHECK_ERROR(bridge::infini::rt::translate(rt_runtime::GraphLaunch(exec, stream)));
     }
 };
+
+struct Graph::Segment {
+    bool capture_safe;
+    std::vector<std::shared_ptr<GraphOperator>> ops;
+    std::unique_ptr<DeviceGraph> device_graph;
+
+    explicit Segment(bool capture_safe_) : capture_safe(capture_safe_) {
+    }
+
+    void run() const {
+        if (device_graph) {
+            device_graph->launch();
+            return;
+        }
+        for (const auto &op : ops) {
+            op->run();
+        }
+    }
+};
 #else
 struct Graph::DeviceGraph {};
+struct Graph::Segment {};
 #endif
 
 Graph::Graph() {
@@ -71,12 +92,18 @@ Graph::Graph() {
 
 void Graph::run() const {
 #ifdef USE_INFINIRT_GRAPH
-    if (device_graph_ != nullptr && device_graph_.get()->exec != nullptr) {
-        device_graph_.get()->launch();
+    if (segments_.empty()) {
+        for (const auto &op : op_list_) {
+            op->run();
+        }
         return;
     }
+    for (const auto &segment : segments_) {
+        segment->run();
+    }
+    return;
 #endif
-    for (auto &op : op_list_) {
+    for (const auto &op : op_list_) {
         op->run();
     }
 }
@@ -87,68 +114,97 @@ void Graph::add_operator(std::shared_ptr<GraphOperator> op) {
 
 void Graph::instantiate() {
 #ifdef USE_INFINIRT_GRAPH
-    // Reset device graph
-    device_graph_ = std::make_unique<DeviceGraph>();
+    segments_.clear();
     auto current_device = context::getDevice();
-    device_graph_->device_type = bridge::infini::rt::translate_to(static_cast<infiniDevice_t>(current_device.getType()));
-    device_graph_->device_index = static_cast<int>(current_device.getIndex());
-    device_graph_->stream = bridge::infini::rt::translate_to(context::getStream());
-    if (device_graph_->device_type == ::infini::rt::Device::Type::kCount) {
+    auto device_type = bridge::infini::rt::translate_to(static_cast<infiniDevice_t>(current_device.getType()));
+    auto device_index = static_cast<int>(current_device.getIndex());
+    auto stream = bridge::infini::rt::translate_to(context::getStream());
+    if (device_type == ::infini::rt::Device::Type::kCount) {
         spdlog::warn("InfiniRT graph runtime does not support the current device. Falling back to eager execution.");
-        device_graph_.reset();
         return;
     }
-    ::infini::rt::set_runtime_device_type(device_graph_->device_type);
-    auto set_device_status = bridge::infini::rt::translate(rt_runtime::SetDevice(device_graph_->device_index));
+    ::infini::rt::set_runtime_device_type(device_type);
+    auto set_device_status = bridge::infini::rt::translate(rt_runtime::SetDevice(device_index));
     if (set_device_status != INFINI_STATUS_SUCCESS) {
         spdlog::warn("InfiniRT graph runtime failed to select the current device. Falling back to eager execution.");
-        device_graph_.reset();
         return;
     }
 
-    // warmup
+    // Warm the complete op list before splitting it into replay segments.
     for (size_t iter = 0; iter < 5; ++iter) {
         this->run();
     }
     infinicore::context::syncStream();
 
-    auto begin_status = bridge::infini::rt::translate(rt_runtime::StreamBeginCapture(
-        device_graph_->stream,
-        rt_runtime::StreamCaptureMode::kStreamCaptureModeRelaxed));
-    if (begin_status != INFINI_STATUS_SUCCESS) {
-        spdlog::warn("Fail to begin device graph capture.");
-        device_graph_.reset();
+    // Diagnostic escape hatch: keep GraphTensor/operator replay semantics but
+    // bypass device-graph capture, including segmented PP capture.
+    if (std::getenv("INFINICORE_DISABLE_DEVICE_GRAPH_SEGMENTS") != nullptr) {
+        spdlog::info("device graph segments disabled; replaying recorded operators");
         return;
     }
 
-    // Run and record
-    this->run();
-
-    auto end_status = bridge::infini::rt::translate(rt_runtime::StreamEndCapture(
-        device_graph_->stream,
-        &device_graph_->graph));
-    if (end_status != INFINI_STATUS_SUCCESS) {
-        spdlog::warn("Fail to end device graph capture.");
-        device_graph_.reset();
-        return;
-    }
-
-    auto instantiate_status = bridge::infini::rt::translate(rt_runtime::GraphInstantiate(
-        &device_graph_->exec,
-        device_graph_->graph));
-    if (instantiate_status != INFINI_STATUS_SUCCESS) {
-        static bool warned_once = false;
-        if (!warned_once) {
-            warned_once = true;
-            spdlog::warn("Fail to instantiate device graph.");
+    for (const auto &op : op_list_) {
+        const bool capture_safe = op->is_device_graph_capture_safe();
+        if (segments_.empty() || segments_.back()->capture_safe != capture_safe) {
+            segments_.push_back(std::make_unique<Segment>(capture_safe));
         }
-        device_graph_.reset();
-        return;
+        segments_.back()->ops.push_back(op);
     }
+
+    for (auto &segment : segments_) {
+        if (!segment->capture_safe) {
+            // Replay non-capturable operators once between captured segments so
+            // later capture observes the same stream-ordered dependencies.
+            segment->run();
+            continue;
+        }
+
+        segment->device_graph = std::make_unique<DeviceGraph>();
+        auto &device_graph = *segment->device_graph;
+        device_graph.device_type = device_type;
+        device_graph.device_index = device_index;
+        device_graph.stream = stream;
+
+        auto begin_status = bridge::infini::rt::translate(rt_runtime::StreamBeginCapture(
+            device_graph.stream,
+            rt_runtime::StreamCaptureMode::kStreamCaptureModeRelaxed));
+        if (begin_status != INFINI_STATUS_SUCCESS) {
+            throw std::runtime_error("failed to begin device graph capture");
+        }
+
+        for (const auto &op : segment->ops) {
+            op->run();
+        }
+
+        auto end_status = bridge::infini::rt::translate(rt_runtime::StreamEndCapture(
+            device_graph.stream,
+            &device_graph.graph));
+        if (end_status != INFINI_STATUS_SUCCESS) {
+            throw std::runtime_error("failed to end device graph capture");
+        }
+
+        auto instantiate_status = bridge::infini::rt::translate(rt_runtime::GraphInstantiate(
+            &device_graph.exec,
+            device_graph.graph));
+        if (instantiate_status != INFINI_STATUS_SUCCESS) {
+            throw std::runtime_error("failed to instantiate device graph");
+        }
+    }
+
     static bool logged_once = false;
     if (!logged_once) {
         logged_once = true;
         spdlog::info("Using InfiniRT C++ graph runtime API for graph capture and replay.");
+    }
+
+    if (std::getenv("INFINICORE_GRAPH_DEBUG") != nullptr) {
+        size_t host_segments = 0;
+        for (const auto &segment : segments_) {
+            host_segments += segment->capture_safe ? 0 : 1;
+        }
+        spdlog::info(
+            "segmented graph: operators={}, segments={}, host_segments={}",
+            op_list_.size(), segments_.size(), host_segments);
     }
 #endif
 }
@@ -187,6 +243,11 @@ std::shared_ptr<Graph> GraphManager::stop_recording() {
     graph_->instantiate();
 #endif
     return std::exchange(graph_, nullptr);
+}
+
+void GraphManager::cancel_recording() {
+    recording_ = false;
+    graph_.reset();
 }
 
 } // namespace infinicore::graph

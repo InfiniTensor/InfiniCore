@@ -5,6 +5,10 @@
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API)
 #include "nvidia/dequantize_w42f16_nvidia.cuh"
 #endif
+
+#ifdef ENABLE_METAX_API
+#include "metax/dequantize_w42f16_metax.h"
+#endif
 #ifdef ENABLE_MOORE_API
 #include "moore/dequantize_w42f16_moore.h"
 #endif
@@ -34,6 +38,9 @@ __INFINI_C infiniStatus_t infiniopCreateDequantizeGPTQDescriptor(
 #ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax);
+#endif
 #ifdef ENABLE_MOORE_API
         CREATE(INFINI_DEVICE_MOORE, moore);
 #endif
@@ -60,6 +67,9 @@ __INFINI_C infiniStatus_t infiniopGetDequantizeGPTQWorkspaceSize(infiniopDequant
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API
         GET(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_MOORE_API
         GET(INFINI_DEVICE_MOORE, moore);
@@ -96,6 +106,9 @@ __INFINI_C infiniStatus_t infiniopDequantizeGPTQ(
 #ifdef ENABLE_NVIDIA_API
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax);
+#endif
 #ifdef ENABLE_MOORE_API
         CALCULATE(INFINI_DEVICE_MOORE, moore);
 #endif
@@ -123,6 +136,9 @@ infiniopDestroyDequantizeGPTQDescriptor(infiniopDequantizeGPTQDescriptor_t desc)
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API
         DELETE(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        DELETE(INFINI_DEVICE_METAX, metax);
 #endif
 #ifdef ENABLE_MOORE_API
         DELETE(INFINI_DEVICE_MOORE, moore);

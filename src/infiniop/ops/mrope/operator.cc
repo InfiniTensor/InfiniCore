@@ -5,6 +5,12 @@
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_HYGON_API) || defined(ENABLE_ALI_API)
 #include "nvidia/mrope_nvidia.cuh"
 #endif
+#ifdef ENABLE_METAX_API
+#include "metax/mrope_metax.h"
+#endif
+#ifdef ENABLE_MOORE_API
+#include "moore/mrope_moore.h"
+#endif
 
 __INFINI_C infiniStatus_t infiniopCreateMRoPEDescriptor(
     infiniopHandle_t handle,
@@ -47,6 +53,12 @@ __INFINI_C infiniStatus_t infiniopCreateMRoPEDescriptor(
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -74,6 +86,12 @@ __INFINI_C infiniStatus_t infiniopGetMRoPEWorkspaceSize(infiniopMRoPEDescriptor_
 #endif
 #ifdef ENABLE_HYGON_API
         GET(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, moore);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -114,6 +132,12 @@ __INFINI_C infiniStatus_t infiniopMRoPE(
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -141,6 +165,12 @@ __INFINI_C infiniStatus_t infiniopDestroyMRoPEDescriptor(infiniopMRoPEDescriptor
 #endif
 #ifdef ENABLE_HYGON_API
         DESTROY(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        DESTROY(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MOORE_API
+        DESTROY(INFINI_DEVICE_MOORE, moore);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

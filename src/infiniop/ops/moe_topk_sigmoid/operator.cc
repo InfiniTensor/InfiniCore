@@ -2,7 +2,7 @@
 #include "../../handle.h"
 #include "infiniop/ops/moe_topk_sigmoid.h"
 
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
 #include "nvidia/moe_topk_sigmoid_nvidia.cuh"
 #endif
 
@@ -23,6 +23,9 @@ __INFINI_C infiniStatus_t infiniopCreateMoeTopkSigmoidDescriptor(
 #ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
+#ifdef ENABLE_ILUVATAR_API
+        CREATE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -39,6 +42,9 @@ __INFINI_C infiniStatus_t infiniopGetMoeTopkSigmoidWorkspaceSize(
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API
         GET(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        GET(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -63,6 +69,9 @@ __INFINI_C infiniStatus_t infiniopMoeTopkSigmoid(
 #ifdef ENABLE_NVIDIA_API
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
+#ifdef ENABLE_ILUVATAR_API
+        CALCULATE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -78,6 +87,9 @@ __INFINI_C infiniStatus_t infiniopDestroyMoeTopkSigmoidDescriptor(
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API
         DESTROY(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_ILUVATAR_API
+        DESTROY(INFINI_DEVICE_ILUVATAR, nvidia);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

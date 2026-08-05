@@ -5,6 +5,10 @@
 #include "nvidia/mamba_selective_scan_nvidia.cuh"
 #endif
 
+#ifdef ENABLE_METAX_API
+#include "metax/mamba_selective_scan_metax.h"
+#endif
+
 __INFINI_C infiniStatus_t infiniopCreateMambaSelectiveScanDescriptor(
     infiniopHandle_t handle, infiniopMambaSelectiveScanDescriptor_t *desc_ptr,
     infiniopTensorDescriptor_t out_desc, infiniopTensorDescriptor_t x_desc,
@@ -30,6 +34,9 @@ __INFINI_C infiniStatus_t infiniopCreateMambaSelectiveScanDescriptor(
 #endif
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -57,6 +64,9 @@ __INFINI_C infiniStatus_t infiniopGetMambaSelectiveScanWorkspaceSize(infiniopMam
 #endif
 #ifdef ENABLE_HYGON_API
         GET(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -88,6 +98,9 @@ __INFINI_C infiniStatus_t infiniopMambaSelectiveScan(
 #ifdef ENABLE_HYGON_API
         CALC(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CALC(INFINI_DEVICE_METAX, metax);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -114,6 +127,9 @@ __INFINI_C infiniStatus_t infiniopDestroyMambaSelectiveScanDescriptor(infiniopMa
 #endif
 #ifdef ENABLE_HYGON_API
         DESTROY(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        DESTROY(INFINI_DEVICE_METAX, metax);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

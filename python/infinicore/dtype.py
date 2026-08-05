@@ -66,6 +66,7 @@ complex128 = dtype(_infinicore.DataType.C128)
 cdouble = complex128
 float16 = dtype(_infinicore.DataType.F16)
 half = float16
+float8 = dtype(_infinicore.DataType.F8)
 bfloat16 = dtype(_infinicore.DataType.BF16)
 uint8 = dtype(_infinicore.DataType.U8)
 int8 = dtype(_infinicore.DataType.I8)

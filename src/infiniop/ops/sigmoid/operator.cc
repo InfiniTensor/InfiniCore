@@ -8,6 +8,12 @@
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API) || defined(ENABLE_ALI_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/sigmoid_nvidia.cuh"
 #endif
+#ifdef ENABLE_METAX_API
+#include "metax/sigmoid_metax.h"
+#endif
+#ifdef ENABLE_MOORE_API
+#include "moore/sigmoid_moore.h"
+#endif
 
 __INFINI_C infiniStatus_t infiniopCreateSigmoidDescriptor(
     infiniopHandle_t handle,
@@ -43,6 +49,12 @@ __INFINI_C infiniStatus_t infiniopCreateSigmoidDescriptor(
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -76,6 +88,12 @@ __INFINI_C infiniStatus_t infiniopGetSigmoidWorkspaceSize(infiniopSigmoidDescrip
 #endif
 #ifdef ENABLE_HYGON_API
         GET(INFINI_DEVICE_HYGON, nvidia)
+#endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax)
+#endif
+#ifdef ENABLE_MOORE_API
+        GET(INFINI_DEVICE_MOORE, moore)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -118,6 +136,12 @@ __INFINI_C infiniStatus_t infiniopSigmoid(
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -153,6 +177,12 @@ infiniopDestroySigmoidDescriptor(infiniopSigmoidDescriptor_t desc) {
 #endif
 #ifdef ENABLE_HYGON_API
         DELETE(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        DELETE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MOORE_API
+        DELETE(INFINI_DEVICE_MOORE, moore);
 #endif
 
     default:

@@ -9,6 +9,10 @@
 #include "nvidia/mul_scalar_nvidia.cuh"
 #endif
 
+#ifdef ENABLE_METAX_API
+#include "metax/mul_scalar_metax.h"
+#endif
+
 __INFINI_C infiniStatus_t infiniopCreateMulScalarDescriptor(
     infiniopHandle_t handle,
     infiniopMulScalarDescriptor_t *desc_ptr,
@@ -42,6 +46,9 @@ __INFINI_C infiniStatus_t infiniopCreateMulScalarDescriptor(
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -74,6 +81,9 @@ __INFINI_C infiniStatus_t infiniopGetMulScalarWorkspaceSize(infiniopMulScalarDes
 #endif
 #ifdef ENABLE_HYGON_API
         GET(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -114,6 +124,9 @@ __INFINI_C infiniStatus_t infiniopMulScalar(
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -146,6 +159,9 @@ __INFINI_C infiniStatus_t infiniopDestroyMulScalarDescriptor(infiniopMulScalarDe
 #endif
 #ifdef ENABLE_HYGON_API
         DELETE(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        DELETE(INFINI_DEVICE_METAX, metax);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

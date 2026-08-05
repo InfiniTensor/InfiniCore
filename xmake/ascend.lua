@@ -6,8 +6,10 @@ local SOC_VERSION = os.getenv("SOC_VERSION")
 for _, include_dir in ipairs({
     path.join(ASCEND_HOME, "include"),
     path.join(ASCEND_HOME, "include/aclnn"),
+    path.join(ASCEND_HOME, "include/aclnnop"),
     path.join(ASCEND_HOME, "aarch64-linux/include"),
     path.join(ASCEND_HOME, "aarch64-linux/include/aclnn"),
+    path.join(ASCEND_HOME, "aarch64-linux/include/aclnnop"),
 }) do
     if os.isdir(include_dir) then
         add_includedirs(include_dir)

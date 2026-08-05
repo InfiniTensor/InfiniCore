@@ -1,5 +1,7 @@
 #include "infinicore/ops/add_rms_norm.hpp"
 
+#include "../vendor_ops/vendor_ops_dispatch.hpp"
+
 #include "../../utils.hpp"
 
 namespace infinicore::op {
@@ -27,6 +29,12 @@ void add_rms_norm_(Tensor out, Tensor residual, const Tensor &a, const Tensor &b
 }
 
 void add_rms_norm_inplace(Tensor input, Tensor residual, const Tensor &weight, float epsilon) {
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(input, residual, weight);
+    auto kernel = vendor_ops::add_rms_norm_inplace_dispatcher().lookup(input->device().getType());
+    if (kernel != nullptr) {
+        kernel(input, residual, weight, epsilon);
+        return;
+    }
     add_rms_norm_(input, residual, input, residual, weight, epsilon);
 }
 

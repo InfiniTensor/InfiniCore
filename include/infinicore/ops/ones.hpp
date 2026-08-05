@@ -1,16 +1,13 @@
 #pragma once
 
+#include "../device.hpp"
+#include "../graph/graph.hpp"
 #include "common/op.hpp"
 
 namespace infinicore::op {
-class Ones {
 
-public:
-    using schema = void (*)(Tensor);
-    static void execute(Tensor output);
-    static common::OpDispatcher<schema> &dispatcher();
-};
+INFINICORE_GRAPH_OP_CLASS(Ones, Tensor);
 
-Tensor ones();
 void ones_(Tensor output);
+
 } // namespace infinicore::op

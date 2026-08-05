@@ -7,6 +7,8 @@
 #define INFINIOP_CUDA_KERNEL __global__ void
 #endif
 
+#include <cstdint>
+
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
 #ifndef ENABLE_HYGON_API
@@ -31,6 +33,42 @@ using cuda_bfloat16 = nv_bfloat16;
 using cuda_bfloat162 = nv_bfloat162;
 using cuda_fp8_e4m3 = __nv_fp8_e4m3;
 #endif
+
+// Store FP8 E4M3FN values as raw bytes in portable CUDA-style kernels.
+// Several CUDA-compatible backends either expose a different FP8 type name or
+// do not ship cuda_fp8.h at all, while the tensor ABI is still one byte.
+__forceinline__ __device__ uint8_t
+infiniopFp8E4m3Encode(float value) {
+    const uint32_t bits = __float_as_uint(value);
+    const uint32_t abs_bits = bits & 0x7fffffffU;
+    uint32_t magnitude = 0x7fU;
+    if (abs_bits < 0x43f00000U) {
+        if (abs_bits > 0x3c7fffffU) {
+            const uint32_t tie = (bits >> 20U) & 1U;
+            magnitude = (bits + tie + 0x0407ffffU) >> 20U;
+        } else {
+            const float absolute = __uint_as_float(abs_bits);
+            magnitude = __float_as_uint(absolute + 16384.0f);
+        }
+    }
+    const uint32_t sign = (bits >> 24U) & 0x80U;
+    return static_cast<uint8_t>((magnitude & 0x7fU) | sign);
+}
+
+__forceinline__ __device__ float
+infiniopFp8E4m3Decode(uint8_t value) {
+    const uint32_t magnitude = value & 0x7fU;
+    const uint32_t exponent = magnitude >> 3U;
+    const uint32_t mantissa = magnitude & 0x7U;
+    if (exponent == 0xfU && mantissa == 0x7U) {
+        return __uint_as_float(0x7fffffffU);
+    }
+    const float decoded = exponent == 0U
+                            ? static_cast<float>(mantissa) * 0.001953125f
+                            : __uint_as_float((exponent + 120U) << 23U)
+                                  * (1.0f + static_cast<float>(mantissa) * 0.125f);
+    return (value & 0x80U) != 0U ? -decoded : decoded;
+}
 
 namespace device::nvidia {
 

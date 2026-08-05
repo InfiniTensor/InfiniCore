@@ -6,6 +6,10 @@
 #include "nvidia/nsa_compress_paged_cache_nvidia.cuh"
 #endif
 
+#ifdef ENABLE_METAX_API
+#include "metax/nsa_compress_paged_cache_metax.h"
+#endif
+
 __INFINI_C infiniStatus_t infiniopCreateNsaCompressPagedCacheDescriptor(
     infiniopHandle_t handle,
     infiniopNsaCompressPagedCacheDescriptor_t *desc_ptr,
@@ -39,6 +43,9 @@ __INFINI_C infiniStatus_t infiniopCreateNsaCompressPagedCacheDescriptor(
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia)
 #endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -64,6 +71,9 @@ __INFINI_C infiniStatus_t infiniopGetNsaCompressPagedCacheWorkspaceSize(
 #endif
 #ifdef ENABLE_HYGON_API
         GET(INFINI_DEVICE_HYGON, nvidia)
+#endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -99,6 +109,9 @@ __INFINI_C infiniStatus_t infiniopNsaCompressPagedCache(
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia)
 #endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -123,6 +136,9 @@ __INFINI_C infiniStatus_t infiniopDestroyNsaCompressPagedCacheDescriptor(
 #endif
 #ifdef ENABLE_HYGON_API
         DESTROY(INFINI_DEVICE_HYGON, nvidia)
+#endif
+#ifdef ENABLE_METAX_API
+        DESTROY(INFINI_DEVICE_METAX, metax)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

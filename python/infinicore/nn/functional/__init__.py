@@ -12,17 +12,22 @@ from .chunk_gated_delta_rule import chunk_gated_delta_rule
 from .embedding import embedding
 from .flash_attention import flash_attention
 from .fused_gated_delta_net_gating import fused_gated_delta_net_gating
+from .fused_moe import ACT_SILU, ACT_SWIGLU, fused_moe
+from .fused_moe_mxfp4 import fused_moe_mxfp4
 from .gaussian_nll_loss import gaussian_nll_loss
 from .hardswish import hardswish
 from .hardtanh import hardtanh
 from .hinge_embedding_loss import hinge_embedding_loss
 from .huber_loss import huber_loss
 from .interpolate import interpolate
+from .kimi_delta_attention import kimi_delta_attention
 from .layer_norm import layer_norm
 from .linear import linear
+from .linear_mxfp4 import linear_mxfp4
 from .linear_w8a8i8 import linear_w8a8i8
 from .log_softmax import log_softmax
 from .mamba_selective_scan import mamba_selective_scan
+from .moe_fused_dense import moe_fused_dense
 from .multi_margin_loss import multi_margin_loss
 from .pad import pad
 from .prelu import prelu
@@ -39,6 +44,7 @@ from .smooth_l1_loss import smooth_l1_loss
 from .softplus import softplus
 from .softsign import softsign
 from .swiglu import swiglu
+from .tanh import tanh
 from .tanhshrink import tanhshrink
 from .triplet_margin_loss import triplet_margin_loss
 from .triplet_margin_with_distance_loss import triplet_margin_with_distance_loss
@@ -54,9 +60,15 @@ __all__ = [
     "embedding",
     "flash_attention",
     "fused_gated_delta_net_gating",
+    "fused_moe",
+    "fused_moe_mxfp4",
+    "ACT_SILU",
+    "ACT_SWIGLU",
     "gaussian_nll_loss",
     "interpolate",
+    "kimi_delta_attention",
     "linear",
+    "linear_mxfp4",
     "binary_cross_entropy_with_logits",
     "random_sample",
     "adaptive_avg_pool1d",
@@ -76,6 +88,7 @@ __all__ = [
     "interpolate",
     "log_softmax",
     "mamba_selective_scan",
+    "moe_fused_dense",
     "upsample_nearest",
     "triplet_margin_with_distance_loss",
     "embedding",
@@ -94,6 +107,7 @@ __all__ = [
     "linear_w8a8i8",
     "silu_and_mul",
     "adaptive_avg_pool3d",
+    "tanh",
     "tanhshrink",
     "multi_margin_loss",
     "softplus",

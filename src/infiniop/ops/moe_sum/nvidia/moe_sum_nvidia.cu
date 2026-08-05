@@ -1,4 +1,4 @@
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
 
 #include "moe_sum_nvidia.cuh"
 
@@ -117,4 +117,4 @@ infiniStatus_t Descriptor::calculate(
 
 } // namespace op::moe_sum::nvidia
 
-#endif // ENABLE_NVIDIA_API
+#endif // ENABLE_NVIDIA_API || ENABLE_ILUVATAR_API

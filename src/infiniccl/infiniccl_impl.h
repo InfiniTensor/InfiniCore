@@ -11,6 +11,10 @@ struct InfinicclComm {
     int world_size = 1;
 };
 
+namespace infiniccl {
+infiniStatus_t getDevice(infiniDevice_t *device_type, int *device_id);
+}
+
 #define INFINICCL_DEVICE_API(NAMSPACE, IMPL)               \
     namespace infiniccl::NAMSPACE {                        \
     infiniStatus_t commInitAll(                            \

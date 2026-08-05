@@ -17,9 +17,9 @@ __device__ void blockLPNormKernel(
         local_max = max(local_max, fabsf((float)input[tid + ind * stride]));
     }
     __shared__ float global_max;
-#if CUDART_VERSION >= 12090
+#if CUDART_VERSION >= 12090 && !defined(ENABLE_METAX_API)
     float max_block = BlockReduce(temp_storage).Reduce(local_max, ::cuda::maximum());
-#elif defined(ENABLE_HYGON_API)
+#elif defined(ENABLE_HYGON_API) || defined(ENABLE_METAX_API)
     float max_block = BlockReduce(temp_storage).Reduce(
         local_max, [](const float &a, const float &b) { return (a > b) ? a : b; }, BLOCK_SIZE);
 #else
@@ -76,9 +76,9 @@ __device__ void blockLPNormStridesKernel(
         local_max = max(local_max, fabsf((float)input[ind_i + ind]));
     }
     __shared__ float global_max;
-#if CUDART_VERSION >= 12090
+#if CUDART_VERSION >= 12090 && !defined(ENABLE_METAX_API)
     float max_block = BlockReduce(temp_storage).Reduce(local_max, ::cuda::maximum());
-#elif defined(ENABLE_HYGON_API)
+#elif defined(ENABLE_HYGON_API) || defined(ENABLE_METAX_API)
     float max_block = BlockReduce(temp_storage).Reduce(
         local_max, [](const float &a, const float &b) { return (a > b) ? a : b; }, BLOCK_SIZE);
 #else

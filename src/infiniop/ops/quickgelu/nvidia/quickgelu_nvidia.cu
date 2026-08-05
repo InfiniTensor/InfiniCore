@@ -1,3 +1,5 @@
+#include "../../../elementwise/nvidia/elementwise_nvidia.cuh"
+
 #include "../cuda/kernel.cuh"
 #include "quickgelu_nvidia.cuh"
 
@@ -49,7 +51,7 @@ infiniStatus_t Descriptor::calculate(
             _info, workspace, output, inputs, stream);
 
     case INFINI_DTYPE_BF16:
-        return _device_info->calculate<256, cuda::QuickGeluOp, __nv_bfloat16>(
+        return _device_info->calculate<256, cuda::QuickGeluOp, cuda_bfloat16>(
             _info, workspace, output, inputs, stream);
 
     case INFINI_DTYPE_F32:

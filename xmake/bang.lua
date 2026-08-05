@@ -1,5 +1,111 @@
 
 local NEUWARE_HOME = os.getenv("NEUWARE_HOME") or "/usr/local/neuware"
+local FLASH_ATTN_ROOT = get_config("flash-attn")
+local INFINI_ROOT = os.getenv("INFINI_ROOT")
+    or (os.getenv("HOME") .. "/.infini")
+
+if has_config("aten") then
+    add_defines("_GLIBCXX_USE_CXX11_ABI=0")
+end
+
+local function cambricon_flash_attn_so_path()
+    local explicit = os.getenv("FLASH_ATTN_2_BANG_SO")
+    if explicit and explicit ~= "" then
+        explicit = explicit:trim()
+        if os.isfile(explicit) then
+            return explicit
+        end
+        print(string.format(
+            "warning: cambricon+flash-attn: FLASH_ATTN_2_BANG_SO is not a file: %s",
+            explicit))
+    end
+    if FLASH_ATTN_ROOT and FLASH_ATTN_ROOT ~= "" then
+        local candidates
+            = os.files(path.join(FLASH_ATTN_ROOT, "flash_attn_2_bang*.so"))
+        if #candidates > 0 then
+            return candidates[1]
+        end
+    end
+    local detected = os.iorunv("python", {
+        "-c",
+        "import importlib.util; s=importlib.util.find_spec('flash_attn_2_bang'); print(s.origin if s else '')",
+    }):trim()
+    if detected ~= "" and os.isfile(detected) then
+        return detected
+    end
+    raise("cambricon+flash-attn: flash_attn_2_bang extension not found; pass its site-packages directory via --flash-attn or set FLASH_ATTN_2_BANG_SO")
+end
+
+target("flash-attn-cambricon")
+    set_kind("phony")
+    set_default(false)
+    if FLASH_ATTN_ROOT and FLASH_ATTN_ROOT ~= "" then
+        before_build(function (target)
+            print("Cambricon flash-attn extension: "
+                  .. cambricon_flash_attn_so_path())
+        end)
+    end
+target_end()
+
+target("infinicore_cpp_api")
+    add_rpathdirs(path.join(INFINI_ROOT, "lib"))
+    if has_config("aten") then
+        on_load(function (target)
+            local torch_mlu_dir = os.iorunv("python", {
+                "-c",
+                "import torch_mlu, os; print(os.path.dirname(torch_mlu.__file__))",
+            }):trim()
+            target:add("defines", "_GLIBCXX_USE_CXX11_ABI=0")
+            target:add(
+                "includedirs", path.join(torch_mlu_dir, "csrc"),
+                {public = true})
+            target:add(
+                "linkdirs", path.join(torch_mlu_dir, "csrc", "lib"),
+                {public = true})
+        end)
+        before_link(function (target)
+            local torch_dir = os.iorunv("python", {
+                "-c",
+                "import torch, os; print(os.path.dirname(torch.__file__))",
+            }):trim()
+            local torch_mlu_dir = os.iorunv("python", {
+                "-c",
+                "import torch_mlu, os; print(os.path.dirname(torch_mlu.__file__))",
+            }):trim()
+            local torch_lib = path.join(torch_dir, "lib")
+            local torch_mlu_lib = path.join(torch_mlu_dir, "csrc", "lib")
+            target:add(
+                "shflags",
+                "-Wl,--no-as-needed",
+                "-L" .. torch_lib,
+                "-ltorch_python", "-ltorch_cpu", "-ltorch", "-lc10",
+                "-L" .. torch_mlu_lib,
+                "-ltorch_mlu", "-ltorch_mlu_bangc",
+                "-Wl,--as-needed",
+                "-Wl,-rpath," .. torch_lib,
+                "-Wl,-rpath," .. torch_mlu_lib,
+                {force = true})
+            if FLASH_ATTN_ROOT and FLASH_ATTN_ROOT ~= "" then
+                local flash_so = cambricon_flash_attn_so_path()
+                local flash_dir = path.directory(flash_so)
+                target:add(
+                    "shflags",
+                    "-Wl,--no-as-needed",
+                    "-L" .. flash_dir,
+                    "-l:" .. path.filename(flash_so),
+                    "-Wl,--as-needed",
+                    "-Wl,-rpath," .. flash_dir,
+                    {force = true})
+            end
+        end)
+    end
+target_end()
+
+target("_infinicore")
+    add_defines("_GLIBCXX_USE_CXX11_ABI=0")
+    add_rpathdirs(path.join(INFINI_ROOT, "lib"))
+target_end()
+
 add_includedirs(path.join(NEUWARE_HOME, "include"), {public = true})
 add_linkdirs(path.join(NEUWARE_HOME, "lib64"))
 add_linkdirs(path.join(NEUWARE_HOME, "lib"))

@@ -10,27 +10,47 @@ namespace {
 
 using TensorMeta = ::infinicore::op::infiniops::TensorMeta;
 
-void calculate(Tensor output, Tensor input) {
+struct PlannedMeta {
+    TensorMeta output, input;
+    graph::GraphTensor output_tensor, input_tensor;
+};
+
+} // namespace
+
+void *plan(Tensor output, Tensor input) {
     INFINICORE_ASSERT(::infinicore::op::infiniops::isSupportedDevice(output->device().getType()));
     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(output, input);
+
+    return new PlannedMeta{
+        TensorMeta(output),
+        TensorMeta(input),
+        graph::GraphTensor(output),
+        graph::GraphTensor(input)};
+}
+
+void run(void *planned_meta) {
+    auto planned = reinterpret_cast<PlannedMeta *>(planned_meta);
 
     infini::ops::Handle handle;
     handle.set_stream(context::getStream());
     infini::ops::Config config;
 
-    TensorMeta output_meta(output);
-    TensorMeta input_meta(input);
     infini::ops::Silu::Call(
         handle,
         config,
-        input_meta.tensor(input),
-        output_meta.tensor(output));
+        planned->input.tensor(planned->input_tensor),
+        planned->output.tensor(planned->output_tensor));
 }
 
-} // namespace
+void cleanup(void **planned_meta_ptr) {
+    delete *reinterpret_cast<PlannedMeta **>(planned_meta_ptr);
+    *planned_meta_ptr = nullptr;
+}
 
 static bool registered = []() {
-    ::infinicore::op::infiniops::registerSupportedDevices(Silu::dispatcher(), &calculate);
+    ::infinicore::op::infiniops::registerSupportedDevices(Silu::plan_dispatcher(), &plan);
+    ::infinicore::op::infiniops::registerSupportedDevices(Silu::run_dispatcher(), &run);
+    ::infinicore::op::infiniops::registerSupportedDevices(Silu::cleanup_dispatcher(), &cleanup);
     return true;
 }();
 
