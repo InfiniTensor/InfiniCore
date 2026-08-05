@@ -11,6 +11,7 @@ namespace infinicore::op {
 enum class FusedMoeActivation : int {
     Silu = 0,
     Swiglu = 1,
+    Situglu = 2,
 };
 
 INFINICORE_GRAPH_OP_CLASS(FusedMoe,

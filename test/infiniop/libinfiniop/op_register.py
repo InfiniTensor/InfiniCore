@@ -1364,6 +1364,37 @@ def dequantize_gptq_(lib):
 
 
 @OpRegister.operator
+def mxfp4_dequantize_(lib):
+    lib.infiniopCreateMxfp4DequantizeDescriptor.restype = c_int32
+    lib.infiniopCreateMxfp4DequantizeDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+    lib.infiniopGetMxfp4DequantizeWorkspaceSize.restype = c_int32
+    lib.infiniopGetMxfp4DequantizeWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopMxfp4Dequantize.restype = c_int32
+    lib.infiniopMxfp4Dequantize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyMxfp4DequantizeDescriptor.restype = c_int32
+    lib.infiniopDestroyMxfp4DequantizeDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def per_channel_quant_int8_(lib):
     lib.infiniopCreatePerChannelQuantI8Descriptor.restype = c_int32
     lib.infiniopCreatePerChannelQuantI8Descriptor.argtypes = [

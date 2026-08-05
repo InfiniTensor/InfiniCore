@@ -132,6 +132,14 @@ c10::cuda::CUDAStream get_cuda_stream() {
 }
 #endif
 
+#if defined(ENABLE_CAMBRICON_API)
+torch_mlu::MLUStream get_mlu_stream() {
+    return torch_mlu::getStreamFromExternal(
+        cnrtQueue_t(infinicore::context::getStream()),
+        infinicore::context::getDevice().getIndex());
+}
+#endif
+
 void set_aten_stream_to_infinicore() {
 #if defined(ENABLE_ILUVATAR_FLASH_ATTN)
     const auto error = torch_set_current_cuda_stream(
@@ -146,6 +154,8 @@ void set_aten_stream_to_infinicore() {
     c10::hip::setCurrentHIPStream(get_hip_stream());
 #elif defined(ENABLE_MOORE_API)
     c10::musa::setCurrentMUSAStream(get_musa_stream());
+#elif defined(ENABLE_CAMBRICON_API)
+    torch_mlu::setCurrentMLUStream(get_mlu_stream());
 #elif defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API) || defined(ENABLE_ALI_API)
     c10::cuda::setCurrentCUDAStream(get_cuda_stream());
 #elif defined(ENABLE_ILUVATAR_API)

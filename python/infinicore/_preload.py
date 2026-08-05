@@ -158,6 +158,17 @@ def preload_flash_attn() -> None:
             continue
 
 
+def preload_cambricon() -> None:
+    """Import torch and torch_mlu for shared-library and backend setup."""
+    preload_torch()
+    try:
+        import torch_mlu  # noqa: F401
+    except Exception:
+        # The linked rpaths still allow the C++ library to load. Backend
+        # registration remains best-effort at package import time.
+        pass
+
+
 def _should_preload_device(device_type: str) -> bool:
     """
     Check if preload is needed for a specific device type.
@@ -166,8 +177,8 @@ def _should_preload_device(device_type: str) -> bool:
         "METAX": ["HPCC_PATH", "INFINICORE_PRELOAD_HPCC"],  # HPCC/METAX
         "HYGON": ["DTK_ROOT", "INFINICORE_PRELOAD_TORCH_HIP"],
         "ASCEND": ["ASCEND_HOME", "ASCEND_TOOLKIT_HOME"],
+        "CAMBRICON": ["NEUWARE_HOME", "INFINICORE_PRELOAD_CAMBRICON"],
         # Add other device types here as needed:
-        # "CAMBRICON": ["NEUWARE_HOME"],
     }
 
     env_vars = device_env_map.get(device_type, [])
@@ -178,6 +189,8 @@ def _should_preload_device(device_type: str) -> bool:
         dtk_root = os.getenv("DTK_ROOT") or "/opt/dtk"
         if os.path.isdir(dtk_root):
             return True
+    if device_type == "CAMBRICON":
+        return importlib.util.find_spec("torch_mlu") is not None
     return False
 
 
@@ -198,6 +211,8 @@ def preload_device(device_type: str) -> None:
     elif device_type == "ASCEND":
         preload_torch()
     # Add other device preload functions here as needed:
+    elif device_type == "CAMBRICON":
+        preload_cambricon()
     # etc.
 
 
@@ -215,8 +230,8 @@ def preload() -> None:
         "METAX",  # HPCC/METAX
         "HYGON",
         "ASCEND",
+        "CAMBRICON",
         # Add other device types here as they are implemented:
-        # "CAMBRICON",
         # etc.
     ]
 

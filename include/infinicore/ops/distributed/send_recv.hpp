@@ -13,6 +13,9 @@ public:
     Send(const Tensor &input, int peer, infinicclComm_t communicator);
     ~Send();
     void run() const override;
+    bool is_device_graph_capture_safe() const override {
+        return false;
+    }
     static void execute(const Tensor &input, int peer, infinicclComm_t communicator);
 
 private:
@@ -24,6 +27,9 @@ public:
     Recv(Tensor output, int peer, infinicclComm_t communicator);
     ~Recv();
     void run() const override;
+    bool is_device_graph_capture_safe() const override {
+        return false;
+    }
     static void execute(Tensor output, int peer, infinicclComm_t communicator);
 
 private:
@@ -32,6 +38,7 @@ private:
 
 void send(const Tensor &input, int peer, infinicclComm_t communicator);
 void recv_(Tensor output, int peer, infinicclComm_t communicator);
-Tensor recv(const Shape &shape, DataType dtype, Device device, int peer, infinicclComm_t communicator);
+Tensor recv(const Shape &shape, DataType dtype, Device device, int peer,
+            infinicclComm_t communicator);
 
 } // namespace infinicore::op::distributed

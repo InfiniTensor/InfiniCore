@@ -8,6 +8,7 @@ typedef struct InfiniopDescriptor *infiniopFusedMoeDescriptor_t;
 typedef enum {
     INFINIOP_FUSED_MOE_ACT_SILU = 0,
     INFINIOP_FUSED_MOE_ACT_SWIGLU = 1,
+    INFINIOP_FUSED_MOE_ACT_SITUGLU = 2,
 } infiniopFusedMoeActivation_t;
 
 __INFINI_C __export infiniStatus_t infiniopCreateFusedMoeDescriptor(

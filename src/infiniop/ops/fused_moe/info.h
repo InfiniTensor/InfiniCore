@@ -36,7 +36,9 @@ public:
         if (out_desc == nullptr || input_desc == nullptr || token_selected_experts_desc == nullptr || token_final_scales_desc == nullptr || w1_desc == nullptr || w2_desc == nullptr) {
             return INFINI_STATUS_NULL_POINTER;
         }
-        if (activation != INFINIOP_FUSED_MOE_ACT_SILU && activation != INFINIOP_FUSED_MOE_ACT_SWIGLU) {
+        if (activation != INFINIOP_FUSED_MOE_ACT_SILU
+            && activation != INFINIOP_FUSED_MOE_ACT_SWIGLU
+            && activation != INFINIOP_FUSED_MOE_ACT_SITUGLU) {
             return INFINI_STATUS_BAD_PARAM;
         }
 
@@ -71,7 +73,8 @@ public:
         if (out_shape[0] != N || out_shape[1] != hidden || indices_shape[0] != N || scales_shape[0] != N || scales_shape[1] != topk || w1_shape[2] != hidden || w2_shape[0] != experts || w2_shape[1] != hidden) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
-        if (activation == INFINIOP_FUSED_MOE_ACT_SWIGLU) {
+        if (activation == INFINIOP_FUSED_MOE_ACT_SWIGLU
+            || activation == INFINIOP_FUSED_MOE_ACT_SITUGLU) {
             if (w1_cols != 2 * inter) {
                 return INFINI_STATUS_BAD_TENSOR_SHAPE;
             }

@@ -15,6 +15,11 @@
 #include <c10/cuda/CUDAStream.h>
 #endif
 
+#if defined(ENABLE_CAMBRICON_API)
+#include <framework/core/MLUStream.h>
+#include <framework/core/stream_guard.h>
+#endif
+
 #if defined(ENABLE_MOORE_API)
 #include <c10/macros/Macros.h>
 #include <c10/musa/MUSAMacros.h>
@@ -66,6 +71,11 @@ inline at::Device to_at_device(const Device &device) {
         return at::Device(at::DeviceType::PrivateUse1, device.getIndex());
     }
 #endif
+#if defined(ENABLE_CAMBRICON_API)
+    else if (device.getType() == Device::Type::CAMBRICON) {
+        return at::Device(at::DeviceType::PrivateUse1, device.getIndex());
+    }
+#endif
     else {
         throw std::runtime_error("Unsupported device type for ATen");
     }
@@ -80,6 +90,10 @@ c10::cuda::CUDAStream get_cuda_stream();
 #endif
 
 void set_aten_stream_to_infinicore();
+
+#if defined(ENABLE_CAMBRICON_API)
+torch_mlu::MLUStream get_mlu_stream();
+#endif
 
 #if defined(ENABLE_MOORE_API)
 c10::musa::MUSAStream get_musa_stream();

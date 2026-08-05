@@ -22,12 +22,14 @@ from libinfiniop import (
 
 ACT_SILU = 0
 ACT_SWIGLU = 1
+ACT_SITUGLU = 2
 
 _TEST_CASES_ = [
     # N, hidden, inter, experts, topk, activation
     (2, 16, 32, 4, 2, ACT_SILU),
     (3, 32, 16, 5, 2, ACT_SWIGLU),
     (1, 16, 16, 3, 1, ACT_SWIGLU),
+    (2, 16, 32, 4, 2, ACT_SITUGLU),
 ]
 _TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.BF16, InfiniDtype.F32]
 _TOLERANCE_MAP = {
@@ -53,6 +55,10 @@ def torch_fused_moe(x, indices, scales, w1, w2, b1, b2, activation):
             if activation == ACT_SWIGLU:
                 gate, up = hidden1.chunk(2, dim=0)
                 act = F.silu(gate) * up
+            elif activation == ACT_SITUGLU:
+                gate, up = hidden1.chunk(2, dim=0)
+                act = 4.0 * torch.tanh(gate / 4.0) * torch.sigmoid(gate)
+                act = act * (25.0 * torch.tanh(up / 25.0))
             else:
                 act = F.silu(hidden1)
             y = torch.matmul(w2[expert].float(), act)
@@ -88,7 +94,7 @@ def test(
     x_t = (
         torch.rand((N, hidden), dtype=torch_dtype, device=torch_device) * 2 - 1
     ).contiguous()
-    w1_cols = inter * 2 if activation == ACT_SWIGLU else inter
+    w1_cols = inter * 2 if activation in (ACT_SWIGLU, ACT_SITUGLU) else inter
     w1_t = (
         torch.rand((experts, w1_cols, hidden), dtype=torch_dtype, device=torch_device)
         * 2

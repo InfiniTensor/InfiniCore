@@ -4,6 +4,7 @@
 #include "infinicore/context/context.hpp"
 
 namespace infinicore::op::distributed {
+namespace {
 
 struct SendPlannedMeta {
     graph::GraphTensor input;
@@ -17,9 +18,15 @@ struct RecvPlannedMeta {
     infinicclComm_t communicator;
 };
 
+void check_tensor(const Tensor &tensor) {
+    INFINICORE_ASSERT(tensor->is_contiguous());
+    INFINICORE_ASSERT(tensor->numel() > 0);
+}
+
+} // namespace
+
 Send::Send(const Tensor &input, int peer, infinicclComm_t communicator) {
-    INFINICORE_ASSERT(input->is_contiguous());
-    INFINICORE_ASSERT(input->numel() > 0);
+    check_tensor(input);
     planned_meta_ = new SendPlannedMeta{graph::GraphTensor(input), peer, communicator};
 }
 
@@ -45,8 +52,7 @@ void Send::execute(const Tensor &input, int peer, infinicclComm_t communicator) 
 }
 
 Recv::Recv(Tensor output, int peer, infinicclComm_t communicator) {
-    INFINICORE_ASSERT(output->is_contiguous());
-    INFINICORE_ASSERT(output->numel() > 0);
+    check_tensor(output);
     planned_meta_ = new RecvPlannedMeta{graph::GraphTensor(output), peer, communicator};
 }
 
@@ -79,7 +85,8 @@ void recv_(Tensor output, int peer, infinicclComm_t communicator) {
     Recv::execute(output, peer, communicator);
 }
 
-Tensor recv(const Shape &shape, DataType dtype, Device device, int peer, infinicclComm_t communicator) {
+Tensor recv(const Shape &shape, DataType dtype, Device device, int peer,
+            infinicclComm_t communicator) {
     auto output = Tensor::empty(shape, dtype, device);
     recv_(output, peer, communicator);
     return output;

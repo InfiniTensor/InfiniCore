@@ -16,6 +16,7 @@ public:
     void start_recording();
     void add_operator(std::shared_ptr<GraphOperator> op);
     std::shared_ptr<Graph> stop_recording();
+    void cancel_recording();
 
 private:
     std::shared_ptr<Graph> graph_;

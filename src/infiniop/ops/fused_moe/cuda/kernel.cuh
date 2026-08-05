@@ -37,6 +37,14 @@ __device__ inline float moeSilu(float x) {
     return x / (1.0f + expf(-x));
 }
 
+__device__ inline float moeSituGlu(float gate, float up) {
+    constexpr float beta = 4.0f;
+    constexpr float linear_beta = 25.0f;
+    float situ_gate = beta * tanhf(gate / beta) / (1.0f + expf(-gate));
+    float bounded_up = linear_beta * tanhf(up / linear_beta);
+    return situ_gate * bounded_up;
+}
+
 template <typename T>
 __global__ void fusedMoeW1Kernel(
     T *w1_out,
@@ -98,6 +106,9 @@ __global__ void fusedMoeActivationKernel(
     if (activation == INFINIOP_FUSED_MOE_ACT_SWIGLU) {
         float up = moeToFloat(row[j + inter_size]);
         act = moeSilu(gate) * up;
+    } else if (activation == INFINIOP_FUSED_MOE_ACT_SITUGLU) {
+        float up = moeToFloat(row[j + inter_size]);
+        act = moeSituGlu(gate, up);
     } else {
         act = moeSilu(gate);
     }

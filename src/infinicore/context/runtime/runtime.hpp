@@ -66,6 +66,7 @@ public:
     void startGraphRecording();
     void addGraphOperator(std::shared_ptr<graph::GraphOperator> op);
     std::shared_ptr<graph::Graph> stopGraphRecording();
+    void cancelGraphRecording();
 
     std::string toString() const;
 

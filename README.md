@@ -156,6 +156,36 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
      xmake f --ascend-npu=true -cv
      ```
 
+##### 试验功能 -- 使用寒武纪平台预编译 Flash Attention 能力
+
+  ~~~shell
+  # 寒武纪直接链接当前 Python 环境中已安装的 flash_attn_2_bang 扩展。
+  # --flash-attn 指向包含 flash_attn_2_bang*.so 的 site-packages 目录。
+  python -c "import flash_attn_2_bang; print(flash_attn_2_bang.__file__)"
+
+  export FLASH_ATTN_2_BANG_SO=/torch/venv3/pytorch/lib/python3.10/site-packages/flash_attn_2_bang.cpython-310-x86_64-linux-gnu.so
+  xmake f --cambricon-mlu=true --ccl=true --graph=true --aten=true \
+      --flash-attn=/torch/venv3/pytorch/lib/python3.10/site-packages -cv
+
+  xmake build
+  xmake install
+  xmake build _infinicore
+  xmake install _infinicore
+  pip install -e .
+
+  # 当前 PyTorch/torch_mlu 使用 C++ ABI 0；依赖 InfiniCore 的 C++ 扩展
+  # 也必须使用相同 ABI。以 InfiniLM 为例：
+  cd ../InfiniLM
+  xmake f --cxxflags=-D_GLIBCXX_USE_CXX11_ABI=0 -c
+  xmake -r _infinilm
+  xmake install _infinilm
+
+  # 当前寒武纪 wheel 不导出专用 KV-cache 符号。分页路径仅收集
+  # block table 中的有效 KV token，随后调用 wheel 的 mha_varlen_fwd。
+  # head dimension 超过 wheel 限制或 Q/K/V 末维不一致时使用 ATen SDPA。
+  ~~~
+
+
 ##### 试验功能 -- 使用英伟达平台 flash attention 库中的算子
 
   ```shell

@@ -51,6 +51,9 @@ bool isGraphRecording();
 void startGraphRecording();
 void addGraphOperator(std::shared_ptr<graph::GraphOperator> op);
 std::shared_ptr<graph::Graph> stopGraphRecording();
+// Abandon an in-progress recording without instantiating it, for example when
+// one rank fails during a collectively coordinated graph compilation.
+void cancelGraphRecording();
 
 } // namespace context
 

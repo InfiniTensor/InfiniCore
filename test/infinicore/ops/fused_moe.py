@@ -17,11 +17,13 @@ import infinicore
 
 ACT_SILU = 0
 ACT_SWIGLU = 1
+ACT_SITUGLU = 2
 CASES = [
     (2, 16, 32, 4, 2, ACT_SILU),
     (3, 32, 16, 5, 2, ACT_SWIGLU),
     (1, 2560, 1536, 64, 6, ACT_SWIGLU),
     (64, 2560, 1536, 64, 6, ACT_SWIGLU),
+    (2, 16, 32, 4, 2, ACT_SITUGLU),
 ]
 DTYPES = [infinicore.float16, infinicore.bfloat16, infinicore.float32]
 TOLS = {
@@ -45,6 +47,10 @@ def ref(x, indices, scales, w1, w2, b1, b2, activation):
             if activation == ACT_SWIGLU:
                 gate, up = h1.chunk(2, dim=0)
                 act = F.silu(gate) * up
+            elif activation == ACT_SITUGLU:
+                gate, up = h1.chunk(2, dim=0)
+                act = 4.0 * torch.tanh(gate / 4.0) * torch.sigmoid(gate)
+                act = act * (25.0 * torch.tanh(up / 25.0))
             else:
                 act = F.silu(h1)
             y = w2[e].float() @ act
@@ -68,7 +74,7 @@ def run_case(device, case, dtype):
     x = (
         torch.rand((N, hidden), dtype=torch_dtype, device=torch_device) * 2 - 1
     ).contiguous()
-    w1_cols = inter * 2 if activation == ACT_SWIGLU else inter
+    w1_cols = inter * 2 if activation in (ACT_SWIGLU, ACT_SITUGLU) else inter
     w1 = (
         torch.rand((experts, w1_cols, hidden), dtype=torch_dtype, device=torch_device)
         * 2

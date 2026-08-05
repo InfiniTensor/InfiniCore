@@ -208,6 +208,10 @@ std::shared_ptr<graph::Graph> stopGraphRecording() {
     return ContextImpl::singleton().getCurrentRuntime()->stopGraphRecording();
 }
 
+void cancelGraphRecording() {
+    ContextImpl::singleton().getCurrentRuntime()->cancelGraphRecording();
+}
+
 std::shared_ptr<Memory> reinstantiateBlob(std::shared_ptr<Memory> blob) {
     setDevice(blob->device());
     return ContextImpl::singleton().getCurrentRuntime()->reinstantiateBlob(blob);

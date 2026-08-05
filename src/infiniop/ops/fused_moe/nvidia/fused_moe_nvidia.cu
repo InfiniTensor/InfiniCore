@@ -210,6 +210,9 @@ __global__ void groupedActivationKernel(T *activated,
     if (activation == INFINIOP_FUSED_MOE_ACT_SWIGLU) {
         float up = moeToFloat(base[inter_size + col]);
         act = moeSilu(gate) * up;
+    } else if (activation == INFINIOP_FUSED_MOE_ACT_SITUGLU) {
+        float up = moeToFloat(base[inter_size + col]);
+        act = moeSituGlu(gate, up);
     } else {
         act = moeSilu(gate);
     }

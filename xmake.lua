@@ -264,7 +264,7 @@ if has_config("aten") then
         add_defines("_GLIBCXX_USE_CXX11_ABI=0")
     end
     if get_config("flash-attn") and get_config("flash-attn") ~= ""
-       and (has_config("nv-gpu") or has_config("metax-gpu") or has_config("qy-gpu") or has_config("hygon-dcu") or has_config("ali-ppu")) then
+       and (has_config("nv-gpu") or has_config("cambricon-mlu") or has_config("metax-gpu") or has_config("qy-gpu") or has_config("hygon-dcu") or has_config("ali-ppu")) then
         add_defines("ENABLE_FLASH_ATTN")
     end
     -- Ascend flash-attn: enabled when ascend-gpu + aten + flash-attn
@@ -762,6 +762,9 @@ target("infinicore_cpp_api")
         if has_config("hygon-dcu") then
             add_deps("flash-attn-hygon")
         end
+        if has_config("cambricon-mlu") then
+            add_deps("flash-attn-cambricon")
+        end
         if has_config("ali-ppu") then
             add_deps("flash-attn-ali")
         end
@@ -913,6 +916,14 @@ target("infinicore_cpp_api")
                     "c10",
                     "torch_hip",
                     "c10_hip",
+                    { public = true }
+                )
+            elseif has_config("cambricon-mlu") then
+                target:add(
+                    "links",
+                    "torch",
+                    "torch_cpu",
+                    "c10",
                     { public = true }
                 )
             else

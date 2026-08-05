@@ -53,7 +53,7 @@ inline void bind_fused_moe(py::module &m) {
           py::arg("b1") = py::none(),
           py::arg("b2") = py::none(),
           py::arg("activation") = 1,
-          R"doc(Fused MoE consuming topksoftmax values/indices. activation: 0=silu, 1=swiglu.)doc");
+          R"doc(Fused MoE consuming routing values/indices. activation: 0=silu, 1=swiglu, 2=situglu.)doc");
 
     m.def("fused_moe_",
           &ops::py_fused_moe_,
