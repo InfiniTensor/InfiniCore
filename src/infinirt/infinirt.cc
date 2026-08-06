@@ -251,41 +251,21 @@ __INFINI_C infiniStatus_t infinirtGraphLuanch(infinirtGraphExec_t graph_exec, in
 }
 
 __INFINI_C infiniStatus_t infinirtGraphTaskGroupBegin(infinirtStream_t stream) {
-#ifdef ENABLE_ASCEND_API
-    if (CURRENT_DEVICE_TYPE == INFINI_DEVICE_ASCEND) {
-        return infinirt::ascend::graphTaskGroupBegin(stream);
-    }
-#endif
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    INFINIRT_CALL_DEVICE_API(graphTaskGroupBegin, (stream));
 }
 
 __INFINI_C infiniStatus_t infinirtGraphTaskGroupEnd(
     infinirtStream_t stream,
     infinirtGraphTaskGroup_t *handle) {
-#ifdef ENABLE_ASCEND_API
-    if (CURRENT_DEVICE_TYPE == INFINI_DEVICE_ASCEND) {
-        return infinirt::ascend::graphTaskGroupEnd(stream, handle);
-    }
-#endif
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    INFINIRT_CALL_DEVICE_API(graphTaskGroupEnd, (stream, handle));
 }
 
 __INFINI_C infiniStatus_t infinirtGraphTaskUpdateBegin(
     infinirtStream_t stream,
     infinirtGraphTaskGroup_t handle) {
-#ifdef ENABLE_ASCEND_API
-    if (CURRENT_DEVICE_TYPE == INFINI_DEVICE_ASCEND) {
-        return infinirt::ascend::graphTaskUpdateBegin(stream, handle);
-    }
-#endif
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    INFINIRT_CALL_DEVICE_API(graphTaskUpdateBegin, (stream, handle));
 }
 
 __INFINI_C infiniStatus_t infinirtGraphTaskUpdateEnd(infinirtStream_t stream) {
-#ifdef ENABLE_ASCEND_API
-    if (CURRENT_DEVICE_TYPE == INFINI_DEVICE_ASCEND) {
-        return infinirt::ascend::graphTaskUpdateEnd(stream);
-    }
-#endif
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    INFINIRT_CALL_DEVICE_API(graphTaskUpdateEnd, (stream));
 }
