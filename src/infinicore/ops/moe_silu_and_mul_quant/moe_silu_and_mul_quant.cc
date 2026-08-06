@@ -1,9 +1,28 @@
 #include "infinicore/ops/moe_silu_and_mul_quant.hpp"
 #include "../../utils.hpp"
 #include "../vendor_ops/vendor_ops_dispatch.hpp"
+#include "infinicore/context/context.hpp"
+#include "infinicore/graph/graph.hpp"
+#include <functional>
 #include <stdexcept>
 
 namespace infinicore::op {
+namespace {
+
+class MoeSiluAndMulQuantGraphOperator final : public graph::GraphOperator {
+public:
+    explicit MoeSiluAndMulQuantGraphOperator(std::function<void()> runner)
+        : runner_(std::move(runner)) {}
+
+    void run() const override {
+        runner_();
+    }
+
+private:
+    std::function<void()> runner_;
+};
+
+} // namespace
 
 void moe_silu_and_mul_quant_(Tensor output, std::optional<Tensor> output_scale, const Tensor &input, int64_t format) {
     if (output_scale) {
@@ -57,6 +76,15 @@ void moe_silu_and_mul_quant_(Tensor output, std::optional<Tensor> output_scale, 
         if (format == 2 && (n % 64) != 0) {
             throw std::runtime_error("moe_silu_and_mul_quant packed requires N % 64 == 0");
         }
+    }
+    if (context::isGraphRecording()) {
+        context::addGraphOperator(
+            std::make_shared<MoeSiluAndMulQuantGraphOperator>(
+                [output, output_scale, input, format] {
+                    moe_silu_and_mul_quant_(
+                        output, output_scale, input, format);
+                }));
+        return;
     }
     auto kernel = vendor_ops::lookup(
         vendor_ops::moe_silu_and_mul_quant_dispatcher(),

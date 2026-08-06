@@ -34,6 +34,8 @@ using MoeTopkFn = void (*)(Tensor, Tensor, Tensor, const Tensor &, bool, const T
 using PagedAttentionMlaFn = void (*)(Tensor, const Tensor &, const Tensor &, float, const Tensor &, const Tensor &, int64_t);
 using DynamicScaledInt8QuantFn = void (*)(Tensor, const Tensor &, Tensor);
 using ScaledMmFn = void (*)(Tensor, const Tensor &, const Tensor &, const Tensor &, const Tensor &, std::optional<Tensor>, bool);
+using ScaledMmW4A16AwqFn = void (*)(Tensor, const Tensor &, const Tensor &, const Tensor &, const Tensor &, std::optional<Tensor>);
+using PrepareGlmW4A16AwqFn = void (*)(Tensor, Tensor, Tensor, const Tensor &, const Tensor &);
 using GroupGemmFn = void (*)(Tensor, const Tensor &, const Tensor &, const Tensor &, const Tensor &, const Tensor &, std::optional<Tensor>, std::optional<Tensor>, bool, bool);
 using GroupGemmF16Fn = void (*)(Tensor, const Tensor &, const Tensor &, const Tensor &, std::optional<Tensor>, std::optional<Tensor>, bool, bool);
 
@@ -63,6 +65,8 @@ common::OpDispatcher<PagedAttentionMlaFn> &paged_attention_mla_dispatcher();
 common::OpDispatcher<DynamicScaledInt8QuantFn> &dynamic_scaled_int8_quant_dispatcher();
 common::OpDispatcher<ScaledMmFn> &scaled_mm_w4a8_dispatcher();
 common::OpDispatcher<ScaledMmFn> &scaled_mm_w8a8_dispatcher();
+common::OpDispatcher<ScaledMmW4A16AwqFn> &scaled_mm_w4a16_awq_dispatcher();
+common::OpDispatcher<PrepareGlmW4A16AwqFn> &prepare_glm_w4a16_awq_dispatcher();
 common::OpDispatcher<GroupGemmF16Fn> &w16a16_group_gemm_dispatcher();
 common::OpDispatcher<GroupGemmFn> &w4a8_group_gemm_dispatcher();
 common::OpDispatcher<GroupGemmFn> &w8a8_group_gemm_dispatcher();

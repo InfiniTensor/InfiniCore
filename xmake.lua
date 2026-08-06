@@ -958,11 +958,13 @@ target("infinicore_cpp_api")
     add_files("src/infinicore/ops/*/*.cc")
     add_files("src/infinicore/ops/*/*/*.cc")
     add_files("src/infinicore/ops/*/*/*/*.cc")
-    -- Platform-private Hygon sources are guarded and only kept in Hygon builds.
-    if has_config("hygon-dcu") and get_config("flash-attn") and get_config("flash-attn") ~= "" then
-        -- Hygon links against a prebuilt flash-attn extension with a different ABI.
-        -- Keep the platform-specific implementation under each op's hygon/ folder.
-        add_files("src/infinicore/adaptor/flash_attn/hygon/*.cc")
+    -- Platform-private Hygon operator sources are guarded and only kept in Hygon builds.
+    if has_config("hygon-dcu") then
+        add_files("src/infinicore/ops/*/hygon/*.cc")
+        if get_config("flash-attn") and get_config("flash-attn") ~= "" then
+            -- Hygon links against a prebuilt flash-attn extension with a different ABI.
+            add_files("src/infinicore/adaptor/flash_attn/hygon/*.cc")
+        end
     else
         remove_files("src/infinicore/ops/*/hygon/*.cc")
     end

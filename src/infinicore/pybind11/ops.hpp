@@ -156,7 +156,10 @@
 #include "ops/moe_silu_and_mul_quant.hpp"
 #include "ops/moe_sum_vendor.hpp"
 #include "ops/moe_topk_vendor.hpp"
+#include "ops/moe_w4a8_marlin.hpp"
 #include "ops/paged_attention_mla.hpp"
+#include "ops/prepare_glm_w4a16_awq.hpp"
+#include "ops/scaled_mm_w4a16_awq.hpp"
 #include "ops/scaled_mm_w4a8.hpp"
 #include "ops/scaled_mm_w8a8.hpp"
 #include "ops/w16a16_group_gemm.hpp"
@@ -182,9 +185,12 @@ inline void bind(py::module &m) {
     bind_moe_silu_and_mul_quant(m);
     bind_moe_sum_vendor(m);
     bind_moe_topk_vendor(m);
+    bind_moe_w4a8_marlin(m);
     bind_paged_attention_mla(m);
+    bind_prepare_glm_w4a16_awq(m);
     bind_scaled_mm_w4a8(m);
     bind_scaled_mm_w8a8(m);
+    bind_scaled_mm_w4a16_awq(m);
     bind_w16a16_group_gemm(m);
     bind_w4a8_group_gemm(m);
     bind_w8a8_group_gemm(m);

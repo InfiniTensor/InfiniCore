@@ -1,8 +1,27 @@
 #include "infinicore/ops/w4a8_group_gemm.hpp"
 #include "../../utils.hpp"
 #include "../vendor_ops/vendor_ops_dispatch.hpp"
+#include "infinicore/context/context.hpp"
+#include "infinicore/graph/graph.hpp"
+#include <functional>
 #include <stdexcept>
 namespace infinicore::op {
+namespace {
+
+class W4A8GroupGemmGraphOperator final : public graph::GraphOperator {
+public:
+    explicit W4A8GroupGemmGraphOperator(std::function<void()> runner)
+        : runner_(std::move(runner)) {}
+
+    void run() const override {
+        runner_();
+    }
+
+private:
+    std::function<void()> runner_;
+};
+
+} // namespace
 void w4a8_group_gemm_(Tensor out, const Tensor &input, const Tensor &weight, const Tensor &input_scale, const Tensor &weight_scale, const Tensor &tokens_per_experts, std::optional<Tensor> sorted_token_ids, std::optional<Tensor> bias, bool trans_weight, bool is_decode) {
     if (bias) {
         INFINICORE_ASSERT_TENSORS_SAME_DEVICE(out, input, weight, input_scale, weight_scale, *bias);
@@ -57,6 +76,19 @@ void w4a8_group_gemm_(Tensor out, const Tensor &input, const Tensor &weight, con
     }
     if (bias && ((*bias)->size(0) != e || (*bias)->size(1) != out->size(1))) {
         throw std::runtime_error("w4a8_group_gemm bias shape mismatch");
+    }
+    if (context::isGraphRecording()) {
+        context::addGraphOperator(
+            std::make_shared<W4A8GroupGemmGraphOperator>(
+                [out, input, weight, input_scale, weight_scale,
+                 tokens_per_experts, sorted_token_ids, bias,
+                 trans_weight, is_decode] {
+                    w4a8_group_gemm_(
+                        out, input, weight, input_scale, weight_scale,
+                        tokens_per_experts, sorted_token_ids, bias,
+                        trans_weight, is_decode);
+                }));
+        return;
     }
     auto kernel = vendor_ops::lookup(
         vendor_ops::w4a8_group_gemm_dispatcher(),

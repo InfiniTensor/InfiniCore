@@ -1,9 +1,28 @@
 #include "infinicore/ops/moe_argsort_bincount.hpp"
 #include "../../utils.hpp"
 #include "../vendor_ops/vendor_ops_dispatch.hpp"
+#include "infinicore/context/context.hpp"
+#include "infinicore/graph/graph.hpp"
+#include <functional>
 #include <stdexcept>
 
 namespace infinicore::op {
+namespace {
+
+class MoeArgsortGraphOperator final : public graph::GraphOperator {
+public:
+    explicit MoeArgsortGraphOperator(std::function<void()> runner)
+        : runner_(std::move(runner)) {}
+
+    void run() const override {
+        runner_();
+    }
+
+private:
+    std::function<void()> runner_;
+};
+
+} // namespace
 
 void moe_argsort_bincount_with_inv_pos_(Tensor tokens_per_experts, Tensor sorted_indices, Tensor inv_pos, const Tensor &topk_ids, int64_t num_experts) {
     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(tokens_per_experts, sorted_indices, inv_pos, topk_ids);
@@ -21,6 +40,17 @@ void moe_argsort_bincount_with_inv_pos_(Tensor tokens_per_experts, Tensor sorted
     }
     if (!topk_ids->is_contiguous() || !tokens_per_experts->is_contiguous() || !sorted_indices->is_contiguous() || !inv_pos->is_contiguous()) {
         throw std::runtime_error("moe_argsort_bincount_with_inv_pos expects contiguous tensors");
+    }
+    if (context::isGraphRecording()) {
+        context::addGraphOperator(
+            std::make_shared<MoeArgsortGraphOperator>(
+                [tokens_per_experts, sorted_indices, inv_pos, topk_ids,
+                 num_experts] {
+                    moe_argsort_bincount_with_inv_pos_(
+                        tokens_per_experts, sorted_indices, inv_pos,
+                        topk_ids, num_experts);
+                }));
+        return;
     }
     auto kernel = vendor_ops::lookup(
         vendor_ops::moe_argsort_dispatcher(),

@@ -1,9 +1,29 @@
 #include "infinicore/ops/scaled_mm_w8a8.hpp"
 #include "../../utils.hpp"
 #include "../vendor_ops/vendor_ops_dispatch.hpp"
+#include "infinicore/context/context.hpp"
+#include "infinicore/graph/graph.hpp"
+#include <functional>
 #include <stdexcept>
 
 namespace infinicore::op {
+namespace {
+
+class ScaledMmW8A8GraphOperator final : public graph::GraphOperator {
+public:
+    explicit ScaledMmW8A8GraphOperator(std::function<void()> runner)
+        : runner_(std::move(runner)) {}
+
+    void run() const override {
+        runner_();
+    }
+
+private:
+    std::function<void()> runner_;
+};
+
+} // namespace
+
 Tensor scaled_mm_w8a8(const Tensor &a, const Tensor &b, const Tensor &a_scales,
                       const Tensor &b_scales, std::optional<Tensor> bias, bool trans_weight) {
     if (a->ndim() != 2 || b->ndim() != 2) {
@@ -53,6 +73,15 @@ void scaled_mm_w8a8_(Tensor out, const Tensor &a, const Tensor &b, const Tensor 
     }
     if (!out->is_contiguous() || !a->is_contiguous() || !b->is_contiguous() || !a_scales->is_contiguous() || !b_scales->is_contiguous() || (bias && !(*bias)->is_contiguous())) {
         throw std::runtime_error("scaled_mm_w8a8 expects contiguous tensors");
+    }
+    if (context::isGraphRecording()) {
+        context::addGraphOperator(
+            std::make_shared<ScaledMmW8A8GraphOperator>(
+                [out, a, b, a_scales, b_scales, bias, trans_weight] {
+                    scaled_mm_w8a8_(
+                        out, a, b, a_scales, b_scales, bias, trans_weight);
+                }));
+        return;
     }
     auto kernel = vendor_ops::lookup(
         vendor_ops::scaled_mm_w8a8_dispatcher(),

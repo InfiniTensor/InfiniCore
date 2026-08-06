@@ -118,7 +118,7 @@ target("infiniop-hygon")
     set_values("cuda.rdc", false)
 
     -- 海光DCU使用DTK中的CUDA库
-    add_links("cudart", "cublas", "curand", "cublasLt", "cudnn")
+    add_links("cuda", "cudart", "cublas", "curand", "cublasLt", "cudnn")
     
     add_hygon_dtk_paths()
 
@@ -145,6 +145,11 @@ target("infiniop-hygon")
     -- 复用NVIDIA的CUDA实现，通过HIP兼容层
     add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")
     add_files("../src/infiniop/ops/quant/per_channel_quant_int8/nvidia/*.cu")
+    if has_config("use-vendor-ops") then
+        add_files("../src/infinicore/ops/*/hygon/*.cu")
+        add_linkdirs(path.join(dtk_root, "hip", "lib"))
+        add_links("galaxyhip")
+    end
 
     -- Keep platform-specific or currently unregistered NVIDIA sources out of the Hygon target.
     remove_files("../src/infiniop/ops/avg_pool3d/nvidia/*.cu")
@@ -226,6 +231,13 @@ target("infiniccl-hygon")
 
         -- 使用NCCL (NVIDIA Collective Communications Library)
         add_links("nccl")
+
+        if has_config("use-vendor-ops") then
+            add_defines("ENABLE_HYGON_CUSTOM_ALLREDUCE")
+            add_files("../src/infiniccl/hygon/*.cu")
+            add_linkdirs(path.join(dtk_root, "hip", "lib"))
+            add_links("galaxyhip")
+        end
 
         add_files("../src/infiniccl/cuda/*.cu")
     end

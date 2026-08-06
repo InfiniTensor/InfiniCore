@@ -8,6 +8,10 @@
 
 #include "../../utils.h"
 
+#ifdef ENABLE_HYGON_CUSTOM_ALLREDUCE
+#include "../hygon/custom_allreduce_hygon.hpp"
+#endif
+
 #define CHECK_NCCL(API__) CHECK_INTERNAL(API__, ncclSuccess)
 
 inline cudaStream_t getCudaStream(infinirtStream_t stream) {
@@ -75,6 +79,10 @@ infiniStatus_t commInitAll(
         comms[i] = new InfinicclComm{INFINI_DEVICE_NVIDIA, device_ids[i], (void *)(nccl_comms[i]), i, ndevice};
     }
 
+#ifdef ENABLE_HYGON_CUSTOM_ALLREDUCE
+    infiniccl::hygon::customAllReduceInitAll(comms, ndevice, device_ids);
+#endif
+
     return INFINI_STATUS_SUCCESS;
 }
 
@@ -112,6 +120,9 @@ infiniStatus_t commInitRank(
 }
 
 infiniStatus_t commDestroy(infinicclComm_t comm) {
+#ifdef ENABLE_HYGON_CUSTOM_ALLREDUCE
+    infiniccl::hygon::customAllReduceDestroy(comm);
+#endif
     CHECK_NCCL(ncclCommDestroy(getNcclComm(comm)));
     delete comm;
     return INFINI_STATUS_SUCCESS;
@@ -140,6 +151,12 @@ infiniStatus_t allReduce(
                 INFINI_DTYPE_BF16, INFINI_DTYPE_I32, INFINI_DTYPE_I64,
                 INFINI_DTYPE_U32, INFINI_DTYPE_U64);
 
+#ifdef ENABLE_HYGON_CUSTOM_ALLREDUCE
+    if (infiniccl::hygon::customAllReduce(
+            sendbuf, recvbuf, count, datatype, op, comm, stream)) {
+        return INFINI_STATUS_SUCCESS;
+    }
+#endif
     CHECK_NCCL(ncclAllReduce(sendbuf, recvbuf, count, getNcclDtype(datatype),
                              getNcclRedOp(op), getNcclComm(comm), getCudaStream(stream)));
 

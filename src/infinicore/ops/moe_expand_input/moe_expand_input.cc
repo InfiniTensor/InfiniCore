@@ -1,9 +1,28 @@
 #include "infinicore/ops/moe_expand_input.hpp"
 #include "../../utils.hpp"
 #include "../vendor_ops/vendor_ops_dispatch.hpp"
+#include "infinicore/context/context.hpp"
+#include "infinicore/graph/graph.hpp"
+#include <functional>
 #include <stdexcept>
 
 namespace infinicore::op {
+namespace {
+
+class MoeExpandInputGraphOperator final : public graph::GraphOperator {
+public:
+    explicit MoeExpandInputGraphOperator(std::function<void()> runner)
+        : runner_(std::move(runner)) {}
+
+    void run() const override {
+        runner_();
+    }
+
+private:
+    std::function<void()> runner_;
+};
+
+} // namespace
 
 void moe_expand_input_with_inv_pos_(Tensor expand_states, std::optional<Tensor> expand_scales, const Tensor &hidden_states, const Tensor &inv_pos, int64_t top_k, int64_t group_size, int64_t format) {
     if (expand_scales) {
@@ -65,6 +84,17 @@ void moe_expand_input_with_inv_pos_(Tensor expand_states, std::optional<Tensor> 
         if (format == 2 && (n_out % 64) != 0) {
             throw std::runtime_error("moe_expand_input_with_inv_pos packed requires padded hidden % 64 == 0");
         }
+    }
+    if (context::isGraphRecording()) {
+        context::addGraphOperator(
+            std::make_shared<MoeExpandInputGraphOperator>(
+                [expand_states, expand_scales, hidden_states, inv_pos,
+                 top_k, group_size, format] {
+                    moe_expand_input_with_inv_pos_(
+                        expand_states, expand_scales, hidden_states, inv_pos,
+                        top_k, group_size, format);
+                }));
+        return;
     }
     auto kernel = vendor_ops::lookup(
         vendor_ops::moe_expand_input_dispatcher(),

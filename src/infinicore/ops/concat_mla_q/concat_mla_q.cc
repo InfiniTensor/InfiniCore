@@ -1,6 +1,9 @@
 #include "infinicore/ops/concat_mla_q.hpp"
 #include "../../utils.hpp"
+#include "infinicore/context/context.hpp"
+#include "infinicore/graph/graph.hpp"
 
+#include <functional>
 #include <stdexcept>
 
 #include "../vendor_ops/vendor_ops_dispatch.hpp"
@@ -8,6 +11,19 @@
 namespace infinicore::op {
 
 namespace {
+
+class ConcatMlaQGraphOperator final : public graph::GraphOperator {
+public:
+    explicit ConcatMlaQGraphOperator(std::function<void()> runner)
+        : runner_(std::move(runner)) {}
+
+    void run() const override {
+        runner_();
+    }
+
+private:
+    std::function<void()> runner_;
+};
 
 void validate_concat_mla_q(const Tensor &ql_nope, const Tensor &q_pe, Tensor q_out) {
     if (!ql_nope || !q_pe || !q_out) {
@@ -40,6 +56,14 @@ void validate_concat_mla_q(const Tensor &ql_nope, const Tensor &q_pe, Tensor q_o
 void concat_mla_q_(const Tensor &ql_nope, const Tensor &q_pe, Tensor q_out) {
     validate_concat_mla_q(ql_nope, q_pe, q_out);
 
+    if (context::isGraphRecording()) {
+        context::addGraphOperator(
+            std::make_shared<ConcatMlaQGraphOperator>(
+                [ql_nope, q_pe, q_out] {
+                    concat_mla_q_(ql_nope, q_pe, q_out);
+                }));
+        return;
+    }
     auto kernel = vendor_ops::lookup(
         vendor_ops::concat_mla_q_dispatcher(),
         q_out->device().getType(),

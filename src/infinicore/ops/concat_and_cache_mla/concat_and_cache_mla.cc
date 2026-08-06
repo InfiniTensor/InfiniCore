@@ -1,6 +1,9 @@
 #include "infinicore/ops/concat_and_cache_mla.hpp"
 #include "../../utils.hpp"
+#include "infinicore/context/context.hpp"
+#include "infinicore/graph/graph.hpp"
 
+#include <functional>
 #include <stdexcept>
 
 #include "../vendor_ops/vendor_ops_dispatch.hpp"
@@ -8,6 +11,19 @@
 namespace infinicore::op {
 
 namespace {
+
+class ConcatAndCacheMlaGraphOperator final : public graph::GraphOperator {
+public:
+    explicit ConcatAndCacheMlaGraphOperator(std::function<void()> runner)
+        : runner_(std::move(runner)) {}
+
+    void run() const override {
+        runner_();
+    }
+
+private:
+    std::function<void()> runner_;
+};
 
 void validate_concat_and_cache_mla(const Tensor &kv_c,
                                    const Tensor &k_pe,
@@ -65,6 +81,16 @@ void concat_and_cache_mla_(const Tensor &kv_c,
                            Tensor scale) {
     validate_concat_and_cache_mla(kv_c, k_pe, kv_cache, slot_mapping, kv_cache_dtype, scale);
 
+    if (context::isGraphRecording()) {
+        context::addGraphOperator(
+            std::make_shared<ConcatAndCacheMlaGraphOperator>(
+                [kv_c, k_pe, kv_cache, slot_mapping, kv_cache_dtype, scale] {
+                    concat_and_cache_mla_(
+                        kv_c, k_pe, kv_cache, slot_mapping,
+                        kv_cache_dtype, scale);
+                }));
+        return;
+    }
     auto kernel = vendor_ops::lookup(
         vendor_ops::concat_and_cache_mla_dispatcher(),
         kv_cache->device().getType(),

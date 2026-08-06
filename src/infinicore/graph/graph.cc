@@ -3,7 +3,11 @@
 #include "../utils.hpp"
 #include "infinicore/context/context.hpp"
 #include <cstdlib>
+#include <fstream>
 #include <infinirt.h>
+#include <limits>
+#include <typeinfo>
+#include <unordered_map>
 
 namespace infinicore::graph {
 
@@ -110,12 +114,31 @@ void Graph::instantiate() {
         return;
     }
 
+    size_t capture_prefix = std::numeric_limits<size_t>::max();
+    if (const char *prefix_file = std::getenv("INFINICORE_GRAPH_CAPTURE_PREFIX_FILE")) {
+        std::ifstream input(prefix_file);
+        input >> capture_prefix;
+        spdlog::info("graph capture prefix={}", capture_prefix);
+    }
+
+    std::unordered_map<std::string, size_t> type_counts;
+    size_t op_index = 0;
     for (const auto &op : op_list_) {
-        const bool capture_safe = op->is_device_graph_capture_safe();
+        const bool capture_safe = op->is_device_graph_capture_safe() && op_index < capture_prefix;
+        if (std::getenv("INFINICORE_GRAPH_TYPE_DEBUG") != nullptr) {
+            ++type_counts[typeid(*op).name()];
+        }
+        ++op_index;
         if (segments_.empty() || segments_.back()->capture_safe != capture_safe) {
             segments_.push_back(std::make_unique<Segment>(capture_safe));
         }
         segments_.back()->ops.push_back(op);
+    }
+
+    if (std::getenv("INFINICORE_GRAPH_TYPE_DEBUG") != nullptr) {
+        for (const auto &[name, count] : type_counts) {
+            spdlog::info("graph operator type: count={} name={}", count, name);
+        }
     }
 
     for (auto &segment : segments_) {

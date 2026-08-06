@@ -140,6 +140,11 @@ from infinicore.ops.moe_topk_vendor import (
     moe_topk_sigmoid_vendor,
     moe_topk_softmax_vendor,
 )
+from infinicore.ops.moe_w4a8_marlin import (
+    moe_align_block_size_from_counts_,
+    moe_w4a8_marlin_,
+    prepare_w4a8_marlin_weight_,
+)
 from infinicore.ops.moore_mate_flash_attn import (
     moore_mate_flash_attn_decode,
     moore_mate_flash_attn_prefill,
@@ -153,6 +158,7 @@ from infinicore.ops.paged_attention import paged_attention
 from infinicore.ops.paged_attention_mla import paged_attention_mla_
 from infinicore.ops.paged_attention_prefill import paged_attention_prefill
 from infinicore.ops.paged_caching import paged_caching
+from infinicore.ops.prepare_glm_w4a16_awq import prepare_glm_w4a16_awq_
 from infinicore.ops.rearrange import rearrange
 from infinicore.ops.reciprocal import reciprocal
 from infinicore.ops.rot import rot
@@ -161,6 +167,7 @@ from infinicore.ops.rotm import rotm
 from infinicore.ops.rotmg import rotmg
 from infinicore.ops.scal import scal
 from infinicore.ops.scaled_mm_w4a8 import scaled_mm_w4a8
+from infinicore.ops.scaled_mm_w4a16_awq import scaled_mm_w4a16_awq
 from infinicore.ops.scaled_mm_w8a8 import scaled_mm_w8a8
 from infinicore.ops.scatter import scatter
 from infinicore.ops.sinh import sinh
@@ -379,7 +386,12 @@ __all__ += [
     "moe_sum_vendor_",
     "moe_topk_sigmoid_vendor",
     "moe_topk_softmax_vendor",
+    "moe_align_block_size_from_counts_",
+    "moe_w4a8_marlin_",
+    "prepare_w4a8_marlin_weight_",
     "paged_attention_mla_",
+    "prepare_glm_w4a16_awq_",
+    "scaled_mm_w4a16_awq",
     "scaled_mm_w4a8",
     "scaled_mm_w8a8",
     "w16a16_group_gemm_",

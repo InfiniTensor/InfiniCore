@@ -1,9 +1,28 @@
 #include "infinicore/ops/moe_sum_vendor.hpp"
 #include "../../utils.hpp"
 #include "../vendor_ops/vendor_ops_dispatch.hpp"
+#include "infinicore/context/context.hpp"
+#include "infinicore/graph/graph.hpp"
+#include <functional>
 #include <stdexcept>
 
 namespace infinicore::op {
+namespace {
+
+class MoeSumVendorGraphOperator final : public graph::GraphOperator {
+public:
+    explicit MoeSumVendorGraphOperator(std::function<void()> runner)
+        : runner_(std::move(runner)) {}
+
+    void run() const override {
+        runner_();
+    }
+
+private:
+    std::function<void()> runner_;
+};
+
+} // namespace
 
 void moe_sum_vendor_(Tensor output, const Tensor &input, std::optional<Tensor> topk_weights, std::optional<Tensor> extra_residual, double routed_scale, double residual_scale) {
     if (topk_weights && extra_residual) {
@@ -39,6 +58,17 @@ void moe_sum_vendor_(Tensor output, const Tensor &input, std::optional<Tensor> t
     }
     if (extra_residual && ((*extra_residual)->dtype() != output->dtype() || (*extra_residual)->ndim() != 2 || (*extra_residual)->size(0) != n || (*extra_residual)->size(1) != h)) {
         throw std::runtime_error("moe_sum_vendor extra_residual shape/dtype mismatch");
+    }
+    if (context::isGraphRecording()) {
+        context::addGraphOperator(
+            std::make_shared<MoeSumVendorGraphOperator>(
+                [output, input, topk_weights, extra_residual,
+                 routed_scale, residual_scale] {
+                    moe_sum_vendor_(
+                        output, input, topk_weights, extra_residual,
+                        routed_scale, residual_scale);
+                }));
+        return;
     }
     auto kernel = vendor_ops::lookup(
         vendor_ops::moe_sum_dispatcher(),

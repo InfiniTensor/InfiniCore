@@ -7,7 +7,7 @@
  * Licensed under the Apache License, Version 2.0.
  */
 
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_HYGON_API)
 
 #include "moe_topk_sigmoid_nvidia.cuh"
 
@@ -328,6 +328,17 @@ infiniStatus_t topkGatingSigmoidKernelLauncher(
     const bool renormalize,
     const float *correction_bias,
     cudaStream_t stream) {
+#ifdef ENABLE_HYGON_API
+    if (sigmoid_workspace == nullptr) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+    static constexpr int TPB = 256;
+    moeSigmoid<T, TPB><<<num_tokens, TPB, 0, stream>>>(
+        gating_output, nullptr, sigmoid_workspace, num_experts, correction_bias);
+    moeTopK<TPB><<<num_tokens, TPB, 0, stream>>>(
+        sigmoid_workspace, nullptr, topk_weights, topk_indices, num_experts, topk,
+        0, num_experts, renormalize, correction_bias);
+#else
     static constexpr int WARPS_PER_TB = 4;
     switch (num_experts) {
     case 1:
@@ -370,14 +381,19 @@ infiniStatus_t topkGatingSigmoidKernelLauncher(
         break;
     }
     }
+#endif
     return INFINI_STATUS_SUCCESS;
 }
 
 #undef LAUNCH_SIGMOID
 
 bool needs_workspace(size_t num_experts) {
+#ifdef ENABLE_HYGON_API
+    return true;
+#else
     const bool is_pow_2 = (num_experts != 0) && ((num_experts & (num_experts - 1)) == 0);
     return !is_pow_2 || num_experts > 256;
+#endif
 }
 
 template <typename T>
@@ -464,4 +480,4 @@ infiniStatus_t Descriptor::calculate(
 
 } // namespace op::moe_topk_sigmoid::nvidia
 
-#endif // ENABLE_NVIDIA_API || ENABLE_ILUVATAR_API
+#endif // ENABLE_NVIDIA_API || ENABLE_ILUVATAR_API || ENABLE_HYGON_API
