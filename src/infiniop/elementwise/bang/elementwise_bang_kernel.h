@@ -166,13 +166,19 @@ __mlu_global__ void elementwiseKernel(
     const ptrdiff_t *output_strides,
     const ptrdiff_t *input_strides,
     Tdata *output,
-    const void *const *inputs,
+    const void *input0,
+    const void *input1,
     Args... args) {
 
+    static_assert(N <= 2, "BANG elementwise kernel supports at most two inputs.");
+
+    // Keep input pointers in kernel parameters so graph capture does not depend
+    // on a device-side pointer array refreshed by H2D copies.
     // Cast input pointers to the correct type
     Tdata *typed_inputs[N];
-    for (size_t i = 0; i < N; ++i) {
-        typed_inputs[i] = reinterpret_cast<Tdata *>(const_cast<void *>(inputs[i]));
+    typed_inputs[0] = reinterpret_cast<Tdata *>(const_cast<void *>(input0));
+    if constexpr (N > 1) {
+        typed_inputs[1] = reinterpret_cast<Tdata *>(const_cast<void *>(input1));
     }
 
     // Calculate workload per task
@@ -264,7 +270,10 @@ void launchElementwiseKernelWrapper(
         input_contiguous, input_broadcasted,
         output_shape, input_shapes,
         output_strides, input_strides,
-        output, inputs, args...);
+        output,
+        inputs[0],
+        N > 1 ? inputs[1] : nullptr,
+        args...);
 }
 
 /**

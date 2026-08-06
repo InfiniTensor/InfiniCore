@@ -140,7 +140,7 @@ void causalSoftmaxUnion(void *workspace, int core_per_cluster, int cluster_count
         info->y_stride_b, info->y_stride_i, info->y_stride_j,
         info->x_stride_b, info->x_stride_i, info->x_stride_j);
 
-    cnrtQueueSync(queue);
+    device::bang::syncQueueIfNotCapturing(queue);
 }
 
 namespace op::causal_softmax::bang {

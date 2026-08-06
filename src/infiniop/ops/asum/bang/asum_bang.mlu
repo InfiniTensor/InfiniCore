@@ -57,7 +57,7 @@ infiniStatus_t calculateAsum(
             result);
     }
 
-    cnrtQueueSync(queue);
+    device::bang::syncQueueIfNotCapturing(queue);
 
     return INFINI_STATUS_SUCCESS;
 }

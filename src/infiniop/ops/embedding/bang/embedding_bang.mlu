@@ -76,7 +76,7 @@ static infiniStatus_t launchEmbedding(
         num_indices,
         embedding_dim,
         vocab_size);
-    cnrtQueueSync(queue);
+    device::bang::syncQueueIfNotCapturing(queue);
     return INFINI_STATUS_SUCCESS;
 }
 
