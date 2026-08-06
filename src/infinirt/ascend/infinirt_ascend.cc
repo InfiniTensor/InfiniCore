@@ -215,6 +215,34 @@ infiniStatus_t graphLuanch(infinirtGraphExec_t graph_exec, infinirtStream_t stre
     return INFINI_STATUS_SUCCESS;
 }
 
+infiniStatus_t graphTaskGroupBegin(infinirtStream_t stream) {
+    CHECK_ACLRT(aclmdlRICaptureTaskGrpBegin((aclrtStream)stream));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t graphTaskGroupEnd(
+    infinirtStream_t stream,
+    infinirtGraphTaskGroup_t *handle) {
+    aclrtTaskGrp task_group = nullptr;
+    CHECK_ACLRT(aclmdlRICaptureTaskGrpEnd((aclrtStream)stream, &task_group));
+    *handle = reinterpret_cast<infinirtGraphTaskGroup_t>(task_group);
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t graphTaskUpdateBegin(
+    infinirtStream_t stream,
+    infinirtGraphTaskGroup_t handle) {
+    CHECK_ACLRT(aclmdlRICaptureTaskUpdateBegin(
+        (aclrtStream)stream,
+        reinterpret_cast<aclrtTaskGrp>(handle)));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t graphTaskUpdateEnd(infinirtStream_t stream) {
+    CHECK_ACLRT(aclmdlRICaptureTaskUpdateEnd((aclrtStream)stream));
+    return INFINI_STATUS_SUCCESS;
+}
+
 infiniStatus_t getMemInfo(int device_id, size_t *free_bytes, size_t *total_bytes) {
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }

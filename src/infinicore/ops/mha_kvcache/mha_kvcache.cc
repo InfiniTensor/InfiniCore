@@ -16,6 +16,11 @@ MhaKVCache::MhaKVCache(Tensor out,
     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(out, q, k_cache, v_cache, seqlens_k, block_table);
     INFINICORE_GRAPH_OP_DISPATCH(out->device().getType(),
                                  out, q, k_cache, v_cache, seqlens_k, block_table, alibi_slopes, scale);
+#if defined(ENABLE_ASCEND_FLASH_ATTN)
+    if (out->device().getType() == Device::Type::ASCEND) {
+        enable_task_update();
+    }
+#endif
 }
 
 void MhaKVCache::execute(Tensor out,
