@@ -251,6 +251,9 @@ infiniStatus_t Descriptor::calculate(
         if (_info.dtype == INFINI_DTYPE_BF16) {            \
             DISPATCH_KERNEL(Tindex, __nv_bfloat16, float); \
         }                                                  \
+        if (_info.dtype == INFINI_DTYPE_F32) {             \
+            DISPATCH_KERNEL(Tindex, float, float);         \
+        }                                                  \
         return INFINI_STATUS_BAD_TENSOR_DTYPE;             \
     } while (false)
 
