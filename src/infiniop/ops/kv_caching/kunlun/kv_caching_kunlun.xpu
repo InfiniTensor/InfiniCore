@@ -1,0 +1,172 @@
+
+#include "../../../devices/kunlun/kunlun_common.h"
+#include "../../../devices/kunlun/kunlun_handle.h"
+#include "../../../devices/kunlun/kunlun_kernel_common.h"
+#include "kv_caching_kunlun.h"
+
+namespace {
+
+template <typename Tmem, typename Tidx>
+__global__ void kvCachingKunlunKernel(
+    Tmem *k_cache,
+    Tmem *v_cache,
+    const Tmem *k,
+    const Tmem *v,
+    const Tidx *past_kv_lengths,
+    uint32_t batch_size,
+    uint32_t num_kv_heads,
+    uint32_t seq_len,
+    uint32_t hidden_dim,
+    int32_t k_cache_strides_0,
+    int32_t k_cache_strides_1,
+    int32_t k_cache_strides_2,
+    int32_t k_cache_strides_3,
+    int32_t v_cache_strides_0,
+    int32_t v_cache_strides_1,
+    int32_t v_cache_strides_2,
+    int32_t v_cache_strides_3,
+    int32_t k_strides_0,
+    int32_t k_strides_1,
+    int32_t k_strides_2,
+    int32_t k_strides_3,
+    int32_t v_strides_0,
+    int32_t v_strides_1,
+    int32_t v_strides_2,
+    int32_t v_strides_3) {
+    int cid = core_id();
+    int ncores = core_num();
+    if (cid >= ncores) {
+        return;
+    }
+    uint32_t thread_id = static_cast<uint32_t>(ncores * cluster_id() + cid);
+    uint32_t nthreads = static_cast<uint32_t>(ncores * cluster_num());
+    uint32_t total = batch_size * num_kv_heads * seq_len * hidden_dim;
+
+    for (uint32_t linear = thread_id; linear < total; linear += nthreads) {
+        uint32_t idx = linear;
+        uint32_t d = idx % hidden_dim;
+        idx /= hidden_dim;
+        uint32_t s = idx % seq_len;
+        idx /= seq_len;
+        uint32_t h = idx % num_kv_heads;
+        uint32_t b = idx / num_kv_heads;
+
+        int32_t cache_s = static_cast<int32_t>(past_kv_lengths[b]) + static_cast<int32_t>(s);
+        int32_t k_cache_offset = static_cast<int32_t>(b) * k_cache_strides_0
+                                 + static_cast<int32_t>(h) * k_cache_strides_1
+                                 + cache_s * k_cache_strides_2
+                                 + static_cast<int32_t>(d) * k_cache_strides_3;
+        int32_t v_cache_offset = static_cast<int32_t>(b) * v_cache_strides_0
+                                 + static_cast<int32_t>(h) * v_cache_strides_1
+                                 + cache_s * v_cache_strides_2
+                                 + static_cast<int32_t>(d) * v_cache_strides_3;
+        int32_t k_src_offset = static_cast<int32_t>(b) * k_strides_0
+                               + static_cast<int32_t>(h) * k_strides_1
+                               + static_cast<int32_t>(s) * k_strides_2
+                               + static_cast<int32_t>(d) * k_strides_3;
+        int32_t v_src_offset = static_cast<int32_t>(b) * v_strides_0
+                               + static_cast<int32_t>(h) * v_strides_1
+                               + static_cast<int32_t>(s) * v_strides_2
+                               + static_cast<int32_t>(d) * v_strides_3;
+        k_cache[k_cache_offset] = k[k_src_offset];
+        v_cache[v_cache_offset] = v[v_src_offset];
+    }
+}
+
+} // namespace
+
+namespace op::kv_caching::kunlun {
+
+struct Descriptor::Opaque {
+    std::shared_ptr<device::kunlun::Handle::Internal> internal;
+};
+
+Descriptor::~Descriptor() {
+    delete _opaque;
+}
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle_,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t k_cache,
+    infiniopTensorDescriptor_t v_cache,
+    infiniopTensorDescriptor_t k,
+    infiniopTensorDescriptor_t v,
+    infiniopTensorDescriptor_t past_kv_lengths) {
+    auto handle = reinterpret_cast<device::kunlun::Handle *>(handle_);
+    auto info = KVCachingInfo::createKVCachingInfo(k_cache, v_cache, k, v, past_kv_lengths);
+    CHECK_RESULT(info);
+
+    *desc_ptr = new Descriptor(
+        new Opaque{handle->internal()},
+        info.take(), 0, handle->device, handle->device_id);
+    return INFINI_STATUS_SUCCESS;
+}
+
+template <typename Tmem, typename Tidx>
+infiniStatus_t launchKunlunKernel(
+    kunlunStream_t stream,
+    void *k_cache,
+    void *v_cache,
+    const void *k,
+    const void *v,
+    const void *past_kv_lengths,
+    const KVCachingInfo &info) {
+    size_t total = info.batch_size * info.num_kv_heads * info.seq_len * info.hidden_dim;
+    if (total == 0) {
+        return INFINI_STATUS_SUCCESS;
+    }
+    kvCachingKunlunKernel<Tmem, Tidx>
+        <<<12, 64, stream>>>(
+            reinterpret_cast<__global_ptr__ Tmem *>(k_cache),
+            reinterpret_cast<__global_ptr__ Tmem *>(v_cache),
+            reinterpret_cast<__global_ptr__ const Tmem *>(k),
+            reinterpret_cast<__global_ptr__ const Tmem *>(v),
+            reinterpret_cast<__global_ptr__ const Tidx *>(past_kv_lengths),
+            static_cast<uint32_t>(info.batch_size), static_cast<uint32_t>(info.num_kv_heads),
+            static_cast<uint32_t>(info.seq_len), static_cast<uint32_t>(info.hidden_dim),
+            static_cast<int32_t>(info.k_cache_strides_0), static_cast<int32_t>(info.k_cache_strides_1),
+            static_cast<int32_t>(info.k_cache_strides_2), static_cast<int32_t>(info.k_cache_strides_3),
+            static_cast<int32_t>(info.v_cache_strides_0), static_cast<int32_t>(info.v_cache_strides_1),
+            static_cast<int32_t>(info.v_cache_strides_2), static_cast<int32_t>(info.v_cache_strides_3),
+            static_cast<int32_t>(info.k_strides_0), static_cast<int32_t>(info.k_strides_1),
+            static_cast<int32_t>(info.k_strides_2), static_cast<int32_t>(info.k_strides_3),
+            static_cast<int32_t>(info.v_strides_0), static_cast<int32_t>(info.v_strides_1),
+            static_cast<int32_t>(info.v_strides_2), static_cast<int32_t>(info.v_strides_3));
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *k_cache,
+    void *v_cache,
+    const void *k,
+    const void *v,
+    const void *past_kv_lengths,
+    void *stream) const {
+    (void)workspace;
+    (void)workspace_size;
+    auto kunlun_stream = reinterpret_cast<kunlunStream_t>(stream);
+
+#define LAUNCH_WITH_IDX(TMEM)                                                                              \
+    if (_info.past_len_dtype == INFINI_DTYPE_I32) {                                                         \
+        return launchKunlunKernel<TMEM, int32_t>(kunlun_stream, k_cache, v_cache, k, v, past_kv_lengths, _info); \
+    }                                                                                                       \
+    return launchKunlunKernel<TMEM, int64_t>(kunlun_stream, k_cache, v_cache, k, v, past_kv_lengths, _info)
+
+    switch (_info.dtype) {
+    case INFINI_DTYPE_F32:
+        LAUNCH_WITH_IDX(uint32_t);
+    case INFINI_DTYPE_F16:
+        LAUNCH_WITH_IDX(uint16_t);
+    case INFINI_DTYPE_BF16:
+        LAUNCH_WITH_IDX(uint16_t);
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+
+#undef LAUNCH_WITH_IDX
+}
+
+} // namespace op::kv_caching::kunlun
