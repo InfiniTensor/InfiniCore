@@ -21,6 +21,8 @@ _TEST_CASES_DATA = [
     (2, 1, 4, 4, 64, 256, [7, 250]),
     (2, 1, 8, 2, 128, 256, [73, 260]),
     (3, 1, 8, 1, 128, 256, [1, 257, 511]),
+    # Qwen3.5-27B TP=4 decode shape: N=6, Nkv=1, D=256.
+    (2, 1, 6, 1, 256, 256, [73, 260]),
 ]
 
 _TOLERANCE_MAP = {
@@ -196,6 +198,10 @@ class OpTest(BaseOperatorTest):
         block_table,
         scale=1.0,
     ):
+        if q.device.type == "npu":
+            # Ascend FIA consumes physical BnNBsD paged cache.
+            k_cache = k_cache.permute([0, 2, 1, 3]).contiguous()
+            v_cache = v_cache.permute([0, 2, 1, 3]).contiguous()
         out = infinicore.mha_kvcache(
             q,
             k_cache,

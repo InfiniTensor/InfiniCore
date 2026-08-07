@@ -47,6 +47,53 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
 
     std::shared_ptr<Block> block;
 
+    // The allocator normally keeps free blocks for fast reuse. On memory-constrained
+    // inference servers, a workload shape change can leave enough cached blocks in
+    // other size classes to make a new allocation fail. Reclaim only idle,
+    // non-graph blocks and retry once before surfacing OOM.
+    auto malloc_with_reclaim = [this](void **ptr, size_t bytes) -> infiniStatus_t {
+        auto status = infinirtMalloc(ptr, bytes);
+        if (status == INFINI_STATUS_SUCCESS && *ptr != nullptr) {
+            return status;
+        }
+
+        size_t reclaimed_blocks = 0;
+        size_t reclaimed_bytes = 0;
+        for (auto &cls : size_classes_) {
+            for (auto it = cls.free_blocks.begin(); it != cls.free_blocks.end();) {
+                if (!(*it)->frozen && !(*it)->in_use) {
+                    reclaimed_bytes += (*it)->size;
+                    ++reclaimed_blocks;
+                    INFINICORE_CHECK_ERROR(infinirtFree((*it)->ptr));
+                    all_blocks_.erase((*it)->ptr);
+                    it = cls.free_blocks.erase(it);
+                } else {
+                    ++it;
+                }
+            }
+        }
+        for (auto it = large_blocks_.begin(); it != large_blocks_.end();) {
+            if (!(*it)->frozen && !(*it)->in_use) {
+                reclaimed_bytes += (*it)->size;
+                ++reclaimed_blocks;
+                INFINICORE_CHECK_ERROR(infinirtFree((*it)->ptr));
+                all_blocks_.erase((*it)->ptr);
+                it = large_blocks_.erase(it);
+            } else {
+                ++it;
+            }
+        }
+        if (reclaimed_blocks > 0) {
+            spdlog::warn("Device allocation of {} bytes failed; reclaimed {} idle blocks ({} bytes) and retrying",
+                         bytes, reclaimed_blocks, reclaimed_bytes);
+        }
+        status = infinirtMalloc(ptr, bytes);
+        if (status == INFINI_STATUS_SUCCESS && *ptr == nullptr) {
+            return INFINI_STATUS_INTERNAL_ERROR;
+        }
+        return status;
+    };
+
     // 1. Try size-class allocation for small/medium
     for (auto &cls : size_classes_) {
         if (size <= cls.block_size) {
@@ -74,7 +121,7 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
             block->in_use = true;
             block->use_count = 1;
 
-            INFINICORE_CHECK_ERROR(infinirtMalloc(&block->ptr, block->size));
+            INFINICORE_CHECK_ERROR(malloc_with_reclaim(&block->ptr, block->size));
 
             all_blocks_[block->ptr] = block;
             return reinterpret_cast<std::byte *>(block->ptr);
@@ -101,7 +148,7 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
     block->in_use = true;
     block->use_count = 1;
 
-    INFINICORE_CHECK_ERROR(infinirtMalloc(&block->ptr, block->size));
+    INFINICORE_CHECK_ERROR(malloc_with_reclaim(&block->ptr, block->size));
 
     large_blocks_.push_back(block);
     all_blocks_[block->ptr] = block;
@@ -166,7 +213,7 @@ void PinnableBlockAllocator::trim() {
     // Free non-frozen size-class blocks
     for (auto &cls : size_classes_) {
         for (auto it = cls.free_blocks.begin(); it != cls.free_blocks.end();) {
-            if (!(*it)->frozen) {
+            if (!(*it)->frozen && !(*it)->in_use) {
                 INFINICORE_CHECK_ERROR(infinirtFree((*it)->ptr));
                 all_blocks_.erase((*it)->ptr);
                 it = cls.free_blocks.erase(it);

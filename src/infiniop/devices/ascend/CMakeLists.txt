@@ -31,6 +31,11 @@ ascendc_library(ascend_kernels STATIC
     ../../ops/paged_caching/ascend/paged_caching_ascend_kernel.cpp
     ../../ops/paged_attention/ascend/paged_attention_ascend_kernel.cpp
     ../../ops/paged_attention_prefill/ascend/paged_attention_prefill_ascend_kernel.cpp
+    ../../ops/causal_conv1d/ascend/causal_conv1d_ascend_kernel.cpp
+    ../../ops/fused_gated_delta_net_gating/ascend/fused_gated_delta_net_gating_ascend_kernel.cpp
+    ../../ops/chunk_gated_delta_rule/ascend/gated_delta_rule_ascend_kernel.cpp
+    ../../ops/recurrent_gated_delta_rule/ascend/recurrent_gated_delta_rule_native_kernel.cpp
+    ../../ops/mrope/ascend/mrope_ascend_kernel.cpp
 )
 
 target_include_directories(ascend_kernels PRIVATE ../../../../include)

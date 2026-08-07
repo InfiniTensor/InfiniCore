@@ -3,7 +3,6 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import infinicore
 import torch
 from framework import (
     BaseOperatorTest,
@@ -13,6 +12,7 @@ from framework import (
     TestCase,
 )
 
+import infinicore
 
 # Test cases:
 # (qkv_shape, qkv_strides, state_shape, weight_shape, bias_shape,
@@ -144,6 +144,42 @@ def parse_test_cases():
                 )
             )
 
+            if final_state_indices is not None:
+                tests.append(
+                    TestCase(
+                        inputs=inputs,
+                        kwargs={},
+                        output_spec=None,
+                        comparison_target=1,
+                        tolerance=_TOLERANCE_MAP[dtype],
+                        description="CausalConv1d - UPDATED_STATE",
+                    )
+                )
+
+    # Large indexed state update: C=2048 keeps all eight Ascend blocks active
+    # for FP16/BF16 under the 512-byte alignment rule and catches cache-line
+    # races that small shapes cannot expose.
+    for dtype in _TENSOR_DTYPES:
+        inputs = [
+            TensorSpec.from_tensor((1, 1, 2048), None, dtype),
+            TensorSpec.from_tensor((2, 2048, 3), None, dtype),
+            TensorSpec.from_tensor((2048, 1, 4), None, dtype),
+            TensorSpec.from_tensor((2048,), None, dtype),
+            _manual_i32((0, 1)),
+            _manual_i32((1,)),
+            _manual_i32((1,)),
+        ]
+        tests.append(
+            TestCase(
+                inputs=inputs,
+                kwargs={},
+                output_spec=None,
+                comparison_target=1,
+                tolerance=_TOLERANCE_MAP[dtype],
+                description="CausalConv1d - MULTICORE_UPDATED_STATE",
+            )
+        )
+
     return tests
 
 
@@ -177,7 +213,7 @@ class OpTest(BaseOperatorTest):
         )
         return torch_causal_conv1d_ref(
             qkv,
-            conv_state.clone(),
+            conv_state,
             weight,
             bias=bias,
             cu_seqlens=cu_seqlens,

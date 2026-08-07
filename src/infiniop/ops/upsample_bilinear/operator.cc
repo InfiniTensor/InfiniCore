@@ -18,6 +18,10 @@
 #include "moore/upsample_bilinear_moore.h"
 #endif
 
+#ifdef ENABLE_ASCEND_API
+#include "ascend/upsample_bilinear_ascend.h"
+#endif
+
 extern "C" {
 
 // =======================================================================
@@ -61,6 +65,9 @@ __INFINI_C infiniStatus_t infiniopCreateUpsampleBilinearDescriptor(
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_ASCEND_API
+        CREATE(INFINI_DEVICE_ASCEND, ascend);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -98,6 +105,9 @@ __INFINI_C infiniStatus_t infiniopGetUpsampleBilinearWorkspaceSize(infiniopUpsam
 #endif
 #ifdef ENABLE_HYGON_API
         GET(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_ASCEND_API
+        GET(INFINI_DEVICE_ASCEND, ascend);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -143,6 +153,9 @@ __INFINI_C infiniStatus_t infiniopUpsampleBilinear(
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_ASCEND_API
+        CALCULATE(INFINI_DEVICE_ASCEND, ascend);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -180,6 +193,9 @@ __INFINI_C infiniStatus_t infiniopDestroyUpsampleBilinearDescriptor(infiniopUpsa
 #endif
 #ifdef ENABLE_HYGON_API
         DELETE(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_ASCEND_API
+        DELETE(INFINI_DEVICE_ASCEND, ascend);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

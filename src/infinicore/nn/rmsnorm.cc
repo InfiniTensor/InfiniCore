@@ -1,7 +1,13 @@
 #include "infinicore/nn/rmsnorm.hpp"
 #include "infinicore/ops.hpp"
+#ifdef ENABLE_ASCEND_API
+#include "infinicore/ops/matmul_allreduce_add_rmsnorm_ascend.hpp"
+#endif
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include <stdexcept>
+#include <tuple>
 
 namespace infinicore::nn {
 
@@ -26,6 +32,20 @@ void RMSNorm::forward_inplace(Tensor &x, Tensor &residual) const {
         residual = x;
         x = op::rms_norm(x, weight_, static_cast<float>(eps_));
     } else {
+#ifdef ENABLE_ASCEND_API
+        static const bool ascend_vendor_enabled = []() {
+            const char *value = std::getenv(
+                "INFINICORE_ASCEND_ADD_RMSNORM_VENDOR");
+            return value == nullptr || std::strcmp(value, "0") != 0;
+        }();
+        if (device_.getType() == Device::Type::ASCEND
+            && ascend_vendor_enabled) {
+            std::tie(x, residual) = op::add_rmsnorm_ascend_vendor(
+                x, residual, weight_,
+                static_cast<float>(eps_));
+            return;
+        }
+#endif
         if (device_.getType() == Device::Type::CPU
             || device_.getType() == Device::Type::NVIDIA
             || device_.getType() == Device::Type::ILUVATAR

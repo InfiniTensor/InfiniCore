@@ -13,7 +13,9 @@ MhaKVCache::MhaKVCache(Tensor out,
                        const Tensor &block_table,
                        std::optional<Tensor> alibi_slopes,
                        float scale) {
-    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(out, q, k_cache, v_cache, seqlens_k, block_table);
+    // Ascend may consume seqlens_k directly from the host to avoid a
+    // device-to-host synchronization in every attention layer.
+    INFINICORE_ASSERT_TENSORS_SAME_DEVICE(out, q, k_cache, v_cache, block_table);
     INFINICORE_GRAPH_OP_DISPATCH(out->device().getType(),
                                  out, q, k_cache, v_cache, seqlens_k, block_table, alibi_slopes, scale);
 }

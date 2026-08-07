@@ -20,6 +20,9 @@
 #ifdef ENABLE_CAMBRICON_API
 #include "bang/gelu_bang.h"
 #endif
+#ifdef ENABLE_ASCEND_API
+#include "ascend/gelu_ascend.h"
+#endif
 
 __INFINI_C infiniStatus_t infiniopCreateGeluDescriptor(
     infiniopHandle_t handle,
@@ -67,6 +70,9 @@ __INFINI_C infiniStatus_t infiniopCreateGeluDescriptor(
 #ifdef ENABLE_ALI_API
         CREATE(INFINI_DEVICE_ALI, nvidia);
 #endif
+#ifdef ENABLE_ASCEND_API
+        CREATE(INFINI_DEVICE_ASCEND, ascend);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -112,6 +118,9 @@ __INFINI_C infiniStatus_t infiniopGetGeluWorkspaceSize(infiniopGeluDescriptor_t 
 #endif
 #ifdef ENABLE_ALI_API
         GET(INFINI_DEVICE_ALI, nvidia);
+#endif
+#ifdef ENABLE_ASCEND_API
+        GET(INFINI_DEVICE_ASCEND, ascend);
 #endif
 
     default:
@@ -167,6 +176,9 @@ __INFINI_C infiniStatus_t infiniopGelu(
 #ifdef ENABLE_ALI_API
         CALCULATE(INFINI_DEVICE_ALI, nvidia);
 #endif
+#ifdef ENABLE_ASCEND_API
+        CALCULATE(INFINI_DEVICE_ASCEND, ascend);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -214,6 +226,9 @@ infiniopDestroyGeluDescriptor(infiniopGeluDescriptor_t desc) {
 #endif
 #ifdef ENABLE_ALI_API
         DELETE(INFINI_DEVICE_ALI, nvidia);
+#endif
+#ifdef ENABLE_ASCEND_API
+        DELETE(INFINI_DEVICE_ASCEND, ascend);
 #endif
 
     default:

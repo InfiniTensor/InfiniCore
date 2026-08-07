@@ -11,6 +11,9 @@
 #ifdef ENABLE_MOORE_API
 #include "moore/mrope_moore.h"
 #endif
+#ifdef ENABLE_ASCEND_API
+#include "ascend/mrope_ascend.h"
+#endif
 
 __INFINI_C infiniStatus_t infiniopCreateMRoPEDescriptor(
     infiniopHandle_t handle,
@@ -59,6 +62,9 @@ __INFINI_C infiniStatus_t infiniopCreateMRoPEDescriptor(
 #ifdef ENABLE_MOORE_API
         CREATE(INFINI_DEVICE_MOORE, moore);
 #endif
+#ifdef ENABLE_ASCEND_API
+        CREATE(INFINI_DEVICE_ASCEND, ascend);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -92,6 +98,9 @@ __INFINI_C infiniStatus_t infiniopGetMRoPEWorkspaceSize(infiniopMRoPEDescriptor_
 #endif
 #ifdef ENABLE_MOORE_API
         GET(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_ASCEND_API
+        GET(INFINI_DEVICE_ASCEND, ascend);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -138,6 +147,9 @@ __INFINI_C infiniStatus_t infiniopMRoPE(
 #ifdef ENABLE_MOORE_API
         CALCULATE(INFINI_DEVICE_MOORE, moore);
 #endif
+#ifdef ENABLE_ASCEND_API
+        CALCULATE(INFINI_DEVICE_ASCEND, ascend);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -171,6 +183,9 @@ __INFINI_C infiniStatus_t infiniopDestroyMRoPEDescriptor(infiniopMRoPEDescriptor
 #endif
 #ifdef ENABLE_MOORE_API
         DESTROY(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_ASCEND_API
+        DESTROY(INFINI_DEVICE_ASCEND, ascend);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

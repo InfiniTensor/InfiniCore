@@ -709,7 +709,7 @@ target("infinicore_cpp_api")
         add_includedirs(ASCEND_HOME .. "/include/aclnnop")
         add_includedirs(path.join(os.projectdir(), "submodules/InfiniOps/src"))
         add_linkdirs(ASCEND_HOME .. "/lib64")
-        add_links("ascendcl", "nnopbase", "opapi", "runtime")
+        add_links("ascendcl", "nnopbase", "opapi", "runtime", "dl")
         add_linkdirs(ASCEND_HOME .. "/../../driver/lib64/driver")
         add_links("ascend_hal")
     end
