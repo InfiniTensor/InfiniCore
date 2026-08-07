@@ -67,6 +67,88 @@ infiniStatus_t Descriptor::create(
 }
 
 template <typename Tdata, typename Tgate>
+static infiniStatus_t launch_warp_sequence(const KimiDeltaAttentionInfo &info,
+                                           void *out,
+                                           void *initial_state,
+                                           void *final_state,
+                                           const void *q,
+                                           const void *k,
+                                           const void *v,
+                                           const void *g,
+                                           const void *beta,
+                                           const void *A_log,
+                                           const void *dt_bias,
+                                           const void *cu_seqlens,
+                                           const void *initial_state_indices,
+                                           const void *final_state_indices,
+                                           cudaStream_t stream) {
+    constexpr size_t D = 128;
+    constexpr size_t WARPS_PER_BLOCK = 8;
+    constexpr size_t NUM_THREADS = WARPS_PER_BLOCK * 32;
+    const dim3 grid(
+        static_cast<uint32_t>(info.B),
+        static_cast<uint32_t>(info.H),
+        static_cast<uint32_t>((D + WARPS_PER_BLOCK - 1) / WARPS_PER_BLOCK));
+    const dim3 block(NUM_THREADS);
+    const size_t shared = (D * 3 + NUM_THREADS + 1) * sizeof(float);
+
+    kimiDeltaAttentionWarpCudaKernel<Tdata, Tgate, float, D, WARPS_PER_BLOCK>
+        <<<grid, block, shared, stream>>>(
+            static_cast<Tdata *>(out),
+            static_cast<Tdata *>(initial_state),
+            static_cast<Tdata *>(final_state),
+            static_cast<const Tdata *>(q),
+            static_cast<const Tdata *>(k),
+            static_cast<const Tdata *>(v),
+            static_cast<const Tgate *>(g),
+            static_cast<const Tgate *>(beta),
+            static_cast<const float *>(A_log),
+            static_cast<const float *>(dt_bias),
+            cu_seqlens,
+            initial_state_indices,
+            final_state_indices,
+            info.cu_seqlens_dtype == INFINI_DTYPE_I64,
+            info.initial_state_indices_dtype == INFINI_DTYPE_I64,
+            info.final_state_indices_dtype == INFINI_DTYPE_I64,
+            info.use_qk_l2norm,
+            info.has_cu_seqlens,
+            info.indexed_state_pool,
+            info.total_tokens,
+            info.pool_size,
+            info.scale,
+            info.lower_bound,
+            info.out_strides[0],
+            info.out_strides[1],
+            info.out_strides[2],
+            info.initial_state_strides[0],
+            info.initial_state_strides[1],
+            info.initial_state_strides[2],
+            info.initial_state_strides[3],
+            info.final_state_strides.empty() ? 0 : info.final_state_strides[0],
+            info.final_state_strides.empty() ? 0 : info.final_state_strides[1],
+            info.final_state_strides.empty() ? 0 : info.final_state_strides[2],
+            info.final_state_strides.empty() ? 0 : info.final_state_strides[3],
+            info.q_strides[0],
+            info.q_strides[1],
+            info.q_strides[2],
+            info.k_strides[0],
+            info.k_strides[1],
+            info.k_strides[2],
+            info.v_strides[0],
+            info.v_strides[1],
+            info.v_strides[2],
+            info.g_strides[0],
+            info.g_strides[1],
+            info.g_strides[2],
+            info.beta_strides[0],
+            info.beta_strides[1],
+            info.beta_strides[2],
+            info.A_log_strides[0],
+            info.dt_bias_strides[0]);
+    return INFINI_STATUS_SUCCESS;
+}
+
+template <typename Tdata, typename Tgate>
 static infiniStatus_t launch_fallback(const KimiDeltaAttentionInfo &info,
                                       void *out,
                                       void *initial_state,
@@ -82,6 +164,25 @@ static infiniStatus_t launch_fallback(const KimiDeltaAttentionInfo &info,
                                       const void *initial_state_indices,
                                       const void *final_state_indices,
                                       cudaStream_t stream) {
+    if (info.D == 128) {
+        return launch_warp_sequence<Tdata, Tgate>(
+            info,
+            out,
+            initial_state,
+            final_state,
+            q,
+            k,
+            v,
+            g,
+            beta,
+            A_log,
+            dt_bias,
+            cu_seqlens,
+            initial_state_indices,
+            final_state_indices,
+            stream);
+    }
+
     constexpr int threads = 256;
     dim3 grid(static_cast<uint32_t>(info.B), static_cast<uint32_t>(info.H), static_cast<uint32_t>(info.D));
     size_t shared = info.is_decode ? threads * sizeof(float) : (info.D * 3 + threads) * sizeof(float);

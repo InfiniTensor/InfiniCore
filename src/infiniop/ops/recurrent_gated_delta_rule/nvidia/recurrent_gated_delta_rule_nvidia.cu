@@ -16,6 +16,8 @@ INFINIOP_CUDA_KERNEL recurrentGatedDeltaRuleIndexedPoolWarp(
     bool initial_state_indices_i64,
     bool final_state_indices_i64,
     bool use_qk_l2norm,
+    bool indexed_state_pool,
+    size_t pool_size,
     size_t Hk,
     size_t value_heads_per_key_head,
     ptrdiff_t out_s0,
@@ -44,11 +46,13 @@ INFINIOP_CUDA_KERNEL recurrentGatedDeltaRuleIndexedPoolWarp(
     ptrdiff_t beta_s0,
     ptrdiff_t beta_s1,
     ptrdiff_t beta_s2) {
+    extern __shared__ char shared_memory[];
     recurrentGatedDeltaRuleIndexedPoolWarpKernel<Tdata, Tgate, Tcompute, Dk, Dv, WARPS_PER_BLOCK>(
         out, initial_state, final_state, q, k, v, g, beta,
         initial_state_indices, final_state_indices,
         initial_state_indices_i64, final_state_indices_i64,
         use_qk_l2norm,
+        indexed_state_pool, pool_size,
         Hk, value_heads_per_key_head,
         out_s0, out_s1, out_s2,
         initial_s0, initial_s1, initial_s2, initial_s3,
@@ -57,7 +61,8 @@ INFINIOP_CUDA_KERNEL recurrentGatedDeltaRuleIndexedPoolWarp(
         k_s0, k_s1, k_s2,
         v_s0, v_s1, v_s2,
         g_s0, g_s1, g_s2,
-        beta_s0, beta_s1, beta_s2);
+        beta_s0, beta_s1, beta_s2,
+        reinterpret_cast<Tcompute *>(shared_memory));
 }
 namespace op {
 namespace recurrent_gated_delta_rule {
@@ -114,7 +119,7 @@ infiniStatus_t launchIndexedPoolWarpKernelTyped(
     constexpr size_t NUM_THREADS = WARPS_PER_BLOCK * 32;
     dim3 grid(uint32_t(_info.B), uint32_t(_info.Hv), uint32_t((_info.Dv + WARPS_PER_BLOCK - 1) / WARPS_PER_BLOCK));
     dim3 block(NUM_THREADS);
-    size_t shared_mem_size = (Dk + Dk + NUM_THREADS) * sizeof(float);
+    size_t shared_mem_size = (Dk * 3 + NUM_THREADS + 1) * sizeof(float);
 
     auto final_s0 = _info.final_state_strides.empty() ? 0 : _info.final_state_strides[0];
     auto final_s1 = _info.final_state_strides.empty() ? 0 : _info.final_state_strides[1];
@@ -136,6 +141,8 @@ infiniStatus_t launchIndexedPoolWarpKernelTyped(
             initial_state_indices_i64,
             final_state_indices_i64,
             _info.use_qk_l2norm,
+            _info.indexed_state_pool,
+            _info.pool_size,
             _info.Hk,
             _info.value_heads_per_key_head,
             _info.out_strides[0],

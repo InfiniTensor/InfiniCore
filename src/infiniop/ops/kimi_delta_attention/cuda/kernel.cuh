@@ -4,6 +4,8 @@
 #include <cmath>
 #include <cstdint>
 
+#include "../../recurrent_gated_delta_rule/cuda/recurrent_delta_rule_common.cuh"
+
 template <typename T>
 __device__ inline float kdaLoadAsFloat(const T *ptr, ptrdiff_t offset) {
     return static_cast<float>(ptr[offset]);
@@ -52,6 +54,175 @@ __device__ inline float kdaBlockReduceSum(float value, float *scratch) {
     const float result = scratch[0];
     __syncthreads();
     return result;
+}
+
+template <typename Tgate, typename Tcompute, size_t D>
+struct KimiDeltaRuleGatePolicy {
+    const Tgate *g;
+    const Tgate *beta;
+    const float *A_log;
+    const float *dt_bias;
+    float lower_bound;
+    ptrdiff_t g_s0;
+    ptrdiff_t g_s1;
+    ptrdiff_t g_s2;
+    ptrdiff_t beta_s0;
+    ptrdiff_t beta_s1;
+    ptrdiff_t beta_s2;
+    ptrdiff_t A_log_s0;
+    ptrdiff_t dt_bias_s0;
+
+    __device__ void prepare(int token_batch,
+                            int64_t token_idx,
+                            int key_head_idx,
+                            int,
+                            Tcompute *decay,
+                            Tcompute *beta_out) const {
+        if (threadIdx.x == 0) {
+            decay[0] = expf(A_log[static_cast<ptrdiff_t>(key_head_idx) * A_log_s0]);
+            const ptrdiff_t beta_offset = static_cast<ptrdiff_t>(token_batch) * beta_s0 + static_cast<ptrdiff_t>(token_idx) * beta_s1 + static_cast<ptrdiff_t>(key_head_idx) * beta_s2;
+            beta_out[0] = static_cast<Tcompute>(
+                op::recurrent_gated_delta_rule::cuda::sigmoid(
+                    op::recurrent_gated_delta_rule::cuda::loadAsFloat(
+                        beta, beta_offset)));
+        }
+        __syncthreads();
+        const Tcompute a_log_exp = decay[0];
+        const ptrdiff_t gate_base = static_cast<ptrdiff_t>(token_batch) * g_s0 + static_cast<ptrdiff_t>(token_idx) * g_s1 + static_cast<ptrdiff_t>(key_head_idx) * g_s2;
+        for (int key_dim_idx = threadIdx.x; key_dim_idx < static_cast<int>(D);
+             key_dim_idx += blockDim.x) {
+            const Tcompute raw_gate = static_cast<Tcompute>(
+                                          op::recurrent_gated_delta_rule::cuda::loadAsFloat(
+                                              g, gate_base + key_dim_idx))
+                                    + static_cast<Tcompute>(
+                                          dt_bias[static_cast<ptrdiff_t>(key_head_idx) * dt_bias_s0 + key_dim_idx]);
+            decay[key_dim_idx] = expf(
+                static_cast<Tcompute>(lower_bound) * op::recurrent_gated_delta_rule::cuda::sigmoid(a_log_exp * raw_gate));
+        }
+    }
+};
+
+template <typename Tdata,
+          typename Tgate,
+          typename Tcompute,
+          size_t D,
+          size_t WARPS_PER_BLOCK>
+__global__ void kimiDeltaAttentionWarpCudaKernel(
+    Tdata *out,
+    Tdata *initial_state,
+    Tdata *final_state,
+    const Tdata *q,
+    const Tdata *k,
+    const Tdata *v,
+    const Tgate *g,
+    const Tgate *beta,
+    const float *A_log,
+    const float *dt_bias,
+    const void *cu_seqlens,
+    const void *initial_state_indices,
+    const void *final_state_indices,
+    bool cu_seqlens_i64,
+    bool initial_state_indices_i64,
+    bool final_state_indices_i64,
+    bool use_qk_l2norm,
+    bool has_cu_seqlens,
+    bool indexed_state_pool,
+    size_t total_tokens,
+    size_t pool_size,
+    float scale,
+    float lower_bound,
+    ptrdiff_t out_s0,
+    ptrdiff_t out_s1,
+    ptrdiff_t out_s2,
+    ptrdiff_t initial_s0,
+    ptrdiff_t initial_s1,
+    ptrdiff_t initial_s2,
+    ptrdiff_t initial_s3,
+    ptrdiff_t final_s0,
+    ptrdiff_t final_s1,
+    ptrdiff_t final_s2,
+    ptrdiff_t final_s3,
+    ptrdiff_t q_s0,
+    ptrdiff_t q_s1,
+    ptrdiff_t q_s2,
+    ptrdiff_t k_s0,
+    ptrdiff_t k_s1,
+    ptrdiff_t k_s2,
+    ptrdiff_t v_s0,
+    ptrdiff_t v_s1,
+    ptrdiff_t v_s2,
+    ptrdiff_t g_s0,
+    ptrdiff_t g_s1,
+    ptrdiff_t g_s2,
+    ptrdiff_t beta_s0,
+    ptrdiff_t beta_s1,
+    ptrdiff_t beta_s2,
+    ptrdiff_t A_log_s0,
+    ptrdiff_t dt_bias_s0) {
+    extern __shared__ char shared_memory[];
+    const KimiDeltaRuleGatePolicy<Tgate, Tcompute, D> gate_policy{
+        g,
+        beta,
+        A_log,
+        dt_bias,
+        lower_bound,
+        g_s0,
+        g_s1,
+        g_s2,
+        beta_s0,
+        beta_s1,
+        beta_s2,
+        A_log_s0,
+        dt_bias_s0,
+    };
+    op::recurrent_gated_delta_rule::cuda::recurrentDeltaRuleWarpSequence<
+        Tdata,
+        Tcompute,
+        D,
+        D,
+        WARPS_PER_BLOCK>(
+        out,
+        initial_state,
+        final_state,
+        q,
+        k,
+        v,
+        cu_seqlens,
+        initial_state_indices,
+        final_state_indices,
+        cu_seqlens_i64,
+        initial_state_indices_i64,
+        final_state_indices_i64,
+        use_qk_l2norm,
+        has_cu_seqlens,
+        indexed_state_pool,
+        total_tokens,
+        pool_size,
+        gridDim.y,
+        1,
+        static_cast<Tcompute>(scale),
+        out_s0,
+        out_s1,
+        out_s2,
+        initial_s0,
+        initial_s1,
+        initial_s2,
+        initial_s3,
+        final_s0,
+        final_s1,
+        final_s2,
+        final_s3,
+        q_s0,
+        q_s1,
+        q_s2,
+        k_s0,
+        k_s1,
+        k_s2,
+        v_s0,
+        v_s1,
+        v_s2,
+        gate_policy,
+        reinterpret_cast<Tcompute *>(shared_memory));
 }
 
 template <typename Tdata, typename Tgate>
