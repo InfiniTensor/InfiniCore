@@ -85,9 +85,9 @@ class OpTest(BaseOperatorTest):
             args[1] = args[1].as_tuple()
         return torch.hsplit(*args, **kwargs)
 
-    # def infinicore_operator(self, *args, **kwargs):
+    def infinicore_operator(self, *args, **kwargs):
     #     """InfiniCore implementation (operator not yet available)."""
-    #     return infinicore.hsplit(*args, **kwargs)
+        return infinicore.hsplit(*args, **kwargs)
 
 
 def main():

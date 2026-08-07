@@ -15,6 +15,7 @@ from .fused_gated_delta_net_gating import fused_gated_delta_net_gating
 from .fused_moe import ACT_SILU, ACT_SWIGLU, fused_moe
 from .fused_moe_mxfp4 import fused_moe_mxfp4
 from .gaussian_nll_loss import gaussian_nll_loss
+from .gumbel_softmax import gumbel_softmax
 from .hardswish import hardswish
 from .hardtanh import hardtanh
 from .hinge_embedding_loss import hinge_embedding_loss
@@ -65,6 +66,7 @@ __all__ = [
     "ACT_SILU",
     "ACT_SWIGLU",
     "gaussian_nll_loss",
+    "gumbel_softmax",
     "interpolate",
     "kimi_delta_attention",
     "linear",

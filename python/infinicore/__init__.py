@@ -113,6 +113,8 @@ from infinicore.ops.fmod import fmod
 from infinicore.ops.fused_rotary_embedding import fused_rotary_embedding_
 from infinicore.ops.grouped_topk_vendor import grouped_topk_vendor
 from infinicore.ops.hypot import hypot
+from infinicore.ops.heaviside import heaviside
+from infinicore.ops.hsplit import hsplit
 from infinicore.ops.index_add import index_add
 from infinicore.ops.index_copy import index_copy
 from infinicore.ops.inner import inner
@@ -164,6 +166,8 @@ from infinicore.ops.scaled_mm_w4a8 import scaled_mm_w4a8
 from infinicore.ops.scaled_mm_w8a8 import scaled_mm_w8a8
 from infinicore.ops.scatter import scatter
 from infinicore.ops.sinh import sinh
+from infinicore.ops.slice_scatter import slice_scatter
+from infinicore.ops.slogdet import slogdet
 from infinicore.ops.squeeze import squeeze
 from infinicore.ops.sum import sum
 from infinicore.ops.swap import swap
@@ -306,6 +310,8 @@ __all__ = [
     "floor_divide",
     "float_power",
     "flipud",
+    "heaviside",
+    "hsplit",
     "scatter",
     "rot",
     "rotg",
@@ -325,6 +331,8 @@ __all__ = [
     "index_add",
     "take",
     "sinh",
+    "slice_scatter",
+    "slogdet",
     "swap",
     "ones",
     "broadcast_to",
