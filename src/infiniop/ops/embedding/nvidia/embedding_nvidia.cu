@@ -2,7 +2,6 @@
 #include "../../../devices/nvidia/nvidia_common.cuh"
 #include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 #include "../../../tensor.h"
-#include "../cuda/embedding_kernel.cuh"
 #include "embedding_nvidia.cuh"
 #include <cuda_runtime.h>
 
@@ -14,8 +13,9 @@ INFINIOP_CUDA_KERNEL embeddingKernel(
     size_t num_indices,
     size_t embedding_dim,
     size_t vocab_size) {
-    // Calculate global thread index
-    size_t idx = blockIdx.x * blockDim.x + threadIdx.x;
+    // Assign one block to each index so threads copy the embedding row
+    // cooperatively. Decode commonly has a single index and a wide row.
+    size_t idx = blockIdx.x;
 
     if (idx < num_indices) {
         // Get the index value
@@ -27,35 +27,8 @@ INFINIOP_CUDA_KERNEL embeddingKernel(
             const T *src = weight + static_cast<size_t>(index_val) * embedding_dim;
             T *dst = output + idx * embedding_dim;
 
-            // Choose optimal copy strategy based on type and alignment
-            if constexpr (std::is_same_v<T, float>) {
-                // Check alignment for float4 (16 bytes)
-                bool aligned_16 = is_aligned(src, 16) && is_aligned(dst, 16);
-                if (aligned_16 && embedding_dim >= 4 && embedding_dim % 4 == 0) {
-                    copyVectorizedFloat4<IndexType>(dst, src, embedding_dim);
-                } else if (embedding_dim >= 2 && embedding_dim % 2 == 0) {
-                    // Try float2 if not aligned to 16 bytes
-                    copyVectorizedFloat2<IndexType>(dst, src, embedding_dim);
-                } else {
-                    copyScalar<T, IndexType>(dst, src, embedding_dim);
-                }
-            } else if constexpr (std::is_same_v<T, half>) {
-                // Use half2 for vectorized access
-                if (embedding_dim >= 2 && embedding_dim % 2 == 0) {
-                    copyVectorizedHalf2<IndexType>(dst, src, embedding_dim);
-                } else {
-                    copyScalar<T, IndexType>(dst, src, embedding_dim);
-                }
-            } else if constexpr (std::is_same_v<T, cuda_bfloat16>) {
-                // Use bfloat162 for vectorized access
-                if (embedding_dim >= 2 && embedding_dim % 2 == 0) {
-                    copyVectorizedBFloat162<IndexType>(dst, src, embedding_dim);
-                } else {
-                    copyScalar<T, IndexType>(dst, src, embedding_dim);
-                }
-            } else {
-                // Fallback to scalar copy with __ldg
-                copyScalar<T, IndexType>(dst, src, embedding_dim);
+            for (size_t col = threadIdx.x; col < embedding_dim; col += blockDim.x) {
+                dst[col] = __ldg(&src[col]);
             }
         }
     }
@@ -135,17 +108,8 @@ infiniStatus_t Descriptor::calculate(
 
     auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
 
-    // Dynamic block size optimization based on embedding_dim
-    // Smaller embedding_dim benefits from larger block size (better occupancy)
-    // Larger embedding_dim benefits from smaller block size (more registers per thread)
-    size_t block_size = 256; // Default
-    if (_embedding_dim <= 64) {
-        block_size = 512; // Small embedding_dim: use larger block for better occupancy
-    } else if (_embedding_dim >= 1024) {
-        block_size = 128; // Large embedding_dim: use smaller block to reduce register pressure
-    }
-
-    size_t grid_size = (_num_indices + block_size - 1) / block_size;
+    constexpr size_t block_size = 256;
+    size_t grid_size = _num_indices;
 
     // Launch kernel based on dtypes
     if (_input_dtype == INFINI_DTYPE_I32) {

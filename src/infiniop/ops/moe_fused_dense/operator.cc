@@ -2,7 +2,7 @@
 #include "../../handle.h"
 #include "infiniop/ops/moe_fused_dense.h"
 
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/moe_fused_dense_nvidia.cuh"
 #endif
 
@@ -28,6 +28,9 @@ __INFINI_C infiniStatus_t infiniopCreateMoeFusedDenseDescriptor(
 #ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
+#ifdef ENABLE_HYGON_API
+        CREATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -44,6 +47,9 @@ __INFINI_C infiniStatus_t infiniopGetMoeFusedDenseWorkspaceSize(
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API
         GET(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_HYGON_API
+        GET(INFINI_DEVICE_HYGON, nvidia);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -74,6 +80,9 @@ __INFINI_C infiniStatus_t infiniopMoeFusedDense(
 #ifdef ENABLE_NVIDIA_API
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
+#ifdef ENABLE_HYGON_API
+        CALCULATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -89,6 +98,9 @@ __INFINI_C infiniStatus_t infiniopDestroyMoeFusedDenseDescriptor(
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API
         DESTROY(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_HYGON_API
+        DESTROY(INFINI_DEVICE_HYGON, nvidia);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
