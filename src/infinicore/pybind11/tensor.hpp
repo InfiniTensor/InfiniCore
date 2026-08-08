@@ -29,7 +29,14 @@ inline void bind(py::module &m) {
         .def("debug", [](const Tensor &tensor, const std::string &filename) { return tensor->debug(filename); })
 
         .def("copy_", [](Tensor &tensor, const Tensor &other) { tensor->copy_from(other); })
-        .def("to", [](const Tensor &tensor, const Device &device) { return tensor->to(device); })
+        .def(
+            "copy_async_",
+            [](Tensor &tensor, const Tensor &other) { tensor->copy_from_async(other); },
+            py::call_guard<py::gil_scoped_release>())
+        .def(
+            "to",
+            [](const Tensor &tensor, const Device &device) { return tensor->to(device); },
+            py::call_guard<py::gil_scoped_release>())
         .def("contiguous", [](const Tensor &tensor) { return tensor->contiguous(); })
 
         .def("as_strided", [](const Tensor &tensor, const Shape &shape, const Strides &strides) { return tensor->as_strided(shape, strides); })

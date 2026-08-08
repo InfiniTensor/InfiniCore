@@ -187,6 +187,13 @@ public:
     void copy_from(Tensor src);
 
     /**
+     * Queue a non-blocking copy from another tensor on the active device stream.
+     * Cross-device copies require contiguous tensors. D2H destinations and H2D
+     * sources must use page-locked host memory.
+     */
+    void copy_from_async(Tensor src);
+
+    /**
      * Return a tensor with the same data in contiguous arrangement as current tensor.
      * If this tensor is already contiguous, the original tensor is returned.
      *

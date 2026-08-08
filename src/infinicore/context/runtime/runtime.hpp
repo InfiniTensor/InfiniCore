@@ -45,7 +45,7 @@ public:
     std::shared_ptr<Memory> reinstantiateBlob(std::shared_ptr<Memory> blob);
 
     void memcpyH2D(void *dst, const void *src, size_t size, bool async = true);
-    void memcpyD2H(void *dst, const void *src, size_t size);
+    void memcpyD2H(void *dst, const void *src, size_t size, bool async = false);
     void memcpyD2D(void *dst, const void *src, size_t size, bool async = true);
 
     void setDeviceMemory(void *ptr, int value, size_t count);
