@@ -1,8 +1,11 @@
 #ifndef __DIFF_NVIDIA_H__
 #define __DIFF_NVIDIA_H__
 
+#include "../../../../utils.h"
 #include "../../../operator.h"
 #include <cstddef>
+#include <utility>
+#include <vector>
 
 namespace op::diff::nvidia {
 
