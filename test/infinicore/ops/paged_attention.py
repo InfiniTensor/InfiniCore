@@ -27,6 +27,7 @@ _TEST_CASES_DATA = [
     (3, 8, 8, 128, 16, 1024, False),
     (3, 8, 8, 64, 16, 1024, False),
     (8, 64, 8, 128, 16, 2048, False),
+    (2, 8, 2, 128, 256, 512, False),
     # Qwen3.6/Qwen3.5 full attention local TP shapes: head_dim=value_dim=256, GQA ratio=6.
     (1, 24, 4, 256, 16, 32, False),
     (1, 12, 2, 256, 16, 32, False),
@@ -101,6 +102,9 @@ def parse_test_cases():
         for dtype in _TENSOR_DTYPES:
             tolerance = _TOLERANCE_MAP.get(dtype, {"atol": 0, "rtol": 1e-3})
 
+            # The canonical FlashAttention paged path requires int32 indices.
+            index_dtype = infinicore.int32 if block_size == 256 else infinicore.int64
+
             # Create typed tensor specs
             q_spec = TensorSpec.from_tensor(q_shape, None, dtype)
             k_cache_spec = TensorSpec.from_tensor(k_cache_shape, None, dtype)
@@ -109,13 +113,13 @@ def parse_test_cases():
                 block_tables_shape,
                 init_mode=TensorInitializer.MANUAL,
                 set_tensor=block_tables,
-                dtype=infinicore.int64,
+                dtype=index_dtype,
             )
             cache_lens_spec = TensorSpec.from_tensor(
                 cache_lens_shape,
                 init_mode=TensorInitializer.MANUAL,
                 set_tensor=cache_lens_torch,
-                dtype=infinicore.int64,
+                dtype=index_dtype,
             )
 
             # Paged attention operation: returns output tensor

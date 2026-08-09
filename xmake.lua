@@ -356,26 +356,38 @@ end
 
 local infiniops_external_built = false
 
-local function filter_infiniops_ops_for_backend(infiniops_ops)
+local function configure_infiniops_ops(infiniops_ops)
     if not infiniops_ops or #infiniops_ops == 0 then
-        return infiniops_ops
-    end
-    if has_config("nv-gpu") then
-        return infiniops_ops
+        return infiniops_ops, false
     end
 
     local skipped_ops = {
         paged_attention_infinilm = true,
         paged_attention_prefill_infinilm = true
     }
-    local filtered = {}
+    local selected = {}
+    local selected_set = {}
+    local with_linked_flash_attention = false
     for _, op in ipairs(infiniops_ops:split("[,;]")) do
         op = op:trim()
-        if #op > 0 and not skipped_ops[op] then
-            table.insert(filtered, op)
+        if #op > 0 and (has_config("nv-gpu") or not skipped_ops[op]) then
+            table.insert(selected, op)
+            selected_set[op] = true
+            if has_config("nv-gpu") and (op == "paged_attention_infinilm" or op == "flash_attn_with_kvcache") then
+                with_linked_flash_attention = true
+            end
         end
     end
-    return table.concat(filtered, ",")
+
+    if with_linked_flash_attention then
+        for _, op in ipairs({"paged_attention_infinilm", "flash_attn_with_kvcache"}) do
+            if not selected_set[op] then
+                table.insert(selected, op)
+            end
+        end
+    end
+
+    return table.concat(selected, ","), with_linked_flash_attention
 end
 
 local function get_infiniops_backend_cmake_arg()
@@ -419,7 +431,10 @@ local function build_infiniops_external(xmake_os)
         table.insert(cmake_config_args, "-DTORCH_CXX11_ABI=0")
         table.insert(cmake_config_args, "-DCMAKE_CXX_FLAGS=-D_GLIBCXX_USE_CXX11_ABI=0")
     end
-    local infiniops_ops = filter_infiniops_ops_for_backend(os.getenv("INFINI_OPS_OPS"))
+    local infiniops_ops, with_linked_flash_attention = configure_infiniops_ops(os.getenv("INFINI_OPS_OPS"))
+    if with_linked_flash_attention then
+        table.insert(cmake_config_args, "-DWITH_LINKED=ON")
+    end
     if infiniops_ops and #infiniops_ops > 0 then
         table.insert(cmake_config_args, "-DINFINI_OPS_OPS=" .. infiniops_ops)
     end
@@ -727,6 +742,10 @@ target("infinicore_cpp_api")
         end
         add_deps("infiniops_external")
         add_defines("ENABLE_INFINIOPS_API")
+        local _, with_linked_flash_attention = configure_infiniops_ops(os.getenv("INFINI_OPS_OPS"))
+        if with_linked_flash_attention then
+            add_defines("ENABLE_INFINIOPS_LINKED_FLASH_ATTN_WITH_KVCACHE")
+        end
         add_links("infiniops")
         add_rpathdirs(INFINI_ROOT .. "/lib")
         on_load(function (target)

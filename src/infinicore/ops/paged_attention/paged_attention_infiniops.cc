@@ -3,10 +3,13 @@
 #ifdef ENABLE_INFINIOPS_API
 #include "../infiniops_impl.hpp"
 
+#include "base/flash_attn_with_kvcache.h"
 #include "base/paged_attention_infinilm.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <optional>
+#include <vector>
 
 namespace infinicore::op::paged_attention_impl::infiniops {
 namespace {
@@ -22,11 +25,65 @@ std::size_t WorkspaceSizeInBytes(const Tensor &q) {
          * sizeof(float);
 }
 
+bool canUseFlashAttention(const Tensor &out,
+                          const Tensor &q,
+                          const Tensor &k_cache,
+                          const Tensor &v_cache,
+                          const Tensor &block_tables,
+                          const Tensor &cache_lens) {
+#ifdef ENABLE_INFINIOPS_LINKED_FLASH_ATTN_WITH_KVCACHE
+    const auto dtype = q->dtype();
+    return out->device().getType() == Device::Type::NVIDIA
+        && q->ndim() == 3
+        && out->ndim() == 3
+        && k_cache->ndim() == 4
+        && v_cache->ndim() == 4
+        && block_tables->ndim() == 2
+        && cache_lens->ndim() == 1
+        && (dtype == DataType::F16 || dtype == DataType::BF16)
+        && out->dtype() == dtype
+        && k_cache->dtype() == dtype
+        && v_cache->dtype() == dtype
+        && k_cache->shape() == v_cache->shape()
+        && out->size(0) == q->size(0)
+        && out->size(1) == q->size(1)
+        && out->size(2) == v_cache->size(3)
+        && q->size(0) == block_tables->size(0)
+        && q->size(0) == cache_lens->size(0)
+        && k_cache->size(1) > 0
+        && q->size(1) % k_cache->size(1) == 0
+        && q->size(2) == k_cache->size(3)
+        && q->size(2) == v_cache->size(3)
+        && q->size(2) <= 256
+        && q->size(2) % 8 == 0
+        && k_cache->size(2) % 256 == 0
+        && q->stride(2) == 1
+        && out->stride(2) == 1
+        && k_cache->stride(3) == 1
+        && v_cache->stride(3) == 1
+        && block_tables->dtype() == DataType::I32
+        && cache_lens->dtype() == DataType::I32
+        && block_tables->is_contiguous()
+        && cache_lens->is_contiguous();
+#else
+    (void)out;
+    (void)q;
+    (void)k_cache;
+    (void)v_cache;
+    (void)block_tables;
+    (void)cache_lens;
+    return false;
+#endif
+}
+
 struct PlannedMeta {
     TensorMeta out, q, k_cache, v_cache, block_tables, cache_lens;
+    TensorMeta flash_out, flash_q, flash_k_cache, flash_v_cache;
     std::optional<TensorMeta> alibi_slopes;
-    graph::GraphTensor workspace, out_tensor, q_tensor, k_cache_tensor, v_cache_tensor, block_tables_tensor, cache_lens_tensor;
+    std::optional<graph::GraphTensor> workspace;
+    graph::GraphTensor out_tensor, q_tensor, k_cache_tensor, v_cache_tensor, block_tables_tensor, cache_lens_tensor;
     std::optional<graph::GraphTensor> alibi_slopes_tensor;
+    bool use_flash_attention;
     float scale;
 };
 } // namespace
@@ -44,12 +101,21 @@ void *plan(Tensor out,
     if (alibi_slopes) {
         INFINICORE_ASSERT_TENSORS_SAME_DEVICE(out, *alibi_slopes);
     }
+
+    const bool use_flash_attention = canUseFlashAttention(out, q, k_cache, v_cache, block_tables, cache_lens);
+    auto flash_out = out->unsqueeze(1);
+    auto flash_q = q->unsqueeze(1);
+    auto flash_k_cache = k_cache->permute({0, 2, 1, 3});
+    auto flash_v_cache = v_cache->permute({0, 2, 1, 3});
+
     return new PlannedMeta{
         TensorMeta(out), TensorMeta(q), TensorMeta(k_cache), TensorMeta(v_cache), TensorMeta(block_tables), TensorMeta(cache_lens),
+        TensorMeta(flash_out), TensorMeta(flash_q), TensorMeta(flash_k_cache), TensorMeta(flash_v_cache),
         alibi_slopes ? std::optional<TensorMeta>{TensorMeta(*alibi_slopes)} : std::nullopt,
-        graph::GraphTensor(Tensor::empty({WorkspaceSizeInBytes(q)}, DataType::U8, out->device())),
+        use_flash_attention ? std::nullopt : std::optional<graph::GraphTensor>{graph::GraphTensor(Tensor::empty({WorkspaceSizeInBytes(q)}, DataType::U8, out->device()))},
         graph::GraphTensor(out), graph::GraphTensor(q), graph::GraphTensor(k_cache), graph::GraphTensor(v_cache), graph::GraphTensor(block_tables), graph::GraphTensor(cache_lens),
         alibi_slopes ? std::optional<graph::GraphTensor>{graph::GraphTensor(*alibi_slopes)} : std::nullopt,
+        use_flash_attention,
         scale};
 }
 
@@ -57,9 +123,51 @@ void run(void *planned_meta) {
     auto planned = reinterpret_cast<PlannedMeta *>(planned_meta);
     infini::ops::Handle handle;
     handle.set_stream(context::getStream());
-    handle.set_workspace(planned->workspace->data());
-    handle.set_workspace_size_in_bytes(planned->workspace->numel());
+    if (planned->workspace) {
+        handle.set_workspace(planned->workspace.value()->data());
+        handle.set_workspace_size_in_bytes(planned->workspace.value()->numel());
+    }
     infini::ops::Config config;
+
+#ifdef ENABLE_INFINIOPS_LINKED_FLASH_ATTN_WITH_KVCACHE
+    if (planned->use_flash_attention) {
+        config.set_implementation_index(16);
+        const std::optional<infini::ops::Tensor> no_tensor;
+        const std::optional<infini::ops::Tensor> cache_lens{
+            planned->cache_lens.tensor(planned->cache_lens_tensor)};
+        const std::optional<infini::ops::Tensor> block_tables{
+            planned->block_tables.tensor(planned->block_tables_tensor)};
+        const std::optional<infini::ops::Tensor> alibi_slopes = planned->alibi_slopes
+                                                                  ? std::optional<infini::ops::Tensor>{planned->alibi_slopes->tensor(planned->alibi_slopes_tensor.value()->data())}
+                                                                  : std::nullopt;
+        infini::ops::FlashAttnWithKvcache::Call(
+            handle,
+            config,
+            planned->flash_q.tensor(planned->q_tensor),
+            planned->flash_k_cache.tensor(planned->k_cache_tensor),
+            planned->flash_v_cache.tensor(planned->v_cache_tensor),
+            no_tensor,
+            no_tensor,
+            no_tensor,
+            no_tensor,
+            cache_lens,
+            no_tensor,
+            no_tensor,
+            block_tables,
+            alibi_slopes,
+            std::optional<double>{planned->scale},
+            true,
+            std::vector<std::int64_t>{-1, -1},
+            0.0,
+            true,
+            std::int64_t{0},
+            false,
+            planned->flash_out.tensor(planned->out_tensor),
+            no_tensor);
+        return;
+    }
+#endif
+
     infini::ops::PagedAttentionInfinilm::Call(
         handle,
         config,
