@@ -361,40 +361,18 @@ local function configure_infiniops_ops(infiniops_ops)
         return infiniops_ops, false, false
     end
 
-    local skipped_ops = {
-        paged_attention_infinilm = true,
-        paged_attention_prefill_infinilm = true
-    }
     local selected = {}
-    local selected_set = {}
     local with_linked_flash_attn_with_kvcache = false
     local with_linked_flash_attn_varlen_func = false
     for _, op in ipairs(infiniops_ops:split("[,;]")) do
         op = op:trim()
-        if #op > 0 and (has_config("nv-gpu") or not skipped_ops[op]) then
+        if #op > 0 then
             table.insert(selected, op)
-            selected_set[op] = true
-            if has_config("nv-gpu") and (op == "paged_attention_infinilm" or op == "flash_attn_with_kvcache") then
+            if has_config("nv-gpu") and op == "flash_attn_with_kvcache" then
                 with_linked_flash_attn_with_kvcache = true
             end
-            if has_config("nv-gpu") and (op == "paged_attention_prefill_infinilm" or op == "flash_attn_varlen_func") then
+            if has_config("nv-gpu") and op == "flash_attn_varlen_func" then
                 with_linked_flash_attn_varlen_func = true
-            end
-        end
-    end
-
-    if with_linked_flash_attn_with_kvcache then
-        for _, op in ipairs({"paged_attention_infinilm", "flash_attn_with_kvcache"}) do
-            if not selected_set[op] then
-                table.insert(selected, op)
-            end
-        end
-    end
-
-    if with_linked_flash_attn_varlen_func then
-        for _, op in ipairs({"paged_attention_prefill_infinilm", "flash_attn_varlen_func"}) do
-            if not selected_set[op] then
-                table.insert(selected, op)
             end
         end
     end
@@ -1021,7 +999,6 @@ target("infinicore_cpp_api")
     end
     if has_config("infiniops") and not has_config("nv-gpu") then
         remove_files("src/infinicore/ops/paged_attention/paged_attention_infiniops.cc")
-        remove_files("src/infinicore/ops/paged_attention_prefill/paged_attention_prefill_infiniops.cc")
     end
     if has_config("mutual-awareness") then
         add_files("src/infinicore/analyzer/*.cc")

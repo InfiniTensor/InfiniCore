@@ -4,26 +4,27 @@
 #include "../infiniops_impl.hpp"
 
 #include "base/flash_attn_with_kvcache.h"
-#include "base/paged_attention_infinilm.h"
 
-#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <vector>
 
+namespace infinicore::op::paged_attention_impl::infiniop {
+void *plan(Tensor out,
+           const Tensor &q,
+           const Tensor &k_cache,
+           const Tensor &v_cache,
+           const Tensor &block_tables,
+           const Tensor &cache_lens,
+           std::optional<Tensor> alibi_slopes,
+           float scale);
+void run(void *planned_meta);
+void cleanup(void **planned_meta_ptr);
+} // namespace infinicore::op::paged_attention_impl::infiniop
+
 namespace infinicore::op::paged_attention_impl::infiniops {
 namespace {
 using TensorMeta = ::infinicore::op::infiniops::TensorMeta;
-
-constexpr std::size_t kMaxPagedAttentionSplits = 8;
-
-std::size_t WorkspaceSizeInBytes(const Tensor &q) {
-    return kMaxPagedAttentionSplits
-         * static_cast<std::size_t>(q->size(0))
-         * static_cast<std::size_t>(q->size(1))
-         * static_cast<std::size_t>(q->size(2) + 2)
-         * sizeof(float);
-}
 
 bool canUseFlashAttention(const Tensor &out,
                           const Tensor &q,
@@ -77,12 +78,12 @@ bool canUseFlashAttention(const Tensor &out,
 }
 
 struct PlannedMeta {
-    TensorMeta out, q, k_cache, v_cache, block_tables, cache_lens;
     TensorMeta flash_out, flash_q, flash_k_cache, flash_v_cache;
+    TensorMeta block_tables, cache_lens;
     std::optional<TensorMeta> alibi_slopes;
-    std::optional<graph::GraphTensor> workspace;
     graph::GraphTensor out_tensor, q_tensor, k_cache_tensor, v_cache_tensor, block_tables_tensor, cache_lens_tensor;
     std::optional<graph::GraphTensor> alibi_slopes_tensor;
+    void *fallback_meta;
     bool use_flash_attention;
     float scale;
 };
@@ -107,30 +108,30 @@ void *plan(Tensor out,
     auto flash_q = q->unsqueeze(1);
     auto flash_k_cache = k_cache->permute({0, 2, 1, 3});
     auto flash_v_cache = v_cache->permute({0, 2, 1, 3});
+    void *fallback_meta = use_flash_attention
+                            ? nullptr
+                            : paged_attention_impl::infiniop::plan(
+                                out, q, k_cache, v_cache, block_tables, cache_lens, alibi_slopes, scale);
 
     return new PlannedMeta{
-        TensorMeta(out), TensorMeta(q), TensorMeta(k_cache), TensorMeta(v_cache), TensorMeta(block_tables), TensorMeta(cache_lens),
         TensorMeta(flash_out), TensorMeta(flash_q), TensorMeta(flash_k_cache), TensorMeta(flash_v_cache),
+        TensorMeta(block_tables), TensorMeta(cache_lens),
         alibi_slopes ? std::optional<TensorMeta>{TensorMeta(*alibi_slopes)} : std::nullopt,
-        use_flash_attention ? std::nullopt : std::optional<graph::GraphTensor>{graph::GraphTensor(Tensor::empty({WorkspaceSizeInBytes(q)}, DataType::U8, out->device()))},
         graph::GraphTensor(out), graph::GraphTensor(q), graph::GraphTensor(k_cache), graph::GraphTensor(v_cache), graph::GraphTensor(block_tables), graph::GraphTensor(cache_lens),
         alibi_slopes ? std::optional<graph::GraphTensor>{graph::GraphTensor(*alibi_slopes)} : std::nullopt,
+        fallback_meta,
         use_flash_attention,
         scale};
 }
 
 void run(void *planned_meta) {
     auto planned = reinterpret_cast<PlannedMeta *>(planned_meta);
-    infini::ops::Handle handle;
-    handle.set_stream(context::getStream());
-    if (planned->workspace) {
-        handle.set_workspace(planned->workspace.value()->data());
-        handle.set_workspace_size_in_bytes(planned->workspace.value()->numel());
-    }
-    infini::ops::Config config;
 
 #ifdef ENABLE_INFINIOPS_LINKED_FLASH_ATTN_WITH_KVCACHE
     if (planned->use_flash_attention) {
+        infini::ops::Handle handle;
+        handle.set_stream(context::getStream());
+        infini::ops::Config config;
         config.set_implementation_index(16);
         const std::optional<infini::ops::Tensor> no_tensor;
         const std::optional<infini::ops::Tensor> cache_lens{
@@ -168,21 +169,16 @@ void run(void *planned_meta) {
     }
 #endif
 
-    infini::ops::PagedAttentionInfinilm::Call(
-        handle,
-        config,
-        planned->q.tensor(planned->q_tensor),
-        planned->k_cache.tensor(planned->k_cache_tensor),
-        planned->v_cache.tensor(planned->v_cache_tensor),
-        planned->block_tables.tensor(planned->block_tables_tensor),
-        planned->cache_lens.tensor(planned->cache_lens_tensor),
-        planned->alibi_slopes ? std::optional<infini::ops::Tensor>{planned->alibi_slopes->tensor(planned->alibi_slopes_tensor.value()->data())} : std::nullopt,
-        planned->scale,
-        planned->out.tensor(planned->out_tensor));
+    INFINICORE_ASSERT(planned->fallback_meta != nullptr);
+    paged_attention_impl::infiniop::run(planned->fallback_meta);
 }
 
 void cleanup(void **planned_meta_ptr) {
-    delete *reinterpret_cast<PlannedMeta **>(planned_meta_ptr);
+    auto planned = *reinterpret_cast<PlannedMeta **>(planned_meta_ptr);
+    if (planned->fallback_meta != nullptr) {
+        paged_attention_impl::infiniop::cleanup(&planned->fallback_meta);
+    }
+    delete planned;
     *planned_meta_ptr = nullptr;
 }
 
