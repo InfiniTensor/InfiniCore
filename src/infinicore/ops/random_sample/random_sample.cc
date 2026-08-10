@@ -29,6 +29,7 @@ bool tryGreedyWithInfiniOps(Tensor indices, Tensor logits, int topk) {
     infini::ops::Handle handle;
     handle.set_stream(context::getStream());
     infini::ops::Config config;
+    config.set_implementation_index(8);
     const std::optional<int64_t> no_dim;
     infini::ops::Argmax::Call(
         handle,

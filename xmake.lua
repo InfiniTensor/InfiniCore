@@ -417,6 +417,10 @@ local function build_infiniops_external(xmake_os)
         "-DGENERATE_PYTHON_BINDINGS=OFF",
         "-DCMAKE_BUILD_TYPE=Release"
     }
+    if has_config("nv-gpu") then
+        table.insert(cmake_config_args, "-DWITH_TORCH=ON")
+        table.insert(cmake_config_args, "-DINFINI_OPS_TORCH_OPS=argmax")
+    end
     if has_config("iluvatar-gpu") and has_config("aten") then
         table.insert(cmake_config_args, "-DTORCH_CXX11_ABI=0")
         table.insert(cmake_config_args, "-DCMAKE_CXX_FLAGS=-D_GLIBCXX_USE_CXX11_ABI=0")
