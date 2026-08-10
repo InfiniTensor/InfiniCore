@@ -7,13 +7,13 @@ namespace infinicore::op {
 INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(RotaryEmbedding);
 
 RotaryEmbedding::RotaryEmbedding(const Tensor &positions,
-                                   Tensor query,
-                                   std::optional<Tensor> key,
-                                   const Tensor &cos_sin_cache,
-                                   int64_t head_size,
-                                   bool is_neox,
-                                   int64_t rope_dim_offset,
-                                   bool inverse) {
+                                 Tensor query,
+                                 std::optional<Tensor> key,
+                                 const Tensor &cos_sin_cache,
+                                 int64_t head_size,
+                                 bool is_neox,
+                                 int64_t rope_dim_offset,
+                                 bool inverse) {
     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(positions, query, cos_sin_cache);
     if (key) {
         INFINICORE_ASSERT_TENSORS_SAME_DEVICE(query, *key);

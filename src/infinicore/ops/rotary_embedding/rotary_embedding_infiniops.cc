@@ -53,8 +53,8 @@ void run(void *planned_meta) {
     handle.set_stream(context::getStream());
     infini::ops::Config config;
     const std::optional<infini::ops::Tensor> key = planned->key
-                                                      ? std::optional<infini::ops::Tensor>{planned->key->tensor(*planned->key_tensor)}
-                                                      : std::nullopt;
+                                                     ? std::optional<infini::ops::Tensor>{planned->key->tensor(*planned->key_tensor)}
+                                                     : std::nullopt;
     infini::ops::RotaryEmbedding::Call(
         handle,
         config,
