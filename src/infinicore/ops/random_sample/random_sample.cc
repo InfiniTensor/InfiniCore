@@ -2,7 +2,46 @@
 
 #include "../../utils.hpp"
 
+#ifdef ENABLE_INFINIOPS_API
+#include "../infiniops_impl.hpp"
+
+#include "base/argmax.h"
+#endif
+
 namespace infinicore::op {
+namespace {
+
+#ifdef ENABLE_INFINIOPS_API
+bool tryGreedyWithInfiniOps(Tensor indices, Tensor logits, int topk) {
+    const auto dtype = logits->dtype();
+    if (logits->device().getType() != Device::Type::NVIDIA
+        || topk != 1
+        || logits->ndim() != 1
+        || logits->numel() == 0
+        || !logits->is_contiguous()
+        || (dtype != DataType::F16 && dtype != DataType::BF16 && dtype != DataType::F32)
+        || indices->numel() != 1
+        || indices->dtype() != DataType::I64
+        || !indices->is_contiguous()) {
+        return false;
+    }
+
+    infini::ops::Handle handle;
+    handle.set_stream(context::getStream());
+    infini::ops::Config config;
+    const std::optional<int64_t> no_dim;
+    infini::ops::Argmax::Call(
+        handle,
+        config,
+        infiniops::TensorMeta(logits).tensor(logits),
+        no_dim,
+        false,
+        infiniops::TensorMeta(indices).tensor(indices));
+    return true;
+}
+#endif
+
+} // namespace
 
 common::OpDispatcher<RandomSample::schema> &RandomSample::dispatcher() {
     static common::OpDispatcher<RandomSample::schema> dispatcher_;
@@ -14,6 +53,12 @@ void RandomSample::execute(
     float random_val, float topp, int topk, float temperature) {
     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(indices, logits);
     infinicore::context::setDevice(logits->device());
+#ifdef ENABLE_INFINIOPS_API
+    if (tryGreedyWithInfiniOps(indices, logits, topk)) {
+        return;
+    }
+#endif
+
     dispatcher().lookup(logits->device().getType())(
         indices, logits, random_val, topp, topk, temperature);
 }
