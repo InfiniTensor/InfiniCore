@@ -92,6 +92,31 @@ public:
         const size_t fast_tile_len = vector_fast_path ? C / block_count : 1;
         const size_t fast_copy_len = alignTileLen<T>(fast_tile_len, BYTE_ALIGN);
         const size_t fast_channel_begin = block * fast_tile_len;
+        constexpr size_t state_len = 3;
+        constexpr size_t state_tile_limit = 64;
+        size_t state_tile_len = vector_fast_path && fast_tile_len > state_tile_limit
+                                  ? state_tile_limit
+                                  : fast_tile_len;
+        while (state_tile_len > 1
+               && (C % state_tile_len != 0
+                   || (state_tile_len * sizeof(T)) % BYTE_ALIGN != 0)) {
+            --state_tile_len;
+        }
+        const size_t state_copy_len = alignTileLen<T>(state_tile_len, BYTE_ALIGN);
+        const size_t state_vector_copy_len = state_len * state_copy_len;
+        const size_t vector_copy_len = fast_copy_len > state_vector_copy_len
+                                         ? fast_copy_len
+                                         : state_vector_copy_len;
+        const size_t weight_data_bytes = 4 * fast_copy_len * sizeof(T)
+                                               > state_vector_copy_len * sizeof(uint32_t)
+                                           ? 4 * fast_copy_len * sizeof(T)
+                                           : state_vector_copy_len * sizeof(uint32_t);
+        const DataCopyParams state_copy_params = {
+            1, static_cast<uint16_t>(state_len * state_copy_len * sizeof(T) / BYTE_ALIGN),
+            0, 0};
+        const DataCopyParams qkv_copy_params = {
+            1, static_cast<uint16_t>(state_copy_len * sizeof(T) / BYTE_ALIGN),
+            0, 0};
 
         TPipe pipe;
         const event_t mte2_to_v = static_cast<event_t>(
@@ -100,30 +125,27 @@ public:
             pipe.FetchEventID(HardEvent::V_MTE3));
         const event_t s_to_v = static_cast<event_t>(
             pipe.FetchEventID(HardEvent::S_V));
-        const event_t mte2_to_s = static_cast<event_t>(
-            pipe.FetchEventID(HardEvent::MTE2_S));
-        const event_t s_to_mte3 = static_cast<event_t>(
-            pipe.FetchEventID(HardEvent::S_MTE3));
         const event_t v_to_s = static_cast<event_t>(
             pipe.FetchEventID(HardEvent::V_S));
-        const event_t mte3_to_v = static_cast<event_t>(
-            pipe.FetchEventID(HardEvent::MTE3_V));
+        const event_t mte3_to_s = static_cast<event_t>(
+            pipe.FetchEventID(HardEvent::MTE3_S));
         const event_t v_to_mte2 = static_cast<event_t>(
             pipe.FetchEventID(HardEvent::V_MTE2));
         TBuf<QuePosition::VECCALC> x_data_buf, weight_data_buf;
-        TBuf<QuePosition::VECCALC> state_raw_buf, weight_raw_buf, qkv_raw_buf;
+        TBuf<QuePosition::VECCALC> state_raw_buf, weight_raw_buf;
+
         TBuf<QuePosition::VECCALC> bias_data_buf, out_data_buf;
         TBuf<QuePosition::VECCALC> gather_offsets_buf;
         TBuf<QuePosition::VECCALC> x_float_buf, weight_float_buf;
         TBuf<QuePosition::VECCALC> acc_float_buf, tmp_float_buf;
         if (vector_fast_path) {
-            pipe.InitBuffer(x_data_buf, fast_copy_len * sizeof(T));
-            pipe.InitBuffer(weight_data_buf, 4 * fast_copy_len * sizeof(T));
+            pipe.InitBuffer(x_data_buf, vector_copy_len * sizeof(T));
+            pipe.InitBuffer(weight_data_buf, weight_data_bytes);
             pipe.InitBuffer(state_raw_buf, 3 * fast_copy_len * sizeof(T));
+
             pipe.InitBuffer(weight_raw_buf, 4 * fast_copy_len * sizeof(T));
-            pipe.InitBuffer(qkv_raw_buf, fast_copy_len * sizeof(T));
             pipe.InitBuffer(bias_data_buf, fast_copy_len * sizeof(T));
-            pipe.InitBuffer(out_data_buf, fast_copy_len * sizeof(T));
+            pipe.InitBuffer(out_data_buf, vector_copy_len * sizeof(T));
             pipe.InitBuffer(gather_offsets_buf, fast_copy_len * sizeof(uint32_t));
             pipe.InitBuffer(x_float_buf, fast_copy_len * sizeof(float));
             pipe.InitBuffer(weight_float_buf, 4 * fast_copy_len * sizeof(float));
@@ -134,6 +156,7 @@ public:
             LocalTensor<T> weight_raw = weight_raw_buf.Get<T>();
             LocalTensor<float> weight_float = weight_float_buf.Get<float>();
             LocalTensor<uint32_t> gather_offsets = gather_offsets_buf.Get<uint32_t>();
+            LocalTensor<uint32_t> state_pack_offsets = weight_data_buf.Get<uint32_t>();
             if (weight_s0 != 1) {
                 DataCopy(weight_raw,
                          weight[static_cast<ptrdiff_t>(fast_channel_begin) * weight_s0],
@@ -181,6 +204,17 @@ public:
                 gather_offsets.ReinterpretCast<int32_t>(), 0,
                 static_cast<int32_t>(3 * sizeof(T)), fast_tile_len);
             PipeBarrier<PIPE_V>();
+            SetFlag<HardEvent::V_S>(v_to_s);
+            WaitFlag<HardEvent::V_S>(v_to_s);
+            for (size_t channel = 0; channel < state_tile_len; ++channel) {
+                for (size_t k = 0; k < state_len; ++k) {
+                    state_pack_offsets.SetValue(
+                        channel * state_len + k,
+                        static_cast<uint32_t>((k * state_copy_len + channel) * sizeof(T)));
+                }
+            }
+            SetFlag<HardEvent::S_V>(s_to_v);
+            WaitFlag<HardEvent::S_V>(s_to_v);
         }
         for (size_t request = 0; request < request_count; ++request) {
             int64_t token_begin = 0;
@@ -214,7 +248,6 @@ public:
                     LocalTensor<T> x_data = x_data_buf.Get<T>();
                     LocalTensor<T> state_raw = state_raw_buf.Get<T>();
                     LocalTensor<T> weight_raw = weight_raw_buf.Get<T>();
-                    LocalTensor<T> qkv_raw = qkv_raw_buf.Get<T>();
                     LocalTensor<T> bias_data = bias_data_buf.Get<T>();
                     LocalTensor<T> out_data = out_data_buf.Get<T>();
                     LocalTensor<float> x_float = x_float_buf.Get<float>();
@@ -227,8 +260,8 @@ public:
                     if (state_s1 != 1) {
                         DataCopy(state_raw, conv_state[state_base],
                                  3 * fast_copy_len);
-                        SetFlag<HardEvent::MTE2_S>(mte2_to_s);
-                        WaitFlag<HardEvent::MTE2_S>(mte2_to_s);
+                        SetFlag<HardEvent::MTE2_V>(mte2_to_v);
+                        WaitFlag<HardEvent::MTE2_V>(mte2_to_v);
                     }
                     if (has_bias) {
                         DataCopy(bias_data,
@@ -296,8 +329,8 @@ public:
                             WaitFlag<HardEvent::V_MTE3>(v_to_mte3);
                             DataCopy(out[out_offset], out_data, fast_tile_len);
                         }
-                        SetFlag<HardEvent::MTE3_V>(mte3_to_v);
-                        WaitFlag<HardEvent::MTE3_V>(mte3_to_v);
+                        SetFlag<HardEvent::MTE3_S>(mte3_to_s);
+                        WaitFlag<HardEvent::MTE3_S>(mte3_to_s);
                     }
                 } else {
                     for (size_t channel = block; channel < C; channel += block_count) {
@@ -341,43 +374,67 @@ public:
                                               && (write_to_pool
                                                   || (final_s1 == 3 && final_s2 == 1));
                 if (vector_state_update) {
-                    LocalTensor<T> state_raw = state_raw_buf.Get<T>();
-                    LocalTensor<T> qkv_raw = qkv_raw_buf.Get<T>();
-                    for (int k = 0; k < 3; ++k) {
-                        const int64_t history_pos = request_len + k;
-                        if (history_pos < 3) {
-                            for (size_t i = 0; i < fast_tile_len; ++i) {
-                                state_raw.SetValue(
-                                    i * 3 + k,
-                                    state_raw.GetValue(i * 3 + history_pos));
-                            }
-                        } else {
-                            const int64_t token_idx = token_begin + history_pos - 3;
-                            const ptrdiff_t qkv_offset = static_cast<ptrdiff_t>(token_batch) * qkv_s0
-                                                       + static_cast<ptrdiff_t>(token_idx) * qkv_s1
-                                                       + static_cast<ptrdiff_t>(fast_channel_begin);
-                            DataCopy(qkv_raw, qkv[qkv_offset], fast_copy_len);
-                            SetFlag<HardEvent::MTE2_S>(mte2_to_s);
-                            WaitFlag<HardEvent::MTE2_S>(mte2_to_s);
-                            for (size_t i = 0; i < fast_tile_len; ++i) {
-                                state_raw.SetValue(
-                                    i * 3 + k, qkv_raw.GetValue(i));
+                    // Each core updates only the channels it has already consumed,
+                    // avoiding cross-core races when source and target slots are identical.
+                    for (size_t state_channel_begin = fast_channel_begin;
+                         state_channel_begin < fast_channel_begin + fast_tile_len;
+                         state_channel_begin += state_tile_len) {
+                        const ptrdiff_t state_base = read_slot * state_s0
+                                                   + static_cast<ptrdiff_t>(state_channel_begin) * state_s1;
+
+                        LocalTensor<uint32_t> gather_offsets = gather_offsets_buf.Get<uint32_t>();
+                        LocalTensor<uint32_t> state_pack_offsets = weight_data_buf.Get<uint32_t>();
+                        LocalTensor<T> state_update = state_raw_buf.Get<T>();
+                        LocalTensor<T> state_planar = out_data_buf.Get<T>();
+                        LocalTensor<T> state_packed = x_data_buf.Get<T>();
+                        DataCopy(state_update, conv_state[state_base], state_copy_params);
+                        SetFlag<HardEvent::MTE2_V>(mte2_to_v);
+                        WaitFlag<HardEvent::MTE2_V>(mte2_to_v);
+                        ArithProgression<int32_t>(
+                            gather_offsets.ReinterpretCast<int32_t>(), 0,
+                            static_cast<int32_t>(state_len * sizeof(T)), state_tile_len);
+                        PipeBarrier<PIPE_V>();
+                        const ptrdiff_t target_base = write_to_pool
+                                                        ? write_slot * state_s0
+                                                              + static_cast<ptrdiff_t>(state_channel_begin) * state_s1
+                                                        : static_cast<ptrdiff_t>(request) * final_s0
+                                                              + static_cast<ptrdiff_t>(state_channel_begin) * final_s1;
+                        for (size_t k = 0; k < state_len; ++k) {
+                            const int64_t history_pos = request_len + k;
+                            if (history_pos < 3) {
+                                Gather(state_planar[k * state_copy_len], state_update,
+                                       gather_offsets, history_pos * sizeof(T), state_tile_len);
+                                PipeBarrier<PIPE_V>();
+                            } else {
+                                const int64_t token_idx = token_begin + history_pos - 3;
+                                const ptrdiff_t qkv_offset = static_cast<ptrdiff_t>(token_batch) * qkv_s0
+                                                           + static_cast<ptrdiff_t>(token_idx) * qkv_s1
+                                                           + static_cast<ptrdiff_t>(state_channel_begin);
+                                DataCopy(state_planar[k * state_copy_len],
+                                         qkv[qkv_offset], qkv_copy_params);
+                                SetFlag<HardEvent::MTE2_V>(mte2_to_v);
+                                WaitFlag<HardEvent::MTE2_V>(mte2_to_v);
                             }
                         }
-                    }
-                    const ptrdiff_t target_base = write_to_pool
-                                                    ? write_slot * state_s0
-                                                          + static_cast<ptrdiff_t>(fast_channel_begin) * state_s1
-                                                    : static_cast<ptrdiff_t>(request) * final_s0
-                                                          + static_cast<ptrdiff_t>(fast_channel_begin) * final_s1;
-                    SetFlag<HardEvent::S_MTE3>(s_to_mte3);
-                    WaitFlag<HardEvent::S_MTE3>(s_to_mte3);
-                    if (write_to_pool) {
-                        DataCopy(conv_state[target_base], state_raw,
-                                 3 * fast_copy_len);
-                    } else {
-                        DataCopy(final_state[target_base], state_raw,
-                                 3 * fast_copy_len);
+                        const size_t state_pack_len = state_len * state_tile_len;
+                        for (size_t pack_begin = 0; pack_begin < state_pack_len;
+                             pack_begin += state_tile_limit) {
+                            const size_t pack_count = state_pack_len - pack_begin < state_tile_limit
+                                                        ? state_pack_len - pack_begin
+                                                        : state_tile_limit;
+                            Gather(state_packed[pack_begin], state_planar,
+                                   state_pack_offsets[pack_begin], 0, pack_count);
+                            PipeBarrier<PIPE_V>();
+                        }
+                        SetFlag<HardEvent::V_MTE3>(v_to_mte3);
+                        WaitFlag<HardEvent::V_MTE3>(v_to_mte3);
+                        if (write_to_pool) {
+                            DataCopy(conv_state[target_base], state_packed, state_copy_params);
+                        } else {
+                            DataCopy(final_state[target_base], state_packed, state_copy_params);
+                        }
+                        SetFlag<HardEvent::MTE3_S>(mte3_to_s);
+                        WaitFlag<HardEvent::MTE3_S>(mte3_to_s);
                     }
                 } else {
                     for (size_t channel = block * block_channels; channel < channel_end; ++channel) {
@@ -404,12 +461,14 @@ public:
                 }
             }
         }
-        if (!update_state_only) {
-            DataCacheCleanAndInvalid<T, CacheLine::ENTIRE_DATA_CACHE>(out);
-        }
-        DataCacheCleanAndInvalid<T, CacheLine::ENTIRE_DATA_CACHE>(conv_state);
-        if (final_state_ptr != nullptr) {
-            DataCacheCleanAndInvalid<T, CacheLine::ENTIRE_DATA_CACHE>(final_state);
+        if (!vector_fast_path) {
+            if (!update_state_only) {
+                DataCacheCleanAndInvalid<T, CacheLine::ENTIRE_DATA_CACHE>(out);
+            }
+            DataCacheCleanAndInvalid<T, CacheLine::ENTIRE_DATA_CACHE>(conv_state);
+            if (final_state_ptr != nullptr) {
+                DataCacheCleanAndInvalid<T, CacheLine::ENTIRE_DATA_CACHE>(final_state);
+            }
         }
     }
 };
@@ -438,9 +497,9 @@ public:
                        weight_s0, weight_s2, bias_s0);                                   \
     }
 
-DEFINE_CAUSAL_CONV1D_KERNEL(causal_conv1d_half, half)
-DEFINE_CAUSAL_CONV1D_KERNEL(causal_conv1d_float, float)
-DEFINE_CAUSAL_CONV1D_KERNEL(causal_conv1d_bf16, bfloat16_t)
+DEFINE_CAUSAL_CONV1D_KERNEL(causal_conv1d_half_state_pack_v2, half)
+DEFINE_CAUSAL_CONV1D_KERNEL(causal_conv1d_float_state_pack_v2, float)
+DEFINE_CAUSAL_CONV1D_KERNEL(causal_conv1d_bf16_state_pack_v2, bfloat16_t)
 #undef DEFINE_CAUSAL_CONV1D_KERNEL
 
 extern "C" infiniStatus_t causal_conv1d_kernel_launch(
@@ -496,9 +555,9 @@ extern "C" infiniStatus_t causal_conv1d_kernel_launch(
         }                                                                    \
         return INFINI_STATUS_SUCCESS;
     switch (dtype) {
-        LAUNCH_CASE(INFINI_DTYPE_F16, causal_conv1d_half)
-        LAUNCH_CASE(INFINI_DTYPE_F32, causal_conv1d_float)
-        LAUNCH_CASE(INFINI_DTYPE_BF16, causal_conv1d_bf16)
+        LAUNCH_CASE(INFINI_DTYPE_F16, causal_conv1d_half_state_pack_v2)
+        LAUNCH_CASE(INFINI_DTYPE_F32, causal_conv1d_float_state_pack_v2)
+        LAUNCH_CASE(INFINI_DTYPE_BF16, causal_conv1d_bf16_state_pack_v2)
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }

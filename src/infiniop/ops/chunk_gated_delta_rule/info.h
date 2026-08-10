@@ -15,6 +15,7 @@ class ChunkGatedDeltaRuleInfo {
 
 public:
     infiniDtype_t data_dtype;
+    infiniDtype_t state_dtype;
     infiniDtype_t gate_dtype;
     infiniDtype_t cu_seqlens_dtype;
     infiniDtype_t initial_state_indices_dtype;
@@ -62,7 +63,14 @@ public:
 
         auto data_dtype = q_desc->dtype();
         CHECK_DTYPE(data_dtype, INFINI_DTYPE_F16, INFINI_DTYPE_BF16, INFINI_DTYPE_F32);
-        if (k_desc->dtype() != data_dtype || v_desc->dtype() != data_dtype || out_desc->dtype() != data_dtype || initial_state_desc->dtype() != data_dtype || (final_state_desc != nullptr && final_state_desc->dtype() != data_dtype)) {
+        if (k_desc->dtype() != data_dtype || v_desc->dtype() != data_dtype || out_desc->dtype() != data_dtype) {
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
+
+        auto state_dtype = initial_state_desc->dtype();
+        CHECK_DTYPE(state_dtype, INFINI_DTYPE_F16, INFINI_DTYPE_BF16, INFINI_DTYPE_F32);
+        if ((state_dtype != data_dtype && state_dtype != INFINI_DTYPE_F32)
+            || (final_state_desc != nullptr && final_state_desc->dtype() != state_dtype)) {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
 
@@ -167,6 +175,7 @@ public:
 
         ChunkGatedDeltaRuleInfo info;
         info.data_dtype = data_dtype;
+        info.state_dtype = state_dtype;
         info.gate_dtype = gate_dtype;
         info.cu_seqlens_dtype = cu_dtype;
         info.initial_state_indices_dtype = initial_indices_dtype;

@@ -160,6 +160,7 @@ infiniStatus_t Descriptor::create(
                                  && info.beta_strides[1] == static_cast<ptrdiff_t>(info.Hv)
                                  && info.beta_strides[2] == 1;
     opaque->aclnn = info.data_dtype == INFINI_DTYPE_BF16
+                 && info.state_dtype == INFINI_DTYPE_BF16
                  && info.gate_dtype == INFINI_DTYPE_F32
                  && info.use_qk_l2norm
                  && info.has_cu_seqlens
@@ -437,6 +438,7 @@ infiniStatus_t Descriptor::calculate(
 
     GatedDeltaRuleAscendParams p{};
     p.data_dtype = static_cast<int32_t>(_info.data_dtype);
+    p.state_dtype = static_cast<int32_t>(_info.state_dtype);
     p.gate_dtype = static_cast<int32_t>(_info.gate_dtype);
     p.use_qk_l2norm = _info.use_qk_l2norm;
     p.has_cu_seqlens = _info.has_cu_seqlens;

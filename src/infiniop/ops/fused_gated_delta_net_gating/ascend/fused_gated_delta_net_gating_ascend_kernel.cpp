@@ -17,6 +17,23 @@ __aicore__ inline float gatingToFloat(T value) {
     }
 }
 
+template <typename T>
+__aicore__ inline float gatingRoundToInput(float value) {
+    // vLLM stores sigmoid(beta) in the model dtype before the recurrent
+    // update. Preserve that rounding point while keeping the public output F32.
+    if constexpr (std::is_same<T, bfloat16_t>::value) {
+        uint32_t bits = *reinterpret_cast<uint32_t *>(&value);
+        // BF16 round-to-nearest-even. Returning the expanded FP32 value avoids
+        // an unsupported scalar float -> bfloat16_t cast in the AscendC backend.
+        uint32_t rounding_bias = 0x7fffu + ((bits >> 16) & 1u);
+        bits += rounding_bias;
+        bits &= 0xffff0000u;
+        return *reinterpret_cast<float *>(&bits);
+    } else {
+        return gatingToFloat(static_cast<T>(value));
+    }
+}
+
 // AscendC does not expose the host scalar exp/log functions to AICore code.
 // These helpers use range reduction and short polynomials instead.
 __aicore__ inline float gatingExp(float x) {
@@ -143,8 +160,14 @@ __aicore__ inline void fused_gated_delta_net_gating_process(
         float decay = -gatingExp(gatingToFloat(
             A_log.GetValue(static_cast<ptrdiff_t>(h) * A_log_s0)));
         g.SetValue(g_off, decay * gatingSoftplus(x, beta, threshold));
-        beta_output.SetValue(
-            beta_off, gatingSigmoid(gatingToFloat(b.GetValue(b_off))));
+        float beta_value = gatingSigmoid(gatingToFloat(b.GetValue(b_off)));
+        // vLLM's Qwen3.5 decode fusion keeps sigmoid(b) in FP32, while its
+        // prefill path materializes beta in the model dtype. InfiniLM lays
+        // decode out as [active_sequences, 1, heads].
+        if (seq_len != 1) {
+            beta_value = gatingRoundToInput<T>(beta_value);
+        }
+        beta_output.SetValue(beta_off, beta_value);
     }
 }
 

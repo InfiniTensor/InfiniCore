@@ -1,17 +1,18 @@
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import infinicore
 import torch
 from framework import (
     BaseOperatorTest,
-    TensorSpec,
-    TestCase,
     GenericTestRunner,
     TensorInitializer,
+    TensorSpec,
+    TestCase,
 )
+
+import infinicore
 
 # Test cases:
 # (n_khead, kdim, n_vhead, vdim, seqlens, init_state_indices, final_state_indices, state_pool_size)
@@ -290,6 +291,39 @@ def parse_varlen_test_cases():
                     description="ChunkGatedDeltaRule - VARLEN_INDEXED_STATE_POOL",
                 )
             )
+
+            if dtype == infinicore.bfloat16:
+                tests.append(
+                    TestCase(
+                        inputs=[
+                            q_spec,
+                            k_spec,
+                            v_spec,
+                            g_spec,
+                            beta_spec,
+                            TensorSpec.from_tensor(
+                                state_shape,
+                                None,
+                                infinicore.float32,
+                                init_mode=TensorInitializer.ZEROS,
+                            ),
+                            cu_seqlens_spec,
+                            init_indices_spec,
+                            final_indices_spec,
+                        ],
+                        kwargs={
+                            "use_qk_l2norm": True,
+                            "chunk_size": 64,
+                        },
+                        output_spec=None,
+                        comparison_target=None,
+                        tolerance=_TOLERANCE_MAP[infinicore.bfloat16],
+                        description=(
+                            "ChunkGatedDeltaRule - VARLEN_INDEXED_STATE_POOL "
+                            "BF16 data with FP32 state"
+                        ),
+                    )
+                )
 
     return tests
 

@@ -7,6 +7,7 @@
 
 struct GatedDeltaRuleAscendParams {
     int32_t data_dtype;
+    int32_t state_dtype;
     int32_t gate_dtype;
     bool use_qk_l2norm;
     bool has_cu_seqlens;
