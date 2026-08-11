@@ -85,6 +85,7 @@ public:
     double theta() const { return theta_; }
     Algo algo() const { return algo_; }
     DataType dtype() const { return dtype_; }
+    Tensor cos_sin_cache() const { return cos_sin_cache_; }
     const std::optional<std::vector<int>> &mrope_section() const { return mrope_section_; }
     bool mrope_interleaved() const { return mrope_interleaved_; }
     const Tensor &sin_cache() const { return sin_cache_; }
@@ -97,6 +98,7 @@ protected:
     // Buffers (sin and cos cache tables) - not exposed in state_dict
     INFINICORE_NN_BUFFER(sin_cache);
     INFINICORE_NN_BUFFER(cos_cache);
+    INFINICORE_NN_BUFFER(cos_sin_cache);
 
 private:
     void initialize_cache();
