@@ -2,7 +2,7 @@
 
 ## 介绍
 
-使用 python 脚本生成包含测例的 `.gguf` 文件，并使用 `infiniop-test` 程序进行测试。
+使用 python 脚本生成包含测例的 `.gguf` 文件，并使用 `infiniop-test` 程序进行测试。可以手动执行各个步骤，也可以使用自动化脚本一次性完成整个流程。
 
 ## 运行方式
 
@@ -34,6 +34,36 @@ infiniop-test --help
 ```bash
 infiniop-test gemm.gguf --cpu --warmup 20 --run 1000
 ```
+
+## 自动化运行方式
+
+使用 python 脚本自动化完成上述所有步骤，包括编译、生成测例和在 CPU 上进行测试。
+
+```bash
+cd /test/infiniop-test/
+python -m test_generate.auto_gemm_test --overwrite
+```
+
+### 参数说明
+
+`--config` 模型列表配置文件，指定 `HuggingFace patterns`，默认值为 `config-hub.json`，示例如下。
+
+```bash
+{
+  "facebook/opt-125m": [ "decoder.layers.*.self_attn.q_proj.weight" ],
+  "t5-small": [ "encoder.block.*.layer.0.SelfAttention.q.weight" ]
+}
+```
+
+`--model-path` 模型存储根目录，若指定，则扫描该目录下的模型文件夹而不使用模型列表配置文件，默认值为 `None`。
+
+`--output` 输出目录，默认值为 `gguf_output`。
+
+`--warmup` 预热次数，类型为整数，默认值为 20。
+
+`--run` 测试次数，类型为整数，默认值为 1000。
+
+`--overwrite` 覆盖已有输出，使用该参数时会覆盖已有的输出文件。
 
 ## 自定义测例
 
