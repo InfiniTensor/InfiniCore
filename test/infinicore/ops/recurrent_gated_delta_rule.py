@@ -41,10 +41,11 @@ def ref_recurrent_gated_delta_rule(
     initial_state,
     use_qk_l2norm=False,
 ):
-    initial_dtype = query.dtype
+    output_dtype = query.dtype
+    state_dtype = initial_state.dtype
     if use_qk_l2norm:
-        query = torch_F.normalize(query, p=2, dim=-1)
-        key = torch_F.normalize(key, p=2, dim=-1)
+        query = torch_F.normalize(query, p=2, dim=-1, eps=1e-6)
+        key = torch_F.normalize(key, p=2, dim=-1, eps=1e-6)
 
     query, key, value, beta, g = [
         x.contiguous().to(torch.float32) for x in (query, key, value, beta, g)
@@ -82,8 +83,8 @@ def ref_recurrent_gated_delta_rule(
             state[:, vh] = state_t
             out[:, i, vh] = (state_t * q_t.unsqueeze(-1)).sum(dim=-2)
 
-    return out.contiguous().to(initial_dtype), state.transpose(-1, -2).contiguous().to(
-        initial_dtype
+    return out.contiguous().to(output_dtype), state.transpose(-1, -2).contiguous().to(
+        state_dtype
     )
 
 
@@ -181,6 +182,32 @@ def parse_test_cases():
                     tolerance=tol,
                 )
             )
+
+    # Qwen3.5 keeps Q/K/V in BF16 while its recurrent SSM cache is FP32.
+    B, Hk, Hv, D = 16, 4, 12, 128
+    tests.append(
+        TestCase(
+            inputs=[
+                tensor_spec((B, 1, Hk, D), infinicore.bfloat16),
+                tensor_spec((B, 1, Hk, D), infinicore.bfloat16),
+                tensor_spec((B, 1, Hv, D), infinicore.bfloat16),
+                gate_spec((B, 1, Hv)),
+                beta_spec((B, 1, Hv)),
+                TensorSpec.from_tensor((B + 1, Hv, D, D), None, infinicore.float32),
+                index_spec(range(1, B + 1)),
+                index_spec(range(1, B + 1)),
+            ],
+            kwargs={
+                "mode": "indexed_pool",
+                "use_qk_l2norm": True,
+            },
+            output_count=2,
+            description=(
+                "Qwen3.5 decode B=16 Hk=4 Hv=12 D=128 BF16 data with FP32 state"
+            ),
+            tolerance=_TOLERANCE_MAP[infinicore.bfloat16],
+        )
+    )
 
     for dtype in _TENSOR_DTYPES:
         tests.append(

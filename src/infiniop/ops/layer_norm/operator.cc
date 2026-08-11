@@ -17,6 +17,9 @@
 #ifdef ENABLE_CAMBRICON_API
 #include "bang/layer_norm_bang.h"
 #endif
+#ifdef ENABLE_ASCEND_API
+#include "ascend/layer_norm_ascend.h"
+#endif
 
 __INFINI_C infiniStatus_t infiniopCreateLayerNormDescriptor(
     infiniopHandle_t handle,
@@ -70,6 +73,9 @@ __INFINI_C infiniStatus_t infiniopCreateLayerNormDescriptor(
 #ifdef ENABLE_CAMBRICON_API
         CREATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
+#ifdef ENABLE_ASCEND_API
+        CREATE(INFINI_DEVICE_ASCEND, ascend);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -111,6 +117,9 @@ __INFINI_C infiniStatus_t infiniopGetLayerNormWorkspaceSize(infiniopLayerNormDes
 #endif
 #ifdef ENABLE_CAMBRICON_API
         GET(INFINI_DEVICE_CAMBRICON, bang);
+#endif
+#ifdef ENABLE_ASCEND_API
+        GET(INFINI_DEVICE_ASCEND, ascend);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -174,6 +183,9 @@ __INFINI_C infiniStatus_t infiniopLayerNorm(
 #ifdef ENABLE_CAMBRICON_API
         CALCULATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
+#ifdef ENABLE_ASCEND_API
+        CALCULATE(INFINI_DEVICE_ASCEND, ascend);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -218,6 +230,9 @@ infiniopDestroyLayerNormDescriptor(infiniopLayerNormDescriptor_t desc) {
 #endif
 #ifdef ENABLE_ILUVATAR_API
         DELETE(INFINI_DEVICE_ILUVATAR, nvidia);
+#endif
+#ifdef ENABLE_ASCEND_API
+        DELETE(INFINI_DEVICE_ASCEND, ascend);
 #endif
 
     default:

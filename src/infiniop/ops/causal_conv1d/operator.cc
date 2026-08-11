@@ -12,6 +12,9 @@
 #include "moore/causal_conv1d_moore.h"
 #endif
 
+#ifdef ENABLE_ASCEND_API
+#include "ascend/causal_conv1d_ascend.h"
+#endif
 __INFINI_C infiniStatus_t infiniopCreateCausalConv1dDescriptor(
     infiniopHandle_t handle,
     infiniopCausalConv1dDescriptor_t *desc_ptr,
@@ -47,6 +50,9 @@ __INFINI_C infiniStatus_t infiniopCreateCausalConv1dDescriptor(
 #ifdef ENABLE_MOORE_API
         CREATE(INFINI_DEVICE_MOORE, moore)
 #endif
+#ifdef ENABLE_ASCEND_API
+        CREATE(INFINI_DEVICE_ASCEND, ascend)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -72,6 +78,9 @@ __INFINI_C infiniStatus_t infiniopGetCausalConv1dWorkspaceSize(
 #endif
 #ifdef ENABLE_MOORE_API
         GET(INFINI_DEVICE_MOORE, moore)
+#endif
+#ifdef ENABLE_ASCEND_API
+        GET(INFINI_DEVICE_ASCEND, ascend)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -113,6 +122,9 @@ __INFINI_C infiniStatus_t infiniopCausalConv1d(
 #ifdef ENABLE_MOORE_API
         CALCULATE(INFINI_DEVICE_MOORE, moore)
 #endif
+#ifdef ENABLE_ASCEND_API
+        CALCULATE(INFINI_DEVICE_ASCEND, ascend)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -138,6 +150,9 @@ __INFINI_C infiniStatus_t infiniopDestroyCausalConv1dDescriptor(
 #endif
 #ifdef ENABLE_MOORE_API
         DESTROY(INFINI_DEVICE_MOORE, moore)
+#endif
+#ifdef ENABLE_ASCEND_API
+        DESTROY(INFINI_DEVICE_ASCEND, ascend)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

@@ -2,6 +2,7 @@
 
 #include "infinicore/context/context.hpp"
 #include "infinicore/ops/mha_varlen.hpp"
+#include "infinicore/ops/paged_attention_prefill.hpp"
 #include "native/ascend/workspace_pool_.h"
 
 #include <acl/acl.h>
@@ -210,43 +211,90 @@ void run(void *planned_meta) {
     auto k_shape = p->k->shape();
     const int64_t num_heads = q_shape[1];
     const int64_t head_size = q_shape[2];
-    const int64_t block_size_val = k_shape[1];
-    const int64_t num_kv_heads = k_shape[2];
+    // Ascend paged KV cache is physical BnNBsD.
     const int64_t num_blocks = k_shape[0];
+    const int64_t num_kv_heads = k_shape[1];
+    const int64_t block_size_val = k_shape[2];
 
     Tensor q_work = p->q->is_contiguous() ? Tensor(p->q) : p->q->contiguous();
     Tensor k_work = p->k->is_contiguous() ? Tensor(p->k) : p->k->contiguous();
     Tensor v_work = p->v->is_contiguous() ? Tensor(p->v) : p->v->contiguous();
     Tensor out_work = p->out->is_contiguous() ? Tensor(p->out) : p->out->contiguous();
 
+    aclrtStream stream = static_cast<aclrtStream>(infinicore::context::getStream());
+    const bool use_bnsd = head_size == 256;
+    int64_t max_q_len = static_cast<int64_t>(q_shape[0]);
+    Tensor q_acl_storage = q_work;
+    Tensor out_acl_storage = out_work;
+    std::vector<int64_t> actual_seq_q_for_acl = actual_seq_q_vec;
+
+    if (use_bnsd) {
+        max_q_len = 0;
+        actual_seq_q_for_acl.clear();
+        for (int64_t i = 0; i < batch_size; ++i) {
+            int64_t q_len = cu_q_host[i + 1] - cu_q_host[i];
+            actual_seq_q_for_acl.push_back(q_len);
+            max_q_len = std::max(max_q_len, q_len);
+        }
+
+        q_acl_storage = Tensor::empty(
+            {static_cast<size_t>(batch_size), static_cast<size_t>(num_heads),
+             static_cast<size_t>(max_q_len), static_cast<size_t>(head_size)},
+            q_work->dtype(), q_work->device());
+        out_acl_storage = Tensor::empty(
+            {static_cast<size_t>(batch_size), static_cast<size_t>(num_heads),
+             static_cast<size_t>(max_q_len), static_cast<size_t>(head_size)},
+            out_work->dtype(), out_work->device());
+
+        // Pack ragged token-major TND directly into physical BNSD. The
+        // metadata views are free; copy_from performs one strided device copy
+        // per request without an intermediate BSND allocation.
+        for (int64_t i = 0; i < batch_size; ++i) {
+            const size_t q_begin = static_cast<size_t>(cu_q_host[i]);
+            const size_t q_len = static_cast<size_t>(actual_seq_q_for_acl[i]);
+            Tensor src = q_work->narrow({{0, q_begin, q_len}})
+                             ->permute({1, 0, 2});
+            Tensor dst = q_acl_storage
+                             ->narrow({{0, static_cast<size_t>(i), 1},
+                                       {2, 0, q_len}})
+                             ->squeeze(0);
+            dst->copy_from(src);
+        }
+    }
+
     aclDataType q_dtype = to_acl_dtype(q_work->dtype());
 
-    // Query is already contiguous TND [total_q, num_heads, head_size].
-    std::vector<int64_t> q_dims = {static_cast<int64_t>(q_shape[0]), num_heads,
-                                   head_size};
-    std::vector<int64_t> q_strides = {num_heads * head_size, head_size, 1};
+    // TND rejects head_dim=256 on the installed CANN. Pack query once into
+    // physical BNSD and request BSND output so the consumer keeps its native
+    // token-major layout.
+    std::vector<int64_t> q_dims = use_bnsd
+                                    ? std::vector<int64_t>{batch_size, num_heads, max_q_len, head_size}
+                                    : std::vector<int64_t>{static_cast<int64_t>(q_shape[0]), num_heads, head_size};
+    std::vector<int64_t> q_strides = use_bnsd
+                                       ? std::vector<int64_t>{num_heads * max_q_len * head_size,
+                                                              max_q_len * head_size, head_size, 1}
+                                       : std::vector<int64_t>{num_heads * head_size, head_size, 1};
     aclTensor *query_acl = aclCreateTensor(
         q_dims.data(), q_dims.size(), q_dtype, q_strides.data(), 0, ACL_FORMAT_ND,
         q_dims.data(), q_dims.size(),
-        const_cast<void *>(reinterpret_cast<const void *>(q_work->data())));
+        const_cast<void *>(reinterpret_cast<const void *>(q_acl_storage->data())));
 
-    // The physical BnBsND cache is contiguous in N and D, so expose it to FIA
-    // as BnBsH without copying.
-    std::vector<int64_t> k_dims = {num_blocks, block_size_val,
-                                   num_kv_heads * head_size};
-    std::vector<int64_t> k_strides = {num_kv_heads * block_size_val * head_size,
-                                      num_kv_heads * head_size, 1};
+    std::vector<int64_t> k_dims = {
+        num_blocks, num_kv_heads, block_size_val, head_size};
+    std::vector<int64_t> k_strides = {
+        num_kv_heads * block_size_val * head_size,
+        block_size_val * head_size, head_size, 1};
     aclTensor *k_acl_tensor = aclCreateTensor(
         k_dims.data(), k_dims.size(), q_dtype, k_strides.data(), 0, ACL_FORMAT_ND,
         k_dims.data(), k_dims.size(),
         const_cast<void *>(reinterpret_cast<const void *>(k_work->data())));
     aclTensorList *key_acl = aclCreateTensorList(&k_acl_tensor, 1);
 
-    // Value uses the same contiguous BnBsH representation.
-    std::vector<int64_t> v_dims = {num_blocks, block_size_val,
-                                   num_kv_heads * head_size};
-    std::vector<int64_t> v_strides = {num_kv_heads * block_size_val * head_size,
-                                      num_kv_heads * head_size, 1};
+    std::vector<int64_t> v_dims = {
+        num_blocks, num_kv_heads, block_size_val, head_size};
+    std::vector<int64_t> v_strides = {
+        num_kv_heads * block_size_val * head_size,
+        block_size_val * head_size, head_size, 1};
     aclTensor *v_acl_tensor = aclCreateTensor(
         v_dims.data(), v_dims.size(), q_dtype, v_strides.data(), 0, ACL_FORMAT_ND,
         v_dims.data(), v_dims.size(),
@@ -267,22 +315,29 @@ void run(void *planned_meta) {
             const_cast<void *>(reinterpret_cast<const void *>(bt_work->data())));
     }
 
-    // FIA writes directly to contiguous TND output.
+    // FIA writes directly to the same contiguous output storage.
     auto out_shape = out_work->shape();
-    std::vector<int64_t> out_dims = {static_cast<int64_t>(out_shape[0]),
-                                     num_heads, head_size};
-    std::vector<int64_t> out_strides = {num_heads * head_size, head_size, 1};
+    std::vector<int64_t> out_dims = use_bnsd
+                                      ? std::vector<int64_t>{batch_size, num_heads, max_q_len, head_size}
+                                      : std::vector<int64_t>{static_cast<int64_t>(out_shape[0]), num_heads, head_size};
+    std::vector<int64_t> out_strides = use_bnsd
+                                         ? std::vector<int64_t>{num_heads * max_q_len * head_size,
+                                                                max_q_len * head_size, head_size, 1}
+                                         : std::vector<int64_t>{num_heads * head_size, head_size, 1};
     aclDataType out_dtype = to_acl_dtype(out_work->dtype());
     aclTensor *out_acl = aclCreateTensor(
         out_dims.data(), out_dims.size(), out_dtype, out_strides.data(), 0,
         ACL_FORMAT_ND, out_dims.data(), out_dims.size(),
-        const_cast<void *>(reinterpret_cast<const void *>(out_work->data())));
+        const_cast<void *>(reinterpret_cast<const void *>(out_acl_storage->data())));
 
-    aclIntArray *actual_seq_q_acl = host_vector_to_acl_int_array(actual_seq_q_vec);
+    aclIntArray *actual_seq_q_acl = host_vector_to_acl_int_array(actual_seq_q_for_acl);
     aclIntArray *actual_seq_k_acl = host_vector_to_acl_int_array(actual_seq_k_vec);
 
-    int64_t sparse_mode = 3; // rightDownCausal
-    aclTensor *atten_mask_acl = create_causal_mask(p);
+    // A one-token query is decode-equivalent and may attend the whole prefix.
+    // rightDownCausal is needed only when a request contributes multiple
+    // query tokens.
+    const int64_t sparse_mode = use_bnsd && max_q_len == 1 ? 0 : 3;
+    aclTensor *atten_mask_acl = sparse_mode == 0 ? nullptr : create_causal_mask(p);
 
     uint64_t workspace_size = 0;
     aclOpExecutor *executor = nullptr;
@@ -308,8 +363,9 @@ void run(void *planned_meta) {
         nullptr,         // dequantScaleQuery
         nullptr,         // learnableSink
         num_heads, static_cast<double>(p->scale), 2147483647, 2147483647,
-        const_cast<char *>("TND"), num_kv_heads, sparse_mode,
-        0,              // innerPrecise: high precision TND path
+        const_cast<char *>(use_bnsd ? "BNSD" : "TND"),
+        num_kv_heads, sparse_mode,
+        0,              // innerPrecise: high precision path
         block_size_val, // blockSize - Paged Attention block size
         0,              // antiquantMode
         false,
@@ -336,7 +392,6 @@ void run(void *planned_meta) {
             + std::to_string(ret) + ", msg: " + (err_msg ? err_msg : "(null)"));
     }
 
-    aclrtStream stream = static_cast<aclrtStream>(infinicore::context::getStream());
     void *workspace = nullptr;
     if (workspace_size > 0) {
         workspace = infini::ops::ascend::GetWorkspacePool()
@@ -346,6 +401,20 @@ void run(void *planned_meta) {
 
     ret = aclnnFusedInferAttentionScoreV4(workspace, workspace_size, executor,
                                           stream);
+    if (ret == 0 && use_bnsd) {
+        // Unpack physical BNSD directly into the caller's ragged TND output.
+        for (int64_t i = 0; i < batch_size; ++i) {
+            const size_t q_begin = static_cast<size_t>(cu_q_host[i]);
+            const size_t q_len = static_cast<size_t>(actual_seq_q_for_acl[i]);
+            Tensor src = out_acl_storage
+                             ->narrow({{0, static_cast<size_t>(i), 1},
+                                       {2, 0, q_len}})
+                             ->squeeze(0)
+                             ->permute({1, 0, 2});
+            Tensor dst = out_work->narrow({{0, q_begin, q_len}});
+            dst->copy_from(src);
+        }
+    }
 
     // Release aclTensor/aclTensorList/aclIntArray resources
     aclDestroyTensor(query_acl);

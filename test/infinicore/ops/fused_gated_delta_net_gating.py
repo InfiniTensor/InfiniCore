@@ -5,7 +5,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
 import torch.nn.functional as F
-import infinicore
 from framework import (
     BaseOperatorTest,
     GenericTestRunner,
@@ -13,6 +12,7 @@ from framework import (
     TestCase,
 )
 
+import infinicore
 
 _TEST_CASES_DATA = [
     ((2, 1, 8), None, None),
@@ -38,6 +38,8 @@ def torch_fused_gdn_gating(A_log, a, b, dt_bias, beta=1.0, threshold=20.0, out=N
     )
     g = -A_log.float().exp().view(1, 1, -1) * softplus_x
     beta_output = b.float().sigmoid()
+    if b.shape[1] != 1:
+        beta_output = beta_output.to(b.dtype).float()
     if out is not None:
         out_g, out_beta = out
         out_g.copy_(g)

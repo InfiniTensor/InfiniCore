@@ -17,6 +17,9 @@
 #ifdef ENABLE_MOORE_API
 #include "moore/mul_moore.h"
 #endif
+#ifdef ENABLE_ASCEND_API
+#include "ascend/mul_ascend.h"
+#endif
 
 __INFINI_C infiniStatus_t infiniopCreateMulDescriptor(
     infiniopHandle_t handle,
@@ -63,6 +66,9 @@ __INFINI_C infiniStatus_t infiniopCreateMulDescriptor(
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_ASCEND_API
+        CREATE(INFINI_DEVICE_ASCEND, ascend);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -105,6 +111,9 @@ __INFINI_C infiniStatus_t infiniopGetMulWorkspaceSize(infiniopMulDescriptor_t de
 #endif
 #ifdef ENABLE_HYGON_API
         GET(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_ASCEND_API
+        GET(INFINI_DEVICE_ASCEND, ascend);
 #endif
 
     default:
@@ -158,6 +167,9 @@ __INFINI_C infiniStatus_t infiniopMul(
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_ASCEND_API
+        CALCULATE(INFINI_DEVICE_ASCEND, ascend);
+#endif
 
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -202,6 +214,9 @@ infiniopDestroyMulDescriptor(infiniopMulDescriptor_t desc) {
 #endif
 #ifdef ENABLE_HYGON_API
         DELETE(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_ASCEND_API
+        DELETE(INFINI_DEVICE_ASCEND, ascend);
 #endif
 
     default:
