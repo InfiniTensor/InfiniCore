@@ -47,7 +47,11 @@
         char *log_buffer,                                                                                                                \
         size_t buffer_size) IMPL;                                                                                                        \
     INLINE infiniStatus_t graphExecDestroy(infinirtGraphExec_t graph_exec) IMPL;                                                         \
-    INLINE infiniStatus_t graphLuanch(infinirtGraphExec_t graph_exec, infinirtStream_t stream) IMPL;
+    INLINE infiniStatus_t graphLuanch(infinirtGraphExec_t graph_exec, infinirtStream_t stream) IMPL;                                     \
+    INLINE infiniStatus_t graphTaskGroupBegin(infinirtStream_t stream) IMPL;                                                             \
+    INLINE infiniStatus_t graphTaskGroupEnd(infinirtStream_t stream, infinirtGraphTaskGroup_t *handle) IMPL;                             \
+    INLINE infiniStatus_t graphTaskUpdateBegin(infinirtStream_t stream, infinirtGraphTaskGroup_t handle) IMPL;                           \
+    INLINE infiniStatus_t graphTaskUpdateEnd(infinirtStream_t stream) IMPL;
 
 #define INFINIRT_DEVICE_API_IMPL INFINIRT_DEVICE_API(, , )
 #define INFINIRT_DEVICE_API_NOOP INFINIRT_DEVICE_API(            \

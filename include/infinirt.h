@@ -9,6 +9,7 @@ typedef void *infinirtEvent_t;
 typedef void *infinirtGraph_t;
 typedef void *infinirtGraphNode_t;
 typedef void *infinirtGraphExec_t;
+typedef void *infinirtGraphTaskGroup_t;
 
 // Bitmask describing which fields of an infinirtDeviceResourceSnapshot_t
 // have been populated by the backend. Backends without a particular
@@ -130,5 +131,13 @@ __INFINI_C __export infiniStatus_t infinirtGraphInstantiate(
     size_t buffer_size);
 __INFINI_C __export infiniStatus_t infinirtGraphExecDestroy(infinirtGraphExec_t graph_exec);
 __INFINI_C __export infiniStatus_t infinirtGraphLuanch(infinirtGraphExec_t graph_exec, infinirtStream_t stream);
+__INFINI_C __export infiniStatus_t infinirtGraphTaskGroupBegin(infinirtStream_t stream);
+__INFINI_C __export infiniStatus_t infinirtGraphTaskGroupEnd(
+    infinirtStream_t stream,
+    infinirtGraphTaskGroup_t *handle);
+__INFINI_C __export infiniStatus_t infinirtGraphTaskUpdateBegin(
+    infinirtStream_t stream,
+    infinirtGraphTaskGroup_t handle);
+__INFINI_C __export infiniStatus_t infinirtGraphTaskUpdateEnd(infinirtStream_t stream);
 
 #endif // __INFINIRT_API_H__

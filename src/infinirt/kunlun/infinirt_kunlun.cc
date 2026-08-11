@@ -190,6 +190,26 @@ infiniStatus_t graphLuanch(infinirtGraphExec_t graph_exec, infinirtStream_t stre
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }
 
+infiniStatus_t graphTaskGroupBegin(infinirtStream_t stream) {
+    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+}
+
+infiniStatus_t graphTaskGroupEnd(
+    infinirtStream_t stream,
+    infinirtGraphTaskGroup_t *handle) {
+    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+}
+
+infiniStatus_t graphTaskUpdateBegin(
+    infinirtStream_t stream,
+    infinirtGraphTaskGroup_t handle) {
+    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+}
+
+infiniStatus_t graphTaskUpdateEnd(infinirtStream_t stream) {
+    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+}
+
 infiniStatus_t getMemInfo(int device_id, size_t *free_bytes, size_t *total_bytes) {
     return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
 }

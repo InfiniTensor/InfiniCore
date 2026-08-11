@@ -249,3 +249,23 @@ __INFINI_C infiniStatus_t infinirtGraphExecDestroy(infinirtGraphExec_t graph_exe
 __INFINI_C infiniStatus_t infinirtGraphLuanch(infinirtGraphExec_t graph_exec, infinirtStream_t stream) {
     INFINIRT_CALL_DEVICE_API(graphLuanch, (graph_exec, stream));
 }
+
+__INFINI_C infiniStatus_t infinirtGraphTaskGroupBegin(infinirtStream_t stream) {
+    INFINIRT_CALL_DEVICE_API(graphTaskGroupBegin, (stream));
+}
+
+__INFINI_C infiniStatus_t infinirtGraphTaskGroupEnd(
+    infinirtStream_t stream,
+    infinirtGraphTaskGroup_t *handle) {
+    INFINIRT_CALL_DEVICE_API(graphTaskGroupEnd, (stream, handle));
+}
+
+__INFINI_C infiniStatus_t infinirtGraphTaskUpdateBegin(
+    infinirtStream_t stream,
+    infinirtGraphTaskGroup_t handle) {
+    INFINIRT_CALL_DEVICE_API(graphTaskUpdateBegin, (stream, handle));
+}
+
+__INFINI_C infiniStatus_t infinirtGraphTaskUpdateEnd(infinirtStream_t stream) {
+    INFINIRT_CALL_DEVICE_API(graphTaskUpdateEnd, (stream));
+}
