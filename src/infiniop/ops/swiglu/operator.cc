@@ -11,7 +11,7 @@
 #ifdef ENABLE_KUNLUN_API
 #include "kunlun/swiglu_kunlun.h"
 #endif
-#ifdef ENABLE_METAX_API
+#if defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API)
 #if defined(ENABLE_NINETOOTHED)
 #include "ninetoothed/swiglu.h"
 #else
@@ -87,6 +87,9 @@ __INFINI_C infiniStatus_t infiniopCreateSwiGLUDescriptor(
         CREATE_CUDA(INFINI_DEVICE_METAX, metax);
 #endif
 #endif
+#ifdef ENABLE_MARS_API
+        CREATE_CUDA(INFINI_DEVICE_MARS, metax);
+#endif
 #ifdef ENABLE_CAMBRICON_API
         CREATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
@@ -150,6 +153,9 @@ __INFINI_C infiniStatus_t infiniopGetSwiGLUWorkspaceSize(infiniopSwiGLUDescripto
 #else
         GET_CUDA(INFINI_DEVICE_METAX, metax);
 #endif
+#endif
+#ifdef ENABLE_MARS_API
+        GET_CUDA(INFINI_DEVICE_MARS, metax);
 #endif
 #ifdef ENABLE_CAMBRICON_API
         GET(INFINI_DEVICE_CAMBRICON, bang);
@@ -221,6 +227,9 @@ __INFINI_C infiniStatus_t infiniopSwiGLU(
         CALCULATE_CUDA(INFINI_DEVICE_METAX, metax);
 #endif
 #endif
+#ifdef ENABLE_MARS_API
+        CALCULATE_CUDA(INFINI_DEVICE_MARS, metax);
+#endif
 #ifdef ENABLE_CAMBRICON_API
         CALCULATE(INFINI_DEVICE_CAMBRICON, bang);
 #endif
@@ -285,6 +294,9 @@ infiniopDestroySwiGLUDescriptor(infiniopSwiGLUDescriptor_t desc) {
 #else
         DELETE_CUDA(INFINI_DEVICE_METAX, metax);
 #endif
+#endif
+#ifdef ENABLE_MARS_API
+        DELETE_CUDA(INFINI_DEVICE_MARS, metax);
 #endif
 #ifdef ENABLE_CAMBRICON_API
         DELETE(INFINI_DEVICE_CAMBRICON, bang);

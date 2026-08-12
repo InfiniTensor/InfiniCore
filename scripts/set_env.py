@@ -1,7 +1,7 @@
 import os
 import platform
 
-from metax_env import set_env_for_metax_gpu
+from metax_env import set_env_for_mars_gpu, set_env_for_metax_gpu
 
 
 def _parse_xmake_cli_flag_values(flags: str):
@@ -38,12 +38,16 @@ def set_env_by_config(flags: str) -> None:
             parse_xmake_cli_flag_values=_parse_xmake_cli_flag_values,
             truthy_flag_value=_truthy_flag_value,
         )
-    else:
-        pass
+    if _truthy_flag_value(d.get("mars-gpu", "n")):
+        set_env_for_mars_gpu(
+            flags,
+            parse_xmake_cli_flag_values=_parse_xmake_cli_flag_values,
+            truthy_flag_value=_truthy_flag_value,
+        )
 
 
 def set_env():
-    if os.environ.get("INFINI_ROOT") == None:
+    if os.environ.get("INFINI_ROOT") is None:
         os.environ["INFINI_ROOT"] = os.path.expanduser("~/.infini")
 
     if platform.system() == "Windows":
@@ -56,10 +60,23 @@ def set_env():
         if new_path not in os.environ.get("PATH", ""):
             os.environ["PATH"] = f"{new_path}:{os.environ.get('PATH', '')}"
 
-        new_lib_path = os.path.expanduser(os.environ.get("INFINI_ROOT") + "/lib")
-        if new_lib_path not in os.environ.get("LD_LIBRARY_PATH", ""):
-            os.environ["LD_LIBRARY_PATH"] = (
-                f"{new_lib_path}:{os.environ.get('LD_LIBRARY_PATH', '')}"
-            )
+        new_lib_paths = []
+        infinirt_root = os.environ.get("INFINI_RT_ROOT")
+        if infinirt_root:
+            for subdir in ("lib", "lib64"):
+                candidate = os.path.join(infinirt_root, subdir)
+                if os.path.isdir(candidate):
+                    new_lib_paths.append(candidate)
+        new_lib_paths.append(os.path.expanduser(os.environ["INFINI_ROOT"] + "/lib"))
+
+        current_lib_paths = [
+            path
+            for path in os.environ.get("LD_LIBRARY_PATH", "").split(":")
+            if path
+        ]
+        for new_lib_path in reversed(new_lib_paths):
+            if new_lib_path not in current_lib_paths:
+                current_lib_paths.insert(0, new_lib_path)
+        os.environ["LD_LIBRARY_PATH"] = ":".join(current_lib_paths)
     else:
         raise RuntimeError("Unsupported platform.")

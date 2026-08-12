@@ -6,7 +6,7 @@
 #include <stdexcept>
 
 #ifdef ENABLE_FLASH_ATTN
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API)
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API) || defined(ENABLE_QY_API)
 #include <c10/cuda/CUDAGuard.h>
 #endif
 #endif
@@ -40,10 +40,10 @@ void *plan(Tensor out,
 
 namespace {
 
-// MetaX/hpcc pip `flash_attn_2_cuda` exports `mha_fwd` at global scope (no namespace),
+#if defined(ENABLE_FLASH_ATTN) && (defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API) || defined(ENABLE_QY_API))
+// MetaX/Mars `flash_attn_2_cuda` exports `mha_fwd` at global scope,
 // while NVIDIA `flash-attn-nvidia.so` uses `flash::mha_fwd`.
-#if defined(ENABLE_FLASH_ATTN) && (defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API))
-#if defined(ENABLE_METAX_API)
+#if defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API)
 #define INFINICORE_FLASH_OP(name) ::name
 #else
 #define INFINICORE_FLASH_OP(name) flash::name
@@ -53,7 +53,7 @@ namespace {
 } // namespace
 
 void run(void *planned_meta) {
-#if defined(ENABLE_FLASH_ATTN) && (defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API))
+#if defined(ENABLE_FLASH_ATTN) && (defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API) || defined(ENABLE_QY_API))
     c10::cuda::CUDAStreamGuard guard(infinicore::adaptor::get_cuda_stream());
     auto *p = reinterpret_cast<PlannedMeta *>(planned_meta);
 
@@ -73,8 +73,11 @@ void run(void *planned_meta) {
     auto scale = p->scale;
     auto is_causal = p->is_causal;
 
-#if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
-    std::optional<at::Tensor> flash_attn_mars_ext = std::nullopt;
+#if defined(INFINICORE_FLASH_ATTN_MARS_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_EXT)
+    std::optional<at::Tensor> attn_mask = std::nullopt;
+#endif
+#if defined(INFINICORE_FLASH_ATTN_MARS_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_S_AUX)
+    std::optional<at::Tensor> s_aux = std::nullopt;
 #endif
 
     INFINICORE_FLASH_OP(mha_fwd)
@@ -87,6 +90,9 @@ void run(void *planned_meta) {
         softmax_lse,
 #endif
         alibi_slopes,
+#if defined(INFINICORE_FLASH_ATTN_MARS_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_EXT)
+        attn_mask,
+#endif
         0.0,
         scale,
         is_causal,
@@ -95,9 +101,9 @@ void run(void *planned_meta) {
         0.0,
         false,
         std::nullopt
-#if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
+#if defined(INFINICORE_FLASH_ATTN_MARS_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_EXT) || defined(INFINICORE_FLASH_ATTN_METAX_S_AUX)
         ,
-        flash_attn_mars_ext
+        s_aux
 #endif
     );
 

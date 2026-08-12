@@ -11,7 +11,7 @@
 #include "nvidia/floor_nvidia.cuh"
 #endif
 
-#ifdef ENABLE_METAX_API
+#if defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API)
 #include "metax/floor_metax.h"
 #endif
 
@@ -57,6 +57,9 @@ __INFINI_C infiniStatus_t infiniopCreateFloorDescriptor(
 #endif
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MARS_API
+        CREATE(INFINI_DEVICE_MARS, metax);
 #endif
 // ==========================================
 // 添加 MOORE 分支
@@ -104,6 +107,9 @@ __INFINI_C infiniStatus_t infiniopGetFloorWorkspaceSize(infiniopFloorDescriptor_
 #endif
 #ifdef ENABLE_METAX_API
         GET(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MARS_API
+        GET(INFINI_DEVICE_MARS, metax);
 #endif
 #ifdef ENABLE_HYGON_API
         GET(INFINI_DEVICE_HYGON, nvidia);
@@ -154,6 +160,9 @@ __INFINI_C infiniStatus_t infiniopFloor(
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
+#ifdef ENABLE_MARS_API
+        CALCULATE(INFINI_DEVICE_MARS, metax);
+#endif
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
@@ -194,6 +203,9 @@ __INFINI_C infiniStatus_t infiniopDestroyFloorDescriptor(infiniopFloorDescriptor
 #endif
 #ifdef ENABLE_METAX_API
         DELETE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MARS_API
+        DELETE(INFINI_DEVICE_MARS, metax);
 #endif
 #ifdef ENABLE_HYGON_API
         DELETE(INFINI_DEVICE_HYGON, nvidia);

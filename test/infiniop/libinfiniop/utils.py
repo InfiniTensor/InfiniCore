@@ -452,6 +452,11 @@ def get_args():
         help="Run METAX GPU test",
     )
     parser.add_argument(
+        "--mars",
+        action="store_true",
+        help="Run Mars GPU test",
+    )
+    parser.add_argument(
         "--moore",
         action="store_true",
         help="Run MTHREADS GPU test",
@@ -522,6 +527,7 @@ def filter_tensor_dtypes_by_device(device, tensor_dtypes):
         InfiniDeviceEnum.CPU,
         InfiniDeviceEnum.NVIDIA,
         InfiniDeviceEnum.METAX,
+        InfiniDeviceEnum.MARS,
         InfiniDeviceEnum.ASCEND,
         InfiniDeviceEnum.ILUVATAR,
         InfiniDeviceEnum.CAMBRICON,
@@ -781,6 +787,10 @@ def get_test_devices(args):
         import torch
 
         devices_to_test.append(InfiniDeviceEnum.METAX)
+    if args.mars:
+        import torch
+
+        devices_to_test.append(InfiniDeviceEnum.MARS)
     if args.moore:
         import torch
 

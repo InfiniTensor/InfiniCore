@@ -41,6 +41,7 @@ void printUsage() {
               << "  cambricon" << std::endl
               << "  ascend" << std::endl
               << "  metax" << std::endl
+              << "  mars" << std::endl
               << "  moore" << std::endl
               << "  iluvatar" << std::endl
               << "  qy" << std::endl
@@ -79,6 +80,8 @@ ParsedArgs parseArgs(int argc, char *argv[]) {
             args.device_type = INFINI_DEVICE_ASCEND;
         } else if (arg == "--metax") {
             args.device_type = INFINI_DEVICE_METAX;
+        } else if (arg == "--mars") {
+            args.device_type = INFINI_DEVICE_MARS;
         } else if (arg == "--moore") {
             args.device_type = INFINI_DEVICE_MOORE;
         } else if (arg == "--iluvatar") {

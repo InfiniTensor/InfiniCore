@@ -23,6 +23,7 @@ public:
         HYGON = INFINI_DEVICE_HYGON,
         QY = INFINI_DEVICE_QY,
         ALI = INFINI_DEVICE_ALI,
+        MARS = INFINI_DEVICE_MARS,
         COUNT = INFINI_DEVICE_TYPE_COUNT,
     };
 

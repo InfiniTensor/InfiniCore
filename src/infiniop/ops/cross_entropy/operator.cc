@@ -13,7 +13,7 @@
 #ifdef ENABLE_MOORE_API
 #include "moore/cross_entropy_moore.h"
 #endif
-#ifdef ENABLE_METAX_API
+#if defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API)
 #include "metax/cross_entropy_metax.h"
 #endif
 
@@ -53,6 +53,9 @@ __INFINI_C infiniStatus_t infiniopCreateCrossEntropyDescriptor(
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, metax)
 #endif
+#ifdef ENABLE_MARS_API
+        CREATE(INFINI_DEVICE_MARS, metax)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -88,6 +91,9 @@ __INFINI_C infiniStatus_t infiniopGetCrossEntropyWorkspaceSize(
 #endif
 #ifdef ENABLE_METAX_API
         GET(INFINI_DEVICE_METAX, metax)
+#endif
+#ifdef ENABLE_MARS_API
+        GET(INFINI_DEVICE_MARS, metax)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -131,6 +137,9 @@ __INFINI_C infiniStatus_t infiniopCrossEntropy(
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, metax)
 #endif
+#ifdef ENABLE_MARS_API
+        CALCULATE(INFINI_DEVICE_MARS, metax)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -166,6 +175,9 @@ __INFINI_C infiniStatus_t infiniopDestroyCrossEntropyDescriptor(
 #endif
 #ifdef ENABLE_METAX_API
         DESTROY(INFINI_DEVICE_METAX, metax)
+#endif
+#ifdef ENABLE_MARS_API
+        DESTROY(INFINI_DEVICE_MARS, metax)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

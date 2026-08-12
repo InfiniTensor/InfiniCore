@@ -8,7 +8,7 @@
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_QY_API) || defined(ENABLE_ALI_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/relu_nvidia.cuh"
 #endif
-#ifdef ENABLE_METAX_API
+#if defined(ENABLE_METAX_API) || defined(ENABLE_MARS_API)
 #ifdef ENABLE_NINETOOTHED
 #include "metax/relu_metax.h"
 #endif
@@ -50,6 +50,11 @@ __INFINI_C infiniStatus_t infiniopCreateReluDescriptor(
         CREATE(INFINI_DEVICE_METAX, metax);
 #endif
 #endif
+#ifdef ENABLE_MARS_API
+#ifdef ENABLE_NINETOOTHED
+        CREATE(INFINI_DEVICE_MARS, metax);
+#endif
+#endif
 #ifdef ENABLE_ALI_API
         CREATE(INFINI_DEVICE_ALI, nvidia);
 #endif
@@ -87,6 +92,11 @@ __INFINI_C infiniStatus_t infiniopGetReluWorkspaceSize(infiniopReluDescriptor_t 
 #ifdef ENABLE_METAX_API
 #ifdef ENABLE_NINETOOTHED
         GET(INFINI_DEVICE_METAX, metax)
+#endif
+#endif
+#ifdef ENABLE_MARS_API
+#ifdef ENABLE_NINETOOTHED
+        GET(INFINI_DEVICE_MARS, metax)
 #endif
 #endif
 #ifdef ENABLE_ALI_API
@@ -136,6 +146,11 @@ __INFINI_C infiniStatus_t infiniopRelu(
         CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
 #endif
+#ifdef ENABLE_MARS_API
+#ifdef ENABLE_NINETOOTHED
+        CALCULATE(INFINI_DEVICE_MARS, metax);
+#endif
+#endif
 #ifdef ENABLE_ALI_API
         CALCULATE(INFINI_DEVICE_ALI, nvidia);
 #endif
@@ -175,6 +190,11 @@ infiniopDestroyReluDescriptor(infiniopReluDescriptor_t desc) {
 #ifdef ENABLE_METAX_API
 #ifdef ENABLE_NINETOOTHED
         DELETE(INFINI_DEVICE_METAX, metax);
+#endif
+#endif
+#ifdef ENABLE_MARS_API
+#ifdef ENABLE_NINETOOTHED
+        DELETE(INFINI_DEVICE_MARS, metax);
 #endif
 #endif
 #ifdef ENABLE_ALI_API
