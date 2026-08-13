@@ -8,6 +8,22 @@
 #include "./metax/infiniccl_metax.h"
 #include "./moore/infiniccl_moore.h"
 
+__INFINI_C infiniStatus_t infinicclGetCommName(
+    infinicclComm_t comm,
+    char *comm_name,
+    size_t comm_name_size) {
+    if (comm == nullptr || comm_name == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    switch (comm->device_type) {
+    case INFINI_DEVICE_ASCEND:
+        return infiniccl::ascend::getCommName(
+            comm, comm_name, comm_name_size);
+    default:
+        return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    }
+}
+
 __INFINI_C infiniStatus_t infinicclCommInitAll(
     infiniDevice_t device_type,
     infinicclComm_t *comms,

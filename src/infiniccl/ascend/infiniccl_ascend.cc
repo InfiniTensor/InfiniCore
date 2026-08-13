@@ -54,6 +54,20 @@ inline HcclReduceOp getHcclRedOp(infinicclReduceOp_t op) {
 
 namespace infiniccl::ascend {
 
+infiniStatus_t getCommName(
+    infinicclComm_t comm,
+    char *comm_name,
+    size_t comm_name_size) {
+    if (comm == nullptr || comm_name == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    if (comm_name_size < COMM_NAME_MAX_LENGTH) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    CHECK_HCCL(HcclGetCommName(getHcclComm(comm), comm_name));
+    return INFINI_STATUS_SUCCESS;
+}
+
 infiniStatus_t commInitAll(
     infinicclComm_t *comms,
     int ndevice,

@@ -21,6 +21,13 @@ typedef struct {
     char internal[INFINICCL_UNIQUE_ID_BYTES];
 } infinicclUniqueId_t;
 
+#define INFINICCL_COMM_NAME_MAX_LENGTH 128
+
+__INFINI_C __export infiniStatus_t infinicclGetCommName(
+    infinicclComm_t comm,
+    char *comm_name,
+    size_t comm_name_size);
+
 __INFINI_C __export infiniStatus_t infinicclCommInitAll(
     infiniDevice_t device_type,
     infinicclComm_t *comms,
