@@ -85,6 +85,7 @@ public:
     double theta() const { return theta_; }
     Algo algo() const { return algo_; }
     DataType dtype() const { return dtype_; }
+    Tensor cos_sin_cache() const { return cos_sin_cache_; }
     const std::optional<std::vector<int>> &mrope_section() const { return mrope_section_; }
     bool mrope_interleaved() const { return mrope_interleaved_; }
     const Tensor &sin_cache() const { return sin_cache_; }

@@ -2,7 +2,7 @@
 #include "../../handle.h"
 #include "infiniop/ops/moe_fused_gate.h"
 
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/moe_fused_gate_nvidia.cuh"
 #endif
 
@@ -29,6 +29,9 @@ __INFINI_C infiniStatus_t infiniopCreateMoeFusedGateDescriptor(
 #ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
+#ifdef ENABLE_HYGON_API
+        CREATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -45,6 +48,9 @@ __INFINI_C infiniStatus_t infiniopGetMoeFusedGateWorkspaceSize(
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API
         GET(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_HYGON_API
+        GET(INFINI_DEVICE_HYGON, nvidia);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -69,6 +75,9 @@ __INFINI_C infiniStatus_t infiniopMoeFusedGate(
 #ifdef ENABLE_NVIDIA_API
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
+#ifdef ENABLE_HYGON_API
+        CALCULATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -84,6 +93,9 @@ __INFINI_C infiniStatus_t infiniopDestroyMoeFusedGateDescriptor(
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API
         DESTROY(INFINI_DEVICE_NVIDIA, nvidia);
+#endif
+#ifdef ENABLE_HYGON_API
+        DESTROY(INFINI_DEVICE_HYGON, nvidia);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

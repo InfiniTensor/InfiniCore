@@ -5,6 +5,7 @@
 
 #include <ATen/ATen.h>
 #include <optional>
+#include <string>
 #include <vector>
 
 namespace flash {
@@ -30,6 +31,22 @@ mha_fwd_kvcache(at::Tensor &q,
                 float softcap,
                 bool is_rotary_interleaved,
                 int num_splits);
+
+void paged_attention(
+    at::Tensor &out,
+    at::Tensor &q,
+    at::Tensor &k_cache,
+    at::Tensor &v_cache,
+    float scale,
+    at::Tensor &block_table,
+    at::Tensor &cache_lens,
+    const std::optional<at::Tensor> &alibi_slopes,
+    const std::string &kv_cache_dtype,
+    const std::optional<at::Tensor> &q_descale,
+    const std::optional<at::Tensor> &k_descale,
+    const std::optional<at::Tensor> &v_descale,
+    int max_context_len,
+    const std::optional<at::Tensor> &s_aux);
 
 std::vector<at::Tensor>
 vllm_mha_varlen_fwd(at::Tensor &q,

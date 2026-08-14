@@ -8,6 +8,7 @@
 
 struct CrossEntropyInfo {
     int dtype;
+    int output_dtype;
     int target_dtype;
     size_t outer_size;
     size_t vocab_size;
