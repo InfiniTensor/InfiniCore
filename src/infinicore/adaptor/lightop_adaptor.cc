@@ -7,8 +7,8 @@
 #include <hip/hip_runtime.h>
 
 #include <algorithm>
-#include <cerrno>
 #include <cctype>
+#include <cerrno>
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
@@ -24,38 +24,22 @@
 namespace infinicore::adaptor::lightop {
 namespace {
 
-constexpr const char *kDefaultLightopSo =
-    "/usr/local/lib/python3.10/dist-packages/lightop/op.cpython-310-x86_64-linux-gnu.so";
-constexpr const char *kDefaultLmslimQuantSo =
-    "/usr/local/lib/python3.10/dist-packages/lmslimquant.cpython-310-x86_64-linux-gnu.so";
-constexpr const char *kLightopAsmRoot =
-    "/usr/local/lib/python3.10/dist-packages/lightop/hsa/";
-constexpr const char *kFuseSiluAndMulSymbol =
-    "_ZN2at6native17fuse_silu_and_mulERNS_6TensorES2_";
-constexpr const char *kRmsRotaryEmbeddingFuseSymbol =
-    "_ZN2at6native25rms_rotary_embedding_fuseERNS_6TensorES2_S2_lS2_bS1_S1_St8optionalIS1_ES4_d";
-constexpr const char *kReshapeAndCacheCudaSymbol =
-    "_ZN2at6native22reshape_and_cache_cudaERNS_6TensorES2_S2_S2_S2_RKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES2_S2_";
-constexpr const char *kMoeSumSymbol =
-    "_ZN2at6native7moe_sumERNS_6TensorES2_RKSt8optionalIS1_ES6_S6_fi";
-constexpr const char *kMoeAlignBlockSizeSymbol =
-    "_ZN2at6native20moe_align_block_sizeENS_6TensorEllS1_S1_S1_RKSt8optionalIS1_ES5_S5_bb";
-constexpr const char *kMoeGemmW16A16Symbol =
-    "_ZN2at6native15moe_gemm_w16a16ENS_6TensorES1_S1_St8optionalIS1_ES1_S1_S1_lii";
-constexpr const char *kMoeMarlinW16A16AsmSymbol =
-    "_ZN2at6native21moe_marlin_w16a16_asmENS_6TensorES1_S1_St8optionalIS1_ES1_S1_S1_iii";
-constexpr const char *kMoeGemmW8A8Symbol =
-    "_ZN2at6native20moe_gemm_marlin_w8a8ENS_6TensorES1_S1_S1_S1_St8optionalIS1_ES1_S1_S1_lii";
-constexpr const char *kMoeMarlinW8A8AsmSymbol =
-    "_ZN2at6native19moe_marlin_w8a8_asmENS_6TensorES1_S1_S1_S1_St8optionalIS1_ES1_S1_S1_jii";
-constexpr const char *kFuseSiluMulQuantSymbol =
-    "_ZN2at6native19fuse_silu_mul_quantERNS_6TensorES2_S2_RSt8optionalIS1_EiiS5_";
-constexpr const char *kPerTokenDynamicQuantInt8Symbol =
-    "_ZN2at6native28per_token_dynamic_quant_int8ERNS_6TensorERKS1_S2_S4_";
-constexpr const char *kBlasltW8A8Bf16Symbol =
-    "_ZN14hipblaslt_gemm14w8a8_bf16_gemmERKN2at6TensorES3_S3_S3_RS1_llllRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES3_S3_RKSt8optionalIS1_E";
-constexpr const char *kBlasltW8A8Fp16Symbol =
-    "_ZN14hipblaslt_gemm14w8a8_fp16_gemmERKN2at6TensorES3_S3_S3_RS1_llllRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES3_S3_RKSt8optionalIS1_E";
+constexpr const char *kDefaultLightopSo = "/usr/local/lib/python3.10/dist-packages/lightop/op.cpython-310-x86_64-linux-gnu.so";
+constexpr const char *kDefaultLmslimQuantSo = "/usr/local/lib/python3.10/dist-packages/lmslimquant.cpython-310-x86_64-linux-gnu.so";
+constexpr const char *kLightopAsmRoot = "/usr/local/lib/python3.10/dist-packages/lightop/hsa/";
+constexpr const char *kFuseSiluAndMulSymbol = "_ZN2at6native17fuse_silu_and_mulERNS_6TensorES2_";
+constexpr const char *kRmsRotaryEmbeddingFuseSymbol = "_ZN2at6native25rms_rotary_embedding_fuseERNS_6TensorES2_S2_lS2_bS1_S1_St8optionalIS1_ES4_d";
+constexpr const char *kReshapeAndCacheCudaSymbol = "_ZN2at6native22reshape_and_cache_cudaERNS_6TensorES2_S2_S2_S2_RKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES2_S2_";
+constexpr const char *kMoeSumSymbol = "_ZN2at6native7moe_sumERNS_6TensorES2_RKSt8optionalIS1_ES6_S6_fi";
+constexpr const char *kMoeAlignBlockSizeSymbol = "_ZN2at6native20moe_align_block_sizeENS_6TensorEllS1_S1_S1_RKSt8optionalIS1_ES5_S5_bb";
+constexpr const char *kMoeGemmW16A16Symbol = "_ZN2at6native15moe_gemm_w16a16ENS_6TensorES1_S1_St8optionalIS1_ES1_S1_S1_lii";
+constexpr const char *kMoeMarlinW16A16AsmSymbol = "_ZN2at6native21moe_marlin_w16a16_asmENS_6TensorES1_S1_St8optionalIS1_ES1_S1_S1_iii";
+constexpr const char *kMoeGemmW8A8Symbol = "_ZN2at6native20moe_gemm_marlin_w8a8ENS_6TensorES1_S1_S1_S1_St8optionalIS1_ES1_S1_S1_lii";
+constexpr const char *kMoeMarlinW8A8AsmSymbol = "_ZN2at6native19moe_marlin_w8a8_asmENS_6TensorES1_S1_S1_S1_St8optionalIS1_ES1_S1_S1_jii";
+constexpr const char *kFuseSiluMulQuantSymbol = "_ZN2at6native19fuse_silu_mul_quantERNS_6TensorES2_S2_RSt8optionalIS1_EiiS5_";
+constexpr const char *kPerTokenDynamicQuantInt8Symbol = "_ZN2at6native28per_token_dynamic_quant_int8ERNS_6TensorERKS1_S2_S4_";
+constexpr const char *kBlasltW8A8Bf16Symbol = "_ZN14hipblaslt_gemm14w8a8_bf16_gemmERKN2at6TensorES3_S3_S3_RS1_llllRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES3_S3_RKSt8optionalIS1_E";
+constexpr const char *kBlasltW8A8Fp16Symbol = "_ZN14hipblaslt_gemm14w8a8_fp16_gemmERKN2at6TensorES3_S3_S3_RS1_llllRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEES3_S3_RKSt8optionalIS1_E";
 
 std::string hip_error_message(const std::string &operation, hipError_t status);
 
@@ -73,8 +57,7 @@ std::string normalize_gpu_target(std::string target) {
     std::transform(target.begin(), target.end(), target.begin(), [](unsigned char ch) {
         return static_cast<char>(std::tolower(ch));
     });
-    if (target.size() <= 3 || target.compare(0, 3, "gfx") != 0 ||
-        !std::all_of(target.begin() + 3, target.end(), [](unsigned char ch) {
+    if (target.size() <= 3 || target.compare(0, 3, "gfx") != 0 || !std::all_of(target.begin() + 3, target.end(), [](unsigned char ch) {
             return std::isalnum(ch) != 0;
         })) {
         throw std::runtime_error("invalid Hygon GPU target: " + target);
@@ -222,14 +205,10 @@ LightopLibrary &library() {
     return lib;
 }
 
-constexpr const char *kMoeW16A16MarlinMode1000UpCo =
-    "moe_w16a16_channel/moe_w16a16_marlin_128x256x64_TN_BF16_UP.co";
-constexpr const char *kMoeW16A16MarlinMode1000DownCo =
-    "moe_w16a16_channel/moe_w16a16_marlin_128x256x64_TN_BF16_DOWN.co";
-constexpr const char *kMoeW16A16MarlinMode1000UpKernel =
-    "MOE_W16A16_BF16_PERCHANNEL_MARLIN_ASM_TN_MT128x256x64_WGM1_UP";
-constexpr const char *kMoeW16A16MarlinMode1000DownKernel =
-    "MOE_W16A16_BF16_PERCHANNEL_MARLIN_ASM_TN_MT128x256x64_WGM1_DOWN";
+constexpr const char *kMoeW16A16MarlinMode1000UpCo = "moe_w16a16_channel/moe_w16a16_marlin_128x256x64_TN_BF16_UP.co";
+constexpr const char *kMoeW16A16MarlinMode1000DownCo = "moe_w16a16_channel/moe_w16a16_marlin_128x256x64_TN_BF16_DOWN.co";
+constexpr const char *kMoeW16A16MarlinMode1000UpKernel = "MOE_W16A16_BF16_PERCHANNEL_MARLIN_ASM_TN_MT128x256x64_WGM1_UP";
+constexpr const char *kMoeW16A16MarlinMode1000DownKernel = "MOE_W16A16_BF16_PERCHANNEL_MARLIN_ASM_TN_MT128x256x64_WGM1_DOWN";
 constexpr uint32_t kMoeW16A16MarlinNBlock = 256;
 constexpr uint32_t kMoeW16A16MarlinMBlock = 128;
 constexpr uint32_t kMoeW16A16MarlinKBlock = 64;
@@ -290,10 +269,8 @@ moe_w16a16_marlin_kernels(bool down_stage) {
     return down_stage ? down_kernels : up_kernels;
 }
 
-constexpr const char *kMoeW8A8MarlinMode1001Co =
-    "moe_w8a8_channel/moe_w8a8_i8_marlin_64x256x128_TN_BF16_UP.co";
-constexpr const char *kMoeW8A8MarlinMode1001Kernel =
-    "MOE_W8A8_I8_PERCHANNEL_MARLIN_ASM_TN_MT64x256x128_WGM1_UP";
+constexpr const char *kMoeW8A8MarlinMode1001Co = "moe_w8a8_channel/moe_w8a8_i8_marlin_64x256x128_TN_BF16_UP.co";
+constexpr const char *kMoeW8A8MarlinMode1001Kernel = "MOE_W8A8_I8_PERCHANNEL_MARLIN_ASM_TN_MT64x256x128_WGM1_UP";
 constexpr uint32_t kMoeW8A8MarlinNBlock = 256;
 constexpr uint32_t kMoeW8A8MarlinWorkgroupSize = 768;
 
@@ -375,11 +352,11 @@ MoeW16A16MarlinDeviceKernel get_moe_w16a16_marlin_mode1000_kernel(
     }
     const auto &asm_dir = runtime_config.asm_dir;
     const char *co = down_stage
-                         ? kMoeW16A16MarlinMode1000DownCo
-                         : kMoeW16A16MarlinMode1000UpCo;
+                       ? kMoeW16A16MarlinMode1000DownCo
+                       : kMoeW16A16MarlinMode1000UpCo;
     const char *function = down_stage
-                               ? kMoeW16A16MarlinMode1000DownKernel
-                               : kMoeW16A16MarlinMode1000UpKernel;
+                             ? kMoeW16A16MarlinMode1000DownKernel
+                             : kMoeW16A16MarlinMode1000UpKernel;
     const std::string co_path = asm_dir + co;
 
     MoeW16A16MarlinDeviceKernel kernel;
@@ -436,16 +413,14 @@ MoeW8A8MarlinDeviceKernel get_moe_w8a8_marlin_mode1001_kernel() {
 }
 
 uint32_t checked_u32(int64_t value, const char *name) {
-    if (value < 0 ||
-        static_cast<uint64_t>(value) > std::numeric_limits<uint32_t>::max()) {
+    if (value < 0 || static_cast<uint64_t>(value) > std::numeric_limits<uint32_t>::max()) {
         throw std::runtime_error(std::string("Hygon W8A8 Marlin ") + name + " exceeds uint32");
     }
     return static_cast<uint32_t>(value);
 }
 
 uint32_t checked_w16_u32(int64_t value, const char *name) {
-    if (value < 0 ||
-        static_cast<uint64_t>(value) > std::numeric_limits<uint32_t>::max()) {
+    if (value < 0 || static_cast<uint64_t>(value) > std::numeric_limits<uint32_t>::max()) {
         throw std::runtime_error(std::string("Hygon W16A16 Marlin ") + name + " exceeds uint32");
     }
     return static_cast<uint32_t>(value);
@@ -462,24 +437,7 @@ void launch_moe_w16a16_marlin_mode1000(
     int64_t top_k,
     int delta) {
     const auto device = input.device();
-    if (delta <= 0 || top_k <= 0 ||
-        input.dim() != 2 || weight.dim() != 3 || output.dim() != 2 ||
-        sorted_token_ids.dim() != 1 || expert_ids.dim() != 1 ||
-        input.scalar_type() != at::kBFloat16 ||
-        weight.scalar_type() != at::kBFloat16 ||
-        output.scalar_type() != at::kBFloat16 ||
-        sorted_token_ids.scalar_type() != at::kInt ||
-        expert_ids.scalar_type() != at::kInt ||
-        num_tokens_post_padded.scalar_type() != at::kInt ||
-        !input.is_contiguous() || !weight.is_contiguous() ||
-        !output.is_contiguous() || !sorted_token_ids.is_contiguous() ||
-        !expert_ids.is_contiguous() || !num_tokens_post_padded.is_contiguous() ||
-        weight.device() != device || output.device() != device ||
-        sorted_token_ids.device() != device || expert_ids.device() != device ||
-        num_tokens_post_padded.device() != device ||
-        (topk_weights.has_value() &&
-         (topk_weights->scalar_type() != at::kFloat ||
-          !topk_weights->is_contiguous() || topk_weights->device() != device))) {
+    if (delta <= 0 || top_k <= 0 || input.dim() != 2 || weight.dim() != 3 || output.dim() != 2 || sorted_token_ids.dim() != 1 || expert_ids.dim() != 1 || input.scalar_type() != at::kBFloat16 || weight.scalar_type() != at::kBFloat16 || output.scalar_type() != at::kBFloat16 || sorted_token_ids.scalar_type() != at::kInt || expert_ids.scalar_type() != at::kInt || num_tokens_post_padded.scalar_type() != at::kInt || !input.is_contiguous() || !weight.is_contiguous() || !output.is_contiguous() || !sorted_token_ids.is_contiguous() || !expert_ids.is_contiguous() || !num_tokens_post_padded.is_contiguous() || weight.device() != device || output.device() != device || sorted_token_ids.device() != device || expert_ids.device() != device || num_tokens_post_padded.device() != device || (topk_weights.has_value() && (topk_weights->scalar_type() != at::kFloat || !topk_weights->is_contiguous() || topk_weights->device() != device))) {
         throw std::runtime_error("Hygon W16A16 Marlin mode 1000 tensor contract mismatch");
     }
 
@@ -488,25 +446,16 @@ void launch_moe_w16a16_marlin_mode1000(
     const int64_t num_experts = weight.size(0);
     const int64_t n = weight.size(2) / 16;
     const int64_t sorted_token_lens = sorted_token_ids.numel();
-    if (m <= 0 || k <= 0 || n <= 0 || num_experts <= 0 ||
-        m > std::numeric_limits<int64_t>::max() / top_k ||
-        k % kMoeW16A16MarlinKBlock != 0 ||
-        weight.size(1) != k / 16 || weight.size(2) != n * 16 ||
-        output.size(0) != m * top_k || output.size(1) != n ||
-        num_tokens_post_padded.numel() != 1 || sorted_token_lens <= 0 ||
-        (topk_weights.has_value() && topk_weights->numel() != m)) {
+    if (m <= 0 || k <= 0 || n <= 0 || num_experts <= 0 || m > std::numeric_limits<int64_t>::max() / top_k || k % kMoeW16A16MarlinKBlock != 0 || weight.size(1) != k / 16 || weight.size(2) != n * 16 || output.size(0) != m * top_k || output.size(1) != n || num_tokens_post_padded.numel() != 1 || sorted_token_lens <= 0 || (topk_weights.has_value() && topk_weights->numel() != m)) {
         throw std::runtime_error("Hygon W16A16 Marlin mode 1000 tensor shape mismatch");
     }
 
     const uint32_t n_u32 = checked_w16_u32(n, "N");
-    const uint32_t sorted_token_lens_u32 =
-        checked_w16_u32(sorted_token_lens, "sorted_token_lens");
+    const uint32_t sorted_token_lens_u32 = checked_w16_u32(sorted_token_lens, "sorted_token_lens");
     (void)checked_w16_u32(expert_ids.numel(), "expert_ids capacity");
     const uint32_t top_k_u32 = checked_w16_u32(top_k, "top_k");
-    const uint32_t n_block_count =
-        1 + (n_u32 - 1) / kMoeW16A16MarlinNBlock;
-    const uint32_t m_block_count =
-        1 + (sorted_token_lens_u32 - 1) / kMoeW16A16MarlinMBlock;
+    const uint32_t n_block_count = 1 + (n_u32 - 1) / kMoeW16A16MarlinNBlock;
+    const uint32_t m_block_count = 1 + (sorted_token_lens_u32 - 1) / kMoeW16A16MarlinMBlock;
     if (static_cast<uint64_t>(expert_ids.numel()) < m_block_count) {
         throw std::runtime_error("Hygon W16A16 Marlin mode 1000 expert_ids capacity mismatch");
     }
@@ -593,22 +542,7 @@ bool can_launch_moe_w8a8_marlin_mode1001(
     int64_t top_k,
     int mode,
     int delta) {
-    return mode == 1001 && delta == 1 && !topk_weights.has_value() &&
-           top_k > 0 &&
-           input.dim() == 2 && weight.dim() == 3 && output.dim() == 3 &&
-           input_scale.dim() == 2 && weight_scale.dim() == 3 &&
-           input.scalar_type() == at::kChar &&
-           weight.scalar_type() == at::kChar &&
-           output.scalar_type() == at::kBFloat16 &&
-           input_scale.scalar_type() == at::kFloat &&
-           weight_scale.scalar_type() == at::kFloat &&
-           sorted_token_ids.scalar_type() == at::kInt &&
-           expert_ids.scalar_type() == at::kInt &&
-           num_tokens_post_padded.scalar_type() == at::kInt &&
-           input.is_contiguous() && weight.is_contiguous() &&
-           output.is_contiguous() && input_scale.is_contiguous() &&
-           weight_scale.is_contiguous() && sorted_token_ids.is_contiguous() &&
-           expert_ids.is_contiguous() && num_tokens_post_padded.is_contiguous();
+    return mode == 1001 && delta == 1 && !topk_weights.has_value() && top_k > 0 && input.dim() == 2 && weight.dim() == 3 && output.dim() == 3 && input_scale.dim() == 2 && weight_scale.dim() == 3 && input.scalar_type() == at::kChar && weight.scalar_type() == at::kChar && output.scalar_type() == at::kBFloat16 && input_scale.scalar_type() == at::kFloat && weight_scale.scalar_type() == at::kFloat && sorted_token_ids.scalar_type() == at::kInt && expert_ids.scalar_type() == at::kInt && num_tokens_post_padded.scalar_type() == at::kInt && input.is_contiguous() && weight.is_contiguous() && output.is_contiguous() && input_scale.is_contiguous() && weight_scale.is_contiguous() && sorted_token_ids.is_contiguous() && expert_ids.is_contiguous() && num_tokens_post_padded.is_contiguous();
 }
 
 void launch_moe_w8a8_marlin_mode1001(
@@ -625,21 +559,14 @@ void launch_moe_w8a8_marlin_mode1001(
     const int64_t k = input.size(1);
     const int64_t num_experts = weight.size(0);
     const int64_t n = output.size(2);
-    if (output.size(0) != m || output.size(1) != top_k ||
-        weight.size(1) * 64 != k || weight.size(2) != n * 64 ||
-        input_scale.size(0) != m || input_scale.size(1) != 1 ||
-        weight_scale.size(0) != num_experts ||
-        weight_scale.size(1) != n || weight_scale.size(2) != 1 ||
-        num_tokens_post_padded.numel() != 1) {
+    if (output.size(0) != m || output.size(1) != top_k || weight.size(1) * 64 != k || weight.size(2) != n * 64 || input_scale.size(0) != m || input_scale.size(1) != 1 || weight_scale.size(0) != num_experts || weight_scale.size(1) != n || weight_scale.size(2) != 1 || num_tokens_post_padded.numel() != 1) {
         throw std::runtime_error("Hygon W8A8 Marlin mode 1001 tensor shape mismatch");
     }
 
     const uint32_t n_u32 = checked_u32(n, "N");
     const uint32_t top_k_u32 = checked_u32(top_k, "top_k");
-    const uint32_t n_block_count =
-        (n_u32 + kMoeW8A8MarlinNBlock - 1) / kMoeW8A8MarlinNBlock;
-    const uint32_t max_m_block_count =
-        checked_u32(expert_ids.numel(), "max_m_block_count");
+    const uint32_t n_block_count = (n_u32 + kMoeW8A8MarlinNBlock - 1) / kMoeW8A8MarlinNBlock;
+    const uint32_t max_m_block_count = checked_u32(expert_ids.numel(), "max_m_block_count");
 
     MoeW8A8MarlinMode1001Args args{
         n_block_count,
@@ -1184,8 +1111,7 @@ void blaslt_w8a8_gemm(at::Tensor &output,
     if (!a.is_contiguous() || !b.is_contiguous() || !output.is_contiguous()) {
         throw std::runtime_error("lmslimquant W8A8 GEMM expects contiguous a, b, and output");
     }
-    if (a.scalar_type() != at::kChar || b.scalar_type() != at::kChar ||
-        scale_a.scalar_type() != at::kFloat || scale_b.scalar_type() != at::kFloat) {
+    if (a.scalar_type() != at::kChar || b.scalar_type() != at::kChar || scale_a.scalar_type() != at::kFloat || scale_b.scalar_type() != at::kFloat) {
         throw std::runtime_error("lmslimquant W8A8 GEMM expects int8 inputs and float32 scales");
     }
 

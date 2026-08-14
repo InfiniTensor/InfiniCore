@@ -24,8 +24,7 @@ Tensor select_last_token_hidden_states(
 
     const auto num_requests = input_offsets->size(0) - 1;
     const auto hidden_size = hidden_states->size(2);
-    const auto total_tokens =
-        hidden_states->size(0) * hidden_states->size(1);
+    const auto total_tokens = hidden_states->size(0) * hidden_states->size(1);
     if (total_tokens < num_requests) {
         throw std::runtime_error(
             "select_last_token_hidden_states: more requests than input tokens");
@@ -40,7 +39,7 @@ Tensor select_last_token_hidden_states(
     if (offsets[0] != 0
         || offsets[num_requests] < 0
         || static_cast<size_t>(offsets[num_requests])
-            != total_tokens) {
+               != total_tokens) {
         throw std::runtime_error(
             "select_last_token_hidden_states: input_offsets must cover all input tokens");
     }
@@ -55,15 +54,13 @@ Tensor select_last_token_hidden_states(
         }
     }
 
-    auto flat_hidden_states =
-        hidden_states->view({total_tokens, hidden_size});
+    auto flat_hidden_states = hidden_states->view({total_tokens, hidden_size});
     auto selected_hidden_states = Tensor::empty(
         {1, num_requests, hidden_size},
         hidden_states->dtype(),
         hidden_states->device());
     for (size_t i = 0; i < num_requests; ++i) {
-        const auto token_index =
-            static_cast<size_t>(offsets[i + 1] - 1);
+        const auto token_index = static_cast<size_t>(offsets[i + 1] - 1);
         selected_hidden_states
             ->narrow({{1, i, 1}})
             ->view({1, hidden_size})

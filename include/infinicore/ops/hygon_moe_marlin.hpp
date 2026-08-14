@@ -16,8 +16,7 @@ struct HygonMoeMarlinWeights {
     Tensor packed_w2;
     Tensor packed_w13_scale;
     Tensor packed_w2_scale;
-    HygonMoeMarlinWeightFormat format =
-        HygonMoeMarlinWeightFormat::W16A16;
+    HygonMoeMarlinWeightFormat format = HygonMoeMarlinWeightFormat::W16A16;
 };
 
 struct HygonMoeMarlinWorkspace {

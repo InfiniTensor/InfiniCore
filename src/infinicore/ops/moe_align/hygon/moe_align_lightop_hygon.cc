@@ -42,8 +42,7 @@ void *plan(Tensor sorted_token_ids,
            const size_t block_size,
            const bool pad_sorted_token_ids) {
     const auto shape = topk_ids->shape();
-    const bool use_lightop =
-        shape.size() == 2 && shape[0] == 1 && shape[1] == 8 && num_experts == 128;
+    const bool use_lightop = shape.size() == 2 && shape[0] == 1 && shape[1] == 8 && num_experts == 128;
     if (use_lightop) {
         infinicore::adaptor::lightop::preload_moe_align();
     }

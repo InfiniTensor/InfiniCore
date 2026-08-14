@@ -12,7 +12,6 @@ public:
     AllReduce(Tensor output, const Tensor &input, infinicclReduceOp_t op, infinicclComm_t communicator);
     ~AllReduce();
     void run() const override;
-    bool is_device_graph_capture_safe() const override;
     static void execute(Tensor output, const Tensor &input, infinicclReduceOp_t op, infinicclComm_t communicator);
 
 private:

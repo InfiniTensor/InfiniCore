@@ -23,15 +23,14 @@ std::pair<Tensor, Tensor> update_paged_kv_cache(
     auto k_cache_layer = kv_cache->narrow({{0, 0, 1}})->squeeze(0);
     auto v_cache_layer = kv_cache->narrow({{0, 1, 1}})->squeeze(0);
     const auto &cache_shape = k_cache_layer->shape();
-    const bool use_hygon_lightop_paged_attention =
-        key->device().getType() == Device::Type::HYGON
-        && cache_shape.size() == 4
-        && cache_shape[1] == 64
-        && cache_shape[2] == num_kv_heads
-        && cache_shape[3] == head_dim
-        && num_heads == 8
-        && num_kv_heads == 1
-        && head_dim == 128;
+    const bool use_hygon_lightop_paged_attention = key->device().getType() == Device::Type::HYGON
+                                                && cache_shape.size() == 4
+                                                && cache_shape[1] == 64
+                                                && cache_shape[2] == num_kv_heads
+                                                && cache_shape[3] == head_dim
+                                                && num_heads == 8
+                                                && num_kv_heads == 1
+                                                && head_dim == 128;
     if (use_hygon_lightop_paged_attention) {
         const auto num_blocks = cache_shape[0];
         const auto block_size = cache_shape[1];
@@ -99,11 +98,10 @@ Tensor paged_flash_attention(
 
     if (is_prefill) {
         const auto cache_block_size = kv_cache->shape()[2];
-        const auto max_cache_seqlen =
-            block_tables->shape()[1] * cache_block_size;
+        const auto max_cache_seqlen = block_tables->shape()[1] * cache_block_size;
         if (seq_len > static_cast<size_t>(std::numeric_limits<int>::max())
             || max_cache_seqlen
-                > static_cast<size_t>(std::numeric_limits<int>::max())) {
+                   > static_cast<size_t>(std::numeric_limits<int>::max())) {
             throw std::runtime_error(
                 "FlashAttention sequence length exceeds int range");
         }
@@ -129,8 +127,7 @@ Tensor paged_flash_attention(
             block_tables,
             std::nullopt,
             scale);
-        attn_output =
-            attn_out_4d->view({seq_len, num_heads, head_dim});
+        attn_output = attn_out_4d->view({seq_len, num_heads, head_dim});
     }
 
     return attn_output->view({1, seq_len, num_heads * head_dim});

@@ -112,7 +112,6 @@ void MoeW8A8MarlinFusedDense::execute(
         delta1);
 }
 
-
 Tensor moe_w8a8_marlin_pack(const Tensor &weight) {
     return moe_w8a8_marlin_pack_impl::dispatcher().lookup(weight->device().getType())(weight);
 }
@@ -145,6 +144,5 @@ void moe_w8a8_marlin_fused_dense_(
         topk_weights, sorted_token_ids, expert_ids, num_tokens_post_padded,
         top_k, mode0, block_size_m, delta0, mode1, delta1);
 }
-
 
 } // namespace infinicore::op

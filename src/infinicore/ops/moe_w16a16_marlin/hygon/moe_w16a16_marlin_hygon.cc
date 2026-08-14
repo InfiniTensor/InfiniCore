@@ -129,28 +129,19 @@ void *plan(Tensor output,
     const auto same_device = [&](const Tensor &tensor) {
         return tensor && tensor->device() == device;
     };
-    if (!same_device(output) || !same_device(cache13) || !same_device(cache2) ||
-        !same_device(w13_marlin) || !same_device(w2_marlin) ||
-        !same_device(topk_weights) || !same_device(sorted_token_ids) ||
-        !same_device(expert_ids) || !same_device(num_tokens_post_padded)) {
+    if (!same_device(output) || !same_device(cache13) || !same_device(cache2) || !same_device(w13_marlin) || !same_device(w2_marlin) || !same_device(topk_weights) || !same_device(sorted_token_ids) || !same_device(expert_ids) || !same_device(num_tokens_post_padded)) {
         throw std::runtime_error("w16a16 marlin fused dense tensors must be on one device");
     }
 
     const bool bf16 = hidden_states->dtype() == infinicore::DataType::BF16;
     const bool direct_mode0 = bf16 && mode0 == 1000;
     const bool direct_mode1 = bf16 && mode1 == 1000;
-    if ((direct_mode0 || direct_mode1) &&
-        (!output->is_contiguous() || !cache13->is_contiguous() ||
-         !cache2->is_contiguous() || !hidden_states->is_contiguous() ||
-         !w13_marlin->is_contiguous() || !w2_marlin->is_contiguous() ||
-         !topk_weights->is_contiguous() || !sorted_token_ids->is_contiguous() ||
-         !expert_ids->is_contiguous() || !num_tokens_post_padded->is_contiguous())) {
+    if ((direct_mode0 || direct_mode1) && (!output->is_contiguous() || !cache13->is_contiguous() || !cache2->is_contiguous() || !hidden_states->is_contiguous() || !w13_marlin->is_contiguous() || !w2_marlin->is_contiguous() || !topk_weights->is_contiguous() || !sorted_token_ids->is_contiguous() || !expert_ids->is_contiguous() || !num_tokens_post_padded->is_contiguous())) {
         throw std::runtime_error("Hygon W16A16 Marlin mode 1000 requires contiguous tensors");
     }
 
     const bool preload_legacy_gemm = mode0 < 1000 || mode1 < 1000;
-    const bool preload_legacy_asm =
-        (mode0 >= 1000 && !direct_mode0) || (mode1 >= 1000 && !direct_mode1);
+    const bool preload_legacy_asm = (mode0 >= 1000 && !direct_mode0) || (mode1 >= 1000 && !direct_mode1);
     infinicore::adaptor::lightop::preload_moe_w16a16_ops(
         preload_legacy_gemm, preload_legacy_asm);
     if (direct_mode0) {
@@ -185,20 +176,15 @@ void run(void *planned_meta) {
         throw std::runtime_error("w16a16 marlin fused dense weight shape mismatch");
     }
 
-    const bool uses_direct_mode1000 =
-        p->hidden_states->dtype() == infinicore::DataType::BF16 &&
-        (p->mode0 == 1000 || p->mode1 == 1000);
-    if (uses_direct_mode1000 &&
-        (!p->output->is_contiguous() || !p->hidden_states->is_contiguous())) {
+    const bool uses_direct_mode1000 = p->hidden_states->dtype() == infinicore::DataType::BF16 && (p->mode0 == 1000 || p->mode1 == 1000);
+    if (uses_direct_mode1000 && (!p->output->is_contiguous() || !p->hidden_states->is_contiguous())) {
         throw std::runtime_error("Hygon W16A16 Marlin mode 1000 requires contiguous input and output");
     }
-    const bool output_need_copy_back =
-        !uses_direct_mode1000 && !p->output->is_contiguous();
+    const bool output_need_copy_back = !uses_direct_mode1000 && !p->output->is_contiguous();
     Tensor output_work_ic = output_need_copy_back ? p->output->contiguous() : Tensor(p->output);
-    Tensor hidden_work_ic =
-        uses_direct_mode1000 || p->hidden_states->is_contiguous()
-            ? Tensor(p->hidden_states)
-            : p->hidden_states->contiguous();
+    Tensor hidden_work_ic = uses_direct_mode1000 || p->hidden_states->is_contiguous()
+                              ? Tensor(p->hidden_states)
+                              : p->hidden_states->contiguous();
 
     const size_t top_k = p->top_k;
     const size_t cache1_numel = m * top_k * n2;

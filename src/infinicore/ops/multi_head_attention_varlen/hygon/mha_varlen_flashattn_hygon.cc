@@ -125,11 +125,10 @@ void run(void *planned_meta) {
     auto k_work = k.contiguous();
     auto v_work = v.contiguous();
     if (block_table.has_value() && k.dim() == 4 && v.dim() == 4) {
-        const bool vllm_cache_layout =
-            k.size(0) == v.size(0)
-            && k.size(1) == v.size(1)
-            && k.size(2) == v.size(3)
-            && k.size(3) == v.size(2);
+        const bool vllm_cache_layout = k.size(0) == v.size(0)
+                                    && k.size(1) == v.size(1)
+                                    && k.size(2) == v.size(3)
+                                    && k.size(3) == v.size(2);
         if (vllm_cache_layout) {
             if (k.size(2) != 64) {
                 throw std::runtime_error("[mha_varlen/hygon] vLLM cache layout requires block size 64");

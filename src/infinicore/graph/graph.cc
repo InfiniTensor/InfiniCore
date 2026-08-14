@@ -5,17 +5,6 @@
 #include <cstdlib>
 #include <infinirt.h>
 
-#include <algorithm>
-
-#if defined(ENABLE_HYGON_API) && defined(ENABLE_ATEN)
-#include "infinicore/adaptor/aten_adaptor.hpp"
-
-#include <ATen/hip/HIPGraph.h>
-#include <c10/hip/HIPGuard.h>
-
-#include <mutex>
-#endif
-
 namespace infinicore::graph {
 
 namespace {
@@ -74,14 +63,11 @@ DispatchableGraphOperator::~DispatchableGraphOperator() {
  * ========================= */
 
 struct Graph::DeviceGraph {
-    infinirtGraph_t graph = nullptr;
-    infinirtGraphExec_t exec = nullptr;
-    infinirtGraphNode_t node = nullptr;
+    infinirtGraph_t graph;
+    infinirtGraphExec_t exec;
+    infinirtGraphNode_t node;
     std::vector<char> log_buffer;
     std::vector<std::shared_ptr<GraphOperator>> updatable_ops;
-#if defined(ENABLE_HYGON_API) && defined(ENABLE_ATEN)
-    std::unique_ptr<at::cuda::CUDAGraph> hygon_graph;
-#endif
 
     DeviceGraph() : graph(nullptr), exec(nullptr), node(nullptr) {
         log_buffer.resize(4 * 1024);
@@ -96,23 +82,7 @@ struct Graph::DeviceGraph {
         }
     }
 
-    bool is_instantiated() const {
-#if defined(ENABLE_HYGON_API) && defined(ENABLE_ATEN)
-        if (hygon_graph) {
-            return true;
-        }
-#endif
-        return exec != nullptr;
-    }
-
     void launch() {
-#if defined(ENABLE_HYGON_API) && defined(ENABLE_ATEN)
-        if (hygon_graph) {
-            c10::hip::HIPStreamGuard guard(infinicore::adaptor::get_hip_stream());
-            hygon_graph->replay();
-            return;
-        }
-#endif
         INFINICORE_CHECK_ERROR(infinirtGraphLuanch(exec, context::getStream()));
     }
 };
@@ -186,20 +156,11 @@ void Graph::add_operator(std::shared_ptr<GraphOperator> op) {
 }
 
 void Graph::instantiate() {
-#if defined(ENABLE_HYGON_API) && defined(ENABLE_ATEN)
-    const bool is_hygon =
-        context::getDevice().getType() == Device::Type::HYGON;
-#else
-    constexpr bool is_hygon = false;
-#endif
-
     segments_.clear();
 
     // Warm the complete op list before splitting it into replay segments.
     for (size_t iter = 0; iter < 5; ++iter) {
-        for (const auto &op : op_list_) {
-            op->run();
-        }
+        this->run();
     }
     infinicore::context::syncStream();
 
@@ -211,7 +172,7 @@ void Graph::instantiate() {
     }
 
     for (const auto &op : op_list_) {
-        const bool capture_safe = is_hygon || op->is_device_graph_capture_safe();
+        const bool capture_safe = op->is_device_graph_capture_safe();
         if (segments_.empty() || segments_.back()->capture_safe != capture_safe) {
             segments_.push_back(std::make_unique<Segment>(capture_safe));
         }

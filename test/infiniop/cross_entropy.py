@@ -11,7 +11,6 @@ from libinfiniop import (
     get_tolerance,
     profile_operation,
     TestWorkspace,
-    InfiniDeviceEnum,
     InfiniDtype,
     InfiniDtypeNames,
     InfiniDeviceNames,
@@ -28,52 +27,29 @@ _TEST_CASES_ = [
 ]
 
 _TENSOR_DTYPES = [InfiniDtype.F16, InfiniDtype.BF16, InfiniDtype.F32]
-_MIXED_OUTPUT_DTYPES = [InfiniDtype.F16, InfiniDtype.BF16]
-# Hygon dispatches this operator through the same CUDA implementation as NVIDIA.
-_MIXED_OUTPUT_DEVICES = {InfiniDeviceEnum.NVIDIA, InfiniDeviceEnum.HYGON}
-_MIXED_OUTPUT_TEST_CASES_ = [((2, 4, 10), None, None)]
 _TOLERANCE_MAP = {
     InfiniDtype.F16: {"atol": 1e-3, "rtol": 1e-2},
     InfiniDtype.BF16: {"atol": 1e-2, "rtol": 2e-2},
     InfiniDtype.F32: {"atol": 1e-5, "rtol": 1e-5},
 }
-_TORCH_DTYPE_MAP = {
-    InfiniDtype.F16: torch.float16,
-    InfiniDtype.BF16: torch.bfloat16,
-    InfiniDtype.F32: torch.float32,
-}
 
 # ------------------------------------------------------------
 # PyTorch 参考实现
 # ------------------------------------------------------------
-def cross_entropy_ref(logits, target, output_dtype):
+def cross_entropy_ref(logits, target):
     vocab = logits.shape[-1]
     logits_flat = logits.reshape(-1, vocab).float()
     target_flat = target.reshape(-1).long()
     loss = torch.nn.functional.cross_entropy(logits_flat, target_flat, reduction="none")
-    return loss.view(target.shape).to(_TORCH_DTYPE_MAP[output_dtype])
+    return loss.view(target.shape).to(logits.dtype)
 
 
-def test(
-    handle,
-    device,
-    shape,
-    x_stride=None,
-    y_stride=None,
-    dtype=InfiniDtype.F16,
-    sync=None,
-    output_dtype=None,
-):
+def test(handle, device, shape, x_stride=None, y_stride=None, dtype=InfiniDtype.F16, sync=None):
     logits_shape = shape
     label_shape = shape[:-1]
     vocab = shape[-1]
-    output_dtype = dtype if output_dtype is None else output_dtype
 
-    print(
-        f"Testing CrossEntropy on {InfiniDeviceNames[device]} "
-        f"logits:{logits_shape} input_dtype:{InfiniDtypeNames[dtype]} "
-        f"output_dtype:{InfiniDtypeNames[output_dtype]}"
-    )
+    print(f"Testing CrossEntropy on {InfiniDeviceNames[device]} logits:{logits_shape} dtype:{InfiniDtypeNames[dtype]}")
 
     x = TestTensor(logits_shape, x_stride, dtype, device)
     target = TestTensor(label_shape, None, InfiniDtype.I64, device)
@@ -83,10 +59,8 @@ def test(
     tgt.copy_(torch.randint(0, vocab, label_shape, dtype=torch.int64, device=tgt.device))
     target.actual_tensor().copy_(tgt)
 
-    reference = cross_entropy_ref(
-        x.torch_tensor(), target.torch_tensor(), output_dtype
-    )
-    y = TestTensor(label_shape, y_stride, output_dtype, device)
+    reference = cross_entropy_ref(x.torch_tensor(), target.torch_tensor())
+    y = TestTensor(label_shape, y_stride, dtype, device)
 
     descriptor = infiniopOperatorDescriptor_t()
     check_error(
@@ -125,36 +99,8 @@ def test(
     check_error(LIBINFINIOP.infiniopDestroyCrossEntropyDescriptor(descriptor))
 
 
-def test_mixed_output(
-    handle,
-    device,
-    shape,
-    x_stride=None,
-    y_stride=None,
-    dtype=InfiniDtype.F16,
-    sync=None,
-):
-    test(
-        handle,
-        device,
-        shape,
-        x_stride,
-        y_stride,
-        dtype,
-        sync,
-        output_dtype=InfiniDtype.F32,
-    )
-
-
 if __name__ == "__main__":
     args = get_args()
     for device in get_test_devices(args):
         test_operator(device, test, _TEST_CASES_, _TENSOR_DTYPES)
-        if device in _MIXED_OUTPUT_DEVICES:
-            test_operator(
-                device,
-                test_mixed_output,
-                _MIXED_OUTPUT_TEST_CASES_,
-                _MIXED_OUTPUT_DTYPES,
-            )
     print("\033[92mTest passed!\033[0m")

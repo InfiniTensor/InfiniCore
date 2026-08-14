@@ -56,19 +56,18 @@ void run(void *planned_meta) {
                           ? std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(*p->alibi_slopes))
                           : std::nullopt;
 
-    const bool use_paged_attention =
-        q.dim() == 4 && q.size(1) == 1
-        && k_cache.dim() == 4 && v_cache.dim() == 4
-        && k_cache.size(0) == v_cache.size(0)
-        && k_cache.size(1) == v_cache.size(1)
-        && k_cache.size(2) == v_cache.size(3)
-        && k_cache.size(3) == v_cache.size(2)
-        && k_cache.size(2) == 64
-        && q.size(2) % k_cache.size(1) == 0
-        && q.size(3) == k_cache.size(3)
-        && q.is_contiguous() && k_cache.is_contiguous() && v_cache.is_contiguous()
-        && seqlens_k_tensor.dim() == 1 && block_table_tensor.dim() == 2
-        && !alibi_slopes.has_value();
+    const bool use_paged_attention = q.dim() == 4 && q.size(1) == 1
+                                  && k_cache.dim() == 4 && v_cache.dim() == 4
+                                  && k_cache.size(0) == v_cache.size(0)
+                                  && k_cache.size(1) == v_cache.size(1)
+                                  && k_cache.size(2) == v_cache.size(3)
+                                  && k_cache.size(3) == v_cache.size(2)
+                                  && k_cache.size(2) == 64
+                                  && q.size(2) % k_cache.size(1) == 0
+                                  && q.size(3) == k_cache.size(3)
+                                  && q.is_contiguous() && k_cache.is_contiguous() && v_cache.is_contiguous()
+                                  && seqlens_k_tensor.dim() == 1 && block_table_tensor.dim() == 2
+                                  && !alibi_slopes.has_value();
     if (use_paged_attention) {
         const auto max_context_len_64 = block_table_tensor.size(1) * k_cache.size(2);
         if (max_context_len_64 > std::numeric_limits<int>::max()) {

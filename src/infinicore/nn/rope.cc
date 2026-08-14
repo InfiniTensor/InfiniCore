@@ -77,8 +77,12 @@ void RoPE::initialize_cache() {
     INFINICORE_NN_BUFFER_INIT(sin_cache, ({max_seq_len_, cache_dim}, dtype_, device_));
     INFINICORE_NN_BUFFER_INIT(cos_cache, ({max_seq_len_, cache_dim}, dtype_, device_));
 
-#ifdef ENABLE_INFINIOPS_API
-    if ((device_.getType() == Device::Type::NVIDIA || device_.getType() == Device::Type::METAX) && !mrope_section_) {
+#if defined(ENABLE_INFINIOPS_API) || defined(ENABLE_HYGON_API)
+    const auto device_type = device_.getType();
+    if ((device_type == Device::Type::NVIDIA
+         || device_type == Device::Type::METAX
+         || device_type == Device::Type::HYGON)
+        && !mrope_section_) {
         INFINICORE_NN_BUFFER_INIT(cos_sin_cache, ({max_seq_len_, rotary_dim_}, dtype_, device_));
     }
 #endif

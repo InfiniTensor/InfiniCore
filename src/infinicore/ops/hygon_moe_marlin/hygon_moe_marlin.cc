@@ -99,19 +99,16 @@ RoutingMetadata prepare_routing(
     }
     const size_t num_pairs = topk_shape[0] * topk_shape[1];
     const size_t align_num_experts = num_local_experts + 1;
-    const size_t max_num_tokens_padded =
-        num_pairs < align_num_experts
-        ? num_pairs * block_size
-        : num_pairs + align_num_experts * (block_size - 1);
-    const size_t sorted_token_ids_capacity =
-        ((max_num_tokens_padded + 3) / 4) * 4;
-    const size_t max_num_blocks =
-        (max_num_tokens_padded + block_size - 1) / block_size;
+    const size_t max_num_tokens_padded = num_pairs < align_num_experts
+                                           ? num_pairs * block_size
+                                           : num_pairs + align_num_experts * (block_size - 1);
+    const size_t sorted_token_ids_capacity = ((max_num_tokens_padded + 3) / 4) * 4;
+    const size_t max_num_blocks = (max_num_tokens_padded + block_size - 1) / block_size;
     const auto device = topk_ids->device();
 
     if (!same_device(workspace.sorted_token_ids, device)
         || workspace.sorted_token_ids_capacity
-            < sorted_token_ids_capacity) {
+               < sorted_token_ids_capacity) {
         if (context::isGraphRecording()) {
             throw std::runtime_error(
                 "Hygon MoE Marlin sorted_token_ids workspace was not initialized before graph capture");
@@ -120,8 +117,7 @@ RoutingMetadata prepare_routing(
             {sorted_token_ids_capacity},
             DataType::I32,
             device);
-        workspace.sorted_token_ids_capacity =
-            sorted_token_ids_capacity;
+        workspace.sorted_token_ids_capacity = sorted_token_ids_capacity;
     }
     if (!same_device(workspace.expert_ids, device)
         || workspace.expert_ids_capacity < max_num_blocks) {
@@ -219,11 +215,9 @@ Tensor run_w16a16(
         throw std::runtime_error(
             "Hygon W16A16 Marlin MoE inputs above 16384 tokens must be sliced");
     }
-    const size_t cache13_required =
-        num_tokens * top_k
-        * std::max(intermediate_size * 2, hidden_size);
-    const size_t cache2_required =
-        num_tokens * top_k * intermediate_size;
+    const size_t cache13_required = num_tokens * top_k
+                                  * std::max(intermediate_size * 2, hidden_size);
+    const size_t cache2_required = num_tokens * top_k * intermediate_size;
 
     ensure_tensor(
         workspace.output,
@@ -319,9 +313,8 @@ Tensor run_w8a8(
 
     const size_t top_k = topk_ids->shape()[1];
     const size_t num_tokens = hidden_states->shape()[0];
-    const size_t cache13_required =
-        num_tokens * top_k
-        * std::max(intermediate_size * 2, hidden_size);
+    const size_t cache13_required = num_tokens * top_k
+                                  * std::max(intermediate_size * 2, hidden_size);
 
     ensure_tensor(
         workspace.output,
@@ -447,23 +440,19 @@ HygonMoeMarlinOutput run_sliced(
         const size_t slice_tokens = std::min(
             kHygonMoeSliceTokens,
             num_tokens - offset);
-        auto hidden_slice =
-            hidden_states->narrow({{0, offset, slice_tokens}});
-        auto topk_weights_slice =
-            topk_weights->narrow({{0, offset, slice_tokens}});
-        auto topk_ids_slice =
-            topk_ids->narrow({{0, offset, slice_tokens}});
+        auto hidden_slice = hidden_states->narrow({{0, offset, slice_tokens}});
+        auto topk_weights_slice = topk_weights->narrow({{0, offset, slice_tokens}});
+        auto topk_ids_slice = topk_ids->narrow({{0, offset, slice_tokens}});
 
         if (weights.format == HygonMoeMarlinWeightFormat::W16A16) {
-            const auto config =
-                slice_tokens == kHygonMoeSliceTokens
-                ? full_w16_config
-                : select_hygon_w16a16_marlin_config(
-                      slice_tokens,
-                      hidden_size,
-                      intermediate_size,
-                      activation_dtype,
-                      device_index);
+            const auto config = slice_tokens == kHygonMoeSliceTokens
+                                  ? full_w16_config
+                                  : select_hygon_w16a16_marlin_config(
+                                      slice_tokens,
+                                      hidden_size,
+                                      intermediate_size,
+                                      activation_dtype,
+                                      device_index);
             if (!config.supported) {
                 throw std::runtime_error(
                     "No LightOP W16A16 Marlin config found for sliced Hygon shape");
@@ -489,14 +478,13 @@ HygonMoeMarlinOutput run_sliced(
                 ->narrow({{0, offset, slice_tokens}})
                 ->copy_from(slice_output);
         } else {
-            const auto config =
-                slice_tokens == kHygonMoeSliceTokens
-                ? full_w8_config
-                : select_hygon_w8a8_marlin_config(
-                      slice_tokens,
-                      hidden_size,
-                      intermediate_size,
-                      device_index);
+            const auto config = slice_tokens == kHygonMoeSliceTokens
+                                  ? full_w8_config
+                                  : select_hygon_w8a8_marlin_config(
+                                      slice_tokens,
+                                      hidden_size,
+                                      intermediate_size,
+                                      device_index);
             if (!config.supported) {
                 throw std::runtime_error(
                     "No LightOP W8A8 Marlin config found for sliced Hygon shape");

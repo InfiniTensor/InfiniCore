@@ -3,16 +3,12 @@
 #include "../cuda/kernel.cuh"
 #include "cross_entropy_nvidia.cuh"
 
-template <unsigned int BLOCK_SIZE,
-          typename Tout,
-          typename Tdata,
-          typename Tidx,
-          typename Tcompute = float>
+template <unsigned int BLOCK_SIZE, typename Tdata, typename Tidx, typename Tcompute = float>
 INFINIOP_CUDA_KERNEL crossEntropy(
-    Tout *y, const Tdata *x, const void *target,
+    Tdata *y, const Tdata *x, const void *target,
     size_t outer_size, size_t vocab_size, ptrdiff_t x_stride) {
 
-    crossEntropyKernel<BLOCK_SIZE, Tout, Tdata, Tidx, Tcompute>(
+    crossEntropyKernel<BLOCK_SIZE, Tdata, Tidx, Tcompute>(
         y, x, target, outer_size, vocab_size, x_stride);
 }
 
@@ -33,21 +29,11 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t x_desc,
     infiniopTensorDescriptor_t target_desc) {
 
-    auto y_dtype = y_desc->dtype();
     auto x_dtype = x_desc->dtype();
     auto t_dtype = target_desc->dtype();
 
-    CHECK_DTYPE(x_dtype, INFINI_DTYPE_F16, INFINI_DTYPE_BF16, INFINI_DTYPE_F32);
-    CHECK_DTYPE(y_dtype, INFINI_DTYPE_F16, INFINI_DTYPE_BF16, INFINI_DTYPE_F32);
-    CHECK_DTYPE(t_dtype, INFINI_DTYPE_I32, INFINI_DTYPE_I64);
-
-    if (y_dtype != x_dtype && y_dtype != INFINI_DTYPE_F32) {
-        return INFINI_STATUS_BAD_TENSOR_DTYPE;
-    }
-
-    CrossEntropyInfo info{};
+    CrossEntropyInfo info;
     info.dtype = x_dtype;
-    info.output_dtype = y_dtype;
     info.target_dtype = t_dtype;
 
     info.vocab_size = x_desc->shape().back();
@@ -62,65 +48,40 @@ infiniStatus_t Descriptor::create(
     return INFINI_STATUS_SUCCESS;
 }
 
-template <unsigned int BLOCK_SIZE, typename Tdata, typename Tidx>
-infiniStatus_t launchTypedKernel(void *y, const void *x, const void *target,
-                                const CrossEntropyInfo &info, cudaStream_t stream) {
-    dim3 grid(static_cast<uint32_t>(info.outer_size), 1, 1);
-    if (info.output_dtype == INFINI_DTYPE_F32) {
-        crossEntropy<BLOCK_SIZE, float, Tdata, Tidx>
-            <<<grid, BLOCK_SIZE, 0, stream>>>(
-                (float *)y,
-                (const Tdata *)x,
-                target,
-                info.outer_size,
-                info.vocab_size,
-                info.x_stride);
-    } else if (info.output_dtype == info.dtype) {
-        crossEntropy<BLOCK_SIZE, Tdata, Tdata, Tidx>
-            <<<grid, BLOCK_SIZE, 0, stream>>>(
-                (Tdata *)y,
-                (const Tdata *)x,
-                target,
-                info.outer_size,
-                info.vocab_size,
-                info.x_stride);
-    } else {
-        return INFINI_STATUS_BAD_TENSOR_DTYPE;
-    }
-    return INFINI_STATUS_SUCCESS;
-}
-
 template <unsigned int BLOCK_SIZE>
 infiniStatus_t launchKernel(void *y, const void *x, const void *target,
                             const CrossEntropyInfo &info, cudaStream_t stream) {
+
+    dim3 grid(static_cast<uint32_t>(info.outer_size), 1, 1);
+
     if (info.target_dtype == INFINI_DTYPE_I64) {
         if (info.dtype == INFINI_DTYPE_F16) {
-            return launchTypedKernel<BLOCK_SIZE, half, int64_t>(
-                y, x, target, info, stream);
-        }
-        if (info.dtype == INFINI_DTYPE_BF16) {
-            return launchTypedKernel<BLOCK_SIZE, __nv_bfloat16, int64_t>(
-                y, x, target, info, stream);
-        }
-        if (info.dtype == INFINI_DTYPE_F32) {
-            return launchTypedKernel<BLOCK_SIZE, float, int64_t>(
-                y, x, target, info, stream);
+            crossEntropy<BLOCK_SIZE, half, int64_t>
+                <<<grid, BLOCK_SIZE, 0, stream>>>((half *)y, (const half *)x, target, info.outer_size, info.vocab_size, info.x_stride);
+        } else if (info.dtype == INFINI_DTYPE_BF16) {
+            crossEntropy<BLOCK_SIZE, __nv_bfloat16, int64_t>
+                <<<grid, BLOCK_SIZE, 0, stream>>>((__nv_bfloat16 *)y, (const __nv_bfloat16 *)x, target, info.outer_size, info.vocab_size, info.x_stride);
+        } else if (info.dtype == INFINI_DTYPE_F32) {
+            crossEntropy<BLOCK_SIZE, float, int64_t>
+                <<<grid, BLOCK_SIZE, 0, stream>>>((float *)y, (const float *)x, target, info.outer_size, info.vocab_size, info.x_stride);
         }
     } else if (info.target_dtype == INFINI_DTYPE_I32) {
+
         if (info.dtype == INFINI_DTYPE_F16) {
-            return launchTypedKernel<BLOCK_SIZE, half, int32_t>(
-                y, x, target, info, stream);
+            crossEntropy<BLOCK_SIZE, half, int32_t>
+                <<<grid, BLOCK_SIZE, 0, stream>>>((half *)y, (const half *)x, target, info.outer_size, info.vocab_size, info.x_stride);
+        } else if (info.dtype == INFINI_DTYPE_BF16) {
+            crossEntropy<BLOCK_SIZE, __nv_bfloat16, int32_t>
+                <<<grid, BLOCK_SIZE, 0, stream>>>((__nv_bfloat16 *)y, (const __nv_bfloat16 *)x, target, info.outer_size, info.vocab_size, info.x_stride);
+        } else if (info.dtype == INFINI_DTYPE_F32) {
+            crossEntropy<BLOCK_SIZE, float, int32_t>
+                <<<grid, BLOCK_SIZE, 0, stream>>>((float *)y, (const float *)x, target, info.outer_size, info.vocab_size, info.x_stride);
         }
-        if (info.dtype == INFINI_DTYPE_BF16) {
-            return launchTypedKernel<BLOCK_SIZE, __nv_bfloat16, int32_t>(
-                y, x, target, info, stream);
-        }
-        if (info.dtype == INFINI_DTYPE_F32) {
-            return launchTypedKernel<BLOCK_SIZE, float, int32_t>(
-                y, x, target, info, stream);
-        }
+    } else {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
-    return INFINI_STATUS_BAD_TENSOR_DTYPE;
+
+    return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t Descriptor::calculate(void *workspace, size_t workspace_size,

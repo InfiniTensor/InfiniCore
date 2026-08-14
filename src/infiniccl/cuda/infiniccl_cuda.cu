@@ -126,11 +126,8 @@ struct HygonTp8Signal {
     alignas(128) uint32_t flag[kHygonTp8MaxBlocks];
 };
 
-constexpr size_t kHygonTp8TwoStageScratchBytes =
-    kHygonTp8TwoStageMaxBytes / kHygonTp8WorldSize +
-    (kHygonTp8WorldSize - 1) * sizeof(HygonBf16Pack);
-constexpr size_t kHygonTp8SignalAllocationBytes =
-    sizeof(HygonTp8Signal) + kHygonTp8TwoStageScratchBytes;
+constexpr size_t kHygonTp8TwoStageScratchBytes = kHygonTp8TwoStageMaxBytes / kHygonTp8WorldSize + (kHygonTp8WorldSize - 1) * sizeof(HygonBf16Pack);
+constexpr size_t kHygonTp8SignalAllocationBytes = sizeof(HygonTp8Signal) + kHygonTp8TwoStageScratchBytes;
 
 struct alignas(16) HygonTp8RankData {
     const void *ptrs[kHygonTp8WorldSize];
@@ -160,15 +157,7 @@ struct HygonCudaDriverApi {
         if (library == nullptr) {
             library = dlopen("/opt/dtk/cuda/cuda/lib64/libcuda.so.1", RTLD_NOW | RTLD_LOCAL);
         }
-        available = library != nullptr &&
-                    load(mem_get_allocation_granularity, "cuMemGetAllocationGranularity") &&
-                    load(mem_address_reserve, "cuMemAddressReserve") &&
-                    load(mem_create, "cuMemCreate") &&
-                    load(mem_map, "cuMemMap") &&
-                    load(mem_set_access, "cuMemSetAccess") &&
-                    load(mem_unmap, "cuMemUnmap") &&
-                    load(mem_release, "cuMemRelease") &&
-                    load(mem_address_free, "cuMemAddressFree");
+        available = library != nullptr && load(mem_get_allocation_granularity, "cuMemGetAllocationGranularity") && load(mem_address_reserve, "cuMemAddressReserve") && load(mem_create, "cuMemCreate") && load(mem_map, "cuMemMap") && load(mem_set_access, "cuMemSetAccess") && load(mem_unmap, "cuMemUnmap") && load(mem_release, "cuMemRelease") && load(mem_address_free, "cuMemAddressFree");
     }
 
 private:
@@ -193,7 +182,8 @@ struct HygonHipExtApi {
     int (*event_destroy)(void *) = nullptr;
     int (*ext_launch_kernel)(
         const void *, dim3, dim3, void **, size_t,
-        void *, void *, void *, int) = nullptr;
+        void *, void *, void *, int)
+        = nullptr;
     bool available = false;
 
     HygonHipExtApi() {
@@ -205,15 +195,11 @@ struct HygonHipExtApi {
         };
         for (const char *candidate : candidates) {
             library = dlopen(candidate, RTLD_NOW | RTLD_LOCAL);
-            if (library != nullptr) break;
+            if (library != nullptr) {
+                break;
+            }
         }
-        available = library != nullptr &&
-                    load(ext_malloc_with_flags, "hipExtMallocWithFlags") &&
-                    load(memset, "hipMemset") &&
-                    load(free, "hipFree") &&
-                    load(event_create_with_flags, "hipEventCreateWithFlags") &&
-                    load(event_destroy, "hipEventDestroy") &&
-                    load(ext_launch_kernel, "hipExtLaunchKernel");
+        available = library != nullptr && load(ext_malloc_with_flags, "hipExtMallocWithFlags") && load(memset, "hipMemset") && load(free, "hipFree") && load(event_create_with_flags, "hipEventCreateWithFlags") && load(event_destroy, "hipEventDestroy") && load(ext_launch_kernel, "hipExtLaunchKernel");
     }
 
 private:
@@ -256,16 +242,19 @@ struct HygonTp2AllReduceState {
         const bool restore_device = cudaGetDevice(&previous_device) == cudaSuccess;
         for (int rank = 0; rank < 2; ++rank) {
             cudaSetDevice(device_ids[rank]);
-            if (rank_data[rank] != nullptr) cudaFree(rank_data[rank]);
-            if (signal_hosts[rank] != nullptr) cudaFreeHost(signal_hosts[rank]);
+            if (rank_data[rank] != nullptr) {
+                cudaFree(rank_data[rank]);
+            }
+            if (signal_hosts[rank] != nullptr) {
+                cudaFreeHost(signal_hosts[rank]);
+            }
             auto &driver = hygon_cuda_driver_api();
             if (driver.available && stages[rank].handle != 0) {
                 const auto address = reinterpret_cast<CUdeviceptr>(stages[rank].ptr);
                 driver.mem_unmap(address, stages[rank].size);
                 driver.mem_address_free(address, stages[rank].size);
                 driver.mem_release(stages[rank].handle);
-            } else if (stages[rank].hip_uncached &&
-                       stages[rank].ptr != nullptr) {
+            } else if (stages[rank].hip_uncached && stages[rank].ptr != nullptr) {
                 auto &hip = hygon_hip_ext_api();
                 if (hip.available) {
                     hip.free(stages[rank].ptr);
@@ -274,7 +263,9 @@ struct HygonTp2AllReduceState {
                 cudaFree(stages[rank].ptr);
             }
         }
-        if (restore_device) cudaSetDevice(previous_device);
+        if (restore_device) {
+            cudaSetDevice(previous_device);
+        }
     }
 };
 
@@ -317,7 +308,9 @@ struct HygonTp8AllReduceState {
                 hip.free(signals[rank]);
             }
         }
-        if (restore_device) cudaSetDevice(previous_device);
+        if (restore_device) {
+            cudaSetDevice(previous_device);
+        }
     }
 };
 
@@ -329,31 +322,39 @@ bool allocate_hygon_vmm(HygonVmmAllocation &allocation,
                         const int device_ids[2],
                         size_t requested_size) {
     auto &driver = hygon_cuda_driver_api();
-    if (!driver.available) return false;
+    if (!driver.available) {
+        return false;
+    }
     CUmemAllocationProp properties{};
     properties.type = CU_MEM_ALLOCATION_TYPE_PINNED;
     properties.location.type = CU_MEM_LOCATION_TYPE_DEVICE;
     properties.location.id = owner_device;
     size_t granularity = 0;
     if (driver.mem_get_allocation_granularity(
-            &granularity, &properties, CU_MEM_ALLOC_GRANULARITY_MINIMUM) != CUDA_SUCCESS ||
-        granularity == 0) return false;
+            &granularity, &properties, CU_MEM_ALLOC_GRANULARITY_MINIMUM)
+            != CUDA_SUCCESS
+        || granularity == 0) {
+        return false;
+    }
     allocation.size = (requested_size + granularity - 1) / granularity * granularity;
     CUdeviceptr address = 0;
     if (driver.mem_address_reserve(
-            &address, allocation.size, granularity, 0, 0) != CUDA_SUCCESS) {
+            &address, allocation.size, granularity, 0, 0)
+        != CUDA_SUCCESS) {
         allocation = {};
         return false;
     }
     allocation.ptr = reinterpret_cast<void *>(address);
     if (driver.mem_create(
-            &allocation.handle, allocation.size, &properties, 0) != CUDA_SUCCESS) {
+            &allocation.handle, allocation.size, &properties, 0)
+        != CUDA_SUCCESS) {
         driver.mem_address_free(address, allocation.size);
         allocation = {};
         return false;
     }
     if (driver.mem_map(
-            address, allocation.size, 0, allocation.handle, 0) != CUDA_SUCCESS) {
+            address, allocation.size, 0, allocation.handle, 0)
+        != CUDA_SUCCESS) {
         driver.mem_release(allocation.handle);
         driver.mem_address_free(address, allocation.size);
         allocation = {};
@@ -387,11 +388,14 @@ __device__ __forceinline__ uint32_t hygon_tp2_start_sync(
             next_flag, __ATOMIC_RELAXED, __MEMORY_SCOPE_SYSTEM);
         while (__scoped_atomic_load_n(
                    &self_signal->start[blockIdx.x][threadIdx.x],
-                   __ATOMIC_RELAXED, __MEMORY_SCOPE_DEVICE) < next_flag) {
+                   __ATOMIC_RELAXED, __MEMORY_SCOPE_DEVICE)
+               < next_flag) {
         }
     }
     __syncthreads();
-    if (threadIdx.x == 0) self_signal->flag[blockIdx.x] = next_flag;
+    if (threadIdx.x == 0) {
+        self_signal->flag[blockIdx.x] = next_flag;
+    }
     return next_flag;
 }
 
@@ -408,7 +412,8 @@ __device__ __forceinline__ void hygon_tp2_end_sync(
             flag, __ATOMIC_RELAXED, __MEMORY_SCOPE_SYSTEM);
         while (__scoped_atomic_load_n(
                    &self_signal->end[blockIdx.x][threadIdx.x],
-                   __ATOMIC_RELAXED, __MEMORY_SCOPE_DEVICE) < flag) {
+                   __ATOMIC_RELAXED, __MEMORY_SCOPE_DEVICE)
+               < flag) {
         }
     }
     __syncthreads();
@@ -442,8 +447,7 @@ __global__ __launch_bounds__(512, 1) void hygon_tp2_bf16_allreduce_kernel(
         __threadfence_system();
     }
     __syncthreads();
-    const uint32_t sync_flag =
-        hygon_tp2_start_sync<num_ranks>(rank_signals, self_signal, rank);
+    const uint32_t sync_flag = hygon_tp2_start_sync<num_ranks>(rank_signals, self_signal, rank);
     for (size_t index = blockIdx.x * threads_per_rank + lane;
          index < pack_count;
          index += gridDim.x * threads_per_rank) {
@@ -455,9 +459,7 @@ __global__ __launch_bounds__(512, 1) void hygon_tp2_bf16_allreduce_kernel(
             HygonBf16Pack reduced;
 #pragma unroll
             for (int element = 0; element < pack_size; ++element) {
-                const float value =
-                    __bfloat162float(shared[threadIdx.x * pack_size + element]) +
-                    __bfloat162float(shared[(threads_per_rank + threadIdx.x) * pack_size + element]);
+                const float value = __bfloat162float(shared[threadIdx.x * pack_size + element]) + __bfloat162float(shared[(threads_per_rank + threadIdx.x) * pack_size + element]);
                 reduced.values[element] = __float2bfloat16(value);
             }
             reinterpret_cast<HygonBf16Pack *>(output)[index] = reduced;
@@ -470,59 +472,79 @@ __global__ __launch_bounds__(512, 1) void hygon_tp2_bf16_allreduce_kernel(
 
 std::shared_ptr<HygonTp2AllReduceState> create_hygon_tp2_state(
     int ndevice, const int *device_ids) {
-    if (ndevice != 2 || device_ids == nullptr) return nullptr;
+    if (ndevice != 2 || device_ids == nullptr) {
+        return nullptr;
+    }
     auto state = std::make_shared<HygonTp2AllReduceState>();
     state->device_ids[0] = device_ids[0];
     state->device_ids[1] = device_ids[1];
     int previous_device = 0;
     const bool restore_device = cudaGetDevice(&previous_device) == cudaSuccess;
     auto fail = [&]() -> std::shared_ptr<HygonTp2AllReduceState> {
-        if (restore_device) cudaSetDevice(previous_device);
+        if (restore_device) {
+            cudaSetDevice(previous_device);
+        }
         return nullptr;
     };
     const size_t stage_bytes = kHygonTp2StageCapacityElements * sizeof(__nv_bfloat16);
     for (int rank = 0; rank < 2; ++rank) {
-        if (cudaSetDevice(device_ids[rank]) != cudaSuccess) return fail();
+        if (cudaSetDevice(device_ids[rank]) != cudaSuccess) {
+            return fail();
+        }
         const int peer = 1 - rank;
         int can_access_peer = 0;
         if (cudaDeviceCanAccessPeer(
                 &can_access_peer,
                 device_ids[rank],
-                device_ids[peer]) != cudaSuccess ||
-            can_access_peer == 0) {
+                device_ids[peer])
+                != cudaSuccess
+            || can_access_peer == 0) {
             return fail();
         }
-        const cudaError_t enable_status =
-            cudaDeviceEnablePeerAccess(device_ids[peer], 0);
+        const cudaError_t enable_status = cudaDeviceEnablePeerAccess(device_ids[peer], 0);
         if (enable_status == cudaErrorPeerAccessAlreadyEnabled) {
             (void)cudaGetLastError();
         } else if (enable_status != cudaSuccess) {
             return fail();
         }
         auto &hip = hygon_hip_ext_api();
-        if (!hip.available) return fail();
+        if (!hip.available) {
+            return fail();
+        }
         state->stages[rank].size = stage_bytes;
         if (hip.ext_malloc_with_flags(
                 &state->stages[rank].ptr,
                 stage_bytes,
-                kHygonHipDeviceMallocUncached) != kHygonHipSuccess) {
+                kHygonHipDeviceMallocUncached)
+            != kHygonHipSuccess) {
             return fail();
         }
         state->stages[rank].hip_uncached = true;
         if (hip.memset(
                 state->stages[rank].ptr,
                 0,
-                stage_bytes) != kHygonHipSuccess) return fail();
+                stage_bytes)
+            != kHygonHipSuccess) {
+            return fail();
+        }
         void *signal_host = nullptr;
         if (cudaHostAlloc(&signal_host, sizeof(HygonTp2Signal),
-                          cudaHostAllocMapped) != cudaSuccess) return fail();
+                          cudaHostAllocMapped)
+            != cudaSuccess) {
+            return fail();
+        }
         state->signal_hosts[rank] = static_cast<HygonTp2Signal *>(signal_host);
         std::memset(state->signal_hosts[rank], 0, sizeof(HygonTp2Signal));
         void *signal_device = nullptr;
-        if (cudaHostGetDevicePointer(&signal_device, signal_host, 0) != cudaSuccess) return fail();
+        if (cudaHostGetDevicePointer(&signal_device, signal_host, 0) != cudaSuccess) {
+            return fail();
+        }
         state->signals[rank] = static_cast<HygonTp2Signal *>(signal_device);
         if (cudaMalloc(reinterpret_cast<void **>(&state->rank_data[rank]),
-                      sizeof(HygonTp2RankData)) != cudaSuccess) return fail();
+                       sizeof(HygonTp2RankData))
+            != cudaSuccess) {
+            return fail();
+        }
     }
     HygonTp2RankData host_rank_data{{state->stages[0].ptr, state->stages[1].ptr}};
     state->rank_signals.signals[0] = state->signals[0];
@@ -530,9 +552,14 @@ std::shared_ptr<HygonTp2AllReduceState> create_hygon_tp2_state(
     for (int rank = 0; rank < 2; ++rank) {
         cudaSetDevice(device_ids[rank]);
         if (cudaMemcpy(state->rank_data[rank], &host_rank_data,
-                      sizeof(host_rank_data), cudaMemcpyHostToDevice) != cudaSuccess) return fail();
+                       sizeof(host_rank_data), cudaMemcpyHostToDevice)
+            != cudaSuccess) {
+            return fail();
+        }
     }
-    if (restore_device) cudaSetDevice(previous_device);
+    if (restore_device) {
+        cudaSetDevice(previous_device);
+    }
     return state;
 }
 
@@ -540,9 +567,13 @@ void register_hygon_tp2_state(infinicclComm_t *comms,
                               int ndevice,
                               const int *device_ids) {
     auto state = create_hygon_tp2_state(ndevice, device_ids);
-    if (state == nullptr) return;
+    if (state == nullptr) {
+        return;
+    }
     std::lock_guard<std::mutex> lock(hygon_tp2_states_mutex);
-    for (int rank = 0; rank < 2; ++rank) hygon_tp2_states.emplace(comms[rank], state);
+    for (int rank = 0; rank < 2; ++rank) {
+        hygon_tp2_states.emplace(comms[rank], state);
+    }
 }
 
 void erase_hygon_tp2_state(infinicclComm_t comm) {
@@ -570,7 +601,9 @@ bool reserve_hygon_tp2_stage(
         cursor.initialized = true;
     }
     const size_t aligned_offset = (cursor.next_element + 7) & ~size_t{7};
-    if (aligned_offset > kHygonTp2StageCapacityElements - count) return false;
+    if (aligned_offset > kHygonTp2StageCapacityElements - count) {
+        return false;
+    }
     *element_offset = aligned_offset;
     cursor.next_element = aligned_offset + count;
     return true;
@@ -580,18 +613,23 @@ bool try_hygon_tp2_graph_allreduce(
     void *sendbuf, void *recvbuf, size_t count,
     infiniDtype_t datatype, infinicclReduceOp_t op,
     infinicclComm_t comm, cudaStream_t stream) {
-    if (comm == nullptr || comm->world_size != 2 ||
-        datatype != INFINI_DTYPE_BF16 || op != INFINICCL_SUM ||
-        count == 0 || count > kHygonTp2StageCapacityElements || (count % 8) != 0) return false;
+    if (comm == nullptr || comm->world_size != 2 || datatype != INFINI_DTYPE_BF16 || op != INFINICCL_SUM || count == 0 || count > kHygonTp2StageCapacityElements || (count % 8) != 0) {
+        return false;
+    }
     cudaStreamCaptureStatus capture_status = cudaStreamCaptureStatusNone;
     unsigned long long capture_id = 0;
-    if (cudaStreamGetCaptureInfo(stream, &capture_status, &capture_id) != cudaSuccess ||
-        capture_status != cudaStreamCaptureStatusActive) return false;
+    if (cudaStreamGetCaptureInfo(stream, &capture_status, &capture_id) != cudaSuccess || capture_status != cudaStreamCaptureStatusActive) {
+        return false;
+    }
     auto state = get_hygon_tp2_state(comm);
-    if (state == nullptr || comm->rank < 0 || comm->rank >= 2) return false;
+    if (state == nullptr || comm->rank < 0 || comm->rank >= 2) {
+        return false;
+    }
     const int rank = comm->rank;
     size_t element_offset = 0;
-    if (!reserve_hygon_tp2_stage(state, rank, capture_id, count, &element_offset)) return false;
+    if (!reserve_hygon_tp2_stage(state, rank, capture_id, count, &element_offset)) {
+        return false;
+    }
     const size_t pack_count = count / 8;
     int blocks = static_cast<int>(
         std::min<size_t>(kHygonTp2MaxBlocks, (pack_count + 255) / 256));
@@ -612,8 +650,8 @@ __device__ __forceinline__ uint32_t hygon_tp8_start_sync(
     if (threadIdx.x == 0) {
         *block_flag = __scoped_atomic_load_n(
                           &self_signal->flag[blockIdx.x],
-                          __ATOMIC_ACQUIRE, __MEMORY_SCOPE_SYSTEM) +
-                      1;
+                          __ATOMIC_ACQUIRE, __MEMORY_SCOPE_SYSTEM)
+                    + 1;
     }
     __syncthreads();
     const uint32_t next_flag = *block_flag;
@@ -623,7 +661,8 @@ __device__ __forceinline__ uint32_t hygon_tp8_start_sync(
             next_flag, __ATOMIC_RELEASE, __MEMORY_SCOPE_SYSTEM);
         while (__scoped_atomic_load_n(
                    &self_signal->start[blockIdx.x][threadIdx.x],
-                   __ATOMIC_ACQUIRE, __MEMORY_SCOPE_SYSTEM) != next_flag) {
+                   __ATOMIC_ACQUIRE, __MEMORY_SCOPE_SYSTEM)
+               != next_flag) {
         }
     }
     __syncthreads();
@@ -648,7 +687,8 @@ __device__ __forceinline__ void hygon_tp8_end_sync(
             flag, __ATOMIC_RELEASE, __MEMORY_SCOPE_SYSTEM);
         while (__scoped_atomic_load_n(
                    &self_signal->end[blockIdx.x][threadIdx.x],
-                   __ATOMIC_ACQUIRE, __MEMORY_SCOPE_SYSTEM) != flag) {
+                   __ATOMIC_ACQUIRE, __MEMORY_SCOPE_SYSTEM)
+               != flag) {
         }
     }
     __syncthreads();
@@ -667,10 +707,8 @@ __global__ __launch_bounds__(kHygonTp8Threads, 1) void hygon_tp8_bf16_allreduce_
     const uint32_t sync_flag = hygon_tp8_start_sync<num_ranks>(
         rank_signals, self_signal, rank, &block_flag);
 
-    const size_t thread_index =
-        static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
-    const size_t thread_stride =
-        static_cast<size_t>(gridDim.x) * blockDim.x;
+    const size_t thread_index = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+    const size_t thread_stride = static_cast<size_t>(gridDim.x) * blockDim.x;
     auto *packed_output = reinterpret_cast<HygonBf16Pack *>(output);
     for (size_t index = thread_index;
          index < pack_count;
@@ -690,8 +728,7 @@ __global__ __launch_bounds__(kHygonTp8Threads, 1) void hygon_tp8_bf16_allreduce_
             source_pack = source[index];
 #pragma unroll
             for (int element = 0; element < 8; ++element) {
-                reduced[element] +=
-                    __bfloat162float(source_pack.values[element]);
+                reduced[element] += __bfloat162float(source_pack.values[element]);
             }
         }
         HygonBf16Pack result;
@@ -731,11 +768,10 @@ __global__ __launch_bounds__(kHygonTp8Threads, 1) void hygon_tp8_bf16_allreduce_
     const size_t remainder = pack_count % num_ranks;
     const size_t slice_begin = static_cast<size_t>(rank) * part;
     const size_t slice_end = rank == num_ranks - 1
-                                 ? pack_count
-                                 : slice_begin + part;
+                               ? pack_count
+                               : slice_begin + part;
     const size_t largest_part = part + remainder;
-    HygonBf16Pack *local_scratch =
-        hygon_tp8_two_stage_scratch(self_signal);
+    HygonBf16Pack *local_scratch = hygon_tp8_two_stage_scratch(self_signal);
 
     const uint32_t sync_flag = hygon_tp8_start_sync<num_ranks>(
         rank_signals, self_signal, rank, &block_flag);
@@ -786,15 +822,13 @@ __global__ __launch_bounds__(kHygonTp8Threads, 1) void hygon_tp8_bf16_allreduce_
         rank_signals, self_signal, rank, sync_flag);
 
     // Stage 2: the eight thread groups gather one source rank each.
-    const HygonBf16Pack *source_scratch =
-        hygon_tp8_two_stage_scratch(rank_signals.signals[source_rank]);
+    const HygonBf16Pack *source_scratch = hygon_tp8_two_stage_scratch(rank_signals.signals[source_rank]);
     auto *packed_output = reinterpret_cast<HygonBf16Pack *>(output);
     for (size_t offset = thread_index;
          offset < largest_part;
          offset += thread_stride) {
         if (source_rank == num_ranks - 1 || offset < part) {
-            packed_output[static_cast<size_t>(source_rank) * part + offset] =
-                source_scratch[offset];
+            packed_output[static_cast<size_t>(source_rank) * part + offset] = source_scratch[offset];
         }
     }
     return;
@@ -802,29 +836,41 @@ __global__ __launch_bounds__(kHygonTp8Threads, 1) void hygon_tp8_bf16_allreduce_
 
 std::shared_ptr<HygonTp8AllReduceState> create_hygon_tp8_state(
     int ndevice, const int *device_ids) {
-    if (ndevice != kHygonTp8WorldSize || device_ids == nullptr) return nullptr;
+    if (ndevice != kHygonTp8WorldSize || device_ids == nullptr) {
+        return nullptr;
+    }
     auto &hip = hygon_hip_ext_api();
-    if (!hip.available) return nullptr;
+    if (!hip.available) {
+        return nullptr;
+    }
     auto state = std::make_shared<HygonTp8AllReduceState>();
     std::memcpy(state->device_ids, device_ids, sizeof(state->device_ids));
 
     int previous_device = 0;
     const bool restore_device = cudaGetDevice(&previous_device) == cudaSuccess;
     auto fail = [&]() -> std::shared_ptr<HygonTp8AllReduceState> {
-        if (restore_device) cudaSetDevice(previous_device);
+        if (restore_device) {
+            cudaSetDevice(previous_device);
+        }
         return nullptr;
     };
 
     for (int rank = 0; rank < kHygonTp8WorldSize; ++rank) {
-        if (cudaSetDevice(device_ids[rank]) != cudaSuccess) return fail();
+        if (cudaSetDevice(device_ids[rank]) != cudaSuccess) {
+            return fail();
+        }
         for (int peer = 0; peer < kHygonTp8WorldSize; ++peer) {
-            if (peer == rank) continue;
+            if (peer == rank) {
+                continue;
+            }
             int can_access = 0;
             if (cudaDeviceCanAccessPeer(
-                    &can_access, device_ids[rank], device_ids[peer]) != cudaSuccess ||
-                can_access == 0) return fail();
-            const cudaError_t enable_status =
-                cudaDeviceEnablePeerAccess(device_ids[peer], 0);
+                    &can_access, device_ids[rank], device_ids[peer])
+                    != cudaSuccess
+                || can_access == 0) {
+                return fail();
+            }
+            const cudaError_t enable_status = cudaDeviceEnablePeerAccess(device_ids[peer], 0);
             if (enable_status == cudaErrorPeerAccessAlreadyEnabled) {
                 (void)cudaGetLastError();
             } else if (enable_status != cudaSuccess) {
@@ -834,21 +880,24 @@ std::shared_ptr<HygonTp8AllReduceState> create_hygon_tp8_state(
         if (hip.ext_malloc_with_flags(
                 reinterpret_cast<void **>(&state->signals[rank]),
                 kHygonTp8SignalAllocationBytes,
-                kHygonHipDeviceMallocUncached) != kHygonHipSuccess ||
-            hip.memset(state->signals[rank], 0,
-                       kHygonTp8SignalAllocationBytes) !=
-                kHygonHipSuccess) {
+                kHygonHipDeviceMallocUncached)
+                != kHygonHipSuccess
+            || hip.memset(state->signals[rank], 0,
+                          kHygonTp8SignalAllocationBytes)
+                   != kHygonHipSuccess) {
             return fail();
         }
         if (hip.event_create_with_flags(
                 &state->release_events[rank],
-                kHygonHipEventReleaseToSystem | kHygonHipEventDisableTiming) !=
-            kHygonHipSuccess) {
+                kHygonHipEventReleaseToSystem | kHygonHipEventDisableTiming)
+            != kHygonHipSuccess) {
             return fail();
         }
         state->rank_signals.signals[rank] = state->signals[rank];
     }
-    if (restore_device) cudaSetDevice(previous_device);
+    if (restore_device) {
+        cudaSetDevice(previous_device);
+    }
     return state;
 }
 
@@ -856,7 +905,9 @@ void register_hygon_tp8_state(infinicclComm_t *comms,
                               int ndevice,
                               const int *device_ids) {
     auto state = create_hygon_tp8_state(ndevice, device_ids);
-    if (state == nullptr) return;
+    if (state == nullptr) {
+        return;
+    }
     std::lock_guard<std::mutex> lock(hygon_tp8_states_mutex);
     for (int rank = 0; rank < kHygonTp8WorldSize; ++rank) {
         hygon_tp8_states.emplace(comms[rank], state);
@@ -884,19 +935,15 @@ bool rendezvous_hygon_tp8_graph_inputs(
     infinicclReduceOp_t op,
     HygonTp8RankData *rank_data,
     bool *metadata_error) {
-    const bool local_eligible =
-        sendbuf != nullptr && recvbuf != nullptr && sendbuf != recvbuf &&
-        datatype == INFINI_DTYPE_BF16 && op == INFINICCL_SUM &&
-        count != 0 && (count % 8) == 0 &&
-        count <= kHygonTp8TwoStageMaxBytes / sizeof(__nv_bfloat16) &&
-        (reinterpret_cast<uintptr_t>(sendbuf) % alignof(HygonBf16Pack)) == 0 &&
-        (reinterpret_cast<uintptr_t>(recvbuf) % alignof(HygonBf16Pack)) == 0;
+    const bool local_eligible = sendbuf != nullptr && recvbuf != nullptr && sendbuf != recvbuf && datatype == INFINI_DTYPE_BF16 && op == INFINICCL_SUM && count != 0 && (count % 8) == 0 && count <= kHygonTp8TwoStageMaxBytes / sizeof(__nv_bfloat16) && (reinterpret_cast<uintptr_t>(sendbuf) % alignof(HygonBf16Pack)) == 0 && (reinterpret_cast<uintptr_t>(recvbuf) % alignof(HygonBf16Pack)) == 0;
 
     auto &rendezvous = state->rendezvous;
     std::unique_lock<std::mutex> lock(rendezvous.mutex);
     const uint64_t generation = rendezvous.generation;
     const uint32_t rank_bit = uint32_t{1} << rank;
-    if ((rendezvous.arrived_mask & rank_bit) != 0) std::abort();
+    if ((rendezvous.arrived_mask & rank_bit) != 0) {
+        std::abort();
+    }
 
     rendezvous.arrived_mask |= rank_bit;
     rendezvous.sendbufs[rank] = sendbuf;
@@ -906,17 +953,12 @@ bool rendezvous_hygon_tp8_graph_inputs(
     rendezvous.ops[rank] = op;
     rendezvous.eligible[rank] = local_eligible;
 
-    constexpr uint32_t all_ranks_mask =
-        (uint32_t{1} << kHygonTp8WorldSize) - 1;
+    constexpr uint32_t all_ranks_mask = (uint32_t{1} << kHygonTp8WorldSize) - 1;
     if (rendezvous.arrived_mask == all_ranks_mask) {
         bool signatures_match = true;
         bool use_custom = true;
         for (int peer = 0; peer < kHygonTp8WorldSize; ++peer) {
-            signatures_match =
-                signatures_match &&
-                rendezvous.counts[peer] == rendezvous.counts[0] &&
-                rendezvous.datatypes[peer] == rendezvous.datatypes[0] &&
-                rendezvous.ops[peer] == rendezvous.ops[0];
+            signatures_match = signatures_match && rendezvous.counts[peer] == rendezvous.counts[0] && rendezvous.datatypes[peer] == rendezvous.datatypes[0] && rendezvous.ops[peer] == rendezvous.ops[0];
             use_custom = use_custom && rendezvous.eligible[peer];
         }
         rendezvous.metadata_error = !signatures_match;
@@ -963,8 +1005,7 @@ HygonTp8AllReduceResult try_hygon_tp8_graph_allreduce(
     void *sendbuf, void *recvbuf, size_t count,
     infiniDtype_t datatype, infinicclReduceOp_t op,
     infinicclComm_t comm, cudaStream_t stream) {
-    if (comm == nullptr || comm->world_size != kHygonTp8WorldSize ||
-        comm->rank < 0 || comm->rank >= kHygonTp8WorldSize) {
+    if (comm == nullptr || comm->world_size != kHygonTp8WorldSize || comm->rank < 0 || comm->rank >= kHygonTp8WorldSize) {
         return HygonTp8AllReduceResult::Fallback;
     }
 
@@ -979,31 +1020,30 @@ HygonTp8AllReduceResult try_hygon_tp8_graph_allreduce(
     }
 
     auto state = get_hygon_tp8_state(comm);
-    if (state == nullptr) return HygonTp8AllReduceResult::Fallback;
+    if (state == nullptr) {
+        return HygonTp8AllReduceResult::Fallback;
+    }
     const int rank = comm->rank;
     HygonTp8RankData rank_data{};
     bool metadata_error = false;
     if (!rendezvous_hygon_tp8_graph_inputs(
             state, rank, sendbuf, recvbuf, count, datatype, op,
             &rank_data, &metadata_error)) {
-        if (metadata_error) return HygonTp8AllReduceResult::Error;
+        if (metadata_error) {
+            return HygonTp8AllReduceResult::Error;
+        }
         return HygonTp8AllReduceResult::Fallback;
     }
 
     size_t pack_count = count / 8;
-    const bool use_two_stage =
-        count * sizeof(__nv_bfloat16) >= kHygonTp8OneStageMaxBytes;
-    const size_t work_pack_count =
-        use_two_stage
-            ? pack_count / kHygonTp8WorldSize +
-                  pack_count % kHygonTp8WorldSize
-            : pack_count;
-    const size_t work_threads =
-        use_two_stage
-            ? kHygonTp8Threads / kHygonTp8WorldSize
-            : kHygonTp8Threads;
-    const int max_blocks =
-        use_two_stage ? kHygonTp8MaxBlocks : kHygonTp8OneStageMaxBlocks;
+    const bool use_two_stage = count * sizeof(__nv_bfloat16) >= kHygonTp8OneStageMaxBytes;
+    const size_t work_pack_count = use_two_stage
+                                     ? pack_count / kHygonTp8WorldSize + pack_count % kHygonTp8WorldSize
+                                     : pack_count;
+    const size_t work_threads = use_two_stage
+                                  ? kHygonTp8Threads / kHygonTp8WorldSize
+                                  : kHygonTp8Threads;
+    const int max_blocks = use_two_stage ? kHygonTp8MaxBlocks : kHygonTp8OneStageMaxBlocks;
     int blocks = static_cast<int>(std::min<size_t>(
         max_blocks,
         (work_pack_count + work_threads - 1) / work_threads));
@@ -1013,23 +1053,27 @@ HygonTp8AllReduceResult try_hygon_tp8_graph_allreduce(
     auto *output = static_cast<__nv_bfloat16 *>(recvbuf);
     int kernel_rank = rank;
     void *args[] = {
-        &rank_data, &rank_signals, &self_signal,
-        &output, &kernel_rank, &pack_count,
+        &rank_data,
+        &rank_signals,
+        &self_signal,
+        &output,
+        &kernel_rank,
+        &pack_count,
     };
     auto &hip = hygon_hip_ext_api();
     const void *kernel = use_two_stage
-                             ? reinterpret_cast<const void *>(
-                                   hygon_tp8_bf16_allreduce_2stage_kernel)
-                             : reinterpret_cast<const void *>(
-                                   hygon_tp8_bf16_allreduce_kernel);
+                           ? reinterpret_cast<const void *>(
+                               hygon_tp8_bf16_allreduce_2stage_kernel)
+                           : reinterpret_cast<const void *>(
+                               hygon_tp8_bf16_allreduce_kernel);
     const int launch_status = hip.ext_launch_kernel(
         kernel,
         dim3(blocks), dim3(kHygonTp8Threads), args, 0,
         reinterpret_cast<void *>(stream), nullptr,
         state->release_events[rank], 0);
     return launch_status == kHygonHipSuccess
-               ? HygonTp8AllReduceResult::Success
-               : HygonTp8AllReduceResult::Error;
+             ? HygonTp8AllReduceResult::Success
+             : HygonTp8AllReduceResult::Error;
 }
 
 } // namespace

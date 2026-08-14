@@ -30,12 +30,10 @@ void *plan(Tensor c,
     if (c->ndim() != 2 || a_p->ndim() != 2 || b_p->ndim() != 2) {
         throw std::runtime_error("Hygon scaled_mm_i8 expects 2D tensors");
     }
-    if (a_p->dtype() != DataType::I8 || b_p->dtype() != DataType::I8 ||
-        a_s->dtype() != DataType::F32 || b_s->dtype() != DataType::F32) {
+    if (a_p->dtype() != DataType::I8 || b_p->dtype() != DataType::I8 || a_s->dtype() != DataType::F32 || b_s->dtype() != DataType::F32) {
         throw std::runtime_error("Hygon scaled_mm_i8 expects int8 inputs and float32 scales");
     }
-    if (a_p->shape()[0] != c->shape()[0] || b_p->shape()[1] != c->shape()[1] ||
-        a_p->shape()[1] != b_p->shape()[0]) {
+    if (a_p->shape()[0] != c->shape()[0] || b_p->shape()[1] != c->shape()[1] || a_p->shape()[1] != b_p->shape()[0]) {
         throw std::runtime_error("Hygon scaled_mm_i8 matrix shape mismatch");
     }
 

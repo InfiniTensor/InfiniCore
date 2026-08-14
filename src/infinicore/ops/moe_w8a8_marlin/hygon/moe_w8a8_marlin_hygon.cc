@@ -41,9 +41,9 @@ at::Tensor pack_one_expert(const at::Tensor &weight) {
         throw std::runtime_error("w8a8 marlin pack requires K % 64 == 0");
     }
     auto packed = q_w.reshape({size_k / k_tile, k_tile, size_n})
-        .transpose(1, 2)
-        .reshape({size_k / k_tile, size_n * k_tile})
-        .contiguous();
+                      .transpose(1, 2)
+                      .reshape({size_k / k_tile, size_n * k_tile})
+                      .contiguous();
     return packed;
 }
 
@@ -160,25 +160,17 @@ void run(void *planned_meta) {
     const size_t top_k = p->top_k;
     const size_t n = w2_shape[1] * 64;
     const size_t n2 = n * 2;
-    if (w13_shape[1] * 64 != k ||
-        w13_shape[2] != n2 * 64 ||
-        w2_shape[2] != k * 64) {
+    if (w13_shape[1] * 64 != k || w13_shape[2] != n2 * 64 || w2_shape[2] != k * 64) {
         throw std::runtime_error("w8a8 marlin fused dense weight shape mismatch");
     }
     const infinicore::Shape input_i8_shape{m, k};
     const infinicore::Shape input_scale_shape{m, 1};
     const infinicore::Shape cache2_i8_shape{m * top_k, n};
     const infinicore::Shape cache2_scale_shape{m * top_k, 1};
-    if (p->input_i8->shape() != input_i8_shape ||
-        p->input_scale->shape() != input_scale_shape ||
-        p->cache2_i8->shape() != cache2_i8_shape ||
-        p->cache2_scale->shape() != cache2_scale_shape) {
+    if (p->input_i8->shape() != input_i8_shape || p->input_scale->shape() != input_scale_shape || p->cache2_i8->shape() != cache2_i8_shape || p->cache2_scale->shape() != cache2_scale_shape) {
         throw std::runtime_error("w8a8 marlin fused dense workspace shape mismatch");
     }
-    if (p->input_i8->dtype() != infinicore::DataType::I8 ||
-        p->cache2_i8->dtype() != infinicore::DataType::I8 ||
-        p->input_scale->dtype() != infinicore::DataType::F32 ||
-        p->cache2_scale->dtype() != infinicore::DataType::F32) {
+    if (p->input_i8->dtype() != infinicore::DataType::I8 || p->cache2_i8->dtype() != infinicore::DataType::I8 || p->input_scale->dtype() != infinicore::DataType::F32 || p->cache2_scale->dtype() != infinicore::DataType::F32) {
         throw std::runtime_error("w8a8 marlin fused dense workspace dtype mismatch");
     }
 
@@ -218,21 +210,17 @@ void run(void *planned_meta) {
 
     const size_t num_pairs = m * top_k;
     const size_t num_experts = w13_shape[0];
-    const size_t vllm_max_tokens_padded =
-        num_pairs < num_experts
-            ? std::min(num_pairs * p->block_size_m,
-                       num_pairs + num_experts * (p->block_size_m - 1))
-            : num_pairs + num_experts * (p->block_size_m - 1);
-    const size_t vllm_max_blocks =
-        (vllm_max_tokens_padded + p->block_size_m - 1) / p->block_size_m;
-    auto sorted_token_ids_lightop =
-        vllm_max_tokens_padded < static_cast<size_t>(sorted_token_ids.size(0))
-            ? sorted_token_ids.narrow(0, 0, static_cast<int64_t>(vllm_max_tokens_padded))
-            : sorted_token_ids;
-    auto expert_ids_lightop =
-        vllm_max_blocks < static_cast<size_t>(expert_ids.size(0))
-            ? expert_ids.narrow(0, 0, static_cast<int64_t>(vllm_max_blocks))
-            : expert_ids;
+    const size_t vllm_max_tokens_padded = num_pairs < num_experts
+                                            ? std::min(num_pairs * p->block_size_m,
+                                                       num_pairs + num_experts * (p->block_size_m - 1))
+                                            : num_pairs + num_experts * (p->block_size_m - 1);
+    const size_t vllm_max_blocks = (vllm_max_tokens_padded + p->block_size_m - 1) / p->block_size_m;
+    auto sorted_token_ids_lightop = vllm_max_tokens_padded < static_cast<size_t>(sorted_token_ids.size(0))
+                                      ? sorted_token_ids.narrow(0, 0, static_cast<int64_t>(vllm_max_tokens_padded))
+                                      : sorted_token_ids;
+    auto expert_ids_lightop = vllm_max_blocks < static_cast<size_t>(expert_ids.size(0))
+                                ? expert_ids.narrow(0, 0, static_cast<int64_t>(vllm_max_blocks))
+                                : expert_ids;
 
     try {
         infinicore::adaptor::lightop::moe_gemm_marlin_w8a8(

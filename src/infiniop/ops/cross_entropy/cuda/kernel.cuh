@@ -4,13 +4,9 @@
 #include "../../../devices/nvidia/nvidia_common.cuh"
 #include "../../../reduce/cuda/reduce.cuh"
 
-template <unsigned int BLOCK_SIZE,
-          typename Tout,
-          typename Tdata,
-          typename Tidx,
-          typename Tcompute = float>
+template <unsigned int BLOCK_SIZE, typename Tdata, typename Tidx, typename Tcompute = float>
 __device__ void crossEntropyKernel(
-    Tout *y_,
+    Tdata *y_,
     const Tdata *x_,
     const void *target_,
     size_t outer_size,
@@ -77,7 +73,7 @@ __device__ void crossEntropyKernel(
             log_term = 0.0f;
         }
 
-        y_[row_idx] = static_cast<Tout>(log_term - target_logit);
+        y_[row_idx] = static_cast<Tdata>(log_term - target_logit);
     }
 }
 
