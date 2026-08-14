@@ -102,8 +102,17 @@ public:
         }
 
         auto is_transed = false;
-        if ((layout == MatrixLayout::COL_MAJOR && c_matrix->col_stride == 1)
-            || (layout == MatrixLayout::ROW_MAJOR && c_matrix->row_stride == 1)) {
+        // A contiguous matrix with a singleton dimension can have both matrix
+        // strides equal to one.  In that case the storage is valid for either
+        // layout, and transposing the logical GEMM would turn an [M, 1] output
+        // into a descriptor whose M columns all alias the same address.
+        const bool needs_col_major = layout == MatrixLayout::COL_MAJOR
+                                  && c_matrix->col_stride == 1
+                                  && c_matrix->row_stride != 1;
+        const bool needs_row_major = layout == MatrixLayout::ROW_MAJOR
+                                  && c_matrix->row_stride == 1
+                                  && c_matrix->col_stride != 1;
+        if (needs_col_major || needs_row_major) {
             c_matrix->transpose();
             b_matrix->transpose();
             a_matrix->transpose();

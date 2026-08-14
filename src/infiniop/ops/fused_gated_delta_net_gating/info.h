@@ -13,6 +13,7 @@ class FusedGatedDeltaNetGatingInfo {
 
 public:
     infiniDtype_t input_dtype;
+    infiniDtype_t parameter_dtype;
     size_t batch_size;
     size_t seq_len;
     size_t hidden;
@@ -37,7 +38,8 @@ public:
         infiniopTensorDescriptor_t b_desc,
         infiniopTensorDescriptor_t dt_bias_desc,
         float beta,
-        float threshold) {
+        float threshold,
+        bool allow_fp32_parameters = false) {
 
         if (g_desc->dtype() != INFINI_DTYPE_F32 || beta_output_desc->dtype() != INFINI_DTYPE_F32) {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
@@ -47,7 +49,13 @@ public:
         if (input_dtype != INFINI_DTYPE_F32 && input_dtype != INFINI_DTYPE_F16 && input_dtype != INFINI_DTYPE_BF16) {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
-        if (b_desc->dtype() != input_dtype || A_log_desc->dtype() != input_dtype || dt_bias_desc->dtype() != input_dtype) {
+        if (b_desc->dtype() != input_dtype) {
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
+        auto parameter_dtype = A_log_desc->dtype();
+        if (dt_bias_desc->dtype() != parameter_dtype
+            || (parameter_dtype != input_dtype
+                && !(allow_fp32_parameters && parameter_dtype == INFINI_DTYPE_F32))) {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
 
@@ -70,6 +78,7 @@ public:
 
         FusedGatedDeltaNetGatingInfo info;
         info.input_dtype = input_dtype;
+        info.parameter_dtype = parameter_dtype;
         info.batch_size = shape[0];
         info.seq_len = shape[1];
         info.hidden = hidden;

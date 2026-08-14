@@ -3,15 +3,16 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import infinicore
 import torch
 from framework import (
     BaseOperatorTest,
+    GenericTestRunner,
     TensorSpec,
     TestCase,
-    GenericTestRunner,
     is_broadcast,
 )
+
+import infinicore
 
 # ==============================================================================
 # Operator-specific configuration
@@ -24,6 +25,7 @@ _TEST_CASES_DATA = [
     (2, 5, 256, 2048, False, None, None, None),
     (None, 5, 256, 2048, False, None, None, None),
     (None, 1, 2048, 5632, True, None, None, None),
+    (None, 19, 3072, 1, False, None, None, None),
 ]
 
 # Alpha test cases: (bs, n, in_features, out_features, bias, input_strides, weight_strides, out_strides, alpha)
@@ -99,7 +101,7 @@ def parse_test_cases():
                     output_spec=None,
                     comparison_target=None,
                     tolerance=tolerance,
-                    description=f"Linear - OUT_OF_PLACE",
+                    description="Linear - OUT_OF_PLACE",
                 )
             )
 
@@ -112,7 +114,7 @@ def parse_test_cases():
                         output_spec=out_spec,  # Specify the output tensor spec
                         comparison_target="out",
                         tolerance=tolerance,
-                        description=f"Linear - INPLACE(out)",
+                        description="Linear - INPLACE(out)",
                     )
                 )
 
@@ -137,7 +139,9 @@ def parse_test_cases():
             tolerance = _TOLERANCE_MAP.get(dtype, {"atol": 0, "rtol": 1e-3})
             input_spec = TensorSpec.from_tensor(input_shape, input_strides, dtype)
             weight_spec = TensorSpec.from_tensor(weight_shape, weight_strides, dtype)
-            bias_spec = TensorSpec.from_tensor(bias_shape, None, dtype) if bias_shape else None
+            bias_spec = (
+                TensorSpec.from_tensor(bias_shape, None, dtype) if bias_shape else None
+            )
 
             test_cases.append(
                 TestCase(

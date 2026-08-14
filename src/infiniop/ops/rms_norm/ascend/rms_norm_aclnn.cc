@@ -8,6 +8,21 @@ extern "C" infiniStatus_t rms_norm_cast_w_launch(
     size_t count, void *stream);
 
 namespace op::rms_norm::ascend {
+namespace {
+
+bool isContiguous(const std::vector<size_t> &shape,
+                  const std::vector<ptrdiff_t> &strides) {
+    ptrdiff_t expected_stride = 1;
+    for (size_t i = shape.size(); i-- > 0;) {
+        if (strides[i] != expected_stride) {
+            return false;
+        }
+        expected_stride *= static_cast<ptrdiff_t>(shape[i]);
+    }
+    return true;
+}
+
+} // namespace
 
 struct Descriptor::Opaque {
     aclnnTensorDescriptor_t y;
@@ -17,6 +32,7 @@ struct Descriptor::Opaque {
     size_t workspaceSize;
     aclOpExecutor *executor;
     bool needs_cast_w;
+    bool uses_sliced_execution;
     size_t cast_w_offset;
     size_t w_padded_offset;
     size_t w_padded_size;
@@ -24,9 +40,11 @@ struct Descriptor::Opaque {
     Opaque(aclnnTensorDescriptor_t y_, aclnnTensorDescriptor_t x_,
            aclnnTensorDescriptor_t w_, aclnnTensorDescriptor_t rstd_,
            size_t ws, aclOpExecutor *exec,
-           bool cast_w, size_t cast_off, size_t pad_off, size_t pad_sz)
+           bool cast_w, bool sliced_execution,
+           size_t cast_off, size_t pad_off, size_t pad_sz)
         : y(y_), x(x_), w(w_), rstd(rstd_), workspaceSize(ws), executor(exec),
-          needs_cast_w(cast_w), cast_w_offset(cast_off),
+          needs_cast_w(cast_w), uses_sliced_execution(sliced_execution),
+          cast_w_offset(cast_off),
           w_padded_offset(pad_off), w_padded_size(pad_sz) {}
 
     ~Opaque() {
@@ -56,8 +74,21 @@ infiniStatus_t Descriptor::create(
 
     auto handle_ascend = reinterpret_cast<device::ascend::Handle *>(handle);
 
-    aclnnTensorDescriptor_t y = new aclnnTensorDescriptor(y_desc);
-    aclnnTensorDescriptor_t x = new aclnnTensorDescriptor(x_desc);
+    // aclnnRmsNorm writes output as contiguous storage even when the output
+    // descriptor has non-contiguous outer strides. Keep the full-tensor fast
+    // path for contiguous output, and use row slices only when layout requires it.
+    bool uses_sliced_execution = !isContiguous(info.shape, info.y_strides);
+    aclnnTensorDescriptor_t y = nullptr;
+    aclnnTensorDescriptor_t x = nullptr;
+    if (uses_sliced_execution) {
+        std::vector<int64_t> slice_shape = {static_cast<int64_t>(info.dim())};
+        std::vector<int64_t> slice_strides = {1};
+        y = new aclnnTensorDescriptor(toAclDataType(info.atype), slice_shape, slice_strides);
+        x = new aclnnTensorDescriptor(toAclDataType(info.atype), slice_shape, slice_strides);
+    } else {
+        y = new aclnnTensorDescriptor(y_desc);
+        x = new aclnnTensorDescriptor(x_desc);
+    }
 
     // 仅在跨半精度组合时需要将 w cast 到 atype
     // (F16 atype + BF16 w, 或 BF16 atype + F16 w)
@@ -78,14 +109,18 @@ infiniStatus_t Descriptor::create(
         w = new aclnnTensorDescriptor(w_desc);
     }
 
-    std::vector<int64_t> rstd_shape;
-    rstd_shape.reserve(info.ndim() - 1);
-    for (size_t i = 0; i + 1 < info.ndim(); ++i) {
-        rstd_shape.push_back(static_cast<int64_t>(info.shape[i]));
-    }
-    std::vector<int64_t> rstd_strides(rstd_shape.size(), 1);
-    for (ptrdiff_t i = static_cast<ptrdiff_t>(rstd_shape.size()) - 2; i >= 0; --i) {
-        rstd_strides[i] = rstd_strides[i + 1] * rstd_shape[i + 1];
+    std::vector<int64_t> rstd_shape = {1};
+    std::vector<int64_t> rstd_strides = {1};
+    if (!uses_sliced_execution) {
+        rstd_shape.clear();
+        rstd_shape.reserve(info.ndim() - 1);
+        for (size_t i = 0; i + 1 < info.ndim(); ++i) {
+            rstd_shape.push_back(static_cast<int64_t>(info.shape[i]));
+        }
+        rstd_strides.assign(rstd_shape.size(), 1);
+        for (ptrdiff_t i = static_cast<ptrdiff_t>(rstd_shape.size()) - 2; i >= 0; --i) {
+            rstd_strides[i] = rstd_strides[i + 1] * rstd_shape[i + 1];
+        }
     }
     aclnnTensorDescriptor_t rstd = new aclnnTensorDescriptor(toAclDataType(INFINI_DTYPE_F32), rstd_shape, rstd_strides);
 
@@ -115,7 +150,9 @@ infiniStatus_t Descriptor::create(
     size_t w_padded_offset = cast_w_offset + cast_w_dst_size;
 
     *desc_ptr = new Descriptor(
-        new Opaque{y, x, w, rstd, workspace_size, executor, needs_cast_w, cast_w_offset, w_padded_offset, w_padded_size},
+        new Opaque{y, x, w, rstd, workspace_size, executor,
+                   needs_cast_w, uses_sliced_execution,
+                   cast_w_offset, w_padded_offset, w_padded_size},
         std::move(info),
         all_workspace_size,
         handle_ascend->device,
@@ -150,12 +187,40 @@ infiniStatus_t Descriptor::calculate(
         w_ptr = const_cast<void *>(w);
     }
 
-    CHECK_ACL(AclSetTensorAddr(_opaque->executor, 0, _opaque->x->tensor, const_cast<void *>(x)));
     CHECK_ACL(AclSetTensorAddr(_opaque->executor, 1, _opaque->w->tensor, w_ptr));
-    CHECK_ACL(AclSetTensorAddr(_opaque->executor, 2, _opaque->y->tensor, y));
     CHECK_ACL(AclSetTensorAddr(_opaque->executor, 3, _opaque->rstd->tensor, rstd_ptr));
-    CHECK_ACL(aclnnRmsNorm(
-        workspace, _opaque->workspaceSize, _opaque->executor, stream));
+
+    if (!_opaque->uses_sliced_execution) {
+        CHECK_ACL(AclSetTensorAddr(_opaque->executor, 0, _opaque->x->tensor, const_cast<void *>(x)));
+        CHECK_ACL(AclSetTensorAddr(_opaque->executor, 2, _opaque->y->tensor, y));
+        CHECK_ACL(aclnnRmsNorm(
+            workspace, _opaque->workspaceSize, _opaque->executor, stream));
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    const size_t element_size = infiniSizeOf(_info.atype);
+    const size_t batch = _info.shape[0];
+    const size_t nhead = _info.ndim() == 3 ? _info.shape[1] : 1;
+    for (size_t batch_idx = 0; batch_idx < batch; ++batch_idx) {
+        for (size_t head_idx = 0; head_idx < nhead; ++head_idx) {
+            ptrdiff_t x_offset = batch_idx * _info.x_strides[0];
+            ptrdiff_t y_offset = batch_idx * _info.y_strides[0];
+            if (_info.ndim() == 3) {
+                x_offset += head_idx * _info.x_strides[1];
+                y_offset += head_idx * _info.y_strides[1];
+            }
+
+            auto x_row = static_cast<const uint8_t *>(x) + x_offset * element_size;
+            auto y_row = static_cast<uint8_t *>(y) + y_offset * element_size;
+            CHECK_ACL(AclSetTensorAddr(
+                _opaque->executor, 0, _opaque->x->tensor,
+                const_cast<uint8_t *>(x_row)));
+            CHECK_ACL(AclSetTensorAddr(
+                _opaque->executor, 2, _opaque->y->tensor, y_row));
+            CHECK_ACL(aclnnRmsNorm(
+                workspace, _opaque->workspaceSize, _opaque->executor, stream));
+        }
+    }
     return INFINI_STATUS_SUCCESS;
 }
 

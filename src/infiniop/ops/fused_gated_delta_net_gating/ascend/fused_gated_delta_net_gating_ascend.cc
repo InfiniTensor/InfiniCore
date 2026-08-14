@@ -5,7 +5,8 @@ namespace op::fused_gated_delta_net_gating::ascend {
 extern "C" infiniStatus_t fused_gated_delta_net_gating_kernel_launch(
     void *g, void *beta_output,
     const void *A_log, const void *a, const void *b, const void *dt_bias,
-    infiniDtype_t dtype, size_t total, size_t seq_len, size_t hidden,
+    infiniDtype_t input_dtype, infiniDtype_t parameter_dtype,
+    size_t total, size_t seq_len, size_t hidden,
     ptrdiff_t g_s0, ptrdiff_t g_s1, ptrdiff_t g_s2,
     ptrdiff_t beta_s0, ptrdiff_t beta_s1, ptrdiff_t beta_s2,
     ptrdiff_t A_log_s0,
@@ -33,7 +34,7 @@ infiniStatus_t Descriptor::create(
 
     auto result = FusedGatedDeltaNetGatingInfo::create(
         g_desc, beta_output_desc, A_log_desc, a_desc, b_desc, dt_bias_desc,
-        beta, threshold);
+        beta, threshold, true);
     CHECK_RESULT(result);
 
     auto handle_ascend = reinterpret_cast<device::ascend::Handle *>(handle);
@@ -59,7 +60,8 @@ infiniStatus_t Descriptor::calculate(
     }
     return fused_gated_delta_net_gating_kernel_launch(
         g, beta_output, A_log, a, b, dt_bias,
-        _info.input_dtype, _info.numel(), _info.seq_len, _info.hidden,
+        _info.input_dtype, _info.parameter_dtype,
+        _info.numel(), _info.seq_len, _info.hidden,
         _info.g_strides[0], _info.g_strides[1], _info.g_strides[2],
         _info.beta_output_strides[0], _info.beta_output_strides[1],
         _info.beta_output_strides[2], _info.A_log_strides[0],

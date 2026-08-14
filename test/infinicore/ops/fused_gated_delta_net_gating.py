@@ -85,6 +85,31 @@ def parse_test_cases():
                     output_count=2,
                 )
             )
+
+            if dtype == infinicore.bfloat16:
+                tests.append(
+                    TestCase(
+                        inputs=[
+                            TensorSpec.from_tensor(
+                                (hidden,), hidden_strides, infinicore.float32
+                            ),
+                            a,
+                            b,
+                            TensorSpec.from_tensor(
+                                (hidden,), hidden_strides, infinicore.float32
+                            ),
+                        ],
+                        kwargs=kwargs.copy(),
+                        output_spec=None,
+                        comparison_target=None,
+                        tolerance=tol,
+                        description=(
+                            "FusedGatedDeltaNetGating - BF16 activations "
+                            "with FP32 parameters"
+                        ),
+                        output_count=2,
+                    )
+                )
     return tests
 
 

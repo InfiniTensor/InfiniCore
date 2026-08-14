@@ -23,6 +23,8 @@ _TEST_CASES = [
     (1, 1, 8, 8, 64, 64, True, False),
     (2, 1, 4, 8, 64, 64, False, False),
     (2, 1, 4, 8, 64, 64, True, True),
+    # Qwen3.5-122B-A10B with TP=8.
+    (1, 1, 2, 8, 128, 128, True, False),
 ]
 _TENSOR_DTYPES = [infinicore.float16, infinicore.bfloat16, infinicore.float32]
 _TOLERANCE_MAP = {

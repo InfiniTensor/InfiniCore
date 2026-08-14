@@ -93,7 +93,7 @@ __aicore__ inline float gatingSoftplus(float x, float beta, float threshold) {
     return gatingLog(1.0f + gatingExp(bx)) / beta;
 }
 
-template <typename T>
+template <typename TData, typename TParam>
 __aicore__ inline void fused_gated_delta_net_gating_process(
     GM_ADDR g_ptr,
     GM_ADDR beta_output_ptr,
@@ -123,17 +123,17 @@ __aicore__ inline void fused_gated_delta_net_gating_process(
 
     GlobalTensor<float> g;
     GlobalTensor<float> beta_output;
-    GlobalTensor<T> A_log;
-    GlobalTensor<T> a;
-    GlobalTensor<T> b;
-    GlobalTensor<T> dt_bias;
+    GlobalTensor<TParam> A_log;
+    GlobalTensor<TData> a;
+    GlobalTensor<TData> b;
+    GlobalTensor<TParam> dt_bias;
     g.SetGlobalBuffer(reinterpret_cast<__gm__ float *>(g_ptr));
     beta_output.SetGlobalBuffer(
         reinterpret_cast<__gm__ float *>(beta_output_ptr));
-    A_log.SetGlobalBuffer(reinterpret_cast<__gm__ T *>(A_log_ptr));
-    a.SetGlobalBuffer(reinterpret_cast<__gm__ T *>(a_ptr));
-    b.SetGlobalBuffer(reinterpret_cast<__gm__ T *>(b_ptr));
-    dt_bias.SetGlobalBuffer(reinterpret_cast<__gm__ T *>(dt_bias_ptr));
+    A_log.SetGlobalBuffer(reinterpret_cast<__gm__ TParam *>(A_log_ptr));
+    a.SetGlobalBuffer(reinterpret_cast<__gm__ TData *>(a_ptr));
+    b.SetGlobalBuffer(reinterpret_cast<__gm__ TData *>(b_ptr));
+    dt_bias.SetGlobalBuffer(reinterpret_cast<__gm__ TParam *>(dt_bias_ptr));
 
     for (size_t linear = 0; linear < total; ++linear) {
         size_t h = linear % hidden;
@@ -165,13 +165,13 @@ __aicore__ inline void fused_gated_delta_net_gating_process(
         // prefill path materializes beta in the model dtype. InfiniLM lays
         // decode out as [active_sequences, 1, heads].
         if (seq_len != 1) {
-            beta_value = gatingRoundToInput<T>(beta_value);
+            beta_value = gatingRoundToInput<TData>(beta_value);
         }
         beta_output.SetValue(beta_off, beta_value);
     }
 }
 
-#define DEFINE_GATING_KERNEL(NAME, TYPE)                                  \
+#define DEFINE_GATING_KERNEL(NAME, DATA_TYPE, PARAM_TYPE)                 \
     __global__ __aicore__ void NAME(                                      \
         GM_ADDR g, GM_ADDR beta_output, GM_ADDR A_log, GM_ADDR a,         \
         GM_ADDR b, GM_ADDR dt_bias, size_t total, size_t seq_len,         \
@@ -180,16 +180,18 @@ __aicore__ inline void fused_gated_delta_net_gating_process(
         ptrdiff_t A_log_s0, ptrdiff_t a_s0, ptrdiff_t a_s1,               \
         ptrdiff_t a_s2, ptrdiff_t b_s0, ptrdiff_t b_s1, ptrdiff_t b_s2,   \
         ptrdiff_t dt_bias_s0, float beta, float threshold) {              \
-        fused_gated_delta_net_gating_process<TYPE>(                       \
+        fused_gated_delta_net_gating_process<DATA_TYPE, PARAM_TYPE>(      \
             g, beta_output, A_log, a, b, dt_bias, total, seq_len, hidden, \
             g_s0, g_s1, g_s2, beta_s0, beta_s1, beta_s2, A_log_s0,        \
             a_s0, a_s1, a_s2, b_s0, b_s1, b_s2, dt_bias_s0, beta,         \
             threshold);                                                   \
     }
 
-DEFINE_GATING_KERNEL(fused_gating_half, half)
-DEFINE_GATING_KERNEL(fused_gating_float, float)
-DEFINE_GATING_KERNEL(fused_gating_bf16, bfloat16_t)
+DEFINE_GATING_KERNEL(fused_gating_half, half, half)
+DEFINE_GATING_KERNEL(fused_gating_float, float, float)
+DEFINE_GATING_KERNEL(fused_gating_bf16, bfloat16_t, bfloat16_t)
+DEFINE_GATING_KERNEL(fused_gating_half_float, half, float)
+DEFINE_GATING_KERNEL(fused_gating_bf16_float, bfloat16_t, float)
 #undef DEFINE_GATING_KERNEL
 
 extern "C" infiniStatus_t fused_gated_delta_net_gating_kernel_launch(
@@ -199,7 +201,8 @@ extern "C" infiniStatus_t fused_gated_delta_net_gating_kernel_launch(
     const void *a,
     const void *b,
     const void *dt_bias,
-    infiniDtype_t dtype,
+    infiniDtype_t input_dtype,
+    infiniDtype_t parameter_dtype,
     size_t total,
     size_t seq_len,
     size_t hidden,
@@ -236,13 +239,24 @@ extern "C" infiniStatus_t fused_gated_delta_net_gating_kernel_launch(
             threshold);                                            \
         return INFINI_STATUS_SUCCESS;
 
-    switch (dtype) {
-        LAUNCH_GATING(INFINI_DTYPE_F16, fused_gating_half)
-        LAUNCH_GATING(INFINI_DTYPE_BF16, fused_gating_bf16)
-        LAUNCH_GATING(INFINI_DTYPE_F32, fused_gating_float)
-    default:
-        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    if (parameter_dtype == input_dtype) {
+        switch (input_dtype) {
+            LAUNCH_GATING(INFINI_DTYPE_F16, fused_gating_half)
+            LAUNCH_GATING(INFINI_DTYPE_BF16, fused_gating_bf16)
+            LAUNCH_GATING(INFINI_DTYPE_F32, fused_gating_float)
+        default:
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
     }
+    if (parameter_dtype == INFINI_DTYPE_F32) {
+        switch (input_dtype) {
+            LAUNCH_GATING(INFINI_DTYPE_F16, fused_gating_half_float)
+            LAUNCH_GATING(INFINI_DTYPE_BF16, fused_gating_bf16_float)
+        default:
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
+    }
+    return INFINI_STATUS_BAD_TENSOR_DTYPE;
 
 #undef LAUNCH_GATING
 }

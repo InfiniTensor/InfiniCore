@@ -513,23 +513,27 @@ add_rmsnorm_ascend_vendor(
             "[add_rmsnorm/ascend/vendor] all tensors must be contiguous");
     }
 
+    const size_t hidden_size = x1->shape().back();
+    const size_t rows = x1->numel() / hidden_size;
+    auto x1_2d = x1->view({rows, hidden_size});
+    auto x2_2d = x2->view({rows, hidden_size});
     auto normalized = Tensor::empty(
         x1->shape(), x1->dtype(), x1->device());
     auto add_out = Tensor::empty(
         x1->shape(), x1->dtype(), x1->device());
-    aclTensor *x1_acl = matmul_allreduce_add_rmsnorm_ascend_impl::make_acl_tensor(x1);
-    aclTensor *x2_acl = matmul_allreduce_add_rmsnorm_ascend_impl::make_acl_tensor(x2);
+    auto normalized_2d = normalized->view({rows, hidden_size});
+    auto add_out_2d = add_out->view({rows, hidden_size});
+    // vLLM-Ascend's AddRmsNormBias kernel is tiled for [tokens, hidden].
+    // Flatten leading dimensions as a metadata-only view so batched model
+    // tensors use the same fast kernel without leaving rows unwritten.
+    aclTensor *x1_acl = matmul_allreduce_add_rmsnorm_ascend_impl::make_acl_tensor(x1_2d);
+    aclTensor *x2_acl = matmul_allreduce_add_rmsnorm_ascend_impl::make_acl_tensor(x2_2d);
     aclTensor *gamma_acl = matmul_allreduce_add_rmsnorm_ascend_impl::make_acl_tensor(gamma);
-    aclTensor *normalized_acl = matmul_allreduce_add_rmsnorm_ascend_impl::make_acl_tensor(normalized);
-    aclTensor *add_out_acl = matmul_allreduce_add_rmsnorm_ascend_impl::make_acl_tensor(add_out);
+    aclTensor *normalized_acl = matmul_allreduce_add_rmsnorm_ascend_impl::make_acl_tensor(normalized_2d);
+    aclTensor *add_out_acl = matmul_allreduce_add_rmsnorm_ascend_impl::make_acl_tensor(add_out_2d);
 
-    std::vector<int64_t> rstd_dims;
-    rstd_dims.reserve(x1->ndim());
-    for (size_t i = 0; i < x1->ndim(); ++i) {
-        rstd_dims.push_back(
-            static_cast<int64_t>(x1->shape()[i]));
-    }
-    rstd_dims.back() = 1;
+    std::vector<int64_t> rstd_dims{
+        static_cast<int64_t>(rows), 1};
     std::vector<int64_t> rstd_strides(rstd_dims.size(), 1);
     for (ptrdiff_t i = static_cast<ptrdiff_t>(rstd_dims.size()) - 2;
          i >= 0; --i) {
