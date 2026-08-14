@@ -403,6 +403,7 @@ infiniStatus_t launch_cutlass_gemm_grouped_device_meta(int problem_count,
                                                        int64_t *d_ldb,
                                                        int64_t *d_ldc,
                                                        int64_t *d_ldd,
+                                                       bool full_occupancy_wave,
                                                        cudaStream_t stream) {
     if (problem_count == 0) {
         return INFINI_STATUS_SUCCESS;
@@ -436,7 +437,15 @@ infiniStatus_t launch_cutlass_gemm_grouped_device_meta(int problem_count,
         cutlass::gemm::kernel::GroupScheduleMode::kDeviceOnly>::GemmKernel;
     using Gemm = cutlass::gemm::device::GemmGrouped<GemmKernel>;
 
-    const int threadblock_count = std::min(Gemm::sufficient(), problem_count);
+    const int occupancy_wave = Gemm::sufficient();
+    // Decode routes to only top-k experts, but each expert still contains many
+    // N-dimension tiles. A full persistent wave lets CUTLASS distribute those
+    // tiles across the GPU instead of leaving most SMs idle. Prefill retains
+    // the previous problem-count cap to avoid scheduler overhead from excess
+    // threadblocks when most experts receive no tokens.
+    const int threadblock_count = full_occupancy_wave
+                                    ? occupancy_wave
+                                    : std::min(occupancy_wave, problem_count);
     if (threadblock_count <= 0) {
         return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
     }
@@ -547,7 +556,7 @@ infiniStatus_t calculate_typed(const MoeFusedDenseInfo &info,
         // A D2H count copy and stream sync cannot be captured for replay.
         CHECK_STATUS(launch_cutlass_gemm_grouped_device_meta<CutlassT>(
             topk, grouped_problems, grouped_ptr_a, grouped_ptr_b, grouped_ptr_c, grouped_ptr_d,
-            grouped_lda, grouped_ldb, grouped_ldc, grouped_ldd, stream));
+            grouped_lda, grouped_ldb, grouped_ldc, grouped_ldd, true, stream));
 
         swiglu_kernel<T><<<(topk * intermediate_size + 255) / 256, 256, 0, stream>>>(gate_up, activated, topk, intermediate_size);
 
@@ -560,7 +569,7 @@ infiniStatus_t calculate_typed(const MoeFusedDenseInfo &info,
             output_permutation, pairs, num_experts, hidden_size, intermediate_size, block_size);
         CHECK_STATUS(launch_cutlass_gemm_grouped_device_meta<CutlassT>(
             topk, grouped_problems, grouped_ptr_a, grouped_ptr_b, grouped_ptr_c, grouped_ptr_d,
-            grouped_lda, grouped_ldb, grouped_ldc, grouped_ldd, stream));
+            grouped_lda, grouped_ldb, grouped_ldc, grouped_ldd, true, stream));
 
         apply_shuffle_mul_sum_kernel<T><<<1, std::min(hidden_size, 1024), 0, stream>>>(
             expert_out, reinterpret_cast<T *>(output), output_permutation,
@@ -604,7 +613,7 @@ infiniStatus_t calculate_typed(const MoeFusedDenseInfo &info,
     // avoids making the runtime problem count depend on device routing data.
     CHECK_STATUS(launch_cutlass_gemm_grouped_device_meta<CutlassT>(
         num_experts, grouped_problems, grouped_ptr_a, grouped_ptr_b, grouped_ptr_c, grouped_ptr_d,
-        grouped_lda, grouped_ldb, grouped_ldc, grouped_ldd, stream));
+        grouped_lda, grouped_ldb, grouped_ldc, grouped_ldd, false, stream));
 
     swiglu_kernel<T><<<(max_num_tokens_padded * intermediate_size + 255) / 256, 256, 0, stream>>>(
         gate_up, activated, max_num_tokens_padded, intermediate_size);
@@ -615,7 +624,7 @@ infiniStatus_t calculate_typed(const MoeFusedDenseInfo &info,
         w2_t, expert_out, num_experts, hidden_size, intermediate_size);
     CHECK_STATUS(launch_cutlass_gemm_grouped_device_meta<CutlassT>(
         num_experts, grouped_problems, grouped_ptr_a, grouped_ptr_b, grouped_ptr_c, grouped_ptr_d,
-        grouped_lda, grouped_ldb, grouped_ldc, grouped_ldd, stream));
+        grouped_lda, grouped_ldb, grouped_ldc, grouped_ldd, false, stream));
 
     apply_shuffle_mul_sum_kernel<T><<<num_tokens, std::min(hidden_size, 1024), 0, stream>>>(
         expert_out, reinterpret_cast<T *>(output), output_permutation,

@@ -80,6 +80,28 @@ __device__ __forceinline__ const T *typedInputPtr(const void *ptr) {
     return reinterpret_cast<const T *>(ptr);
 }
 
+template <size_t N>
+struct InputPointerArray {
+    const void *values[N];
+};
+
+/**
+ * @brief Stores elementwise input pointers in device workspace.
+ *
+ * The pointer array is passed by value as a kernel argument. This is required
+ * for CUDA Graph capture: a captured cudaMemcpyAsync from inputs.data() would
+ * retain a pointer to a temporary host std::vector that is destroyed before
+ * graph replay.
+ */
+template <size_t N>
+INFINIOP_CUDA_KERNEL storeInputPointers(
+    const void **output,
+    InputPointerArray<N> inputs) {
+    for (size_t i = threadIdx.x; i < N; i += blockDim.x) {
+        output[i] = inputs.values[i];
+    }
+}
+
 /**
  * @brief Computes the output index in memory, accounting for strides if non-contiguous.
  *
@@ -580,8 +602,21 @@ private:
         const int8_t *info_meta_start = info.getMetaStart();
         const int8_t *d_meta_start = reinterpret_cast<int8_t *>(workspace) + input_arr_size;
 
-        // copy the input pointer array and meta to device
-        CHECK_CUDA(cudaMemcpyAsync(workspace, h_inputs_arr, input_arr_size, cudaMemcpyHostToDevice, stream));
+        cudaStreamCaptureStatus capture_status = cudaStreamCaptureStatusNone;
+        CHECK_CUDA(cudaStreamIsCapturing(stream, &capture_status));
+        if (capture_status == cudaStreamCaptureStatusNone) {
+            CHECK_CUDA(cudaMemcpyAsync(workspace, h_inputs_arr, input_arr_size, cudaMemcpyHostToDevice, stream));
+        } else {
+            // A captured H2D copy from a temporary std::vector would retain an
+            // invalid host pointer for replay. Kernel arguments are stored by
+            // value in the graph node instead.
+            InputPointerArray<N> input_pointers{};
+            for (size_t i = 0; i < N; ++i) {
+                input_pointers.values[i] = h_inputs_arr[i];
+            }
+            storeInputPointers<N><<<1, N, 0, stream>>>(
+                reinterpret_cast<const void **>(workspace), input_pointers);
+        }
         CHECK_CUDA(cudaMemcpyAsync((void *)d_meta_start, info_meta_start, info.getMetaMemSize(), cudaMemcpyHostToDevice, stream));
 
         // offset/assign the pointers
