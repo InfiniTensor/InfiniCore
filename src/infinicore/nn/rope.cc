@@ -78,7 +78,10 @@ void RoPE::initialize_cache() {
     INFINICORE_NN_BUFFER_INIT(cos_cache, ({max_seq_len_, cache_dim}, dtype_, device_));
 
 #ifdef ENABLE_INFINIOPS_API
-    if ((device_.getType() == Device::Type::NVIDIA || device_.getType() == Device::Type::METAX) && !mrope_section_) {
+    if ((device_.getType() == Device::Type::NVIDIA
+         || device_.getType() == Device::Type::METAX
+         || device_.getType() == Device::Type::ILUVATAR)
+        && !mrope_section_) {
         INFINICORE_NN_BUFFER_INIT(cos_sin_cache, ({max_seq_len_, rotary_dim_}, dtype_, device_));
     }
 #endif
@@ -269,6 +272,21 @@ std::pair<Tensor, Tensor> RoPE::forward(const Tensor &q_out,
                                         const Tensor &k,
                                         const Tensor &positions) const {
     if (!mrope_section_.has_value()) {
+#ifdef ENABLE_INFINIOPS_API
+        if (cos_sin_cache_) {
+            auto mutable_q_out = q_out;
+            auto mutable_k_out = k_out;
+            mutable_q_out->copy_from(q);
+            mutable_k_out->copy_from(k);
+            op::rotary_embedding_(positions,
+                                  mutable_q_out,
+                                  mutable_k_out,
+                                  cos_sin_cache_,
+                                  static_cast<int64_t>(head_dim_),
+                                  algo_ == Algo::GPT_NEOX);
+            return {q_out, k_out};
+        }
+#endif
         auto apply_standard = [this, &positions](Tensor out, const Tensor &in) {
             if (rotary_dim_ < head_dim_) {
                 out->copy_from(in);

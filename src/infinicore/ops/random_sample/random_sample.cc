@@ -2,7 +2,10 @@
 
 #include "../../utils.hpp"
 
-#ifdef ENABLE_INFINIOPS_API
+#if defined(ENABLE_INFINIOPS_API)    \
+    && (defined(ENABLE_NVIDIA_API)   \
+        || defined(ENABLE_METAX_API) \
+        || (defined(ENABLE_ILUVATAR_API) && defined(ENABLE_ATEN)))
 #include "../infiniops_impl.hpp"
 
 #include "base/argmax.h"
@@ -11,12 +14,16 @@
 namespace infinicore::op {
 namespace {
 
-#ifdef ENABLE_INFINIOPS_API
+#if defined(ENABLE_INFINIOPS_API)    \
+    && (defined(ENABLE_NVIDIA_API)   \
+        || defined(ENABLE_METAX_API) \
+        || (defined(ENABLE_ILUVATAR_API) && defined(ENABLE_ATEN)))
 bool tryGreedyWithInfiniOps(Tensor indices, Tensor logits, int topk) {
     const auto dtype = logits->dtype();
     const auto device_type = logits->device().getType();
     if ((device_type != Device::Type::NVIDIA
-         && device_type != Device::Type::METAX)
+         && device_type != Device::Type::METAX
+         && device_type != Device::Type::ILUVATAR)
         || topk != 1
         || logits->ndim() != 1
         || logits->numel() == 0
@@ -56,7 +63,10 @@ void RandomSample::execute(
     float random_val, float topp, int topk, float temperature) {
     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(indices, logits);
     infinicore::context::setDevice(logits->device());
-#ifdef ENABLE_INFINIOPS_API
+#if defined(ENABLE_INFINIOPS_API)    \
+    && (defined(ENABLE_NVIDIA_API)   \
+        || defined(ENABLE_METAX_API) \
+        || (defined(ENABLE_ILUVATAR_API) && defined(ENABLE_ATEN)))
     if (tryGreedyWithInfiniOps(indices, logits, topk)) {
         return;
     }

@@ -31,7 +31,10 @@ void *plan(const Tensor &positions,
            bool is_neox,
            int64_t rope_dim_offset,
            bool inverse) {
-    INFINICORE_ASSERT(query->device().getType() == Device::Type::NVIDIA || query->device().getType() == Device::Type::METAX);
+    const auto device_type = query->device().getType();
+    INFINICORE_ASSERT(device_type == Device::Type::NVIDIA
+                      || device_type == Device::Type::METAX
+                      || device_type == Device::Type::ILUVATAR);
     return new PlannedMeta{
         TensorMeta(positions),
         TensorMeta(query),
@@ -80,6 +83,9 @@ static bool registered = []() {
     RotaryEmbedding::plan_dispatcher().registerDevice(Device::Type::METAX, &plan);
     RotaryEmbedding::run_dispatcher().registerDevice(Device::Type::METAX, &run);
     RotaryEmbedding::cleanup_dispatcher().registerDevice(Device::Type::METAX, &cleanup);
+    RotaryEmbedding::plan_dispatcher().registerDevice(Device::Type::ILUVATAR, &plan);
+    RotaryEmbedding::run_dispatcher().registerDevice(Device::Type::ILUVATAR, &run);
+    RotaryEmbedding::cleanup_dispatcher().registerDevice(Device::Type::ILUVATAR, &cleanup);
     return true;
 }();
 
