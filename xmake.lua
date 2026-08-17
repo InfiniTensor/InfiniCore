@@ -416,13 +416,21 @@ local function build_infiniops_external(xmake_os)
         "-DGENERATE_PYTHON_BINDINGS=OFF",
         "-DCMAKE_BUILD_TYPE=Release"
     }
-    if has_config("nv-gpu") or has_config("metax-gpu") then
+    if has_config("nv-gpu")
+        or has_config("metax-gpu")
+        or (has_config("iluvatar-gpu") and has_config("aten")) then
         table.insert(cmake_config_args, "-DWITH_TORCH=ON")
         table.insert(cmake_config_args, "-DINFINI_OPS_TORCH_OPS=argmax")
     end
     if has_config("iluvatar-gpu") and has_config("aten") then
         table.insert(cmake_config_args, "-DTORCH_CXX11_ABI=0")
         table.insert(cmake_config_args, "-DCMAKE_CXX_FLAGS=-D_GLIBCXX_USE_CXX11_ABI=0")
+    end
+    if has_config("iluvatar-gpu") then
+        local iluvatar_arch = get_config("iluvatar-arch")
+        if iluvatar_arch and iluvatar_arch ~= "" then
+            table.insert(cmake_config_args, "-DILUVATAR_ARCH=" .. iluvatar_arch)
+        end
     end
     local infiniops_ops, with_linked_flash_attn_with_kvcache, with_linked_flash_attn_varlen_func = configure_infiniops_ops(os.getenv("INFINI_OPS_OPS"))
     if with_linked_flash_attn_with_kvcache or with_linked_flash_attn_varlen_func then
@@ -706,7 +714,7 @@ target("infinicore_cpp_api")
         add_defines("CHAR_BIT=8", "INT_MIN=(-2147483647 - 1)", "INT_MAX=2147483647", "UINT_MAX=4294967295U")
     end
     add_includedirs(INFINI_ROOT.."/include", { public = true })
-    if has_config("nv-gpu") or has_config("ali-ppu") then
+    if has_config("nv-gpu") or has_config("iluvatar-gpu") or has_config("ali-ppu") then
         local cuda_root = os.getenv("CUDA_HOME") or os.getenv("CUDA_PATH") or get_config("cuda") or "/usr/local/cuda"
         add_includedirs(cuda_root .. "/include")
     end

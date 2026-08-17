@@ -45,7 +45,7 @@ target("infinicore_cpp_api")
         add_defines("ENABLE_ILUVATAR_VENDOR_OPS")
     end
 
-    if iluvatar_flash_attn_enabled then
+    if has_config("aten") then
         before_link(function (target)
             local torch_dir = os.iorunv("python3", {
                 "-c",
@@ -53,12 +53,12 @@ target("infinicore_cpp_api")
             }):trim()
             local torch_lib_dir = path.join(torch_dir, "lib")
             if not os.isdir(torch_lib_dir) then
-                raise("Iluvatar Flash Attention: torch library directory not found: " .. torch_lib_dir)
+                raise("Iluvatar ATen: torch library directory not found: " .. torch_lib_dir)
             end
 
-            -- Flash Attention and vendor extensions use ATen symbols and may be
-            -- loaded after InfiniCore. Keep the complete Torch runtime discoverable
-            -- even when users import infinicore before importing torch.
+            -- ATen-backed InfiniOps operators, Flash Attention, and vendor
+            -- extensions use Torch symbols. Keep the complete Torch runtime
+            -- discoverable even when users import infinicore before importing torch.
             target:add(
                 "shflags",
                 "-Wl,--no-as-needed",
@@ -73,6 +73,10 @@ target("infinicore_cpp_api")
                 "-Wl,-rpath," .. torch_lib_dir,
                 {force = true}
             )
+
+            if not iluvatar_flash_attn_enabled then
+                return
+            end
 
             local attention_so = iluvatar_attention_so_path(os.iorunv)
             print("Iluvatar attention extension: " .. attention_so)
