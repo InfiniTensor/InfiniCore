@@ -42,7 +42,8 @@ bool canUseInfiniOps(const Tensor &out,
                      const std::optional<Tensor> &alibi_slopes) {
     const bool paged = block_table.has_value();
     const auto dtype = q->dtype();
-    if (out->device().getType() != Device::Type::NVIDIA
+    const auto device_type = out->device().getType();
+    if ((device_type != Device::Type::NVIDIA && device_type != Device::Type::METAX)
         || q->ndim() != 3
         || out->ndim() != 3
         || ((paged && (k->ndim() != 4 || v->ndim() != 4))

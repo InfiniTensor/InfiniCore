@@ -357,26 +357,37 @@ local infiniops_external_built = false
 
 local function configure_infiniops_ops(infiniops_ops)
     if not infiniops_ops or #infiniops_ops == 0 then
-        return infiniops_ops, false, false
+        return nil, false, false
     end
 
-    local selected = {}
+    local selection = {}
     local with_linked_flash_attn_with_kvcache = false
     local with_linked_flash_attn_varlen_func = false
     for _, op in ipairs(infiniops_ops:split("[,;]")) do
         op = op:trim()
         if #op > 0 then
-            table.insert(selected, op)
-            if has_config("nv-gpu") and op == "flash_attn_with_kvcache" then
+            local use_linked_implementation = false
+            if (has_config("nv-gpu") or has_config("metax-gpu")) and op == "flash_attn_with_kvcache" then
                 with_linked_flash_attn_with_kvcache = true
+                use_linked_implementation = true
             end
-            if has_config("nv-gpu") and op == "flash_attn_varlen_func" then
+            if (has_config("nv-gpu") or has_config("metax-gpu")) and op == "flash_attn_varlen_func" then
                 with_linked_flash_attn_varlen_func = true
+                use_linked_implementation = true
             end
+            local implementations = "all"
+            if use_linked_implementation then
+                implementations = {16}
+            elseif op == "argmax" or op == "index_select" then
+                implementations = {8}
+            elseif op == "rms_norm" or op == "silu_and_mul" or op == "topk_softmax" then
+                implementations = {0}
+            end
+            selection[op] = {implementations = implementations}
         end
     end
 
-    return table.concat(selected, ","), with_linked_flash_attn_with_kvcache, with_linked_flash_attn_varlen_func
+    return selection, with_linked_flash_attn_with_kvcache, with_linked_flash_attn_varlen_func
 end
 
 local function get_infiniops_backend_cmake_arg()
@@ -399,7 +410,7 @@ local function get_infiniops_backend_cmake_arg()
     return enabled[1]
 end
 
-local function build_infiniops_external(xmake_os)
+local function build_infiniops_external(xmake_os, json)
     if not has_config("infiniops") or infiniops_external_built then
         return
     end
@@ -420,7 +431,11 @@ local function build_infiniops_external(xmake_os)
         or has_config("metax-gpu")
         or (has_config("iluvatar-gpu") and has_config("aten")) then
         table.insert(cmake_config_args, "-DWITH_TORCH=ON")
-        table.insert(cmake_config_args, "-DINFINI_OPS_TORCH_OPS=argmax")
+        local torch_ops = "argmax"
+        if has_config("nv-gpu") or has_config("metax-gpu") then
+            torch_ops = torch_ops .. ",index_select"
+        end
+        table.insert(cmake_config_args, "-DINFINI_OPS_TORCH_OPS=" .. torch_ops)
     end
     if has_config("iluvatar-gpu") and has_config("aten") then
         table.insert(cmake_config_args, "-DTORCH_CXX11_ABI=0")
@@ -432,12 +447,15 @@ local function build_infiniops_external(xmake_os)
             table.insert(cmake_config_args, "-DILUVATAR_ARCH=" .. iluvatar_arch)
         end
     end
-    local infiniops_ops, with_linked_flash_attn_with_kvcache, with_linked_flash_attn_varlen_func = configure_infiniops_ops(os.getenv("INFINI_OPS_OPS"))
+    local infiniops_ops_config, with_linked_flash_attn_with_kvcache, with_linked_flash_attn_varlen_func = configure_infiniops_ops(os.getenv("INFINI_OPS_OPS"))
     if with_linked_flash_attn_with_kvcache or with_linked_flash_attn_varlen_func then
         table.insert(cmake_config_args, "-DWITH_LINKED=ON")
     end
-    if infiniops_ops and #infiniops_ops > 0 then
-        table.insert(cmake_config_args, "-DINFINI_OPS_OPS=" .. infiniops_ops)
+    if infiniops_ops_config then
+        xmake_os.mkdir(infiniops_builddir)
+        local infiniops_ops_config_path = path.join(infiniops_builddir, "ops.json")
+        json.savefile(infiniops_ops_config_path, infiniops_ops_config)
+        table.insert(cmake_config_args, "-DINFINI_OPS_OPS=" .. infiniops_ops_config_path)
     end
     local cmake_cuda_architectures = get_infiniops_cuda_architectures()
     if cmake_cuda_architectures and cmake_cuda_architectures ~= "" then
@@ -689,7 +707,7 @@ target("infiniops_external")
     set_default(false)
 
     on_build(function (target)
-        build_infiniops_external(os)
+        build_infiniops_external(os, import("core.base.json"))
     end)
 target_end()
 
@@ -753,7 +771,7 @@ target("infinicore_cpp_api")
         add_links("infiniops")
         add_rpathdirs(INFINI_ROOT .. "/lib")
         on_load(function (target)
-            build_infiniops_external(os)
+            build_infiniops_external(os, import("core.base.json"))
         end)
         after_install(function (target)
             local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")

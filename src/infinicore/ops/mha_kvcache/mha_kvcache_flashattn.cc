@@ -40,7 +40,8 @@ bool canUseInfiniOps(const Tensor &out,
                      const Tensor &block_table,
                      const std::optional<Tensor> &alibi_slopes) {
     const auto dtype = q->dtype();
-    if (out->device().getType() != Device::Type::NVIDIA
+    const auto device_type = out->device().getType();
+    if ((device_type != Device::Type::NVIDIA && device_type != Device::Type::METAX)
         || q->ndim() != 4
         || out->ndim() != 4
         || k_cache->ndim() != 4
