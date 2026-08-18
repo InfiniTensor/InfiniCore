@@ -33,6 +33,10 @@ PinnableBlockAllocator::PinnableBlockAllocator(Device device)
         {128 * 1024 * 1024, {}}, // 128 MB
         {256 * 1024 * 1024, {}}, // 256 MB
     };
+    if (device_.getType() == Device::Type::HYGON) {
+        // Large model shapes benefit from exact-size reuse instead of coarse classes.
+        size_classes_.resize(8);
+    }
 }
 
 // ------------------- allocate -------------------
@@ -85,6 +89,15 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
     // Try to reuse a frozen or free large block
     auto it = std::find_if(large_blocks_.begin(), large_blocks_.end(),
                            [size](const std::shared_ptr<Block> &b) { return b->size >= size && !b->in_use; });
+    if (device_.getType() == Device::Type::HYGON) {
+        it = large_blocks_.end();
+        for (auto candidate = large_blocks_.begin(); candidate != large_blocks_.end(); ++candidate) {
+            if (!(*candidate)->in_use && (*candidate)->size >= size
+                && (it == large_blocks_.end() || (*candidate)->size < (*it)->size)) {
+                it = candidate;
+            }
+        }
+    }
 
     if (it != large_blocks_.end()) {
         block = *it;
@@ -92,6 +105,22 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
         block->use_count = 1;
         block->frozen = block->frozen || pinned_mode_;
         return reinterpret_cast<std::byte *>(block->ptr);
+    }
+
+    // A growing sequence of exact-size allocations should not leave every
+    // smaller eager-only block cached indefinitely. Graph-frozen and live
+    // blocks must stay resident because captured graphs may still reference
+    // their addresses.
+    if (device_.getType() == Device::Type::HYGON) {
+        for (auto stale = large_blocks_.begin(); stale != large_blocks_.end();) {
+            if (!(*stale)->in_use && !(*stale)->frozen && (*stale)->size < size) {
+                INFINICORE_CHECK_ERROR(infinirtFree((*stale)->ptr));
+                all_blocks_.erase((*stale)->ptr);
+                stale = large_blocks_.erase(stale);
+            } else {
+                ++stale;
+            }
+        }
     }
 
     // Allocate new large block

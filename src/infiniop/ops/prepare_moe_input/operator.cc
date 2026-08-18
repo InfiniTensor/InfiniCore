@@ -2,7 +2,7 @@
 #include "../../handle.h"
 #include "infiniop/ops/prepare_moe_input.h"
 
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/prepare_moe_input_nvidia.cuh"
 #endif
 
@@ -47,6 +47,9 @@ __INFINI_C infiniStatus_t infiniopCreatePrepareMoeInputDescriptor(
 #ifdef ENABLE_METAX_API
         CREATE(INFINI_DEVICE_METAX, metax);
 #endif
+#ifdef ENABLE_HYGON_API
+        CREATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -69,6 +72,9 @@ __INFINI_C infiniStatus_t infiniopGetPrepareMoeInputWorkspaceSize(
 #endif
 #ifdef ENABLE_METAX_API
         GET(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_HYGON_API
+        GET(INFINI_DEVICE_HYGON, nvidia);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -103,6 +109,9 @@ __INFINI_C infiniStatus_t infiniopPrepareMoeInput(
 #ifdef ENABLE_METAX_API
         CALCULATE(INFINI_DEVICE_METAX, metax);
 #endif
+#ifdef ENABLE_HYGON_API
+        CALCULATE(INFINI_DEVICE_HYGON, nvidia);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -124,6 +133,9 @@ __INFINI_C infiniStatus_t infiniopDestroyPrepareMoeInputDescriptor(
 #endif
 #ifdef ENABLE_METAX_API
         DESTROY(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_HYGON_API
+        DESTROY(INFINI_DEVICE_HYGON, nvidia);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

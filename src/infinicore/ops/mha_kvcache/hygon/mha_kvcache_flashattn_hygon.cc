@@ -4,13 +4,11 @@
 #include "../../../adaptor/flash_attn/hygon/flash_attn_hygon.hpp"
 #include "infinicore/adaptor/aten_adaptor.hpp"
 
-#include <ATen/TensorIndexing.h>
-#include <cstdlib>
+#include <c10/hip/HIPGuard.h>
+
 #include <limits>
 #include <stdexcept>
-
-#include <c10/hip/HIPFunctions.h>
-#include <c10/hip/HIPGuard.h>
+#include <string>
 
 namespace infinicore::op::mha_kvcache_impl::flashattn {
 
@@ -50,58 +48,49 @@ void run(void *planned_meta) {
     auto q = infinicore::adaptor::to_aten_tensor(p->q);
     auto k_cache = infinicore::adaptor::to_aten_tensor(p->k_cache);
     auto v_cache = infinicore::adaptor::to_aten_tensor(p->v_cache);
-    auto seqlens_k = std::optional<const at::Tensor>(infinicore::adaptor::to_aten_tensor(p->seqlens_k));
-    auto block_table = std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(p->block_table));
+    auto seqlens_k_tensor = infinicore::adaptor::to_aten_tensor(p->seqlens_k);
+    auto block_table_tensor = infinicore::adaptor::to_aten_tensor(p->block_table);
+    auto seqlens_k = std::optional<const at::Tensor>(seqlens_k_tensor);
+    auto block_table = std::optional<at::Tensor>(block_table_tensor);
     auto alibi_slopes = p->alibi_slopes
                           ? std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(*p->alibi_slopes))
                           : std::nullopt;
 
-    if (std::getenv("INFINICORE_HYGON_ATEN_FALLBACK")) {
-        namespace idx = at::indexing;
-        auto seqlens_t = infinicore::adaptor::to_aten_tensor(p->seqlens_k);
-        auto block_table_t = infinicore::adaptor::to_aten_tensor(p->block_table);
-        auto seqlens_cpu = seqlens_t.to(at::kCPU);
-        auto block_table_cpu = block_table_t.to(at::kCPU);
-
-        auto result = at::empty_like(out_tensor);
-        const int64_t batch_size = q.size(0);
-        const int64_t seqlen_q = q.size(1);
-        const int64_t num_heads = q.size(2);
-        const int64_t block_size = k_cache.size(1);
-        const int64_t num_kv_heads = k_cache.size(2);
-        const int64_t group_size = num_heads / num_kv_heads;
-
-        for (int64_t batch_idx = 0; batch_idx < batch_size; ++batch_idx) {
-            const int64_t seq_len = seqlens_cpu.index({batch_idx}).item<int64_t>();
-            std::vector<at::Tensor> keys;
-            std::vector<at::Tensor> values;
-            keys.reserve(seq_len);
-            values.reserve(seq_len);
-            for (int64_t logical_pos = 0; logical_pos < seq_len; ++logical_pos) {
-                const int64_t block_id = block_table_cpu.index({batch_idx, logical_pos / block_size}).item<int64_t>();
-                const int64_t off = logical_pos % block_size;
-                keys.push_back(k_cache.index({block_id, off, idx::Slice(), idx::Slice()}));
-                values.push_back(v_cache.index({block_id, off, idx::Slice(), idx::Slice()}));
-            }
-            auto K = at::stack(keys, 0);
-            auto V = at::stack(values, 0);
-            if (group_size > 1) {
-                K = K.repeat_interleave(group_size, 1);
-                V = V.repeat_interleave(group_size, 1);
-            }
-            auto cur_q = q.index({batch_idx});
-            auto scores = at::matmul(cur_q.permute({1, 0, 2}).to(at::kFloat), K.permute({1, 2, 0}).to(at::kFloat)) * p->scale;
-            auto mask = at::full({seqlen_q, seq_len}, -std::numeric_limits<float>::infinity(), q.options().dtype(at::kFloat));
-            const int64_t prefix_len = seq_len - seqlen_q;
-            for (int64_t query_pos = 0; query_pos < seqlen_q; ++query_pos) {
-                mask.index_put_({query_pos, idx::Slice(0, prefix_len + query_pos + 1)}, 0.0);
-            }
-            auto attn = at::softmax(scores + mask.unsqueeze(0), -1).to(q.dtype());
-            auto cur_out = at::matmul(attn, V.permute({1, 0, 2})).permute({1, 0, 2});
-            result.index_put_({batch_idx}, cur_out);
+    const bool use_paged_attention = q.dim() == 4 && q.size(1) == 1
+                                  && k_cache.dim() == 4 && v_cache.dim() == 4
+                                  && k_cache.size(0) == v_cache.size(0)
+                                  && k_cache.size(1) == v_cache.size(1)
+                                  && k_cache.size(2) == v_cache.size(3)
+                                  && k_cache.size(3) == v_cache.size(2)
+                                  && k_cache.size(2) == 64
+                                  && q.size(2) % k_cache.size(1) == 0
+                                  && q.size(3) == k_cache.size(3)
+                                  && q.is_contiguous() && k_cache.is_contiguous() && v_cache.is_contiguous()
+                                  && seqlens_k_tensor.dim() == 1 && block_table_tensor.dim() == 2
+                                  && !alibi_slopes.has_value();
+    if (use_paged_attention) {
+        const auto max_context_len_64 = block_table_tensor.size(1) * k_cache.size(2);
+        if (max_context_len_64 > std::numeric_limits<int>::max()) {
+            throw std::runtime_error("paged_attention max context length exceeds int range");
         }
-
-        out_tensor.copy_(result);
+        auto paged_out = out_tensor.view({q.size(0), q.size(2), q.size(3)});
+        const std::optional<at::Tensor> none = std::nullopt;
+        static const std::string kv_cache_dtype = "auto";
+        flash::paged_attention(
+            paged_out,
+            q,
+            k_cache,
+            v_cache,
+            p->scale,
+            block_table_tensor,
+            seqlens_k_tensor,
+            none,
+            kv_cache_dtype,
+            none,
+            none,
+            none,
+            static_cast<int>(max_context_len_64),
+            none);
         if (out_need_copy_back) {
             p->out->copy_from(out_work);
         }
@@ -114,12 +103,19 @@ void run(void *planned_meta) {
     std::optional<const at::Tensor> rotary_sin = std::nullopt;
     std::optional<const at::Tensor> cache_batch_idx = std::nullopt;
     std::optional<const at::Tensor> leftpad_k = std::nullopt;
-    const bool use_dynamic_out = q.dim() == 4 && k_cache.dim() == 4
-                              && q.size(1) == 1 && q.size(2) > k_cache.size(2)
-                              && q.size(3) % 8 == 0 && !alibi_slopes.has_value();
-
-    auto out = use_dynamic_out ? std::optional<at::Tensor>(std::nullopt)
-                               : std::optional<at::Tensor>(out_tensor);
+    const bool needs_grouped_out_alias = q.dim() == 4
+                                      && k_cache.dim() == 4 && v_cache.dim() == 4
+                                      && q.size(1) == 1 && k_cache.size(2) > 0
+                                      && q.size(2) > k_cache.size(2)
+                                      && q.size(2) % k_cache.size(2) == 0
+                                      && q.size(3) == v_cache.size(3)
+                                      && q.size(3) % 8 == 0
+                                      && v_cache.sizes() == k_cache.sizes()
+                                      && !alibi_slopes.has_value();
+    auto direct_out = needs_grouped_out_alias
+                        ? out_tensor.view({q.size(0), q.size(2) / k_cache.size(2), k_cache.size(2), v_cache.size(3)})
+                        : out_tensor;
+    auto out = std::optional<at::Tensor>(direct_out);
 
     auto result = flash::mha_fwd_kvcache(
         q,
@@ -143,7 +139,8 @@ void run(void *planned_meta) {
         false,
         0);
 
-    if (!result.empty() && result[0].defined()) {
+    if (!result.empty() && result[0].defined()
+        && result[0].data_ptr() != out_tensor.data_ptr()) {
         out_tensor.copy_(result[0]);
     }
     if (out_need_copy_back) {

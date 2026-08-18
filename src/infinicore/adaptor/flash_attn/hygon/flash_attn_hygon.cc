@@ -33,6 +33,22 @@ using mha_fwd_kvcache_fn_t = std::vector<at::Tensor> (*)(
     int num_splits,
     const std::optional<at::Tensor> &s_aux_);
 
+using paged_attention_fn_t = void (*)(
+    at::Tensor &out,
+    at::Tensor &q,
+    at::Tensor &k_cache,
+    at::Tensor &v_cache,
+    float scale,
+    at::Tensor &block_table,
+    at::Tensor &cache_lens,
+    const std::optional<at::Tensor> &alibi_slopes,
+    const std::string &kv_cache_dtype,
+    const std::optional<at::Tensor> &q_descale,
+    const std::optional<at::Tensor> &k_descale,
+    const std::optional<at::Tensor> &v_descale,
+    int max_context_len,
+    const std::optional<at::Tensor> &s_aux);
+
 using mha_varlen_fwd_fn_t = std::vector<at::Tensor> (*)(
     at::Tensor &q,
     const at::Tensor &k,
@@ -132,6 +148,28 @@ mha_fwd_kvcache(at::Tensor &q,
               cache_batch_idx_, leftpad_k_, block_table_, alibi_slopes_, out_,
               softmax_scale, is_causal, window_size_left, window_size_right,
               softcap, is_rotary_interleaved, num_splits, s_aux);
+}
+
+void paged_attention(
+    at::Tensor &out,
+    at::Tensor &q,
+    at::Tensor &k_cache,
+    at::Tensor &v_cache,
+    float scale,
+    at::Tensor &block_table,
+    at::Tensor &cache_lens,
+    const std::optional<at::Tensor> &alibi_slopes,
+    const std::string &kv_cache_dtype,
+    const std::optional<at::Tensor> &q_descale,
+    const std::optional<at::Tensor> &k_descale,
+    const std::optional<at::Tensor> &v_descale,
+    int max_context_len,
+    const std::optional<at::Tensor> &s_aux) {
+    static auto fn = reinterpret_cast<paged_attention_fn_t>(
+        resolve_flash_extension_symbol("paged_attention"));
+    fn(out, q, k_cache, v_cache, scale, block_table, cache_lens,
+       alibi_slopes, kv_cache_dtype, q_descale, k_descale, v_descale,
+       max_context_len, s_aux);
 }
 
 std::vector<at::Tensor>
