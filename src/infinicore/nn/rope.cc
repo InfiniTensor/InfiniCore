@@ -80,7 +80,8 @@ void RoPE::initialize_cache() {
 #ifdef ENABLE_INFINIOPS_API
     if ((device_.getType() == Device::Type::NVIDIA
          || device_.getType() == Device::Type::METAX
-         || device_.getType() == Device::Type::ILUVATAR)
+         || device_.getType() == Device::Type::ILUVATAR
+         || device_.getType() == Device::Type::HYGON)
         && !mrope_section_) {
         INFINICORE_NN_BUFFER_INIT(cos_sin_cache, ({max_seq_len_, rotary_dim_}, dtype_, device_));
     }
