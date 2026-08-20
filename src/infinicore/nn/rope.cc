@@ -196,8 +196,12 @@ Tensor RoPE::forward(const Tensor &x, const Tensor &pos, bool in_place) const {
         if (!in_place) {
             y->copy_from(x);
         }
+        auto query = y;
+        if (pos->ndim() == 1 && query->ndim() == 4 && query->size(0) == 1) {
+            query = query->squeeze(0);
+        }
         op::rotary_embedding_(pos,
-                              y,
+                              query,
                               std::nullopt,
                               cos_sin_cache_,
                               static_cast<int64_t>(head_dim_),
