@@ -121,15 +121,15 @@ public:
         float max_score = -3.4028234663852886e38f;
         float sum_exp = 0.0f;
 
-        for (size_t block_idx = 0; block_idx < _max_num_blocks_per_seq; ++block_idx) {
-            size_t token_start = block_idx * _page_block_size;
+        for (size_t page_block_idx = 0; page_block_idx < _max_num_blocks_per_seq; ++page_block_idx) {
+            size_t token_start = page_block_idx * _page_block_size;
             if (token_start >= seq_len) {
                 break;
             }
 
             const int64_t physical_block = loadIndex(
                 _block_tables_gm,
-                static_cast<ptrdiff_t>(seq_idx) * _block_table_batch_stride + static_cast<ptrdiff_t>(block_idx));
+                static_cast<ptrdiff_t>(seq_idx) * _block_table_batch_stride + static_cast<ptrdiff_t>(page_block_idx));
 
             size_t token_end = token_start + _page_block_size;
             if (token_end > seq_len) {
