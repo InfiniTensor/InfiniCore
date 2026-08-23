@@ -1395,6 +1395,37 @@ def mxfp4_dequantize_(lib):
 
 
 @OpRegister.operator
+def fp8_blockwise_dequantize_(lib):
+    lib.infiniopCreateFp8BlockwiseDequantizeDescriptor.restype = c_int32
+    lib.infiniopCreateFp8BlockwiseDequantizeDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+    lib.infiniopGetFp8BlockwiseDequantizeWorkspaceSize.restype = c_int32
+    lib.infiniopGetFp8BlockwiseDequantizeWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopFp8BlockwiseDequantize.restype = c_int32
+    lib.infiniopFp8BlockwiseDequantize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyFp8BlockwiseDequantizeDescriptor.restype = c_int32
+    lib.infiniopDestroyFp8BlockwiseDequantizeDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def per_channel_quant_int8_(lib):
     lib.infiniopCreatePerChannelQuantI8Descriptor.restype = c_int32
     lib.infiniopCreatePerChannelQuantI8Descriptor.argtypes = [
