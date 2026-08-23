@@ -1503,6 +1503,76 @@ def per_tensor_dequant_int8_(lib):
 
 
 @OpRegister.operator
+def per_tensor_quant_fp8_(lib):
+    lib.infiniopCreatePerTensorQuantFp8Descriptor.restype = c_int32
+    lib.infiniopCreatePerTensorQuantFp8Descriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetPerTensorQuantFp8WorkspaceSize.restype = c_int32
+    lib.infiniopGetPerTensorQuantFp8WorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopPerTensorQuantFp8.restype = c_int32
+    lib.infiniopPerTensorQuantFp8.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_bool,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyPerTensorQuantFp8Descriptor.restype = c_int32
+    lib.infiniopDestroyPerTensorQuantFp8Descriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
+def per_tensor_dequant_fp8_(lib):
+    lib.infiniopCreatePerTensorDequantFp8Descriptor.restype = c_int32
+    lib.infiniopCreatePerTensorDequantFp8Descriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+
+    lib.infiniopGetPerTensorDequantFp8WorkspaceSize.restype = c_int32
+    lib.infiniopGetPerTensorDequantFp8WorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+
+    lib.infiniopPerTensorDequantFp8.restype = c_int32
+    lib.infiniopPerTensorDequantFp8.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+
+    lib.infiniopDestroyPerTensorDequantFp8Descriptor.restype = c_int32
+    lib.infiniopDestroyPerTensorDequantFp8Descriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+
+@OpRegister.operator
 def gptq_marlin_gemm_(lib):
     lib.infiniopCreateGptqMarlinGemmDescriptor.restype = c_int32
     lib.infiniopCreateGptqMarlinGemmDescriptor.argtypes = [
