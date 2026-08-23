@@ -126,7 +126,18 @@ __device__ void perTensorQuantFp8SymKernel(
     unsigned int gid = blockIdx.x * blockDim.x + threadIdx.x;
     const int grid_size = blockDim.x * gridDim.x;
 
-    float scale_val = 1.0f / x_scale[0];
+    // Guard against a zero scale: all-zero input (dynamic mode, max|x| = 0) or
+    // a zero static scale. 1.0f / 0.0f = inf would turn 0 * inf into NaN and
+    // produce garbage bytes. When scale == 0 we skip the division entirely and
+    // write all-zero fp8 bytes (equivalent to memsetting the output), and
+    // normalize the scale to 1.0, matching the reference semantics
+    // (absmax == 0 -> scale = 1). This also covers inference engines feeding
+    // empty/all-zero sequences, avoiding a NaN storm downstream.
+    const bool zero_scale = (x_scale[0] == 0.0f);
+    if (zero_scale && threadIdx.x == 0 && blockIdx.x == 0) {
+        x_scale[0] = 1.0f;
+    }
+    const float scale_val = zero_scale ? 0.0f : 1.0f / x_scale[0];
 
     for (int ind = gid; ind < num_elements; ind += grid_size) {
         int tid = ind;
@@ -145,7 +156,9 @@ __device__ void perTensorQuantFp8SymKernel(
         int p_index = w * (int)p_strides_3 + h * (int)p_strides_2 + c * (int)p_strides_1 + b * (int)p_strides_0;
 
         float qf = (float)x[index] * scale_val;
-        x_packed[p_index] = float_to_e4m3(qf);
+        // zero_scale: write 0x00 directly, skipping float_to_e4m3 entirely
+        // (immune to NaN inputs; equivalent to memsetting the output).
+        x_packed[p_index] = zero_scale ? 0 : float_to_e4m3(qf);
     }
 }
 

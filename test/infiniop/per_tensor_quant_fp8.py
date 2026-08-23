@@ -24,19 +24,22 @@ from libinfiniop import (
 # These are not meant to be imported from other modules
 # FP8 e4m3fn: symmetric per-tensor quant, scale = max / 448 (dynamic or static)
 _TEST_CASES = [
-    # x_shape, x_stride, x_packed_stride, is_static, extreme_values
-    ((16, 5632), None, None, False, False),
-    ((13, 4), (10, 1), None, True, False),
-    ((13, 4), (10, 1), (10, 1), False, False),
-    ((16, 5632), (13312, 1), (13312, 1), True, False),
-    ((4, 4, 5632), None, None, False, False),
-    ((4, 4, 5632), (45056, 5632, 1), (45056, 5632, 1), True, False),
-    ((1, 32, 4, 128), (147456, 4608, 128, 1), (147456, 4608, 128, 1), False, False),
-    ((1, 32, 4, 128), (16384, 512, 128, 1), (16384, 512, 128, 1), True, False),
+    # x_shape, x_stride, x_packed_stride, is_static, extreme_values, all_zero
+    ((16, 5632), None, None, False, False, False),
+    ((13, 4), (10, 1), None, True, False, False),
+    ((13, 4), (10, 1), (10, 1), False, False, False),
+    ((16, 5632), (13312, 1), (13312, 1), True, False, False),
+    ((4, 4, 5632), None, None, False, False, False),
+    ((4, 4, 5632), (45056, 5632, 1), (45056, 5632, 1), True, False, False),
+    ((1, 32, 4, 128), (147456, 4608, 128, 1), (147456, 4608, 128, 1), False, False, False),
+    ((1, 32, 4, 128), (16384, 512, 128, 1), (16384, 512, 128, 1), True, False, False),
     # Deterministic boundary coverage: zero, subnormal (< 2^-9), normal,
     # carry rounding, exact max 448, and saturation (|v| > 448 -> 0x7E/0xFE).
-    ((1, 16), None, None, True, True),
-    ((1, 16), None, None, False, True),
+    ((1, 16), None, None, True, True, False),
+    ((1, 16), None, None, False, True, False),
+    # All-zero input (dynamic): scale = max|x| / 448 = 0 must not divide by
+    # zero; expect scale normalized to 1.0 and all-zero fp8 output.
+    ((1, 16), None, None, False, False, True),
 ]
 
 _TENSOR_DTYPES = [InfiniDtype.BF16, InfiniDtype.F16, InfiniDtype.F32]
@@ -154,15 +157,18 @@ def test(
     x_packed_stride,
     is_static,
     extreme=False,
+    all_zero=False,
     dtype=InfiniDtype.F16,
     sync=None,
 ):
 
     print(
-        f"Testing Per Tensor Quant Fp8 on {InfiniDeviceNames[device]} with x_shape:{x_shape}, x_stride:{x_stride}, x_packed_stride:{x_packed_stride}, is_static:{is_static}, extreme:{extreme}, dtype:{InfiniDtypeNames[dtype]}"
+        f"Testing Per Tensor Quant Fp8 on {InfiniDeviceNames[device]} with x_shape:{x_shape}, x_stride:{x_stride}, x_packed_stride:{x_packed_stride}, is_static:{is_static}, extreme:{extreme}, all_zero:{all_zero}, dtype:{InfiniDtypeNames[dtype]}"
     )
 
-    if extreme:
+    if all_zero:
+        x = TestTensor(x_shape, x_stride, dtype, device, mode="zeros")
+    elif extreme:
         torch_dtype = {
             InfiniDtype.F16: torch.float16,
             InfiniDtype.BF16: torch.bfloat16,
