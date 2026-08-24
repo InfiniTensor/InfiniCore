@@ -355,9 +355,57 @@ end
 
 local infiniops_external_built = false
 
-local function configure_infiniops_ops(infiniops_ops)
+local function infiniops_selection_includes_slot(selection, slot)
+    if type(selection) ~= "table" then
+        return false
+    end
+
+    local implementations = selection.implementations
+    if implementations == "all" then
+        return true
+    end
+    if type(implementations) ~= "table" then
+        return false
+    end
+
+    for _, implementation in ipairs(implementations) do
+        if implementation == slot then
+            return true
+        end
+    end
+    return false
+end
+
+local function configure_infiniops_ops(infiniops_ops, xmake_os, json)
     if not infiniops_ops or #infiniops_ops == 0 then
-        return nil, false, false
+        return nil, false, false, nil
+    end
+
+    infiniops_ops = infiniops_ops:trim()
+    if #infiniops_ops == 0 then
+        return nil, false, false, nil
+    end
+
+    if infiniops_ops:lower():match("%.json$") then
+        local config_path = path.absolute(infiniops_ops, os.projectdir())
+        if not xmake_os.isfile(config_path) then
+            xmake_os.raise("InfiniOps ops config not found: " .. config_path)
+        end
+
+        local selection = json.loadfile(config_path)
+        if type(selection) ~= "table" then
+            xmake_os.raise("InfiniOps ops config must contain a JSON object: " .. config_path)
+        end
+
+        local linked_device = has_config("nv-gpu") or has_config("metax-gpu")
+        local with_linked_flash_attn_with_kvcache = linked_device
+            and infiniops_selection_includes_slot(selection.flash_attn_with_kvcache, 16)
+        local with_linked_flash_attn_varlen_func = linked_device
+            and infiniops_selection_includes_slot(selection.flash_attn_varlen_func, 16)
+        return selection,
+               with_linked_flash_attn_with_kvcache,
+               with_linked_flash_attn_varlen_func,
+               config_path
     end
 
     local selection = {}
@@ -387,7 +435,8 @@ local function configure_infiniops_ops(infiniops_ops)
         end
     end
 
-    return selection, with_linked_flash_attn_with_kvcache, with_linked_flash_attn_varlen_func
+    return selection, with_linked_flash_attn_with_kvcache,
+           with_linked_flash_attn_varlen_func, nil
 end
 
 local function get_infiniops_backend_cmake_arg()
@@ -447,14 +496,19 @@ local function build_infiniops_external(xmake_os, json)
             table.insert(cmake_config_args, "-DILUVATAR_ARCH=" .. iluvatar_arch)
         end
     end
-    local infiniops_ops_config, with_linked_flash_attn_with_kvcache, with_linked_flash_attn_varlen_func = configure_infiniops_ops(os.getenv("INFINI_OPS_OPS"))
+    local infiniops_ops_config,
+          with_linked_flash_attn_with_kvcache,
+          with_linked_flash_attn_varlen_func,
+          infiniops_ops_config_path = configure_infiniops_ops(os.getenv("INFINI_OPS_OPS"), xmake_os, json)
     if with_linked_flash_attn_with_kvcache or with_linked_flash_attn_varlen_func then
         table.insert(cmake_config_args, "-DWITH_LINKED=ON")
     end
     if infiniops_ops_config then
-        xmake_os.mkdir(infiniops_builddir)
-        local infiniops_ops_config_path = path.join(infiniops_builddir, "ops.json")
-        json.savefile(infiniops_ops_config_path, infiniops_ops_config)
+        if not infiniops_ops_config_path then
+            xmake_os.mkdir(infiniops_builddir)
+            infiniops_ops_config_path = path.join(infiniops_builddir, "ops.json")
+            json.savefile(infiniops_ops_config_path, infiniops_ops_config)
+        end
         table.insert(cmake_config_args, "-DINFINI_OPS_OPS=" .. infiniops_ops_config_path)
     end
     local cmake_cuda_architectures = get_infiniops_cuda_architectures()
@@ -761,17 +815,19 @@ target("infinicore_cpp_api")
         end
         add_deps("infiniops_external")
         add_defines("ENABLE_INFINIOPS_API")
-        local _, with_linked_flash_attn_with_kvcache, with_linked_flash_attn_varlen_func = configure_infiniops_ops(os.getenv("INFINI_OPS_OPS"))
-        if with_linked_flash_attn_with_kvcache then
-            add_defines("ENABLE_INFINIOPS_LINKED_FLASH_ATTN_WITH_KVCACHE")
-        end
-        if with_linked_flash_attn_varlen_func then
-            add_defines("ENABLE_INFINIOPS_LINKED_FLASH_ATTN_VARLEN_FUNC")
-        end
         add_links("infiniops")
         add_rpathdirs(INFINI_ROOT .. "/lib")
         on_load(function (target)
-            build_infiniops_external(os, import("core.base.json"))
+            local json = import("core.base.json")
+            local _, with_linked_flash_attn_with_kvcache, with_linked_flash_attn_varlen_func = configure_infiniops_ops(
+                os.getenv("INFINI_OPS_OPS"), os, json)
+            if with_linked_flash_attn_with_kvcache then
+                target:add("defines", "ENABLE_INFINIOPS_LINKED_FLASH_ATTN_WITH_KVCACHE")
+            end
+            if with_linked_flash_attn_varlen_func then
+                target:add("defines", "ENABLE_INFINIOPS_LINKED_FLASH_ATTN_VARLEN_FUNC")
+            end
+            build_infiniops_external(os, json)
         end)
         after_install(function (target)
             local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
