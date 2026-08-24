@@ -439,6 +439,27 @@ local function configure_infiniops_ops(infiniops_ops, xmake_os, json)
            with_linked_flash_attn_varlen_func, nil
 end
 
+local infiniops_adapter_dependencies = {
+    add_rms_norm = {"copy", "fused_add_rms_norm"},
+    conv2d = {"convolution"},
+    gelutanh = {"gelu"},
+    paged_attention = {"flash_attn_with_kvcache"},
+    paged_caching = {"reshape_and_cache_flash"},
+    rearrange = {"copy"},
+    topksoftmax = {"topk_softmax"}
+}
+
+local function is_infiniops_adapter_selected(adapter_name, selected_ops)
+    local dependencies = infiniops_adapter_dependencies[adapter_name]
+                         or {adapter_name}
+    for _, dependency in ipairs(dependencies) do
+        if not selected_ops[dependency] then
+            return false
+        end
+    end
+    return true
+end
+
 local function get_infiniops_backend_cmake_arg()
     local enabled = {}
     local function add_backend(config, cmake_arg)
@@ -450,8 +471,9 @@ local function get_infiniops_backend_cmake_arg()
     add_backend("metax-gpu", "-DWITH_METAX=ON")
     add_backend("iluvatar-gpu", "-DWITH_ILUVATAR=ON")
     add_backend("moore-gpu", "-DWITH_MOORE=ON")
+    add_backend("cambricon-mlu", "-DWITH_CAMBRICON=ON")
     if #enabled == 0 then
-        raise("InfiniOps integration requires one of --nv-gpu, --metax-gpu, --iluvatar-gpu, or --moore-gpu")
+        raise("InfiniOps integration requires one of --nv-gpu, --metax-gpu, --iluvatar-gpu, --moore-gpu, or --cambricon-mlu")
     end
     if #enabled > 1 then
         raise("InfiniOps can build only one GPU backend at a time")
@@ -476,9 +498,34 @@ local function build_infiniops_external(xmake_os, json)
         "-DGENERATE_PYTHON_BINDINGS=OFF",
         "-DCMAKE_BUILD_TYPE=Release"
     }
+    if has_config("cambricon-mlu") then
+        -- Avoid stale finder and optional-provider state when reusing an
+        -- InfiniOps build tree previously configured for another backend.
+        table.insert(cmake_config_args, "-UINFINI_RT_INCLUDE_DIRS")
+        table.insert(cmake_config_args, "-UINFINI_RT_LIBRARY")
+        table.insert(cmake_config_args, "-U_INFINI_RT_INCLUDE_DIR")
+        table.insert(cmake_config_args, "-U_INFINI_RT_LIBRARY")
+        table.insert(cmake_config_args, "-DWITH_LINKED=OFF")
+        if has_config("aten") then
+            local torch_cxx11_abi = xmake_os.iorunv(PYTHON, {
+                "-c",
+                "import torch; print(1 if torch._C._GLIBCXX_USE_CXX11_ABI else 0)",
+            }):trim()
+            table.insert(
+                cmake_config_args,
+                "-DCMAKE_CXX_FLAGS=-D_GLIBCXX_USE_CXX11_ABI=" .. torch_cxx11_abi)
+        else
+            table.insert(cmake_config_args, "-DWITH_TORCH=OFF")
+        end
+
+        -- Cambricon headers define host half helpers with external linkage,
+        -- so generated call instantiations must stay in one translation unit.
+        xmake_os.setenv("INFINI_OPS_DISPATCH_BATCH_SIZE", "64")
+    end
     if has_config("nv-gpu")
         or has_config("metax-gpu")
-        or (has_config("iluvatar-gpu") and has_config("aten")) then
+        or (has_config("iluvatar-gpu") and has_config("aten"))
+        or (has_config("cambricon-mlu") and has_config("aten")) then
         table.insert(cmake_config_args, "-DWITH_TORCH=ON")
         local torch_ops = "argmax"
         if has_config("nv-gpu") or has_config("metax-gpu") then
@@ -823,7 +870,7 @@ target("infinicore_cpp_api")
         add_rpathdirs(INFINI_ROOT .. "/lib")
         on_load(function (target)
             local json = import("core.base.json")
-            local _, with_linked_flash_attn_with_kvcache, with_linked_flash_attn_varlen_func = configure_infiniops_ops(
+            local selected_ops, with_linked_flash_attn_with_kvcache, with_linked_flash_attn_varlen_func = configure_infiniops_ops(
                 os.getenv("INFINI_OPS_OPS"), os, json)
             if with_linked_flash_attn_with_kvcache then
                 target:add("defines", "ENABLE_INFINIOPS_LINKED_FLASH_ATTN_WITH_KVCACHE")
@@ -832,6 +879,40 @@ target("infinicore_cpp_api")
                 target:add("defines", "ENABLE_INFINIOPS_LINKED_FLASH_ATTN_VARLEN_FUNC")
             end
             build_infiniops_external(os, json)
+            if has_config("cambricon-mlu") and has_config("aten") then
+                local torch_mlu_dir = os.iorunv(PYTHON, {
+                    "-c",
+                    "import torch_mlu, os; print(os.path.dirname(torch_mlu.__file__))",
+                }):trim()
+                local torch_cxx11_abi = os.iorunv(PYTHON, {
+                    "-c",
+                    "import torch; print(1 if torch._C._GLIBCXX_USE_CXX11_ABI else 0)",
+                }):trim()
+
+                target:add(
+                    "defines",
+                    "_GLIBCXX_USE_CXX11_ABI=" .. torch_cxx11_abi)
+                target:add(
+                    "includedirs",
+                    path.join(torch_mlu_dir, "csrc"),
+                    path.join(torch_mlu_dir, "csrc", "include"),
+                    {public = true})
+
+                if selected_ops then
+                    for _, adapter_file in ipairs(os.files("src/infinicore/ops/*/*_infiniops.cc")) do
+                        local adapter_name =
+                            path.filename(adapter_file):match("^(.-)_infiniops%.cc$")
+                        if not is_infiniops_adapter_selected(adapter_name,
+                                                              selected_ops) then
+                            target:remove("files", adapter_file)
+                        end
+                    end
+                else
+                    target:remove(
+                        "files",
+                        "src/infinicore/ops/paged_attention/paged_attention_infiniops.cc")
+                end
+            end
         end)
         after_install(function (target)
             local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
@@ -1086,7 +1167,8 @@ target("infinicore_cpp_api")
     else
         remove_files("src/infinicore/ops/*/hygon/*.cc")
     end
-    if has_config("infiniops") and not has_config("nv-gpu") then
+    if has_config("infiniops") and not has_config("nv-gpu")
+        and not has_config("cambricon-mlu") then
         remove_files("src/infinicore/ops/paged_attention/paged_attention_infiniops.cc")
     end
     if has_config("mutual-awareness") then

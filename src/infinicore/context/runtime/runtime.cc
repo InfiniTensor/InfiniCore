@@ -111,6 +111,9 @@ void Runtime::memcpyH2D(void *dst, const void *src, size_t size, bool async) {
 }
 
 void Runtime::memcpyD2H(void *dst, const void *src, size_t size) {
+    if (device_.getType() == Device::Type::CAMBRICON) {
+        syncStream();
+    }
     INFINICORE_CHECK_ERROR(infinirtMemcpy(dst, src, size, INFINIRT_MEMCPY_D2H));
 }
 
