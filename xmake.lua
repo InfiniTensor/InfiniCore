@@ -499,25 +499,6 @@ local function build_infiniops_external(xmake_os, json)
         "-DCMAKE_BUILD_TYPE=Release"
     }
     if has_config("cambricon-mlu") then
-        -- Avoid stale finder and optional-provider state when reusing an
-        -- InfiniOps build tree previously configured for another backend.
-        table.insert(cmake_config_args, "-UINFINI_RT_INCLUDE_DIRS")
-        table.insert(cmake_config_args, "-UINFINI_RT_LIBRARY")
-        table.insert(cmake_config_args, "-U_INFINI_RT_INCLUDE_DIR")
-        table.insert(cmake_config_args, "-U_INFINI_RT_LIBRARY")
-        table.insert(cmake_config_args, "-DWITH_LINKED=OFF")
-        if has_config("aten") then
-            local torch_cxx11_abi = xmake_os.iorunv(PYTHON, {
-                "-c",
-                "import torch; print(1 if torch._C._GLIBCXX_USE_CXX11_ABI else 0)",
-            }):trim()
-            table.insert(
-                cmake_config_args,
-                "-DCMAKE_CXX_FLAGS=-D_GLIBCXX_USE_CXX11_ABI=" .. torch_cxx11_abi)
-        else
-            table.insert(cmake_config_args, "-DWITH_TORCH=OFF")
-        end
-
         -- Cambricon headers define host half helpers with external linkage,
         -- so generated call instantiations must stay in one translation unit.
         xmake_os.setenv("INFINI_OPS_DISPATCH_BATCH_SIZE", "64")
