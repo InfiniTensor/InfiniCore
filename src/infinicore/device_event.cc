@@ -42,7 +42,16 @@ DeviceEvent &DeviceEvent::operator=(DeviceEvent &&other) noexcept {
     if (this != &other) {
         // Clean up current resources
         if (event_ != nullptr) {
+            Device current_device = context::getDevice();
+            if (current_device != device_) {
+                context::setDevice(device_);
+            }
+
             context::destroyEvent(event_);
+
+            if (current_device != device_) {
+                context::setDevice(current_device);
+            }
         }
 
         // Transfer ownership
@@ -59,7 +68,16 @@ DeviceEvent &DeviceEvent::operator=(DeviceEvent &&other) noexcept {
 
 DeviceEvent::~DeviceEvent() {
     if (event_ != nullptr) {
+        Device current_device = context::getDevice();
+        if (current_device != device_) {
+            context::setDevice(device_);
+        }
+
         context::destroyEvent(event_);
+
+        if (current_device != device_) {
+            context::setDevice(current_device);
+        }
     }
 }
 

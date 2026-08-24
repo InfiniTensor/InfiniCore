@@ -81,6 +81,10 @@ class Tensor:
     def copy_(self, src):
         self._underlying.copy_(src._underlying)
 
+    def copy_async_(self, src):
+        """Queue an explicit non-blocking copy on the active device stream."""
+        self._underlying.copy_async_(src._underlying)
+
     def to(self, *args, **kwargs):
         return Tensor(
             self._underlying.to(*tuple(arg._underlying for arg in args), **kwargs)
