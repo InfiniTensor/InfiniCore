@@ -78,6 +78,9 @@ static bool registered = []() {
     SelectLastTokenHidden::plan_dispatcher().registerDevice(Device::Type::METAX, &plan);
     SelectLastTokenHidden::run_dispatcher().registerDevice(Device::Type::METAX, &run);
     SelectLastTokenHidden::cleanup_dispatcher().registerDevice(Device::Type::METAX, &cleanup);
+    SelectLastTokenHidden::plan_dispatcher().registerDevice(Device::Type::HYGON, &plan);
+    SelectLastTokenHidden::run_dispatcher().registerDevice(Device::Type::HYGON, &run);
+    SelectLastTokenHidden::cleanup_dispatcher().registerDevice(Device::Type::HYGON, &cleanup);
     return true;
 }();
 

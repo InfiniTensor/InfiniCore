@@ -450,8 +450,9 @@ local function get_infiniops_backend_cmake_arg()
     add_backend("metax-gpu", "-DWITH_METAX=ON")
     add_backend("iluvatar-gpu", "-DWITH_ILUVATAR=ON")
     add_backend("moore-gpu", "-DWITH_MOORE=ON")
+    add_backend("hygon-dcu", "-DWITH_HYGON=ON")
     if #enabled == 0 then
-        raise("InfiniOps integration requires one of --nv-gpu, --metax-gpu, --iluvatar-gpu, or --moore-gpu")
+        raise("InfiniOps integration requires one of --nv-gpu, --metax-gpu, --iluvatar-gpu, --moore-gpu, or --hygon-dcu")
     end
     if #enabled > 1 then
         raise("InfiniOps can build only one GPU backend at a time")
@@ -478,10 +479,11 @@ local function build_infiniops_external(xmake_os, json)
     }
     if has_config("nv-gpu")
         or has_config("metax-gpu")
+        or has_config("hygon-dcu")
         or (has_config("iluvatar-gpu") and has_config("aten")) then
         table.insert(cmake_config_args, "-DWITH_TORCH=ON")
         local torch_ops = "argmax"
-        if has_config("nv-gpu") or has_config("metax-gpu") then
+        if has_config("nv-gpu") or has_config("metax-gpu") or has_config("hygon-dcu") then
             torch_ops = torch_ops .. ",index_select"
         end
         table.insert(cmake_config_args, "-DINFINI_OPS_TORCH_OPS=" .. torch_ops)
