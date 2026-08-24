@@ -216,6 +216,12 @@ target("infiniop-nvidia")
     set_languages("cxx17")
     add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu", "../src/infiniop/ops/*/*/nvidia/*.cu")
 
+    -- avg_pool3d's NVIDIA implementation requires cuDNN; exclude it when cudnn=n
+    -- to avoid mixing PyTorch's bundled cuDNN with the system CUDA runtime.
+    if not has_config("cudnn") then
+        remove_files("../src/infiniop/ops/avg_pool3d/nvidia/*.cu")
+    end
+
     if has_config("ninetoothed") then
         add_files("../build/ninetoothed/*.c", "../build/ninetoothed/*.cpp")
     end

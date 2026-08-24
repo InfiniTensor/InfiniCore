@@ -5,7 +5,7 @@
 #ifdef ENABLE_CPU_API
 #include "cpu/avg_pool3d_cpu.h"
 #endif
-#if defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API)
+#if (defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API)) && defined(ENABLE_CUDNN_API)
 #include "nvidia/avg_pool3d_nvidia.cuh"
 #endif
 #ifdef ENABLE_METAX_API
@@ -40,10 +40,10 @@ __INFINI_C infiniStatus_t infiniopCreateAvgPool3dDescriptor(
 #ifdef ENABLE_CPU_API
         CREATE(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) && defined(ENABLE_CUDNN_API)
         CREATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
-#ifdef ENABLE_QY_API
+#if defined(ENABLE_QY_API) && defined(ENABLE_CUDNN_API)
         CREATE(INFINI_DEVICE_QY, nvidia);
 #endif
 #ifdef ENABLE_METAX_API
@@ -71,10 +71,10 @@ __INFINI_C infiniStatus_t infiniopGetAvgPool3dWorkspaceSize(infiniopAvgPool3dDes
 #ifdef ENABLE_CPU_API
         GET(INFINI_DEVICE_CPU, cpu)
 #endif
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) && defined(ENABLE_CUDNN_API)
         GET(INFINI_DEVICE_NVIDIA, nvidia)
 #endif
-#ifdef ENABLE_QY_API
+#if defined(ENABLE_QY_API) && defined(ENABLE_CUDNN_API)
         GET(INFINI_DEVICE_QY, nvidia)
 #endif
 #ifdef ENABLE_METAX_API
@@ -109,10 +109,10 @@ __INFINI_C infiniStatus_t infiniopAvgPool3d(
 #ifdef ENABLE_CPU_API
         CALCULATE(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) && defined(ENABLE_CUDNN_API)
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
-#ifdef ENABLE_QY_API
+#if defined(ENABLE_QY_API) && defined(ENABLE_CUDNN_API)
         CALCULATE(INFINI_DEVICE_QY, nvidia);
 #endif
 #ifdef ENABLE_METAX_API
@@ -142,10 +142,10 @@ infiniopDestroyAvgPool3dDescriptor(infiniopAvgPool3dDescriptor_t desc) {
 #ifdef ENABLE_CPU_API
         DELETE(INFINI_DEVICE_CPU, cpu);
 #endif
-#ifdef ENABLE_NVIDIA_API
+#if defined(ENABLE_NVIDIA_API) && defined(ENABLE_CUDNN_API)
         DELETE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
-#ifdef ENABLE_QY_API
+#if defined(ENABLE_QY_API) && defined(ENABLE_CUDNN_API)
         DELETE(INFINI_DEVICE_QY, nvidia);
 #endif
 #ifdef ENABLE_METAX_API
