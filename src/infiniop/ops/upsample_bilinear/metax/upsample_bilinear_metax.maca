@@ -5,6 +5,7 @@
 #include "upsample_bilinear_metax.h"
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <cstdio>
 
 namespace op::upsample_bilinear::metax {
@@ -60,6 +61,14 @@ __global__ void upsample_bilinear_kernel(
     size_t W_in,
     size_t H_out,
     size_t W_out,
+    ptrdiff_t input_stride_n,
+    ptrdiff_t input_stride_c,
+    ptrdiff_t input_stride_h,
+    ptrdiff_t input_stride_w,
+    ptrdiff_t output_stride_n,
+    ptrdiff_t output_stride_c,
+    ptrdiff_t output_stride_h,
+    ptrdiff_t output_stride_w,
     float scale_h, // 预计算的缩放比例
     float scale_w, // 预计算的缩放比例
     bool align_corners) {
@@ -101,18 +110,18 @@ __global__ void upsample_bilinear_kernel(
         w0 = clamp(w0, 0, static_cast<int>(W_in) - 1);
         w1 = clamp(w1, 0, static_cast<int>(W_in) - 1);
 
-        // 6. 读取数据并转换为 float
-        const T *img_base = input + (n_idx * C + c_idx) * H_in * W_in;
-
-        float val00 = to_float(img_base[h0 * W_in + w0]);
-        float val01 = to_float(img_base[h0 * W_in + w1]);
-        float val10 = to_float(img_base[h1 * W_in + w0]);
-        float val11 = to_float(img_base[h1 * W_in + w1]);
+        const ptrdiff_t input_base = n_idx * input_stride_n + c_idx * input_stride_c;
+        float val00 = to_float(input[input_base + h0 * input_stride_h + w0 * input_stride_w]);
+        float val01 = to_float(input[input_base + h0 * input_stride_h + w1 * input_stride_w]);
+        float val10 = to_float(input[input_base + h1 * input_stride_h + w0 * input_stride_w]);
+        float val11 = to_float(input[input_base + h1 * input_stride_h + w1 * input_stride_w]);
 
         // 7. 双线性插值计算
         float val = h0_lambda * (w0_lambda * val00 + w1_lambda * val01) + h1_lambda * (w0_lambda * val10 + w1_lambda * val11);
 
-        output[i] = static_cast<T>(val);
+        const ptrdiff_t output_offset = n_idx * output_stride_n + c_idx * output_stride_c
+                                      + h_out_idx * output_stride_h + w_out_idx * output_stride_w;
+        output[output_offset] = static_cast<T>(val);
     }
 }
 
@@ -165,6 +174,10 @@ void launch_kernel(
             out_ptr,
             in_ptr,
             N, C, H_in, W_in, H_out, W_out,
+            info.input_stride(0), info.input_stride(1),
+            info.input_stride(2), info.input_stride(3),
+            info.output_stride(0), info.output_stride(1),
+            info.output_stride(2), info.output_stride(3),
             scale_h, scale_w,
             align_corners);
 }
