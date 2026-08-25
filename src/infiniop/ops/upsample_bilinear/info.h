@@ -3,6 +3,8 @@
 
 #include "../../../utils.h"
 #include "../../tensor.h"
+#include <array>
+#include <cstddef>
 #include <vector>
 
 namespace op::upsample_bilinear {
@@ -23,6 +25,8 @@ public:
     size_t _w_in;  // Input Width
     size_t _h_out; // Output Height
     size_t _w_out; // Output Width
+    std::array<ptrdiff_t, 4> _input_strides;
+    std::array<ptrdiff_t, 4> _output_strides;
 
     int dtype() const { return _dtype; }
     bool align_corners() const { return _align_corners; }
@@ -32,16 +36,22 @@ public:
     size_t w_in() const { return _w_in; }
     size_t h_out() const { return _h_out; }
     size_t w_out() const { return _w_out; }
+    ptrdiff_t input_stride(size_t dim) const { return _input_strides[dim]; }
+    ptrdiff_t output_stride(size_t dim) const { return _output_strides[dim]; }
 
     // 构造函数
     UpsampleBilinearInfo(int dtype, bool align_corners,
                          size_t n, size_t c,
                          size_t h_in, size_t w_in,
-                         size_t h_out, size_t w_out)
+                         size_t h_out, size_t w_out,
+                         std::array<ptrdiff_t, 4> input_strides,
+                         std::array<ptrdiff_t, 4> output_strides)
         : _dtype(dtype), _align_corners(align_corners),
           _n(n), _c(c),
           _h_in(h_in), _w_in(w_in),
-          _h_out(h_out), _w_out(w_out) {}
+          _h_out(h_out), _w_out(w_out),
+          _input_strides(input_strides),
+          _output_strides(output_strides) {}
 
     static utils::Result<UpsampleBilinearInfo> create(
         infiniopTensorDescriptor_t out_desc,
@@ -49,10 +59,9 @@ public:
         int align_corners) { // C 接口通常传入 int 替代 bool
 
         // 1. 检查维度数量
-        // 至少需要 2 维 (H, W)
-        // 修复: 使用 size_t 避免与 ndim() 返回值比较时的 signed/unsigned 警告
+        // Normalize [H, W], [C, H, W], and [N, C, H, W] to NCHW.
         size_t ndim = input_desc->ndim();
-        if (ndim < 2) {
+        if (ndim < 2 || ndim > 4) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
         if (out_desc->ndim() != ndim) {
@@ -67,32 +76,21 @@ public:
 
         // 3. 检查 Batch/Channel 维度一致性
         // 除了最后两维 (H, W)，前面的维度必须完全匹配
-        size_t n = 1;
-        size_t c = 1;
-
-        // 解析 N 和 C 用于 Info 缓存
-        // 逻辑：
-        // ndim = 4: [N, C, H, W] -> n=dims[0], c=dims[1]
-        // ndim = 3: [C, H, W]    -> n=1,       c=dims[0]
-        // ndim = 2: [H, W]       -> n=1,       c=1
-        // 其他情况将所有非 spatial 维度累乘到 c 中 (视为 flattened channels)
-
-        for (size_t i = 0; i < ndim - 2; ++i) { // 循环变量 i 也建议改为 size_t
+        for (size_t i = 0; i < ndim - 2; ++i) {
             if (input_desc->shape()[i] != out_desc->shape()[i]) {
                 return INFINI_STATUS_BAD_TENSOR_SHAPE;
             }
+        }
 
-            // 简单 heuristic 来填充 n 和 c
-            if (ndim == 4 && i == 0) {
-                n = input_desc->shape()[i];
-            } else if (ndim == 4 && i == 1) {
-                c = input_desc->shape()[i];
-            } else if (ndim == 3 && i == 0) {
-                c = input_desc->shape()[i];
-            } else {
-                // 对于 >4 维的情况，简单地归约为 c
-                c *= input_desc->shape()[i];
-            }
+        size_t n = ndim == 4 ? input_desc->shape()[0] : 1;
+        size_t c = ndim == 4 ? input_desc->shape()[1]
+                             : (ndim == 3 ? input_desc->shape()[0] : 1);
+        std::array<ptrdiff_t, 4> input_strides{0, 0, 0, 0};
+        std::array<ptrdiff_t, 4> output_strides{0, 0, 0, 0};
+        const size_t stride_offset = 4 - ndim;
+        for (size_t i = 0; i < ndim; ++i) {
+            input_strides[stride_offset + i] = input_desc->strides()[i];
+            output_strides[stride_offset + i] = out_desc->strides()[i];
         }
 
         // 4. 获取空间维度
@@ -114,7 +112,9 @@ public:
             h_in,
             w_in,
             h_out,
-            w_out});
+            w_out,
+            input_strides,
+            output_strides});
     }
 };
 

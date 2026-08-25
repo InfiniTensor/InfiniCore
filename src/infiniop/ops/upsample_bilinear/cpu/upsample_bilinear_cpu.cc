@@ -2,6 +2,7 @@
 #include "../../../devices/cpu/common_cpu.h"
 #include <algorithm>
 #include <cmath>
+#include <cstddef>
 #include <omp.h>
 #include <vector>
 
@@ -104,6 +105,14 @@ void calculate_cpu_impl(
     size_t out_h = info.h_out();
     size_t out_w = info.w_out();
     bool align_corners = info.align_corners();
+    const ptrdiff_t input_stride_n = info.input_stride(0);
+    const ptrdiff_t input_stride_c = info.input_stride(1);
+    const ptrdiff_t input_stride_h = info.input_stride(2);
+    const ptrdiff_t input_stride_w = info.input_stride(3);
+    const ptrdiff_t output_stride_n = info.output_stride(0);
+    const ptrdiff_t output_stride_c = info.output_stride(1);
+    const ptrdiff_t output_stride_h = info.output_stride(2);
+    const ptrdiff_t output_stride_w = info.output_stride(3);
 
     auto out_ptr = reinterpret_cast<T *>(output);
     auto in_ptr = reinterpret_cast<const T *>(input);
@@ -116,24 +125,24 @@ void calculate_cpu_impl(
 
 #pragma omp parallel for schedule(static)
     for (ptrdiff_t nc = 0; nc < (ptrdiff_t)n_c; ++nc) {
-        // 当前 channel 的输入输出起始指针
-        const T *src_base = in_ptr + nc * in_h * in_w;
-        T *dst_base = out_ptr + nc * out_h * out_w;
+        const size_t n = static_cast<size_t>(nc) / C;
+        const size_t c = static_cast<size_t>(nc) % C;
+        const ptrdiff_t input_base = n * input_stride_n + c * input_stride_c;
+        const ptrdiff_t output_base = n * output_stride_n + c * output_stride_c;
 
         for (size_t h = 0; h < out_h; ++h) {
             const auto &hp = h_params[h];
-            // 缓存行指针，避免内层循环重复计算乘法
-            const T *src_row0 = src_base + hp.idx0 * in_w;
-            const T *src_row1 = src_base + hp.idx1 * in_w;
+            const ptrdiff_t row0 = input_base + hp.idx0 * input_stride_h;
+            const ptrdiff_t row1 = input_base + hp.idx1 * input_stride_h;
 
             for (size_t w = 0; w < out_w; ++w) {
                 const auto &wp = w_params[w];
 
                 // 获取四个采样点的值
-                float val00 = utils::cast<float>(src_row0[wp.idx0]);
-                float val01 = utils::cast<float>(src_row0[wp.idx1]);
-                float val10 = utils::cast<float>(src_row1[wp.idx0]);
-                float val11 = utils::cast<float>(src_row1[wp.idx1]);
+                float val00 = utils::cast<float>(in_ptr[row0 + wp.idx0 * input_stride_w]);
+                float val01 = utils::cast<float>(in_ptr[row0 + wp.idx1 * input_stride_w]);
+                float val10 = utils::cast<float>(in_ptr[row1 + wp.idx0 * input_stride_w]);
+                float val11 = utils::cast<float>(in_ptr[row1 + wp.idx1 * input_stride_w]);
 
                 // 双线性插值计算
                 // interpolation = (val00 * w0 + val01 * w1) * h_w0 + (val10 * w0 + val11 * w1) * h_w1
@@ -141,7 +150,7 @@ void calculate_cpu_impl(
                 float val_h1 = val10 * wp.w0 + val11 * wp.w1;
                 float result = val_h0 * hp.w0 + val_h1 * hp.w1;
 
-                dst_base[h * out_w + w] = utils::cast<T>(result);
+                out_ptr[output_base + h * output_stride_h + w * output_stride_w] = utils::cast<T>(result);
             }
         }
     }

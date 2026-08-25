@@ -23,6 +23,8 @@ _TEST_CASES_DATA = [
     ((2, 3, 6, 6), (12, 12), None, None),
     ((4, 3, 7, 7), 2.0, False, None),
     ((3, 3, 5, 5), (10, 10), True, None),
+    # Channel-first view of a contiguous NHWC tensor, as used by Qwen3-VL.
+    ((1, 8, 4, 4), (6, 8), True, (128, 1, 32, 8)),
 ]
 
 _TOLERANCE_MAP = {
