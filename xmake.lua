@@ -880,21 +880,21 @@ target("infinicore_cpp_api")
                     path.join(torch_mlu_dir, "csrc"),
                     path.join(torch_mlu_dir, "csrc", "include"),
                     {public = true})
+            end
 
-                if selected_ops then
-                    for _, adapter_file in ipairs(os.files("src/infinicore/ops/*/*_infiniops.cc")) do
-                        local adapter_name =
-                            path.filename(adapter_file):match("^(.-)_infiniops%.cc$")
-                        if not is_infiniops_adapter_selected(adapter_name,
-                                                              selected_ops) then
-                            target:remove("files", adapter_file)
-                        end
+            if selected_ops then
+                for _, adapter_file in ipairs(os.files("src/infinicore/ops/*/*_infiniops.cc")) do
+                    local adapter_name =
+                        path.filename(adapter_file):match("^(.-)_infiniops%.cc$")
+                    if not is_infiniops_adapter_selected(adapter_name,
+                                                         selected_ops) then
+                        target:remove("files", adapter_file)
                     end
-                else
-                    target:remove(
-                        "files",
-                        "src/infinicore/ops/paged_attention/paged_attention_infiniops.cc")
                 end
+            else
+                target:remove(
+                    "files",
+                    "src/infinicore/ops/paged_attention/paged_attention_infiniops.cc")
             end
         end)
         after_install(function (target)
