@@ -312,9 +312,9 @@ option("infiniops")
 option_end()
 
 option("infiniops-root")
-    set_default("submodules/InfiniOps")
+    set_default("")
     set_showmenu(true)
-    set_description("Path to the InfiniOps repository used by --infiniops")
+    set_description("Path to an installed InfiniOps prefix used by --infiniops")
 option_end()
 
 option("infinirt-root")
@@ -334,26 +334,71 @@ local function get_standalone_infinirt_root()
     return nil
 end
 
-local function get_infiniops_cuda_architectures()
-    local arch_opt = get_config("cuda_arch")
-    if not arch_opt or arch_opt == "" then
-        return nil
+local function get_standalone_infiniops_root()
+    local infiniops_root = get_config("infiniops-root")
+    if not infiniops_root or infiniops_root == "" then
+        infiniops_root = os.getenv("INFINI_OPS_ROOT")
     end
-
-    local cmake_archs = {}
-    for _, arch in ipairs(arch_opt:gsub(";", ","):split(",")) do
-        local cmake_arch = arch:trim():match("^sm_(%d+a?)$")
-        if cmake_arch then
-            table.insert(cmake_archs, cmake_arch)
-        end
+    if not infiniops_root or infiniops_root == "" then
+        infiniops_root = os.getenv("INFINI_ROOT")
     end
-    if #cmake_archs == 0 then
-        return nil
+    if not infiniops_root or infiniops_root == "" then
+        local home = os.getenv(is_host("windows") and "HOMEPATH" or "HOME")
+        infiniops_root = path.join(home, ".infini")
     end
-    return table.concat(cmake_archs, ";")
+    return path.absolute(infiniops_root, os.projectdir())
 end
 
-local infiniops_external_built = false
+local function find_installed_library(root, name)
+    for _, libdir in ipairs({"lib", "lib64"}) do
+        local library = path.join(root, libdir, name)
+        if os.isfile(library) then
+            return library
+        end
+    end
+    raise("Installed library not found under " .. root .. ": " .. name)
+end
+
+local function stage_infiniops_runtime(xmake_os, destination)
+    local infiniops_root = get_standalone_infiniops_root()
+    local infiniops_lib = find_installed_library(infiniops_root, "libinfiniops.so")
+    local staged_infiniops = path.join(destination, "libinfiniops.so")
+    xmake_os.mkdir(destination)
+    if path.absolute(infiniops_lib) ~= path.absolute(staged_infiniops) then
+        xmake_os.cp(infiniops_lib, staged_infiniops)
+    end
+
+    local infinirt_root = get_standalone_infinirt_root()
+    if infinirt_root then
+        local standalone_infinirt = find_installed_library(infinirt_root, "libinfinirt.so")
+        local private_soname = "libinfiniops_infinirt.so"
+        local private_infinirt = path.join(destination, private_soname)
+        xmake_os.cp(standalone_infinirt, private_infinirt)
+        xmake_os.execv("patchelf", {"--set-soname", private_soname, private_infinirt})
+        xmake_os.execv("patchelf", {"--replace-needed", standalone_infinirt, private_soname, staged_infiniops})
+        xmake_os.execv("patchelf", {"--replace-needed", "libinfinirt.so", private_soname, staged_infiniops})
+    end
+end
+
+if has_config("infiniops") then
+    local cmake_prefixes = {get_standalone_infiniops_root()}
+    local infinirt_root = get_standalone_infinirt_root()
+    if infinirt_root then
+        table.insert(cmake_prefixes, infinirt_root)
+    end
+    add_requires("cmake::InfiniOps", {
+        alias = "infiniops",
+        system = true,
+        configs = {
+            search_mode = "config",
+            envs = {
+                CMAKE_PREFIX_PATH = table.concat(
+                    cmake_prefixes, is_host("windows") and ";" or ":")
+            },
+            link_libraries = {"InfiniOps::infiniops"}
+        }
+    })
+end
 
 local function infiniops_selection_includes_slot(selection, slot)
     if type(selection) ~= "table" then
@@ -378,12 +423,12 @@ end
 
 local function configure_infiniops_ops(infiniops_ops, xmake_os, json)
     if not infiniops_ops or #infiniops_ops == 0 then
-        return nil, false, false, nil
+        return nil, false, false
     end
 
     infiniops_ops = infiniops_ops:trim()
     if #infiniops_ops == 0 then
-        return nil, false, false, nil
+        return nil, false, false
     end
 
     if infiniops_ops:lower():match("%.json$") then
@@ -404,8 +449,7 @@ local function configure_infiniops_ops(infiniops_ops, xmake_os, json)
             and infiniops_selection_includes_slot(selection.flash_attn_varlen_func, 16)
         return selection,
                with_linked_flash_attn_with_kvcache,
-               with_linked_flash_attn_varlen_func,
-               config_path
+               with_linked_flash_attn_varlen_func
     end
 
     local selection = {}
@@ -436,7 +480,7 @@ local function configure_infiniops_ops(infiniops_ops, xmake_os, json)
     end
 
     return selection, with_linked_flash_attn_with_kvcache,
-           with_linked_flash_attn_varlen_func, nil
+           with_linked_flash_attn_varlen_func
 end
 
 local infiniops_adapter_dependencies = {
@@ -458,119 +502,6 @@ local function is_infiniops_adapter_selected(adapter_name, selected_ops)
         end
     end
     return true
-end
-
-local function get_infiniops_backend_cmake_arg()
-    local enabled = {}
-    local function add_backend(config, cmake_arg)
-        if has_config(config) then
-            table.insert(enabled, cmake_arg)
-        end
-    end
-    add_backend("nv-gpu", "-DWITH_NVIDIA=ON")
-    add_backend("metax-gpu", "-DWITH_METAX=ON")
-    add_backend("iluvatar-gpu", "-DWITH_ILUVATAR=ON")
-    add_backend("moore-gpu", "-DWITH_MOORE=ON")
-    add_backend("cambricon-mlu", "-DWITH_CAMBRICON=ON")
-    add_backend("hygon-dcu", "-DWITH_HYGON=ON")
-    if #enabled == 0 then
-        raise("InfiniOps integration requires one of --nv-gpu, --metax-gpu, --iluvatar-gpu, --moore-gpu, --cambricon-mlu, or --hygon-dcu")
-    end
-    if #enabled > 1 then
-        raise("InfiniOps can build only one GPU backend at a time")
-    end
-    return enabled[1]
-end
-
-local function build_infiniops_external(xmake_os, json)
-    if not has_config("infiniops") or infiniops_external_built then
-        return
-    end
-    local infiniops_root = path.absolute(get_config("infiniops-root") or "submodules/InfiniOps", os.projectdir())
-    local infiniops_builddir = path.join(infiniops_root, "build")
-    local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
-    local infinirt_root = get_standalone_infinirt_root()
-    local cmake_config_args = {
-        "-S", infiniops_root,
-        "-B", infiniops_builddir,
-        "-DWITH_CPU=ON",
-        get_infiniops_backend_cmake_arg(),
-        "-DGENERATE_OPERATOR_CALL_INSTANTIATIONS=ON",
-        "-DGENERATE_PYTHON_BINDINGS=OFF",
-        "-DCMAKE_BUILD_TYPE=Release"
-    }
-    if has_config("cambricon-mlu") then
-        -- Cambricon headers define host half helpers with external linkage,
-        -- so generated call instantiations must stay in one translation unit.
-        xmake_os.setenv("INFINI_OPS_DISPATCH_BATCH_SIZE", "64")
-    end
-    if has_config("nv-gpu")
-        or has_config("metax-gpu")
-        or has_config("hygon-dcu")
-        or (has_config("iluvatar-gpu") and has_config("aten"))
-        or (has_config("cambricon-mlu") and has_config("aten")) then
-        table.insert(cmake_config_args, "-DWITH_TORCH=ON")
-        local torch_ops = "argmax"
-        if has_config("nv-gpu") or has_config("metax-gpu") or has_config("hygon-dcu") then
-            torch_ops = torch_ops .. ",index_select"
-        end
-        table.insert(cmake_config_args, "-DINFINI_OPS_TORCH_OPS=" .. torch_ops)
-    end
-    if has_config("iluvatar-gpu") and has_config("aten") then
-        table.insert(cmake_config_args, "-DTORCH_CXX11_ABI=0")
-        table.insert(cmake_config_args, "-DCMAKE_CXX_FLAGS=-D_GLIBCXX_USE_CXX11_ABI=0")
-    end
-    if has_config("iluvatar-gpu") then
-        local iluvatar_arch = get_config("iluvatar-arch")
-        if iluvatar_arch and iluvatar_arch ~= "" then
-            table.insert(cmake_config_args, "-DILUVATAR_ARCH=" .. iluvatar_arch)
-        end
-    end
-    local infiniops_ops_config,
-          with_linked_flash_attn_with_kvcache,
-          with_linked_flash_attn_varlen_func,
-          infiniops_ops_config_path = configure_infiniops_ops(os.getenv("INFINI_OPS_OPS"), xmake_os, json)
-    if with_linked_flash_attn_with_kvcache or with_linked_flash_attn_varlen_func then
-        table.insert(cmake_config_args, "-DWITH_LINKED=ON")
-    end
-    if infiniops_ops_config then
-        if not infiniops_ops_config_path then
-            xmake_os.mkdir(infiniops_builddir)
-            infiniops_ops_config_path = path.join(infiniops_builddir, "ops.json")
-            json.savefile(infiniops_ops_config_path, infiniops_ops_config)
-        end
-        table.insert(cmake_config_args, "-DINFINI_OPS_OPS=" .. infiniops_ops_config_path)
-    end
-    local cmake_cuda_architectures = get_infiniops_cuda_architectures()
-    if cmake_cuda_architectures and cmake_cuda_architectures ~= "" then
-        table.insert(cmake_config_args, "-DCMAKE_CUDA_ARCHITECTURES=" .. cmake_cuda_architectures)
-    end
-    if infinirt_root and infinirt_root ~= "" then
-        table.insert(cmake_config_args, "-DINFINI_RT_ROOT=" .. infinirt_root)
-    end
-    xmake_os.execv("cmake", cmake_config_args)
-    -- The first configure regenerates operator_call_instantiations_*.cc.
-    -- Reconfigure once so CMake's globbed infiniops target sees every shard.
-    xmake_os.execv("cmake", cmake_config_args)
-    xmake_os.execv("cmake", {"--build", infiniops_builddir, "--target", "infiniops"})
-    xmake_os.execv("cmake", {"--install", infiniops_builddir, "--prefix", INFINI_ROOT})
-    if infinirt_root and infinirt_root ~= "" then
-        local standalone_infinirt = path.join(infinirt_root, "lib", "libinfinirt.so")
-        if not xmake_os.isfile(standalone_infinirt) then
-            standalone_infinirt = path.join(infinirt_root, "lib64", "libinfinirt.so")
-        end
-        if not xmake_os.isfile(standalone_infinirt) then
-            raise("Standalone InfiniRT library not found under: " .. infinirt_root)
-        end
-        local infiniops_lib = path.join(INFINI_ROOT, "lib", "libinfiniops.so")
-        local private_soname = "libinfiniops_infinirt.so"
-        local private_infinirt = path.join(INFINI_ROOT, "lib", private_soname)
-        xmake_os.cp(standalone_infinirt, private_infinirt)
-        xmake_os.execv("patchelf", {"--set-soname", private_soname, private_infinirt})
-        xmake_os.execv("patchelf", {"--replace-needed", standalone_infinirt, private_soname, infiniops_lib})
-        xmake_os.execv("patchelf", {"--replace-needed", "libinfinirt.so", private_soname, infiniops_lib})
-    end
-    infiniops_external_built = true
 end
 
 -- Mutual Awareness Analyzer
@@ -786,15 +717,6 @@ target("infinicore_c_api")
     after_build(function (target) print(YELLOW .. "[Congratulations!] Now you can install the libraries with \"xmake install\"" .. NC) end)
 target_end()
 
-target("infiniops_external")
-    set_kind("phony")
-    set_default(false)
-
-    on_build(function (target)
-        build_infiniops_external(os, import("core.base.json"))
-    end)
-target_end()
-
 target("infinicore_cpp_api")
     set_kind("shared")
     add_deps("infiniop", "infinirt", "infiniccl")
@@ -836,21 +758,12 @@ target("infinicore_cpp_api")
         add_links("ascend_hal")
     end
     if has_config("infiniops") then
-        local infiniops_root = path.absolute(get_config("infiniops-root") or "submodules/InfiniOps", os.projectdir())
-        if not os.isdir(infiniops_root) then
-            raise("InfiniOps root not found: " .. infiniops_root)
-        end
-        get_infiniops_backend_cmake_arg()
-        local infinirt_root = get_standalone_infinirt_root()
-        if infinirt_root and infinirt_root ~= "" then
-            add_includedirs(infinirt_root .. "/include")
-            add_linkdirs(infinirt_root .. "/lib", infinirt_root .. "/lib64")
-            add_rpathdirs(infinirt_root .. "/lib", infinirt_root .. "/lib64")
-        end
-        add_deps("infiniops_external")
+        local infiniops_root = get_standalone_infiniops_root()
+        add_packages("infiniops")
         add_defines("ENABLE_INFINIOPS_API")
-        add_links("infiniops")
         add_rpathdirs(INFINI_ROOT .. "/lib")
+        add_rpathdirs(path.join(infiniops_root, "lib"),
+                      path.join(infiniops_root, "lib64"))
         on_load(function (target)
             local json = import("core.base.json")
             local selected_ops, with_linked_flash_attn_with_kvcache, with_linked_flash_attn_varlen_func = configure_infiniops_ops(
@@ -861,7 +774,6 @@ target("infinicore_cpp_api")
             if with_linked_flash_attn_varlen_func then
                 target:add("defines", "ENABLE_INFINIOPS_LINKED_FLASH_ATTN_VARLEN_FUNC")
             end
-            build_infiniops_external(os, json)
             if has_config("cambricon-mlu") and has_config("aten") then
                 local torch_mlu_dir = os.iorunv(PYTHON, {
                     "-c",
@@ -898,23 +810,11 @@ target("infinicore_cpp_api")
             end
         end)
         after_install(function (target)
-            local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
-            local infinirt_root = get_standalone_infinirt_root()
-            if infinirt_root and infinirt_root ~= "" then
-                local standalone_infinirt = path.join(infinirt_root, "lib", "libinfinirt.so")
-                if not os.isfile(standalone_infinirt) then
-                    standalone_infinirt = path.join(infinirt_root, "lib64", "libinfinirt.so")
-                end
-                if not os.isfile(standalone_infinirt) then
-                    raise("Standalone InfiniRT library not found under: " .. infinirt_root)
-                end
-                local infiniops_lib = path.join(INFINI_ROOT, "lib", "libinfiniops.so")
-                local private_soname = "libinfiniops_infinirt.so"
-                local private_infinirt = path.join(INFINI_ROOT, "lib", private_soname)
-                os.cp(standalone_infinirt, private_infinirt)
-                os.execv("patchelf", {"--set-soname", private_soname, private_infinirt})
-                os.execv("patchelf", {"--replace-needed", "libinfinirt.so", private_soname, infiniops_lib})
-            end
+            local install_libdir = path.join(INFINI_ROOT, "lib")
+            os.cp(
+                target:dep("infinirt"):targetfile(),
+                path.join(install_libdir, "libinfinirt.so"))
+            stage_infiniops_runtime(os, install_libdir)
         end)
     end
 
@@ -956,6 +856,10 @@ target("infinicore_cpp_api")
     end
 
     before_build(function (target)
+        if has_config("infiniops") then
+            stage_infiniops_runtime(os, path.join(INFINI_ROOT, "lib"))
+        end
+
         -- MetaX + flash-attn: `flash_attn_2_cuda` may use a different `mha_fwd_kvcache` ABI
         -- depending on the underlying stack version. When building with MACA (`--use-mc=y`),
         -- the version file is typically `/opt/maca/Version.txt` (HPCC uses `/opt/hpcc/Version.txt`).
@@ -1194,47 +1098,10 @@ target("_infinicore")
     add_files("src/infinicore/pybind11/**.cc")
 
     if has_config("infiniops") then
-        local infinirt_root = get_standalone_infinirt_root()
-        if infinirt_root and infinirt_root ~= "" then
-            add_includedirs(infinirt_root .. "/include")
-            add_linkdirs(infinirt_root .. "/lib", infinirt_root .. "/lib64")
-            add_rpathdirs(infinirt_root .. "/lib", infinirt_root .. "/lib64")
-        end
-        after_install(function (target)
-            local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
-            local infiniops_root = path.absolute(get_config("infiniops-root") or "submodules/InfiniOps", os.projectdir())
-            local infiniops_lib = path.join(INFINI_ROOT, "lib", "libinfiniops.so")
-            local infiniops_lib_installed = true
-            if not os.isfile(infiniops_lib) then
-                infiniops_lib = path.join(infiniops_root, "build", "src", "libinfiniops.so")
-                infiniops_lib_installed = false
-            end
-            local infinirt_root = get_standalone_infinirt_root()
-            if infinirt_root and infinirt_root ~= "" then
-                local standalone_infinirt = path.join(infinirt_root, "lib", "libinfinirt.so")
-                if not os.isfile(standalone_infinirt) then
-                    standalone_infinirt = path.join(infinirt_root, "lib64", "libinfinirt.so")
-                end
-                if not os.isfile(standalone_infinirt) then
-                    raise("Standalone InfiniRT library not found under: " .. infinirt_root)
-                end
-                local private_soname = "libinfiniops_infinirt.so"
-                local private_infinirt = path.join(INFINI_ROOT, "lib", private_soname)
-                os.cp(standalone_infinirt, private_infinirt)
-                os.execv("patchelf", {"--set-soname", private_soname, private_infinirt})
-                os.execv("patchelf", {"--replace-needed", standalone_infinirt, private_soname, infiniops_lib})
-                os.execv("patchelf", {"--replace-needed", "libinfinirt.so", private_soname, infiniops_lib})
-            end
-            os.mkdir(path.join(INFINI_ROOT, "lib"))
-            if not infiniops_lib_installed then
-                os.cp(infiniops_lib, path.join(INFINI_ROOT, "lib"))
-            end
-            os.mkdir(path.join(os.projectdir(), "python", "infinicore", "lib"))
-            os.cp(infiniops_lib, path.join(os.projectdir(), "python", "infinicore", "lib"))
-            local private_infinirt = path.join(INFINI_ROOT, "lib", "libinfiniops_infinirt.so")
-            if os.isfile(private_infinirt) then
-                os.cp(private_infinirt, path.join(os.projectdir(), "python", "infinicore", "lib"))
-            end
+        add_rpathdirs(INFINI_ROOT .. "/lib")
+        after_install(function ()
+            stage_infiniops_runtime(
+                os, path.join(os.projectdir(), "python", "infinicore", "lib"))
         end)
     end
 
