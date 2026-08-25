@@ -85,6 +85,13 @@ def interpolate(
                 "Per-dimension scale_factor is not supported; pass a scalar (or equal values)."
             )
 
+    if mode == "nearest" and spatial_ndim == 1:
+        from .upsample_nearest import upsample_nearest
+
+        if size_list:
+            return upsample_nearest(input, size=size_list[0])
+        return upsample_nearest(input, scale_factor=scale_list[0])
+
     align_i = 0 if align_corners is None else int(bool(align_corners))
 
     return Tensor(
