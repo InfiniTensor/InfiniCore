@@ -90,6 +90,7 @@
 #include "ops/swap.hpp"
 #include "ops/swiglu.hpp"
 #include "ops/tanh.hpp"
+#include "ops/timestep_embedding.hpp"
 #include "ops/topksoftmax.hpp"
 #include "ops/vocab_parallel_embedding.hpp"
 #include "ops/zeros.hpp"
