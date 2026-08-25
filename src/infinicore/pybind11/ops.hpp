@@ -135,6 +135,7 @@
 #include "ops/tan.hpp"
 #include "ops/tanh.hpp"
 #include "ops/tanhshrink.hpp"
+#include "ops/timestep_embedding.hpp"
 #include "ops/topk.hpp"
 #include "ops/topksoftmax.hpp"
 #include "ops/triplet_margin_loss.hpp"
@@ -318,6 +319,7 @@ inline void bind(py::module &m) {
     bind_linear_w8a8i8(m);
     bind_silu_and_mul(m);
     bind_situ_and_mul(m);
+    bind_timestep_embedding(m);
     bind_sum(m);
     bind_var_mean(m);
     bind_var(m);
