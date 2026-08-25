@@ -470,6 +470,8 @@ local function configure_infiniops_ops(infiniops_ops, xmake_os, json)
             local implementations = "all"
             if use_linked_implementation then
                 implementations = {16}
+            elseif has_config("ascend-npu") and op == "argmax" then
+                implementations = {0}
             elseif op == "argmax" or op == "index_select" then
                 implementations = {8}
             elseif op == "rms_norm" or op == "silu_and_mul" or op == "topk_softmax" then

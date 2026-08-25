@@ -59,6 +59,8 @@ inline infini::ops::Device toInfiniOpsDevice(const Device &device) {
         return infini::ops::Device{infini::ops::Device::Type::kCambricon, static_cast<int>(device.getIndex())};
     case Device::Type::HYGON:
         return infini::ops::Device{infini::ops::Device::Type::kHygon, static_cast<int>(device.getIndex())};
+    case Device::Type::ASCEND:
+        return infini::ops::Device{infini::ops::Device::Type::kAscend, static_cast<int>(device.getIndex())};
     default:
         throw std::runtime_error("InfiniOps backend does not support this device type.");
     }
@@ -72,6 +74,7 @@ inline bool isSupportedDevice(Device::Type device_type) {
     case Device::Type::ILUVATAR:
     case Device::Type::CAMBRICON:
     case Device::Type::HYGON:
+    case Device::Type::ASCEND:
         return true;
     default:
         return false;
@@ -86,6 +89,7 @@ void registerSupportedDevices(Dispatcher &dispatcher, Function function) {
     dispatcher.registerDevice(Device::Type::ILUVATAR, function);
     dispatcher.registerDevice(Device::Type::CAMBRICON, function);
     dispatcher.registerDevice(Device::Type::HYGON, function);
+    dispatcher.registerDevice(Device::Type::ASCEND, function);
 }
 
 struct TensorMeta {
