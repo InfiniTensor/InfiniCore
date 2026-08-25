@@ -23,9 +23,11 @@ void TensorImpl::copy_from(Tensor src) {
             "Cannot copy from tensor with different shape. Src: " + src->info() + " Dst: " + this->info());
     }
     if (this->device() == src->device()) {
+        context::setDevice(this->device());
         op::rearrange_(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()), src);
     } else {
         if (!src->is_contiguous()) {
+            context::setDevice(src->device());
             src = src->contiguous();
         }
 
@@ -48,6 +50,20 @@ void TensorImpl::copy_from(Tensor src) {
             } else {
                 auto local_src = Tensor::empty(this->shape(), this->dtype(), this->device());
                 context::memcpyH2D(local_src->data(), src->data(), copy_size);
+                op::rearrange_(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()), local_src);
+            }
+        } else {
+            if (this->device().getType() != src->device().getType()) {
+                throw std::runtime_error(
+                    "Cannot copy directly between different accelerator types. Src: " + src->info() +
+                    " Dst: " + this->info());
+            }
+            context::setDevice(this->device());
+            if (this->is_contiguous()) {
+                context::memcpyD2D(this->data(), src->data(), copy_size);
+            } else {
+                auto local_src = Tensor::empty(this->shape(), this->dtype(), this->device());
+                context::memcpyD2D(local_src->data(), src->data(), copy_size);
                 op::rearrange_(Tensor(const_cast<TensorImpl *>(this)->shared_from_this()), local_src);
             }
         }
