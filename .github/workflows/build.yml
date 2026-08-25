@@ -26,15 +26,15 @@ jobs:
     - name: Check Format
       if: matrix.os == 'ubuntu-latest' && matrix.type == 'debug'
       run: |
-        sudo apt-get install -y clang-format-16
-        pip install black ruff==0.15.20 colorama
+        python -m pip install clang-format==21.1.8 black ruff==0.15.20 colorama
         if [ "${{ github.event_name }}" = "pull_request" ]; then
-          python3 scripts/format.py --ref "${{ github.event.pull_request.base.sha }}" --path src --check
+          base_ref="${{ github.event.pull_request.base.sha }}"
         elif [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
-          python3 scripts/format.py --ref "${{ github.event.before }}" --path src --check
+          base_ref="${{ github.event.before }}"
         else
-          python3 scripts/format.py --path src --check
+          base_ref="$(git merge-base HEAD "origin/${{ github.event.repository.default_branch }}")"
         fi
+        python3 scripts/format.py --ref "${base_ref}" --check
 
     - name: install xmake
       uses: xmake-io/github-action-setup-xmake@v1

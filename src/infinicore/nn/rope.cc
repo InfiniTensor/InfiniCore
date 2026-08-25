@@ -81,7 +81,8 @@ void RoPE::initialize_cache() {
     if ((device_.getType() == Device::Type::NVIDIA
          || device_.getType() == Device::Type::METAX
          || device_.getType() == Device::Type::ILUVATAR
-         || device_.getType() == Device::Type::CAMBRICON)
+         || device_.getType() == Device::Type::CAMBRICON
+         || device_.getType() == Device::Type::HYGON)
         && !mrope_section_) {
         INFINICORE_NN_BUFFER_INIT(cos_sin_cache, ({max_seq_len_, rotary_dim_}, dtype_, device_));
     }
@@ -197,8 +198,12 @@ Tensor RoPE::forward(const Tensor &x, const Tensor &pos, bool in_place) const {
         if (!in_place) {
             y->copy_from(x);
         }
+        auto query = y;
+        if (pos->ndim() == 1 && query->ndim() == 4 && query->size(0) == 1) {
+            query = query->squeeze(0);
+        }
         op::rotary_embedding_(pos,
-                              y,
+                              query,
                               std::nullopt,
                               cos_sin_cache_,
                               static_cast<int64_t>(head_dim_),

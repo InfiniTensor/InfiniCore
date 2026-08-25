@@ -150,7 +150,7 @@ Dear 开发者，感谢你参与 InfiniCore 开源项目的开发！本文档将
 
 ### 代码格式化
 
-本项目分别使用 `clang-format-16` 和 `black` 对 C/C++ 以及 Python 代码进行格式化。可以使用 [`scripts/format.py`](/scripts/format.py) 脚本实现代码格式化检查和操作。
+本项目分别使用 `clang-format 21.1.8` 和 `black` 对 C/C++ 以及 Python 代码进行格式化。可以使用 [`scripts/format.py`](/scripts/format.py) 脚本实现代码格式化检查和操作。
 
 使用
 
@@ -168,7 +168,7 @@ options:
   --ref REF          Git reference (commit hash) to compare against.
   --path [PATH ...]  Files to format or check.
   --check            Check files without modifying them.
-  --c C              C formatter (default: clang-format-16)
+  --c C              C formatter (default: clang-format)
   --py PY            Python formatter (default: black)
 ```
 
@@ -180,7 +180,7 @@ options:
     - 若 `ref` 非空，将比较指定 commit 和当前代码的差异，只格式化修改过的文件；
     - 若 `path` 非空，可传入多个路径（`--path p0 p1 p2`），只格式化指定路径及其子目录中的文件；
 - 若设置 `--check`，将检查代码是否需要修改格式，不修改文件内容；
-- 通过 `--c` 指定 c/c++ 格式化器，默认为 `clang-format-16`；
+- 通过 `--c` 指定 c/c++ 格式化器，默认为 `clang-format`；
 - 通过 `--python` 指定 python 格式化器 `black`；
 
 ### vscode 开发配置

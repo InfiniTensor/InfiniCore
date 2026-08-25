@@ -169,9 +169,11 @@ class OpTest(BaseOperatorTest):
             torch_device = "cuda"
 
         # 创建 pos_ids的变量
-        pos_ids_torch = torch.arange(0, seq_len, dtype=torch.int32, device=torch_device)
+        pos_ids_torch = torch.arange(0, seq_len, dtype=torch.int64, device=torch_device)
         pos_ids_torch = pos_ids_torch.unsqueeze(0)
         pos_ids_torch = pos_ids_torch.expand(bs, seq_len).contiguous()
+        if bs == 1:
+            pos_ids_torch = pos_ids_torch.view(seq_len)
 
         pos_ids_infini = infinicore.from_torch(pos_ids_torch)
 

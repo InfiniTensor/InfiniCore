@@ -5,6 +5,7 @@
 #if defined(ENABLE_INFINIOPS_API)                                  \
     && (defined(ENABLE_NVIDIA_API)                                 \
         || defined(ENABLE_METAX_API)                               \
+        || defined(ENABLE_HYGON_API)                               \
         || (defined(ENABLE_CAMBRICON_API) && defined(ENABLE_ATEN)) \
         || (defined(ENABLE_ILUVATAR_API) && defined(ENABLE_ATEN)))
 #include "../infiniops_impl.hpp"
@@ -18,6 +19,7 @@ namespace {
 #if defined(ENABLE_INFINIOPS_API)                                  \
     && (defined(ENABLE_NVIDIA_API)                                 \
         || defined(ENABLE_METAX_API)                               \
+        || defined(ENABLE_HYGON_API)                               \
         || (defined(ENABLE_CAMBRICON_API) && defined(ENABLE_ATEN)) \
         || (defined(ENABLE_ILUVATAR_API) && defined(ENABLE_ATEN)))
 bool tryGreedyWithInfiniOps(Tensor indices, Tensor logits, int topk) {
@@ -26,7 +28,8 @@ bool tryGreedyWithInfiniOps(Tensor indices, Tensor logits, int topk) {
     if ((device_type != Device::Type::NVIDIA
          && device_type != Device::Type::METAX
          && device_type != Device::Type::CAMBRICON
-         && device_type != Device::Type::ILUVATAR)
+         && device_type != Device::Type::ILUVATAR
+         && device_type != Device::Type::HYGON)
         || topk != 1
         || logits->ndim() != 1
         || logits->numel() == 0
@@ -41,7 +44,9 @@ bool tryGreedyWithInfiniOps(Tensor indices, Tensor logits, int topk) {
     infini::ops::Handle handle;
     handle.set_stream(context::getStream());
     infini::ops::Config config;
-    config.set_implementation_index(8);
+    if (device_type != Device::Type::HYGON) {
+        config.set_implementation_index(8);
+    }
     const std::optional<int64_t> no_dim;
     infini::ops::Argmax::Call(
         handle,
@@ -69,6 +74,7 @@ void RandomSample::execute(
 #if defined(ENABLE_INFINIOPS_API)                                  \
     && (defined(ENABLE_NVIDIA_API)                                 \
         || defined(ENABLE_METAX_API)                               \
+        || defined(ENABLE_HYGON_API)                               \
         || (defined(ENABLE_CAMBRICON_API) && defined(ENABLE_ATEN)) \
         || (defined(ENABLE_ILUVATAR_API) && defined(ENABLE_ATEN)))
     if (tryGreedyWithInfiniOps(indices, logits, topk)) {
