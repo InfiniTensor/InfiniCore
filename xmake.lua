@@ -492,6 +492,7 @@ local infiniops_adapter_dependencies = {
     paged_attention = {"flash_attn_with_kvcache"},
     paged_caching = {"reshape_and_cache_flash"},
     rearrange = {"copy"},
+    select_last_token_hidden = {"add", "index_select"},
     topksoftmax = {"topk_softmax"}
 }
 
