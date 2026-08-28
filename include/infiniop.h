@@ -120,6 +120,8 @@
 #include "infiniop/ops/pixel_shuffle.h"
 #include "infiniop/ops/prepare_moe_input.h"
 #include "infiniop/ops/quant/per_channel_quant_int8.h"
+#include "infiniop/ops/dequant/per_tensor_dequant_fp8.h"
+#include "infiniop/ops/quant/per_tensor_quant_fp8.h"
 #include "infiniop/ops/quant/per_tensor_quant_int8.h"
 #include "infiniop/ops/quickgelu.h"
 #include "infiniop/ops/random_sample.h"

@@ -64,6 +64,8 @@
 #include "ops/paged_attention_prefill.hpp"
 #include "ops/paged_caching.hpp"
 #include "ops/per_tensor_dequant_i8.hpp"
+#include "ops/per_tensor_dequant_fp8.hpp"
+#include "ops/per_tensor_quant_fp8.hpp"
 #include "ops/per_tensor_quant_i8.hpp"
 #include "ops/prepare_moe_input.hpp"
 #include "ops/quickgelu.hpp"
