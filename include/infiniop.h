@@ -57,6 +57,7 @@
 #include "infiniop/ops/fmin.h"
 #include "infiniop/ops/fmod.h"
 #include "infiniop/ops/fp8_blockwise_dequantize.h"
+#include "infiniop/ops/fp8_blockwise_gemm.h"
 #include "infiniop/ops/fp8_indexer_logits.h"
 #include "infiniop/ops/fp8_indexer_quant.h"
 #include "infiniop/ops/fp8_mla_rmsnorm_cache.h"

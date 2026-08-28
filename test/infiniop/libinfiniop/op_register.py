@@ -1426,6 +1426,39 @@ def fp8_blockwise_dequantize_(lib):
 
 
 @OpRegister.operator
+def fp8_blockwise_gemm_(lib):
+    lib.infiniopCreateFp8BlockwiseGemmDescriptor.restype = c_int32
+    lib.infiniopCreateFp8BlockwiseGemmDescriptor.argtypes = [
+        infiniopHandle_t,
+        POINTER(infiniopOperatorDescriptor_t),
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,
+    ]
+    lib.infiniopGetFp8BlockwiseGemmWorkspaceSize.restype = c_int32
+    lib.infiniopGetFp8BlockwiseGemmWorkspaceSize.argtypes = [
+        infiniopOperatorDescriptor_t,
+        POINTER(c_size_t),
+    ]
+    lib.infiniopFp8BlockwiseGemm.restype = c_int32
+    lib.infiniopFp8BlockwiseGemm.argtypes = [
+        infiniopOperatorDescriptor_t,
+        c_void_p,
+        c_size_t,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+        c_void_p,
+    ]
+    lib.infiniopDestroyFp8BlockwiseGemmDescriptor.restype = c_int32
+    lib.infiniopDestroyFp8BlockwiseGemmDescriptor.argtypes = [
+        infiniopOperatorDescriptor_t,
+    ]
+
+
+@OpRegister.operator
 def per_channel_quant_int8_(lib):
     lib.infiniopCreatePerChannelQuantI8Descriptor.restype = c_int32
     lib.infiniopCreatePerChannelQuantI8Descriptor.argtypes = [

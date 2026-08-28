@@ -34,6 +34,7 @@
 #include "ops/fmin.hpp"
 #include "ops/fmod.hpp"
 #include "ops/fp8_blockwise_dequantize.hpp"
+#include "ops/fp8_blockwise_gemm.hpp"
 #include "ops/fp8_indexer_logits.hpp"
 #include "ops/fp8_indexer_quant.hpp"
 #include "ops/fp8_mla_rmsnorm_cache.hpp"
