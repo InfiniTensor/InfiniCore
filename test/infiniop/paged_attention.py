@@ -14,6 +14,7 @@ from libinfiniop import (
     profile_operation,
     InfiniDtype,
     InfiniDtypeNames,
+    InfiniDeviceEnum,
     InfiniDeviceNames,
     infiniopOperatorDescriptor_t,
     TestWorkspace,
@@ -209,6 +210,8 @@ def test(
             block_tables.descriptor,
             seq_lens.descriptor,
             alibi_slopes_desc,
+            None,
+            None,
             scale,
         )
     )
@@ -247,6 +250,8 @@ def test(
                 seq_lens.data(),
                 alibi_slopes_data,
                 None,
+                None,
+                None,
             )
         )
 
@@ -277,6 +282,187 @@ def test(
     check_error(LIBINFINIOP.infiniopDestroyPagedAttentionDescriptor(descriptor))
 
 
+# ==============================================================================
+#  FP8 (E4M3) KV-Cache Decode Test
+# ==============================================================================
+# FP8 decode v1 supports head_size 64/128 with value_size == head_size.
+# The caches carry E4M3 codes plus per-token F32 scales; q/out stay F16/BF16.
+_TEST_CASES_FP8_ = [
+    # (num_seqs, num_heads, num_kv_heads, head_size, block_size, max_seq_len, use_alibi)
+    (1, 1, 1, 128, 16, 1024, False),
+    (4, 40, 40, 128, 16, 1024, True),
+    (8, 64, 8, 128, 16, 2048, False),
+    (3, 8, 8, 64, 16, 1024, False),
+]
+
+_TENSOR_DTYPES_FP8_ = [InfiniDtype.F16, InfiniDtype.BF16]
+
+
+def quantize_cache_ref(pool_float):
+    """
+    Quantize a float32 cache pool [num_blocks, nkvh, block_size, d] the same way
+    paged_caching does: per-(block, head, slot) amax/448 scaling, then E4M3 RNE.
+    Returns (codes_uint8, scales_float32).
+    """
+    amax = pool_float.abs().amax(dim=-1)
+    scales = torch.where(amax > 0, amax / 448.0, torch.ones_like(amax))
+    inv_scales = 1.0 / scales
+    codes = (pool_float * inv_scales.unsqueeze(-1)).to(torch.float8_e4m3fn)
+    return codes, scales
+
+
+def test_fp8(
+    handle,
+    device,
+    num_seqs,
+    num_heads,
+    num_kv_heads,
+    head_size,
+    block_size,
+    max_seq_len,
+    use_alibi,
+    dtype,
+    sync,
+):
+    print(
+        f"Testing PagedAttention FP8 on {InfiniDeviceNames[device]} with "
+        f"num_seqs={num_seqs}, num_heads={num_heads}, head_size={head_size}, "
+        f"block_size={block_size}, dtype={InfiniDtypeNames[dtype]}, use_alibi={use_alibi}"
+    )
+
+    scale = 1.0 / (head_size**0.5)
+    max_blocks_per_seq = (max_seq_len + block_size - 1) // block_size
+    num_blocks = num_seqs * max_blocks_per_seq
+
+    q = TestTensor((num_seqs, num_heads, head_size), None, dtype, device)
+    out = TestTensor((num_seqs, num_heads, head_size), None, dtype, device)
+
+    # Build FP8 caches by quantizing random float pools per token.
+    k_pool = TestTensor(
+        (num_blocks, num_kv_heads, block_size, head_size),
+        None,
+        InfiniDtype.F32,
+        device,
+        scale=4.0,
+        bias=-2.0,
+    )
+    v_pool = TestTensor(
+        (num_blocks, num_kv_heads, block_size, head_size),
+        None,
+        InfiniDtype.F32,
+        device,
+        scale=4.0,
+        bias=-2.0,
+    )
+    k_codes_torch, k_scales_torch = quantize_cache_ref(k_pool.torch_tensor())
+    v_codes_torch, v_scales_torch = quantize_cache_ref(v_pool.torch_tensor())
+
+    k_cache = TestTensor.from_torch(k_codes_torch, InfiniDtype.F8, device)
+    v_cache = TestTensor.from_torch(v_codes_torch, InfiniDtype.F8, device)
+    k_scale_t = TestTensor.from_torch(k_scales_torch, InfiniDtype.F32, device)
+    v_scale_t = TestTensor.from_torch(v_scales_torch, InfiniDtype.F32, device)
+
+    seq_lens_torch = torch.randint(1, max_seq_len, (num_seqs,), dtype=torch.int64)
+    seq_lens = TestTensor.from_torch(seq_lens_torch, InfiniDtype.I64, device)
+
+    block_tables_py = torch.arange(
+        0, num_seqs * max_blocks_per_seq, dtype=torch.int64
+    ).view(num_seqs, max_blocks_per_seq)
+    block_tables = TestTensor.from_torch(block_tables_py, InfiniDtype.I64, device)
+
+    alibi_slopes_desc = ctypes.c_void_p(0)
+    alibi_slopes_data = ctypes.c_void_p(0)
+    alibi_slopes_torch = None
+    if use_alibi:
+        alibi_slopes = TestTensor((num_heads,), None, InfiniDtype.F32, device)
+        alibi_slopes_desc = alibi_slopes.descriptor
+        alibi_slopes_data = alibi_slopes.data()
+        alibi_slopes_torch = alibi_slopes.torch_tensor()
+
+    # Reference: dequantize the caches to float32 and run the attention reference
+    # entirely in float32 so only the kernel's own arithmetic is compared.
+    k_deq = k_codes_torch.float() * k_scales_torch.unsqueeze(-1)
+    v_deq = v_codes_torch.float() * v_scales_torch.unsqueeze(-1)
+    ans = ref_single_query_cached_kv_attention(
+        q.torch_tensor().float(),
+        k_deq,
+        v_deq,
+        block_tables.torch_tensor(),
+        seq_lens.torch_tensor(),
+        scale,
+        alibi_slopes_torch,
+    )
+
+    if sync:
+        sync()
+
+    descriptor = infiniopOperatorDescriptor_t()
+    check_error(
+        LIBINFINIOP.infiniopCreatePagedAttentionDescriptor(
+            handle,
+            ctypes.byref(descriptor),
+            out.descriptor,
+            q.descriptor,
+            k_cache.descriptor,
+            v_cache.descriptor,
+            block_tables.descriptor,
+            seq_lens.descriptor,
+            alibi_slopes_desc,
+            k_scale_t.descriptor,
+            v_scale_t.descriptor,
+            scale,
+        )
+    )
+
+    workspace_size = c_uint64(0)
+    check_error(
+        LIBINFINIOP.infiniopGetPagedAttentionWorkspaceSize(
+            descriptor, ctypes.byref(workspace_size)
+        )
+    )
+    workspace = TestWorkspace(workspace_size.value, q.device)
+
+    q.destroy_desc()
+    out.destroy_desc()
+    k_cache.destroy_desc()
+    v_cache.destroy_desc()
+    k_scale_t.destroy_desc()
+    v_scale_t.destroy_desc()
+    block_tables.destroy_desc()
+    seq_lens.destroy_desc()
+    if use_alibi:
+        alibi_slopes.destroy_desc()
+
+    check_error(
+        LIBINFINIOP.infiniopPagedAttention(
+            descriptor,
+            workspace.data(),
+            workspace_size.value,
+            out.data(),
+            q.data(),
+            k_cache.data(),
+            v_cache.data(),
+            block_tables.data(),
+            seq_lens.data(),
+            alibi_slopes_data,
+            k_scale_t.data(),
+            v_scale_t.data(),
+            None,
+        )
+    )
+
+    if sync:
+        sync()
+
+    atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
+    out_float = out.actual_tensor().float()
+    if DEBUG:
+        debug(out_float, ans, atol=atol, rtol=rtol)
+    assert torch.allclose(out_float, ans, atol=atol, rtol=rtol)
+
+    check_error(LIBINFINIOP.infiniopDestroyPagedAttentionDescriptor(descriptor))
+
+
 if __name__ == "__main__":
     args = get_args()
 
@@ -288,5 +474,7 @@ if __name__ == "__main__":
 
     for device in get_test_devices(args):
         test_operator(device, test, _TEST_CASES_, _TENSOR_DTYPES)
+        if device == InfiniDeviceEnum.NVIDIA:
+            test_operator(device, test_fp8, _TEST_CASES_FP8_, _TENSOR_DTYPES_FP8_)
 
     print("\033[92mTest passed!\033[0m")

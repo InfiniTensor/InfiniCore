@@ -11,10 +11,14 @@ def paged_attention_prefill(
     cu_seqlens_q: Tensor,
     alibi_slopes: Tensor | None = None,
     scale: float = 1.0,
+    k_scale: Tensor | None = None,
+    v_scale: Tensor | None = None,
     *,
     out: Tensor | None = None,
 ):
     alibi_ptr = alibi_slopes._underlying if alibi_slopes is not None else None
+    k_scale_ptr = k_scale._underlying if k_scale is not None else None
+    v_scale_ptr = v_scale._underlying if v_scale is not None else None
 
     if out is None:
         return Tensor(
@@ -27,6 +31,8 @@ def paged_attention_prefill(
                 cu_seqlens_q._underlying,
                 alibi_ptr,
                 scale,
+                k_scale_ptr,
+                v_scale_ptr,
             )
         )
 
@@ -40,6 +46,8 @@ def paged_attention_prefill(
         cu_seqlens_q._underlying,
         alibi_ptr,
         scale,
+        k_scale_ptr,
+        v_scale_ptr,
     )
 
     return out

@@ -25,14 +25,17 @@ __INFINI_C infiniStatus_t infiniopCreatePagedCachingDescriptor(
     infiniopTensorDescriptor_t v_cache_desc,
     infiniopTensorDescriptor_t k_desc,
     infiniopTensorDescriptor_t v_desc,
-    infiniopTensorDescriptor_t slot_mapping_desc) {
+    infiniopTensorDescriptor_t slot_mapping_desc,
+    infiniopTensorDescriptor_t k_scale_desc,
+    infiniopTensorDescriptor_t v_scale_desc) {
 
 #define CREATE(CASE, NAMESPACE)                                                      \
     case CASE:                                                                       \
         return op::paged_caching::NAMESPACE::Descriptor::create(                     \
             handle,                                                                  \
             reinterpret_cast<op::paged_caching::NAMESPACE::Descriptor **>(desc_ptr), \
-            k_cache_desc, v_cache_desc, k_desc, v_desc, slot_mapping_desc);
+            k_cache_desc, v_cache_desc, k_desc, v_desc, slot_mapping_desc,           \
+            k_scale_desc, v_scale_desc);
 
     switch (handle->device) {
 #ifdef ENABLE_NVIDIA_API
@@ -115,12 +118,14 @@ __INFINI_C infiniStatus_t infiniopPagedCaching(
     void *k_cache, void *v_cache,
     const void *k, const void *v,
     const void *slot_mapping,
+    void *k_scale, void *v_scale,
     void *stream) {
 
 #define CALCULATE(CASE, NAMESPACE)                                                            \
     case CASE:                                                                                \
         return reinterpret_cast<op::paged_caching::NAMESPACE::Descriptor *>(desc)->calculate( \
-            workspace, workspace_size, k_cache, v_cache, k, v, slot_mapping, stream);
+            workspace, workspace_size, k_cache, v_cache, k, v, slot_mapping,                  \
+            k_scale, v_scale, stream);
 
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API

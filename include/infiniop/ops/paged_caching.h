@@ -19,6 +19,11 @@ typedef struct InfiniopDescriptor *infiniopPagedCachingDescriptor_t;
  * @param k_desc Descriptor for the source key tensor.
  * @param v_desc Descriptor for the source value tensor.
  * @param slot_mapping_desc Descriptor for the slot mapping tensor.
+ * @param k_scale_desc [Optional] Descriptor for the per-token key dequant scales.
+ * Shape: [num_blocks, num_kv_heads, block_size], DType: F32.
+ * Required (non-NULL) iff the caches are F8; must be NULL otherwise.
+ * @param v_scale_desc [Optional] Descriptor for the per-token value dequant scales.
+ * Same layout and rules as k_scale_desc.
  * @return infiniStatus_t Status code of the operation.
  */
 __INFINI_C __export infiniStatus_t infiniopCreatePagedCachingDescriptor(
@@ -28,7 +33,9 @@ __INFINI_C __export infiniStatus_t infiniopCreatePagedCachingDescriptor(
     infiniopTensorDescriptor_t v_cache_desc,
     infiniopTensorDescriptor_t k_desc,
     infiniopTensorDescriptor_t v_desc,
-    infiniopTensorDescriptor_t slot_mapping_desc);
+    infiniopTensorDescriptor_t slot_mapping_desc,
+    infiniopTensorDescriptor_t k_scale_desc,
+    infiniopTensorDescriptor_t v_scale_desc);
 
 /**
  * @brief Retrieves the workspace size required for the Paged Caching operation.
@@ -51,6 +58,10 @@ __INFINI_C __export infiniStatus_t infiniopGetPagedCachingWorkspaceSize(
  * @param k Pointer to the source key tensor data.
  * @param v Pointer to the source value tensor data.
  * @param slot_mapping Pointer to the slot mapping data.
+ * @param k_scale [Optional] Pointer to the per-token key dequant scales.
+ * Written by this operator when the caches are F8 (quantization happens here).
+ * Must be NULL when the caches are not F8.
+ * @param v_scale [Optional] Pointer to the per-token value dequant scales.
  * @param stream The CUDA stream for the operation. Can be NULL.
  * @return infiniStatus_t Status code of the operation.
  */
@@ -63,6 +74,8 @@ __INFINI_C __export infiniStatus_t infiniopPagedCaching(
     const void *k,
     const void *v,
     const void *slot_mapping,
+    void *k_scale,
+    void *v_scale,
     void *stream);
 
 /**

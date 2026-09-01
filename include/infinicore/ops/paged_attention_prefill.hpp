@@ -20,12 +20,15 @@ public:
      * 7. cu_seqlens_q: Cumulative sequence lengths of Query (prefix sum for variable-length batch)
      * 8. alibi_slopes: ALiBi bias slopes (optional)
      * 9. scale: Scaling factor (typically 1/sqrt(head_size))
+     * 10. k_scale: Per-token dequant scales for FP8 K cache (optional)
+     * 11. v_scale: Per-token dequant scales for FP8 V cache (optional)
      */
-    using schema = void (*)(Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, std::optional<Tensor>, float);
+    using schema = void (*)(Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, std::optional<Tensor>, float, std::optional<Tensor>, std::optional<Tensor>);
 
     static void execute(Tensor out, Tensor q, Tensor k_cache, Tensor v_cache,
                         Tensor block_tables, Tensor total_kv_lens, Tensor cum_seqlens_q,
-                        std::optional<Tensor> alibi_slopes, float scale);
+                        std::optional<Tensor> alibi_slopes, float scale,
+                        std::optional<Tensor> k_scale, std::optional<Tensor> v_scale);
 
     static common::OpDispatcher<schema> &dispatcher();
 };
@@ -37,7 +40,9 @@ Tensor paged_attention_prefill(Tensor q,
                                Tensor total_kv_lens,
                                Tensor cum_seqlens_q,
                                std::optional<Tensor> alibi_slopes,
-                               float scale);
+                               float scale,
+                               std::optional<Tensor> k_scale = std::nullopt,
+                               std::optional<Tensor> v_scale = std::nullopt);
 
 void paged_attention_prefill_(Tensor out,
                               Tensor q,
@@ -47,6 +52,8 @@ void paged_attention_prefill_(Tensor out,
                               Tensor total_kv_lens,
                               Tensor cum_seqlens_q,
                               std::optional<Tensor> alibi_slopes,
-                              float scale);
+                              float scale,
+                              std::optional<Tensor> k_scale = std::nullopt,
+                              std::optional<Tensor> v_scale = std::nullopt);
 
 } // namespace infinicore::op

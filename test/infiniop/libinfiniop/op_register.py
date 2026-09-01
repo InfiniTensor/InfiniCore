@@ -2261,6 +2261,8 @@ def paged_attention_(lib):
         infiniopTensorDescriptor_t,
         infiniopTensorDescriptor_t,
         c_void_p,
+        infiniopTensorDescriptor_t,  # k_scale_desc
+        infiniopTensorDescriptor_t,  # v_scale_desc
         c_float,
     ]
 
@@ -2282,7 +2284,9 @@ def paged_attention_(lib):
         c_void_p,
         c_void_p,
         c_void_p,
-        c_void_p,
+        c_void_p,  # k_scale
+        c_void_p,  # v_scale
+        c_void_p,  # stream
     ]
 
     lib.infiniopDestroyPagedAttentionDescriptor.restype = c_int32
@@ -2302,6 +2306,8 @@ def paged_caching_(lib):
         infiniopTensorDescriptor_t,  # k_desc
         infiniopTensorDescriptor_t,  # v_desc
         infiniopTensorDescriptor_t,  # slot_mapping_desc
+        infiniopTensorDescriptor_t,  # k_scale_desc
+        infiniopTensorDescriptor_t,  # v_scale_desc
     ]
 
     # infiniopGetPagedCachingWorkspaceSize
@@ -2322,6 +2328,8 @@ def paged_caching_(lib):
         c_void_p,  # k
         c_void_p,  # v
         c_void_p,  # slot_mapping
+        c_void_p,  # k_scale
+        c_void_p,  # v_scale
         c_void_p,  # stream
     ]
 
@@ -2345,7 +2353,9 @@ def paged_attention_prefill_(lib):
         infiniopTensorDescriptor_t,
         infiniopTensorDescriptor_t,
         infiniopTensorDescriptor_t,
-        infiniopTensorDescriptor_t,
+        infiniopTensorDescriptor_t,  # alibi_slopes_desc
+        infiniopTensorDescriptor_t,  # k_scale_desc
+        infiniopTensorDescriptor_t,  # v_scale_desc
         c_float,
     ]
 
@@ -2367,8 +2377,10 @@ def paged_attention_prefill_(lib):
         c_void_p,
         c_void_p,
         c_void_p,
-        c_void_p,
-        c_void_p,
+        c_void_p,  # alibi_slopes
+        c_void_p,  # k_scale
+        c_void_p,  # v_scale
+        c_void_p,  # stream
     ]
 
     lib.infiniopDestroyPagedAttentionPrefillDescriptor.restype = c_int32

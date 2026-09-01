@@ -29,9 +29,13 @@ __INFINI_C infiniStatus_t infiniopCreatePagedAttentionPrefillDescriptor(
     infiniopTensorDescriptor_t seq_lens_desc,
     infiniopTensorDescriptor_t cum_seq_lens_q_desc,
     infiniopTensorDescriptor_t alibi_slopes_desc,
+    infiniopTensorDescriptor_t k_scale_desc,
+    infiniopTensorDescriptor_t v_scale_desc,
     float scale) {
 
     infiniopTensorDescriptor_t alibi_opt = (alibi_slopes_desc == nullptr) ? nullptr : alibi_slopes_desc;
+    infiniopTensorDescriptor_t k_scale_opt = (k_scale_desc == nullptr) ? nullptr : k_scale_desc;
+    infiniopTensorDescriptor_t v_scale_opt = (v_scale_desc == nullptr) ? nullptr : v_scale_desc;
 
 #define CREATE(CASE, NAMESPACE)                                                                \
     case CASE:                                                                                 \
@@ -39,7 +43,7 @@ __INFINI_C infiniStatus_t infiniopCreatePagedAttentionPrefillDescriptor(
             handle,                                                                            \
             reinterpret_cast<op::paged_attention_prefill::NAMESPACE::Descriptor **>(desc_ptr), \
             out_desc, q_desc, k_cache_desc, v_cache_desc, block_tables_desc,                   \
-            seq_lens_desc, cum_seq_lens_q_desc, alibi_opt, scale);
+            seq_lens_desc, cum_seq_lens_q_desc, alibi_opt, k_scale_opt, v_scale_opt, scale);
 
     switch (handle->device) {
 #ifdef ENABLE_NVIDIA_API
@@ -118,13 +122,14 @@ __INFINI_C infiniStatus_t infiniopPagedAttentionPrefill(
     const void *seq_lens,
     const void *cum_seq_lens_q,
     const void *alibi_slopes,
+    const void *k_scale, const void *v_scale,
     void *stream) {
 
 #define CALCULATE(CASE, NAMESPACE)                                                                      \
     case CASE:                                                                                          \
         return reinterpret_cast<op::paged_attention_prefill::NAMESPACE::Descriptor *>(desc)->calculate( \
             workspace, workspace_size, out, q, k_cache, v_cache, block_tables,                          \
-            seq_lens, cum_seq_lens_q, alibi_slopes, stream);
+            seq_lens, cum_seq_lens_q, alibi_slopes, k_scale, v_scale, stream);
 
     switch (desc->device_type) {
 #ifdef ENABLE_NVIDIA_API

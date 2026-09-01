@@ -7,14 +7,16 @@
 
 namespace infinicore::op {
 
-INFINICORE_GRAPH_OP_CLASS(PagedAttention, Tensor, const Tensor &, const Tensor &, const Tensor &, const Tensor &, const Tensor &, std::optional<Tensor>, float);
+INFINICORE_GRAPH_OP_CLASS(PagedAttention, Tensor, const Tensor &, const Tensor &, const Tensor &, const Tensor &, const Tensor &, std::optional<Tensor>, float, std::optional<Tensor>, std::optional<Tensor>);
 
 Tensor paged_attention(const Tensor &q, const Tensor &k_cache, const Tensor &v_cache,
                        const Tensor &block_tables, const Tensor &kv_lens,
-                       std::optional<Tensor> alibi_slopes, float scale);
+                       std::optional<Tensor> alibi_slopes, float scale,
+                       std::optional<Tensor> k_scale = std::nullopt, std::optional<Tensor> v_scale = std::nullopt);
 
 void paged_attention_(Tensor out, const Tensor &q, const Tensor &k_cache, const Tensor &v_cache,
                       const Tensor &block_tables, const Tensor &kv_lens,
-                      std::optional<Tensor> alibi_slopes, float scale);
+                      std::optional<Tensor> alibi_slopes, float scale,
+                      std::optional<Tensor> k_scale = std::nullopt, std::optional<Tensor> v_scale = std::nullopt);
 
 } // namespace infinicore::op

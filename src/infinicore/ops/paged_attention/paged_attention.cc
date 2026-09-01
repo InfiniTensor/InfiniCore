@@ -7,32 +7,36 @@ INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(PagedAttention);
 
 PagedAttention::PagedAttention(Tensor out, const Tensor &q, const Tensor &k_cache, const Tensor &v_cache,
                                const Tensor &block_tables, const Tensor &kv_lens,
-                               std::optional<Tensor> alibi_slopes, float scale) {
+                               std::optional<Tensor> alibi_slopes, float scale,
+                               std::optional<Tensor> k_scale, std::optional<Tensor> v_scale) {
     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(out, q, k_cache, v_cache, block_tables, kv_lens);
     INFINICORE_GRAPH_OP_DISPATCH(out->device().getType(),
-                                 out, q, k_cache, v_cache, block_tables, kv_lens, alibi_slopes, scale);
+                                 out, q, k_cache, v_cache, block_tables, kv_lens, alibi_slopes, scale, k_scale, v_scale);
 }
 
 void PagedAttention::execute(Tensor out, const Tensor &q, const Tensor &k_cache, const Tensor &v_cache,
                              const Tensor &block_tables, const Tensor &kv_lens,
-                             std::optional<Tensor> alibi_slopes, float scale) {
+                             std::optional<Tensor> alibi_slopes, float scale,
+                             std::optional<Tensor> k_scale, std::optional<Tensor> v_scale) {
     INFINICORE_GRAPH_OP_RECORD_OR_RUN(
         PagedAttention,
-        out, q, k_cache, v_cache, block_tables, kv_lens, alibi_slopes, scale);
+        out, q, k_cache, v_cache, block_tables, kv_lens, alibi_slopes, scale, k_scale, v_scale);
 }
 
 Tensor paged_attention(const Tensor &q, const Tensor &k_cache, const Tensor &v_cache,
                        const Tensor &block_tables, const Tensor &kv_lens,
-                       std::optional<Tensor> alibi_slopes, float scale) {
+                       std::optional<Tensor> alibi_slopes, float scale,
+                       std::optional<Tensor> k_scale, std::optional<Tensor> v_scale) {
     auto out = Tensor::empty(q->shape(), q->dtype(), q->device());
-    paged_attention_(out, q, k_cache, v_cache, block_tables, kv_lens, alibi_slopes, scale);
+    paged_attention_(out, q, k_cache, v_cache, block_tables, kv_lens, alibi_slopes, scale, k_scale, v_scale);
     return out;
 }
 
 void paged_attention_(Tensor out, const Tensor &q, const Tensor &k_cache, const Tensor &v_cache,
                       const Tensor &block_tables, const Tensor &kv_lens,
-                      std::optional<Tensor> alibi_slopes, float scale) {
-    PagedAttention::execute(out, q, k_cache, v_cache, block_tables, kv_lens, alibi_slopes, scale);
+                      std::optional<Tensor> alibi_slopes, float scale,
+                      std::optional<Tensor> k_scale, std::optional<Tensor> v_scale) {
+    PagedAttention::execute(out, q, k_cache, v_cache, block_tables, kv_lens, alibi_slopes, scale, k_scale, v_scale);
 }
 
 } // namespace infinicore::op

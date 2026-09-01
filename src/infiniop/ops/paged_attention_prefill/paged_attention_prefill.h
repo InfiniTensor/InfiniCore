@@ -40,6 +40,8 @@
             infiniopTensorDescriptor_t seq_lens_desc,                           \
             infiniopTensorDescriptor_t cum_seq_lens_q_desc,                     \
             const std::optional<infiniopTensorDescriptor_t> &alibi_slopes_desc, \
+            const std::optional<infiniopTensorDescriptor_t> &k_scale_desc,      \
+            const std::optional<infiniopTensorDescriptor_t> &v_scale_desc,      \
             float scale);                                                       \
                                                                                 \
         infiniStatus_t calculate(                                               \
@@ -49,6 +51,7 @@
             const void *seq_lens,                                               \
             const void *cum_seq_lens_q,                                         \
             const void *alibi_slopes,                                           \
+            const void *k_scale, const void *v_scale,                           \
             void *stream) const;                                                \
     };                                                                          \
     }

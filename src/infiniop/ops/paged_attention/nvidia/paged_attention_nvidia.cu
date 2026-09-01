@@ -9,6 +9,59 @@
 
 namespace op::paged_attention::nvidia {
 
+// FP8(E4M3) KV-cache decode launchers (paged_attention_fp8.cu). v1 supports
+// head_size 64/128; other head sizes return INFINI_STATUS_NOT_IMPLEMENTED.
+infiniStatus_t launch_decode_fp8_i64(
+    void *out, const void *q, const void *k_cache, const void *v_cache,
+    const void *k_scale, const void *v_scale,
+    infiniDtype_t dtype,
+    const int64_t *block_tables, const int64_t *cache_lens,
+    const float *alibi_slopes,
+    size_t num_heads, size_t num_seqs, size_t num_kv_heads,
+    float scale, size_t head_size,
+    size_t max_num_blocks_per_seq, size_t page_block_size,
+    ptrdiff_t q_stride, ptrdiff_t q_head_stride,
+    ptrdiff_t k_batch_stride, ptrdiff_t k_row_stride, ptrdiff_t k_head_stride,
+    ptrdiff_t v_batch_stride, ptrdiff_t v_row_stride, ptrdiff_t v_head_stride,
+    ptrdiff_t o_stride, ptrdiff_t o_head_stride,
+    ptrdiff_t k_scale_block_stride, ptrdiff_t k_scale_head_stride, ptrdiff_t k_scale_slot_stride,
+    ptrdiff_t v_scale_block_stride, ptrdiff_t v_scale_head_stride, ptrdiff_t v_scale_slot_stride,
+    cudaStream_t stream);
+
+infiniStatus_t launch_decode_fp8_i32(
+    void *out, const void *q, const void *k_cache, const void *v_cache,
+    const void *k_scale, const void *v_scale,
+    infiniDtype_t dtype,
+    const int32_t *block_tables, const int32_t *cache_lens,
+    const float *alibi_slopes,
+    size_t num_heads, size_t num_seqs, size_t num_kv_heads,
+    float scale, size_t head_size,
+    size_t max_num_blocks_per_seq, size_t page_block_size,
+    ptrdiff_t q_stride, ptrdiff_t q_head_stride,
+    ptrdiff_t k_batch_stride, ptrdiff_t k_row_stride, ptrdiff_t k_head_stride,
+    ptrdiff_t v_batch_stride, ptrdiff_t v_row_stride, ptrdiff_t v_head_stride,
+    ptrdiff_t o_stride, ptrdiff_t o_head_stride,
+    ptrdiff_t k_scale_block_stride, ptrdiff_t k_scale_head_stride, ptrdiff_t k_scale_slot_stride,
+    ptrdiff_t v_scale_block_stride, ptrdiff_t v_scale_head_stride, ptrdiff_t v_scale_slot_stride,
+    cudaStream_t stream);
+
+infiniStatus_t launch_decode_fp8_u32(
+    void *out, const void *q, const void *k_cache, const void *v_cache,
+    const void *k_scale, const void *v_scale,
+    infiniDtype_t dtype,
+    const uint32_t *block_tables, const uint32_t *cache_lens,
+    const float *alibi_slopes,
+    size_t num_heads, size_t num_seqs, size_t num_kv_heads,
+    float scale, size_t head_size,
+    size_t max_num_blocks_per_seq, size_t page_block_size,
+    ptrdiff_t q_stride, ptrdiff_t q_head_stride,
+    ptrdiff_t k_batch_stride, ptrdiff_t k_row_stride, ptrdiff_t k_head_stride,
+    ptrdiff_t v_batch_stride, ptrdiff_t v_row_stride, ptrdiff_t v_head_stride,
+    ptrdiff_t o_stride, ptrdiff_t o_head_stride,
+    ptrdiff_t k_scale_block_stride, ptrdiff_t k_scale_head_stride, ptrdiff_t k_scale_slot_stride,
+    ptrdiff_t v_scale_block_stride, ptrdiff_t v_scale_head_stride, ptrdiff_t v_scale_slot_stride,
+    cudaStream_t stream);
+
 infiniStatus_t launch_decode_hd64_i64(
     void *workspace, size_t workspace_size,
     void *out, const void *q, const void *k_cache, const void *v_cache,
@@ -189,16 +242,19 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t block_tables_desc,
     infiniopTensorDescriptor_t cache_lens_desc,
     const std::optional<infiniopTensorDescriptor_t> &alibi_slopes_desc,
+    const std::optional<infiniopTensorDescriptor_t> &k_scale_desc,
+    const std::optional<infiniopTensorDescriptor_t> &v_scale_desc,
     float scale) {
 
-    auto info_res = PagedAttentionInfo::create(out_desc, q_desc, k_cache_desc, v_cache_desc, block_tables_desc, cache_lens_desc, alibi_slopes_desc, scale);
+    auto info_res = PagedAttentionInfo::create(out_desc, q_desc, k_cache_desc, v_cache_desc, block_tables_desc, cache_lens_desc, alibi_slopes_desc, k_scale_desc, v_scale_desc, scale);
     CHECK_RESULT(info_res);
     auto info = info_res.take();
     // Reserve workspace for optional split-kv decode (partial acc + m/l).
     // Workspace is independent of runtime env toggles; kernels will clamp num_splits <= kMaxSplits.
+    // The FP8 decode kernel (v1) has no split-kv path and needs no workspace.
     constexpr size_t kMaxSplits = 8;
     const size_t per_split = info.num_seqs * info.num_heads * (info.value_size + 2) * sizeof(float);
-    const size_t workspace_bytes = kMaxSplits * per_split;
+    const size_t workspace_bytes = (info.cache_dtype == INFINI_DTYPE_F8) ? 0 : kMaxSplits * per_split;
 
     *desc_ptr = new Descriptor(
         new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
@@ -211,7 +267,43 @@ infiniStatus_t Descriptor::calculate(
     void *workspace, size_t workspace_size,
     void *out, const void *q, const void *k_cache, const void *v_cache,
     const void *block_tables, const void *cache_lens, const void *alibi_slopes,
+    const void *k_scale, const void *v_scale,
     void *stream_) const {
+
+    auto stream = static_cast<cudaStream_t>(stream_);
+
+    const float *alibi_ptr = (alibi_slopes == nullptr) ? nullptr : static_cast<const float *>(alibi_slopes);
+
+    // FP8(E4M3) KV caches dispatch to the dedicated clean-room decode kernel.
+    if (_info.cache_dtype == INFINI_DTYPE_F8) {
+#define CALCULATE_FP8(Tindex, SUFFIX)                                                        \
+    return launch_decode_fp8_##SUFFIX(                                                       \
+        out, q, k_cache, v_cache, k_scale, v_scale, _info.dtype,                             \
+        static_cast<const Tindex *>(block_tables),                                           \
+        static_cast<const Tindex *>(cache_lens), alibi_ptr,                                  \
+        _info.num_heads, _info.num_seqs, _info.num_kv_heads,                                 \
+        _info.scale, _info.head_size,                                                        \
+        _info.max_num_blocks_per_seq, _info.page_block_size,                                 \
+        _info.q_stride, _info.q_head_stride,                                                 \
+        _info.k_batch_stride, _info.k_row_stride, _info.k_head_stride,                       \
+        _info.v_batch_stride, _info.v_row_stride, _info.v_head_stride,                       \
+        _info.o_stride, _info.o_head_stride,                                                 \
+        _info.k_scale_block_stride, _info.k_scale_head_stride, _info.k_scale_slot_stride,    \
+        _info.v_scale_block_stride, _info.v_scale_head_stride, _info.v_scale_slot_stride,    \
+        stream)
+
+        if (_info.index_dtype == INFINI_DTYPE_I64) {
+            CALCULATE_FP8(int64_t, i64);
+        }
+        if (_info.index_dtype == INFINI_DTYPE_I32) {
+            CALCULATE_FP8(int32_t, i32);
+        }
+        if (_info.index_dtype == INFINI_DTYPE_U32) {
+            CALCULATE_FP8(uint32_t, u32);
+        }
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+#undef CALCULATE_FP8
+    }
 
     bool need_workspace = false;
     if (const char *env = std::getenv("INFINIOP_FLASH_DECODE_SPLITKV")) {
@@ -224,10 +316,6 @@ infiniStatus_t Descriptor::calculate(
     if (need_workspace && workspace_size < _workspace_size) {
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
-
-    auto stream = static_cast<cudaStream_t>(stream_);
-
-    const float *alibi_ptr = (alibi_slopes == nullptr) ? nullptr : static_cast<const float *>(alibi_slopes);
 
     if (_info.index_dtype == INFINI_DTYPE_I64) {
         const auto *block_table_i64 = static_cast<const int64_t *>(block_tables);

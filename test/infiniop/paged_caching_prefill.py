@@ -173,6 +173,8 @@ def test(
                 k_in.descriptor,
                 v_in.descriptor,
                 slot_mapping.descriptor,
+                None,
+                None,
             )
         )
 
@@ -195,6 +197,8 @@ def test(
                     k_in.data(),
                     v_in.data(),
                     slot_mapping.data(),
+                    None,
+                    None,
                     None,
                 )
             )

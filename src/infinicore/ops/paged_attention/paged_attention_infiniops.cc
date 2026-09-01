@@ -17,7 +17,9 @@ void *plan(Tensor out,
            const Tensor &block_tables,
            const Tensor &cache_lens,
            std::optional<Tensor> alibi_slopes,
-           float scale);
+           float scale,
+           std::optional<Tensor> k_scale,
+           std::optional<Tensor> v_scale);
 void run(void *planned_meta);
 void cleanup(void **planned_meta_ptr);
 } // namespace infinicore::op::paged_attention_impl::infiniop
@@ -96,14 +98,20 @@ void *plan(Tensor out,
            const Tensor &block_tables,
            const Tensor &cache_lens,
            std::optional<Tensor> alibi_slopes,
-           float scale) {
+           float scale,
+           std::optional<Tensor> k_scale,
+           std::optional<Tensor> v_scale) {
     INFINICORE_ASSERT(::infinicore::op::infiniops::isSupportedDevice(out->device().getType()));
     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(out, q, k_cache, v_cache, block_tables, cache_lens);
     if (alibi_slopes) {
         INFINICORE_ASSERT_TENSORS_SAME_DEVICE(out, *alibi_slopes);
     }
 
-    const bool use_flash_attention = canUseFlashAttention(out, q, k_cache, v_cache, block_tables, cache_lens);
+    // FP8 KV caches (k_scale/v_scale present) never match the flash path's
+    // dtype checks, so canUseFlashAttention already rejects them; the scales
+    // are forwarded to the InfiniOP fallback.
+    const bool use_flash_attention = canUseFlashAttention(out, q, k_cache, v_cache, block_tables, cache_lens)
+        && !k_scale.has_value() && !v_scale.has_value();
     auto flash_out = out->unsqueeze(1);
     auto flash_q = q->unsqueeze(1);
     auto flash_k_cache = k_cache->permute({0, 2, 1, 3});
@@ -111,7 +119,7 @@ void *plan(Tensor out,
     void *fallback_meta = use_flash_attention
                             ? nullptr
                             : paged_attention_impl::infiniop::plan(
-                                out, q, k_cache, v_cache, block_tables, cache_lens, alibi_slopes, scale);
+                                out, q, k_cache, v_cache, block_tables, cache_lens, alibi_slopes, scale, k_scale, v_scale);
 
     return new PlannedMeta{
         TensorMeta(flash_out), TensorMeta(flash_q), TensorMeta(flash_k_cache), TensorMeta(flash_v_cache),

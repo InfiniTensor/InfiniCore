@@ -1,6 +1,7 @@
 #include "../../../devices/nvidia/nvidia_common.cuh"
 #include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 #include "../cuda/kernel.cuh"
+#include "../cuda/kernel_fp8.cuh"
 #include "paged_caching_nvidia.cuh"
 
 template <typename Tdata, int NUM_THREADS>
@@ -19,6 +20,29 @@ INFINIOP_CUDA_KERNEL pagedCaching(
         block_size, k_src_stride, v_src_stride,
         k_src_head_stride, v_src_head_stride,
         k_cache_block_stride, v_cache_block_stride, k_cache_head_stride, v_cache_head_stride, k_cache_slot_stride, v_cache_slot_stride);
+}
+
+template <typename Tdata, int NUM_THREADS>
+INFINIOP_CUDA_KERNEL pagedCachingFp8(
+    uint8_t *k_cache, uint8_t *v_cache,
+    float *k_scale, float *v_scale,
+    const Tdata *k, const Tdata *v,
+    const int64_t *slot_mapping,
+    const size_t head_size, const size_t v_head_size, const size_t block_size,
+    const ptrdiff_t k_src_stride, const ptrdiff_t v_src_stride,
+    const ptrdiff_t k_src_head_stride, const ptrdiff_t v_src_head_stride,
+    const ptrdiff_t k_cache_block_stride, const ptrdiff_t v_cache_block_stride,
+    const ptrdiff_t k_cache_head_stride, const ptrdiff_t v_cache_head_stride,
+    const ptrdiff_t k_cache_slot_stride, const ptrdiff_t v_cache_slot_stride,
+    const ptrdiff_t k_scale_block_stride, const ptrdiff_t k_scale_head_stride, const ptrdiff_t k_scale_slot_stride,
+    const ptrdiff_t v_scale_block_stride, const ptrdiff_t v_scale_head_stride, const ptrdiff_t v_scale_slot_stride) {
+    op::paged_caching::cuda::pagedCachingFp8Kernel<Tdata, NUM_THREADS>(
+        k_cache, v_cache, k_scale, v_scale, k, v, slot_mapping, head_size, v_head_size,
+        block_size, k_src_stride, v_src_stride,
+        k_src_head_stride, v_src_head_stride,
+        k_cache_block_stride, v_cache_block_stride, k_cache_head_stride, v_cache_head_stride, k_cache_slot_stride, v_cache_slot_stride,
+        k_scale_block_stride, k_scale_head_stride, k_scale_slot_stride,
+        v_scale_block_stride, v_scale_head_stride, v_scale_slot_stride);
 }
 
 namespace op::paged_caching::nvidia {
@@ -40,9 +64,11 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t v_cache_desc,
     infiniopTensorDescriptor_t k_desc,
     infiniopTensorDescriptor_t v_desc,
-    infiniopTensorDescriptor_t slot_mapping_desc) {
+    infiniopTensorDescriptor_t slot_mapping_desc,
+    infiniopTensorDescriptor_t k_scale_desc,
+    infiniopTensorDescriptor_t v_scale_desc) {
 
-    auto info = PagedCachingInfo::create(k_cache_desc, v_cache_desc, k_desc, v_desc, slot_mapping_desc);
+    auto info = PagedCachingInfo::create(k_cache_desc, v_cache_desc, k_desc, v_desc, slot_mapping_desc, k_scale_desc, v_scale_desc);
     CHECK_RESULT(info);
 
     // Create and return the Descriptor instance.
@@ -147,15 +173,84 @@ infiniStatus_t launchKernel(const PagedCachingInfo &info,
     return INFINI_STATUS_SUCCESS;
 }
 
+// FP8(E4M3) quantizing write path: same grid/block geometry as the copy
+// kernel, but each block computes the per-(token, head) amax, writes the
+// dequant scale, and stores E4M3 codes instead of raw values.
+template <int NUM_THREADS>
+infiniStatus_t launchKernelFp8(const PagedCachingInfo &info,
+                               void *k_cache, void *v_cache,
+                               void *k_scale, void *v_scale,
+                               const void *k, const void *v,
+                               const void *slot_mapping,
+                               cudaStream_t stream) {
+
+    dim3 grid(uint64_t(info.num_kv_heads), uint64_t(info.num_tokens), 1);
+    dim3 block(NUM_THREADS);
+    size_t shared_mem_size = 0;
+
+#define LAUNCH_FP8(Tdata)                                                                \
+    pagedCachingFp8<Tdata, NUM_THREADS>                                                  \
+        <<<grid, block, shared_mem_size, stream>>>(                                      \
+            (uint8_t *)k_cache,                                                          \
+            (uint8_t *)v_cache,                                                          \
+            (float *)k_scale,                                                            \
+            (float *)v_scale,                                                            \
+            (const Tdata *)k,                                                            \
+            (const Tdata *)v,                                                            \
+            (const int64_t *)slot_mapping,                                               \
+            info.head_size,                                                              \
+            info.v_head_size,                                                            \
+            info.block_size,                                                             \
+            info.k_src_stride,                                                           \
+            info.v_src_stride,                                                           \
+            info.k_src_head_stride,                                                      \
+            info.v_src_head_stride,                                                      \
+            info.k_cache_block_stride,                                                   \
+            info.v_cache_block_stride,                                                   \
+            info.k_cache_head_stride,                                                    \
+            info.v_cache_head_stride,                                                    \
+            info.k_cache_slot_stride,                                                    \
+            info.v_cache_slot_stride,                                                    \
+            info.k_scale_block_stride,                                                   \
+            info.k_scale_head_stride,                                                    \
+            info.k_scale_slot_stride,                                                    \
+            info.v_scale_block_stride,                                                   \
+            info.v_scale_head_stride,                                                    \
+            info.v_scale_slot_stride)
+
+    if (info.dtype == INFINI_DTYPE_F16) {
+        LAUNCH_FP8(half);
+    } else if (info.dtype == INFINI_DTYPE_BF16) {
+        LAUNCH_FP8(__nv_bfloat16);
+    } else {
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+#undef LAUNCH_FP8
+    return INFINI_STATUS_SUCCESS;
+}
+
 // Execution method implementation
 infiniStatus_t Descriptor::calculate(
     void *workspace, size_t workspace_size,
     void *k_cache, void *v_cache,
     const void *k, const void *v,
     const void *slot_mapping,
+    void *k_scale, void *v_scale,
     void *stream_) const {
 
     cudaStream_t stream = (cudaStream_t)stream_;
+
+    if (_info.cache_dtype == INFINI_DTYPE_F8) {
+        if (_opaque->internal->maxThreadsPerBlock() >= CUDA_BLOCK_SIZE_1024) {
+            return launchKernelFp8<CUDA_BLOCK_SIZE_1024>(_info, k_cache, v_cache, k_scale, v_scale, k, v, slot_mapping, stream);
+        } else if (_opaque->internal->maxThreadsPerBlock() >= CUDA_BLOCK_SIZE_512) {
+            return launchKernelFp8<CUDA_BLOCK_SIZE_512>(_info, k_cache, v_cache, k_scale, v_scale, k, v, slot_mapping, stream);
+        } else if (_opaque->internal->maxThreadsPerBlock() >= CUDA_BLOCK_SIZE_4096) {
+            return launchKernelFp8<CUDA_BLOCK_SIZE_4096>(_info, k_cache, v_cache, k_scale, v_scale, k, v, slot_mapping, stream);
+        } else {
+            return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
+        }
+    }
 
     // Dispatch logic based on the GPU's maximum threads per block.
     // This allows selecting the largest, most efficient block size the hardware supports.

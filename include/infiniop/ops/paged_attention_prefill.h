@@ -26,6 +26,11 @@ typedef struct InfiniopDescriptor *infiniopPagedAttentionPrefillDescriptor_t;
  * Shape: [batch_size + 1]
  * @param alibi_slopes_desc Optional descriptor for the ALiBi slopes tensor. Can be NULL.
  * Shape: [num_heads]
+ * @param k_scale_desc Optional descriptor for the per-token key dequant scales.
+ * Shape: [max_num_blocks, num_kv_heads, block_size], DType: F32.
+ * Required (non-NULL) iff k_cache/v_cache are F8; must be NULL otherwise.
+ * @param v_scale_desc Optional descriptor for the per-token value dequant scales.
+ * Same layout and rules as k_scale_desc.
  * @param scale The attention scaling factor (typically 1.0 / sqrt(head_size)).
  * @return infiniStatus_t Status code of the operation.
  */
@@ -40,6 +45,8 @@ __INFINI_C __export infiniStatus_t infiniopCreatePagedAttentionPrefillDescriptor
     infiniopTensorDescriptor_t seq_lens_desc,
     infiniopTensorDescriptor_t cum_seq_lens_q_desc,
     infiniopTensorDescriptor_t alibi_slopes_desc,
+    infiniopTensorDescriptor_t k_scale_desc,
+    infiniopTensorDescriptor_t v_scale_desc,
     float scale);
 
 /**
@@ -61,6 +68,8 @@ __INFINI_C __export infiniStatus_t infiniopGetPagedAttentionPrefillWorkspaceSize
  * @param seq_lens Pointer to the KV lengths data.
  * @param cum_seq_lens_q Pointer to the Q cumulative sequence lengths data (prefix sum).
  * @param alibi_slopes Pointer to the ALiBi slopes data. Can be NULL.
+ * @param k_scale Pointer to the per-token key dequant scales (F8 caches only). Can be NULL.
+ * @param v_scale Pointer to the per-token value dequant scales (F8 caches only). Can be NULL.
  * @param stream The device stream (e.g., cudaStream_t) for the operation.
  * @return infiniStatus_t Status code of the operation.
  */
@@ -76,6 +85,8 @@ __INFINI_C __export infiniStatus_t infiniopPagedAttentionPrefill(
     const void *seq_lens,
     const void *cum_seq_lens_q,
     const void *alibi_slopes,
+    const void *k_scale,
+    const void *v_scale,
     void *stream);
 
 /**

@@ -36,13 +36,16 @@
             infiniopTensorDescriptor_t v_cache_desc,             \
             infiniopTensorDescriptor_t k_desc,                   \
             infiniopTensorDescriptor_t v_desc,                   \
-            infiniopTensorDescriptor_t slot_mapping_desc);       \
+            infiniopTensorDescriptor_t slot_mapping_desc,        \
+            infiniopTensorDescriptor_t k_scale_desc,             \
+            infiniopTensorDescriptor_t v_scale_desc);            \
                                                                  \
         infiniStatus_t calculate(                                \
             void *workspace, size_t workspace_size,              \
             void *k_cache, void *v_cache,                        \
             const void *k, const void *v,                        \
             const void *slot_mapping,                            \
+            void *k_scale, void *v_scale,                        \
             void *stream) const;                                 \
     };                                                           \
     }

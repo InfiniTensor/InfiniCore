@@ -27,6 +27,10 @@ typedef struct InfiniopDescriptor *infiniopPagedAttentionDescriptor_t;
  * Expected DType: int64_t (I64).
  * @param alibi_slopes_desc [Optional] Shape: (num_heads,).
  * Slopes for ALiBi (Attention with Linear Biases). Can be NULL.
+ * @param k_scale_desc [Optional] Shape: (num_blocks, num_kv_heads, block_size).
+ * Per-token dequant scales for the key cache. DType: F32.
+ * Required (non-NULL) iff k_cache/v_cache are F8; must be NULL otherwise.
+ * @param v_scale_desc [Optional] Same layout and rules as k_scale_desc.
  * @param scale     The attention scaling factor (typically 1/sqrt(head_size)).
  * @return infiniStatus_t Status code.
  */
@@ -40,6 +44,8 @@ __INFINI_C __export infiniStatus_t infiniopCreatePagedAttentionDescriptor(
     infiniopTensorDescriptor_t block_tables_desc,
     infiniopTensorDescriptor_t seq_lens_desc,
     infiniopTensorDescriptor_t alibi_slopes_desc,
+    infiniopTensorDescriptor_t k_scale_desc,
+    infiniopTensorDescriptor_t v_scale_desc,
     float scale);
 
 /**
@@ -65,6 +71,8 @@ __INFINI_C __export infiniStatus_t infiniopGetPagedAttentionWorkspaceSize(
  * @param block_tables Pointer to the block tables data.
  * @param seq_lens Pointer to the sequence lengths data.
  * @param alibi_slopes Pointer to the ALiBi slopes data. Can be NULL.
+ * @param k_scale Pointer to the per-token key dequant scales (F8 caches only). Can be NULL.
+ * @param v_scale Pointer to the per-token value dequant scales (F8 caches only). Can be NULL.
  * @param stream The CUDA stream for the operation. Can be NULL.
  * @return infiniStatus_t Status code of the operation.
  */
@@ -79,6 +87,8 @@ __INFINI_C __export infiniStatus_t infiniopPagedAttention(
     const void *block_tables,
     const void *seq_lens,
     const void *alibi_slopes,
+    const void *k_scale,
+    const void *v_scale,
     void *stream);
 
 /**

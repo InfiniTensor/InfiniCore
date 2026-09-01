@@ -14,6 +14,7 @@ class PagedAttentionInfo {
 
 public:
     infiniDtype_t dtype;
+    infiniDtype_t cache_dtype;
     infiniDtype_t index_dtype;
     float scale;
 
@@ -38,6 +39,16 @@ public:
     ptrdiff_t block_table_batch_stride;
     ptrdiff_t cache_lens_stride;
 
+    // --- FP8(E4M3) KV cache: per-token dequant scales [num_blocks, num_kv_heads, block_size] ---
+    // Only meaningful when cache_dtype == INFINI_DTYPE_F8.
+    ptrdiff_t q_head_stride;
+    ptrdiff_t k_scale_block_stride;
+    ptrdiff_t k_scale_head_stride;
+    ptrdiff_t k_scale_slot_stride;
+    ptrdiff_t v_scale_block_stride;
+    ptrdiff_t v_scale_head_stride;
+    ptrdiff_t v_scale_slot_stride;
+
     static utils::Result<PagedAttentionInfo> create(
         infiniopTensorDescriptor_t out_desc,
         infiniopTensorDescriptor_t q_desc,
@@ -46,12 +57,36 @@ public:
         infiniopTensorDescriptor_t block_tables_desc,
         infiniopTensorDescriptor_t cache_lens_desc,
         const std::optional<infiniopTensorDescriptor_t> &alibi_slopes_desc,
+        const std::optional<infiniopTensorDescriptor_t> &k_scale_desc,
+        const std::optional<infiniopTensorDescriptor_t> &v_scale_desc,
         float scale) {
 
         auto dtype = q_desc->dtype();
         CHECK_DTYPE(dtype, INFINI_DTYPE_F16, INFINI_DTYPE_BF16);
-        if (out_desc->dtype() != dtype || k_cache_desc->dtype() != dtype || v_cache_desc->dtype() != dtype) {
+        if (out_desc->dtype() != dtype) {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        }
+
+        // The caches either keep the compute dtype or store FP8(E4M3) codes
+        // plus per-token F32 scales produced by paged_caching.
+        auto cache_dtype = k_cache_desc->dtype();
+        const bool cache_fp8 = (cache_dtype == INFINI_DTYPE_F8);
+        const bool has_k_scale = k_scale_desc.has_value() && k_scale_desc.value() != nullptr;
+        const bool has_v_scale = v_scale_desc.has_value() && v_scale_desc.value() != nullptr;
+        if (cache_fp8) {
+            if (v_cache_desc->dtype() != INFINI_DTYPE_F8) {
+                return INFINI_STATUS_BAD_TENSOR_DTYPE;
+            }
+            if (!has_k_scale || !has_v_scale) {
+                return INFINI_STATUS_BAD_PARAM;
+            }
+        } else {
+            if (cache_dtype != dtype || v_cache_desc->dtype() != dtype) {
+                return INFINI_STATUS_BAD_TENSOR_DTYPE;
+            }
+            if (has_k_scale || has_v_scale) {
+                return INFINI_STATUS_BAD_PARAM;
+            }
         }
 
         if (q_desc->ndim() != 3 || out_desc->ndim() != 3) {
@@ -150,6 +185,22 @@ public:
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
 
+        // Per-token dequant scales for the FP8 path: [num_blocks, num_kv_heads, page_block_size].
+        if (cache_fp8) {
+            for (const auto &scale_desc : {k_scale_desc.value(), v_scale_desc.value()}) {
+                if (scale_desc->dtype() != INFINI_DTYPE_F32) {
+                    return INFINI_STATUS_BAD_TENSOR_DTYPE;
+                }
+                if (scale_desc->ndim() != 3) {
+                    return INFINI_STATUS_BAD_TENSOR_SHAPE;
+                }
+                const auto scale_shape = scale_desc->shape();
+                if (scale_shape[0] != num_blocks || scale_shape[1] != num_kv_heads || scale_shape[2] != page_block_size) {
+                    return INFINI_STATUS_BAD_TENSOR_SHAPE;
+                }
+            }
+        }
+
         const size_t max_num_blocks_per_seq = block_tables_desc->shape()[1];
 
         // Strides (in elements)
@@ -168,8 +219,17 @@ public:
         const ptrdiff_t block_table_batch_stride = block_tables_desc->stride(0);
         const ptrdiff_t cache_lens_stride = cache_lens_desc->stride(0);
 
+        const ptrdiff_t q_head_stride = q_desc->stride(1);
+        const ptrdiff_t k_scale_block_stride = cache_fp8 ? k_scale_desc.value()->stride(0) : 0;
+        const ptrdiff_t k_scale_head_stride = cache_fp8 ? k_scale_desc.value()->stride(1) : 0;
+        const ptrdiff_t k_scale_slot_stride = cache_fp8 ? k_scale_desc.value()->stride(2) : 0;
+        const ptrdiff_t v_scale_block_stride = cache_fp8 ? v_scale_desc.value()->stride(0) : 0;
+        const ptrdiff_t v_scale_head_stride = cache_fp8 ? v_scale_desc.value()->stride(1) : 0;
+        const ptrdiff_t v_scale_slot_stride = cache_fp8 ? v_scale_desc.value()->stride(2) : 0;
+
         return utils::Result<PagedAttentionInfo>(PagedAttentionInfo{
             dtype,
+            cache_dtype,
             block_tables_dt,
             scale,
             num_seqs,
@@ -190,6 +250,13 @@ public:
             o_head_stride,
             block_table_batch_stride,
             cache_lens_stride,
+            q_head_stride,
+            k_scale_block_stride,
+            k_scale_head_stride,
+            k_scale_slot_stride,
+            v_scale_block_stride,
+            v_scale_head_stride,
+            v_scale_slot_stride,
         });
     }
 };

@@ -13,6 +13,7 @@
 // #include "paged_attention_prefill_fa2.cuh"
 #include "paged_attention_prefill_nvidia.cuh"
 
+#include "../cuda/kernel_fp8.cuh"
 #include "../cuda/kernel_v2.cuh"
 
 namespace op::paged_attention_prefill::nvidia {
@@ -1567,6 +1568,175 @@ infiniStatus_t launch_prefill_warpcta16(
         return INFINI_STATUS_BAD_TENSOR_SHAPE;
     }
 }
+
+// ============================================================================
+// FP8(E4M3) KV-cache prefill (plan B): gather-dequant the referenced pages
+// into a compact BF16/F16 scratch cache with identity block tables, then run
+// the regular prefill kernel on the scratch. The F16/BF16 kernels and their
+// dispatch above are not modified.
+// ============================================================================
+
+template <typename Tindex>
+INFINIOP_CUDA_KERNEL FillIdentityBlockTables(
+    Tindex *block_tables_scratch, size_t total) {
+    op::paged_attention_prefill::cuda::fillIdentityBlockTablesKernel<Tindex>(
+        block_tables_scratch, total);
+}
+
+template <typename Tindex, typename Tdata>
+INFINIOP_CUDA_KERNEL GatherDequantFp8Kv(
+    Tdata *k_scratch, Tdata *v_scratch,
+    const uint8_t *k_cache, const uint8_t *v_cache,
+    const float *k_scale, const float *v_scale,
+    const Tindex *block_tables, const Tindex *total_kv_lens,
+    size_t num_kv_heads, size_t head_size, size_t value_size,
+    size_t page_block_size, size_t max_num_blocks_per_seq,
+    ptrdiff_t block_table_batch_stride,
+    ptrdiff_t k_batch_stride, ptrdiff_t k_row_stride, ptrdiff_t k_head_stride,
+    ptrdiff_t v_batch_stride, ptrdiff_t v_row_stride, ptrdiff_t v_head_stride,
+    ptrdiff_t k_scale_block_stride, ptrdiff_t k_scale_head_stride, ptrdiff_t k_scale_slot_stride,
+    ptrdiff_t v_scale_block_stride, ptrdiff_t v_scale_head_stride, ptrdiff_t v_scale_slot_stride) {
+    op::paged_attention_prefill::cuda::gatherDequantFp8KvKernel<Tindex, Tdata>(
+        k_scratch, v_scratch, k_cache, v_cache, k_scale, v_scale,
+        block_tables, total_kv_lens,
+        num_kv_heads, head_size, value_size, page_block_size, max_num_blocks_per_seq,
+        block_table_batch_stride,
+        k_batch_stride, k_row_stride, k_head_stride,
+        v_batch_stride, v_row_stride, v_head_stride,
+        k_scale_block_stride, k_scale_head_stride, k_scale_slot_stride,
+        v_scale_block_stride, v_scale_head_stride, v_scale_slot_stride);
+}
+
+constexpr size_t alignUp256(size_t x) {
+    return (x + 255) / 256 * 256;
+}
+
+struct Fp8ScratchLayout {
+    size_t v_offset;
+    size_t bt_offset;
+    size_t total;
+};
+
+// Workspace layout: [K scratch | V scratch | identity block tables], each
+// segment 256-byte aligned. Tdata is F16/BF16 (2 bytes), guaranteed by info.
+inline Fp8ScratchLayout fp8ScratchLayout(const PagedAttentionPrefillInfo &info) {
+    const size_t tindex_size = (info.index_dtype == INFINI_DTYPE_I64) ? sizeof(int64_t) : sizeof(int32_t);
+    const size_t scratch_blocks = info.num_seqs * info.max_num_blocks_per_seq;
+    const size_t k_bytes = scratch_blocks * info.num_kv_heads * info.page_block_size * info.head_size * sizeof(uint16_t);
+    const size_t v_bytes = scratch_blocks * info.num_kv_heads * info.page_block_size * info.value_size * sizeof(uint16_t);
+    const size_t bt_bytes = scratch_blocks * tindex_size;
+    Fp8ScratchLayout layout;
+    layout.v_offset = alignUp256(k_bytes);
+    layout.bt_offset = layout.v_offset + alignUp256(v_bytes);
+    layout.total = layout.bt_offset + alignUp256(bt_bytes);
+    return layout;
+}
+
+template <typename Tindex, typename Tdata>
+infiniStatus_t launch_prefill_fp8(
+    void *workspace, size_t workspace_size,
+    Tdata *out, const Tdata *q,
+    const void *k_cache, const void *v_cache,
+    const void *k_scale, const void *v_scale,
+    const Tindex *block_tables, const Tindex *total_kv_lens, const Tindex *cu_seqlens_q,
+    const float *alibi_slopes,
+    const PagedAttentionPrefillInfo &info,
+    cudaStream_t stream) {
+
+    const Fp8ScratchLayout layout = fp8ScratchLayout(info);
+    if (workspace == nullptr || workspace_size < layout.total) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+
+    const size_t scratch_blocks = info.num_seqs * info.max_num_blocks_per_seq;
+    if (scratch_blocks == 0) {
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    Tdata *k_scratch = static_cast<Tdata *>(workspace);
+    Tdata *v_scratch = reinterpret_cast<Tdata *>(static_cast<uint8_t *>(workspace) + layout.v_offset);
+    Tindex *bt_scratch = reinterpret_cast<Tindex *>(static_cast<uint8_t *>(workspace) + layout.bt_offset);
+
+    // Identity block tables over the compact scratch: (seq, page) -> seq * mbps + page.
+    {
+        constexpr int threads = 256;
+        const size_t blocks = ceilDiv(scratch_blocks, static_cast<size_t>(threads));
+        FillIdentityBlockTables<Tindex>
+            <<<static_cast<uint32_t>(blocks), threads, 0, stream>>>(bt_scratch, scratch_blocks);
+    }
+
+    // Gather + dequantize the referenced pages.
+    {
+        const dim3 grid(static_cast<uint32_t>(info.max_num_blocks_per_seq),
+                        static_cast<uint32_t>(info.num_seqs),
+                        static_cast<uint32_t>(info.num_kv_heads));
+        const dim3 block(256);
+        GatherDequantFp8Kv<Tindex, Tdata><<<grid, block, 0, stream>>>(
+            k_scratch, v_scratch,
+            static_cast<const uint8_t *>(k_cache), static_cast<const uint8_t *>(v_cache),
+            static_cast<const float *>(k_scale), static_cast<const float *>(v_scale),
+            block_tables, total_kv_lens,
+            info.num_kv_heads, info.head_size, info.value_size,
+            info.page_block_size, info.max_num_blocks_per_seq,
+            info.block_table_batch_stride,
+            info.k_batch_stride, info.k_row_stride, info.k_head_stride,
+            info.v_batch_stride, info.v_row_stride, info.v_head_stride,
+            info.k_scale_block_stride, info.k_scale_head_stride, info.k_scale_slot_stride,
+            info.v_scale_block_stride, info.v_scale_head_stride, info.v_scale_slot_stride);
+    }
+
+    // Contiguous scratch strides.
+    const ptrdiff_t s_k_batch = static_cast<ptrdiff_t>(info.num_kv_heads * info.page_block_size * info.head_size);
+    const ptrdiff_t s_k_head = static_cast<ptrdiff_t>(info.page_block_size * info.head_size);
+    const ptrdiff_t s_k_row = static_cast<ptrdiff_t>(info.head_size);
+    const ptrdiff_t s_v_batch = static_cast<ptrdiff_t>(info.num_kv_heads * info.page_block_size * info.value_size);
+    const ptrdiff_t s_v_head = static_cast<ptrdiff_t>(info.page_block_size * info.value_size);
+    const ptrdiff_t s_v_row = static_cast<ptrdiff_t>(info.value_size);
+    const ptrdiff_t s_bt_batch = static_cast<ptrdiff_t>(info.max_num_blocks_per_seq);
+
+#define LAUNCH_PREFILL_ON_SCRATCH(LAUNCHER)                                                        \
+    return LAUNCHER<Tindex, Tdata>(                                                                \
+        out, q, k_scratch, v_scratch, bt_scratch, total_kv_lens, cu_seqlens_q, alibi_slopes,       \
+        info.num_heads, info.num_seqs, info.num_kv_heads, info.total_q_tokens,                     \
+        info.head_size, info.scale, info.max_num_blocks_per_seq, info.page_block_size,             \
+        s_bt_batch,                                                                                \
+        info.q_stride, info.q_head_stride,                                                         \
+        s_k_batch, s_k_row, s_k_head,                                                              \
+        s_v_batch, s_v_row, s_v_head,                                                              \
+        info.o_stride, info.o_head_stride, stream)
+
+    // Follow the same default kernel selection as the regular path. The
+    // split-kv/mma variants are not supported on the F8 path; fall back to
+    // the default tile kernel for head_size 64/128 and to "ref" otherwise.
+    const char *k = default_prefill_kernel(info);
+    if (std::strcmp(k, "warp") == 0) {
+        LAUNCH_PREFILL_ON_SCRATCH(launch_prefill_warp);
+    }
+    if (std::strcmp(k, "warpcta") == 0) {
+        LAUNCH_PREFILL_ON_SCRATCH(launch_prefill);
+    }
+    if (std::strcmp(k, "warpcta8pipe") == 0) {
+        LAUNCH_PREFILL_ON_SCRATCH(launch_prefill_warpcta8pipe);
+    }
+    if (std::strcmp(k, "warpcta16") == 0) {
+        LAUNCH_PREFILL_ON_SCRATCH(launch_prefill_warpcta16);
+    }
+    if (std::strcmp(k, "ref") == 0) {
+        return launch_prefill_ref<Tindex, Tdata, float>(
+            out, q, k_scratch, v_scratch, bt_scratch, total_kv_lens, cu_seqlens_q, alibi_slopes,
+            info.num_heads, info.num_seqs, info.num_kv_heads, info.total_q_tokens,
+            info.head_size, info.value_size, info.scale, info.max_num_blocks_per_seq, info.page_block_size,
+            s_bt_batch,
+            info.q_stride, info.q_head_stride,
+            s_k_batch, s_k_row, s_k_head,
+            s_v_batch, s_v_row, s_v_head,
+            info.o_stride, info.o_head_stride, stream);
+    }
+    // "warpcta8" (and any remaining default) — head_size 64/128.
+    LAUNCH_PREFILL_ON_SCRATCH(launch_prefill_warpcta8);
+
+#undef LAUNCH_PREFILL_ON_SCRATCH
+}
 } // namespace
 
 struct Descriptor::Opaque {
@@ -1588,12 +1758,14 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t total_kv_lens_desc,
     infiniopTensorDescriptor_t cum_seqlens_q_desc,
     const std::optional<infiniopTensorDescriptor_t> &alibi_slopes_desc,
+    const std::optional<infiniopTensorDescriptor_t> &k_scale_desc,
+    const std::optional<infiniopTensorDescriptor_t> &v_scale_desc,
     float scale) {
 
     auto info = PagedAttentionPrefillInfo::create(
         out_desc, q_desc, k_cache_desc, v_cache_desc,
         block_tables_desc, total_kv_lens_desc, cum_seqlens_q_desc,
-        alibi_slopes_desc, scale);
+        alibi_slopes_desc, k_scale_desc, v_scale_desc, scale);
     CHECK_RESULT(info);
 
     // Optional split-kv prefill requires workspace for partial (m, l, acc).
@@ -1621,8 +1793,12 @@ infiniStatus_t Descriptor::create(
     const size_t n = info->total_q_tokens * info->num_heads;
     const size_t splitkv_workspace_bytes = use_splitkv ? (static_cast<size_t>(num_splits) * n * (info->head_size + 2) * sizeof(float)) : 0;
 
-    const size_t workspace_bytes = splitkv_workspace_bytes;
-    // const size_t workspace_bytes = splitkv_workspace_bytes + fa2_workspace_bytes;
+    // FP8 caches (plan B) need scratch for the gather-dequantized K/V plus the
+    // compact identity block tables. Split-kv prefill is not supported on the
+    // F8 path, so the two never coexist.
+    const size_t fp8_workspace_bytes = (info->cache_dtype == INFINI_DTYPE_F8) ? fp8ScratchLayout(*info).total : 0;
+
+    const size_t workspace_bytes = splitkv_workspace_bytes + fp8_workspace_bytes;
 
     *desc_ptr = new Descriptor(
         new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
@@ -1638,12 +1814,52 @@ infiniStatus_t Descriptor::calculate(
     const void *total_kv_lens,
     const void *cum_seqlens_q,
     const void *alibi_slopes,
+    const void *k_scale, const void *v_scale,
     void *stream_) const {
     auto stream = static_cast<cudaStream_t>(stream_);
 
     const float *alibi_ptr = (alibi_slopes == nullptr) ? nullptr : static_cast<const float *>(alibi_slopes);
     const void *total_kv_lens_ptr = total_kv_lens;
     const void *cu_seqlens_q_ptr = cum_seqlens_q;
+
+    // FP8(E4M3) KV caches: gather-dequant into scratch, then run the regular
+    // F16/BF16 prefill kernel on the scratch (plan B; split-kv unsupported).
+    if (_info.cache_dtype == INFINI_DTYPE_F8) {
+#define CALCULATE_FP8_PREFILL(Tindex, Tdata)                                                  \
+    return launch_prefill_fp8<Tindex, Tdata>(                                                 \
+        workspace, workspace_size,                                                            \
+        static_cast<Tdata *>(out), static_cast<const Tdata *>(q),                             \
+        k_cache, v_cache, k_scale, v_scale,                                                   \
+        static_cast<const Tindex *>(block_tables),                                            \
+        static_cast<const Tindex *>(total_kv_lens_ptr),                                       \
+        static_cast<const Tindex *>(cu_seqlens_q_ptr),                                        \
+        alibi_ptr, _info, stream)
+
+        if (_info.index_dtype == INFINI_DTYPE_I64) {
+            if (_info.dtype == INFINI_DTYPE_F16) {
+                CALCULATE_FP8_PREFILL(int64_t, half);
+            }
+            if (_info.dtype == INFINI_DTYPE_BF16) {
+                CALCULATE_FP8_PREFILL(int64_t, __nv_bfloat16);
+            }
+        } else if (_info.index_dtype == INFINI_DTYPE_I32) {
+            if (_info.dtype == INFINI_DTYPE_F16) {
+                CALCULATE_FP8_PREFILL(int32_t, half);
+            }
+            if (_info.dtype == INFINI_DTYPE_BF16) {
+                CALCULATE_FP8_PREFILL(int32_t, __nv_bfloat16);
+            }
+        } else if (_info.index_dtype == INFINI_DTYPE_U32) {
+            if (_info.dtype == INFINI_DTYPE_F16) {
+                CALCULATE_FP8_PREFILL(uint32_t, half);
+            }
+            if (_info.dtype == INFINI_DTYPE_BF16) {
+                CALCULATE_FP8_PREFILL(uint32_t, __nv_bfloat16);
+            }
+        }
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+#undef CALCULATE_FP8_PREFILL
+    }
 
     bool use_splitkv = false;
     if (const char *env = std::getenv("INFINIOP_FLASH_PREFILL_SPLITKV")) {

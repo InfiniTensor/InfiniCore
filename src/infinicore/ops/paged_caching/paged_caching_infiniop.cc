@@ -10,14 +10,18 @@ struct PlannedMeta {
     std::shared_ptr<Descriptor> descriptor;
 
     graph::GraphTensor workspace, k_cache, v_cache, k, v, slot_mapping;
+    std::optional<graph::GraphTensor> k_scale, v_scale;
 };
 
-void *plan(Tensor k_cache, Tensor v_cache, const Tensor &k, const Tensor &v, const Tensor &slot_mapping) {
-    size_t key = hash_combine(k_cache, v_cache, k, v, slot_mapping);
+void *plan(Tensor k_cache, Tensor v_cache, const Tensor &k, const Tensor &v, const Tensor &slot_mapping,
+           std::optional<Tensor> k_scale, std::optional<Tensor> v_scale) {
+    size_t key = hash_combine(k_cache, v_cache, k, v, slot_mapping, k_scale, v_scale);
 
     INFINIOP_CACHABLE_DESCRIPTOR_GET_OR_CREATE(
         Descriptor, descriptor, PagedCaching,
-        key, k_cache->desc(), v_cache->desc(), k->desc(), v->desc(), slot_mapping->desc());
+        key, k_cache->desc(), v_cache->desc(), k->desc(), v->desc(), slot_mapping->desc(),
+        k_scale ? k_scale.value()->desc() : nullptr,
+        v_scale ? v_scale.value()->desc() : nullptr);
 
     INFINIOP_WORKSPACE_TENSOR(workspace, PagedCaching, descriptor);
 
@@ -28,7 +32,9 @@ void *plan(Tensor k_cache, Tensor v_cache, const Tensor &k, const Tensor &v, con
         graph::GraphTensor(v_cache),
         graph::GraphTensor(k),
         graph::GraphTensor(v),
-        graph::GraphTensor(slot_mapping)};
+        graph::GraphTensor(slot_mapping),
+        k_scale ? std::optional<graph::GraphTensor>(graph::GraphTensor(*k_scale)) : std::nullopt,
+        v_scale ? std::optional<graph::GraphTensor>(graph::GraphTensor(*v_scale)) : std::nullopt};
 }
 
 void run(void *planned_meta) {
@@ -44,6 +50,8 @@ void run(void *planned_meta) {
             p->k->data(),
             p->v->data(),
             p->slot_mapping->data(),
+            p->k_scale.has_value() ? p->k_scale.value()->data() : nullptr,
+            p->v_scale.has_value() ? p->v_scale.value()->data() : nullptr,
             context::getStream()));
 }
 

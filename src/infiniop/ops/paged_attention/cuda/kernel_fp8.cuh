@@ -1,0 +1,277 @@
+#ifndef __PAGED_ATTENTION_FP8_KERNEL_CUH__
+#define __PAGED_ATTENTION_FP8_KERNEL_CUH__
+
+//================================================================================
+// Paged Attention Decode Kernel for FP8(E4M3) KV Caches (clean-room)
+//
+// v1.6: deeper memory-level parallelism on top of the v1.5 warp-parallel scan.
+// One CTA of NUM_WARPS*32 threads (default 8 warps = 256 threads) per
+// (sequence, query head); warp `w` visits tokens w, w+NUM_WARPS, ... of every
+// referenced page (per-page striding; the global token index t = t_base + tb
+// keeps ALiBi correct for any page size). Each lane owns DL = HEAD_SIZE/32
+// consecutive head dims (4 for hd128, 2 for hd64), so a single uint32/uint16
+// load fetches all of the lane's E4M3 codes for one token and the warp covers
+// HEAD_SIZE contiguous bytes per K/V row.
+//
+// The token stream is walked with a (logical block, token-in-block) cursor and
+// register double buffering: while token i is being processed, the packed K/V
+// words and both per-token scales of token i+1 are already in flight (loads
+// issued one iteration ahead, across page boundaries). The qk dot product is
+// a shuffle-only warp reduction; every warp keeps its own online-softmax state
+// (m, l, acc[DL]) in registers; the partial states are merged once at the end
+// through shared memory (the only __syncthreads in the kernel), rescaling by
+// exp2(m_w - m_total) in the standard online-softmax fashion.
+//
+// Semantics are unchanged from v1: dequant-on-load
+//   x = e4m3_decode(code) * scale[physical_block, kv_head, slot]
+// with per-token-per-kv-head F32 scales written by paged_caching, online
+// softmax in the log2 domain (scale * log2e, optional ALiBi, final division
+// by l + 1e-6), F16/BF16 output, HEAD_SIZE in {64, 128}, no split-kv.
+//
+// Alignment note: the packed code loads assume each K/V row is DL-byte
+// aligned, i.e. the cache base pointer and the batch/head/row strides are
+// multiples of DL bytes. This holds for any contiguous cache pool (row stride
+// == HEAD_SIZE) and for block/head slices of one.
+//================================================================================
+
+#include <cstdint>
+#include <type_traits>
+
+#include "../../../devices/nvidia/nvidia_kernel_common.cuh"
+
+namespace op::paged_attention::cuda {
+
+// Number of warps per CTA in the FP8 decode kernel. Tunable (4/8/16); the
+// launcher sizes the block from this constant, so the two stay in sync.
+constexpr int kFp8DecodeNumWarps = 32;
+
+template <typename Tindex, typename Tdata, int HEAD_SIZE>
+__device__ void flashAttentionDecodeFp8Kernel(
+    Tdata *out_,
+    const Tdata *q_,
+    const uint8_t *k_cache_,
+    const uint8_t *v_cache_,
+    const float *k_scale_,
+    const float *v_scale_,
+    const Tindex *block_tables_,
+    const Tindex *cache_lens_,
+    const float *alibi_slopes_,
+    size_t num_kv_heads,
+    float scale,
+    size_t max_num_blocks_per_seq,
+    size_t page_block_size,
+    ptrdiff_t q_stride,
+    ptrdiff_t q_head_stride,
+    ptrdiff_t k_batch_stride,
+    ptrdiff_t k_row_stride,
+    ptrdiff_t k_head_stride,
+    ptrdiff_t v_batch_stride,
+    ptrdiff_t v_row_stride,
+    ptrdiff_t v_head_stride,
+    ptrdiff_t o_stride,
+    ptrdiff_t o_head_stride,
+    ptrdiff_t k_scale_block_stride,
+    ptrdiff_t k_scale_head_stride,
+    ptrdiff_t k_scale_slot_stride,
+    ptrdiff_t v_scale_block_stride,
+    ptrdiff_t v_scale_head_stride,
+    ptrdiff_t v_scale_slot_stride) {
+
+    static_assert(HEAD_SIZE == 64 || HEAD_SIZE == 128,
+                  "FP8 decode kernel supports head_size 64/128 only.");
+
+    constexpr int DL = HEAD_SIZE / 32; // head dims per lane: 4 (hd128) or 2 (hd64)
+    using PackT = std::conditional_t<DL == 4, uint32_t, uint16_t>;
+    constexpr int NUM_WARPS = kFp8DecodeNumWarps;
+
+    const size_t seq_idx = blockIdx.y;
+    const size_t head_idx = blockIdx.x;
+    const int lane = threadIdx.x & 31;
+    const int warp = threadIdx.x >> 5;
+
+    const int seq_len = static_cast<int>(cache_lens_[seq_idx]);
+    if (seq_len <= 0) {
+        return;
+    }
+
+    const size_t num_heads = gridDim.x;
+    const size_t num_queries_per_kv = num_heads / num_kv_heads;
+    const size_t kv_head_idx = head_idx / num_queries_per_kv;
+
+    const float alibi_slope = (alibi_slopes_ == nullptr) ? 0.0f : alibi_slopes_[head_idx];
+    constexpr float kLog2e = 1.4426950408889634f;
+    const float scale_log2 = scale * kLog2e;
+
+    const Tindex *block_table = block_tables_ + seq_idx * max_num_blocks_per_seq;
+
+    // This lane's head dims are d0 .. d0+DL-1 (contiguous => packed byte loads).
+    const int d0 = lane * DL;
+    const Tdata *q_ptr = q_ + seq_idx * q_stride + head_idx * q_head_stride + d0;
+    float q_reg[DL];
+#pragma unroll
+    for (int j = 0; j < DL; ++j) {
+        q_reg[j] = static_cast<float>(q_ptr[j]);
+    }
+
+    // Per-warp online softmax state; acc holds this lane's DL dims.
+    float acc[DL];
+#pragma unroll
+    for (int j = 0; j < DL; ++j) {
+        acc[j] = 0.0f;
+    }
+    float m = -INFINITY;
+    float l = 0.0f;
+
+    const int pbs = static_cast<int>(page_block_size);
+
+    // Number of valid tokens in logical block `lb` (last page may be partial).
+    auto tokenEnd = [&](int lb) -> int {
+        return min(pbs, seq_len - lb * pbs);
+    };
+
+    // One token's prefetched payload: the lane's packed K/V code words plus
+    // the (warp-uniform) per-token dequant scales.
+    struct KvPack {
+        PackT k, v;
+        float ks, vs;
+    };
+
+    // Load token `tb` of logical block `lb` into `pack`. All four loads are
+    // independent; the block_table read is L1-cached and shared by all warps.
+    auto loadToken = [&](int lb, int tb, KvPack &pack) {
+        const ptrdiff_t physical_block = static_cast<ptrdiff_t>(block_table[lb]);
+        const uint8_t *k_base = k_cache_ + physical_block * k_batch_stride + static_cast<ptrdiff_t>(kv_head_idx) * k_head_stride;
+        const uint8_t *v_base = v_cache_ + physical_block * v_batch_stride + static_cast<ptrdiff_t>(kv_head_idx) * v_head_stride;
+        const float *k_scale_base = k_scale_ + physical_block * k_scale_block_stride + static_cast<ptrdiff_t>(kv_head_idx) * k_scale_head_stride;
+        const float *v_scale_base = v_scale_ + physical_block * v_scale_block_stride + static_cast<ptrdiff_t>(kv_head_idx) * v_scale_head_stride;
+        pack.k = *reinterpret_cast<const PackT *>(k_base + tb * k_row_stride + d0);
+        pack.v = *reinterpret_cast<const PackT *>(v_base + tb * v_row_stride + d0);
+        pack.ks = k_scale_base[tb * k_scale_slot_stride];
+        pack.vs = v_scale_base[tb * v_scale_slot_stride];
+    };
+
+    // Per-warp token cursor: (logical block, token-in-block). Within each page
+    // warp `warp` owns tokens warp, warp+NUM_WARPS, ...; pages with no token
+    // for this warp (tokenEnd <= warp) are skipped.
+    int cur_lb = 0;
+    int cur_tb = warp;
+    while (cur_lb * pbs < seq_len && cur_tb >= tokenEnd(cur_lb)) {
+        ++cur_lb;
+    }
+    bool has_cur = cur_lb * pbs < seq_len;
+
+    KvPack cur{}, nxt{};
+    if (has_cur) {
+        loadToken(cur_lb, cur_tb, cur);
+    }
+
+    // Software-pipelined scan: process `cur` while `nxt` is being fetched.
+    while (has_cur) {
+        // Advance the cursor (possibly across page boundaries) and issue the
+        // next token's loads before touching the current payload.
+        int nxt_lb = cur_lb;
+        int nxt_tb = cur_tb + NUM_WARPS;
+        if (nxt_tb >= tokenEnd(nxt_lb)) {
+            ++nxt_lb;
+            nxt_tb = warp;
+            while (nxt_lb * pbs < seq_len && nxt_tb >= tokenEnd(nxt_lb)) {
+                ++nxt_lb;
+            }
+        }
+        const bool has_nxt = nxt_lb * pbs < seq_len;
+        if (has_nxt) {
+            loadToken(nxt_lb, nxt_tb, nxt);
+        }
+
+        const int t = cur_lb * pbs + cur_tb;
+
+        float partial = 0.0f;
+#pragma unroll
+        for (int j = 0; j < DL; ++j) {
+            const uint8_t code = static_cast<uint8_t>((cur.k >> (8 * j)) & 0xFF);
+            partial += q_reg[j] * (infiniopFp8E4m3Decode(code) * cur.ks);
+        }
+        // Shuffle-only warp reduction (no smem, no __syncthreads).
+#pragma unroll
+        for (int offset = 16; offset > 0; offset >>= 1) {
+            partial += __shfl_xor_sync(0xffffffff, partial, offset);
+        }
+        const float qk = partial;
+
+        float score = qk * scale_log2;
+        if (alibi_slope != 0.0f) {
+            score += (alibi_slope * static_cast<float>(t - (seq_len - 1))) * kLog2e;
+        }
+        const float m_new = fmaxf(m, score);
+        const float alpha = exp2f(m - m_new);
+        const float beta = exp2f(score - m_new);
+        l = l * alpha + beta;
+        m = m_new;
+
+#pragma unroll
+        for (int j = 0; j < DL; ++j) {
+            const uint8_t code = static_cast<uint8_t>((cur.v >> (8 * j)) & 0xFF);
+            acc[j] = acc[j] * alpha + beta * (infiniopFp8E4m3Decode(code) * cur.vs);
+        }
+
+        cur = nxt;
+        cur_lb = nxt_lb;
+        cur_tb = nxt_tb;
+        has_cur = has_nxt;
+    }
+
+    // ---- Cross-warp merge (the only block-wide synchronization) ----
+    __shared__ float m_part[NUM_WARPS];
+    __shared__ float l_part[NUM_WARPS];
+    __shared__ float acc_part[NUM_WARPS][HEAD_SIZE];
+
+    if (lane == 0) {
+        m_part[warp] = m;
+        l_part[warp] = l;
+    }
+#pragma unroll
+    for (int j = 0; j < DL; ++j) {
+        acc_part[warp][d0 + j] = acc[j];
+    }
+    __syncthreads();
+
+    // Scalar (m, l) merge, computed redundantly by all threads. A warp that
+    // saw no token has m = -inf / l = 0 and contributes exp2f(-inf - m) == 0.
+    float m_total = m_part[0];
+#pragma unroll
+    for (int w = 1; w < NUM_WARPS; ++w) {
+        m_total = fmaxf(m_total, m_part[w]);
+    }
+    float wgt[NUM_WARPS];
+    float l_total = 0.0f;
+#pragma unroll
+    for (int w = 0; w < NUM_WARPS; ++w) {
+        wgt[w] = exp2f(m_part[w] - m_total);
+        l_total += l_part[w] * wgt[w];
+    }
+    const float inv_l = 1.0f / (l_total + 1e-6f);
+
+    // HEAD_SIZE output dims over the CTA: thread `tid` writes dim `tid`
+    // (threads with tid >= HEAD_SIZE idle out).
+    const int tid = threadIdx.x;
+    if (tid < HEAD_SIZE) {
+        float o = 0.0f;
+#pragma unroll
+        for (int w = 0; w < NUM_WARPS; ++w) {
+            o += acc_part[w][tid] * wgt[w];
+        }
+        o *= inv_l;
+        Tdata *out_ptr = out_ + seq_idx * o_stride + head_idx * o_head_stride + tid;
+        if constexpr (std::is_same_v<Tdata, half>) {
+            *out_ptr = __float2half_rn(o);
+        } else if constexpr (std::is_same_v<Tdata, __nv_bfloat16>) {
+            *out_ptr = __float2bfloat16_rn(o);
+        } else {
+            *out_ptr = static_cast<Tdata>(o);
+        }
+    }
+}
+
+} // namespace op::paged_attention::cuda
+
+#endif // __PAGED_ATTENTION_FP8_KERNEL_CUH__
