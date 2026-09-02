@@ -56,6 +56,10 @@ void launch_kernel(
             out_ptr,
             in_ptr,
             N, C, H_in, W_in, H_out, W_out,
+            info.input_stride(0), info.input_stride(1),
+            info.input_stride(2), info.input_stride(3),
+            info.output_stride(0), info.output_stride(1),
+            info.output_stride(2), info.output_stride(3),
             scale_h, scale_w,
             align_corners);
 }
