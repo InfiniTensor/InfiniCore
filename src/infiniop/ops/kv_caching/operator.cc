@@ -2,11 +2,26 @@
 #include "../../handle.h"
 #include "infiniop/ops/kv_caching.h"
 
+#if defined(ENABLE_CPU_API)
+#include "cpu/kv_caching_cpu.h"
+#endif
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_QY_API) || defined(ENABLE_ILUVATAR_API) || defined(ENABLE_ALI_API) || defined(ENABLE_HYGON_API)
 #include "nvidia/kv_caching_nvidia.cuh"
 #endif
 #if defined(ENABLE_METAX_API)
 #include "metax/kv_caching_metax.h"
+#endif
+#if defined(ENABLE_MOORE_API)
+#include "moore/kv_caching_moore.h"
+#endif
+#if defined(ENABLE_CAMBRICON_API)
+#include "bang/kv_caching_bang.h"
+#endif
+#if defined(ENABLE_ASCEND_API)
+#include "ascend/kv_caching_ascend.h"
+#endif
+#if defined(ENABLE_KUNLUN_API)
+#include "kunlun/kv_caching_kunlun.h"
 #endif
 
 __INFINI_C infiniStatus_t infiniopCreateKVCachingDescriptor(
@@ -31,6 +46,9 @@ __INFINI_C infiniStatus_t infiniopCreateKVCachingDescriptor(
 
     switch (handle->device) {
 
+#ifdef ENABLE_CPU_API
+        CREATE(INFINI_DEVICE_CPU, cpu);
+#endif
 #ifdef ENABLE_NVIDIA_API
         CREATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
@@ -48,6 +66,18 @@ __INFINI_C infiniStatus_t infiniopCreateKVCachingDescriptor(
 #endif
 #if defined(ENABLE_METAX_API)
         CREATE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MOORE_API
+        CREATE(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_CAMBRICON_API
+        CREATE(INFINI_DEVICE_CAMBRICON, bang);
+#endif
+#ifdef ENABLE_ASCEND_API
+        CREATE(INFINI_DEVICE_ASCEND, ascend);
+#endif
+#ifdef ENABLE_KUNLUN_API
+        CREATE(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
 
     default:
@@ -69,6 +99,9 @@ __INFINI_C infiniStatus_t infiniopGetKVCachingWorkspaceSize(
 
     switch (desc->device_type) {
 
+#ifdef ENABLE_CPU_API
+        GET_SIZE(INFINI_DEVICE_CPU, cpu);
+#endif
 #ifdef ENABLE_NVIDIA_API
         GET_SIZE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
@@ -86,6 +119,18 @@ __INFINI_C infiniStatus_t infiniopGetKVCachingWorkspaceSize(
 #endif
 #if defined(ENABLE_METAX_API)
         GET_SIZE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MOORE_API
+        GET_SIZE(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_CAMBRICON_API
+        GET_SIZE(INFINI_DEVICE_CAMBRICON, bang);
+#endif
+#ifdef ENABLE_ASCEND_API
+        GET_SIZE(INFINI_DEVICE_ASCEND, ascend);
+#endif
+#ifdef ENABLE_KUNLUN_API
+        GET_SIZE(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
 
     default:
@@ -113,6 +158,9 @@ __INFINI_C infiniStatus_t infiniopKVCaching(
 
     switch (desc->device_type) {
 
+#ifdef ENABLE_CPU_API
+        CALCULATE(INFINI_DEVICE_CPU, cpu);
+#endif
 #ifdef ENABLE_NVIDIA_API
         CALCULATE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
@@ -130,6 +178,18 @@ __INFINI_C infiniStatus_t infiniopKVCaching(
 #endif
 #if defined(ENABLE_METAX_API)
         CALCULATE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MOORE_API
+        CALCULATE(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_CAMBRICON_API
+        CALCULATE(INFINI_DEVICE_CAMBRICON, bang);
+#endif
+#ifdef ENABLE_ASCEND_API
+        CALCULATE(INFINI_DEVICE_ASCEND, ascend);
+#endif
+#ifdef ENABLE_KUNLUN_API
+        CALCULATE(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
 
     default:
@@ -149,6 +209,9 @@ __INFINI_C infiniStatus_t infiniopDestroyKVCachingDescriptor(
 
     switch (desc->device_type) {
 
+#ifdef ENABLE_CPU_API
+        DELETE(INFINI_DEVICE_CPU, cpu);
+#endif
 #ifdef ENABLE_NVIDIA_API
         DELETE(INFINI_DEVICE_NVIDIA, nvidia);
 #endif
@@ -166,6 +229,18 @@ __INFINI_C infiniStatus_t infiniopDestroyKVCachingDescriptor(
 #endif
 #if defined(ENABLE_METAX_API)
         DELETE(INFINI_DEVICE_METAX, metax);
+#endif
+#ifdef ENABLE_MOORE_API
+        DELETE(INFINI_DEVICE_MOORE, moore);
+#endif
+#ifdef ENABLE_CAMBRICON_API
+        DELETE(INFINI_DEVICE_CAMBRICON, bang);
+#endif
+#ifdef ENABLE_ASCEND_API
+        DELETE(INFINI_DEVICE_ASCEND, ascend);
+#endif
+#ifdef ENABLE_KUNLUN_API
+        DELETE(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
 
     default:
