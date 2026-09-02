@@ -346,6 +346,20 @@ infiniStatus_t launch_decode_hd64_impl(
                 static_cast<__nv_bfloat16 *>(out), partial_acc, partial_m, partial_l, num_splits, o_stride);
             return INFINI_STATUS_SUCCESS;
         }
+        if (dtype == INFINI_DTYPE_F32) {
+            flashAttentionDecodeHd64SplitKv<Tindex, float><<<grid_split, block_split, 0, stream>>>(
+                partial_acc, partial_m, partial_l,
+                static_cast<const float *>(q),
+                static_cast<const float *>(k_cache),
+                static_cast<const float *>(v_cache),
+                block_tables, cache_lens, alibi_slopes,
+                num_kv_heads, scale, max_num_blocks_per_seq, page_block_size,
+                q_stride, k_batch_stride, k_row_stride, k_head_stride,
+                v_batch_stride, v_row_stride, v_head_stride, num_splits);
+            flashAttentionDecodeHd64SplitKvCombine<float><<<grid, 32, 0, stream>>>(
+                static_cast<float *>(out), partial_acc, partial_m, partial_l, num_splits, o_stride);
+            return INFINI_STATUS_SUCCESS;
+        }
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
 
@@ -420,6 +434,19 @@ infiniStatus_t launch_decode_hd64_impl(
                 v_batch_stride, v_row_stride, v_head_stride, o_stride);
         }
 
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    if (dtype == INFINI_DTYPE_F32) {
+        flashAttentionDecodeHd64Warp<Tindex, float><<<grid, block, 0, stream>>>(
+            static_cast<float *>(out),
+            static_cast<const float *>(q),
+            static_cast<const float *>(k_cache),
+            static_cast<const float *>(v_cache),
+            block_tables, cache_lens, alibi_slopes,
+            num_kv_heads, scale, max_num_blocks_per_seq, page_block_size,
+            q_stride, k_batch_stride, k_row_stride, k_head_stride,
+            v_batch_stride, v_row_stride, v_head_stride, o_stride);
         return INFINI_STATUS_SUCCESS;
     }
 
