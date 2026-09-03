@@ -1,0 +1,515 @@
+#include "../../../../utils.h"
+#include "../../../devices/kunlun/kunlun_common.h"
+#include "../../../devices/kunlun/kunlun_handle.h"
+#include "../../../devices/kunlun/kunlun_kernel_common.h"
+#include "../../../tensor.h"
+#include "paged_attention_kunlun.h"
+#include <cstdlib>
+#include <memory>
+
+using namespace device::kunlun::kernel;
+
+namespace {
+
+// Decode paged attention on Kunlun XPU.
+//
+// Design (vLLM-style fused decode kernel, single pass over the KV cache):
+//  - One cluster handles one (seq, kv_head) task (grid-stride). All query
+//    heads of the GQA group share the K/V tiles staged in cluster shared
+//    memory, so the paged K/V is read from HBM once per kv head.
+//  - The sequence is streamed in tiles of `tile_n` tokens gathered from
+//    physical blocks through the block table with contiguous-run GM2SM DMAs.
+//    `tile_n` is as large as the KV staging buffers allow for the shape.
+//  - Query heads are processed in chunks whose fp32 accumulators and q
+//    staging rows fit in the shared memory left over by the KV tiles.
+//  - Online (flash-style) softmax keeps a running (m, l, acc) state per
+//    query head across tiles, so no seq_len-sized logits buffer is needed
+//    and arbitrary context lengths are supported.
+//  - All heavy work is flattened across the cores of the cluster: QK dots
+//    are range-split over (head, token, dim) with atomic partial sums, the
+//    exp() vector and row sums are computed in parallel, and the PV
+//    accumulation is split over (head, dim). Only two small serial passes
+//    (tile max + running-state update) run on a single core.
+
+constexpr uint32_t TILE_STATIC = 4; // KV staging arrays hold TILE_STATIC*MAX_DIM rows
+constexpr uint32_t TILE_N_MAX = 16; // s/p scratch is sized for this tile width
+constexpr uint32_t MAX_DIM = 576;   // max(head_size, value_size) accepted by info.h
+constexpr uint32_t MAX_HC = 64;     // max heads processed per chunk
+// Shared-memory budget (worst case Tdata = 2 bytes):
+//   k_sm/v_sm     2 * TILE_STATIC * MAX_DIM * 2   =  9216 B
+//   q_sm          HC_UNITS * 2                    (q staging rows)
+//   acc_sm        HC_UNITS * 4                    (fp32 accumulators)
+//   s/p/m/l/corr/slope/tile scratch + guard       <= SM_SCRATCH
+//   total                                         <= 40960 B (SM_SIZE)
+// HC_UNITS bounds chunk heads both for the q staging rows (HC_UNITS *
+// sizeof(Tdata)) and the fp32 accumulators (HC_UNITS * sizeof(float)).
+constexpr uint32_t SM_SCRATCH = 10240;
+constexpr uint32_t HC_UNITS = (SM_SIZE - 2 * TILE_STATIC * MAX_DIM * 2 - SM_SCRATCH) / 6;
+
+template <typename Tdata>
+__device__ inline float toFloat(Tdata x) {
+    if constexpr (xpu_std::is_same<Tdata, half>::value) {
+        return __half2float(x);
+    } else if constexpr (xpu_std::is_same<Tdata, bfloat16_t>::value) {
+        return __bfloat162float(x);
+    } else {
+        return static_cast<float>(x);
+    }
+}
+
+template <typename Tdata>
+__device__ inline Tdata fromFloat(float x) {
+    if constexpr (xpu_std::is_same<Tdata, half>::value) {
+        return __float2half_rn(x);
+    } else if constexpr (xpu_std::is_same<Tdata, bfloat16_t>::value) {
+        return __float2bfloat16_rn(x);
+    } else {
+        return x;
+    }
+}
+
+template <typename Tdata, typename Tindex>
+__global__ void pagedAttentionKernel(
+    __global_ptr__ Tdata *out,
+    __global_ptr__ const Tdata *q,
+    __global_ptr__ const Tdata *k_cache,
+    __global_ptr__ const Tdata *v_cache,
+    __global_ptr__ const Tindex *block_tables,
+    __global_ptr__ const Tindex *seq_lens,
+    __global_ptr__ const float *alibi_slopes,
+    uint32_t num_tasks,
+    uint32_t num_kv_heads,
+    uint32_t group_size,
+    uint32_t head_size,
+    uint32_t value_size,
+    uint32_t page_block_size,
+    uint32_t heads_per_chunk,
+    uint32_t tile_n_max,
+    float scale,
+    int64_t q_stride,
+    int64_t k_batch_stride,
+    int64_t k_row_stride,
+    int64_t k_head_stride,
+    int64_t v_batch_stride,
+    int64_t v_row_stride,
+    int64_t v_head_stride,
+    int64_t o_stride,
+    int64_t o_head_stride,
+    int64_t block_table_batch_stride,
+    int64_t cache_lens_stride) {
+
+    const uint32_t cid = core_id();
+    const uint32_t nc = core_num();
+    if (cid >= nc) {
+        return;
+    }
+
+    __shared__ Tdata k_sm[TILE_STATIC * MAX_DIM];
+    __shared__ Tdata v_sm[TILE_STATIC * MAX_DIM];
+    __shared__ Tdata q_sm[HC_UNITS];
+    __shared__ float acc_sm[HC_UNITS];
+    __shared__ float s_sm[MAX_HC * TILE_N_MAX];
+    __shared__ float p_sm[MAX_HC * TILE_N_MAX];
+    __shared__ float m_sm[MAX_HC];
+    __shared__ float l_sm[MAX_HC];
+    __shared__ float corr_sm[MAX_HC];
+    __shared__ float slope_sm[MAX_HC];
+    __shared__ float tile_m_sm[MAX_HC];
+    __shared__ float tile_l_sm[MAX_HC];
+
+    for (uint32_t task = cluster_id(); task < num_tasks; task += cluster_num()) {
+        const uint32_t seq_idx = task / num_kv_heads;
+        const uint32_t kv_head = task - seq_idx * num_kv_heads;
+
+        const int64_t seq_len = static_cast<int64_t>(seq_lens[seq_idx * cache_lens_stride]);
+
+        if (seq_len <= 0) {
+            // Nothing cached yet: emit zero rows for every head of the group.
+            if (cid == 0) {
+                for (uint32_t d = 0; d < value_size; ++d) {
+                    storeShared(q_sm + d, fromFloat<Tdata>(0.f));
+                }
+            }
+            sync_cluster();
+            for (uint32_t h = 0; h < group_size; ++h) {
+                if (cid == 0) {
+                    SM2GM_ASYNC(q_sm,
+                                out + seq_idx * o_stride + (kv_head * group_size + h) * o_head_stride,
+                                value_size * sizeof(Tdata));
+                }
+                sync_cluster();
+            }
+            continue;
+        }
+
+        const uint32_t first_head = kv_head * group_size;
+
+        for (uint32_t h0 = 0; h0 < group_size; h0 += heads_per_chunk) {
+            const uint32_t n_h = (group_size - h0) < heads_per_chunk ? (group_size - h0) : heads_per_chunk;
+
+            // ---- Stage the q rows of the whole chunk (contiguous in GM) ----
+            if (cid == 0) {
+                GM2SM_ASYNC(q + seq_idx * q_stride + (first_head + h0) * head_size,
+                            q_sm, n_h * head_size * sizeof(Tdata));
+            }
+            for (uint32_t item = cid; item < n_h; item += nc) {
+                storeShared(&slope_sm[item],
+                            (alibi_slopes == nullptr) ? 0.f : alibi_slopes[first_head + h0 + item]);
+                storeShared(&m_sm[item], -1.0e30f);
+                storeShared(&l_sm[item], 0.f);
+            }
+            for (uint32_t item = cid; item < n_h * value_size; item += nc) {
+                storeShared(&acc_sm[item], 0.f);
+            }
+            sync_cluster();
+
+            for (int64_t t0 = 0; t0 < seq_len; t0 += tile_n_max) {
+                const int64_t t_end = (t0 + tile_n_max < seq_len) ? (t0 + tile_n_max) : seq_len;
+                const uint32_t n = static_cast<uint32_t>(t_end - t0);
+                const uint32_t n_logits = n_h * n;
+
+                // ---- Stage the K/V tile through the block table ----
+                if (cid == 0) {
+                    uint32_t pos = 0;
+                    for (int64_t t = t0; t < t_end;) {
+                        const int64_t bt_idx = t / static_cast<int64_t>(page_block_size);
+                        const int64_t blk = static_cast<int64_t>(
+                            block_tables[seq_idx * block_table_batch_stride + bt_idx]);
+                        const int64_t off = t % static_cast<int64_t>(page_block_size);
+                        int64_t run = static_cast<int64_t>(page_block_size) - off;
+                        if (run > t_end - t) {
+                            run = t_end - t;
+                        }
+                        const int64_t k_base = blk * k_batch_stride + kv_head * k_head_stride + off * k_row_stride;
+                        const int64_t v_base = blk * v_batch_stride + kv_head * v_head_stride + off * v_row_stride;
+
+                        if (k_row_stride == static_cast<int64_t>(head_size)) {
+                            GM2SM_ASYNC(k_cache + k_base, k_sm + pos * head_size,
+                                        run * head_size * sizeof(Tdata));
+                        } else {
+                            for (int64_t r = 0; r < run; ++r) {
+                                GM2SM_ASYNC(k_cache + k_base + r * k_row_stride,
+                                            k_sm + (pos + r) * head_size, head_size * sizeof(Tdata));
+                            }
+                        }
+                        if (v_row_stride == static_cast<int64_t>(value_size)) {
+                            GM2SM_ASYNC(v_cache + v_base, v_sm + pos * value_size,
+                                        run * value_size * sizeof(Tdata));
+                        } else {
+                            for (int64_t r = 0; r < run; ++r) {
+                                GM2SM_ASYNC(v_cache + v_base + r * v_row_stride,
+                                            v_sm + (pos + r) * value_size, value_size * sizeof(Tdata));
+                            }
+                        }
+                        pos += static_cast<uint32_t>(run);
+                        t += run;
+                    }
+                }
+                sync_cluster();
+
+                // ---- P1: s[hi][j] = scale * (q_hi . k_j), range-split ----
+                for (uint32_t item = cid; item < n_logits; item += nc) {
+                    storeShared(&s_sm[item], 0.f);
+                }
+                for (uint32_t hi = cid; hi < n_h; hi += nc) {
+                    storeShared(&tile_l_sm[hi], 0.f);
+                }
+                sync_cluster();
+
+                const uint32_t total_macs = n_logits * head_size;
+                const uint32_t per_core = total_macs / nc;
+                const uint32_t rem = total_macs - per_core * nc;
+                const uint32_t my_count = per_core + (cid < rem ? 1 : 0);
+                uint32_t w = cid < rem ? cid * (per_core + 1) : rem * (per_core + 1) + (cid - rem) * per_core;
+                const uint32_t w_end = w + my_count;
+                while (w < w_end) {
+                    const uint32_t item = w / head_size;
+                    const uint32_t d0 = w - item * head_size;
+                    const uint32_t run = (w_end - w) < (head_size - d0) ? (w_end - w) : (head_size - d0);
+                    const uint32_t hi = item / n;
+                    const uint32_t j = item - hi * n;
+                    float partial = 0.f;
+                    const uint32_t q_off = hi * head_size;
+                    const uint32_t k_off = j * head_size;
+                    for (uint32_t d = 0; d < run; ++d) {
+                        partial += toFloat(loadShared(q_sm + q_off + d0 + d))
+                                 * toFloat(loadShared(k_sm + k_off + d0 + d));
+                    }
+                    atomicAdd(&s_sm[item], partial * scale);
+                    w += run;
+                }
+                sync_cluster();
+
+                // ---- P2a: alibi bias, tile max, and the new running max (serial) ----
+                if (cid == 0) {
+                    for (uint32_t hi = 0; hi < n_h; ++hi) {
+                        const float slope = loadShared(&slope_sm[hi]);
+                        const uint32_t base = hi * n;
+                        float tile_m = 0.f;
+                        for (uint32_t j = 0; j < n; ++j) {
+                            float s = loadShared(&s_sm[base + j]);
+                            if (slope != 0.f) {
+                                s += slope * static_cast<float>(t0 + static_cast<int64_t>(j) - seq_len + 1);
+                            }
+                            storeShared(&s_sm[base + j], s);
+                            tile_m = (j == 0) ? s : fmax(tile_m, s);
+                        }
+                        // Store m_new (not the bare tile max) so P2b's exp() is
+                        // relative to the running max and l/acc stay normalized.
+                        storeShared(&tile_m_sm[hi], fmax(loadShared(&m_sm[hi]), tile_m));
+                    }
+                }
+                sync_cluster();
+
+                // ---- P2b: exp vector and row sums (parallel) ----
+                for (uint32_t item = cid; item < n_logits; item += nc) {
+                    const uint32_t hi = item / n;
+                    const float p = exp(loadShared(&s_sm[item]) - loadShared(&tile_m_sm[hi]));
+                    storeShared(&p_sm[item], p);
+                    atomicAdd(&tile_l_sm[hi], p);
+                }
+                sync_cluster();
+
+                // ---- P2c: running-state update (tiny) ----
+                if (cid == 0) {
+                    for (uint32_t hi = 0; hi < n_h; ++hi) {
+                        const float m_old = loadShared(&m_sm[hi]);
+                        const float m_new = loadShared(&tile_m_sm[hi]);
+                        const float corr = exp(m_old - m_new);
+                        storeShared(&corr_sm[hi], corr);
+                        storeShared(&l_sm[hi], loadShared(&l_sm[hi]) * corr + loadShared(&tile_l_sm[hi]));
+                        storeShared(&m_sm[hi], m_new);
+                    }
+                }
+                sync_cluster();
+
+                // ---- P3: acc = acc * corr + sum_j p_j v_j, split over (head, dim) ----
+                const uint32_t n_acc = n_h * value_size;
+                for (uint32_t item = cid; item < n_acc; item += nc) {
+                    const uint32_t hi = item / value_size;
+                    const uint32_t d = item - hi * value_size;
+                    const uint32_t base = hi * n;
+                    float pv = 0.f;
+                    for (uint32_t j = 0; j < n; ++j) {
+                        pv += loadShared(&p_sm[base + j]) * toFloat(loadShared(v_sm + j * value_size + d));
+                    }
+                    const float corr = loadShared(&corr_sm[hi]);
+                    const float acc = loadShared(&acc_sm[item]);
+                    storeShared(&acc_sm[item], acc * corr + pv);
+                }
+                sync_cluster();
+            } // tiles
+
+            // ---- Write out = acc / l for the chunk (reuse q_sm as staging) ----
+            for (uint32_t item = cid; item < n_h * value_size; item += nc) {
+                const uint32_t hi = item / value_size;
+                const float inv_l = 1.f / loadShared(&l_sm[hi]);
+                const float val = loadShared(&acc_sm[item]) * inv_l;
+                storeShared(q_sm + item, fromFloat<Tdata>(val));
+            }
+            sync_cluster();
+            if (cid == 0) {
+                for (uint32_t hi = 0; hi < n_h; ++hi) {
+                    SM2GM_ASYNC(q_sm + hi * value_size,
+                                out + seq_idx * o_stride + (first_head + h0 + hi) * o_head_stride,
+                                value_size * sizeof(Tdata));
+                }
+            }
+            sync_cluster();
+        } // head chunks
+    }     // tasks
+}
+
+} // namespace
+
+namespace op::paged_attention::kunlun {
+
+struct Descriptor::Opaque {
+    std::shared_ptr<device::kunlun::Handle::Internal> internal;
+};
+
+Descriptor::~Descriptor() {
+    delete _opaque;
+}
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t out_desc,
+    infiniopTensorDescriptor_t q_desc,
+    infiniopTensorDescriptor_t k_cache_desc,
+    infiniopTensorDescriptor_t v_cache_desc,
+    infiniopTensorDescriptor_t block_tables_desc,
+    infiniopTensorDescriptor_t seq_lens_desc,
+    const std::optional<infiniopTensorDescriptor_t> &alibi_slopes_desc,
+    float scale) {
+
+    auto result = PagedAttentionInfo::create(
+        out_desc, q_desc, k_cache_desc, v_cache_desc,
+        block_tables_desc, seq_lens_desc, alibi_slopes_desc, scale);
+    CHECK_RESULT(result);
+    auto info = result.take();
+
+    // The q vector and the cache rows are moved with DMAs; their innermost
+    // dimension must be contiguous (q/out strides are already checked in info).
+    CHECK_OR_RETURN(k_cache_desc->stride(3) == 1, INFINI_STATUS_BAD_TENSOR_STRIDES);
+    CHECK_OR_RETURN(v_cache_desc->stride(3) == 1, INFINI_STATUS_BAD_TENSOR_STRIDES);
+    // Staging copies a whole head chunk with one DMA, which requires the q
+    // heads to be densely packed.
+    CHECK_OR_RETURN(q_desc->stride(1) == static_cast<ptrdiff_t>(info.head_size),
+                    INFINI_STATUS_BAD_TENSOR_STRIDES);
+
+    *desc_ptr = new Descriptor(
+        new Opaque{static_cast<device::kunlun::Handle *>(handle)->internal()},
+        info,
+        0,
+        handle->device,
+        handle->device_id);
+    return INFINI_STATUS_SUCCESS;
+}
+
+template <typename Tdata, typename Tindex>
+infiniStatus_t launchPagedAttention(
+    const PagedAttentionInfo &info,
+    void *out, const void *q, const void *k_cache, const void *v_cache,
+    const void *block_tables, const void *seq_lens, const void *alibi_slopes,
+    kunlunStream_t stream) {
+
+    const uint32_t num_seqs = static_cast<uint32_t>(info.num_seqs);
+    const uint32_t num_kv_heads = static_cast<uint32_t>(info.num_kv_heads);
+    const uint32_t num_tasks = num_seqs * num_kv_heads;
+    if (num_tasks == 0) {
+        return INFINI_STATUS_SUCCESS;
+    }
+    const uint32_t group_size = static_cast<uint32_t>(info.num_heads) / num_kv_heads;
+
+    // Heads are processed in chunks whose q staging rows (HC_UNITS elements)
+    // and fp32 accumulators (HC_UNITS floats) fit in shared memory.
+    uint32_t heads_per_chunk = HC_UNITS / static_cast<uint32_t>(info.value_size);
+    const uint32_t hc_by_q = HC_UNITS / static_cast<uint32_t>(info.head_size);
+    if (heads_per_chunk > hc_by_q) {
+        heads_per_chunk = hc_by_q;
+    }
+    if (heads_per_chunk > MAX_HC) {
+        heads_per_chunk = MAX_HC;
+    }
+    if (heads_per_chunk == 0) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+    if (heads_per_chunk > group_size) {
+        heads_per_chunk = group_size;
+    }
+
+    // Tiles are as wide as the KV staging buffers (TILE_STATIC*MAX_DIM rows)
+    // allow for this shape, capped by the s/p scratch arrays.
+    const uint32_t max_dim = info.head_size > info.value_size
+                               ? static_cast<uint32_t>(info.head_size)
+                               : static_cast<uint32_t>(info.value_size);
+    uint32_t tile_n = (TILE_STATIC * MAX_DIM) / max_dim;
+    if (tile_n > TILE_N_MAX) {
+        tile_n = TILE_N_MAX;
+    }
+    if (tile_n == 0) {
+        tile_n = 1;
+    }
+
+    // The P800 runs 64 cores per cluster and 12 clusters; launching more
+    // cores than physically present silently drops work, so stay at the
+    // defaults. Both are overridable for tuning on other XPU SKUs.
+    uint32_t clusters = num_tasks < 12 ? num_tasks : 12;
+    uint32_t cores = 64;
+    if (const char *env = std::getenv("INFINIOP_KUNLUN_PA_CLUSTERS")) {
+        const int v = std::atoi(env);
+        if (v > 0) {
+            clusters = num_tasks < static_cast<uint32_t>(v) ? num_tasks : static_cast<uint32_t>(v);
+        }
+    }
+    if (const char *env = std::getenv("INFINIOP_KUNLUN_PA_CORES")) {
+        const int v = std::atoi(env);
+        if (v > 0) {
+            cores = static_cast<uint32_t>(v);
+        }
+    }
+    pagedAttentionKernel<Tdata, Tindex><<<clusters, cores, stream>>>(
+        reinterpret_cast<__global_ptr__ Tdata *>(out),
+        reinterpret_cast<__global_ptr__ const Tdata *>(q),
+        reinterpret_cast<__global_ptr__ const Tdata *>(k_cache),
+        reinterpret_cast<__global_ptr__ const Tdata *>(v_cache),
+        reinterpret_cast<__global_ptr__ const Tindex *>(block_tables),
+        reinterpret_cast<__global_ptr__ const Tindex *>(seq_lens),
+        reinterpret_cast<__global_ptr__ const float *>(alibi_slopes),
+        num_tasks,
+        num_kv_heads,
+        group_size,
+        static_cast<uint32_t>(info.head_size),
+        static_cast<uint32_t>(info.value_size),
+        static_cast<uint32_t>(info.page_block_size),
+        heads_per_chunk,
+        tile_n,
+        info.scale,
+        static_cast<int64_t>(info.q_stride),
+        static_cast<int64_t>(info.k_batch_stride),
+        static_cast<int64_t>(info.k_row_stride),
+        static_cast<int64_t>(info.k_head_stride),
+        static_cast<int64_t>(info.v_batch_stride),
+        static_cast<int64_t>(info.v_row_stride),
+        static_cast<int64_t>(info.v_head_stride),
+        static_cast<int64_t>(info.o_stride),
+        static_cast<int64_t>(info.o_head_stride),
+        static_cast<int64_t>(info.block_table_batch_stride),
+        static_cast<int64_t>(info.cache_lens_stride));
+
+    // Match the other Kunlun ops (causal_softmax, gemm, random_sample): block
+    // until the stream is idle so callers can rely on the result being visible.
+    xpu_wait(stream);
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace, size_t workspace_size,
+    void *out, const void *q, const void *k_cache, const void *v_cache,
+    const void *block_tables, const void *seq_lens,
+    const void *alibi_slopes,
+    void *stream) const {
+
+    if (workspace_size < _workspace_size) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+
+    kunlunStream_t stream_ = static_cast<kunlunStream_t>(stream);
+
+#define LAUNCH_PAGED_ATTENTION(Tdata, Tindex)                    \
+    return launchPagedAttention<Tdata, Tindex>(                  \
+        _info, out, q, k_cache, v_cache, block_tables, seq_lens, \
+        alibi_slopes, stream_)
+
+    if (_info.index_dtype == INFINI_DTYPE_I64) {
+        if (_info.dtype == INFINI_DTYPE_F16) {
+            LAUNCH_PAGED_ATTENTION(half, int64_t);
+        }
+        if (_info.dtype == INFINI_DTYPE_BF16) {
+            LAUNCH_PAGED_ATTENTION(bfloat16_t, int64_t);
+        }
+    } else if (_info.index_dtype == INFINI_DTYPE_I32) {
+        if (_info.dtype == INFINI_DTYPE_F16) {
+            LAUNCH_PAGED_ATTENTION(half, int32_t);
+        }
+        if (_info.dtype == INFINI_DTYPE_BF16) {
+            LAUNCH_PAGED_ATTENTION(bfloat16_t, int32_t);
+        }
+    } else if (_info.index_dtype == INFINI_DTYPE_U32) {
+        if (_info.dtype == INFINI_DTYPE_F16) {
+            LAUNCH_PAGED_ATTENTION(half, uint32_t);
+        }
+        if (_info.dtype == INFINI_DTYPE_BF16) {
+            LAUNCH_PAGED_ATTENTION(bfloat16_t, uint32_t);
+        }
+    }
+
+#undef LAUNCH_PAGED_ATTENTION
+
+    return INFINI_STATUS_BAD_TENSOR_DTYPE;
+}
+
+} // namespace op::paged_attention::kunlun
