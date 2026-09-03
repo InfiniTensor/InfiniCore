@@ -16,10 +16,15 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t v_cache_desc,
     infiniopTensorDescriptor_t k_desc,
     infiniopTensorDescriptor_t v_desc,
-    infiniopTensorDescriptor_t slot_mapping_desc) {
+    infiniopTensorDescriptor_t slot_mapping_desc,
+    infiniopTensorDescriptor_t k_scale_desc,
+    infiniopTensorDescriptor_t v_scale_desc) {
 
-    auto info = PagedCachingInfo::create(k_cache_desc, v_cache_desc, k_desc, v_desc, slot_mapping_desc);
+    auto info = PagedCachingInfo::create(k_cache_desc, v_cache_desc, k_desc, v_desc, slot_mapping_desc, k_scale_desc, v_scale_desc);
     CHECK_RESULT(info);
+    if (info->cache_dtype == INFINI_DTYPE_F8) {
+        return INFINI_STATUS_NOT_IMPLEMENTED;
+    }
 
     auto handle_ascend = reinterpret_cast<device::ascend::Handle *>(handle);
     *desc_ptr = new Descriptor(
@@ -37,6 +42,7 @@ infiniStatus_t Descriptor::calculate(
     void *k_cache, void *v_cache,
     const void *k, const void *v,
     const void *slot_mapping,
+    void *k_scale, void *v_scale,
     void *stream) const {
     (void)workspace;
     (void)workspace_size;

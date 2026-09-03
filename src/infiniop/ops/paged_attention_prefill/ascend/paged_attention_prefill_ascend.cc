@@ -20,12 +20,17 @@ infiniStatus_t Descriptor::create(
     infiniopTensorDescriptor_t seq_lens_desc,
     infiniopTensorDescriptor_t cum_seq_lens_q_desc,
     const std::optional<infiniopTensorDescriptor_t> &alibi_slopes_desc,
+    const std::optional<infiniopTensorDescriptor_t> &k_scale_desc,
+    const std::optional<infiniopTensorDescriptor_t> &v_scale_desc,
     float scale) {
     auto info = PagedAttentionPrefillInfo::create(
         out_desc, q_desc, k_cache_desc, v_cache_desc,
         block_tables_desc, seq_lens_desc, cum_seq_lens_q_desc,
-        alibi_slopes_desc, scale);
+        alibi_slopes_desc, k_scale_desc, v_scale_desc, scale);
     CHECK_RESULT(info);
+    if (info->cache_dtype == INFINI_DTYPE_F8) {
+        return INFINI_STATUS_NOT_IMPLEMENTED;
+    }
 
     auto handle_ascend = reinterpret_cast<device::ascend::Handle *>(handle);
     *desc_ptr = new Descriptor(
@@ -45,6 +50,7 @@ infiniStatus_t Descriptor::calculate(
     const void *seq_lens,
     const void *cum_seq_lens_q,
     const void *alibi_slopes,
+    const void *k_scale, const void *v_scale,
     void *stream) const {
     (void)workspace;
     (void)workspace_size;
