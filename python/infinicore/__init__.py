@@ -129,6 +129,7 @@ from infinicore.ops.logical_and import logical_and
 from infinicore.ops.logical_not import logical_not
 from infinicore.ops.masked_select import masked_select
 from infinicore.ops.matmul import matmul
+from infinicore.ops.block_fp8_linear import block_fp8_linear, block_fp8_linear_
 from infinicore.ops.mha import mha
 from infinicore.ops.mha_kvcache import mha_kvcache
 from infinicore.ops.mha_varlen import mha_varlen
@@ -276,6 +277,8 @@ __all__ = [
     "logaddexp",
     "logaddexp2",
     "matmul",
+    "block_fp8_linear",
+    "block_fp8_linear_",
     "equal",
     "mul",
     "mul_scalar",

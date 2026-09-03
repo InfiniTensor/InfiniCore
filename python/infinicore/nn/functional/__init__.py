@@ -24,6 +24,7 @@ from .kimi_delta_attention import kimi_delta_attention
 from .layer_norm import layer_norm
 from .linear import linear
 from .linear_mxfp4 import linear_mxfp4
+from .block_fp8_linear import block_fp8_linear
 from .linear_w8a8i8 import linear_w8a8i8
 from .log_softmax import log_softmax
 from .mamba_selective_scan import mamba_selective_scan
@@ -69,6 +70,7 @@ __all__ = [
     "kimi_delta_attention",
     "linear",
     "linear_mxfp4",
+    "block_fp8_linear",
     "binary_cross_entropy_with_logits",
     "random_sample",
     "adaptive_avg_pool1d",
