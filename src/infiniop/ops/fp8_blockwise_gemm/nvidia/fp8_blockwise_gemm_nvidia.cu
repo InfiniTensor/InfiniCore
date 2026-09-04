@@ -481,7 +481,7 @@ void launch_mma_mblocks(T *out, const T *a, const uint8_t *q, const float *scale
         info.block_n, info.block_k, info.scales_cols);
 }
 
-template <typename T>
+template <typename T, int M_TILE>
 void launch_mtile(T *out, const T *a, const uint8_t *q, const float *scales,
                   const Fp8BlockwiseGemmInfo &info, cudaStream_t stream) {
     dim3 grid((info.N + TN - 1) / TN, (info.M + M_TILE - 1) / M_TILE);
