@@ -9,9 +9,11 @@
 
 namespace op::paged_attention::nvidia {
 
-// FP8(E4M3) KV-cache decode launchers (paged_attention_fp8.cu). v1 supports
-// head_size 64/128; other head sizes return INFINI_STATUS_NOT_IMPLEMENTED.
+// FP8(E4M3) KV-cache decode launchers (paged_attention_fp8.cu). head_size
+// 64/128; other head sizes return INFINI_STATUS_NOT_IMPLEMENTED. Split-kv
+// partials go through the workspace (sized in Descriptor::create).
 infiniStatus_t launch_decode_fp8_i64(
+    void *workspace, size_t workspace_size,
     void *out, const void *q, const void *k_cache, const void *v_cache,
     const void *k_scale, const void *v_scale,
     infiniDtype_t dtype,
@@ -29,6 +31,7 @@ infiniStatus_t launch_decode_fp8_i64(
     cudaStream_t stream);
 
 infiniStatus_t launch_decode_fp8_i32(
+    void *workspace, size_t workspace_size,
     void *out, const void *q, const void *k_cache, const void *v_cache,
     const void *k_scale, const void *v_scale,
     infiniDtype_t dtype,
@@ -46,6 +49,7 @@ infiniStatus_t launch_decode_fp8_i32(
     cudaStream_t stream);
 
 infiniStatus_t launch_decode_fp8_u32(
+    void *workspace, size_t workspace_size,
     void *out, const void *q, const void *k_cache, const void *v_cache,
     const void *k_scale, const void *v_scale,
     infiniDtype_t dtype,
@@ -249,12 +253,13 @@ infiniStatus_t Descriptor::create(
     auto info_res = PagedAttentionInfo::create(out_desc, q_desc, k_cache_desc, v_cache_desc, block_tables_desc, cache_lens_desc, alibi_slopes_desc, k_scale_desc, v_scale_desc, scale);
     CHECK_RESULT(info_res);
     auto info = info_res.take();
-    // Reserve workspace for optional split-kv decode (partial acc + m/l).
-    // Workspace is independent of runtime env toggles; kernels will clamp num_splits <= kMaxSplits.
-    // The FP8 decode kernel (v1) has no split-kv path and needs no workspace.
+    // Reserve workspace for optional split-kv decode (partial acc + m/l),
+    // shared by the F16/BF16 family and the FP8 decode kernel (v2).
+    // Workspace is independent of runtime env toggles; kernels clamp
+    // num_splits <= kMaxSplits, so the reservation covers every decision.
     constexpr size_t kMaxSplits = 8;
     const size_t per_split = info.num_seqs * info.num_heads * (info.value_size + 2) * sizeof(float);
-    const size_t workspace_bytes = (info.cache_dtype == INFINI_DTYPE_F8) ? 0 : kMaxSplits * per_split;
+    const size_t workspace_bytes = kMaxSplits * per_split;
 
     *desc_ptr = new Descriptor(
         new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
@@ -274,10 +279,12 @@ infiniStatus_t Descriptor::calculate(
 
     const float *alibi_ptr = (alibi_slopes == nullptr) ? nullptr : static_cast<const float *>(alibi_slopes);
 
-    // FP8(E4M3) KV caches dispatch to the dedicated clean-room decode kernel.
+    // FP8(E4M3) KV caches dispatch to the dedicated clean-room decode kernel
+    // (split-kv partials, when enabled, live in the workspace).
     if (_info.cache_dtype == INFINI_DTYPE_F8) {
 #define CALCULATE_FP8(Tindex, SUFFIX)                                                        \
     return launch_decode_fp8_##SUFFIX(                                                       \
+        workspace, workspace_size,                                                           \
         out, q, k_cache, v_cache, k_scale, v_scale, _info.dtype,                             \
         static_cast<const Tindex *>(block_tables),                                           \
         static_cast<const Tindex *>(cache_lens), alibi_ptr,                                  \

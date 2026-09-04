@@ -291,6 +291,9 @@ _TEST_CASES_FP8_ = [
     # (num_seqs, num_heads, num_kv_heads, head_size, block_size, max_seq_len, use_alibi)
     (1, 1, 1, 128, 16, 1024, False),
     (4, 40, 40, 128, 16, 1024, True),
+    # Small grid + long context: the split-kv heuristic picks num_splits > 1,
+    # exercising the cross-CTA shard scan + combine pass (with ALiBi here).
+    (1, 8, 8, 128, 16, 4096, True),
     (8, 64, 8, 128, 16, 2048, False),
     (3, 8, 8, 64, 16, 1024, False),
 ]
