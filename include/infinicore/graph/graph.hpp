@@ -50,9 +50,13 @@ protected:
     }
     using run_schema = void (*)(void *);
     using cleanup_schema = void (*)(void **);
-    void *planned_meta_;
-    run_schema runner_;
-    cleanup_schema deleter_;
+    // These must be default-initialized: if a derived constructor throws
+    // (e.g. the operator is not supported on the current device), the base
+    // destructor still runs during stack unwinding and would otherwise read
+    // uninitialized pointers.
+    void *planned_meta_ = nullptr;
+    run_schema runner_ = nullptr;
+    cleanup_schema deleter_ = nullptr;
     graph_replay_schema graph_replay_ = nullptr;
 };
 
