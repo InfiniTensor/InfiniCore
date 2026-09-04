@@ -78,6 +78,7 @@
 #include "ops/lerp.hpp"
 #include "ops/linear.hpp"
 #include "ops/linear_mxfp4.hpp"
+#include "ops/block_fp8_linear.hpp"
 #include "ops/linear_w8a8i8.hpp"
 #include "ops/log_softmax.hpp"
 #include "ops/logaddexp.hpp"
@@ -249,6 +250,7 @@ inline void bind(py::module &m) {
     bind_logaddexp2(m);
     bind_linear(m);
     bind_linear_mxfp4(m);
+    bind_block_fp8_linear(m);
     bind_logdet(m);
     bind_matmul(m);
     bind_mamba_selective_scan(m);

@@ -76,6 +76,15 @@ option_end()
 
 if has_config("nv-gpu") then
     add_defines("ENABLE_NVIDIA_API")
+
+    -- NVIDIA operator translation units include cuDNN through the shared handle.
+    -- Keep the location environment-driven so local and CI installations work.
+    local cudnn_root_global = os.getenv("CUDNN_ROOT") or os.getenv("CUDNN_HOME") or os.getenv("CUDNN_PATH")
+    if cudnn_root_global ~= nil and cudnn_root_global ~= "" then
+        add_includedirs(cudnn_root_global .. "/include")
+        add_linkdirs(cudnn_root_global .. "/lib")
+    end
+
     includes("xmake/nvidia.lua")
 end
 
@@ -92,7 +101,7 @@ end
 option("cuda_arch")
     set_showmenu(true)
     set_description("Set CUDA GPU architecture (e.g. sm_90)")
-    set_values("sm_50", "sm_60", "sm_70", "sm_75", "sm_80", "sm_86", "sm_89", "sm_90", "sm_90a")
+    set_values("sm_50", "sm_60", "sm_70", "sm_75", "sm_80", "sm_86", "sm_89", "sm_90", "sm_90a", "sm_120")
     set_category("option")
 option_end()
 

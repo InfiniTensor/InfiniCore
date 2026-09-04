@@ -1,0 +1,8 @@
+#ifndef INFINIOP_NVIDIA_LINEAR_GGUF_OPERATOR_H
+#define INFINIOP_NVIDIA_LINEAR_GGUF_OPERATOR_H
+
+#include "../linear_gguf.h"
+
+DESCRIPTOR(nvidia)
+
+#endif

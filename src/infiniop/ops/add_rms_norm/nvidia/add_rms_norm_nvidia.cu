@@ -35,6 +35,57 @@ INFINIOP_CUDA_KERNEL add_rmsnormKernel(
         w, nhead, dim, epsilon);
 }
 
+template <unsigned int BLOCK_SIZE, typename Tcompute, typename Ty, typename Ta, typename Tb, typename Tweight>
+INFINIOP_CUDA_KERNEL add_rmsnormMixedKernel(
+    Ty *__restrict__ y,
+    Ty *__restrict__ residual_out,
+    ptrdiff_t stride_y_batch,
+    ptrdiff_t stride_y_nhead,
+    ptrdiff_t stride_residual_out_batch,
+    ptrdiff_t stride_residual_out_nhead,
+    const Ta *__restrict__ a,
+    ptrdiff_t stride_a_batch,
+    ptrdiff_t stride_a_nhead,
+    const Tb *__restrict__ b,
+    ptrdiff_t stride_b_batch,
+    ptrdiff_t stride_b_nhead,
+    const Tweight *__restrict__ w,
+    size_t nhead,
+    size_t dim,
+    float epsilon) {
+    const size_t batch_idx = blockIdx.x / nhead;
+    const size_t head_idx = blockIdx.x % nhead;
+    auto y_ptr = y + batch_idx * stride_y_batch + head_idx * stride_y_nhead;
+    auto residual_ptr = residual_out
+        + batch_idx * stride_residual_out_batch + head_idx * stride_residual_out_nhead;
+    auto a_ptr = a + batch_idx * stride_a_batch + head_idx * stride_a_nhead;
+    auto b_ptr = b + batch_idx * stride_b_batch + head_idx * stride_b_nhead;
+
+    Tcompute sum_squared = 0;
+    for (size_t i = threadIdx.x; i < dim; i += BLOCK_SIZE) {
+        const Tcompute sum_val = Tcompute(a_ptr[i]) + Tcompute(b_ptr[i]);
+        residual_ptr[i] = Ty(sum_val);
+        sum_squared += sum_val * sum_val;
+    }
+
+    using BlockReduce = cub::BlockReduce<Tcompute, BLOCK_SIZE>;
+    __shared__ typename BlockReduce::TempStorage temp_storage;
+    sum_squared = BlockReduce(temp_storage).Sum(sum_squared);
+    __shared__ Tcompute rms;
+    if (threadIdx.x == 0) {
+        rms = Tcompute(rsqrtf(sum_squared / Tcompute(dim) + epsilon));
+    }
+    __syncthreads();
+
+    // Recompute the F32 sum instead of reading the BF16 residual_out.  This
+    // keeps the GGUF linear accumulator precision through normalization while
+    // restoring the model's ordinary BF16 boundary for subsequent layers.
+    for (size_t i = threadIdx.x; i < dim; i += BLOCK_SIZE) {
+        const Tcompute sum_val = Tcompute(a_ptr[i]) + Tcompute(b_ptr[i]);
+        y_ptr[i] = Ty(sum_val * Tcompute(w[i]) * rms);
+    }
+}
+
 namespace op::add_rms_norm::nvidia {
 
 struct Descriptor::Opaque {
@@ -70,10 +121,10 @@ infiniStatus_t Descriptor::create(
 template <unsigned int BLOCK_SIZE>
 infiniStatus_t launchKernel(
     uint32_t batch_size, size_t nhead, size_t dim,
-    void *y, infiniDtype_t atype, ptrdiff_t stride_y_batch, ptrdiff_t stride_y_nhead,
+    void *y, infiniDtype_t ytype, ptrdiff_t stride_y_batch, ptrdiff_t stride_y_nhead,
     void *residual_out, ptrdiff_t stride_residual_out_batch, ptrdiff_t stride_residual_out_nhead,
-    const void *a, ptrdiff_t stride_a_batch, ptrdiff_t stride_a_nhead,
-    const void *b, ptrdiff_t stride_b_batch, ptrdiff_t stride_b_nhead,
+    const void *a, infiniDtype_t atype, ptrdiff_t stride_a_batch, ptrdiff_t stride_a_nhead,
+    const void *b, infiniDtype_t btype, ptrdiff_t stride_b_batch, ptrdiff_t stride_b_nhead,
     const void *w, infiniDtype_t wtype,
     float epsilon,
     cudaStream_t cuda_stream) {
@@ -97,19 +148,41 @@ infiniStatus_t launchKernel(
         dim,                                                                                                     \
         epsilon)
 
-    if (atype == INFINI_DTYPE_F16 && wtype == INFINI_DTYPE_F16) {
+    if (ytype == INFINI_DTYPE_BF16 && atype == INFINI_DTYPE_F32
+        && btype == INFINI_DTYPE_BF16 && wtype == INFINI_DTYPE_BF16) {
+        add_rmsnormMixedKernel<BLOCK_SIZE, float, __nv_bfloat16, float, __nv_bfloat16, __nv_bfloat16>
+            <<<batch_size * nhead, BLOCK_SIZE, 0, cuda_stream>>>(
+                reinterpret_cast<__nv_bfloat16 *>(y),
+                reinterpret_cast<__nv_bfloat16 *>(residual_out),
+                stride_y_batch, stride_y_nhead,
+                stride_residual_out_batch, stride_residual_out_nhead,
+                reinterpret_cast<const float *>(a), stride_a_batch, stride_a_nhead,
+                reinterpret_cast<const __nv_bfloat16 *>(b), stride_b_batch, stride_b_nhead,
+                reinterpret_cast<const __nv_bfloat16 *>(w), nhead, dim, epsilon);
+    } else if (ytype == INFINI_DTYPE_F32 && atype == INFINI_DTYPE_BF16
+        && btype == INFINI_DTYPE_BF16 && wtype == INFINI_DTYPE_BF16) {
+        add_rmsnormMixedKernel<BLOCK_SIZE, float, float, __nv_bfloat16, __nv_bfloat16, __nv_bfloat16>
+            <<<batch_size * nhead, BLOCK_SIZE, 0, cuda_stream>>>(
+                reinterpret_cast<float *>(y),
+                reinterpret_cast<float *>(residual_out),
+                stride_y_batch, stride_y_nhead,
+                stride_residual_out_batch, stride_residual_out_nhead,
+                reinterpret_cast<const __nv_bfloat16 *>(a), stride_a_batch, stride_a_nhead,
+                reinterpret_cast<const __nv_bfloat16 *>(b), stride_b_batch, stride_b_nhead,
+                reinterpret_cast<const __nv_bfloat16 *>(w), nhead, dim, epsilon);
+    } else if (ytype == INFINI_DTYPE_F16 && atype == ytype && btype == ytype && wtype == INFINI_DTYPE_F16) {
         LAUNCH_KERNEL(half, half, float);
-    } else if (atype == INFINI_DTYPE_F16 && wtype == INFINI_DTYPE_BF16) {
+    } else if (ytype == INFINI_DTYPE_F16 && atype == ytype && btype == ytype && wtype == INFINI_DTYPE_BF16) {
         LAUNCH_KERNEL(half, __nv_bfloat16, float);
-    } else if (atype == INFINI_DTYPE_F16 && wtype == INFINI_DTYPE_F32) {
+    } else if (ytype == INFINI_DTYPE_F16 && atype == ytype && btype == ytype && wtype == INFINI_DTYPE_F32) {
         LAUNCH_KERNEL(half, float, float);
-    } else if (atype == INFINI_DTYPE_BF16 && wtype == INFINI_DTYPE_BF16) {
+    } else if (ytype == INFINI_DTYPE_BF16 && atype == ytype && btype == ytype && wtype == INFINI_DTYPE_BF16) {
         LAUNCH_KERNEL(__nv_bfloat16, __nv_bfloat16, float);
-    } else if (atype == INFINI_DTYPE_BF16 && wtype == INFINI_DTYPE_F16) {
+    } else if (ytype == INFINI_DTYPE_BF16 && atype == ytype && btype == ytype && wtype == INFINI_DTYPE_F16) {
         LAUNCH_KERNEL(__nv_bfloat16, half, float);
-    } else if (atype == INFINI_DTYPE_BF16 && wtype == INFINI_DTYPE_F32) {
+    } else if (ytype == INFINI_DTYPE_BF16 && atype == ytype && btype == ytype && wtype == INFINI_DTYPE_F32) {
         LAUNCH_KERNEL(__nv_bfloat16, float, float);
-    } else if (atype == INFINI_DTYPE_F32 && wtype == INFINI_DTYPE_F32) {
+    } else if (ytype == INFINI_DTYPE_F32 && atype == ytype && btype == ytype && wtype == INFINI_DTYPE_F32) {
         LAUNCH_KERNEL(float, float, float);
     } else {
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
@@ -146,34 +219,34 @@ infiniStatus_t Descriptor::calculate(
     if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_512) {
         CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_512>(
             batch_size, nhead, dim,
-            y, _info.atype, stride_y_batch, stride_y_nhead,
+            y, _info.ytype, stride_y_batch, stride_y_nhead,
             residual_out, stride_residual_out_batch, stride_residual_out_nhead,
-            a, stride_a_batch, stride_a_nhead,
-            b, stride_b_batch, stride_b_nhead,
+            a, _info.atype, stride_a_batch, stride_a_nhead,
+            b, _info.btype, stride_b_batch, stride_b_nhead,
             weight, _info.wtype, _info.epsilon, cuda_stream));
     } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_1024) {
         CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_1024>(
             batch_size, nhead, dim,
-            y, _info.atype, stride_y_batch, stride_y_nhead,
+            y, _info.ytype, stride_y_batch, stride_y_nhead,
             residual_out, stride_residual_out_batch, stride_residual_out_nhead,
-            a, stride_a_batch, stride_a_nhead,
-            b, stride_b_batch, stride_b_nhead,
+            a, _info.atype, stride_a_batch, stride_a_nhead,
+            b, _info.btype, stride_b_batch, stride_b_nhead,
             weight, _info.wtype, _info.epsilon, cuda_stream));
     } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_2048) {
         CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_2048>(
             batch_size, nhead, dim,
-            y, _info.atype, stride_y_batch, stride_y_nhead,
+            y, _info.ytype, stride_y_batch, stride_y_nhead,
             residual_out, stride_residual_out_batch, stride_residual_out_nhead,
-            a, stride_a_batch, stride_a_nhead,
-            b, stride_b_batch, stride_b_nhead,
+            a, _info.atype, stride_a_batch, stride_a_nhead,
+            b, _info.btype, stride_b_batch, stride_b_nhead,
             weight, _info.wtype, _info.epsilon, cuda_stream));
     } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_4096) {
         CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_4096>(
             batch_size, nhead, dim,
-            y, _info.atype, stride_y_batch, stride_y_nhead,
+            y, _info.ytype, stride_y_batch, stride_y_nhead,
             residual_out, stride_residual_out_batch, stride_residual_out_nhead,
-            a, stride_a_batch, stride_a_nhead,
-            b, stride_b_batch, stride_b_nhead,
+            a, _info.atype, stride_a_batch, stride_a_nhead,
+            b, _info.btype, stride_b_batch, stride_b_nhead,
             weight, _info.wtype, _info.epsilon, cuda_stream));
     } else {
         return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
