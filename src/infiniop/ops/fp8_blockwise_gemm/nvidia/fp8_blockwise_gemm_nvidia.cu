@@ -8,6 +8,8 @@
 #include <cuda_runtime.h>
 
 #include <cstdint>
+#include <cstdlib>
+#include <type_traits>
 
 namespace op::fp8_blockwise_gemm::nvidia {
 namespace {
@@ -252,7 +254,234 @@ INFINIOP_CUDA_KERNEL fp8_blockwise_gemm_kernel(
     }
 }
 
-template <typename T, int M_TILE>
+// ---------------------------------------------------------------------------
+// Tensor-core path (mma.m16n8k16) for 9 <= M <= 32 with F16/BF16 activations.
+//
+// The SIMT warp-per-row kernel above re-reads the activation row per weight
+// element and becomes instruction-throughput bound once M grows (W4: ~5-6
+// TFLOP/s at M=16). This path instead treats decode as a skinny GEMM:
+//   CTA tile  = M_BLOCKS*16 x 32 (N), K streamed in 128-wide chunks
+//   warp      = one n8 block; mma.m16n8k16.row.col accumulates each 128-K
+//               chunk into a partial C, which is then promoted with the
+//               (n-block, k-chunk) scale: c_fin += scale * c_part.
+// FP8 codes are decoded in registers with a bit-placement trick whose result
+// is the true value times 2^-120 (BF16) / 2^-8 (F16); that power-of-two
+// factor is folded into the block scale at promote time, so the mma inputs
+// are exact and no per-element multiply is needed. (The NaN code 0x7F is not
+// special-cased: the encoder saturates at 448, so quantized weights never
+// contain it.)
+//
+// K % 128 == 0 and block_k % 128 == 0 are guaranteed by Fp8BlockwiseGemmInfo,
+// so every 128-wide K chunk maps to exactly one scale column. Rows beyond
+// M/N are zero-filled on load and discarded on store, so any M/N tail works.
+// ---------------------------------------------------------------------------
+
+constexpr int MMA_N_TILE = 32;   // weight rows per CTA (4 warps x n8)
+constexpr int MMA_K_CHUNK = 128; // K per pipeline stage (one scale sub-chunk)
+constexpr int MMA_THREADS = 128; // 4 warps
+constexpr int MMA_A_STRIDE = 136; // sA row stride in elements (128 + 8 pad)
+constexpr int MMA_W_STRIDE = 144; // sW row stride in bytes (128 + 16 pad)
+
+template <typename T>
+struct MmaTraits;
+
+template <>
+struct MmaTraits<__nv_bfloat16> {
+    // Two e4m3 codes (low byte first) -> bf16x2, each the true value * 2^-120.
+    static __device__ __forceinline__ uint32_t decodePair(uint32_t two) {
+        const uint32_t lo = ((two & 0x7fU) << 4) | ((two & 0x80U) << 8);
+        const uint32_t hi = ((two & 0x7f00U) >> 4) | (two & 0x8000U);
+        return lo | (hi << 16);
+    }
+    static constexpr float kDecodeScale = 0x1p+120f;
+    static __device__ __forceinline__ void mma(float c[4], const uint32_t a[4], const uint32_t b[2]) {
+        asm volatile("mma.sync.aligned.m16n8k16.row.col.f32.bf16.bf16.f32 "
+                     "{%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%0,%1,%2,%3};\n"
+                     : "+f"(c[0]), "+f"(c[1]), "+f"(c[2]), "+f"(c[3])
+                     : "r"(a[0]), "r"(a[1]), "r"(a[2]), "r"(a[3]), "r"(b[0]), "r"(b[1]));
+    }
+};
+
+template <>
+struct MmaTraits<half> {
+    // Two e4m3 codes (low byte first) -> half2, each the true value * 2^-8.
+    static __device__ __forceinline__ uint32_t decodePair(uint32_t two) {
+        const uint32_t lo = ((two & 0x7fU) << 7) | ((two & 0x80U) << 8);
+        const uint32_t hi = ((two & 0x7f00U) >> 1) | (two & 0x8000U);
+        return lo | (hi << 16);
+    }
+    static constexpr float kDecodeScale = 256.0f;
+    static __device__ __forceinline__ void mma(float c[4], const uint32_t a[4], const uint32_t b[2]) {
+        asm volatile("mma.sync.aligned.m16n8k16.row.col.f32.f16.f16.f32 "
+                     "{%0,%1,%2,%3}, {%4,%5,%6,%7}, {%8,%9}, {%0,%1,%2,%3};\n"
+                     : "+f"(c[0]), "+f"(c[1]), "+f"(c[2]), "+f"(c[3])
+                     : "r"(a[0]), "r"(a[1]), "r"(a[2]), "r"(a[3]), "r"(b[0]), "r"(b[1]));
+    }
+};
+
+template <typename T, int M_BLOCKS>
+INFINIOP_CUDA_KERNEL fp8_blockwise_gemm_mma_kernel(
+    T *__restrict__ out,
+    const T *__restrict__ a,
+    const uint8_t *__restrict__ q,
+    const float *__restrict__ scales,
+    size_t M, size_t N, size_t K,
+    size_t block_n, size_t block_k, size_t scales_cols) {
+
+    constexpr int A_ROWS = M_BLOCKS * 16;
+    __shared__ T sA[2][A_ROWS][MMA_A_STRIDE];
+    __shared__ uint8_t sW[2][MMA_N_TILE][MMA_W_STRIDE];
+
+    const int tid = threadIdx.x;
+    const int lane = tid & 31;
+    const int warp = tid >> 5;
+    const int g = lane >> 2; // mma group id (row within m16 / column within n8)
+    const int t = lane & 3;  // mma thread id in group
+
+    const size_t n_base = static_cast<size_t>(blockIdx.x) * MMA_N_TILE;
+    const size_t m_base = static_cast<size_t>(blockIdx.y) * A_ROWS;
+
+    const int nchunks = static_cast<int>(K / MMA_K_CHUNK);
+    const int kb_per_scale = static_cast<int>(block_k / MMA_K_CHUNK);
+
+    // Global -> register staging. A: A_ROWS*256B over 128 threads (16B each,
+    // row = idx/16, seg = idx%16). W: 32 rows x 128B (row = idx/8, seg = idx%8).
+    // Out-of-range rows are zero-filled (they never contribute to the output).
+    uint4 a_stage[A_ROWS / 8];
+    uint4 w_stage[2];
+    auto stage_chunk = [&](int c) {
+        const size_t k0 = static_cast<size_t>(c) * MMA_K_CHUNK;
+#pragma unroll
+        for (int i = 0; i < A_ROWS / 8; ++i) {
+            const int idx = tid + i * MMA_THREADS;
+            const size_t m = m_base + (idx >> 4);
+            a_stage[i] = (m < M)
+                           ? *reinterpret_cast<const uint4 *>(a + m * K + k0 + (idx & 15) * 8)
+                           : make_uint4(0, 0, 0, 0);
+        }
+#pragma unroll
+        for (int i = 0; i < 2; ++i) {
+            const int idx = tid + i * MMA_THREADS;
+            const size_t n = n_base + (idx >> 3);
+            w_stage[i] = (n < N)
+                           ? *reinterpret_cast<const uint4 *>(q + n * K + k0 + (idx & 7) * 16)
+                           : make_uint4(0, 0, 0, 0);
+        }
+    };
+    auto store_chunk = [&](int buf) {
+#pragma unroll
+        for (int i = 0; i < A_ROWS / 8; ++i) {
+            const int idx = tid + i * MMA_THREADS;
+            *reinterpret_cast<uint4 *>(&sA[buf][idx >> 4][(idx & 15) * 8]) = a_stage[i];
+        }
+#pragma unroll
+        for (int i = 0; i < 2; ++i) {
+            const int idx = tid + i * MMA_THREADS;
+            *reinterpret_cast<uint4 *>(&sW[buf][idx >> 3][(idx & 7) * 16]) = w_stage[i];
+        }
+    };
+
+    // Accumulators: c_fin holds the scale-promoted sum over all K chunks;
+    // c_part is the raw mma result of the current 128-wide chunk.
+    float c_fin[M_BLOCKS][4];
+#pragma unroll
+    for (int mb = 0; mb < M_BLOCKS; ++mb) {
+#pragma unroll
+        for (int i = 0; i < 4; ++i) {
+            c_fin[mb][i] = 0.0f;
+        }
+    }
+
+    stage_chunk(0);
+    store_chunk(0);
+    __syncthreads();
+
+    for (int c = 0; c < nchunks; ++c) {
+        const int buf = c & 1;
+        const bool has_next = (c + 1 < nchunks);
+        if (has_next) {
+            stage_chunk(c + 1); // loads in flight during the compute below
+        }
+
+        float c_part[M_BLOCKS][4];
+#pragma unroll
+        for (int mb = 0; mb < M_BLOCKS; ++mb) {
+#pragma unroll
+            for (int i = 0; i < 4; ++i) {
+                c_part[mb][i] = 0.0f;
+            }
+        }
+
+        // B fragments for this warp's n8 block, decoded on the fly.
+        const uint8_t *wrow = &sW[buf][warp * 8 + g][0];
+#pragma unroll
+        for (int step = 0; step < MMA_K_CHUNK / 16; ++step) {
+            const int kk = step * 16;
+            const uint32_t b[2] = {
+                MmaTraits<T>::decodePair(*reinterpret_cast<const uint16_t *>(wrow + kk + t * 2)),
+                MmaTraits<T>::decodePair(*reinterpret_cast<const uint16_t *>(wrow + kk + t * 2 + 8)),
+            };
+#pragma unroll
+            for (int mb = 0; mb < M_BLOCKS; ++mb) {
+                const T *arow0 = &sA[buf][mb * 16 + g][0];
+                const T *arow1 = &sA[buf][mb * 16 + g + 8][0];
+                const uint32_t a_frag[4] = {
+                    *reinterpret_cast<const uint32_t *>(arow0 + kk + t * 2),
+                    *reinterpret_cast<const uint32_t *>(arow1 + kk + t * 2),
+                    *reinterpret_cast<const uint32_t *>(arow0 + kk + t * 2 + 8),
+                    *reinterpret_cast<const uint32_t *>(arow1 + kk + t * 2 + 8),
+                };
+                MmaTraits<T>::mma(c_part[mb], a_frag, b);
+            }
+        }
+
+        // Promote the chunk partials with the block scale (the decode
+        // power-of-two factor folded in). The two columns a thread holds
+        // (2t, 2t+1) always sit in one scale block (block_n % 16 == 0).
+        const size_t n0 = n_base + warp * 8 + t * 2;
+        float s = 0.0f;
+        if (n0 < N) {
+            s = scales[(n0 / block_n) * scales_cols + c / kb_per_scale] * MmaTraits<T>::kDecodeScale;
+        }
+#pragma unroll
+        for (int mb = 0; mb < M_BLOCKS; ++mb) {
+#pragma unroll
+            for (int i = 0; i < 4; ++i) {
+                c_fin[mb][i] = fmaf(s, c_part[mb][i], c_fin[mb][i]);
+            }
+        }
+
+        if (has_next) {
+            store_chunk(buf ^ 1);
+        }
+        __syncthreads();
+    }
+
+    // Epilogue: thread (g, t) owns C rows g / g+8 and columns 2t / 2t+1.
+#pragma unroll
+    for (int mb = 0; mb < M_BLOCKS; ++mb) {
+#pragma unroll
+        for (int i = 0; i < 4; ++i) {
+            const size_t m = m_base + mb * 16 + g + (i >> 1) * 8;
+            const size_t n = n_base + warp * 8 + t * 2 + (i & 1);
+            if (m < M && n < N) {
+                out[m * N + n] = from_float<T>(c_fin[mb][i]);
+            }
+        }
+    }
+}
+
+template <typename T, int M_BLOCKS>
+void launch_mma_mblocks(T *out, const T *a, const uint8_t *q, const float *scales,
+                        const Fp8BlockwiseGemmInfo &info, cudaStream_t stream) {
+    dim3 grid((info.N + MMA_N_TILE - 1) / MMA_N_TILE,
+              (info.M + M_BLOCKS * 16 - 1) / (M_BLOCKS * 16));
+    fp8_blockwise_gemm_mma_kernel<T, M_BLOCKS><<<grid, MMA_THREADS, 0, stream>>>(
+        out, a, q, scales, info.M, info.N, info.K,
+        info.block_n, info.block_k, info.scales_cols);
+}
+
+template <typename T>
 void launch_mtile(T *out, const T *a, const uint8_t *q, const float *scales,
                   const Fp8BlockwiseGemmInfo &info, cudaStream_t stream) {
     dim3 grid((info.N + TN - 1) / TN, (info.M + M_TILE - 1) / M_TILE);
@@ -265,6 +494,23 @@ template <typename T>
 void launch(T *out, const T *a, const uint8_t *q, const float *scales,
             const Fp8BlockwiseGemmInfo &info, cudaStream_t stream) {
     const size_t m = info.M;
+    // Tensor-core path for the decode range where the SIMT kernel goes
+    // instruction-throughput bound (W4: fused loses to naive from M >= 16).
+    // INFINIOP_FP8_GEMM_MMA=0 forces the SIMT kernels (A/B debugging).
+    if constexpr (std::is_same_v<T, half> || std::is_same_v<T, __nv_bfloat16>) {
+        static const bool mma_enabled = [] {
+            const char *env = std::getenv("INFINIOP_FP8_GEMM_MMA");
+            return env == nullptr || env[0] != '0';
+        }();
+        if (mma_enabled && m > 8 && m <= 32) {
+            if (m <= 16) {
+                launch_mma_mblocks<T, 1>(out, a, q, scales, info, stream);
+            } else {
+                launch_mma_mblocks<T, 2>(out, a, q, scales, info, stream);
+            }
+            return;
+        }
+    }
     if (m <= 1) {
         launch_mtile<T, 1>(out, a, q, scales, info, stream);
     } else if (m <= 2) {
