@@ -150,15 +150,31 @@ infiniStatus_t memsetDeviceAsync(void *ptr, int value, size_t count, infinirtStr
 }
 
 infiniStatus_t streamBeginCapture(infinirtStream_t stream, infinirtStreamCaptureMode_t mode) {
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    musaStreamCaptureMode graph_mode;
+    if (mode == INFINIRT_STREAM_CAPTURE_MODE_GLOBAL) {
+        graph_mode = musaStreamCaptureModeGlobal;
+    } else if (mode == INFINIRT_STREAM_CAPTURE_MODE_THREAD_LOCAL) {
+        graph_mode = musaStreamCaptureModeThreadLocal;
+    } else if (mode == INFINIRT_STREAM_CAPTURE_MODE_RELAXED) {
+        graph_mode = musaStreamCaptureModeRelaxed;
+    } else {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+
+    CHECK_MUSART(musaStreamBeginCapture((musaStream_t)stream, graph_mode));
+    return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t streamEndCapture(infinirtStream_t stream, infinirtGraph_t *graph_ptr) {
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    musaGraph_t graph;
+    CHECK_MUSART(musaStreamEndCapture((musaStream_t)stream, &graph));
+    *graph_ptr = graph;
+    return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t graphDestroy(infinirtGraph_t graph) {
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    CHECK_MUSART(musaGraphDestroy((musaGraph_t)graph));
+    return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t graphInstantiate(
@@ -167,15 +183,25 @@ infiniStatus_t graphInstantiate(
     infinirtGraphNode_t *node_ptr,
     char *log_buffer,
     size_t buffer_size) {
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    CHECK_MUSART(musaGraphInstantiate(
+        (musaGraphExec_t *)graph_exec_ptr,
+        (musaGraph_t)graph,
+        (musaGraphNode_t *)node_ptr,
+        log_buffer,
+        buffer_size));
+    return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t graphExecDestroy(infinirtGraphExec_t graph_exec) {
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    CHECK_MUSART(musaGraphExecDestroy((musaGraphExec_t)graph_exec));
+    return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t graphLuanch(infinirtGraphExec_t graph_exec, infinirtStream_t stream) {
-    return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
+    CHECK_MUSART(musaGraphLaunch(
+        (musaGraphExec_t)graph_exec,
+        (musaStream_t)stream));
+    return INFINI_STATUS_SUCCESS;
 }
 
 infiniStatus_t getMemInfo(int device_id, size_t *free_bytes, size_t *total_bytes) {

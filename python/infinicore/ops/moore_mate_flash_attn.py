@@ -141,7 +141,8 @@ def moore_mate_flash_attn_decode(
     scale: float,
     block_size: int,
     max_seq_len: int,
-) -> torch.Tensor:
+    return_state: bool = False,
+) -> torch.Tensor | tuple[torch.Tensor, ...]:
     """
     Decode entry point with native flash_attn KV cache layout (B, P, H, D).
     No layout conversion is performed.
@@ -174,7 +175,7 @@ def moore_mate_flash_attn_decode(
         pack_gqa=pack_gqa,
     )
 
-    out, *_ = flash_attn_with_kvcache(
+    result = flash_attn_with_kvcache(
         q=q,
         k_cache=k_cache,
         v_cache=v_cache,
@@ -188,7 +189,18 @@ def moore_mate_flash_attn_decode(
         pack_gqa=pack_gqa,
         return_softmax_lse=True,
     )
-    return out
+    if not return_state:
+        return result[0]
+
+    # Mate allocates output/workspace and scheduler tensors while the graph is
+    # captured. Keep every referenced allocation alive for graph replay.
+    return (
+        *result,
+        cache_seqlens,
+        page_table,
+        cu_seqlens_q,
+        metadata,
+    )
 
 
 # =============================================================================
