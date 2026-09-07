@@ -9,12 +9,17 @@ namespace op::gemm::kunlun {
 
 typedef device::kunlun::blas::Handle::Internal HandleInternal;
 
-static bool isLargeBf16SkinnyGemm(const MatmulInfo &info) {
-    return info.is_transed && info.n == 1 && info.m > 2048;
-}
-
 static bool useBf16Lt(const MatmulInfo &info) {
-    return !isLargeBf16SkinnyGemm(info);
+    // cublasLt (xblas) on Kunlun handles every bf16 shape correctly and fast,
+    // including the "large skinny" batch-1 decode GEMMs (is_transed, n == 1,
+    // m > 2048). Those used to be routed around cublasLt into an f32-cast
+    // fallback that re-cast the entire weight matrix (bf16 -> f32 -> gemm ->
+    // bf16, element-wise) on every token, which cost ~16-200ms per call for
+    // the projection/lm_head layers and made 0.6B-class inference ~80x slower
+    // than expected. The f32-cast path below remains only as a runtime
+    // fallback if cublasLt setup/matmul ever fails.
+    (void)info;
+    return true;
 }
 
 static size_t packedMatrixSize(size_t rows, size_t cols, size_t batch) {

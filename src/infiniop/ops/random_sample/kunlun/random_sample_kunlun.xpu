@@ -21,10 +21,8 @@ void launchKernel(void *workspace,
     int topk_ = topk <= (int)n ? topk : (int)n;
     bool dosample = topk_ > 1 && temperature != 0.0f && topp != 0.0f && random_val != 0.0f;
 
-    Tval *values = (Tval *)workspace_value;
-    xpu_memcpy(values, (Tval *)probs, n * sizeof(Tval), XPU_DEVICE_TO_DEVICE);
-    Tval *values_global = values + n;
-    char *workspace_sum = workspace_value + (n + cluster_num * core_num * topk_) * sizeof(Tval);
+    Tval *values_global = (Tval *)workspace_value;
+    char *workspace_sum = workspace_value + cluster_num * core_num * topk_ * sizeof(Tval);
     float *sum_global = (float *)workspace_sum;
     char *workspace_index = workspace_sum + cluster_num * sizeof(float);
     Tidx *indices = (Tidx *)workspace_index;
@@ -44,9 +42,10 @@ void launchKernel(void *workspace,
         argmaxKernel<Tval, Tidx>
             <<<cluster_num, core_num, stream>>>((Tidx *)result, (Tval *)probs, n,
                                                 indices,
-                                                values,
+                                                nullptr,
                                                 indices_global,
-                                                values_global);
+                                                values_global,
+                                                cluster_num);
     }
 }
 
@@ -79,7 +78,10 @@ infiniStatus_t Descriptor::create(
     int core_num = 64;
     int n = probs_desc->numel();
 
-    size_t workspace_size = (n + cluster_num * core_num * n) * (infiniSizeOf(probs_desc->dtype()) + infiniSizeOf(result_desc->dtype())) + cluster_num * sizeof(float);
+    size_t workspace_size = cluster_num * core_num * n * infiniSizeOf(probs_desc->dtype())
+                          + cluster_num * sizeof(float)
+                          + n * infiniSizeOf(result_desc->dtype())
+                          + cluster_num * core_num * n * infiniSizeOf(result_desc->dtype());
     *desc_ptr = new Descriptor(
         info,
         workspace_size,

@@ -155,19 +155,20 @@ __device__ void findTopOneLocal(
 template <typename Tval, typename Tidx>
 __device__ void TopkKernel(__global_ptr__ Tval *values,
                            __global_ptr__ Tidx *indices,
-                           __global_ptr__ Tidx *indices_global, // 长度为cluster_num() * core_num() * topk
+                           __global_ptr__ Tidx *indices_global, // 长度为nclusters * core_num() * topk
                            __global_ptr__ Tval *values_global,  // 把长度为voc的values的前topk元素集中倒values_global
                            __local__ Tval *values_local,
                            __local__ Tidx *indices_local,
                            int voc,
                            int topk,
-                           int buf_size) {
+                           int buf_size,
+                           int nclusters) {
     int cid = core_id();
     if (cid >= core_num()) {
         return;
     }
     int thread_id = core_num() * cluster_id() + cid;
-    int nthreads = core_num() * cluster_num();
+    int nthreads = core_num() * nclusters;
 
     // 每个coreId分配step个元素
     int remain = voc % nthreads;
@@ -243,6 +244,10 @@ __device__ void TopkKernel(__global_ptr__ Tval *values,
                 LM2GM(indices_local, indices_global + thread_id * topk, topk * sizeof(Tidx));
             }
         }
+        // All threads must have finished writing values_global/indices_global and
+        // the DMA stores must have landed before thread 0 reduces them (same race
+        // as TopOneKernel: reading stale workspace gives a non-deterministic top-k).
+        sync_cluster();
         if (thread_id == 0) {
             findTopk(values_global, indices_global, nthreads * topk, topk);
         }
@@ -259,11 +264,11 @@ __device__ Tcompute softmaxSum(__global_ptr__ const Tval *probs,
                                __global_ptr__ Tcompute *sum_global) {
 
     int sm_size = (SM_SIZE / 2) / sizeof(Tval);
-    int all_sm_size = cluster_num() * sm_size;
+    int all_sm_size = CLUSTER_SIZE * sm_size;
     int sm_remain = voc % all_sm_size;
     int sm_repeat = (voc - sm_remain) / all_sm_size;
-    int sm_remain_cluster = sm_remain % cluster_num();
-    int sm_step_easy = (sm_remain - sm_remain_cluster) / cluster_num();
+    int sm_remain_cluster = sm_remain % CLUSTER_SIZE;
+    int sm_step_easy = (sm_remain - sm_remain_cluster) / CLUSTER_SIZE;
     int sm_step_hard = sm_step_easy + 1;
     int sm_step = (cluster_id() < sm_remain_cluster ? sm_step_hard : sm_step_easy);
     int sm_ind_start = (cluster_id() < sm_remain_cluster ? cluster_id() * sm_step_hard : sm_remain_cluster * sm_step_hard + (cluster_id() - sm_remain_cluster) * sm_step_easy);
@@ -314,11 +319,11 @@ __device__ Tcompute softmaxSum(__global_ptr__ const Tval *probs,
     __shared__ Tcompute all_sum;
     __shared__ Tcompute z_sm[CLUSTER_SIZE];
     if (core_id() == 0) {
-        GM2SM(sum_global_, z_sm, cluster_num() * sizeof(Tcompute));
+        GM2SM(sum_global_, z_sm, CLUSTER_SIZE * sizeof(Tcompute));
     }
     sync_cluster();
 
-    Tcompute all_sum_0 = op::common_kunlun::reduce_op::sum<BLOCK_SIZE, Tcompute, Tcompute>(z_sm, cluster_num());
+    Tcompute all_sum_0 = op::common_kunlun::reduce_op::sum<BLOCK_SIZE, Tcompute, Tcompute>(z_sm, CLUSTER_SIZE);
     if (core_id() == 0) {
         all_sum = all_sum_0;
     }
@@ -480,7 +485,8 @@ __global__ void randomSampleKernel(Tidx *result,
                                    Tval *values,
                                    Tidx *indices_global,
                                    Tval *values_global,
-                                   Tcompute *sum_global) {
+                                   Tcompute *sum_global,
+                                   int nclusters) {
 
     constexpr int buf_size = 128;
     __local__ Tval values_local[2 * buf_size];
@@ -493,7 +499,8 @@ __global__ void randomSampleKernel(Tidx *result,
                            indices_local,
                            voc,
                            topk,
-                           buf_size);
+                           buf_size,
+                           nclusters);
     sync_cluster();
     // 上面这部分是计算topk，数据分别存储在values_global,indices_global里面
 
@@ -522,13 +529,14 @@ __device__ void TopOneKernel(__global_ptr__ Tidx *result,
                              __local__ Tval *values_local,
                              __local__ Tidx *indices_local,
                              int voc,
-                             int buf_size) {
+                             int buf_size,
+                             int nclusters) {
     int cid = core_id();
     if (cid >= core_num()) {
         return;
     }
     int thread_id = core_num() * cluster_id() + cid;
-    int nthreads = core_num() * cluster_num();
+    int nthreads = core_num() * nclusters;
 
     // 每个coreId分配step个元素
     int remain = voc % nthreads;
@@ -572,8 +580,14 @@ __device__ void TopOneKernel(__global_ptr__ Tidx *result,
         LM2GM(values_local, values_global + thread_id, sizeof(Tval));
         LM2GM(indices_local, indices_global + thread_id, sizeof(Tidx));
     }
+    // All threads must have finished writing values_global/indices_global and
+    // the DMA stores must have landed before thread 0 reduces them. Without
+    // this barrier thread 0 races the other cores and may read stale workspace
+    // values, picking a wrong token non-deterministically (greedy decode).
+    sync_cluster();
     if (thread_id == 0) {
         findTopOne(values_global, indices_global, nthreads);
+        mfence(); // ensure the winner store lands before reading it back
         __local__ Tidx result_idx;
         GM2LM(indices_global, &result_idx, sizeof(Tidx));
         LM2GM(&result_idx, result, sizeof(Tidx));
@@ -584,7 +598,8 @@ __global__ void argmaxKernel(Tidx *result, const Tval *probs, int voc,
                              Tidx *indices,
                              Tval *values,
                              Tidx *indices_global,
-                             Tval *values_global) {
+                             Tval *values_global,
+                             int nclusters) {
     constexpr int buf_size = 128;
     __local__ Tval values_local[2 * buf_size];
     __local__ Tidx indices_local[2 * buf_size];
@@ -596,6 +611,7 @@ __global__ void argmaxKernel(Tidx *result, const Tval *probs, int voc,
                              values_local,
                              indices_local,
                              voc,
-                             buf_size);
+                             buf_size,
+                             nclusters);
 }
 #endif
