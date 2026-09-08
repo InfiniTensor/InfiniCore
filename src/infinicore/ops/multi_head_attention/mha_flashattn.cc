@@ -73,7 +73,7 @@ void run(void *planned_meta) {
 #if defined(ENABLE_METAX_API)
     std::optional<at::Tensor> attn_mask = std::nullopt;
 #endif
-#if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
+#if defined(ENABLE_METAX_API) && INFINICORE_METAX_FA263
     std::optional<at::Tensor> s_aux = std::nullopt;
 #endif
 
@@ -92,12 +92,12 @@ void run(void *planned_meta) {
         is_causal,
         -1,
         -1,
-#if !defined(ENABLE_METAX_API) || (defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3))
+#if !defined(ENABLE_METAX_API) || INFINICORE_METAX_FA263
         0.0,
 #endif
         false,
         std::nullopt
-#if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
+#if defined(ENABLE_METAX_API) && INFINICORE_METAX_FA263
         ,
         s_aux,
         false

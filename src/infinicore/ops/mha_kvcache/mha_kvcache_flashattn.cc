@@ -224,7 +224,9 @@ void run(void *planned_meta) {
     std::optional<const at::Tensor> rotary_cos = std::nullopt;
     std::optional<const at::Tensor> rotary_sin = std::nullopt;
     std::optional<const at::Tensor> cache_batch_idx = std::nullopt;
+#if !defined(ENABLE_METAX_API) || INFINICORE_METAX_FA263
     std::optional<const at::Tensor> leftpad_k = std::nullopt;
+#endif
 
     const bool use_dynamic_out = q.dim() == 4 && k_cache.dim() == 4
                               && q.size(1) == 1 && q.size(2) > k_cache.size(2)
@@ -233,7 +235,7 @@ void run(void *planned_meta) {
     auto out = use_dynamic_out ? std::optional<at::Tensor>(std::nullopt)
                                : std::optional<at::Tensor>(out_tensor);
 
-#if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
+#if defined(ENABLE_METAX_API) && INFINICORE_METAX_FA263
     std::optional<at::Tensor> s_aux = std::nullopt;
 #endif
 
@@ -247,7 +249,7 @@ void run(void *planned_meta) {
         rotary_cos,
         rotary_sin,
         cache_batch_idx,
-#if !defined(ENABLE_METAX_API) || (defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3))
+#if !defined(ENABLE_METAX_API) || INFINICORE_METAX_FA263
         leftpad_k,
 #endif
         block_table,
@@ -257,12 +259,12 @@ void run(void *planned_meta) {
         true,
         -1,
         -1,
-#if !defined(ENABLE_METAX_API) || (defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3))
+#if !defined(ENABLE_METAX_API) || INFINICORE_METAX_FA263
         0.0f,
 #endif
         false,
         0
-#if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
+#if defined(ENABLE_METAX_API) && INFINICORE_METAX_FA263
         ,
         s_aux
 #endif

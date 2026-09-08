@@ -265,6 +265,14 @@ option("flash-attn")
     set_description("Path to flash-attention repo. If not set, flash-attention will not used.")
 option_end()
 
+-- MetaX flash-attn ABI selection
+option("metax-fa-abi")
+    set_default("auto")
+    set_showmenu(true)
+    set_values("auto", "253", "263")
+    set_description("MetaX flash-attn ABI: auto (inspect the wheel's symbols), 253 (flash_attn 2.5.3 / MACA 2.x) or 263 (flash_attn 2.6.3+metax / MACA 3.x)")
+option_end()
+
 if has_config("aten") then
     add_defines("ENABLE_ATEN")
     if has_config("iluvatar-gpu") then
@@ -863,29 +871,9 @@ target("infinicore_cpp_api")
             stage_infiniops_runtime(os, path.join(INFINI_ROOT, "lib"))
         end
 
-        -- MetaX + flash-attn: `flash_attn_2_cuda` may use a different `mha_fwd_kvcache` ABI
-        -- depending on the underlying stack version. When building with MACA (`--use-mc=y`),
-        -- the version file is typically `/opt/maca/Version.txt` (HPCC uses `/opt/hpcc/Version.txt`).
-        if has_config("metax-gpu") and get_config("flash-attn") and get_config("flash-attn") ~= "" then
-            local version_txt = "/opt/hpcc/Version.txt"
-            if not os.isfile(version_txt) and has_config("use-mc") then
-                version_txt = "/opt/maca/Version.txt"
-            end
-            if os.isfile(version_txt) then
-                local content = os.iorunv("cat", {version_txt}) or ""
-                content = content:trim()
-                local major_str = content:match("Version:(%d+)") or content:match("^(%d+)")
-                if major_str and major_str ~= "" then
-                    local major = tonumber(major_str)
-                    if major then
-                        local define = "INFINICORE_HPCC_VERSION_MAJOR=" .. tostring(major)
-                        target:add("defines", define)
-                        target:add("cxflags", "-D" .. define)
-                        target:add("cxxflags", "-D" .. define)
-                    end
-                end
-            end
-        end
+        -- MetaX + flash-attn ABI selection (wheel symbol probe with HPCC/MACA Version.txt
+        -- fallback) lives in `on_load` of `infinicore_cpp_api` in `xmake/metax.lua`, so the
+        -- define is public and also reaches `infinicore-test`.
 
         if has_config("aten") then
             local outdata = os.iorunv(PYTHON, {"-c", "import torch, os; print(os.path.dirname(torch.__file__))"}):trim()
