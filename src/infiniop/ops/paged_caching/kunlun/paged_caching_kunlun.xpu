@@ -1,0 +1,201 @@
+#include "../../../../utils.h"
+#include "../../../devices/kunlun/kunlun_common.h"
+#include "../../../devices/kunlun/kunlun_handle.h"
+#include "../../../devices/kunlun/kunlun_kernel_common.h"
+#include "../../../tensor.h"
+#include "paged_caching_kunlun.h"
+#include <cstdlib>
+#include <memory>
+
+using namespace device::kunlun::kernel;
+
+// Paged caching on Kunlun XPU.
+//
+// The copy is flattened into independent (token, head, K/V) row tasks spread
+// over every core of every cluster, so as many GM2LM/LM2GM transfers are in
+// flight as the machine allows. Each row is moved through a per-core local
+// buffer at DMA speed; no cross-core synchronization is needed.
+template <typename Tdata>
+__global__ void pagedCachingKernel(
+    __global_ptr__ Tdata *k_cache,
+    __global_ptr__ Tdata *v_cache,
+    __global_ptr__ const Tdata *k,
+    __global_ptr__ const Tdata *v,
+    __global_ptr__ const int64_t *slot_mapping,
+    uint32_t num_tokens,
+    uint32_t num_kv_heads,
+    uint32_t head_size,
+    uint32_t v_head_size,
+    uint32_t block_size,
+    int64_t k_src_stride,
+    int64_t k_src_head_stride,
+    int64_t v_src_stride,
+    int64_t v_src_head_stride,
+    int64_t k_cache_block_stride,
+    int64_t k_cache_head_stride,
+    int64_t k_cache_slot_stride,
+    int64_t v_cache_block_stride,
+    int64_t v_cache_head_stride,
+    int64_t v_cache_slot_stride) {
+
+    const uint32_t cid = core_id();
+    const uint32_t nc = core_num();
+    if (cid >= nc) {
+        return;
+    }
+
+    // Per-core staging buffer for one head row (or a chunk of a very wide row).
+    constexpr uint32_t BUF_ELEMENTS = 256;
+    __local__ Tdata buf[BUF_ELEMENTS];
+
+    const uint64_t rows_per_token = static_cast<uint64_t>(num_kv_heads) * 2;
+    const uint64_t total_rows = static_cast<uint64_t>(num_tokens) * rows_per_token;
+    const uint64_t stride = static_cast<uint64_t>(cluster_num()) * nc;
+
+    for (uint64_t item = cluster_id() * nc + cid; item < total_rows; item += stride) {
+        const uint32_t is_v = static_cast<uint32_t>(item % 2);
+        const uint32_t head = static_cast<uint32_t>((item / 2) % num_kv_heads);
+        const uint64_t token = item / rows_per_token;
+
+        // Padding slots are marked with a negative index; skip them.
+        const int64_t slot = static_cast<int64_t>(slot_mapping[token]);
+        if (slot < 0) {
+            continue;
+        }
+        const int64_t block = slot / static_cast<int64_t>(block_size);
+        const int64_t offset = slot % static_cast<int64_t>(block_size);
+
+        const uint32_t row_len = is_v ? v_head_size : head_size;
+        __global_ptr__ const Tdata *src = is_v
+                                            ? v + token * v_src_stride + head * v_src_head_stride
+                                            : k + token * k_src_stride + head * k_src_head_stride;
+        __global_ptr__ Tdata *dst = is_v
+                                      ? v_cache + block * v_cache_block_stride + head * v_cache_head_stride + offset * v_cache_slot_stride
+                                      : k_cache + block * k_cache_block_stride + head * k_cache_head_stride + offset * k_cache_slot_stride;
+
+        for (uint32_t base = 0; base < row_len; base += BUF_ELEMENTS) {
+            const uint32_t len = (row_len - base) < BUF_ELEMENTS ? (row_len - base) : BUF_ELEMENTS;
+            GM2LM_ASYNC(src + base, buf, len * sizeof(Tdata));
+            mfence();
+            LM2GM_ASYNC(buf, dst + base, len * sizeof(Tdata));
+            mfence();
+        }
+    }
+}
+
+namespace op::paged_caching::kunlun {
+
+struct Descriptor::Opaque {
+    std::shared_ptr<device::kunlun::Handle::Internal> internal;
+};
+
+Descriptor::~Descriptor() {
+    delete _opaque;
+}
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t k_cache_desc,
+    infiniopTensorDescriptor_t v_cache_desc,
+    infiniopTensorDescriptor_t k_desc,
+    infiniopTensorDescriptor_t v_desc,
+    infiniopTensorDescriptor_t slot_mapping_desc) {
+
+    auto result = PagedCachingInfo::create(k_cache_desc, v_cache_desc, k_desc, v_desc, slot_mapping_desc);
+    CHECK_RESULT(result);
+    auto info = result.take();
+
+    // The DMA-based kernel copies whole rows; require the innermost dimension
+    // of sources and caches to be contiguous.
+    CHECK_OR_RETURN(k_desc->stride(2) == 1, INFINI_STATUS_BAD_TENSOR_STRIDES);
+    CHECK_OR_RETURN(v_desc->stride(2) == 1, INFINI_STATUS_BAD_TENSOR_STRIDES);
+    CHECK_OR_RETURN(k_cache_desc->stride(3) == 1, INFINI_STATUS_BAD_TENSOR_STRIDES);
+    CHECK_OR_RETURN(v_cache_desc->stride(3) == 1, INFINI_STATUS_BAD_TENSOR_STRIDES);
+
+    *desc_ptr = new Descriptor(
+        new Opaque{static_cast<device::kunlun::Handle *>(handle)->internal()},
+        info,
+        0,
+        handle->device,
+        handle->device_id);
+    return INFINI_STATUS_SUCCESS;
+}
+
+template <typename Tdata>
+infiniStatus_t launchPagedCaching(
+    const PagedCachingInfo &info,
+    void *k_cache, void *v_cache,
+    const void *k, const void *v,
+    const void *slot_mapping,
+    kunlunStream_t stream) {
+
+    const uint32_t num_tokens = static_cast<uint32_t>(info.num_tokens);
+    if (num_tokens == 0) {
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    const uint32_t clusters = num_tokens < 12 ? num_tokens : 12;
+    // P800 clusters run 64 cores; launching more silently drops work items.
+    uint32_t cores = 64;
+    if (const char *env = std::getenv("INFINIOP_KUNLUN_PC_CORES")) {
+        const int v = std::atoi(env);
+        if (v > 0) {
+            cores = static_cast<uint32_t>(v);
+        }
+    }
+    pagedCachingKernel<Tdata><<<clusters, cores, stream>>>(
+        reinterpret_cast<__global_ptr__ Tdata *>(k_cache),
+        reinterpret_cast<__global_ptr__ Tdata *>(v_cache),
+        reinterpret_cast<__global_ptr__ const Tdata *>(k),
+        reinterpret_cast<__global_ptr__ const Tdata *>(v),
+        reinterpret_cast<__global_ptr__ const int64_t *>(slot_mapping),
+        num_tokens,
+        static_cast<uint32_t>(info.num_kv_heads),
+        static_cast<uint32_t>(info.head_size),
+        static_cast<uint32_t>(info.v_head_size),
+        static_cast<uint32_t>(info.block_size),
+        static_cast<int64_t>(info.k_src_stride),
+        static_cast<int64_t>(info.k_src_head_stride),
+        static_cast<int64_t>(info.v_src_stride),
+        static_cast<int64_t>(info.v_src_head_stride),
+        static_cast<int64_t>(info.k_cache_block_stride),
+        static_cast<int64_t>(info.k_cache_head_stride),
+        static_cast<int64_t>(info.k_cache_slot_stride),
+        static_cast<int64_t>(info.v_cache_block_stride),
+        static_cast<int64_t>(info.v_cache_head_stride),
+        static_cast<int64_t>(info.v_cache_slot_stride));
+
+    // Match the other Kunlun ops (causal_softmax, gemm, random_sample): block
+    // until the stream is idle so callers can rely on the copy being visible.
+    xpu_wait(stream);
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace, size_t workspace_size,
+    void *k_cache, void *v_cache,
+    const void *k, const void *v,
+    const void *slot_mapping,
+    void *stream) const {
+
+    if (workspace_size < _workspace_size) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+
+    kunlunStream_t stream_ = static_cast<kunlunStream_t>(stream);
+
+    switch (_info.dtype) {
+    case INFINI_DTYPE_F16:
+        return launchPagedCaching<half>(_info, k_cache, v_cache, k, v, slot_mapping, stream_);
+    case INFINI_DTYPE_BF16:
+        return launchPagedCaching<bfloat16_t>(_info, k_cache, v_cache, k, v, slot_mapping, stream_);
+    case INFINI_DTYPE_F32:
+        return launchPagedCaching<float>(_info, k_cache, v_cache, k, v, slot_mapping, stream_);
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+}
+
+} // namespace op::paged_caching::kunlun

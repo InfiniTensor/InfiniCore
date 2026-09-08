@@ -17,6 +17,9 @@
 #ifdef ENABLE_ASCEND_API
 #include "ascend/paged_attention_ascend.h"
 #endif
+#ifdef ENABLE_KUNLUN_API
+#include "kunlun/paged_attention_kunlun.h"
+#endif
 
 __INFINI_C infiniStatus_t infiniopCreatePagedAttentionDescriptor(
     infiniopHandle_t handle,
@@ -64,6 +67,9 @@ __INFINI_C infiniStatus_t infiniopCreatePagedAttentionDescriptor(
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia)
 #endif
+#ifdef ENABLE_KUNLUN_API
+        CREATE(INFINI_DEVICE_KUNLUN, kunlun)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -102,6 +108,9 @@ __INFINI_C infiniStatus_t infiniopGetPagedAttentionWorkspaceSize(
 #endif
 #ifdef ENABLE_HYGON_API
         GET(INFINI_DEVICE_HYGON, nvidia)
+#endif
+#ifdef ENABLE_KUNLUN_API
+        GET(INFINI_DEVICE_KUNLUN, kunlun)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -146,6 +155,9 @@ __INFINI_C infiniStatus_t infiniopPagedAttention(
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia)
 #endif
+#ifdef ENABLE_KUNLUN_API
+        CALCULATE(INFINI_DEVICE_KUNLUN, kunlun)
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -183,6 +195,9 @@ __INFINI_C infiniStatus_t infiniopDestroyPagedAttentionDescriptor(
 #endif
 #ifdef ENABLE_HYGON_API
         DESTROY(INFINI_DEVICE_HYGON, nvidia)
+#endif
+#ifdef ENABLE_KUNLUN_API
+        DESTROY(INFINI_DEVICE_KUNLUN, kunlun)
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

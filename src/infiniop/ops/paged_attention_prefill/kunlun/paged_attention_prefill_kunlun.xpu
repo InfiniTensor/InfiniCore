@@ -1,0 +1,538 @@
+#include "../../../../utils.h"
+#include "../../../devices/kunlun/kunlun_common.h"
+#include "../../../devices/kunlun/kunlun_handle.h"
+#include "../../../devices/kunlun/kunlun_kernel_common.h"
+#include "../../../tensor.h"
+#include "paged_attention_prefill_kunlun.h"
+#include <cstdlib>
+#include <memory>
+
+using namespace device::kunlun::kernel;
+
+namespace {
+
+// Varlen (prefill) paged attention on Kunlun XPU.
+//
+// Design:
+//  - The packed query tokens of every sequence are cut into QT-token tiles;
+//    one cluster handles one (seq, q-tile, kv_head, head-chunk) task in a
+//    grid-stride loop. All query heads of the GQA group inside the chunk
+//    share the staged K/V tiles, so paged K/V is read once per kv head and
+//    head chunk.
+//  - KV tiles of TILE_N tokens are gathered from physical blocks through the
+//    block table with contiguous-run GM2SM DMAs.
+//  - Online (flash-style) softmax keeps the (m, l, acc) state of every
+//    attended (head, query-token) row in the local memory of the core that
+//    owns the row (row r belongs to core r % core_num()), so no shared
+//    memory traffic or atomics are needed for the state updates.
+//  - Causal masking: query row at local index u of the sequence attends to
+//    KV positions [0, cache_len + u], where cache_len = kv_len - num_new.
+//    Tiles beyond a row's limit are skipped entirely; the remainder is
+//    masked inside the row's serial softmax pass.
+
+constexpr uint32_t TILE_N = 6;    // KV tokens staged per tile
+constexpr uint32_t MAX_DIM = 576; // max(head_size, value_size) accepted by info.h
+constexpr uint32_t QT = 8;        // query tokens per task
+constexpr uint32_t MAX_HC = 16;   // max query heads processed per chunk
+// Row r is owned by core (r % core_num()) and kept at local slot (r /
+// core_num()); MIN_CORES bounds that slot so the per-core state arrays below
+// stay in range. MIN_CORES is 64 (not smaller) both because that is the P800
+// cluster width and because it keeps ROWS_PER_CORE -- and hence the per-core
+// local-memory footprint -- at its validated size.
+constexpr uint32_t MIN_CORES = 64;
+constexpr uint32_t ROWS_PER_CORE = (MAX_HC * QT + MIN_CORES - 1) / MIN_CORES;
+// Shared-memory budget (worst case Tdata = 2 bytes):
+//   k_sm/v_sm     2 * TILE_N * MAX_DIM * 2              = 13824 B
+//   q_sm          QCAP * 2                              = 20736 B
+//   logits/p      2 * MAX_HC * QT * TILE_N * 4          =  6144 B
+//   guard                                                 =   256 B
+//   total                                               <= 40960 B (SM_SIZE)
+constexpr uint32_t QCAP = (SM_SIZE - 2 * TILE_N * MAX_DIM * 2 - 2 * MAX_HC * QT * TILE_N * 4 - 256) / 2;
+
+template <typename Tdata>
+__device__ inline float toFloat(Tdata x) {
+    if constexpr (xpu_std::is_same<Tdata, half>::value) {
+        return __half2float(x);
+    } else if constexpr (xpu_std::is_same<Tdata, bfloat16_t>::value) {
+        return __bfloat162float(x);
+    } else {
+        return static_cast<float>(x);
+    }
+}
+
+template <typename Tdata>
+__device__ inline Tdata fromFloat(float x) {
+    if constexpr (xpu_std::is_same<Tdata, half>::value) {
+        return __float2half_rn(x);
+    } else if constexpr (xpu_std::is_same<Tdata, bfloat16_t>::value) {
+        return __float2bfloat16_rn(x);
+    } else {
+        return x;
+    }
+}
+
+template <typename Tdata, typename Tindex>
+__global__ void pagedAttentionPrefillKernel(
+    __global_ptr__ Tdata *out,
+    __global_ptr__ const Tdata *q,
+    __global_ptr__ const Tdata *k_cache,
+    __global_ptr__ const Tdata *v_cache,
+    __global_ptr__ const Tindex *block_tables,
+    __global_ptr__ const Tindex *seq_lens,
+    __global_ptr__ const Tindex *cum_seq_lens_q,
+    __global_ptr__ const float *alibi_slopes,
+    uint32_t num_seqs,
+    uint32_t num_kv_heads,
+    uint32_t group_size,
+    uint32_t head_size,
+    uint32_t value_size,
+    uint32_t page_block_size,
+    uint32_t heads_per_chunk,
+    uint32_t num_chunks,
+    uint32_t tiles_ub,
+    float scale,
+    int64_t q_stride,
+    int64_t q_head_stride,
+    int64_t k_batch_stride,
+    int64_t k_row_stride,
+    int64_t k_head_stride,
+    int64_t v_batch_stride,
+    int64_t v_row_stride,
+    int64_t v_head_stride,
+    int64_t o_stride,
+    int64_t o_head_stride,
+    int64_t block_table_batch_stride) {
+
+    const uint32_t cid = core_id();
+    const uint32_t nc = core_num();
+    if (cid >= nc) {
+        return;
+    }
+
+    __shared__ Tdata k_sm[TILE_N * MAX_DIM];
+    __shared__ Tdata v_sm[TILE_N * MAX_DIM];
+    __shared__ Tdata q_sm[QCAP];
+    __shared__ float logits_sm[MAX_HC * QT * TILE_N];
+    __shared__ float p_sm[MAX_HC * QT * TILE_N];
+
+    __local__ float m_lm[ROWS_PER_CORE];
+    __local__ float l_lm[ROWS_PER_CORE];
+    __local__ float corr_lm[ROWS_PER_CORE];
+    __local__ float acc_lm[ROWS_PER_CORE * MAX_DIM];
+    __local__ Tdata out_lm[MAX_DIM];
+
+    const uint32_t tasks_per_seq = tiles_ub * num_kv_heads * num_chunks;
+
+    for (uint32_t task = cluster_id(); task < num_seqs * tasks_per_seq; task += cluster_num()) {
+        const uint32_t chunk = task % num_chunks;
+        const uint32_t kv_head = (task / num_chunks) % num_kv_heads;
+        const uint32_t tile_id = (task / (num_chunks * num_kv_heads)) % tiles_ub;
+        const uint32_t seq_idx = task / tasks_per_seq;
+
+        const int64_t q_start = static_cast<int64_t>(cum_seq_lens_q[seq_idx]);
+        const int64_t num_new = static_cast<int64_t>(cum_seq_lens_q[seq_idx + 1]) - q_start;
+        const int64_t qt0 = static_cast<int64_t>(tile_id) * QT;
+        if (num_new <= 0 || qt0 >= num_new) {
+            continue;
+        }
+        const uint32_t n_q = static_cast<uint32_t>((num_new - qt0) < QT ? (num_new - qt0) : QT);
+        const int64_t kv_len = static_cast<int64_t>(seq_lens[seq_idx]);
+        const int64_t cache_len = kv_len - num_new;
+        const uint32_t h0 = chunk * heads_per_chunk;
+        const uint32_t n_h = (group_size - h0) < heads_per_chunk ? (group_size - h0) : heads_per_chunk;
+        const uint32_t first_head = kv_head * group_size + h0;
+
+        // ---- Stage the q rows of this tile (one row per (head, q-token)) ----
+        if (cid == 0) {
+            for (uint32_t qt = 0; qt < n_q; ++qt) {
+                for (uint32_t hi = 0; hi < n_h; ++hi) {
+                    GM2SM_ASYNC(q + (q_start + qt0 + qt) * q_stride + (first_head + hi) * q_head_stride,
+                                q_sm + (hi * QT + qt) * head_size, head_size * sizeof(Tdata));
+                }
+            }
+        }
+        sync_cluster();
+
+        // ---- Init the online-softmax state of the rows this core owns ----
+        for (uint32_t r = cid; r < n_h * QT; r += nc) {
+            if ((r % QT) >= n_q) {
+                continue;
+            }
+            const uint32_t slot = r / nc;
+            m_lm[slot] = -1.0e30f;
+            l_lm[slot] = 0.f;
+            corr_lm[slot] = 0.f;
+            for (uint32_t d = 0; d < value_size; ++d) {
+                acc_lm[slot * MAX_DIM + d] = 0.f;
+            }
+        }
+
+        // ---- Stream KV tiles up to the furthest causal limit of this q tile ----
+        const int64_t max_lim = cache_len + qt0 + n_q; // exclusive upper bound
+        for (int64_t t0 = 0; t0 < max_lim && t0 < kv_len; t0 += TILE_N) {
+            // Tiles start at t0; a row (local q index u) needs tile t0 only if
+            // t0 <= cache_len + u, i.e. u >= t0 - cache_len - qt0.
+            int64_t qt_lo64 = t0 - cache_len - qt0;
+            if (qt_lo64 < 0) {
+                qt_lo64 = 0;
+            }
+            const uint32_t qt_lo = static_cast<uint32_t>(qt_lo64);
+            const uint32_t rows_q = n_q - qt_lo; // active q rows for this tile
+            int64_t n64 = TILE_N;
+            if (n64 > kv_len - t0) {
+                n64 = kv_len - t0;
+            }
+            if (n64 > max_lim - t0) {
+                n64 = max_lim - t0;
+            }
+            const uint32_t n = static_cast<uint32_t>(n64);
+
+            // ---- Stage the K/V tile through the block table ----
+            if (cid == 0) {
+                uint32_t pos = 0;
+                for (int64_t t = t0; t < t0 + n;) {
+                    const int64_t bt_idx = t / static_cast<int64_t>(page_block_size);
+                    const int64_t blk = static_cast<int64_t>(
+                        block_tables[seq_idx * block_table_batch_stride + bt_idx]);
+                    const int64_t off = t % static_cast<int64_t>(page_block_size);
+                    int64_t run = static_cast<int64_t>(page_block_size) - off;
+                    if (run > t0 + n - t) {
+                        run = t0 + n - t;
+                    }
+                    const int64_t k_base = blk * k_batch_stride + kv_head * k_head_stride + off * k_row_stride;
+                    const int64_t v_base = blk * v_batch_stride + kv_head * v_head_stride + off * v_row_stride;
+
+                    if (k_row_stride == static_cast<int64_t>(head_size)) {
+                        GM2SM_ASYNC(k_cache + k_base, k_sm + pos * head_size,
+                                    run * head_size * sizeof(Tdata));
+                    } else {
+                        for (int64_t r = 0; r < run; ++r) {
+                            GM2SM_ASYNC(k_cache + k_base + r * k_row_stride,
+                                        k_sm + (pos + r) * head_size, head_size * sizeof(Tdata));
+                        }
+                    }
+                    if (v_row_stride == static_cast<int64_t>(value_size)) {
+                        GM2SM_ASYNC(v_cache + v_base, v_sm + pos * value_size,
+                                    run * value_size * sizeof(Tdata));
+                    } else {
+                        for (int64_t r = 0; r < run; ++r) {
+                            GM2SM_ASYNC(v_cache + v_base + r * v_row_stride,
+                                        v_sm + (pos + r) * value_size, value_size * sizeof(Tdata));
+                        }
+                    }
+                    pos += static_cast<uint32_t>(run);
+                    t += run;
+                }
+            }
+            sync_cluster();
+
+            // ---- P1: logits[r][j] = scale * (q_r . k_j), range-split ----
+            const uint32_t n_logits = n_h * rows_q * n;
+            for (uint32_t item = cid; item < n_logits; item += nc) {
+                const uint32_t hi = item / (rows_q * n);
+                const uint32_t rem = item - hi * (rows_q * n);
+                const uint32_t qt = qt_lo + rem / n;
+                const uint32_t j = rem - (rem / n) * n;
+                storeShared(&logits_sm[(hi * QT + qt) * TILE_N + j], 0.f);
+            }
+            sync_cluster();
+
+            const uint32_t total_macs = n_logits * head_size;
+            const uint32_t per_core = total_macs / nc;
+            const uint32_t rem_macs = total_macs - per_core * nc;
+            const uint32_t my_count = per_core + (cid < rem_macs ? 1 : 0);
+            uint32_t w = cid < rem_macs ? cid * (per_core + 1) : rem_macs * (per_core + 1) + (cid - rem_macs) * per_core;
+            const uint32_t w_end = w + my_count;
+            while (w < w_end) {
+                const uint32_t item = w / head_size;
+                const uint32_t d0 = w - item * head_size;
+                const uint32_t run = (w_end - w) < (head_size - d0) ? (w_end - w) : (head_size - d0);
+                const uint32_t hi = item / (rows_q * n);
+                const uint32_t rem2 = item - hi * (rows_q * n);
+                const uint32_t qt = qt_lo + rem2 / n;
+                const uint32_t j = rem2 - (rem2 / n) * n;
+                const uint32_t r = hi * QT + qt;
+                float partial = 0.f;
+                const uint32_t q_off = r * head_size;
+                const uint32_t k_off = j * head_size;
+                for (uint32_t d = 0; d < run; ++d) {
+                    partial += toFloat(loadShared(q_sm + q_off + d0 + d))
+                             * toFloat(loadShared(k_sm + k_off + d0 + d));
+                }
+                atomicAdd(&logits_sm[r * TILE_N + j], partial * scale);
+                w += run;
+            }
+            sync_cluster();
+
+            // ---- P2 + P3: each core updates the state of the rows it owns ----
+            for (uint32_t r = cid; r < n_h * QT; r += nc) {
+                const uint32_t qt = r % QT;
+                if (qt < qt_lo || qt >= n_q) {
+                    continue;
+                }
+                const uint32_t hi = r / QT;
+                const uint32_t slot = r / nc;
+                const int64_t q_abs = cache_len + qt0 + qt; // absolute position of this query
+                int64_t lim_n64 = q_abs - t0 + 1;
+                if (lim_n64 > n) {
+                    lim_n64 = n;
+                }
+                const uint32_t lim_n = static_cast<uint32_t>(lim_n64);
+                const float slope = (alibi_slopes == nullptr) ? 0.f : alibi_slopes[first_head + hi];
+
+                float tile_m = 0.f;
+                for (uint32_t j = 0; j < lim_n; ++j) {
+                    float s = loadShared(&logits_sm[r * TILE_N + j]);
+                    if (slope != 0.f) {
+                        s += slope * static_cast<float>(t0 + static_cast<int64_t>(j) - q_abs);
+                    }
+                    tile_m = (j == 0) ? s : fmax(tile_m, s);
+                }
+                const float m_old = m_lm[slot];
+                const float m_new = fmax(m_old, tile_m);
+                const float corr = (m_old < -1.0e29f) ? 0.f : exp(m_old - m_new);
+                float tile_l = 0.f;
+                for (uint32_t j = 0; j < lim_n; ++j) {
+                    float s = loadShared(&logits_sm[r * TILE_N + j]);
+                    if (slope != 0.f) {
+                        s += slope * static_cast<float>(t0 + static_cast<int64_t>(j) - q_abs);
+                    }
+                    const float p = exp(s - m_new);
+                    storeShared(&p_sm[r * TILE_N + j], p);
+                    tile_l += p;
+                }
+                m_lm[slot] = m_new;
+                l_lm[slot] = l_lm[slot] * corr + tile_l;
+                corr_lm[slot] = corr;
+
+                // PV accumulation over the tile for this row.
+                for (uint32_t d = 0; d < value_size; ++d) {
+                    float pv = 0.f;
+                    for (uint32_t j = 0; j < lim_n; ++j) {
+                        pv += loadShared(&p_sm[r * TILE_N + j]) * toFloat(loadShared(v_sm + j * value_size + d));
+                    }
+                    acc_lm[slot * MAX_DIM + d] = acc_lm[slot * MAX_DIM + d] * corr + pv;
+                }
+            }
+            sync_cluster();
+        } // KV tiles
+
+        // ---- Write the output rows owned by this core ----
+        for (uint32_t r = cid; r < n_h * QT; r += nc) {
+            const uint32_t qt = r % QT;
+            if (qt >= n_q) {
+                continue;
+            }
+            const uint32_t hi = r / QT;
+            const uint32_t slot = r / nc;
+            const float l = l_lm[slot];
+            const float inv_l = (l > 0.f) ? (1.f / l) : 0.f;
+            for (uint32_t d = 0; d < value_size; ++d) {
+                out_lm[d] = fromFloat<Tdata>(acc_lm[slot * MAX_DIM + d] * inv_l);
+            }
+            mfence();
+            LM2GM_ASYNC(out_lm,
+                        out + (q_start + qt0 + qt) * o_stride + (first_head + hi) * o_head_stride,
+                        value_size * sizeof(Tdata));
+            // The next owned row reuses out_lm; make sure this async DMA has
+            // finished reading it before that happens.
+            mfence();
+        }
+        sync_cluster();
+    } // tasks
+}
+
+} // namespace
+
+namespace op::paged_attention_prefill::kunlun {
+
+struct Descriptor::Opaque {
+    std::shared_ptr<device::kunlun::Handle::Internal> internal;
+};
+
+Descriptor::~Descriptor() {
+    delete _opaque;
+}
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t out_desc,
+    infiniopTensorDescriptor_t q_desc,
+    infiniopTensorDescriptor_t k_cache_desc,
+    infiniopTensorDescriptor_t v_cache_desc,
+    infiniopTensorDescriptor_t block_tables_desc,
+    infiniopTensorDescriptor_t seq_lens_desc,
+    infiniopTensorDescriptor_t cum_seq_lens_q_desc,
+    const std::optional<infiniopTensorDescriptor_t> &alibi_slopes_desc,
+    float scale) {
+
+    auto result = PagedAttentionPrefillInfo::create(
+        out_desc, q_desc, k_cache_desc, v_cache_desc,
+        block_tables_desc, seq_lens_desc, cum_seq_lens_q_desc, alibi_slopes_desc, scale);
+    CHECK_RESULT(result);
+    auto info = result.take();
+
+    // q/out rows and cache rows are moved with DMAs; their innermost
+    // dimension must be contiguous (already enforced by the info checks).
+    // The kernel reads all index tensors through one Tindex type; reject
+    // mismatched index dtypes instead of misreading them silently.
+    CHECK_OR_RETURN(seq_lens_desc->dtype() == block_tables_desc->dtype(),
+                    INFINI_STATUS_BAD_TENSOR_DTYPE);
+    CHECK_OR_RETURN(cum_seq_lens_q_desc->dtype() == block_tables_desc->dtype(),
+                    INFINI_STATUS_BAD_TENSOR_DTYPE);
+
+    *desc_ptr = new Descriptor(
+        new Opaque{static_cast<device::kunlun::Handle *>(handle)->internal()},
+        info,
+        0,
+        handle->device,
+        handle->device_id);
+    return INFINI_STATUS_SUCCESS;
+}
+
+template <typename Tdata, typename Tindex>
+infiniStatus_t launchPagedAttentionPrefill(
+    const PagedAttentionPrefillInfo &info,
+    void *out, const void *q, const void *k_cache, const void *v_cache,
+    const void *block_tables, const void *seq_lens, const void *cum_seq_lens_q,
+    const void *alibi_slopes,
+    kunlunStream_t stream) {
+
+    const uint32_t num_seqs = static_cast<uint32_t>(info.num_seqs);
+    const uint32_t num_kv_heads = static_cast<uint32_t>(info.num_kv_heads);
+    if (num_seqs == 0 || info.total_q_tokens == 0) {
+        return INFINI_STATUS_SUCCESS;
+    }
+    const uint32_t group_size = static_cast<uint32_t>(info.num_heads) / num_kv_heads;
+
+    // Heads are processed in chunks whose staged q rows fit in shared memory.
+    uint32_t heads_per_chunk = QCAP / (QT * static_cast<uint32_t>(info.head_size));
+    if (heads_per_chunk > MAX_HC) {
+        heads_per_chunk = MAX_HC;
+    }
+    if (heads_per_chunk == 0) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+    if (heads_per_chunk > group_size) {
+        heads_per_chunk = group_size;
+    }
+    const uint32_t num_chunks = (group_size + heads_per_chunk - 1) / heads_per_chunk;
+
+    // Upper bound of q tiles per sequence (all packed tokens in one sequence).
+    const uint32_t tiles_ub = (static_cast<uint32_t>(info.total_q_tokens) + QT - 1) / QT;
+    const uint64_t num_tasks64 = static_cast<uint64_t>(num_seqs) * tiles_ub * num_kv_heads * num_chunks;
+    if (num_tasks64 > 0xFFFFFFFFull) {
+        return INFINI_STATUS_BAD_PARAM;
+    }
+    const uint32_t num_tasks = static_cast<uint32_t>(num_tasks64);
+
+    // The P800 runs 64 cores per cluster and 12 clusters; launching more
+    // cores than physically present silently drops work, so stay at the
+    // defaults. Both are overridable for tuning on other XPU SKUs.
+    uint32_t clusters = num_tasks < 12 ? num_tasks : 12;
+    uint32_t cores = 64;
+    if (const char *env = std::getenv("INFINIOP_KUNLUN_PAP_CLUSTERS")) {
+        const int v = std::atoi(env);
+        if (v > 0) {
+            clusters = num_tasks < static_cast<uint32_t>(v) ? num_tasks : static_cast<uint32_t>(v);
+        }
+    }
+    if (const char *env = std::getenv("INFINIOP_KUNLUN_PAP_CORES")) {
+        const int v = std::atoi(env);
+        if (v > 0) {
+            cores = static_cast<uint32_t>(v);
+        }
+    }
+    // The per-core row-state arrays assume at least MIN_CORES cores.
+    if (cores < MIN_CORES) {
+        cores = MIN_CORES;
+    }
+
+    pagedAttentionPrefillKernel<Tdata, Tindex><<<clusters, cores, stream>>>(
+        reinterpret_cast<__global_ptr__ Tdata *>(out),
+        reinterpret_cast<__global_ptr__ const Tdata *>(q),
+        reinterpret_cast<__global_ptr__ const Tdata *>(k_cache),
+        reinterpret_cast<__global_ptr__ const Tdata *>(v_cache),
+        reinterpret_cast<__global_ptr__ const Tindex *>(block_tables),
+        reinterpret_cast<__global_ptr__ const Tindex *>(seq_lens),
+        reinterpret_cast<__global_ptr__ const Tindex *>(cum_seq_lens_q),
+        reinterpret_cast<__global_ptr__ const float *>(alibi_slopes),
+        num_seqs,
+        num_kv_heads,
+        group_size,
+        static_cast<uint32_t>(info.head_size),
+        static_cast<uint32_t>(info.value_size),
+        static_cast<uint32_t>(info.page_block_size),
+        heads_per_chunk,
+        num_chunks,
+        tiles_ub,
+        info.scale,
+        static_cast<int64_t>(info.q_stride),
+        static_cast<int64_t>(info.q_head_stride),
+        static_cast<int64_t>(info.k_batch_stride),
+        static_cast<int64_t>(info.k_row_stride),
+        static_cast<int64_t>(info.k_head_stride),
+        static_cast<int64_t>(info.v_batch_stride),
+        static_cast<int64_t>(info.v_row_stride),
+        static_cast<int64_t>(info.v_head_stride),
+        static_cast<int64_t>(info.o_stride),
+        static_cast<int64_t>(info.o_head_stride),
+        static_cast<int64_t>(info.block_table_batch_stride));
+
+    // Match the other Kunlun ops (causal_softmax, gemm, random_sample): block
+    // until the stream is idle so callers can rely on the result being visible.
+    xpu_wait(stream);
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace, size_t workspace_size,
+    void *out, const void *q, const void *k_cache, const void *v_cache,
+    const void *block_tables,
+    const void *seq_lens,
+    const void *cum_seq_lens_q,
+    const void *alibi_slopes,
+    void *stream) const {
+
+    if (workspace_size < _workspace_size) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+
+    kunlunStream_t stream_ = static_cast<kunlunStream_t>(stream);
+
+#define LAUNCH_PAGED_ATTENTION_PREFILL(Tdata, Tindex)            \
+    return launchPagedAttentionPrefill<Tdata, Tindex>(           \
+        _info, out, q, k_cache, v_cache, block_tables, seq_lens, \
+        cum_seq_lens_q, alibi_slopes, stream_)
+
+    if (_info.index_dtype == INFINI_DTYPE_I64) {
+        if (_info.dtype == INFINI_DTYPE_F16) {
+            LAUNCH_PAGED_ATTENTION_PREFILL(half, int64_t);
+        }
+        if (_info.dtype == INFINI_DTYPE_BF16) {
+            LAUNCH_PAGED_ATTENTION_PREFILL(bfloat16_t, int64_t);
+        }
+    } else if (_info.index_dtype == INFINI_DTYPE_I32) {
+        if (_info.dtype == INFINI_DTYPE_F16) {
+            LAUNCH_PAGED_ATTENTION_PREFILL(half, int32_t);
+        }
+        if (_info.dtype == INFINI_DTYPE_BF16) {
+            LAUNCH_PAGED_ATTENTION_PREFILL(bfloat16_t, int32_t);
+        }
+    } else if (_info.index_dtype == INFINI_DTYPE_U32) {
+        if (_info.dtype == INFINI_DTYPE_F16) {
+            LAUNCH_PAGED_ATTENTION_PREFILL(half, uint32_t);
+        }
+        if (_info.dtype == INFINI_DTYPE_BF16) {
+            LAUNCH_PAGED_ATTENTION_PREFILL(bfloat16_t, uint32_t);
+        }
+    }
+
+#undef LAUNCH_PAGED_ATTENTION_PREFILL
+
+    return INFINI_STATUS_BAD_TENSOR_DTYPE;
+}
+
+} // namespace op::paged_attention_prefill::kunlun
