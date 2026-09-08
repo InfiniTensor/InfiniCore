@@ -14,40 +14,45 @@
 namespace flash {
 #endif
 std::vector<at::Tensor>
-mha_fwd(at::Tensor &q,                   // batch_size x seqlen_q x num_heads x round_multiple(head_size, 8)
-        const at::Tensor &k,             // batch_size x seqlen_k x num_heads_k x round_multiple(head_size, 8)
-        const at::Tensor &v,             // batch_size x seqlen_k x num_heads_k x round_multiple(head_size, 8)
-        std::optional<at::Tensor> &out_, // batch_size x seqlen_q x num_heads x round_multiple(head_size, 8)
-#if defined(ENABLE_METAX_API)
-        std::optional<at::Tensor> &softmax_lse_, // MetaX flash-attn dense fwd ABI includes an optional preallocated LSE tensor
-#endif
+mha_fwd(at::Tensor &q,                            // batch_size x seqlen_q x num_heads x round_multiple(head_size, 8)
+        const at::Tensor &k,                      // batch_size x seqlen_k x num_heads_k x round_multiple(head_size, 8)
+        const at::Tensor &v,                      // batch_size x seqlen_k x num_heads_k x round_multiple(head_size, 8)
+        std::optional<at::Tensor> &out_,          // batch_size x seqlen_q x num_heads x round_multiple(head_size, 8)
         std::optional<at::Tensor> &alibi_slopes_, // num_heads or batch_size x num_heads
+#if defined(ENABLE_METAX_API)
+        std::optional<at::Tensor> &attn_mask_,
+#endif
         const float p_dropout,
         const float softmax_scale,
         bool is_causal,
         int window_size_left,
         int window_size_right,
+#if !defined(ENABLE_METAX_API) || (defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3))
         const float softcap,
+#endif
         const bool return_softmax,
         std::optional<at::Generator> gen_
 #if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
         // MetaX/Mars `flash_attn_2_cuda` (e.g. 2.6.x+mars) appends this argument vs upstream Dao-AILab flash-attn.
         ,
-        std::optional<at::Tensor> &flash_attn_mars_ext_
+        std::optional<at::Tensor> &s_aux_,
+        bool return_max_logit_
 #endif
 );
 
 std::vector<at::Tensor>
-mha_varlen_fwd(at::Tensor &q,                               // total_q x num_heads x head_size, total_q := \sum_{i=0}^{b} s_i
-               const at::Tensor &k,                         // total_k x num_heads_k x head_size, total_k := \sum_{i=0}^{b} s_i or num_blocks x page_block_size x num_heads_k x head_size if there's a block_table.
-               const at::Tensor &v,                         // total_k x num_heads_k x head_size, total_k := \sum_{i=0}^{b} s_i or num_blocks x page_block_size x num_heads_k x head_size if there's a block_table.
-               std::optional<at::Tensor> &out_,             // total_q x num_heads x head_size, total_k := \sum_{i=0}^{b} s_i
-               const at::Tensor &cu_seqlens_q,              // b+1
-               const at::Tensor &cu_seqlens_k,              // b+1
-               std::optional<at::Tensor> &seqused_k,        // b. If given, only this many elements of each batch element's keys are used.
+mha_varlen_fwd(at::Tensor &q,                        // total_q x num_heads x head_size, total_q := \sum_{i=0}^{b} s_i
+               const at::Tensor &k,                  // total_k x num_heads_k x head_size, total_k := \sum_{i=0}^{b} s_i or num_blocks x page_block_size x num_heads_k x head_size if there's a block_table.
+               const at::Tensor &v,                  // total_k x num_heads_k x head_size, total_k := \sum_{i=0}^{b} s_i or num_blocks x page_block_size x num_heads_k x head_size if there's a block_table.
+               std::optional<at::Tensor> &out_,      // total_q x num_heads x head_size, total_k := \sum_{i=0}^{b} s_i
+               const at::Tensor &cu_seqlens_q,       // b+1
+               const at::Tensor &cu_seqlens_k,       // b+1
+               std::optional<at::Tensor> &seqused_k, // b. If given, only this many elements of each batch element's keys are used.
+#if !defined(ENABLE_METAX_API) || (defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3))
                std::optional<const at::Tensor> &leftpad_k_, // batch_size
                std::optional<at::Tensor> &block_table_,     // batch_size x max_num_blocks_per_seq
-               std::optional<at::Tensor> &alibi_slopes_,    // num_heads or b x num_heads
+#endif
+               std::optional<at::Tensor> &alibi_slopes_, // num_heads or b x num_heads
                int max_seqlen_q,
                const int max_seqlen_k,
                const float p_dropout,
@@ -56,13 +61,16 @@ mha_varlen_fwd(at::Tensor &q,                               // total_q x num_hea
                bool is_causal,
                int window_size_left,
                int window_size_right,
+#if !defined(ENABLE_METAX_API) || (defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3))
                const float softcap,
+#endif
                const bool return_softmax,
                std::optional<at::Generator> gen_
 #if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
                // MetaX/Mars `flash_attn_2_cuda` (e.g. 2.6.x+mars) appends this argument vs upstream Dao-AILab flash-attn.
                ,
-               std::optional<at::Tensor> &flash_attn_mars_ext_
+               std::optional<at::Tensor> &s_aux_,
+               bool return_max_logit_
 #endif
 );
 
@@ -123,21 +131,25 @@ mha_fwd_kvcache(at::Tensor &q,                                     // batch_size
                 std::optional<const at::Tensor> &rotary_cos_,      // seqlen_ro x (rotary_dim / 2)
                 std::optional<const at::Tensor> &rotary_sin_,      // seqlen_ro x (rotary_dim / 2)
                 std::optional<const at::Tensor> &cache_batch_idx_, // indices to index into the KV cache
-                std::optional<const at::Tensor> &leftpad_k_,       // batch_size
-                std::optional<at::Tensor> &block_table_,           // batch_size x max_num_blocks_per_seq
-                std::optional<at::Tensor> &alibi_slopes_,          // num_heads or batch_size x num_heads
-                std::optional<at::Tensor> &out_,                   // batch_size x seqlen_q x num_heads x head_size
+#if !defined(ENABLE_METAX_API) || (defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3))
+                std::optional<const at::Tensor> &leftpad_k_, // batch_size
+#endif
+                std::optional<at::Tensor> &block_table_,  // batch_size x max_num_blocks_per_seq
+                std::optional<at::Tensor> &alibi_slopes_, // num_heads or batch_size x num_heads
+                std::optional<at::Tensor> &out_,          // batch_size x seqlen_q x num_heads x head_size
                 const float softmax_scale,
                 bool is_causal,
                 int window_size_left,
                 int window_size_right,
+#if !defined(ENABLE_METAX_API) || (defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3))
                 const float softcap,
+#endif
                 bool is_rotary_interleaved, // if true, rotary combines indices 0 & 1, else indices 0 & rotary_dim / 2
                 int num_splits
 #if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
                 // MetaX/Mars `flash_attn_2_cuda` (e.g. 2.6.x+mars) appends this argument vs upstream Dao-AILab flash-attn.
                 ,
-                std::optional<at::Tensor> &flash_attn_mars_ext_
+                std::optional<at::Tensor> &s_aux_
 #endif
 );
 

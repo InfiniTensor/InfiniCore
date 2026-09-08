@@ -234,7 +234,7 @@ void run(void *planned_meta) {
                                : std::optional<at::Tensor>(out_tensor);
 
 #if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
-    std::optional<at::Tensor> flash_attn_mars_ext = std::nullopt;
+    std::optional<at::Tensor> s_aux = std::nullopt;
 #endif
 
     auto result = INFINICORE_FLASH_OP(mha_fwd_kvcache)(
@@ -247,7 +247,9 @@ void run(void *planned_meta) {
         rotary_cos,
         rotary_sin,
         cache_batch_idx,
+#if !defined(ENABLE_METAX_API) || (defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3))
         leftpad_k,
+#endif
         block_table,
         alibi_slopes,
         out,
@@ -255,12 +257,14 @@ void run(void *planned_meta) {
         true,
         -1,
         -1,
+#if !defined(ENABLE_METAX_API) || (defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3))
         0.0f,
+#endif
         false,
         0
 #if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
         ,
-        flash_attn_mars_ext
+        s_aux
 #endif
     );
 

@@ -66,15 +66,15 @@ void run(void *planned_meta) {
     auto out_work = infinicore::adaptor::to_aten_tensor(out_work_ic);
     auto out = std::optional<at::Tensor>(out_work);
 
-#if defined(ENABLE_METAX_API)
-    std::optional<at::Tensor> softmax_lse = std::nullopt;
-#endif
     auto alibi_slopes = p->alibi_slopes ? std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(*p->alibi_slopes)) : std::nullopt;
     auto scale = p->scale;
     auto is_causal = p->is_causal;
 
+#if defined(ENABLE_METAX_API)
+    std::optional<at::Tensor> attn_mask = std::nullopt;
+#endif
 #if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
-    std::optional<at::Tensor> flash_attn_mars_ext = std::nullopt;
+    std::optional<at::Tensor> s_aux = std::nullopt;
 #endif
 
     INFINICORE_FLASH_OP(mha_fwd)
@@ -83,21 +83,24 @@ void run(void *planned_meta) {
         k,
         v,
         out,
-#if defined(ENABLE_METAX_API)
-        softmax_lse,
-#endif
         alibi_slopes,
+#if defined(ENABLE_METAX_API)
+        attn_mask,
+#endif
         0.0,
         scale,
         is_causal,
         -1,
         -1,
+#if !defined(ENABLE_METAX_API) || (defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3))
         0.0,
+#endif
         false,
         std::nullopt
 #if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
         ,
-        flash_attn_mars_ext
+        s_aux,
+        false
 #endif
     );
 
