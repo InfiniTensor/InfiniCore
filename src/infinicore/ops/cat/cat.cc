@@ -131,7 +131,7 @@ Tensor cat(std::vector<Tensor> tensors, int dim) {
 
     Shape shape = tensors[0]->shape();
     for (int i = 1; i < tensors.size(); i++) {
-        assert(tensors[i]->ndim() == dim || tensors[i]->ndim() == 1);
+        assert(tensors[i]->ndim() == ndim || tensors[i]->ndim() == 1);
         if (tensors[i]->ndim() != ndim) {
             continue;
         }
@@ -152,7 +152,7 @@ void cat_(Tensor out, std::vector<Tensor> tensors, int dim) {
 
     size_t dim_shape = 0;
     for (auto &tensor : tensors) {
-        assert(tensor->ndim() == ndim || tensors[i]->ndim() == 1);
+        assert(tensor->ndim() == ndim || tensor->ndim() == 1);
         if (tensor->ndim() == 1) {
             assert(tensor->shape()[0] == 0);
             continue;

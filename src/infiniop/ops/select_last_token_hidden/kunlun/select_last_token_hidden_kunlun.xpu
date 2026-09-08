@@ -1,0 +1,151 @@
+#include "../../../../utils.h"
+#include "../../../devices/kunlun/kunlun_common.h"
+#include "../../../devices/kunlun/kunlun_handle.h"
+#include "../../../devices/kunlun/kunlun_kernel_common.h"
+#include "../../../tensor.h"
+#include "select_last_token_hidden_kunlun.h"
+
+using namespace device::kunlun::kernel;
+
+template <typename T>
+__global__ void selectLastTokenHiddenKernel(
+    __global_ptr__ T *output,
+    __global_ptr__ const T *hidden_states,
+    __global_ptr__ const int32_t *input_offsets,
+    uint32_t total_tokens,
+    uint32_t num_requests,
+    uint32_t row_elems) {
+
+    int cid = core_id();
+    int ncores = core_num();
+    if (cid >= ncores) {
+        return;
+    }
+
+    int thread_id = ncores * cluster_id() + cid;
+    int nthreads = ncores * cluster_num();
+
+    // num_requests * row_elems (the total number of output elements) can
+    // exceed 32 bits, so index in 64 bits to avoid wrap-around.
+    uint64_t total_size = static_cast<uint64_t>(num_requests) * row_elems;
+    for (uint64_t linear = thread_id; linear < total_size; linear += nthreads) {
+        uint64_t request = linear / row_elems;
+        uint64_t dim = linear - request * row_elems;
+        int32_t row = input_offsets[request + 1] - 1;
+
+        if (row >= 0 && static_cast<uint64_t>(row) < static_cast<uint64_t>(total_tokens)) {
+            __local__ T value;
+            GM2LM_ASYNC(hidden_states + static_cast<uint64_t>(row) * row_elems + dim, &value, sizeof(T));
+            mfence();
+            LM2GM_ASYNC(&value, output + linear, sizeof(T));
+        }
+    }
+}
+
+namespace op::select_last_token_hidden::kunlun {
+
+struct Descriptor::Opaque {
+    infiniDtype_t hidden_dtype;
+};
+
+Descriptor::~Descriptor() {
+    delete _opaque;
+}
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t output_desc,
+    infiniopTensorDescriptor_t hidden_states_desc,
+    infiniopTensorDescriptor_t input_offsets_desc) {
+    const auto output_shape = output_desc->shape();
+    const auto hidden_shape = hidden_states_desc->shape();
+    const auto offsets_shape = input_offsets_desc->shape();
+
+    CHECK_OR_RETURN(output_shape.size() == 3 && hidden_shape.size() == 3 && offsets_shape.size() == 1,
+                    INFINI_STATUS_BAD_TENSOR_SHAPE);
+    CHECK_OR_RETURN(offsets_shape[0] >= 2, INFINI_STATUS_BAD_TENSOR_SHAPE);
+    const size_t num_requests = offsets_shape[0] - 1;
+    CHECK_OR_RETURN(output_shape[0] == 1 && output_shape[1] == num_requests
+                        && output_shape[2] == hidden_shape[2],
+                    INFINI_STATUS_BAD_TENSOR_SHAPE);
+    CHECK_OR_RETURN(output_desc->isContiguous() && hidden_states_desc->isContiguous()
+                        && input_offsets_desc->isContiguous(),
+                    INFINI_STATUS_BAD_TENSOR_STRIDES);
+    CHECK_OR_RETURN(input_offsets_desc->dtype() == INFINI_DTYPE_I32,
+                    INFINI_STATUS_BAD_TENSOR_DTYPE);
+    const auto hidden_dtype = hidden_states_desc->dtype();
+    CHECK_OR_RETURN(hidden_dtype == INFINI_DTYPE_F16 || hidden_dtype == INFINI_DTYPE_BF16
+                        || hidden_dtype == INFINI_DTYPE_F32,
+                    INFINI_STATUS_BAD_TENSOR_DTYPE);
+    CHECK_OR_RETURN(output_desc->dtype() == hidden_dtype, INFINI_STATUS_BAD_TENSOR_DTYPE);
+
+    const size_t total_tokens = hidden_shape[0] * hidden_shape[1];
+    CHECK_OR_RETURN(total_tokens > 0 && hidden_shape[2] > 0, INFINI_STATUS_BAD_TENSOR_SHAPE);
+    *desc_ptr = new Descriptor(
+        num_requests,
+        total_tokens,
+        hidden_shape[2] * infiniSizeOf(hidden_dtype),
+        new Opaque{hidden_dtype},
+        handle->device,
+        handle->device_id,
+        hidden_shape[2]);
+    return INFINI_STATUS_SUCCESS;
+}
+
+template <typename T>
+infiniStatus_t launchSelectLastTokenHidden(
+    void *output,
+    const void *hidden_states,
+    const void *input_offsets,
+    size_t total_tokens,
+    size_t num_requests,
+    size_t row_elems,
+    kunlunStream_t stream) {
+
+    if (total_tokens > static_cast<size_t>(UINT32_MAX) || num_requests > static_cast<size_t>(UINT32_MAX) || row_elems > static_cast<size_t>(UINT32_MAX)) {
+        return INFINI_STATUS_BAD_TENSOR_SHAPE;
+    }
+
+    selectLastTokenHiddenKernel<T><<<12, 64, stream>>>(
+        reinterpret_cast<__global_ptr__ T *>(output),
+        reinterpret_cast<__global_ptr__ const T *>(hidden_states),
+        reinterpret_cast<__global_ptr__ const int32_t *>(input_offsets),
+        static_cast<uint32_t>(total_tokens),
+        static_cast<uint32_t>(num_requests),
+        static_cast<uint32_t>(row_elems));
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *output,
+    const void *hidden_states,
+    const void *input_offsets,
+    void *stream) const {
+
+    if (_num_requests == 0) {
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    auto kunlun_stream = reinterpret_cast<kunlunStream_t>(stream);
+
+    switch (_opaque->hidden_dtype) {
+    case INFINI_DTYPE_F16:
+        return launchSelectLastTokenHidden<half>(
+            output, hidden_states, input_offsets,
+            _total_tokens, _num_requests, _kernel_dim_x, kunlun_stream);
+    case INFINI_DTYPE_BF16:
+        return launchSelectLastTokenHidden<bfloat16_t>(
+            output, hidden_states, input_offsets,
+            _total_tokens, _num_requests, _kernel_dim_x, kunlun_stream);
+    case INFINI_DTYPE_F32:
+        return launchSelectLastTokenHidden<float>(
+            output, hidden_states, input_offsets,
+            _total_tokens, _num_requests, _kernel_dim_x, kunlun_stream);
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+}
+
+} // namespace op::select_last_token_hidden::kunlun

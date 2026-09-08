@@ -1,6 +1,9 @@
 #include "infinirt_kunlun.h"
 #include "../../utils.h"
+#include <algorithm>
 #include <cstring>
+#include <mutex>
+#include <vector>
 #include <xpu/runtime.h>
 #include <xpu/runtime_ex.h>
 
@@ -98,12 +101,67 @@ infiniStatus_t freeDevice(void *ptr) {
     return INFINI_STATUS_SUCCESS;
 }
 
+namespace {
+// The Kunlun XRE runtime exposes no memset API, so emulate it with H2D
+// copies from a host staging buffer filled with the requested byte value.
+// The copy is chunked so that large fills (e.g. a multi-GB KV cache) only
+// need a bounded amount of host memory.
+constexpr size_t MEMSET_STAGING_BYTES = 16ULL * 1024 * 1024;
+
+std::mutex memset_staging_mutex;
+std::vector<uint8_t> memset_staging_buffer;
+
+infiniStatus_t memsetViaCopy(void *ptr, int value, size_t count,
+                             kunlunStream_t stream, bool is_async) {
+    if (count == 0) {
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    std::lock_guard<std::mutex> lock(memset_staging_mutex);
+
+    size_t chunk = std::min(count, MEMSET_STAGING_BYTES);
+    if (memset_staging_buffer.size() < chunk) {
+        memset_staging_buffer.resize(chunk);
+    }
+    std::memset(memset_staging_buffer.data(), value, chunk);
+
+    auto dst = static_cast<uint8_t *>(ptr);
+    for (size_t done = 0; done < count;) {
+        size_t n = std::min(chunk, count - done);
+        if (is_async) {
+            // Always enqueue on `stream` (or the default stream if stream is
+            // nullptr) so the fill is properly ordered with respect to work
+            // already queued there; a plain xpu_memcpy would bypass the stream.
+            CHECK_KUNLUNRT(xpu_memcpy_async(dst + done, memset_staging_buffer.data(),
+                                            static_cast<uint64_t>(n), XPUMemcpyKind::XPU_HOST_TO_DEVICE, stream));
+        } else {
+            CHECK_KUNLUNRT(xpu_memcpy(dst + done, memset_staging_buffer.data(),
+                                      static_cast<uint64_t>(n), XPUMemcpyKind::XPU_HOST_TO_DEVICE));
+        }
+        done += n;
+    }
+
+    if (is_async) {
+        // The staging buffer is shared and refilled by the next call; wait for
+        // the async copies to finish reading it before unlocking.
+        if (stream) {
+            CHECK_KUNLUNRT(xpu_wait(stream));
+        } else {
+            CHECK_KUNLUNRT(xpu_wait());
+        }
+    }
+    return INFINI_STATUS_SUCCESS;
+}
+} // namespace
+
 infiniStatus_t memsetDevice(void *ptr, int value, size_t count) {
-    return INFINI_STATUS_NOT_IMPLEMENTED;
+    return memsetViaCopy(ptr, value, count, nullptr, false);
 }
 
 infiniStatus_t memsetDeviceAsync(void *ptr, int value, size_t count, infinirtStream_t stream) {
-    return INFINI_STATUS_NOT_IMPLEMENTED;
+    // XRE has no async memset primitive, so emulate it with copies; they must
+    // still be issued on `stream` to preserve stream ordering.
+    return memsetViaCopy(ptr, value, count, (kunlunStream_t)stream, true);
 }
 
 infiniStatus_t freeHost(void *ptr) {

@@ -20,6 +20,9 @@
 #ifdef ENABLE_ASCEND_API
 #include "ascend/select_last_token_hidden_ascend.h"
 #endif
+#ifdef ENABLE_KUNLUN_API
+#include "kunlun/select_last_token_hidden_kunlun.h"
+#endif
 
 __INFINI_C infiniStatus_t infiniopCreateSelectLastTokenHiddenDescriptor(
     infiniopHandle_t handle,
@@ -65,6 +68,9 @@ __INFINI_C infiniStatus_t infiniopCreateSelectLastTokenHiddenDescriptor(
 #endif
 #ifdef ENABLE_ASCEND_API
         CREATE(INFINI_DEVICE_ASCEND, ascend);
+#endif
+#ifdef ENABLE_KUNLUN_API
+        CREATE(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -116,6 +122,9 @@ __INFINI_C infiniStatus_t infiniopSelectLastTokenHidden(
 #ifdef ENABLE_ASCEND_API
         CALCULATE(INFINI_DEVICE_ASCEND, ascend);
 #endif
+#ifdef ENABLE_KUNLUN_API
+        CALCULATE(INFINI_DEVICE_KUNLUN, kunlun);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -161,6 +170,9 @@ __INFINI_C infiniStatus_t infiniopDestroySelectLastTokenHiddenDescriptor(
 #endif
 #ifdef ENABLE_ASCEND_API
         DESTROY(INFINI_DEVICE_ASCEND, ascend);
+#endif
+#ifdef ENABLE_KUNLUN_API
+        DESTROY(INFINI_DEVICE_KUNLUN, kunlun);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
