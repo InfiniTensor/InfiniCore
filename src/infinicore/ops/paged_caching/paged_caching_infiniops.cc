@@ -32,7 +32,8 @@ void *plan(Tensor k_cache, Tensor v_cache, const Tensor &k, const Tensor &v, con
 
     // FP8 KV caches need on-write quantization, which the flash path does not
     // implement; fall back to the InfiniOP implementation.
-    if (k_scale.has_value() || v_scale.has_value()) {
+    if (k_scale.has_value() || v_scale.has_value() || k_cache->dtype() == DataType::F8
+        || v_cache->dtype() == DataType::F8) {
         return new PlannedMeta{
             std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt,
             std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt, std::nullopt,
