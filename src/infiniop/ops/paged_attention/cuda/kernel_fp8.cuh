@@ -112,6 +112,31 @@ __device__ void flashAttentionDecodeFp8Kernel(
 
     const int seq_len = static_cast<int>(cache_lens_[seq_idx]);
     if (seq_len <= 0) {
+        // A zero-length sequence has no tokens to attend to. Publish the
+        // neutral element (split-kv partials) or zeros (direct output) so the
+        // row is well-defined: combine would otherwise read stale workspace
+        // and the direct path would leave the caller's buffer untouched.
+        const int tid0 = threadIdx.x;
+        if (partial_m_ != nullptr) {
+            const size_t n0 = gridDim.y * gridDim.x; // num_seqs * num_heads
+            const size_t idx0 = static_cast<size_t>(split_idx) * n0 + seq_idx * gridDim.x + head_idx;
+            if (tid0 == 0) {
+                partial_m_[idx0] = -INFINITY;
+                partial_l_[idx0] = 0.0f;
+            }
+            if (tid0 < HEAD_SIZE) {
+                partial_acc_[idx0 * HEAD_SIZE + tid0] = 0.0f;
+            }
+        } else if (tid0 < HEAD_SIZE) {
+            Tdata *out_ptr = out_ + seq_idx * o_stride + head_idx * o_head_stride + tid0;
+            if constexpr (std::is_same_v<Tdata, half>) {
+                *out_ptr = __float2half_rn(0.0f);
+            } else if constexpr (std::is_same_v<Tdata, __nv_bfloat16>) {
+                *out_ptr = __float2bfloat16_rn(0.0f);
+            } else {
+                *out_ptr = static_cast<Tdata>(0.0f);
+            }
+        }
         return;
     }
 

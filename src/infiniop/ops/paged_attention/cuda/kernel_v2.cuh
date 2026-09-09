@@ -163,6 +163,20 @@ __device__ void flashAttentionDecodeWarpKernel(
 
     const int seq_len = static_cast<int>(cache_lens_[seq_idx]);
     if (seq_len <= 0) {
+        // Zero-length sequence: write defined zeros instead of leaving the
+        // caller's output buffer untouched.
+        Tdata *out_ptr = out_ + seq_idx * o_stride + head_idx * HEAD_SIZE;
+#pragma unroll
+        for (int i = 0; i < DIMS_PER_THREAD; ++i) {
+            const int dim = lane * DIMS_PER_THREAD + i;
+            if constexpr (std::is_same_v<Tdata, half>) {
+                out_ptr[dim] = __float2half_rn(0.0f);
+            } else if constexpr (std::is_same_v<Tdata, __nv_bfloat16>) {
+                out_ptr[dim] = __float2bfloat16_rn(0.0f);
+            } else {
+                out_ptr[dim] = static_cast<Tdata>(0.0f);
+            }
+        }
         return;
     }
 
@@ -371,7 +385,11 @@ __device__ void flashAttentionDecodeSplitKvWarpKernel(
     constexpr int DIMS_PER_THREAD = HEAD_SIZE / kWarpSize;
 
     const int seq_len = static_cast<int>(cache_lens_[seq_idx]);
-    if (seq_len <= 0 || num_splits <= 0) {
+    // No early return for seq_len <= 0: shard becomes 0, so every split takes
+    // the empty-shard path below and publishes the neutral element (m=-inf,
+    // l=0, acc=0). Combine then emits a defined zero row instead of reading
+    // stale workspace.
+    if (num_splits <= 0) {
         return;
     }
 
@@ -601,7 +619,7 @@ __device__ void flashAttentionDecodeSplitKvCombineWarpKernel(
         float acc = 0.0f;
         for (int s = 0; s < num_splits; ++s) {
             const float ms = partial_m[s * n + base];
-            const float w = exp2f(ms - m);
+            const float w = (ms == -INFINITY) ? 0.0f : exp2f(ms - m);
             acc += partial_acc[(s * n + base) * HEAD_SIZE + dim] * w;
         }
         const float o = acc * inv_l;
@@ -661,7 +679,11 @@ __device__ void flashAttentionDecodeSplitKvCtaKernel(
     const int warp_id = tid / kWarpSize;
 
     const int seq_len = static_cast<int>(cache_lens_[seq_idx]);
-    if (seq_len <= 0 || num_splits <= 0) {
+    // No early return for seq_len <= 0: shard becomes 0, so every split takes
+    // the empty-shard path below and publishes the neutral element (m=-inf,
+    // l=0, acc=0). Combine then emits a defined zero row instead of reading
+    // stale workspace.
+    if (num_splits <= 0) {
         return;
     }
 
@@ -1108,6 +1130,16 @@ __device__ void flashAttentionDecodeCtaPipelinedKernel(
 
     const int seq_len = static_cast<int>(cache_lens_[seq_idx]);
     if (seq_len <= 0) {
+        // Zero-length sequence: write defined zeros instead of leaving the
+        // caller's output buffer untouched.
+        Tdata *out_ptr = out_ + seq_idx * o_stride + head_idx * HEAD_SIZE;
+        if constexpr (std::is_same_v<Tdata, half>) {
+            out_ptr[tid] = __float2half_rn(0.0f);
+        } else if constexpr (std::is_same_v<Tdata, __nv_bfloat16>) {
+            out_ptr[tid] = __float2bfloat16_rn(0.0f);
+        } else {
+            out_ptr[tid] = static_cast<Tdata>(0.0f);
+        }
         return;
     }
 
@@ -1285,6 +1317,19 @@ __device__ void flashAttentionDecodeCtaKernel(
 
     const int seq_len = static_cast<int>(cache_lens_[seq_idx]);
     if (seq_len <= 0) {
+        // Zero-length sequence: write defined zeros instead of leaving the
+        // caller's output buffer untouched.
+        Tdata *out_ptr = out_ + seq_idx * o_stride + head_idx * HEAD_SIZE;
+#pragma unroll
+        for (int i = 0; i < kPack; ++i) {
+            if constexpr (std::is_same_v<Tdata, half>) {
+                out_ptr[dim + i] = __float2half_rn(0.0f);
+            } else if constexpr (std::is_same_v<Tdata, __nv_bfloat16>) {
+                out_ptr[dim + i] = __float2bfloat16_rn(0.0f);
+            } else {
+                out_ptr[dim + i] = static_cast<Tdata>(0.0f);
+            }
+        }
         return;
     }
 
@@ -1778,6 +1823,23 @@ __device__ void flashAttentionDecodeCtaGqaKernel(
 
     const int seq_len = static_cast<int>(cache_lens_[seq_idx]);
     if (seq_len <= 0) {
+        // Zero-length sequence: write defined zeros for all NGROUPS query
+        // heads instead of leaving the caller's output buffer untouched.
+#pragma unroll
+        for (int g = 0; g < NGROUPS; ++g) {
+            const int q_head = kv_head_idx * NGROUPS + g;
+            Tdata *out_ptr = out_ + seq_idx * o_stride + q_head * HEAD_SIZE;
+#pragma unroll
+            for (int i = 0; i < kPack; ++i) {
+                if constexpr (std::is_same_v<Tdata, half>) {
+                    out_ptr[dim + i] = __float2half_rn(0.0f);
+                } else if constexpr (std::is_same_v<Tdata, __nv_bfloat16>) {
+                    out_ptr[dim + i] = __float2bfloat16_rn(0.0f);
+                } else {
+                    out_ptr[dim + i] = static_cast<Tdata>(0.0f);
+                }
+            }
+        }
         return;
     }
 

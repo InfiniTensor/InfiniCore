@@ -32,6 +32,12 @@ __device__ void pagedAttentionKernel(
     const int num_heads = gridDim.x;
     const int64_t seq_len = seq_lens_[seq_idx];
     if (seq_len == 0) {
+        // Zero-length sequence: write defined zeros instead of leaving the
+        // caller's output buffer untouched.
+        Tdata *out_ptr = out_ + seq_idx * o_stride + head_idx * HEAD_SIZE;
+        for (size_t h_dim = threadIdx.x; h_dim < HEAD_SIZE; h_dim += NUM_THREADS) {
+            out_ptr[h_dim] = static_cast<Tdata>(0.0f);
+        }
         return;
     }
 
