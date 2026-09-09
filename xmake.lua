@@ -1,5 +1,4 @@
 add_rules("mode.debug", "mode.release")
-add_requires("boost", {configs = {stacktrace = true}})
 add_requires("pybind11")
 
 -- Define color codes

@@ -13,9 +13,12 @@ local FLASH_ATTN_ROOT = get_config("flash-attn")
 
 local INFINI_ROOT = os.getenv("INFINI_ROOT") or (os.getenv(is_host("windows") and "HOMEPATH" or "HOME") .. "/.infini")
 
--- Apply -gencode from `xmake f --cuda_arch=sm_80` (comma-separated values supported).
+-- Apply gencode from `xmake f --cuda_arch=sm_80` (comma-separated values supported).
+-- Goes through cugencodes (not raw cuflags) so the device-link step inherits the
+-- arch too: nvcc >= 13 device-links for sm_75 by default when no gencode is given,
+-- which produces binaries without any SASS for the actual GPU.
 -- Returns true when explicit arch flags were added.
-local function apply_cuda_arch_flags(add_fn)
+local function apply_cuda_arch_flags(target)
     local arch_opt = get_config("cuda_arch")
     if not arch_opt or type(arch_opt) ~= "string" or arch_opt == "" then
         return false
@@ -23,8 +26,7 @@ local function apply_cuda_arch_flags(add_fn)
     for _, arch in ipairs(arch_opt:split(",")) do
         arch = arch:trim()
         if arch ~= "" then
-            local compute = arch:gsub("sm_", "compute_")
-            add_fn("-gencode=arch=" .. compute .. ",code=" .. arch)
+            target:add("cugencodes", arch)
         end
     end
     return true
@@ -118,30 +120,18 @@ target("infiniop-nvidia")
         end
 
         -- CUDA arch: explicit --cuda_arch > nvidia-smi auto-detect > native
-        if not apply_cuda_arch_flags(function(flag) target:add("cuflags", flag) end) then
-            local ok, sm_str = os.iorunv("nvidia-smi", {"--query-gpu=compute_cap", "--format=csv,noheader,nounits"})
-            if ok and sm_str then
-                local major, minor = sm_str:match("(%d+)%.(%d+)")
-                if major then
-                    local sm = tonumber(major) * 10 + tonumber(minor)
-                    local archs = {}
-                    if sm >= 75 then table.insert(archs, "sm_75") end
-                    if sm >= 80 then table.insert(archs, "sm_80") end
-                    if sm >= 86 then table.insert(archs, "sm_86") end
-                    if sm >= 89 then table.insert(archs, "sm_89") end
+        if not apply_cuda_arch_flags(target) then
+            -- os.iorunv returns (stdout, stderr); take the first GPU's "major.minor"
+            local out = os.iorunv("nvidia-smi", {"--query-gpu=compute_cap", "--format=csv,noheader,nounits"})
+            local sm_str = out and out:match("[^\r\n]+")
+            local major, minor = (sm_str or ""):match("(%d+)%.(%d+)")
+            if major then
+                local sm = tonumber(major) * 10 + tonumber(minor)
+                if sm == 90 then
                     -- H100 (sm_90a): use sm_90a for cutlass 3.x
-                    if sm == 90 then
-                        target:add("cuflags", "-gencode=arch=compute_90a,code=sm_90a")
-                    elseif sm > 90 then
-                        table.insert(archs, "sm_90")
-                    end
-                    if #archs == 0 then
-                        target:add("cugencodes", "native")
-                    end
-                    for _, arch in ipairs(archs) do
-                        local compute = arch:gsub("sm_", "compute_")
-                        target:add("cuflags", "-gencode=arch=" .. compute .. ",code=" .. arch)
-                    end
+                    target:add("cugencodes", "sm_90a")
+                elseif sm >= 75 then
+                    target:add("cugencodes", "sm_" .. sm)
                 else
                     target:add("cugencodes", "native")
                 end
@@ -232,6 +222,12 @@ target("infinirt-nvidia")
     add_deps("infini-utils")
     on_install(function (target) end)
 
+    on_load(function (target)
+        if not apply_cuda_arch_flags(target) then
+            target:add("cugencodes", "native")
+        end
+    end)
+
     set_policy("build.cuda.devlink", true)
     set_toolchains("cuda")
     add_links("cudart")
@@ -290,7 +286,7 @@ target("flash-attn-nvidia")
     add_links("cudart")
 
     on_load(function (target)
-        if not apply_cuda_arch_flags(function(flag) target:add("cuflags", flag) end) then
+        if not apply_cuda_arch_flags(target) then
             target:add("cugencodes", "native")
         end
     end)
