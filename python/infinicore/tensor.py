@@ -190,7 +190,10 @@ def strided_from_blob(data_ptr, size, strides, *, dtype=None, device=None):
 
 def from_torch(torch_tensor) -> Tensor:
     infini_type = to_infinicore_dtype(torch_tensor.dtype)
-    infini_device = infinicore.device(torch_tensor.device.type, 0)
+    device_index = torch_tensor.device.index
+    infini_device = infinicore.device(
+        torch_tensor.device.type, 0 if device_index is None else device_index
+    )
     return Tensor(
         _infinicore.from_blob(
             torch_tensor.data_ptr(),
