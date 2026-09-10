@@ -20,9 +20,12 @@
  * and accumulated in fp32, so a model loaded this way never materializes a
  * dense copy of its weights.
  *
- * Current backend implements the decode (GEMV) path only, i.e. M must not
- * exceed kMaxDecodeM from the NVIDIA kernel header.  A larger M returns
- * INFINI_STATUS_NOT_IMPLEMENTED rather than silently dequantizing the weight.
+ * The NVIDIA backend uses a register-resident GEMV for small M and a tiled
+ * dequantization plus cuBLAS GEMM path for larger M. The latter requires a
+ * workspace returned by infiniopGetLinearGgufWorkspaceSize. F32 output is
+ * supported only by the small-M GEMV path; the regular BF16 path supports both
+ * decode and prefill. Unsupported block types and malformed packed rows are
+ * rejected instead of silently falling back to a dense weight.
  */
 typedef struct InfiniopDescriptor *infiniopLinearGgufDescriptor_t;
 
