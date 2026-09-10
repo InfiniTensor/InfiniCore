@@ -12,7 +12,9 @@ class AddRMSNormInfo {
 
 public:
     infiniDtype_t wtype;
+    infiniDtype_t ytype;
     infiniDtype_t atype;
+    infiniDtype_t btype;
     float epsilon;
     std::vector<size_t> shape;
     std::vector<ptrdiff_t> y_strides;
@@ -32,22 +34,36 @@ public:
         infiniopTensorDescriptor_t weight_desc,
         float epsilon) {
 
-        auto atype = y_desc->dtype();
+        auto ytype = y_desc->dtype();
+        auto atype = a_desc->dtype();
+        auto btype = b_desc->dtype();
         auto wtype = weight_desc->dtype();
 
-        // Check that all input tensors have the same dtype
-        if (a_desc->dtype() != atype || b_desc->dtype() != atype) {
-            return INFINI_STATUS_BAD_TENSOR_DTYPE;
-        }
+        const bool mixed_f32_bf16 =
+            ytype == INFINI_DTYPE_BF16
+            && atype == INFINI_DTYPE_F32
+            && btype == INFINI_DTYPE_BF16
+            && wtype == INFINI_DTYPE_BF16;
+        const bool mixed_bf16_to_f32 =
+            ytype == INFINI_DTYPE_F32
+            && atype == INFINI_DTYPE_BF16
+            && btype == INFINI_DTYPE_BF16
+            && wtype == INFINI_DTYPE_BF16;
 
-        if (atype == INFINI_DTYPE_F16 || atype == INFINI_DTYPE_BF16) {
+        if (mixed_f32_bf16 || mixed_bf16_to_f32) {
+            // Experimental precision boundary used by GGUF decode: preserve the
+            // F32 linear output through add/RMS reduction, or preserve the final
+            // BF16 residual sum and norm output in F32 before the LM head.
+        } else if (atype != ytype || btype != ytype) {
+            return INFINI_STATUS_BAD_TENSOR_DTYPE;
+        } else if (ytype == INFINI_DTYPE_F16 || ytype == INFINI_DTYPE_BF16) {
             // For half-precision types (FP16/BF16), weights can be the same half-precision type or FP32
-            if (wtype != atype && wtype != INFINI_DTYPE_F32 && wtype != INFINI_DTYPE_BF16 && wtype != INFINI_DTYPE_F16) {
+            if (wtype != ytype && wtype != INFINI_DTYPE_F32 && wtype != INFINI_DTYPE_BF16 && wtype != INFINI_DTYPE_F16) {
                 return INFINI_STATUS_BAD_TENSOR_DTYPE;
             }
-        } else if (atype == INFINI_DTYPE_F32 || atype == INFINI_DTYPE_F64) {
+        } else if (ytype == INFINI_DTYPE_F32 || ytype == INFINI_DTYPE_F64) {
             // For FP32/FP64, activations and weights must be of the same type
-            if (atype != wtype) {
+            if (ytype != wtype) {
                 return INFINI_STATUS_BAD_TENSOR_DTYPE;
             }
         } else {
@@ -100,7 +116,7 @@ public:
         if (residual_out_ndim != y_ndim) {
             return INFINI_STATUS_BAD_TENSOR_SHAPE;
         }
-        if (residual_out_desc->dtype() != atype) {
+        if (residual_out_desc->dtype() != ytype) {
             return INFINI_STATUS_BAD_TENSOR_DTYPE;
         }
         // Check shape matches
@@ -115,7 +131,9 @@ public:
 
         AddRMSNormInfo info;
         info.wtype = wtype;
+        info.ytype = ytype;
         info.atype = atype;
+        info.btype = btype;
         info.epsilon = epsilon;
         info.shape = y_desc->shape();
         info.y_strides = y_desc->strides();
