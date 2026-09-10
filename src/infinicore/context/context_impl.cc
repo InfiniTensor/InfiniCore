@@ -3,7 +3,33 @@
 
 #include "../utils.hpp"
 
+#include <cstdlib>
+
 namespace infinicore {
+
+namespace {
+
+// Index of the card this process should build its default runtime on.
+//
+// InfiniCore otherwise always uses index 0, so every process in a
+// tensor-parallel job opens a context on card 0 in addition to the card it
+// actually works on. Past about four such contexts the MACA driver stops
+// issuing queue blocks and the next stream creation hangs in an unbounded
+// "mxkwCreateQueueBlock ioctl create queue block timeout" retry loop.
+int default_device_index(int device_count) {
+    const char *env = std::getenv("INFINICORE_DEFAULT_DEVICE_INDEX");
+    if (env == nullptr || *env == '\0') {
+        return 0;
+    }
+    char *end = nullptr;
+    long value = std::strtol(env, &end, 10);
+    if (end == env || *end != '\0' || value < 0 || value >= device_count) {
+        return 0;
+    }
+    return static_cast<int>(value);
+}
+
+} // namespace
 
 thread_local Runtime *ContextImpl::current_runtime_ = nullptr;
 
@@ -13,10 +39,15 @@ Runtime *ContextImpl::getCurrentRuntime() {
         // Lazy initialization: use the first available runtime
         // Try to find the first non-CPU device, fallback to CPU
         for (int i = int(Device::Type::COUNT) - 1; i > 0; i--) {
-            if (!runtime_table_[i].empty() && runtime_table_[i][0] != nullptr) {
-                current_runtime_ = runtime_table_[i][0].get()->activate();
-                spdlog::debug("Lazy init: Set current_runtime_ to {} (ptr={})", current_runtime_->device().toString(), static_cast<void *>(current_runtime_));
-                return current_runtime_;
+            // The runtime that exists is not necessarily the one at index 0:
+            // default_device_index() lets a worker put its default runtime on
+            // its own card, so scan the row instead of assuming index 0.
+            for (size_t j = 0; j < runtime_table_[i].size(); j++) {
+                if (runtime_table_[i][j] != nullptr) {
+                    current_runtime_ = runtime_table_[i][j].get()->activate();
+                    spdlog::debug("Lazy init: Set current_runtime_ to {} (ptr={})", current_runtime_->device().toString(), static_cast<void *>(current_runtime_));
+                    return current_runtime_;
+                }
             }
         }
         // Fallback to CPU runtime
@@ -31,13 +62,17 @@ Runtime *ContextImpl::getCurrentRuntime() {
 }
 
 void ContextImpl::setDevice(Device device) {
-    if (device == getCurrentRuntime()->device()) {
+    // Deliberately not getCurrentRuntime(): on a cold thread that would lazily
+    // build the default runtime -- possibly on another card -- just to answer a
+    // comparison whose result we are about to overwrite anyway. That eager
+    // build is what used to strand a context on card 0 in every worker.
+    if (current_runtime_ != nullptr && device == current_runtime_->device()) {
         // Do nothing if the device is already set.
         return;
     }
 
     thread_local bool warn_switch_runtime = false;
-    if (getCurrentRuntime()->isGraphRecording() && !warn_switch_runtime) {
+    if (current_runtime_ != nullptr && current_runtime_->isGraphRecording() && !warn_switch_runtime) {
         spdlog::warn("Switching device runtime during graph recording may break the graph!");
         warn_switch_runtime = true;
     }
@@ -73,8 +108,9 @@ ContextImpl::ContextImpl() {
         if (device_counter[i] > 0) {
             runtime_table_[i].resize(device_counter[i]);
             if (current_runtime_ == nullptr) {
-                runtime_table_[i][0] = std::unique_ptr<Runtime>(new Runtime(Device(Device::Type(i), 0)));
-                current_runtime_ = runtime_table_[i][0].get();
+                const int index = default_device_index(device_counter[i]);
+                runtime_table_[i][index] = std::unique_ptr<Runtime>(new Runtime(Device(Device::Type(i), index)));
+                current_runtime_ = runtime_table_[i][index].get();
             }
         }
     }
