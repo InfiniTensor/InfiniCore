@@ -94,9 +94,9 @@ infiniStatus_t Descriptor::create(
     auto info_result = op::elementwise::ElementwiseInfo::create(out_desc, input_desc_vec);
     CHECK_RESULT(info_result);
     auto info = info_result.take();
-    auto workspace_size = info.getMetaMemSize() + info.getInputSize() * sizeof(void *);
+    auto workspace_size = 0;
 
-    auto device_impl_result = op::elementwise::moore::DeviceImpl::create(handle->internal());
+    auto device_impl_result = op::elementwise::moore::DeviceImpl::create(handle->internal(), info);
     CHECK_RESULT(device_impl_result);
 
     *desc_ptr = new Descriptor(

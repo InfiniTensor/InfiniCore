@@ -38,22 +38,22 @@ public:
         Args &&...args);
 };
 } // namespace op::elementwise::moore
-#define CREATE_ELEMENTWISE_MOORE_DESCRIPTOR(HANDLE, DTYPE, OUT_DESC, INPUT_DESC_VEC)          \
-                                                                                              \
-    auto info_result = op::elementwise::ElementwiseInfo::create(OUT_DESC, INPUT_DESC_VEC);    \
-    CHECK_RESULT(info_result);                                                                \
-    auto info = info_result.take();                                                           \
-    auto workspace_size = info.getMetaMemSize() + info.getInputSize() * sizeof(void *);       \
-                                                                                              \
-    auto device_impl_result = op::elementwise::moore::DeviceImpl::create(HANDLE->internal()); \
-    CHECK_RESULT(device_impl_result);                                                         \
-                                                                                              \
-    *desc_ptr = new Descriptor(                                                               \
-        DTYPE,                                                                                \
-        std::move(info),                                                                      \
-        std::move(device_impl_result.take()),                                                 \
-        workspace_size,                                                                       \
-        HANDLE->device,                                                                       \
+#define CREATE_ELEMENTWISE_MOORE_DESCRIPTOR(HANDLE, DTYPE, OUT_DESC, INPUT_DESC_VEC)                \
+                                                                                                    \
+    auto info_result = op::elementwise::ElementwiseInfo::create(OUT_DESC, INPUT_DESC_VEC);          \
+    CHECK_RESULT(info_result);                                                                      \
+    auto info = info_result.take();                                                                 \
+    auto workspace_size = 0;                                                                        \
+                                                                                                    \
+    auto device_impl_result = op::elementwise::moore::DeviceImpl::create(HANDLE->internal(), info); \
+    CHECK_RESULT(device_impl_result);                                                               \
+                                                                                                    \
+    *desc_ptr = new Descriptor(                                                                     \
+        DTYPE,                                                                                      \
+        std::move(info),                                                                            \
+        std::move(device_impl_result.take()),                                                       \
+        workspace_size,                                                                             \
+        HANDLE->device,                                                                             \
         HANDLE->device_id);
 
 #endif // __INFINIOP_ELEMENTWISE_MOORE_API_H__

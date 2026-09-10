@@ -37,6 +37,7 @@ struct PlannedMeta {
     graph::GraphTensor out, q, k_cache, v_cache, seqlens_k, block_table;
     std::optional<graph::GraphTensor> alibi_slopes;
     float scale;
+    py::object mate_state;
 };
 
 void *plan(Tensor out,
@@ -89,7 +90,7 @@ void run(void *planned_meta) {
         py::object py_seqlens_k = py::cast(seqlens_k);
         py::object py_blk_tbl = py::cast(block_table);
 
-        py::object result = wrapper.attr("moore_mate_flash_attn_decode")(
+        py::tuple result = wrapper.attr("moore_mate_flash_attn_decode")(
             py_q,
             py_k_cache,
             py_v_cache,
@@ -97,12 +98,14 @@ void run(void *planned_meta) {
             py_seqlens_k,
             p->scale,
             block_size,
-            max_seq_len);
+            max_seq_len,
+            true);
 
-        at::Tensor result_t = result.cast<at::Tensor>();
+        at::Tensor result_t = result[0].cast<at::Tensor>();
         out_tensor.copy_(result_t.unsqueeze(1));
 
-        result = py::none();
+        p->mate_state = result;
+
         py_q = py_k_cache = py_v_cache = py_seqlens_k = py_blk_tbl = py::none();
     } catch (const py::error_already_set &e) {
         throw std::runtime_error(
@@ -111,6 +114,7 @@ void run(void *planned_meta) {
 }
 
 void cleanup(void **planned_meta_ptr) {
+    py::gil_scoped_acquire gil;
     delete *reinterpret_cast<PlannedMeta **>(planned_meta_ptr);
     *planned_meta_ptr = nullptr;
 }
