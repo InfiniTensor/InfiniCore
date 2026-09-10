@@ -3,7 +3,6 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import infinicore
 import torch
 import torch.nn.functional as F
 from framework import (
@@ -14,6 +13,7 @@ from framework import (
     TestCase,
 )
 
+import infinicore
 
 _DTYPES = [infinicore.float16, infinicore.bfloat16, infinicore.float32]
 _TOLERANCE = {
@@ -80,24 +80,54 @@ def make_cases():
         (7, 128, 64, 5, 2, 2, "prefill SiTU"),
     ]
     cases = []
-    for T, H, I, E, topk, activation, description in configs:
-        input_data = torch.randn((T, H), generator=generator) * 0.2
-        ids = torch.randint(0, E, (T, topk), generator=generator, dtype=torch.int32)
-        if T > 1:
+    for (
+        num_tokens,
+        hidden_size,
+        intermediate_size,
+        num_experts,
+        topk,
+        activation,
+        description,
+    ) in configs:
+        input_data = torch.randn((num_tokens, hidden_size), generator=generator) * 0.2
+        ids = torch.randint(
+            0,
+            num_experts,
+            (num_tokens, topk),
+            generator=generator,
+            dtype=torch.int32,
+        )
+        if num_tokens > 1:
             ids[-1, -1] = -1
-        raw_routes = torch.rand((T, topk), generator=generator)
+        raw_routes = torch.rand((num_tokens, topk), generator=generator)
         routing = raw_routes / raw_routes.sum(dim=-1, keepdim=True)
         w13_packed = torch.randint(
-            0, 256, (E, 2 * I, H // 2), generator=generator, dtype=torch.uint8
+            0,
+            256,
+            (num_experts, 2 * intermediate_size, hidden_size // 2),
+            generator=generator,
+            dtype=torch.uint8,
         )
         w13_scale = torch.randint(
-            123, 129, (E, 2 * I, H // 32), generator=generator, dtype=torch.uint8
+            123,
+            129,
+            (num_experts, 2 * intermediate_size, hidden_size // 32),
+            generator=generator,
+            dtype=torch.uint8,
         )
         w2_packed = torch.randint(
-            0, 256, (E, H, I // 2), generator=generator, dtype=torch.uint8
+            0,
+            256,
+            (num_experts, hidden_size, intermediate_size // 2),
+            generator=generator,
+            dtype=torch.uint8,
         )
         w2_scale = torch.randint(
-            123, 129, (E, H, I // 32), generator=generator, dtype=torch.uint8
+            123,
+            129,
+            (num_experts, hidden_size, intermediate_size // 32),
+            generator=generator,
+            dtype=torch.uint8,
         )
         for dtype in _DTYPES:
             tensors = [
@@ -130,6 +160,80 @@ def make_cases():
                     description=f"fused_moe_mxfp4 - {description} - dtype={dtype}",
                 )
             )
+
+    # Kimi-K3 reaches this launch size during long prefills. CUDA-compatible
+    # backends limit a launch to a 32-bit total-thread range, so the W13 grid
+    # must be split once route_count * intermediate_size exceeds that limit.
+    num_tokens = 293
+    hidden_size = 64
+    intermediate_size = 3584
+    num_experts = 1
+    topk = 16
+    input_data = torch.randn((num_tokens, hidden_size), generator=generator) * 0.2
+    ids = torch.full((num_tokens, topk), -1, dtype=torch.int32)
+    ids[-1, -1] = 0
+    routing = torch.full((num_tokens, topk), 1.0 / topk)
+    tensors = [
+        (input_data, infinicore.bfloat16, "input"),
+        (ids, infinicore.int32, "selected_experts"),
+        (routing, infinicore.float32, "routing_weights"),
+        (
+            torch.full(
+                (num_experts, 2 * intermediate_size, hidden_size // 2),
+                0x22,
+                dtype=torch.uint8,
+            ),
+            infinicore.uint8,
+            "w13_packed",
+        ),
+        (
+            torch.full(
+                (num_experts, 2 * intermediate_size, hidden_size // 32),
+                127,
+                dtype=torch.uint8,
+            ),
+            infinicore.uint8,
+            "w13_scale",
+        ),
+        (
+            torch.full(
+                (num_experts, hidden_size, intermediate_size // 2),
+                0x22,
+                dtype=torch.uint8,
+            ),
+            infinicore.uint8,
+            "w2_packed",
+        ),
+        (
+            torch.full(
+                (num_experts, hidden_size, intermediate_size // 32),
+                127,
+                dtype=torch.uint8,
+            ),
+            infinicore.uint8,
+            "w2_scale",
+        ),
+    ]
+    cases.append(
+        TestCase(
+            inputs=[
+                TensorSpec.from_tensor(
+                    tuple(tensor.shape),
+                    None,
+                    tensor_dtype,
+                    init_mode=TensorInitializer.MANUAL,
+                    set_tensor=tensor,
+                    name=name,
+                )
+                for tensor, tensor_dtype, name in tensors
+            ],
+            kwargs={"activation": 2},
+            output_spec=None,
+            comparison_target=None,
+            tolerance=_TOLERANCE[infinicore.bfloat16],
+            description="fused_moe_mxfp4 - large-grid regression",
+        )
+    )
     return cases
 
 

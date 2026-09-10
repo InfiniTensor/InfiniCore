@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 
 namespace op::mxfp4_common::cuda {
 
@@ -35,8 +36,9 @@ __global__ void fusedMoeMxfp4W13Kernel(
     size_t num_experts,
     size_t hidden_size,
     size_t intermediate_size,
-    infiniopFusedMoeActivation_t activation) {
-    const size_t block = blockIdx.x;
+    infiniopFusedMoeActivation_t activation,
+    size_t block_offset) {
+    const size_t block = block_offset + blockIdx.x;
     const size_t route = block / intermediate_size;
     const size_t i = block - route * intermediate_size;
     if (route >= route_count || i >= intermediate_size) {
@@ -99,8 +101,9 @@ __global__ void fusedMoeMxfp4W2Kernel(
     size_t topk,
     size_t num_experts,
     size_t hidden_size,
-    size_t intermediate_size) {
-    const size_t block = blockIdx.x;
+    size_t intermediate_size,
+    size_t block_offset) {
+    const size_t block = block_offset + blockIdx.x;
     const size_t token = block / hidden_size;
     const size_t h = block - token * hidden_size;
     if (token >= num_tokens || h >= hidden_size) {
@@ -156,19 +159,35 @@ void launchFusedMoeMxfp4(
     const op::fused_moe_mxfp4::FusedMoeMxfp4Info &info,
     Stream stream) {
     constexpr size_t block_size = 256;
+    // CUDA-compatible Hygon launches use a 32-bit total-thread range. Split
+    // large prefill grids instead of letting grid_size * block_size overflow.
+    constexpr size_t max_blocks_per_launch
+        = std::numeric_limits<uint32_t>::max() / block_size;
     const size_t w13_grid = info.intermediate_size * info.routeCount();
-    fusedMoeMxfp4W13Kernel<<<w13_grid, block_size,
-                             2 * block_size * sizeof(float), stream>>>(
-        activated, input, selected_experts, w13_packed, w13_scale,
-        info.routeCount(), info.topk, info.num_experts,
-        info.hidden_size, info.intermediate_size, info.activation);
+    for (size_t block_offset = 0; block_offset < w13_grid;
+         block_offset += max_blocks_per_launch) {
+        const size_t grid_size = (w13_grid - block_offset < max_blocks_per_launch)
+                                   ? w13_grid - block_offset
+                                   : max_blocks_per_launch;
+        fusedMoeMxfp4W13Kernel<<<grid_size, block_size,
+                                 2 * block_size * sizeof(float), stream>>>(
+            activated, input, selected_experts, w13_packed, w13_scale,
+            info.routeCount(), info.topk, info.num_experts,
+            info.hidden_size, info.intermediate_size, info.activation, block_offset);
+    }
 
     const size_t w2_grid = info.hidden_size * info.num_tokens;
-    fusedMoeMxfp4W2Kernel<<<w2_grid, block_size,
-                            block_size * sizeof(float), stream>>>(
-        output, activated, selected_experts, routing_weights, w2_packed, w2_scale,
-        info.num_tokens, info.topk, info.num_experts,
-        info.hidden_size, info.intermediate_size);
+    for (size_t block_offset = 0; block_offset < w2_grid;
+         block_offset += max_blocks_per_launch) {
+        const size_t grid_size = (w2_grid - block_offset < max_blocks_per_launch)
+                                   ? w2_grid - block_offset
+                                   : max_blocks_per_launch;
+        fusedMoeMxfp4W2Kernel<<<grid_size, block_size,
+                                block_size * sizeof(float), stream>>>(
+            output, activated, selected_experts, routing_weights, w2_packed, w2_scale,
+            info.num_tokens, info.topk, info.num_experts,
+            info.hidden_size, info.intermediate_size, block_offset);
+    }
 }
 
 inline size_t fusedMoeMxfp4DtypeSize(infiniDtype_t dtype) {
