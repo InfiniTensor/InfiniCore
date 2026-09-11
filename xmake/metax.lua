@@ -2,12 +2,13 @@
 local MACA_ROOT = os.getenv("MACA_PATH") or os.getenv("MACA_HOME") or os.getenv("MACA_ROOT")
 local FLASH_ATTN_ROOT = get_config("flash-attn")
 
--- MetaX flash-attn (pip `flash_attn_2_cuda`) may append an extra trailing argument
--- (`flash_attn_mars_ext_`) depending on the underlying HPCC/MetaX stack version.
-do
-    -- Intentionally empty: HPCC version parsing is deferred to `before_build`
-    -- on `infinicore_cpp_api` where `os.iorunv` is available in this xmake sandbox.
-end
+-- MetaX flash-attn (pip `flash_attn_2_cuda`) ships two incompatible forward ABIs
+-- (see include/infinicore/adaptor/flash_attention_adaptor.hpp):
+--   253: flash_attn 2.5.3 wheels (MACA/HPCC 2.x) -- mha_fwd/mha_varlen_fwd/mha_fwd_kvcache take 13/18/18 args
+--   263: flash_attn 2.6.3+metax wheels (MACA/HPCC 3.x) -- the same functions take 16/23/21 args
+-- The wheel `.so` that will actually be linked is the ground truth, so its dynamic symbols
+-- are inspected at load time (same approach as Cambricon in `xmake/bang.lua`); the HPCC/MACA
+-- toolkit Version.txt is only a fallback when the wheel cannot be inspected.
 
 -- Resolve MetaX flash-attn .so path (used only from this file: `before_link` sandbox cannot see globals from `xmake.lua`).
 local FLASH_ATTN_METAX_CUDA_SO_CONTAINER_DEFAULT =
@@ -41,10 +42,102 @@ local function metax_flash_attn_cuda_so_path()
     return container_path
 end
 
--- MetaX flash-attn link flags for pip `flash_attn_2_cuda`.
--- Version/ABI macros are set in `xmake.lua` for `infinicore_cpp_api` so they apply to all sources.
+-- Classify a MetaX flash-attn wheel as "253"/"263" from its demangled dynamic symbols.
+-- Returns nil + reason when the wheel cannot be inspected or recognized.
+-- `run(program, argv)` is injected by the caller: xmake (>= 3.x) restricts the script-body
+-- sandbox (no os.iorunv/pcall/try there), while hook functions get the full sandbox, so the
+-- on_load hook below passes a runner built from its own environment into these body-level
+-- helpers. The runner returns nil instead of raising when the program is unavailable.
+local function metax_detect_flash_attn_abi(so_path, run)
+    if not so_path or not os.isfile(so_path) then
+        return nil, "wheel .so not found"
+    end
+    local symbols = run("nm", {"-D", "-C", "--defined-only", so_path})
+    if not symbols or symbols == "" then
+        return nil, "could not read the dynamic symbols of " .. so_path
+    end
+    if not symbols:find("mha_fwd(at::Tensor&", 1, true) then
+        return nil, "no demangled mha_fwd symbol in " .. so_path
+    end
+    -- Both markers exist only in flash_attn 2.6.3+metax wheels:
+    --   * leftpad_k (`optional<at::Tensor const>&`) in mha_varlen_fwd -- primary evidence,
+    --     it is one of the params the 2.6.3 ABI appends (substring matches the
+    --     `std::optional` and `c10::optional` demangled spellings alike);
+    --   * mha_fwd_kvcache_dequant -- corroboration.
+    local varlen_sig = symbols:match("[^\n]*mha_varlen_fwd%(([^\n]*)") or ""
+    local has_leftpad = varlen_sig:find("optional<at::Tensor const>&", 1, true) ~= nil
+    local has_dequant = symbols:find("mha_fwd_kvcache_dequant(", 1, true) ~= nil
+    if has_leftpad ~= has_dequant then
+        print(string.format(
+            "warning: metax+flash-attn: inconsistent ABI markers in %s (varlen leftpad_k=%s, mha_fwd_kvcache_dequant=%s); trusting leftpad_k",
+            so_path, tostring(has_leftpad), tostring(has_dequant)))
+    end
+    if has_leftpad then
+        return "263"
+    end
+    return "253"
+end
+
+-- Legacy fallback: HPCC (`/opt/hpcc/Version.txt`) or MACA (`/opt/maca/Version.txt`, with
+-- `--use-mc=y`) toolkit major version. MACA/HPCC 3.x stacks ship flash_attn 2.6.3+metax.
+local function metax_stack_version_major(run)
+    local version_txt = "/opt/hpcc/Version.txt"
+    if not os.isfile(version_txt) and has_config("use-mc") then
+        version_txt = "/opt/maca/Version.txt"
+    end
+    if not os.isfile(version_txt) then
+        return nil
+    end
+    local content = run("cat", {version_txt}) or ""
+    content = content:trim()
+    local major_str = content:match("Version:(%d+)") or content:match("^(%d+)")
+    if major_str and major_str ~= "" then
+        return tonumber(major_str)
+    end
+    return nil
+end
+
+-- MetaX flash-attn ABI selection + link flags for pip `flash_attn_2_cuda`.
+-- `INFINICORE_METAX_FA_ABI` is added {public = true} so it also reaches `infinicore-test`,
+-- which depends on this target and compiles the same `mha_*_flashattn.cc` sources.
 target("infinicore_cpp_api")
     if get_config("flash-attn") and get_config("flash-attn") ~= "" then
+        on_load(function (target)
+            -- This hook body runs in xmake's full sandbox (unlike the restricted
+            -- script-body scope), so os.iorunv/import are available here.
+            local find_program = import("lib.detect.find_program")
+            local function run(program, argv)
+                if not find_program(program) then
+                    return nil
+                end
+                return os.iorunv(program, argv)
+            end
+            local abi = get_config("metax-fa-abi")
+            if not abi or abi == "" or abi == "auto" then
+                local so_path = metax_flash_attn_cuda_so_path()
+                local detected, why = metax_detect_flash_attn_abi(so_path, run)
+                if detected then
+                    abi = detected
+                    print(string.format("metax+flash-attn: %s ABI detected from wheel symbols: %s", abi, so_path))
+                else
+                    local major = metax_stack_version_major(run)
+                    if major then
+                        -- Header derives the ABI from the toolkit major version (>= 3 -> 263).
+                        target:add("defines", "INFINICORE_HPCC_VERSION_MAJOR=" .. tostring(major), {public = true})
+                        print(string.format(
+                            "metax+flash-attn: could not inspect the wheel (%s); falling back to HPCC/MACA major version %d",
+                            why or "unknown reason", major))
+                    else
+                        print(string.format(
+                            "warning: metax+flash-attn: could not inspect the wheel (%s) and found no HPCC/MACA Version.txt; defaulting to the flash_attn 2.5.3 ABI",
+                            why or "unknown reason"))
+                    end
+                end
+            end
+            if abi == "253" or abi == "263" then
+                target:add("defines", "INFINICORE_METAX_FA_ABI=" .. abi, {public = true})
+            end
+        end)
         before_link(function (target)
             local flash_so_metax = metax_flash_attn_cuda_so_path()
             local flash_dir_metax = path.directory(flash_so_metax)

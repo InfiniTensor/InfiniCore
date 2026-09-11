@@ -198,11 +198,11 @@ void run(void *planned_meta) {
         const std::optional<infini::ops::Tensor> no_tensor;
         const std::optional<infini::ops::Tensor> block_table = p->block_table
                                                                  ? std::optional<infini::ops::Tensor>{
-                                                                     p->infiniops_block_table->tensor(*p->block_table)}
+                                                                       p->infiniops_block_table->tensor(*p->block_table)}
                                                                  : std::nullopt;
         const std::optional<infini::ops::Tensor> alibi_slopes = p->alibi_slopes
                                                                   ? std::optional<infini::ops::Tensor>{
-                                                                      p->infiniops_alibi_slopes->tensor(*p->alibi_slopes)}
+                                                                        p->infiniops_alibi_slopes->tensor(*p->alibi_slopes)}
                                                                   : std::nullopt;
 
         infini::ops::FlashAttnVarlenFunc::Call(
@@ -294,6 +294,13 @@ void run(void *planned_meta) {
     }
 
 #ifdef ENABLE_FLASH_ATTN
+#if defined(ENABLE_METAX_API) && !INFINICORE_METAX_FA263
+    // The MetaX flash-attn 2.5.3 (MACA/HPCC 2.x) varlen ABI has no block_table parameter;
+    // refuse paged KV explicitly instead of silently computing attention over the wrong keys.
+    if (p->block_table) {
+        throw std::runtime_error("paged KV varlen attention requires MetaX flash-attn 2.6.3+ (MACA/HPCC 3.x)");
+    }
+#endif
     auto out = std::optional<at::Tensor>(out_work);
     std::optional<at::Tensor> seqused_k = std::nullopt;
     std::optional<const at::Tensor> leftpad_k = std::nullopt;
@@ -303,8 +310,8 @@ void run(void *planned_meta) {
     auto alibi_slopes = p->alibi_slopes ? std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(*p->alibi_slopes)) : std::nullopt;
     auto scale = p->scale;
 
-#if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
-    std::optional<at::Tensor> flash_attn_mars_ext = std::nullopt;
+#if defined(ENABLE_METAX_API) && INFINICORE_METAX_FA263
+    std::optional<at::Tensor> s_aux = std::nullopt;
 #endif
 
     INFINICORE_FLASH_OP(mha_varlen_fwd)
@@ -316,8 +323,10 @@ void run(void *planned_meta) {
         cu_seqlens_q,
         cu_seqlens_kv,
         seqused_k,
+#if !defined(ENABLE_METAX_API) || INFINICORE_METAX_FA263
         leftpad_k,
         block_table,
+#endif
         alibi_slopes,
         max_seqlen_q,
         max_seqlen_k,
@@ -327,12 +336,15 @@ void run(void *planned_meta) {
         true,
         -1,
         -1,
+#if !defined(ENABLE_METAX_API) || INFINICORE_METAX_FA263
         0.0,
+#endif
         false,
         std::nullopt
-#if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
+#if defined(ENABLE_METAX_API) && INFINICORE_METAX_FA263
         ,
-        flash_attn_mars_ext
+        s_aux,
+        false
 #endif
     );
 
