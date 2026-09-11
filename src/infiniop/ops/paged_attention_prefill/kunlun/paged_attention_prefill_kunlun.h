@@ -1,8 +1,0 @@
-#ifndef __PAGED_ATTENTION_PREFILL_KUNLUN_H__
-#define __PAGED_ATTENTION_PREFILL_KUNLUN_H__
-
-#include "../paged_attention_prefill.h"
-
-DESCRIPTOR(kunlun)
-
-#endif // __PAGED_ATTENTION_PREFILL_KUNLUN_H__

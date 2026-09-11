@@ -1,387 +1,317 @@
 # InfiniCore
 
-[![Doc](https://img.shields.io/badge/Document-ready-blue)](https://github.com/InfiniTensor/InfiniCore-Documentation)
-[![CI](https://github.com/InfiniTensor/InfiniCore/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/InfiniTensor/InfiniCore/actions)
-[![license](https://img.shields.io/github/license/InfiniTensor/InfiniCore)](https://mit-license.org/)
-![GitHub repo size](https://img.shields.io/github/repo-size/InfiniTensor/InfiniCore)
-![GitHub code size in bytes](https://img.shields.io/github/languages/code-size/InfiniTensor/InfiniCore)
+**InfiniCore is a unified computing architecture for heterogeneous hardware.**
 
-[![GitHub Issues](https://img.shields.io/github/issues/InfiniTensor/InfiniCore)](https://github.com/InfiniTensor/InfiniCore/issues)
-[![GitHub Pull Requests](https://img.shields.io/github/issues-pr/InfiniTensor/InfiniCore)](https://github.com/InfiniTensor/InfiniCore/pulls)
-![GitHub contributors](https://img.shields.io/github/contributors/InfiniTensor/InfiniCore)
-![GitHub commit activity](https://img.shields.io/github/commit-activity/m/InfiniTensor/InfiniCore)
+It provides a common software foundation for building AI and high-performance computing workloads across CPUs, GPUs, NPUs, and other accelerators.
 
-InfiniCore 是一个跨平台统一编程工具集，为不同芯片平台的功能（包括计算、运行时、通信等）提供统一 C 语言接口。目前支持的硬件和后端包括：
+InfiniCore brings together three core components:
 
-- CPU；
-- CUDA
-  - 英伟达 GPU；
-  - 摩尔线程 GPU；
-  - 天数智芯 GPU；
-  - 沐曦 GPU；
-  - 海光 DCU；
-  - 阿里 PPU；
-- 华为昇腾 NPU；
-- 寒武纪 MLU；
-- 昆仑芯 XPU；
+* **[InfiniRT](https://github.com/InfiniTensor/InfiniRT)** — runtime and device services.
+* **[InfiniOps](https://github.com/InfiniTensor/InfiniOps)** — high-performance computational operators.
+* **[InfiniCCL](https://github.com/InfiniTensor/InfiniCCL)** — collective communication for distributed workloads.
 
-API 定义以及使用方式详见 [`InfiniCore文档`](https://github.com/InfiniTensor/InfiniCore-Documentation)。
+Together, they provide a unified stack spanning **runtime, computation, and communication**, while allowing each hardware backend to use its native SDKs, libraries, and optimized implementations.
 
-## 项目依赖
+## Architecture
 
-- [Xmake](https://xmake.io/)：跨平台自动构建工具，用于编译 InfiniCore 项目。
-- [gcc-11](https://gcc.gnu.org/) 以上或者 [clang-16](https://clang.llvm.org/)：基础编译器，需要支持 C++ 17 标准。
-- [Python>=3.10](https://www.python.org/)
-  - [PyTorch](https://pytorch.org/)：可选，用于对比测试。
-- 各个硬件平台的工具包：请参考各厂商官方文档（如英伟达平台需要安装 CUDA Toolkit）。
+```mermaid
+flowchart TB
+    App["Applications / AI Frameworks"]
 
-## 配置和使用
+    Core["InfiniCore<br/>Unified Computing Architecture"]
 
-### 一、克隆项目
+    RT["InfiniRT<br/>Runtime & Device Services"]
+    Ops["InfiniOps<br/>High-Performance Operators"]
+    CCL["InfiniCCL<br/>Collective Communication"]
 
-由于仓库中含有子模块，所以在克隆时请添加 `--recursive` 或 `--recurse-submodules`，如：
+    HW["Heterogeneous Hardware<br/>CPU · GPU · NPU · Accelerators"]
 
-```shell
-git clone --recursive https://github.com/InfiniTensor/InfiniCore.git
+    App --> Core
+
+    Core --> RT
+    Core --> Ops
+    Core --> CCL
+
+    RT --> HW
+    Ops --> HW
+    CCL --> HW
 ```
 
-或者在普通克隆后进行更新：
+InfiniCore separates the common programming interface from platform-specific implementations. Applications can target the InfiniCore stack while individual components map operations to the appropriate hardware runtime, optimized kernels, and communication libraries.
 
-```shell
+## Components
+
+| Component                                                  | Responsibility                 | Highlights                                                                                                  |
+| ---------------------------------------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| **[InfiniRT](https://github.com/InfiniTensor/InfiniRT)**   | Runtime and device abstraction | Device management, memory management, runtime operations, multi-backend runtime interface                   |
+| **[InfiniOps](https://github.com/InfiniTensor/InfiniOps)** | Computational operators        | High-performance operators, common operator APIs, backend-specific optimized implementations                |
+| **[InfiniCCL](https://github.com/InfiniTensor/InfiniCCL)** | Collective communication       | Unified collective APIs, heterogeneous communication, multiple communication backends, multi-node execution |
+
+### InfiniRT
+
+InfiniRT provides the runtime foundation of InfiniCore.
+
+It exposes common runtime services such as:
+
+* device selection and management;
+* device memory allocation and deallocation;
+* memory copy and memory initialization;
+* runtime dispatch across supported hardware backends;
+* common runtime abstractions for higher-level components.
+
+Applications and libraries can use a consistent runtime interface while InfiniRT dispatches operations to the selected hardware backend.
+
+Learn more in the [InfiniRT repository](https://github.com/InfiniTensor/InfiniRT).
+
+### InfiniOps
+
+InfiniOps is the high-performance operator library of InfiniCore.
+
+It provides common operator APIs backed by platform-specific implementations optimized for different processors and accelerators.
+
+InfiniOps is designed around:
+
+* a unified operator interface;
+* cross-platform execution;
+* optimized native kernels;
+* backend-specific vendor libraries and toolchains;
+* consistent testing and operator semantics across platforms.
+
+Operator implementations may differ between platforms while preserving the common InfiniOps programming model.
+
+Learn more in the [InfiniOps repository](https://github.com/InfiniTensor/InfiniOps).
+
+### InfiniCCL
+
+InfiniCCL provides collective communication capabilities for distributed AI and HPC workloads.
+
+It offers a unified, NCCL-like communication interface across multiple hardware platforms and communication libraries, with features including:
+
+* collective communication primitives;
+* heterogeneous device support;
+* multiple communication backends;
+* automatic platform detection;
+* multi-node execution and orchestration through `icclrun`.
+
+InfiniCCL can work with communication backends including OpenMPI, MPICH, NCCL, and MCCL.
+
+Learn more in the [InfiniCCL repository](https://github.com/InfiniTensor/InfiniCCL).
+
+## Platform Support
+
+InfiniCore is designed for heterogeneous computing environments and supports a growing range of hardware platforms.
+
+The following table summarizes backend availability across the current InfiniCore components.
+
+| Platform              | InfiniRT | InfiniOps | InfiniCCL |
+| --------------------- | :------: | :-------: | :-------: |
+| **CPU**               |    ✅    |    ✅    |     ◐     |
+| **NVIDIA GPU**        |    ✅    |    ✅    |     ✅    |
+| **Iluvatar GPU**      |    ✅    |    ✅    |     ✅    |
+| **MetaX GPU**         |    ✅    |    ✅    |     ✅    |
+| **Hygon DCU**         |    ✅    |    ✅    |     ✅    |
+| **Moore Threads GPU** |    ✅    |    ✅    |     ✅    |
+| **Cambricon MLU**     |    ✅    |    ✅    |     ✅    |
+| **T-Head PPU**        |    ✅    |    ✅    |     —     |
+| **Huawei Ascend NPU** |    ✅    |    ✅    |     —     |
+| **Mars**              |    ✅    |    ✅    |     —     |
+
+> [!NOTE]
+> The table represents backend availability in the current component revisions. Backend availability does **not** imply identical operator, runtime, or collective coverage on every platform.
+>
+> Hardware support continues to evolve. Refer to the documentation of each component for detailed feature coverage and platform-specific requirements.
+
+Legend:
+
+* ✅ Backend available
+* ◐ Partial support
+* — Not currently available in the component
+
+### Backend Toolchains
+
+Different platforms use their corresponding native SDKs and toolchains. Examples include:
+
+| Platform      | Typical Toolchain / SDK |
+| ------------- | ----------------------- |
+| NVIDIA        | CUDA Toolkit            |
+| Iluvatar      | CoreX                   |
+| MetaX         | MACA                    |
+| Hygon         | DTK                     |
+| Moore Threads | MUSA                    |
+| Cambricon     | Neuware                 |
+| Huawei Ascend | CANN                    |
+
+Platform-specific SDK versions and environment requirements are documented in the corresponding component repositories.
+
+## Getting Started
+
+### Clone InfiniCore
+
+Clone the repository together with all InfiniCore components:
+
+```bash
+git clone --recurse-submodules https://github.com/InfiniTensor/InfiniCore.git
+cd InfiniCore
+```
+
+If the repository has already been cloned without submodules:
+
+```bash
+git submodule sync --recursive
 git submodule update --init --recursive
 ```
 
-配置`INFINI_ROOT` 和 `LD_LIBRARY_PATH` 环境变量。  
-默认`INFINI_ROOT`为`$HOME/.infini`，可以使用以下命令自动配置：
+The source tree contains the three core components under `submodules/`:
 
-```shell
-source scripts/set_env_linux.sh
+```text
+InfiniCore/
+├── submodules/
+│   ├── InfiniRT/
+│   ├── InfiniOps/
+│   └── InfiniCCL/
+├── CONTRIBUTING.md
+├── LICENSE
+└── README.md
 ```
 
-如果你需要在本地开发九齿算子（即需要对九齿算子库进行修改），推荐单独克隆[九齿算子库](https://github.com/InfiniTensor/ntops)，并从本地安装：
+## Building the Stack
 
-```shell
-git clone https://github.com/InfiniTensor/ntops.git
-cd ntops
-pip install -e .
-```
+Each InfiniCore component has its own build configuration because different hardware platforms require different SDKs, compilers, libraries, and build options.
 
-### 二、编译安装
+For a typical compute stack, start with **InfiniRT**, then build **InfiniOps** against the installed InfiniRT runtime.
 
-InfiniCore 项目主要包括：
+### 1. Build InfiniRT
 
-1. 底层 C 库（InfiniOP/InfiniRT/InfiniCCL）：[`一键安装`](#一键安装底层库)|[`手动安装`](#手动安装底层库)；
-2. InfiniCore C++ 库：[`安装指令`](#2-安装-c-库)
-3. InfiniCore Python 包（依赖[九齿算子库](https://github.com/InfiniTensor/ntops)）：[`安装指令`](#3-安装-python-包)
-
-三者需要按照顺序进行编译安装。
-
-#### 1. 安装底层库
-
-##### 一键安装底层库
-
-在 `script/` 目录中提供了 `install.py` 安装脚本。使用方式如下：
-
-```shell
-cd InfiniCore
-
-python scripts/install.py [XMAKE_CONFIG_FLAGS]
-```
-
-参数 `XMAKE_CONFIG_FLAGS` 是 xmake 构建配置，可配置下列可选项：
-
-| 选项                     | 功能                              | 默认值
-|--------------------------|-----------------------------------|:-:
-| `--omp=[y\|n]`           | 是否使用 OpenMP                   | y
-| `--cpu=[y\|n]`           | 是否编译 CPU 接口实现             | y
-| `--nv-gpu=[y\|n]`        | 是否编译英伟达 GPU 接口实现       | n
-| `--ascend-npu=[y\|n]`    | 是否编译昇腾 NPU 接口实现         | n
-| `--cambricon-mlu=[y\|n]` | 是否编译寒武纪 MLU 接口实现       | n
-| `--metax-gpu=[y\|n]`     | 是否编译沐曦 GPU 接口实现         | n
-| `--use-mc=[y\|n]`        | 是否沐曦 GPU 接口实现使用maca SDK | n
-| `--moore-gpu=[y\|n]`     | 是否编译摩尔线程 GPU 接口实现     | n
-| `--iluvatar-gpu=[y\|n]`  | 是否编译天数 GPU 接口实现         | n
-| `--qy-gpu=[y\|n]`        | 是否编译QY GPU 接口实现           | n
-| `--hygon-dcu=[y\|n]`     | 是否编译海光 DCU 接口实现         | n
-| `--kunlun-xpu=[y\|n]`    | 是否编译昆仑 XPU 接口实现         | n
-| `--ali-ppu=[y\|n]`       | 是否编译阿里 PPU 接口实现         | n
-| `--ninetoothed=[y\|n]`   | 是否编译九齿实现                 | n
-| `--ccl=[y\|n]`           | 是否编译 InfiniCCL 通信库接口实现 | n
-| `--graph=[y\|n]`         | 是否编译 cuda graph 接口实现      | n
-
-##### 手动安装底层库
-
-0. 生成九齿算子（可选）
-
-   - 克隆并安装[九齿算子库](https://github.com/InfiniTensor/ntops)。
-
-   - 在 `InfiniCore` 文件夹下运行以下命令 AOT 编译库中的九齿算子：
-
-     ```shell
-     PYTHONPATH=${PYTHONPATH}:src python scripts/build_ntops.py
-     ```
-
-1. 项目配置
-
-   windows系统上，建议使用`xmake v2.8.9`编译项目。
-   - 查看当前配置
-
-     ```shell
-     xmake f -v
-     ```
-
-   - 配置 CPU（默认配置）
-
-     ```shell
-     xmake f -cv
-     ```
-
-   - 配置加速卡
-
-     ```shell
-     # 英伟达
-     # 可以指定 CUDA 路径， 一般环境变量为 `CUDA_HOME` 或者 `CUDA_ROOT`
-     # window系统：--cuda="%CUDA_HOME%"
-     # linux系统：--cuda=$CUDA_HOME
-     xmake f --nv-gpu=true --cuda=$CUDA_HOME -cv
-
-     # QY
-     # 需要指定环境变量QY_ROOT来确认库所在位置，比如说export QY_ROOT=/usr/local/XX
-     xmake f --qy-gpu=true --cuda=$CUDA_HOME -cv
-
-     # 寒武纪
-     xmake f --cambricon-mlu=true -cv
-
-     # 华为昇腾
-     xmake f --ascend-npu=true -cv
-     ```
-
-##### 试验功能 -- 使用英伟达平台 flash attention 库中的算子
-
-  ```shell
-
-  # 该功能依赖 flash-attention 和 cutlass，默认不随仓库递归拉取。
-  # 对应子模块固定为以下提交：
-      ## flash-attention commit: 10846960ca0793b993446f6dbaf696479c127a9d
-      ## cutlass commit: 087c84df83d254b5fb295a7a408f1a1d554085cf
-
-  # 若需启用英伟达平台 flash attention 能力，请手动初始化对应子模块：
-      git -c submodule.third_party/flash-attention.update=checkout \
-          -c submodule.third_party/cutlass.update=checkout \
-          submodule update --init third_party/flash-attention third_party/cutlass
-
-  # 上述命令只初始化这两个顶层子模块，并会切换到仓库记录的固定提交。
-
-  # 设置cutlass路径的环境变量CUTLASS_HOME(部分环境可选)
-      export CUTLASS_HOME=<path-to>/InfiniCore/third_party/cutlass
-
-  # xmake配置环节额外打开 --aten 开关，并设置 --flash-attn 库位置，例(cuda路径部分环境可使用默认)：
-      xmake f --nv-gpu=y --ccl=y --aten=y [--graph=y] [--cuda=$CUDA_HOME] --flash-attn=<path-to>/InfiniCore/third_party/flash-attention -cv
-
-  # 设置额外的环境变量
-      export CPLUS_INCLUDE_PATH=$CUDA_HOME/include:$CPLUS_INCLUDE_PATH
-
-  # flash attention库会伴随infinicore_cpp_api一同编译安装
-
-  ```
-
-##### 试验功能 -- 使用昇腾平台 Flash Attention 能力
-
-  ```shell
-  # 昇腾平台的 Flash Attention 能力依赖 ATen。
-  # 同时启用 InfiniCCL 通信库和 Graph 接口：
-  xmake f --ascend-npu=true --aten=y --flash-attn=y --ccl=y --graph=y -cv
-  ```
-
-##### 试验功能 -- 使用寒武纪平台预编译 Flash Attention 能力
-
-  ~~~shell
-  # 寒武纪直接链接当前 Python 环境中已安装的 flash_attn_2_bang 扩展。
-  # --flash-attn 指向包含 flash_attn_2_bang*.so 的 site-packages 目录。
-  python -c "import flash_attn_2_bang; print(flash_attn_2_bang.__file__)"
-
-  export FLASH_ATTN_2_BANG_SO=/torch/venv3/pytorch/lib/python3.10/site-packages/flash_attn_2_bang.cpython-310-x86_64-linux-gnu.so
-  # MLU590，默认值也可以省略
-  xmake f --cambricon-mlu=true --bang-mlu-arch=mtp_592 \
-    --ccl=true --aten=true \
-    --flash-attn=/torch/venv3/pytorch/lib/python3.10/site-packages -cv
-
-  # MLU580
-  xmake f --cambricon-mlu=true --bang-mlu-arch=mtp_613 \
-    --ccl=true --aten=true \
-    --flash-attn=/torch/venv3/pytorch_infer/lib/python3.12/site-packages -cv
-
-  xmake build && xmake install && xmake build _infinicore && xmake install _infinicore && pip install -e .
-
-  # 当前 PyTorch/torch_mlu 使用 C++ ABI 0；依赖 InfiniCore 的 C++ 扩展
-  # 也必须使用相同 ABI。以 InfiniLM 为例：
-  cd ../InfiniLM
-  xmake f --cxxflags=-D_GLIBCXX_USE_CXX11_ABI=0 -c
-  xmake -r _infinilm
-  xmake install _infinilm
-
-  # 当前寒武纪 wheel 不导出专用 KV-cache 符号。分页路径仅收集
-  # block table 中的有效 KV token，随后调用 wheel 的 mha_varlen_fwd。
-  # head dimension 超过 wheel 限制或 Q/K/V 末维不一致时使用 ATen SDPA。
-  ~~~
-
-
-##### 试验功能 -- 使用摩尔线程开源 mate 提供的 flash attention 能力
-  ```shell
-  #该功能依赖摩尔线程开源项目 mate（https://github.com/MooreThreads/mate） v0.1.3 版本，默认不随仓库递归拉取。
-  
-  #若需启用摩尔线程开源项目 mate 提供的 flash attention 能力，请手动初始化对应子模块：
-  git -c submodule.third_party/mate.update=checkout submodule update --init --recursive third_party/mate
-
-  #随后参考 mate v0.1.3 README 进行编译，之后在 xmake 配置环节额外打开 --aten 开关和 --flash-attn 使用 mate 提供的 flash attention 能力，可参考：
-  xmake f --moore-gpu=y --aten=y --flash-attn=y -cv
-  ```
-
-##### 试验功能 -- 使用天数智芯平台 Flash Attention 能力
-
-  ```shell
-  # 天数智芯的 MHA、MHA VarLen 和 MHA KVCache 实现依赖 ATen，
-  # 可通过以下任一种方式启用：
-
-  # 方式一：使用 vendor operators 提供的 Flash Attention 实现。
-  xmake f --iluvatar-gpu=true --cuda=$CUDA_HOME --aten=true \
-      --use-vendor-ops=true -cv
-
-  # 方式二：指定包含 _C.cpython-*.so 的 vllm_iluvatar 预编译扩展目录。
-  # eg. --flash-attn=/usr/local/lib/python3.12/site-packages/vllm_iluvatar
-  xmake f --iluvatar-gpu=true --cuda=$CUDA_HOME --aten=true \
-      --flash-attn=<path-to-fa2> \
-      -cv
-
-  # 两种方式都会自动启用天数智芯 Flash Attention 实现，无需手动定义编译宏。
-  # 如需指定架构，可追加例如：--iluvatar_arch=ivcore11。
-
-  # 按需编译并安装 C++/Python 封装：
-  xmake build _infinicore
-  xmake install _infinicore
-  pip install -e .
-  ```
-
-
-##### 试验功能 -- 使用海光 DCU 平台预编译 flash-attn 能力
-
-  ```shell
-  # 海光 DCU 不在 InfiniCore 内现场编译 flash-attn，而是链接 Python 环境中已经安装好的 flash-attn 运行库。
-  # 因此 --flash-attn 需要指向 flash-attn 的 Python 安装根目录，通常是当前 Python 的 site-packages/dist-packages 目录。
-  # 该目录下需要能找到以下两个文件：
-  #   1. flash_attn_2_cuda*.so
-  #   2. flash_attn/lib/libflash_attention.so
-  # 例如：
-  #   /usr/local/lib/python3.10/dist-packages/flash_attn_2_cuda.cpython-310-x86_64-linux-gnu.so
-  #   /usr/local/lib/python3.10/dist-packages/flash_attn/lib/libflash_attention.so
-
-  # 若 flash_attn_2_cuda*.so 不在 --flash-attn 指定目录下，可通过 FLASH_ATTN_2_CUDA_SO 显式指定。
-  export FLASH_ATTN_2_CUDA_SO=/usr/local/lib/python3.10/dist-packages/flash_attn_2_cuda.cpython-310-x86_64-linux-gnu.so
-
-  # xmake 配置环节需要同时打开海光 DCU、ATen 和 flash-attn：
-  xmake f --hygon-dcu=y --aten=y --flash-attn=/usr/local/lib/python3.10/dist-packages -cv
-
-  # 编译 Python/C++ 封装：
-  xmake build _infinicore
-  xmake install _infinicore
-  ```
-
-##### 试验功能 -- 使用阿里 PPU 平台预编译 flash-attn 能力
-
-  ```shell
-  # 阿里 PPU 直接链接当前 Python 环境中已安装的 flash_attn_2_cuda 扩展。
-  # --flash-attn 指向包含 flash_attn_2_cuda*.so 的 site-packages 目录。
-  python -c "import flash_attn_2_cuda; print(flash_attn_2_cuda.__file__)"
-
-  export FLASH_ATTN_2_CUDA_SO=/usr/local/lib/python3.12/site-packages/flash_attn_2_cuda.cpython-312-x86_64-linux-gnu.so
-  xmake f --ali-ppu=true --ccl=true --graph=true --aten=true \
-      --flash-attn=/usr/local/lib/python3.12/site-packages -cv
-
-  xmake build
-  xmake install
-  xmake build _infinicore
-  xmake install _infinicore
-  pip install -e .
-  ```
-
-##### 试验功能 -- 编译marlin相关算子
-
-  ```shell
-
-  # 需要从github上克隆tvm_ffi仓库，克隆命令参考
-  ## tvm-ffi commit: 35c99d0ac4cb784862115d0089f60c603acec8f9
-      git clone https://github.com/apache/tvm-ffi.git --recursive
-
-  # 设置TVM_ROOT
-      export TVM_ROOT=<path-to>/tvm-ffi #用来搜索tvm相关头文件
-  # 注意，编译gptq_marlin_gemm算子的时候除了指定TVM_ROOT以外，还需要指定cuda_arch
-  ```
-
-2. 编译安装
-
-   默认安装路径为 `$HOME/.infini`。
-
-   ```shell
-   xmake build && xmake install
-   ```
-
-#### 2. 安装 C++ 库
-
-```shell
-xmake build _infinicore
-xmake install _infinicore
-```
-
-#### 3. 安装 Python 包
-
-```shell
-pip install .
-```
-
-或
-
-```shell
-pip install -e .
-```
-
-注：开发时建议加入 `-e` 选项（即 `pip install -e .`），这样对 `python/infinicore` 做的更改将会实时得到反映，同时对 C++ 层所做的修改也只需要运行 `xmake build _infinicore && xmake install _infinicore` 便可以生效。
-
-### 三、运行测试
-
-#### 运行 InfiniCore Python算子接口测试
+For example, a CPU build can be configured with:
 
 ```bash
-# 测试单算子
-python test/infinicore/ops/[operator].py [--bench | --debug | --verbose] [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun | --Hygon | --ali]
-# 测试全部算子
-python test/infinicore/run.py [--bench | --debug | --verbose] [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun | --ali]
+cmake -S submodules/InfiniRT -B build/InfiniRT \
+    -DCMAKE_INSTALL_PREFIX=$HOME/.infini \
+    -DWITH_CPU=ON
+
+cmake --build build/InfiniRT -j
+cmake --install build/InfiniRT
 ```
 
-使用 -h 查看更多参数。
+Hardware backends can be selected through the corresponding CMake options, for example:
 
-#### 运行 InfiniOP 算子测试
-
-```shell
-# 测试单算子
-python test/infiniop/[operator].py [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun | --Hygon | --ali]
-# 测试全部算子
-python scripts/python_test.py [--cpu | --nvidia | --cambricon | --ascend | --iluvatar | --metax | --moore | --kunlun | --Hygon | --ali]
+```text
+WITH_CPU
+WITH_NVIDIA
+WITH_ILUVATAR
+WITH_METAX
+WITH_HYGON
+WITH_THEAD
+WITH_MOORE
+WITH_CAMBRICON
+WITH_ASCEND
 ```
 
-#### 通信库（InfiniCCL）测试
+See the [InfiniRT documentation](https://github.com/InfiniTensor/InfiniRT) for backend-specific configuration.
 
-编译（需要先安装底层库中的 InfiniCCL 库）：
+### 2. Build InfiniOps
 
-```shell
-xmake build infiniccl-test
+After installing InfiniRT, InfiniOps can be built against the same installation prefix.
+
+For example:
+
+```bash
+pip install ./submodules/InfiniOps \
+    -C cmake.define.INFINI_RT_ROOT=$HOME/.infini \
+    -C cmake.define.WITH_CPU=ON
 ```
 
-在英伟达平台运行测试（会自动使用所有可见的卡）：
+Replace `WITH_CPU` with the appropriate backend option when targeting an accelerator.
 
-```shell
-infiniccl-test --nvidia
+See the [InfiniOps documentation](https://github.com/InfiniTensor/InfiniOps) for operator coverage, build options, and platform-specific instructions.
+
+### 3. Build InfiniCCL
+
+InfiniCCL can be built independently for distributed communication workloads.
+
+```bash
+cd submodules/InfiniCCL
+./scripts/build.sh
 ```
 
-## 如何开源贡献
+Hardware and communication backends can also be selected explicitly through CMake options.
 
-见 [`InfiniCore开发者手册`](DEV.md)。
+For example:
+
+```bash
+./scripts/build.sh \
+    -DWITH_NVIDIA=ON \
+    -DWITH_NCCL=ON
+```
+
+See the [InfiniCCL documentation](https://github.com/InfiniTensor/InfiniCCL) for multi-node configuration and `icclrun` usage.
+
+## Requirements
+
+The exact dependencies depend on the selected component and hardware backend. Common requirements include:
+
+* a C++17-compatible compiler;
+* CMake 3.18 or later;
+* Python 3.10 or later for Python tooling and bindings;
+* the SDK and compiler toolchain required by the target accelerator;
+* backend-specific libraries such as CUDA, CANN, MUSA, Neuware, MPI, or NCCL where applicable.
+
+Refer to each component repository for detailed dependency and environment requirements.
+
+## Repository Integration
+
+InfiniRT, InfiniOps, and InfiniCCL are developed as independent components and integrated into InfiniCore as Git submodules.
+
+This allows each component to evolve independently while InfiniCore provides a consistent combination of component revisions for users who want the complete stack.
+
+To inspect the component revisions in your checkout:
+
+```bash
+git submodule status
+```
+
+To synchronize and update the components to the revisions selected by the current InfiniCore version:
+
+```bash
+git submodule sync --recursive
+git submodule update --init --recursive
+```
+
+Avoid updating individual submodules to arbitrary revisions when a reproducible InfiniCore environment is required.
+
+## Design Goals
+
+InfiniCore is built around several principles:
+
+* **Unified** — provide common interfaces across heterogeneous hardware platforms.
+* **Portable** — allow applications to target different devices without redesigning the entire software stack.
+* **High Performance** — retain platform-specific optimization where it matters.
+* **Modular** — keep runtime, computation, and communication independently evolvable.
+* **Extensible** — make it straightforward to introduce new hardware backends, operators, and communication implementations.
+* **Reproducible** — provide compatible component revisions for integration, validation, and release.
+
+## Documentation
+
+Detailed documentation is maintained by each component:
+
+* [InfiniRT](https://github.com/InfiniTensor/InfiniRT) — runtime APIs, backend configuration, build and integration.
+* [InfiniOps](https://github.com/InfiniTensor/InfiniOps) — operators, backend support, build, testing, and examples.
+* [InfiniCCL](https://github.com/InfiniTensor/InfiniCCL) — collective APIs, communication backends, cluster configuration, and `icclrun`.
+
+## Contributing
+
+Contributions are welcome.
+
+Changes to runtime implementations, operators, communication backends, and hardware support should generally be contributed to the corresponding component repository:
+
+* [InfiniRT](https://github.com/InfiniTensor/InfiniRT)
+* [InfiniOps](https://github.com/InfiniTensor/InfiniOps)
+* [InfiniCCL](https://github.com/InfiniTensor/InfiniCCL)
+
+Changes related to InfiniCore integration, component revisions, or top-level documentation can be proposed in this repository.
+
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a pull request.
+
+## License
+
+InfiniCore is licensed under the [MIT License](LICENSE).
