@@ -1,17 +1,17 @@
-import sys
 import os
+import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import infinicore
 import torch
 from framework import (
     BaseOperatorTest,
+    GenericTestRunner,
     TensorSpec,
     TestCase,
-    GenericTestRunner,
-    is_broadcast,
 )
+
+import infinicore
 
 # Test cases format: (shape, size_or_scale_factor, align_corners_or_None, input_strides_or_None)
 # infinicore.nn.functional.upsample_bilinear is deprecated in favor of interpolate(mode='bilinear')
@@ -60,7 +60,7 @@ def parse_test_cases():
                     output_spec=None,
                     comparison_target=None,
                     tolerance=tol,
-                    description=f"upsample_bilinear - OUT_OF_PLACE",
+                    description="upsample_bilinear - OUT_OF_PLACE",
                 )
             )
 

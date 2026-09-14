@@ -8,7 +8,6 @@ from framework import BaseOperatorTest, GenericTestRunner, TensorSpec, TestCase
 
 import infinicore
 
-
 _TIMESTEP_SHAPES = [(1,), (4,), (17,)]
 _EMBEDDING_DIMS = [16, 256]
 _INPUT_DTYPES = [infinicore.float16, infinicore.bfloat16, infinicore.float32]
@@ -46,11 +45,15 @@ class OpTest(BaseOperatorTest):
         out=None,
     ):
         half_dim = embedding_dim // 2
-        exponent = -torch.log(torch.tensor(max_period)) * torch.arange(
-            half_dim,
-            dtype=torch.float32,
-            device=timestep.device,
-        ) / half_dim
+        exponent = (
+            -torch.log(torch.tensor(max_period))
+            * torch.arange(
+                half_dim,
+                dtype=torch.float32,
+                device=timestep.device,
+            )
+            / half_dim
+        )
         angles = timestep.float().unsqueeze(1) * exponent.exp().unsqueeze(0)
         result = torch.cat((angles.cos(), angles.sin()), dim=1)
         if out is not None:

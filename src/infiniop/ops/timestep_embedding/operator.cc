@@ -1,5 +1,5 @@
-#include "../../handle.h"
 #include "../../operator.h"
+#include "../../handle.h"
 #include "infiniop/ops/timestep_embedding.h"
 
 #if defined(ENABLE_NVIDIA_API) || defined(ENABLE_HYGON_API)
@@ -12,13 +12,13 @@ __INFINI_C infiniStatus_t infiniopCreateTimestepEmbeddingDescriptor(
     infiniopTensorDescriptor_t output_desc,
     infiniopTensorDescriptor_t timestep_desc) {
 
-#define CREATE(CASE, NAMESPACE)                                                   \
-    case CASE:                                                                    \
-        return op::timestep_embedding::NAMESPACE::Descriptor::create(             \
-            handle,                                                               \
-            reinterpret_cast<op::timestep_embedding::NAMESPACE::Descriptor **>(   \
-                desc_ptr),                                                        \
-            output_desc,                                                          \
+#define CREATE(CASE, NAMESPACE)                                                 \
+    case CASE:                                                                  \
+        return op::timestep_embedding::NAMESPACE::Descriptor::create(           \
+            handle,                                                             \
+            reinterpret_cast<op::timestep_embedding::NAMESPACE::Descriptor **>( \
+                desc_ptr),                                                      \
+            output_desc,                                                        \
             timestep_desc)
 
     switch (handle->device) {
@@ -44,7 +44,7 @@ __INFINI_C infiniStatus_t infiniopTimestepEmbedding(
 
 #define CALCULATE(CASE, NAMESPACE)                                              \
     case CASE:                                                                  \
-        return reinterpret_cast<                                               \
+        return reinterpret_cast<                                                \
                    const op::timestep_embedding::NAMESPACE::Descriptor *>(desc) \
             ->calculate(output, timestep, max_period, stream)
 
@@ -65,10 +65,10 @@ __INFINI_C infiniStatus_t infiniopTimestepEmbedding(
 __INFINI_C infiniStatus_t infiniopDestroyTimestepEmbeddingDescriptor(
     infiniopTimestepEmbeddingDescriptor_t desc) {
 
-#define DESTROY(CASE, NAMESPACE)                                               \
-    case CASE:                                                                 \
-        delete reinterpret_cast<                                               \
-            const op::timestep_embedding::NAMESPACE::Descriptor *>(desc);      \
+#define DESTROY(CASE, NAMESPACE)                                          \
+    case CASE:                                                            \
+        delete reinterpret_cast<                                          \
+            const op::timestep_embedding::NAMESPACE::Descriptor *>(desc); \
         return INFINI_STATUS_SUCCESS
 
     switch (desc->device_type) {

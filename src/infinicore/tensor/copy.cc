@@ -55,8 +55,7 @@ void TensorImpl::copy_from(Tensor src) {
         } else {
             if (this->device().getType() != src->device().getType()) {
                 throw std::runtime_error(
-                    "Cannot copy directly between different accelerator types. Src: " + src->info() +
-                    " Dst: " + this->info());
+                    "Cannot copy directly between different accelerator types. Src: " + src->info() + " Dst: " + this->info());
             }
             context::setDevice(this->device());
             if (this->is_contiguous()) {
