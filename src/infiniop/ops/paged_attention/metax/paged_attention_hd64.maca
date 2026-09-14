@@ -80,6 +80,243 @@ inline int chooseNumSplitsHeuristic(size_t num_heads, size_t num_seqs, size_t se
 } // namespace
 
 template <typename Tindex, typename Tdata>
+INFINIOP_METAX_KERNEL flashAttentionDecodeHd64GqaSplitKv(
+    float *partial_acc, // [num_splits, num_seqs, num_heads, head_size]
+    float *partial_m,   // [num_splits, num_seqs, num_heads]
+    float *partial_l,   // [num_splits, num_seqs, num_heads]
+    const Tdata *q_,
+    const Tdata *k_cache_,
+    const Tdata *v_cache_,
+    const Tindex *block_tables_,
+    const Tindex *cache_lens_,
+    const float *alibi_slopes_,
+    size_t num_kv_heads,
+    float scale,
+    size_t max_num_blocks_per_seq,
+    size_t page_block_size,
+    ptrdiff_t q_stride,
+    ptrdiff_t k_batch_stride,
+    ptrdiff_t k_row_stride,
+    ptrdiff_t k_head_stride,
+    ptrdiff_t v_batch_stride,
+    ptrdiff_t v_row_stride,
+    ptrdiff_t v_head_stride,
+    int num_splits, int num_heads, int num_seqs) {
+    constexpr int HEAD_SIZE = 64;
+    constexpr int G = 4;
+    constexpr int T = 8;
+    // Keep the exact legacy token-wise arithmetic; only KV loading is grouped.
+    __shared__ __align__(16) Tdata sh_k[T][HEAD_SIZE];
+    __shared__ __align__(16) Tdata sh_v[T][HEAD_SIZE];
+    __shared__ int physical_page;
+
+    const int seq_idx = blockIdx.y;
+    const int head_idx = blockIdx.x * G + threadIdx.x / 32;
+    const int split_idx = static_cast<int>(blockIdx.z);
+    const int lane = threadIdx.x % 32;
+    constexpr int kWarpSize = 32;
+    static_assert(HEAD_SIZE % kWarpSize == 0, "HEAD_SIZE must be divisible by 32.");
+    constexpr int DIMS_PER_THREAD = HEAD_SIZE / kWarpSize;
+
+    const int seq_len = static_cast<int>(cache_lens_[seq_idx]);
+    if (seq_len <= 0 || num_splits <= 0) {
+        return;
+    }
+
+    // Split the [0, seq_len) range into num_splits contiguous shards.
+    const int shard = (seq_len + num_splits - 1) / num_splits;
+    const int start = split_idx * shard;
+    const int end = min(seq_len, start + shard);
+    if (start >= end) {
+        // Empty shard => write neutral element.
+        const int n = num_seqs * num_heads;
+        const int idx = (split_idx * n + seq_idx * num_heads + head_idx);
+        if (lane == 0) {
+            partial_m[idx] = -INFINITY;
+            partial_l[idx] = 0.0f;
+        }
+#pragma unroll
+        for (int i = 0; i < DIMS_PER_THREAD; ++i) {
+            const int dim = lane * DIMS_PER_THREAD + i;
+            partial_acc[idx * HEAD_SIZE + dim] = 0.0f;
+        }
+        return;
+    }
+
+    const int num_queries_per_kv = num_heads / static_cast<int>(num_kv_heads);
+    const int kv_head_idx = head_idx / num_queries_per_kv;
+
+    const float alibi_slope = (alibi_slopes_ == nullptr) ? 0.0f : alibi_slopes_[head_idx];
+    constexpr float kLog2e = 1.4426950408889634f;
+    const float scale_log2 = scale * kLog2e;
+
+    const Tindex *block_table = block_tables_ + seq_idx * static_cast<int>(max_num_blocks_per_seq);
+    const Tdata *q_ptr = q_ + seq_idx * q_stride + head_idx * HEAD_SIZE;
+
+    float q_reg[DIMS_PER_THREAD];
+    float acc[DIMS_PER_THREAD];
+#pragma unroll
+    for (int i = 0; i < DIMS_PER_THREAD; ++i) {
+        const int dim = lane * DIMS_PER_THREAD + i;
+        q_reg[i] = static_cast<float>(q_ptr[dim]);
+        acc[i] = 0.0f;
+    }
+
+#if defined(__CUDA_ARCH__)
+    float2 q_reg2[DIMS_PER_THREAD / 2];
+    if constexpr (std::is_same_v<Tdata, half>) {
+        const int dim_base = lane * DIMS_PER_THREAD;
+        const half2 *q2 = reinterpret_cast<const half2 *>(q_ptr + dim_base);
+#pragma unroll
+        for (int j = 0; j < DIMS_PER_THREAD / 2; ++j) {
+            q_reg2[j] = __half22float2(q2[j]);
+        }
+    }
+    if constexpr (std::is_same_v<Tdata, __nv_bfloat16>) {
+        const int dim_base = lane * DIMS_PER_THREAD;
+        const __nv_bfloat162 *q2 = reinterpret_cast<const __nv_bfloat162 *>(q_ptr + dim_base);
+#pragma unroll
+        for (int j = 0; j < DIMS_PER_THREAD / 2; ++j) {
+            q_reg2[j] = __bfloat1622float2(q2[j]);
+        }
+    }
+#endif
+
+    float m = -INFINITY;
+    float l = 0.0f;
+    const int pbs = static_cast<int>(page_block_size);
+
+    // Scan only [start, end).
+    int t = start;
+    int logical_block = t / pbs;
+    int token_in_block = t - logical_block * pbs;
+    for (; t < end; ++logical_block) {
+        if (threadIdx.x == 0) {
+            physical_page = static_cast<int>(block_table[logical_block]);
+        }
+        __syncthreads();
+        const Tdata *k_base = k_cache_ + physical_page * k_batch_stride + kv_head_idx * k_head_stride;
+        const Tdata *v_base = v_cache_ + physical_page * v_batch_stride + kv_head_idx * v_head_stride;
+        const int token_end = min(pbs, end - logical_block * pbs);
+        for (; token_in_block < token_end; ) {
+            const int tile_n = min(T, token_end - token_in_block);
+            // 128 threads each copy one 16-byte chunk: 64 K chunks, 64 V chunks.
+            const int chunk_id = threadIdx.x % 64;
+            const int tok = chunk_id / 8;
+            const int dim_chunk = (chunk_id % 8) * 8;
+            Tdata *dst = (threadIdx.x < 64 ? &sh_k[tok][dim_chunk] : &sh_v[tok][dim_chunk]);
+            if (tok < tile_n) {
+                const Tdata *src = threadIdx.x < 64
+                    ? k_base + (token_in_block + tok) * k_row_stride + dim_chunk
+                    : v_base + (token_in_block + tok) * v_row_stride + dim_chunk;
+                *reinterpret_cast<uint4 *>(dst) = *reinterpret_cast<const uint4 *>(src);
+            } else {
+                *reinterpret_cast<uint4 *>(dst) = make_uint4(0, 0, 0, 0);
+            }
+            __syncthreads();
+            for (int j = 0; j < tile_n; ++j, ++t) {
+                const Tdata *k_ptr = sh_k[j];
+                const Tdata *v_ptr = sh_v[j];
+                float qk = 0.0f;
+#if defined(__CUDA_ARCH__)
+                if constexpr (std::is_same_v<Tdata, half>) {
+                    const int dim_base = lane * DIMS_PER_THREAD;
+                    const half2 *k2 = reinterpret_cast<const half2 *>(k_ptr + dim_base);
+#pragma unroll
+                    for (int j = 0; j < DIMS_PER_THREAD / 2; ++j) {
+                        const float2 qf = q_reg2[j];
+                        const float2 kf = __half22float2(k2[j]);
+                        qk += qf.x * kf.x + qf.y * kf.y;
+                    }
+                } else if constexpr (std::is_same_v<Tdata, __nv_bfloat16>) {
+                    const int dim_base = lane * DIMS_PER_THREAD;
+                    const __nv_bfloat162 *k2 = reinterpret_cast<const __nv_bfloat162 *>(k_ptr + dim_base);
+#pragma unroll
+                    for (int j = 0; j < DIMS_PER_THREAD / 2; ++j) {
+                        const float2 qf = q_reg2[j];
+                        const float2 kf = __bfloat1622float2(k2[j]);
+                        qk += qf.x * kf.x + qf.y * kf.y;
+                    }
+                } else
+#endif
+                {
+#pragma unroll
+                    for (int i = 0; i < DIMS_PER_THREAD; ++i) {
+                        const int dim = lane * DIMS_PER_THREAD + i;
+                        qk += q_reg[i] * static_cast<float>(k_ptr[dim]);
+                    }
+                }
+
+                qk = op::paged_attention::cuda::warpReduceSum(qk);
+
+                float alpha = 1.0f;
+                float beta = 0.0f;
+                if (lane == 0) {
+                    float score = qk * scale_log2;
+                    if (alibi_slope != 0.0f) {
+                        score += (alibi_slope * static_cast<float>(t - (seq_len - 1))) * kLog2e;
+                    }
+                    const float m_new = fmaxf(m, score);
+                    alpha = exp2f(m - m_new);
+                    beta = exp2f(score - m_new);
+                    l = l * alpha + beta;
+                    m = m_new;
+                }
+
+                alpha = __shfl_sync(0xffffffff, alpha, 0);
+                beta = __shfl_sync(0xffffffff, beta, 0);
+
+#if defined(__CUDA_ARCH__)
+                if constexpr (std::is_same_v<Tdata, half>) {
+                    const int dim_base = lane * DIMS_PER_THREAD;
+                    const half2 *v2 = reinterpret_cast<const half2 *>(v_ptr + dim_base);
+#pragma unroll
+                    for (int j = 0; j < DIMS_PER_THREAD / 2; ++j) {
+                        const float2 vf = __half22float2(v2[j]);
+                        acc[j * 2 + 0] = acc[j * 2 + 0] * alpha + beta * vf.x;
+                        acc[j * 2 + 1] = acc[j * 2 + 1] * alpha + beta * vf.y;
+                    }
+                } else if constexpr (std::is_same_v<Tdata, __nv_bfloat16>) {
+                    const int dim_base = lane * DIMS_PER_THREAD;
+                    const __nv_bfloat162 *v2 = reinterpret_cast<const __nv_bfloat162 *>(v_ptr + dim_base);
+#pragma unroll
+                    for (int j = 0; j < DIMS_PER_THREAD / 2; ++j) {
+                        const float2 vf = __bfloat1622float2(v2[j]);
+                        acc[j * 2 + 0] = acc[j * 2 + 0] * alpha + beta * vf.x;
+                        acc[j * 2 + 1] = acc[j * 2 + 1] * alpha + beta * vf.y;
+                    }
+                } else
+#endif
+                {
+#pragma unroll
+                    for (int i = 0; i < DIMS_PER_THREAD; ++i) {
+                        const int dim = lane * DIMS_PER_THREAD + i;
+                        const float v_val = static_cast<float>(v_ptr[dim]);
+                        acc[i] = acc[i] * alpha + beta * v_val;
+                    }
+                }
+            }
+            // All query-head warps must finish before producers overwrite the tile.
+            __syncthreads();
+            token_in_block += tile_n;
+        }
+        token_in_block = 0;
+    }
+
+    const int n = num_seqs * num_heads;
+    const int idx = (split_idx * n + seq_idx * num_heads + head_idx);
+    if (lane == 0) {
+        partial_m[idx] = m;
+        partial_l[idx] = l;
+    }
+#pragma unroll
+    for (int i = 0; i < DIMS_PER_THREAD; ++i) {
+        const int dim = lane * DIMS_PER_THREAD + i;
+        partial_acc[idx * HEAD_SIZE + dim] = acc[i];
+    }
+}
+
+template <typename Tindex, typename Tdata>
 INFINIOP_METAX_KERNEL flashAttentionDecodeHd64Warp(
     Tdata *out,
     const Tdata *q,
@@ -233,6 +470,7 @@ infiniStatus_t launch_decode_hd64_impl(
     ptrdiff_t v_row_stride,
     ptrdiff_t v_head_stride,
     ptrdiff_t o_stride,
+    bool gqa_layout_eligible,
     hcStream_t stream) {
 
     dim3 grid(static_cast<uint64_t>(num_heads), static_cast<uint64_t>(num_seqs), 1);
@@ -315,33 +553,62 @@ infiniStatus_t launch_decode_hd64_impl(
         float *partial_m = partial_acc + acc_elems;
         float *partial_l = partial_m + m_elems;
 
+        // Preserve the existing split policy; only eligible split launches use KV sharing.
+        const bool aligned_kv = (reinterpret_cast<uintptr_t>(k_cache) % 16 == 0)
+            && (reinterpret_cast<uintptr_t>(v_cache) % 16 == 0)
+            && k_batch_stride % 8 == 0 && k_head_stride % 8 == 0 && k_row_stride % 8 == 0
+            && v_batch_stride % 8 == 0 && v_head_stride % 8 == 0 && v_row_stride % 8 == 0;
+        const bool grouped = gqa_layout_eligible && (num_splits == 1 || num_splits == 2 || num_splits == 4 || num_splits == 8)
+            && num_kv_heads > 0 && num_heads == num_kv_heads * 8
+            && alibi_slopes == nullptr && aligned_kv
+            && (page_block_size == 16 || page_block_size == 32 || page_block_size == 64 || page_block_size == 256);
         dim3 grid_split(static_cast<uint64_t>(num_heads), static_cast<uint64_t>(num_seqs), static_cast<uint64_t>(num_splits));
         dim3 block_split(32);
 
         if (dtype == INFINI_DTYPE_F16) {
-            flashAttentionDecodeHd64SplitKv<Tindex, half><<<grid_split, block_split, 0, stream>>>(
-                partial_acc, partial_m, partial_l,
-                static_cast<const half *>(q),
-                static_cast<const half *>(k_cache),
-                static_cast<const half *>(v_cache),
-                block_tables, cache_lens, alibi_slopes,
-                num_kv_heads, scale, max_num_blocks_per_seq, page_block_size,
-                q_stride, k_batch_stride, k_row_stride, k_head_stride,
-                v_batch_stride, v_row_stride, v_head_stride, num_splits);
+            if (grouped) {
+                flashAttentionDecodeHd64GqaSplitKv<Tindex, half><<<dim3(num_heads / 4, num_seqs, num_splits), 128, 0, stream>>>(
+                    partial_acc, partial_m, partial_l,
+                    static_cast<const half *>(q), static_cast<const half *>(k_cache), static_cast<const half *>(v_cache),
+                    block_tables, cache_lens, alibi_slopes, num_kv_heads, scale,
+                    max_num_blocks_per_seq, page_block_size, q_stride,
+                    k_batch_stride, k_row_stride, k_head_stride, v_batch_stride, v_row_stride, v_head_stride,
+                    num_splits, num_heads, num_seqs);
+            } else {
+                flashAttentionDecodeHd64SplitKv<Tindex, half><<<grid_split, block_split, 0, stream>>>(
+                    partial_acc, partial_m, partial_l,
+                    static_cast<const half *>(q),
+                    static_cast<const half *>(k_cache),
+                    static_cast<const half *>(v_cache),
+                    block_tables, cache_lens, alibi_slopes,
+                    num_kv_heads, scale, max_num_blocks_per_seq, page_block_size,
+                    q_stride, k_batch_stride, k_row_stride, k_head_stride,
+                    v_batch_stride, v_row_stride, v_head_stride, num_splits);
+            }
             flashAttentionDecodeHd64SplitKvCombine<half><<<grid, 32, 0, stream>>>(
                 static_cast<half *>(out), partial_acc, partial_m, partial_l, num_splits, o_stride);
             return INFINI_STATUS_SUCCESS;
         }
         if (dtype == INFINI_DTYPE_BF16) {
-            flashAttentionDecodeHd64SplitKv<Tindex, __nv_bfloat16><<<grid_split, block_split, 0, stream>>>(
-                partial_acc, partial_m, partial_l,
-                static_cast<const __nv_bfloat16 *>(q),
-                static_cast<const __nv_bfloat16 *>(k_cache),
-                static_cast<const __nv_bfloat16 *>(v_cache),
-                block_tables, cache_lens, alibi_slopes,
-                num_kv_heads, scale, max_num_blocks_per_seq, page_block_size,
-                q_stride, k_batch_stride, k_row_stride, k_head_stride,
-                v_batch_stride, v_row_stride, v_head_stride, num_splits);
+            if (grouped) {
+                flashAttentionDecodeHd64GqaSplitKv<Tindex, __nv_bfloat16><<<dim3(num_heads / 4, num_seqs, num_splits), 128, 0, stream>>>(
+                    partial_acc, partial_m, partial_l,
+                    static_cast<const __nv_bfloat16 *>(q), static_cast<const __nv_bfloat16 *>(k_cache), static_cast<const __nv_bfloat16 *>(v_cache),
+                    block_tables, cache_lens, alibi_slopes, num_kv_heads, scale,
+                    max_num_blocks_per_seq, page_block_size, q_stride,
+                    k_batch_stride, k_row_stride, k_head_stride, v_batch_stride, v_row_stride, v_head_stride,
+                    num_splits, num_heads, num_seqs);
+            } else {
+                flashAttentionDecodeHd64SplitKv<Tindex, __nv_bfloat16><<<grid_split, block_split, 0, stream>>>(
+                    partial_acc, partial_m, partial_l,
+                    static_cast<const __nv_bfloat16 *>(q),
+                    static_cast<const __nv_bfloat16 *>(k_cache),
+                    static_cast<const __nv_bfloat16 *>(v_cache),
+                    block_tables, cache_lens, alibi_slopes,
+                    num_kv_heads, scale, max_num_blocks_per_seq, page_block_size,
+                    q_stride, k_batch_stride, k_row_stride, k_head_stride,
+                    v_batch_stride, v_row_stride, v_head_stride, num_splits);
+            }
             flashAttentionDecodeHd64SplitKvCombine<__nv_bfloat16><<<grid, 32, 0, stream>>>(
                 static_cast<__nv_bfloat16 *>(out), partial_acc, partial_m, partial_l, num_splits, o_stride);
             return INFINI_STATUS_SUCCESS;
@@ -451,12 +718,13 @@ infiniStatus_t launch_decode_hd64_i64(
     ptrdiff_t v_row_stride,
     ptrdiff_t v_head_stride,
     ptrdiff_t o_stride,
+    bool gqa_layout_eligible,
     hcStream_t stream) {
     return launch_decode_hd64_impl<int64_t>(
         workspace, workspace_size,
         out, q, k_cache, v_cache, dtype, block_tables, cache_lens, alibi_slopes, num_heads, num_seqs,
         num_kv_heads, scale, max_num_blocks_per_seq, page_block_size, q_stride, k_batch_stride, k_row_stride,
-        k_head_stride, v_batch_stride, v_row_stride, v_head_stride, o_stride, stream);
+        k_head_stride, v_batch_stride, v_row_stride, v_head_stride, o_stride, gqa_layout_eligible, stream);
 }
 
 infiniStatus_t launch_decode_hd64_i32(
@@ -484,12 +752,13 @@ infiniStatus_t launch_decode_hd64_i32(
     ptrdiff_t v_row_stride,
     ptrdiff_t v_head_stride,
     ptrdiff_t o_stride,
+    bool gqa_layout_eligible,
     hcStream_t stream) {
     return launch_decode_hd64_impl<int32_t>(
         workspace, workspace_size,
         out, q, k_cache, v_cache, dtype, block_tables, cache_lens, alibi_slopes, num_heads, num_seqs,
         num_kv_heads, scale, max_num_blocks_per_seq, page_block_size, q_stride, k_batch_stride, k_row_stride,
-        k_head_stride, v_batch_stride, v_row_stride, v_head_stride, o_stride, stream);
+        k_head_stride, v_batch_stride, v_row_stride, v_head_stride, o_stride, gqa_layout_eligible, stream);
 }
 
 infiniStatus_t launch_decode_hd64_u32(
@@ -517,12 +786,13 @@ infiniStatus_t launch_decode_hd64_u32(
     ptrdiff_t v_row_stride,
     ptrdiff_t v_head_stride,
     ptrdiff_t o_stride,
+    bool gqa_layout_eligible,
     hcStream_t stream) {
     return launch_decode_hd64_impl<uint32_t>(
         workspace, workspace_size,
         out, q, k_cache, v_cache, dtype, block_tables, cache_lens, alibi_slopes, num_heads, num_seqs,
         num_kv_heads, scale, max_num_blocks_per_seq, page_block_size, q_stride, k_batch_stride, k_row_stride,
-        k_head_stride, v_batch_stride, v_row_stride, v_head_stride, o_stride, stream);
+        k_head_stride, v_batch_stride, v_row_stride, v_head_stride, o_stride, gqa_layout_eligible, stream);
 }
 
 } // namespace op::paged_attention::metax
