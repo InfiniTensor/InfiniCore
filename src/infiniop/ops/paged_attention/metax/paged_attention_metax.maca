@@ -20,7 +20,7 @@ infiniStatus_t launch_decode_hd64_i64(
     size_t num_heads, size_t num_seqs, size_t num_kv_heads, float scale, size_t max_num_blocks_per_seq, size_t page_block_size,
     ptrdiff_t q_stride, ptrdiff_t k_batch_stride, ptrdiff_t k_row_stride, ptrdiff_t k_head_stride,
     ptrdiff_t v_batch_stride, ptrdiff_t v_row_stride, ptrdiff_t v_head_stride, ptrdiff_t o_stride,
-    hcStream_t stream);
+    bool gqa_layout_eligible, hcStream_t stream);
 
 infiniStatus_t launch_decode_hd64_i32(
     void *workspace, size_t workspace_size,
@@ -29,7 +29,7 @@ infiniStatus_t launch_decode_hd64_i32(
     size_t num_heads, size_t num_seqs, size_t num_kv_heads, float scale, size_t max_num_blocks_per_seq, size_t page_block_size,
     ptrdiff_t q_stride, ptrdiff_t k_batch_stride, ptrdiff_t k_row_stride, ptrdiff_t k_head_stride,
     ptrdiff_t v_batch_stride, ptrdiff_t v_row_stride, ptrdiff_t v_head_stride, ptrdiff_t o_stride,
-    hcStream_t stream);
+    bool gqa_layout_eligible, hcStream_t stream);
 
 infiniStatus_t launch_decode_hd64_u32(
     void *workspace, size_t workspace_size,
@@ -38,7 +38,7 @@ infiniStatus_t launch_decode_hd64_u32(
     size_t num_heads, size_t num_seqs, size_t num_kv_heads, float scale, size_t max_num_blocks_per_seq, size_t page_block_size,
     ptrdiff_t q_stride, ptrdiff_t k_batch_stride, ptrdiff_t k_row_stride, ptrdiff_t k_head_stride,
     ptrdiff_t v_batch_stride, ptrdiff_t v_row_stride, ptrdiff_t v_head_stride, ptrdiff_t o_stride,
-    hcStream_t stream);
+    bool gqa_layout_eligible, hcStream_t stream);
 
 infiniStatus_t launch_decode_hd128_i64(
     void *workspace, size_t workspace_size,
@@ -176,6 +176,7 @@ infiniStatus_t launch_decode_mla_hd576_v512_u32(
 
 struct Descriptor::Opaque {
     std::shared_ptr<device::metax::Handle::Internal> internal;
+    bool hd64_gqa_layout_eligible;
 };
 
 Descriptor::~Descriptor() {
@@ -203,8 +204,20 @@ infiniStatus_t Descriptor::create(
     const size_t per_split = info.num_seqs * info.num_heads * (info.value_size + 2) * sizeof(float);
     const size_t workspace_bytes = kMaxSplits * per_split;
 
+    // Private fast-path guard: the legacy D64 signature assumes packed heads/table rows.
+    const bool gqa_layout_eligible = info.head_size == 64 && info.value_size == 64
+        && q_desc->stride(1) == 64 && out_desc->stride(1) == 64
+        && q_desc->stride(0) >= static_cast<ptrdiff_t>(info.num_heads * 64)
+        && out_desc->stride(0) >= static_cast<ptrdiff_t>(info.num_heads * 64)
+        && block_tables_desc->stride(0) == static_cast<ptrdiff_t>(info.max_num_blocks_per_seq)
+        && k_cache_desc->stride(2) == 64 && v_cache_desc->stride(2) == 64
+        && k_cache_desc->stride(1) == static_cast<ptrdiff_t>(info.page_block_size * 64)
+        && v_cache_desc->stride(1) == static_cast<ptrdiff_t>(info.page_block_size * 64)
+        && k_cache_desc->stride(0) == static_cast<ptrdiff_t>(info.num_kv_heads * info.page_block_size * 64)
+        && v_cache_desc->stride(0) == static_cast<ptrdiff_t>(info.num_kv_heads * info.page_block_size * 64);
+
     *desc_ptr = new Descriptor(
-        new Opaque{reinterpret_cast<device::metax::Handle *>(handle)->internal()},
+        new Opaque{reinterpret_cast<device::metax::Handle *>(handle)->internal(), gqa_layout_eligible},
         info, workspace_bytes, handle->device, handle->device_id);
 
     return INFINI_STATUS_SUCCESS;
@@ -256,7 +269,7 @@ infiniStatus_t Descriptor::calculate(
                 _info.max_num_blocks_per_seq, _info.page_block_size,
                 _info.q_stride, _info.k_batch_stride, _info.k_row_stride, _info.k_head_stride,
                 _info.v_batch_stride, _info.v_row_stride, _info.v_head_stride,
-                _info.o_stride, stream);
+                _info.o_stride, _opaque->hd64_gqa_layout_eligible, stream);
         case 128:
             return launch_decode_hd128_i64(
                 workspace, workspace_size,
@@ -326,7 +339,7 @@ infiniStatus_t Descriptor::calculate(
                 _info.max_num_blocks_per_seq, _info.page_block_size,
                 _info.q_stride, _info.k_batch_stride, _info.k_row_stride, _info.k_head_stride,
                 _info.v_batch_stride, _info.v_row_stride, _info.v_head_stride,
-                _info.o_stride, stream);
+                _info.o_stride, _opaque->hd64_gqa_layout_eligible, stream);
         case 128:
             return launch_decode_hd128_i32(
                 workspace, workspace_size,
@@ -396,7 +409,7 @@ infiniStatus_t Descriptor::calculate(
                 _info.max_num_blocks_per_seq, _info.page_block_size,
                 _info.q_stride, _info.k_batch_stride, _info.k_row_stride, _info.k_head_stride,
                 _info.v_batch_stride, _info.v_row_stride, _info.v_head_stride,
-                _info.o_stride, stream);
+                _info.o_stride, _opaque->hd64_gqa_layout_eligible, stream);
         case 128:
             return launch_decode_hd128_u32(
                 workspace, workspace_size,

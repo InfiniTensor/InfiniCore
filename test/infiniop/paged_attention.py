@@ -2,9 +2,12 @@ import torch
 import ctypes
 from ctypes import c_uint64
 import math
+import os
+from unittest.mock import patch
 from libinfiniop import (
     LIBINFINIOP,
     TestTensor,
+    CTensor,
     get_test_devices,
     check_error,
     test_operator,
@@ -15,6 +18,7 @@ from libinfiniop import (
     InfiniDtype,
     InfiniDtypeNames,
     InfiniDeviceNames,
+    InfiniDeviceEnum,
     infiniopOperatorDescriptor_t,
     TestWorkspace,
 )
@@ -135,6 +139,10 @@ def test(
     max_seq_len,
     use_alibi,
     *tail,
+    index_dtype=InfiniDtype.I64,
+    lengths=None,
+    kv_padding=0,
+    cpu_reference=False,
 ):
     if len(tail) == 2:
         dtype, sync = tail
@@ -156,21 +164,40 @@ def test(
     # Create input tensors
     q = TestTensor((num_seqs, num_heads, head_size), None, dtype, device)
     out = TestTensor((num_seqs, num_heads, value_size), None, dtype, device)
+    kv_strides = None
+    if kv_padding:
+        row = block_size + kv_padding
+        kv_strides = (num_kv_heads * row * head_size, row * head_size, head_size, 1)
     k_cache = TestTensor(
-        (num_blocks, num_kv_heads, block_size, head_size), None, dtype, device
+        (num_blocks, num_kv_heads, block_size, head_size), kv_strides, dtype, device
     )
     v_cache = TestTensor(
-        (num_blocks, num_kv_heads, block_size, value_size), None, dtype, device
+        (num_blocks, num_kv_heads, block_size, value_size), kv_strides, dtype, device
     )
 
     seq_lens_torch = torch.randint(1, max_seq_len, (num_seqs,), dtype=torch.int64)
 
-    seq_lens = TestTensor.from_torch(seq_lens_torch, InfiniDtype.I64, device)
+    if lengths is not None:
+        seq_lens_torch = torch.tensor(lengths, dtype=torch.int64)
+    def index_tensor(values):
+        # Positive I32/U32 indices have identical bits. Keep signed Torch storage
+        # because some backends cannot clone U32, but exercise a real U32 descriptor.
+        storage_dtype = InfiniDtype.I32 if index_dtype == InfiniDtype.U32 else index_dtype
+        tensor = TestTensor.from_torch(values, storage_dtype, device)
+        if index_dtype == InfiniDtype.U32:
+            assert bool((values >= 0).all())
+            tensor.destroy_desc()
+            CTensor.__init__(tensor, index_dtype, values.shape, None)
+        return tensor
+
+    seq_lens = index_tensor(seq_lens_torch)
 
     block_tables_py = torch.arange(
         0, num_seqs * max_blocks_per_seq, dtype=torch.int64
     ).view(num_seqs, max_blocks_per_seq)
-    block_tables = TestTensor.from_torch(block_tables_py, InfiniDtype.I64, device)
+    if cpu_reference:
+        block_tables_py = torch.randperm(num_blocks).view(num_seqs, max_blocks_per_seq)
+    block_tables = index_tensor(block_tables_py)
 
     alibi_slopes_desc = ctypes.c_void_p(0)
     alibi_slopes_data = ctypes.c_void_p(0)
@@ -181,15 +208,20 @@ def test(
         alibi_slopes_data = alibi_slopes.data()
         alibi_slopes_torch = alibi_slopes.torch_tensor()
 
+    # Targeted split cases use independent CPU FP32 QK, softmax and PV.
+    def reference_input(tensor):
+        tensor = tensor.torch_tensor()
+        return tensor.cpu().float() if cpu_reference else tensor
+
     # Run reference implementation
     ans = ref_single_query_cached_kv_attention(
-        q.torch_tensor(),
-        k_cache.torch_tensor(),
-        v_cache.torch_tensor(),
+        reference_input(q),
+        reference_input(k_cache),
+        reference_input(v_cache),
         block_tables.torch_tensor(),
         seq_lens.torch_tensor(),
         scale,
-        alibi_slopes_torch,
+        alibi_slopes_torch.cpu().float() if cpu_reference and use_alibi else alibi_slopes_torch,
     )
 
     if sync:
@@ -260,7 +292,10 @@ def test(
     atol, rtol = get_tolerance(_TOLERANCE_MAP, dtype)
     if DEBUG:
         debug(out.actual_tensor(), ans, atol=atol, rtol=rtol)
-    assert torch.allclose(out.actual_tensor(), ans, atol=atol, rtol=rtol)
+    actual = out.actual_tensor()
+    if cpu_reference:
+        actual = actual.cpu().float()
+    assert torch.allclose(actual, ans, atol=atol, rtol=rtol)
 
     # Profiling workflow
     if PROFILE:
@@ -277,6 +312,31 @@ def test(
     check_error(LIBINFINIOP.infiniopDestroyPagedAttentionDescriptor(descriptor))
 
 
+def test_metax_grouped_split(handle, device, splits, index_dtype, dtype, sync):
+    # Explicit split settings are scoped to this test; production defaults stay unchanged.
+    env = {
+        "INFINIOP_FLASH_DECODE_SPLITKV": "1",
+        "INFINIOP_FLASH_NUM_SPLITS": str(splits),
+    }
+    with patch.dict(os.environ, env), torch.random.fork_rng(devices=[]):
+        torch.manual_seed(20260910)
+        for page in (16, 32, 64, 256):
+            # Empty shards, nondivisible shards, and starts within/across a page.
+            for lengths in ((1, 3, 7, 9), (page - 1, page, page + 1, 2 * page + 3)):
+                test(
+                    handle, device, 4, 32, 4, 64, page, max(lengths), False,
+                    dtype, sync, index_dtype=index_dtype, lengths=lengths,
+                    cpu_reference=True,
+                )
+        # Non-G8, ALiBi and padded KV heads exercise the legacy split fallback.
+        for heads, alibi, padding in ((16, False, 0), (32, True, 0), (32, False, 1)):
+            test(
+                handle, device, 2, heads, 4, 64, 16, 35, alibi,
+                dtype, sync, index_dtype=index_dtype, lengths=(17, 35),
+                kv_padding=padding, cpu_reference=True,
+            )
+
+
 if __name__ == "__main__":
     args = get_args()
 
@@ -288,5 +348,12 @@ if __name__ == "__main__":
 
     for device in get_test_devices(args):
         test_operator(device, test, _TEST_CASES_, _TENSOR_DTYPES)
+        if device == InfiniDeviceEnum.METAX:
+            split_cases = [
+                (s, i)
+                for s in (1, 2, 4, 8)
+                for i in (InfiniDtype.I32, InfiniDtype.I64, InfiniDtype.U32)
+            ]
+            test_operator(device, test_metax_grouped_split, split_cases, _TENSOR_DTYPES)
 
     print("\033[92mTest passed!\033[0m")
