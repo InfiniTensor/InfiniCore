@@ -1,10 +1,14 @@
 #ifndef INFINI_OPS_OPERATOR_H_
 #define INFINI_OPS_OPERATOR_H_
 
+#include <algorithm>
 #include <atomic>
 #include <cassert>
+#include <chrono>
 #include <cstdio>
 #include <cstdlib>
+#include <iostream>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string_view>
@@ -18,7 +22,9 @@
 #include "dispatcher.h"
 #include "handle.h"
 #include "host_range_profiler.h"
+#include "runtime.h"
 #include "tensor.h"
+#include "tuning.h"
 
 namespace infini::ops::detail {
 
@@ -77,6 +83,31 @@ std::vector<std::size_t> ListToVector(List<values...>) {
 template <typename ValueType, auto... values>
 bool ListContains(ValueType value, List<values...>) {
   return ((value == static_cast<ValueType>(values)) || ...);
+}
+
+inline void SyncDevice(Device::Type dev_type) {
+  DispatchFunc<ActiveDevices<void>>(
+      dev_type,
+      [](auto device_tag) {
+        constexpr Device::Type kDev = decltype(device_tag)::value;
+        infini::rt::runtime::Runtime<kDev>::DeviceSynchronize();
+      },
+      "SyncDevice");
+}
+
+inline Device::Type FirstDeviceType() { return Device::Type::kCount; }
+
+template <typename First, typename... Rest>
+Device::Type FirstDeviceType(const First& first, const Rest&... rest) {
+  if constexpr (std::is_same_v<std::decay_t<First>, Tensor>) {
+    return first.device().type();
+  } else if constexpr (std::is_same_v<std::decay_t<First>,
+                                      std::vector<Tensor>>) {
+    return first.empty() ? FirstDeviceType(rest...)
+                         : first.front().device().type();
+  } else {
+    return FirstDeviceType(rest...);
+  }
 }
 
 template <typename TensorLike, typename = void>
@@ -199,6 +230,21 @@ struct CacheKeyBuilder {
   }
 };
 
+namespace detail {
+
+template <typename Key, typename... Args>
+std::size_t ResolveImplementationIndex(const Config& config,
+                                       Device::Type dev_type,
+                                       const Args&... args);
+
+template <typename Key, typename... Args>
+std::size_t ResolveImplementationIndexOnline(const Handle& handle,
+                                             const Config& config,
+                                             Device::Type dev_type,
+                                             const Args&... args);
+
+}  // namespace detail
+
 template <typename Key, Device::Type kDev>
 struct ActiveImplementations;
 
@@ -246,13 +292,24 @@ class Operator : public OperatorBase {
   template <typename... Args>
   static std::unique_ptr<Operator> Make(const Config& config,
                                         const Tensor tensor, Args&&... args) {
-    return MakeWithDevice(config, tensor.device().type(), tensor,
+    const auto dev_type = tensor.device().type();
+    if (!TuningManager::Instance().IsEnabled() ||
+        !config.needs_implementation_resolution()) {
+      return MakeWithDevice(config, dev_type, tensor,
+                            std::forward<Args>(args)...);
+    }
+
+    auto resolved_config = config.Clone();
+    resolved_config->set_implementation_index(
+        detail::ResolveImplementationIndex<Key>(config, dev_type, tensor,
+                                                args...));
+    return MakeWithDevice(*resolved_config, dev_type, tensor,
                           std::forward<Args>(args)...);
   }
 
   template <typename... Args>
   static std::unique_ptr<Operator> Make(const Tensor tensor, Args&&... args) {
-    return Make(DefaultConfig(tensor.device().type()), tensor,
+    return Make(ImplicitConfig(tensor.device().type()), tensor,
                 std::as_const(args)...);
   }
 
@@ -262,7 +319,18 @@ class Operator : public OperatorBase {
                                         Args&&... args) {
     assert(!tensors.empty() && "operator tensor list input cannot be empty");
 
-    return MakeWithDevice(config, tensors.front().device().type(), tensors,
+    const auto dev_type = tensors.front().device().type();
+    if (!TuningManager::Instance().IsEnabled() ||
+        !config.needs_implementation_resolution()) {
+      return MakeWithDevice(config, dev_type, tensors,
+                            std::forward<Args>(args)...);
+    }
+
+    auto resolved_config = config.Clone();
+    resolved_config->set_implementation_index(
+        detail::ResolveImplementationIndex<Key>(config, dev_type, tensors,
+                                                args...));
+    return MakeWithDevice(*resolved_config, dev_type, tensors,
                           std::forward<Args>(args)...);
   }
 
@@ -271,7 +339,7 @@ class Operator : public OperatorBase {
                                         Args&&... args) {
     assert(!tensors.empty() && "operator tensor list input cannot be empty");
 
-    return Make(DefaultConfig(tensors.front().device().type()), tensors,
+    return Make(ImplicitConfig(tensors.front().device().type()), tensors,
                 std::as_const(args)...);
   }
 
@@ -293,12 +361,28 @@ class Operator : public OperatorBase {
       generation = cache_generation;
     }
 
+    std::unique_ptr<Config> resolved_config;
+    const Config* effective_config = &config;
+    if (TuningManager::Instance().IsEnabled() &&
+        config.needs_implementation_resolution()) {
+      const auto dev_type = detail::FirstDeviceType(args...);
+      assert(dev_type != Device::Type::kCount &&
+             "operator call requires at least one tensor argument");
+
+      const auto resolved_implementation_index =
+          detail::ResolveImplementationIndexOnline<Key>(handle, config,
+                                                        dev_type, args...);
+      resolved_config = config.Clone();
+      resolved_config->set_implementation_index(resolved_implementation_index);
+      effective_config = resolved_config.get();
+    }
+
 #if defined(INFINI_OPS_ENABLE_HOST_RANGE_PROFILING)
     auto key = [&]() {
       HostRangeScope host_range_cache_key{HostRangeLayer::kCacheKey};
-      return CacheKeyBuilder<Key>{}(config, args...);
+      return CacheKeyBuilder<Key>{}(*effective_config, args...);
     }();
-    detail::TraceOperatorCall<Key>(key, config);
+    detail::TraceOperatorCall<Key>(key, *effective_config);
 
     auto it = [&]() {
       HostRangeScope host_range_cache_lookup{HostRangeLayer::kCacheLookup};
@@ -308,17 +392,18 @@ class Operator : public OperatorBase {
     if (it == cache.end()) {
       HostRangeScope host_range_cache_construct{
           HostRangeLayer::kCacheConstruct};
-      auto new_op = Make(config, args...);
+      auto new_op = Make(*effective_config, args...);
       it = cache.emplace(std::move(key), std::move(new_op)).first;
     }
 #else
-    auto key = CacheKeyBuilder<Key>{}(config, args...);
-    detail::TraceOperatorCall<Key>(key, config);
+    auto key = CacheKeyBuilder<Key>{}(*effective_config, args...);
+    detail::TraceOperatorCall<Key>(key, *effective_config);
 
     auto it{cache.find(key)};
 
     if (it == cache.end()) {
-      it = cache.emplace(std::move(key), Make(config, args...)).first;
+      it =
+          cache.emplace(std::move(key), Make(*effective_config, args...)).first;
     }
 #endif
 
@@ -331,7 +416,7 @@ class Operator : public OperatorBase {
 
   template <typename... Args>
   static void Call(const Tensor tensor, const Args&... args) {
-    return Call({}, DefaultConfig(tensor.device().type()), tensor, args...);
+    return Call({}, ImplicitConfig(tensor.device().type()), tensor, args...);
   }
 
   template <
@@ -412,6 +497,11 @@ class Operator : public OperatorBase {
     config.set_implementation_index(DefaultImplementationIndex(dev_type));
 
     return config;
+  }
+
+  static Config ImplicitConfig(Device::Type dev_type) {
+    if (TuningManager::Instance().IsEnabled()) return Config{};
+    return DefaultConfig(dev_type);
   }
 
   template <typename TensorLike, typename... Args>
@@ -504,6 +594,126 @@ struct ActiveImplementations {
   using type = typename detail::ActiveImplementationsHelper<
       Key, kDev, std::make_index_sequence<kMaxImplementations>>::type;
 };
+
+namespace detail {
+
+template <typename Key, typename... Args>
+std::size_t ResolveImplementationIndex(const Config& config,
+                                       Device::Type dev_type,
+                                       const Args&... args) {
+  if (!config.needs_implementation_resolution()) {
+    return config.implementation_index();
+  }
+
+  auto indices = Operator<Key>::active_implementation_indices(dev_type);
+  if (indices.empty()) return config.implementation_index();
+
+  auto signature = TuningSignature::Build(args...);
+  constexpr auto op_name = OperatorName<Key>();
+  auto tuned_index =
+      TuningManager::Instance().Lookup(op_name, dev_type, signature);
+  auto chosen = indices.front();
+
+  if (tuned_index.has_value()) {
+    bool is_valid = std::find(indices.begin(), indices.end(), *tuned_index) !=
+                    indices.end();
+    if (is_valid) {
+      chosen = *tuned_index;
+    } else {
+      std::cerr << "[Tuning] Warning: tuned implementation " << *tuned_index
+                << " for " << op_name << " on "
+                << Device::StringFromType(dev_type)
+                << " is not available (compiled indices:";
+      for (auto idx : indices) std::cerr << " " << idx;
+      std::cerr << "), falling back to " << chosen << std::endl;
+    }
+  }
+
+  return chosen;
+}
+
+template <typename Key, typename... Args>
+double BenchmarkImplementation(const Handle& handle, Device::Type dev_type,
+                               std::size_t impl_index, const Args&... args) {
+  Config fixed;
+  fixed.set_implementation_index(impl_index);
+
+  auto op = Operator<Key>::Make(fixed, args...);
+
+  const auto& tuning = TuningManager::Instance();
+  const int warmup = tuning.warmup_count();
+  const int repeat = tuning.repeat_count();
+
+  for (int i = 0; i < warmup; ++i) {
+    (*op)(handle, args...);
+  }
+  SyncDevice(dev_type);
+
+  double best = std::numeric_limits<double>::infinity();
+  for (int i = 0; i < repeat; ++i) {
+    auto start = std::chrono::steady_clock::now();
+    (*op)(handle, args...);
+    SyncDevice(dev_type);
+    auto end = std::chrono::steady_clock::now();
+    double elapsed = std::chrono::duration<double>(end - start).count();
+    best = std::min(best, elapsed);
+  }
+  return best;
+}
+
+template <typename Key, typename... Args>
+std::size_t ResolveImplementationIndexOnline(const Handle& handle,
+                                             const Config& config,
+                                             Device::Type dev_type,
+                                             const Args&... args) {
+  if (!config.needs_implementation_resolution()) {
+    return config.implementation_index();
+  }
+
+  auto& tuning = TuningManager::Instance();
+  if (!tuning.IsEnabled()) {
+    return ResolveImplementationIndex<Key>(config, dev_type, args...);
+  }
+
+  auto indices = Operator<Key>::active_implementation_indices(dev_type);
+  if (indices.empty()) return config.implementation_index();
+
+  auto signature = TuningSignature::Build(args...);
+  constexpr auto op_name = OperatorName<Key>();
+  auto tuned = tuning.Lookup(op_name, dev_type, signature);
+  std::size_t chosen;
+
+  if (tuned.has_value() &&
+      std::find(indices.begin(), indices.end(), *tuned) != indices.end()) {
+    chosen = *tuned;
+  } else if (indices.size() == 1) {
+    chosen = indices.front();
+    tuning.Record(op_name, dev_type, signature, chosen);
+    std::cout << "[Tuning] " << op_name << " on "
+              << Device::StringFromType(dev_type)
+              << ": single impl, chose index " << chosen << std::endl;
+  } else {
+    chosen = indices.front();
+    double best_time = std::numeric_limits<double>::infinity();
+    for (auto idx : indices) {
+      double time =
+          BenchmarkImplementation<Key>(handle, dev_type, idx, args...);
+      if (time < best_time) {
+        best_time = time;
+        chosen = idx;
+      }
+    }
+    tuning.Record(op_name, dev_type, signature, chosen);
+    std::cout << "[Tuning] " << op_name << " on "
+              << Device::StringFromType(dev_type) << ": benchmarked "
+              << indices.size() << " impls, chose index " << chosen << " ("
+              << best_time * 1e6 << " us)" << std::endl;
+  }
+
+  return chosen;
+}
+
+}  // namespace detail
 
 }  // namespace infini::ops
 

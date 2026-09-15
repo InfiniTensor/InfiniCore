@@ -8,7 +8,7 @@ import pytest
 
 
 def test_cpp_operator_call_instantiation_smoke(tmp_path):
-    install_prefix = _install_prefix()
+    install_prefixes = _install_prefixes()
     source_dir = tmp_path / "source"
     build_dir = tmp_path / "build"
     source_dir.mkdir()
@@ -23,7 +23,7 @@ def test_cpp_operator_call_instantiation_smoke(tmp_path):
             str(source_dir),
             "-B",
             str(build_dir),
-            f"-DCMAKE_PREFIX_PATH={install_prefix}",
+            f"-DCMAKE_PREFIX_PATH={';'.join(map(str, install_prefixes))}",
             f"-DCMAKE_CXX_COMPILER={_compiler('CXX', 'c++')}",
         ]
     )
@@ -32,28 +32,7 @@ def test_cpp_operator_call_instantiation_smoke(tmp_path):
 
 
 def test_cpp_operator_call_trace_is_json(tmp_path):
-    install_prefix = _install_prefix()
-    include_dir = install_prefix / "include"
-    library_dir = _library_dir(install_prefix)
-    source = tmp_path / "add_trace.cc"
-    binary = tmp_path / "add_trace"
-    source.write_text(_ADD_SMOKE_SOURCE)
-
-    _run(
-        [
-            _compiler("CXX", "c++"),
-            "-std=c++17",
-            "-Werror",
-            f"-I{include_dir}",
-            str(source),
-            f"-L{library_dir}",
-            "-linfiniops",
-            "-linfinirt",
-            f"-Wl,-rpath,{library_dir}",
-            "-o",
-            str(binary),
-        ]
-    )
+    binary = _compile_cpp(tmp_path, "add_trace", _ADD_SMOKE_SOURCE)
     env = os.environ.copy()
     env["INFINI_OPS_TRACE_CALLS"] = "1"
     result = _run([str(binary)], env=env)
@@ -70,80 +49,99 @@ def test_cpp_operator_call_trace_is_json(tmp_path):
 
 
 def test_cpp_returning_call_smoke(tmp_path):
-    install_prefix = _install_prefix()
-    include_dir = install_prefix / "include"
-    library_dir = _library_dir(install_prefix)
-    source = tmp_path / "add_return_smoke.cc"
-    binary = tmp_path / "add_return_smoke"
-    source.write_text(_ADD_RETURN_SMOKE_SOURCE)
+    binary = _compile_cpp(tmp_path, "add_return_smoke", _ADD_RETURN_SMOKE_SOURCE)
+    _run([str(binary)])
+
+
+def test_tuning_cache_round_trip(tmp_path):
+    binary = _compile_cpp(tmp_path, "tuning_cache", _TUNING_CACHE_SOURCE)
+    cache_path = tmp_path / "tuning.json"
+    environment = os.environ.copy()
+    environment.update(
+        {
+            "INFINI_OPS_ENABLE_AUTO_TUNING": "1",
+            "INFINI_OPS_TUNING_PATH": str(cache_path),
+            "INFINI_OPS_TUNING_WARMUP": "2",
+            "INFINI_OPS_TUNING_REPEAT": "3",
+        }
+    )
+
+    _run([str(binary), "initialize", str(cache_path)], env=environment)
+
+    cache = json.loads(cache_path.read_text())
+    assert cache["version"] == 1
+    entry = cache["entries"][0]
+    assert entry["operator"] == "Add"
+    assert entry["best_implementation"] == 7
+
+    _run([str(binary), "lookup", str(cache_path)])
+
+    cache_path.write_text("{")
+    _run([str(binary), "miss", str(cache_path)])
+
+
+def test_tuning_disabled_by_default(tmp_path):
+    binary = _compile_cpp(tmp_path, "tuning_disabled", _TUNING_CACHE_SOURCE)
+
+    for index, setting in enumerate((None, "0", "OFF", "false")):
+        cache_path = tmp_path / f"disabled-{index}.json"
+        environment = os.environ.copy()
+        environment["INFINI_OPS_TUNING_PATH"] = str(cache_path)
+        if setting is None:
+            environment.pop("INFINI_OPS_ENABLE_AUTO_TUNING", None)
+        else:
+            environment["INFINI_OPS_ENABLE_AUTO_TUNING"] = setting
+
+        _run([str(binary), "disabled", str(cache_path)], env=environment)
+        assert not cache_path.exists()
+
+
+def _compile_cpp(tmp_path, name, source_text):
+    install_prefixes = _install_prefixes()
+    include_dirs = [prefix / "include" for prefix in install_prefixes]
+    library_dirs = list(
+        dict.fromkeys(
+            (
+                _library_dir(install_prefixes, "libinfiniops.so"),
+                _library_dir(install_prefixes, "libinfinirt.so"),
+            )
+        )
+    )
+    source = tmp_path / f"{name}.cc"
+    binary = tmp_path / name
+    source.write_text(source_text)
 
     _run(
         [
             _compiler("CXX", "c++"),
             "-std=c++17",
             "-Werror",
-            f"-I{include_dir}",
+            "-Wno-error=deprecated-declarations",
+            *(f"-I{include_dir}" for include_dir in include_dirs),
             str(source),
-            f"-L{library_dir}",
+            *(f"-L{library_dir}" for library_dir in library_dirs),
             "-linfiniops",
             "-linfinirt",
-            f"-Wl,-rpath,{library_dir}",
+            *(f"-Wl,-rpath,{library_dir}" for library_dir in library_dirs),
             "-o",
             str(binary),
         ]
     )
-    _run([str(binary)])
+
+    return binary
 
 
 def test_cpp_configless_calls_use_first_active_implementation(tmp_path):
-    install_prefix = _install_prefix()
-    include_dir = install_prefix / "include"
-    library_dir = _library_dir(install_prefix)
-    source = tmp_path / "configless_active_implementation.cc"
-    binary = tmp_path / "configless_active_implementation"
-    source.write_text(_CONFIGLESS_ACTIVE_IMPLEMENTATION_SOURCE)
-
-    _run(
-        [
-            _compiler("CXX", "c++"),
-            "-std=c++17",
-            "-Werror",
-            f"-I{include_dir}",
-            str(source),
-            f"-L{library_dir}",
-            "-linfiniops",
-            "-linfinirt",
-            f"-Wl,-rpath,{library_dir}",
-            "-o",
-            str(binary),
-        ]
+    binary = _compile_cpp(
+        tmp_path,
+        "configless_active_implementation",
+        _CONFIGLESS_ACTIVE_IMPLEMENTATION_SOURCE,
     )
     _run([str(binary)])
 
 
 def test_cpp_polymorphic_context_smoke(tmp_path):
-    install_prefix = _install_prefix()
-    include_dir = install_prefix / "include"
-    library_dir = _library_dir(install_prefix)
-    source = tmp_path / "polymorphic_context.cc"
-    binary = tmp_path / "polymorphic_context"
-    source.write_text(_POLYMORPHIC_CONTEXT_SOURCE)
-
-    _run(
-        [
-            _compiler("CXX", "c++"),
-            "-std=c++17",
-            "-Werror",
-            f"-I{include_dir}",
-            str(source),
-            f"-L{library_dir}",
-            "-linfiniops",
-            "-linfinirt",
-            f"-Wl,-rpath,{library_dir}",
-            "-o",
-            str(binary),
-        ]
-    )
+    binary = _compile_cpp(tmp_path, "polymorphic_context", _POLYMORPHIC_CONTEXT_SOURCE)
     _run([str(binary)])
 
 
@@ -156,8 +154,7 @@ def test_cpp_polymorphic_context_smoke(tmp_path):
     ),
 )
 def test_cpp_base_headers_compile_with_metadata_views(tmp_path, header):
-    install_prefix = _install_prefix()
-    include_dir = install_prefix / "include"
+    include_dirs = [prefix / "include" for prefix in _install_prefixes()]
     source = tmp_path / f"{Path(header).stem}_metadata_view.cc"
     source.write_text(f"#include <{header}>\n\nint main() {{ return 0; }}\n")
 
@@ -168,7 +165,7 @@ def test_cpp_base_headers_compile_with_metadata_views(tmp_path, header):
             "-Werror",
             "-UNDEBUG",
             "-fsyntax-only",
-            f"-I{include_dir}",
+            *(f"-I{include_dir}" for include_dir in include_dirs),
             str(source),
         ]
     )
@@ -207,13 +204,22 @@ def _install_prefix():
     pytest.skip("`INFINI_OPS_INSTALL_PREFIX` is not set.")
 
 
-def _library_dir(prefix):
-    for name in ("lib", "lib64"):
-        library_dir = prefix / name
-        if (library_dir / "libinfiniops.so").exists():
-            return library_dir
+def _install_prefixes():
+    infiniops_prefix = _install_prefix()
+    prefixes = [infiniops_prefix]
+    if infinirt_root := os.environ.get("INFINI_RT_ROOT"):
+        prefixes.append(Path(infinirt_root))
 
-    pytest.skip(f"`libinfiniops.so` was not found under `{prefix}`.")
+    return list(dict.fromkeys(prefixes))
+
+
+def _library_dir(prefixes, library_name):
+    for prefix in prefixes:
+        for library_dir in (prefix, prefix / "lib", prefix / "lib64"):
+            if (library_dir / library_name).exists():
+                return library_dir
+
+    pytest.skip(f"`{library_name}` was not found under any configured prefix.")
 
 
 def _compiler(env_name, default):
@@ -233,7 +239,7 @@ def _run(command, **kwargs):
     except FileNotFoundError as error:
         pytest.skip(f"`{command[0]}` is not available: {error}")
     except subprocess.CalledProcessError as error:
-        output = "\n".join((error.stdout, error.stderr)).strip()
+        output = f"{error.stdout}\n{error.stderr}".strip()
         raise AssertionError(output) from error
 
 
@@ -382,6 +388,59 @@ _ASCEND_WORKSPACE_POOL_RETENTION_SOURCE = textwrap.dedent(
       }
 
       return 0;
+    }
+    """
+).lstrip()
+
+
+_TUNING_CACHE_SOURCE = textwrap.dedent(
+    r"""
+    #include <tuning.h>
+
+    #include <string>
+
+    int main(int argc, char** argv) {
+      if (argc != 3) {
+        return 2;
+      }
+
+      infini::ops::TuningSignature signature;
+      signature.tensors.push_back(
+          {{2, 3}, infini::ops::DataType::kFloat32});
+      signature.scalars.push_back(1.5);
+
+      auto& manager = infini::ops::TuningManager::Instance();
+      const std::string mode{argv[1]};
+
+      if (mode == "initialize") {
+        manager.InitializeFromEnvironment();
+        if (!manager.IsEnabled() || manager.warmup_count() != 2 ||
+            manager.repeat_count() != 3) {
+          return 1;
+        }
+        manager.Record("Add", infini::ops::Device::Type::kCpu, signature, 7);
+        return 0;
+      }
+
+      if (mode == "disabled") {
+        manager.InitializeFromEnvironment();
+        if (manager.IsEnabled()) {
+          return 1;
+        }
+        manager.Record("Add", infini::ops::Device::Type::kCpu, signature, 7);
+        return 0;
+      }
+
+      manager.LoadTuningCache(argv[2]);
+      auto implementation = manager.Lookup(
+          "Add", infini::ops::Device::Type::kCpu, signature);
+      if (mode == "lookup") {
+        return implementation == std::optional<std::size_t>{7} ? 0 : 1;
+      }
+      if (mode == "miss") {
+        return implementation.has_value() ? 1 : 0;
+      }
+      return 2;
     }
     """
 ).lstrip()

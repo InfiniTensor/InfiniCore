@@ -51,6 +51,19 @@ endfunction()
 
 include(GNUInstallDirs)
 
+find_package(nlohmann_json 3.12.0 CONFIG QUIET)
+if(NOT TARGET nlohmann_json::nlohmann_json)
+    if(POLICY CMP0135)
+        cmake_policy(SET CMP0135 NEW)
+    endif()
+    include(FetchContent)
+    FetchContent_Declare(nlohmann_json
+        URL https://github.com/nlohmann/json/releases/download/v3.12.0/json.tar.xz
+        URL_HASH SHA256=42f6e95cad6ec532fd372391373363b62a14af6d771056dbfc86160e6dfff7aa
+    )
+    FetchContent_MakeAvailable(nlohmann_json)
+endif()
+
 file(GLOB BASE_SRCS CONFIGURE_DEPENDS "*.cc")
 list(FILTER BASE_SRCS EXCLUDE REGEX ".*tensor\\.cc$")
 target_sources(infiniops PRIVATE ${BASE_SRCS})
@@ -59,6 +72,7 @@ target_link_libraries(infiniops PUBLIC
     $<BUILD_INTERFACE:infinirt>
     $<INSTALL_INTERFACE:InfiniRT::infinirt>
 )
+target_link_libraries(infiniops PRIVATE nlohmann_json::nlohmann_json)
 
 set(INFINI_RT_INCLUDE_FLAGS "")
 foreach(_include_dir IN LISTS INFINI_RT_INCLUDE_DIRS)

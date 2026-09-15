@@ -831,8 +831,10 @@ def _generate_pybind11(operator):
                     "    if (config_dict.has_value()) {\n"
                     "      triton_config_ptr = "
                     "triton::jit::ConfigFromPyDict(*config_dict);\n"
-                    "      triton_config_ptr->set_implementation_index(\n"
-                    "          config.implementation_index());\n"
+                    "      if (!config.needs_implementation_resolution()) {\n"
+                    "        triton_config_ptr->set_implementation_index(\n"
+                    "            config.implementation_index());\n"
+                    "      }\n"
                     "    }\n"
                 )
                 extra_pybind = ', py::arg("config") = py::none()'
@@ -872,7 +874,7 @@ def _generate_pybind11(operator):
                 f"    Config config;\n"
                 f"    if (implementation_index.has_value()) {{\n"
                 f"      config.set_implementation_index(*implementation_index);\n"
-                f"    }} else {{\n"
+                f"    }} else if (!TuningManager::Instance().IsEnabled()) {{\n"
                 f"      config.set_implementation_index(\n"
                 f"          {default_impl_index});\n"
                 f"    }}\n"
@@ -959,7 +961,8 @@ def _generate_pybind11(operator):
 #include "generated/bindings/generated_dispatch.h"
 #include "handle.h"
 #include "host_range_profiler.h"
-#include "pybind11_utils.h"{triton_config_include}
+#include "pybind11_utils.h"
+#include "tuning.h"{triton_config_include}
 
 namespace py = pybind11;
 
@@ -2068,13 +2071,15 @@ void BindHostRangeProfileControls(pybind11::module& m) {
             for bind_func_name in bind_func_names
         )
 
-    module_calls = "BindHostRangeProfileControls(m);"
+    module_calls = """TuningManager::Instance().InitializeFromEnvironment();
+BindHostRangeProfileControls(m);"""
     if bind_func_calls:
         module_calls = f"{module_calls}\n{bind_func_calls}"
 
     return f"""#include <pybind11/pybind11.h>
 
 #include "host_range_profiler.h"
+#include "tuning.h"
 
 {pre_namespace}
 

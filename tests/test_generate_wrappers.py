@@ -369,31 +369,30 @@ class Mul {
 
     text = module._generate_pybind11(operator)
 
+    assert '#include "tuning.h"' in text
     assert "std::size_t DefaultImplementationIndexForMul" in text
     assert (
         "config.set_implementation_index("
         "DefaultImplementationIndexForMul(DeviceFromPybind11Handle(input).type()))"
     ) in text
     assert "std::optional<std::size_t> implementation_index" in text
-    assert "if (implementation_index.has_value())" in text
-    assert "config.set_implementation_index(*implementation_index)" in text
-    assert "auto converted_first_tensor{TensorFromPybind11Handle(input)};" in text
     assert (
-        "DefaultImplementationIndexForMul(converted_first_tensor.device().type()))"
+        "if (implementation_index.has_value()) {\n"
+        "      config.set_implementation_index(*implementation_index);\n"
+        "    } else if (!TuningManager::Instance().IsEnabled()) {\n"
+        "      config.set_implementation_index(\n"
+        "          DefaultImplementationIndexForMul("
+        "converted_first_tensor.device().type()));\n"
+        "    }"
     ) in text
+    assert "auto converted_first_tensor{TensorFromPybind11Handle(input)};" in text
     assert "std::move(converted_first_tensor)" not in text
     assert text.count("DeviceFromPybind11Handle(input)") == 1
-    assert (
-        "config.set_implementation_index("
-        "DefaultImplementationIndexForMul(DeviceFromPybind11Handle(input).type()))"
-    ) in text
     assert "implementation_index.value_or(" not in text
     assert 'py::arg("implementation_index") = py::none()' in text
 
 
-def test_pybind_default_implementation_reuses_first_vector_tensor(
-    monkeypatch, tmp_path
-):
+def test_pybind_reuses_first_vector_tensor_conversion(monkeypatch, tmp_path):
     module = _load_generator_module()
     base_header = tmp_path / "cat.h"
     base_header.write_text(
@@ -424,6 +423,7 @@ class Cat {
     assert (
         "auto converted_first_tensor{VectorTensorFromPybind11Handle(inputs)};" in text
     )
+    assert "generated_dispatch::CallCat(handle, config, converted_first_tensor," in text
     assert "converted_first_tensor.at(0).device().type()" in text
     assert "std::move(converted_first_tensor)" not in text
     assert "DeviceFromPybind11Handle(inputs.at(0))" not in text
@@ -572,6 +572,21 @@ def test_generated_ops_module_exposes_host_range_profile_controls_once():
         assert text.count(marker) == 1
         binding = text.split(marker, maxsplit=1)[1].split("\n  m.def(", maxsplit=1)[0]
         assert target in binding
+
+
+@pytest.mark.parametrize("monolithic", [False, True])
+def test_generated_ops_module_initializes_tuning(monolithic):
+    module = _load_generator_module()
+
+    text = module._generate_ops_module_source(
+        ["BindAdd"],
+        op_includes=['#include "base/add.h"'],
+        monolithic=monolithic,
+    )
+
+    assert text.count('#include "tuning.h"') == 1
+    assert text.count("TuningManager::Instance().InitializeFromEnvironment();") == 1
+    assert text.count("BindHostRangeProfileControls(m);") == 1
 
 
 def test_iluvatar_custom_compilers_receive_host_range_profile_definition():
@@ -994,10 +1009,12 @@ def test_triton_binding_uses_backend_metadata_and_shared_config_parser(
 
     binding = module._generate_pybind11(operator)
 
+    assert '#include "tuning.h"' in binding
     assert '#include "triton/jit/pybind11_config.h"' in binding
     assert "std::unique_ptr<Config> triton_config_ptr;" in binding
     assert "triton::jit::ConfigFromPyDict(*config_dict)" in binding
     assert "triton_config_ptr->set_implementation_index(" in binding
+    assert "if (!config.needs_implementation_resolution())" in binding
     assert "config.implementation_index()" in binding
     assert "if (triton_config_ptr)" in binding
     assert "generated_dispatch::MakeAdd(*triton_config_ptr," in binding

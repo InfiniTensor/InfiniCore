@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include <memory>
+#include <optional>
 
 #include "cloneable.h"
 
@@ -16,14 +17,20 @@ class Config {
     return std::make_unique<Config>(*this);
   }
 
-  std::size_t implementation_index() const { return implementation_index_; }
+  std::size_t implementation_index() const {
+    return implementation_index_.value_or(0);
+  }
 
   void set_implementation_index(std::size_t implementation_index) {
     implementation_index_ = implementation_index;
   }
 
+  bool needs_implementation_resolution() const {
+    return !implementation_index_.has_value();
+  }
+
  private:
-  std::size_t implementation_index_{0};
+  std::optional<std::size_t> implementation_index_;
 };
 
 }  // namespace infini::ops
