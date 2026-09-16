@@ -1,0 +1,118 @@
+{
+  "date": "2026-09-16",
+  "scope": "Archived backend-selection experiment using the same ABI-compatible prototype library in both arms; not before/after timings of the ABI patch, and not a new kernel implementation.",
+  "rows": [
+    {
+      "model": "Qwen3-0.6B",
+      "backend": "paged-attn",
+      "source": {
+        "artifact": "c500-paged-attention/vendor-model-validation/native-06b-c0.json",
+        "sha256": "ac1914ddf3680fdb6e0793ec55c083fd28b7d371cdf457246f33c28e8dfa0259"
+      },
+      "library_sha256": {
+        "_infinicore.cpython-310-x86_64-linux-gnu.so": "7f11ac949f68b6aef335f66601993474dfa3a03040fb95c8cd8604134394c5ee",
+        "_infinilm.cpython-310-x86_64-linux-gnu.so": "04e623f8d9cd951aa871ffd07bdaea107d612160f808e336713436c57a4d1375",
+        "libinfinicore_cpp_api.so": "4630e45e98fd9578ccb2236a9343cb4511953a2e804b4d09cc0d0072067d55ca",
+        "libinfiniop.so": "77185ca529f420734c352ff5ff745a3d76535cfb776907e8658a4184ae25c73d",
+        "libinfinirt.so": "6fc364631bfe04094d3e7e474aaba7a3567a1ebb011cc41a76425c1d6ccebee2",
+        "flash_attn_2_cuda.cpython-310-x86_64-linux-gnu.so": "6cf8d40e92dc37809492a7eccc0c19b303931753ddb67725e588fc6503add078"
+      },
+      "samples": [
+        {
+          "ttft_ms": 472.89357997942716,
+          "median_itl_ms": 17.100885044783354,
+          "finite_request_output_tokens_s": 21.93347181168548
+        },
+        {
+          "ttft_ms": 472.14595798868686,
+          "median_itl_ms": 17.167174024507403,
+          "finite_request_output_tokens_s": 21.931196494026445
+        }
+      ]
+    },
+    {
+      "model": "Qwen3-0.6B",
+      "backend": "flash-attn",
+      "source": {
+        "artifact": "c500-paged-attention/vendor-model-validation/model-06b-c0.json",
+        "sha256": "3606abc36426bc9a4bd722a819f16354169e93272ff8e271ec686fde8ca85433"
+      },
+      "library_sha256": {
+        "_infinicore.cpython-310-x86_64-linux-gnu.so": "7f11ac949f68b6aef335f66601993474dfa3a03040fb95c8cd8604134394c5ee",
+        "_infinilm.cpython-310-x86_64-linux-gnu.so": "04e623f8d9cd951aa871ffd07bdaea107d612160f808e336713436c57a4d1375",
+        "libinfinicore_cpp_api.so": "4630e45e98fd9578ccb2236a9343cb4511953a2e804b4d09cc0d0072067d55ca",
+        "libinfiniop.so": "77185ca529f420734c352ff5ff745a3d76535cfb776907e8658a4184ae25c73d",
+        "libinfinirt.so": "6fc364631bfe04094d3e7e474aaba7a3567a1ebb011cc41a76425c1d6ccebee2",
+        "flash_attn_2_cuda.cpython-310-x86_64-linux-gnu.so": "6cf8d40e92dc37809492a7eccc0c19b303931753ddb67725e588fc6503add078"
+      },
+      "samples": [
+        {
+          "ttft_ms": 80.56356094311923,
+          "median_itl_ms": 6.837593042291701,
+          "finite_request_output_tokens_s": 87.36454217164743
+        },
+        {
+          "ttft_ms": 77.04222307074815,
+          "median_itl_ms": 6.920571904629469,
+          "finite_request_output_tokens_s": 88.48125817712285
+        }
+      ]
+    },
+    {
+      "model": "Qwen3-4B",
+      "backend": "paged-attn",
+      "source": {
+        "artifact": "c500-paged-attention/vendor-model-validation/native-4b-c0.json",
+        "sha256": "273b9d3a3ad0a7350b707d23a6d1df25dd0e6e265048dfd63dd6c979e558f17c"
+      },
+      "library_sha256": {
+        "_infinicore.cpython-310-x86_64-linux-gnu.so": "7f11ac949f68b6aef335f66601993474dfa3a03040fb95c8cd8604134394c5ee",
+        "_infinilm.cpython-310-x86_64-linux-gnu.so": "04e623f8d9cd951aa871ffd07bdaea107d612160f808e336713436c57a4d1375",
+        "libinfinicore_cpp_api.so": "4630e45e98fd9578ccb2236a9343cb4511953a2e804b4d09cc0d0072067d55ca",
+        "libinfiniop.so": "77185ca529f420734c352ff5ff745a3d76535cfb776907e8658a4184ae25c73d",
+        "libinfinirt.so": "6fc364631bfe04094d3e7e474aaba7a3567a1ebb011cc41a76425c1d6ccebee2",
+        "flash_attn_2_cuda.cpython-310-x86_64-linux-gnu.so": "6cf8d40e92dc37809492a7eccc0c19b303931753ddb67725e588fc6503add078"
+      },
+      "samples": [
+        {
+          "ttft_ms": 1212.2369320131838,
+          "median_itl_ms": 25.99629503674805,
+          "finite_request_output_tokens_s": 9.991364582050052
+        },
+        {
+          "ttft_ms": 1212.1770869707689,
+          "median_itl_ms": 26.01130004040897,
+          "finite_request_output_tokens_s": 9.98581804775219
+        }
+      ]
+    },
+    {
+      "model": "Qwen3-4B",
+      "backend": "flash-attn",
+      "source": {
+        "artifact": "c500-paged-attention/vendor-model-validation/model-4b-c0.json",
+        "sha256": "1228d0a903d76251478b5e1e6c5df0d235b3a3c303abd7f743139814110f989e"
+      },
+      "library_sha256": {
+        "_infinicore.cpython-310-x86_64-linux-gnu.so": "7f11ac949f68b6aef335f66601993474dfa3a03040fb95c8cd8604134394c5ee",
+        "_infinilm.cpython-310-x86_64-linux-gnu.so": "04e623f8d9cd951aa871ffd07bdaea107d612160f808e336713436c57a4d1375",
+        "libinfinicore_cpp_api.so": "4630e45e98fd9578ccb2236a9343cb4511953a2e804b4d09cc0d0072067d55ca",
+        "libinfiniop.so": "77185ca529f420734c352ff5ff745a3d76535cfb776907e8658a4184ae25c73d",
+        "libinfinirt.so": "6fc364631bfe04094d3e7e474aaba7a3567a1ebb011cc41a76425c1d6ccebee2",
+        "flash_attn_2_cuda.cpython-310-x86_64-linux-gnu.so": "6cf8d40e92dc37809492a7eccc0c19b303931753ddb67725e588fc6503add078"
+      },
+      "samples": [
+        {
+          "ttft_ms": 212.8345420351252,
+          "median_itl_ms": 12.843064963817596,
+          "finite_request_output_tokens_s": 39.403338779949856
+        },
+        {
+          "ttft_ms": 211.33958199061453,
+          "median_itl_ms": 12.900371919386089,
+          "finite_request_output_tokens_s": 39.51539269958533
+        }
+      ]
+    }
+  ]
+}
