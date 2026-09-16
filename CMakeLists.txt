@@ -240,7 +240,11 @@ if(AUTO_DETECT_BACKENDS)
 endif()
 
 if(WITH_TORCH OR WITH_LINKED)
-    find_package(Python COMPONENTS Interpreter REQUIRED)
+    if(WITH_MARS AND WITH_TORCH AND WITH_LINKED)
+        find_package(Python COMPONENTS Interpreter Development.Embed REQUIRED)
+    else()
+        find_package(Python COMPONENTS Interpreter REQUIRED)
+    endif()
 
     # Prefer the interpreter that the auto-detect block already
     # confirmed has `torch` (this is the system Python on hosts that
@@ -288,7 +292,7 @@ if(WITH_TORCH OR WITH_LINKED)
     find_library(C10_LIB c10 HINTS ${_torch_lib_dirs} REQUIRED)
     set(TORCH_LIBRARIES ${TORCH_LIB} ${TORCH_CPU_LIB} ${C10_LIB})
 
-    if(WITH_NVIDIA OR WITH_ILUVATAR OR WITH_THEAD)
+    if(WITH_NVIDIA OR WITH_ILUVATAR OR WITH_THEAD OR WITH_MARS)
         find_library(TORCH_CUDA_LIB torch_cuda HINTS ${_torch_lib_dirs} REQUIRED)
         find_library(C10_CUDA_LIB c10_cuda HINTS ${_torch_lib_dirs} REQUIRED)
         # `torch_cuda` registers CUDA kernels through static initializers, so
@@ -302,6 +306,12 @@ if(WITH_TORCH OR WITH_LINKED)
         find_library(C10_HIP_LIB c10_hip HINTS ${_torch_lib_dirs} REQUIRED)
         list(APPEND TORCH_LIBRARIES
             -Wl,--no-as-needed ${TORCH_HIP_LIB} ${C10_HIP_LIB} -Wl,--as-needed)
+    endif()
+
+    if(WITH_MARS AND WITH_TORCH AND WITH_LINKED)
+        # The Mars FlashAttention wheel loads libtorch_python without declaring
+        # its libpython dependency, so keep the embedding library in our chain.
+        list(APPEND TORCH_LIBRARIES Python::Python)
     endif()
 
     if(WITH_METAX)
