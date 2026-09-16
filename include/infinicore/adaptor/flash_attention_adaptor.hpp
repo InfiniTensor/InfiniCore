@@ -59,10 +59,14 @@ mha_varlen_fwd(at::Tensor &q,                               // total_q x num_hea
                const float softcap,
                const bool return_softmax,
                std::optional<at::Generator> gen_
-#if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
-               // MetaX/Mars `flash_attn_2_cuda` (e.g. 2.6.x+mars) appends this argument vs upstream Dao-AILab flash-attn.
+#if defined(ENABLE_METAX_API) && defined(INFINICORE_METAX_VARLEN_EXT)
+               // Selected from the linked extension signature at build time.
                ,
                std::optional<at::Tensor> &flash_attn_mars_ext_
+#endif
+#if defined(ENABLE_METAX_API) && defined(INFINICORE_METAX_VARLEN_RETURN_MAX_LOGIT)
+               ,
+               bool return_max_logit
 #endif
 );
 

@@ -867,6 +867,8 @@ target("infinicore_cpp_api")
         -- depending on the underlying stack version. When building with MACA (`--use-mc=y`),
         -- the version file is typically `/opt/maca/Version.txt` (HPCC uses `/opt/hpcc/Version.txt`).
         if has_config("metax-gpu") and get_config("flash-attn") and get_config("flash-attn") ~= "" then
+            local abi = import("metax_flash_abi", {rootdir = path.join(os.projectdir(), "xmake")})
+            abi.configure(target, get_config("flash-attn"))
             local version_txt = "/opt/hpcc/Version.txt"
             if not os.isfile(version_txt) and has_config("use-mc") then
                 version_txt = "/opt/maca/Version.txt"
