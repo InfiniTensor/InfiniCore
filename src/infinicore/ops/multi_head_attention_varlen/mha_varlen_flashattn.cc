@@ -198,11 +198,11 @@ void run(void *planned_meta) {
         const std::optional<infini::ops::Tensor> no_tensor;
         const std::optional<infini::ops::Tensor> block_table = p->block_table
                                                                  ? std::optional<infini::ops::Tensor>{
-                                                                     p->infiniops_block_table->tensor(*p->block_table)}
+                                                                       p->infiniops_block_table->tensor(*p->block_table)}
                                                                  : std::nullopt;
         const std::optional<infini::ops::Tensor> alibi_slopes = p->alibi_slopes
                                                                   ? std::optional<infini::ops::Tensor>{
-                                                                      p->infiniops_alibi_slopes->tensor(*p->alibi_slopes)}
+                                                                        p->infiniops_alibi_slopes->tensor(*p->alibi_slopes)}
                                                                   : std::nullopt;
 
         infini::ops::FlashAttnVarlenFunc::Call(
@@ -303,7 +303,7 @@ void run(void *planned_meta) {
     auto alibi_slopes = p->alibi_slopes ? std::optional<at::Tensor>(infinicore::adaptor::to_aten_tensor(*p->alibi_slopes)) : std::nullopt;
     auto scale = p->scale;
 
-#if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
+#if defined(ENABLE_METAX_API) && defined(INFINICORE_METAX_VARLEN_EXT)
     std::optional<at::Tensor> flash_attn_mars_ext = std::nullopt;
 #endif
 
@@ -330,9 +330,13 @@ void run(void *planned_meta) {
         0.0,
         false,
         std::nullopt
-#if defined(ENABLE_METAX_API) && defined(INFINICORE_HPCC_VERSION_MAJOR) && (INFINICORE_HPCC_VERSION_MAJOR >= 3)
+#if defined(ENABLE_METAX_API) && defined(INFINICORE_METAX_VARLEN_EXT)
         ,
         flash_attn_mars_ext
+#endif
+#if defined(ENABLE_METAX_API) && defined(INFINICORE_METAX_VARLEN_RETURN_MAX_LOGIT)
+        ,
+        false
 #endif
     );
 

@@ -2,51 +2,13 @@
 local MACA_ROOT = os.getenv("MACA_PATH") or os.getenv("MACA_HOME") or os.getenv("MACA_ROOT")
 local FLASH_ATTN_ROOT = get_config("flash-attn")
 
--- MetaX flash-attn (pip `flash_attn_2_cuda`) may append an extra trailing argument
--- (`flash_attn_mars_ext_`) depending on the underlying HPCC/MetaX stack version.
-do
-    -- Intentionally empty: HPCC version parsing is deferred to `before_build`
-    -- on `infinicore_cpp_api` where `os.iorunv` is available in this xmake sandbox.
-end
-
--- Resolve MetaX flash-attn .so path (used only from this file: `before_link` sandbox cannot see globals from `xmake.lua`).
-local FLASH_ATTN_METAX_CUDA_SO_CONTAINER_DEFAULT =
-    "/opt/conda/lib/python3.10/site-packages/flash_attn_2_cuda.cpython-310-x86_64-linux-gnu.so"
-
-local function metax_flash_attn_cuda_so_path()
-    -- Highest priority: override the exact `.so` file to link.
-    local env_path = os.getenv("FLASH_ATTN_2_CUDA_SO")
-    if env_path and env_path ~= "" then
-        env_path = env_path:trim()
-        if os.isfile(env_path) then
-            return env_path
-        end
-        print(string.format("warning: metax+flash-attn: FLASH_ATTN_2_CUDA_SO is not a file: %s, fallback to container/default path", env_path))
-    end
-
-    -- Second priority: allow overriding the "expected" container path via env.
-    local container_path = os.getenv("FLASH_ATTN_METAX_CUDA_SO_CONTAINER")
-    if not container_path or container_path == "" then
-        container_path = FLASH_ATTN_METAX_CUDA_SO_CONTAINER_DEFAULT
-    end
-
-    if not os.isfile(container_path) then
-        print(
-            string.format(
-                "warning: metax+flash-attn: expected %s; install flash-attn in conda env, or export FLASH_ATTN_2_CUDA_SO.",
-                container_path
-            )
-        )
-    end
-    return container_path
-end
-
 -- MetaX flash-attn link flags for pip `flash_attn_2_cuda`.
 -- Version/ABI macros are set in `xmake.lua` for `infinicore_cpp_api` so they apply to all sources.
 target("infinicore_cpp_api")
     if get_config("flash-attn") and get_config("flash-attn") ~= "" then
         before_link(function (target)
-            local flash_so_metax = metax_flash_attn_cuda_so_path()
+            local abi = import("metax_flash_abi", {rootdir = path.join(os.projectdir(), "xmake")})
+            local flash_so_metax = abi.resolve(get_config("flash-attn"))
             local flash_dir_metax = path.directory(flash_so_metax)
             local flash_name_metax = path.filename(flash_so_metax)
             target:add(
