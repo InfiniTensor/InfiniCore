@@ -14,6 +14,7 @@ from .flash_attention import flash_attention
 from .fused_gated_delta_net_gating import fused_gated_delta_net_gating
 from .fused_moe import ACT_SILU, ACT_SWIGLU, fused_moe
 from .fused_moe_mxfp4 import fused_moe_mxfp4
+from .fused_moe_w4a8 import fused_moe_w4a8
 from .gaussian_nll_loss import gaussian_nll_loss
 from .hardswish import hardswish
 from .hardtanh import hardtanh
@@ -24,6 +25,7 @@ from .kimi_delta_attention import kimi_delta_attention
 from .layer_norm import layer_norm
 from .linear import linear
 from .linear_mxfp4 import linear_mxfp4
+from .linear_w4a8 import linear_w4a8
 from .linear_w8a8i8 import linear_w8a8i8
 from .log_softmax import log_softmax
 from .mamba_selective_scan import mamba_selective_scan
@@ -50,6 +52,7 @@ from .triplet_margin_loss import triplet_margin_loss
 from .triplet_margin_with_distance_loss import triplet_margin_with_distance_loss
 from .unfold import unfold
 from .upsample_bilinear import upsample_bilinear
+from .w4a8_moe_shuffle import w4a8_moe_shuffle
 
 __all__ = [
     "conv2d",
@@ -62,6 +65,7 @@ __all__ = [
     "fused_gated_delta_net_gating",
     "fused_moe",
     "fused_moe_mxfp4",
+    "fused_moe_w4a8",
     "ACT_SILU",
     "ACT_SWIGLU",
     "gaussian_nll_loss",
@@ -69,6 +73,7 @@ __all__ = [
     "kimi_delta_attention",
     "linear",
     "linear_mxfp4",
+    "linear_w4a8",
     "binary_cross_entropy_with_logits",
     "random_sample",
     "adaptive_avg_pool1d",
@@ -114,4 +119,5 @@ __all__ = [
     "softsign",
     "huber_loss",
     "layer_norm",
+    "w4a8_moe_shuffle",
 ]

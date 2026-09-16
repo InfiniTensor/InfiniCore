@@ -40,6 +40,7 @@
 #include "ops/fused_gated_delta_net_gating.hpp"
 #include "ops/fused_moe.hpp"
 #include "ops/fused_moe_mxfp4.hpp"
+#include "ops/fused_moe_w4a8.hpp"
 #include "ops/gelu.hpp"
 #include "ops/gelutanh.hpp"
 #include "ops/hardswish.hpp"
@@ -50,6 +51,7 @@
 #include "ops/linear.hpp"
 #include "ops/linear_allreduce.hpp"
 #include "ops/linear_mxfp4.hpp"
+#include "ops/linear_w4a8.hpp"
 #include "ops/mamba_selective_scan.hpp"
 #include "ops/matmul.hpp"
 #include "ops/moe_align.hpp"
@@ -92,6 +94,7 @@
 #include "ops/tanh.hpp"
 #include "ops/topksoftmax.hpp"
 #include "ops/vocab_parallel_embedding.hpp"
+#include "ops/w4a8_moe_shuffle.hpp"
 #include "ops/zeros.hpp"
 
 #ifdef ENABLE_VENDOR_OPS

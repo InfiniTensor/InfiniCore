@@ -63,6 +63,7 @@
 #include "infiniop/ops/fused_gated_delta_net_gating.h"
 #include "infiniop/ops/fused_moe.h"
 #include "infiniop/ops/fused_moe_mxfp4.h"
+#include "infiniop/ops/fused_moe_w4a8.h"
 #include "infiniop/ops/gelu.h"
 #include "infiniop/ops/gelutanh.h"
 #include "infiniop/ops/gemm.h"
@@ -86,6 +87,7 @@
 #include "infiniop/ops/ldexp.h"
 #include "infiniop/ops/lerp.h"
 #include "infiniop/ops/linear_mxfp4.h"
+#include "infiniop/ops/linear_w4a8.h"
 #include "infiniop/ops/log10.h"
 #include "infiniop/ops/log1p.h"
 #include "infiniop/ops/log_softmax.h"
@@ -166,6 +168,7 @@
 #include "infiniop/ops/vander.h"
 #include "infiniop/ops/var.h"
 #include "infiniop/ops/var_mean.h"
+#include "infiniop/ops/w4a8_moe_shuffle.h"
 #include "infiniop/ops/zeros.h"
 #include "infiniop/tensor_descriptor.h"
 #endif // __INFINIOP_API_H__

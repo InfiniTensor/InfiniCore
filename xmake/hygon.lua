@@ -107,6 +107,35 @@ if HYGON_NEEDS_CUB_REDUCE_FALLBACK then
     print("Hygon gfx906: use cub reduce fallback for per_channel_quant_int8")
     add_defines("INFINIOP_HYGON_GFX906")
 end
+
+rule("hygon.hip")
+    set_extensions(".hip")
+
+    on_build_file(function (target, sourcefile)
+        local objectfile = target:objectfile(sourcefile)
+        os.mkdir(path.directory(objectfile))
+
+        local args = {
+            "-c", sourcefile, "-o", objectfile,
+            "-O3", "-fPIC", "-std=c++17",
+            "--offload-arch=" .. HYGON_ARCH,
+            "-DDTK_ENV", "-D__HIP_PLATFORM_AMD__=1",
+            "-D__HIP_PLATFORM_HCC__=1",
+            "-U__HIP_NO_HALF_CONVERSIONS__",
+            "-U__HIP_NO_HALF_OPERATORS__",
+            "-mcmodel=large", "-fno-gpu-rdc", "-w",
+            "-mllvm", "-support-768-vgprs=true",
+            "-mllvm", "-disable-machine-sink",
+        }
+        for _, includedir in ipairs(target:get("includedirs")) do
+            table.insert(args, "-I" .. includedir)
+        end
+
+        os.execv(path.join(dtk_root, "bin", "aicc"), args)
+        table.insert(target:objectfiles(), objectfile)
+    end)
+rule_end()
+
 target("infiniop-hygon")
     set_kind("static")
     set_languages("cxx17")
@@ -118,7 +147,7 @@ target("infiniop-hygon")
     set_values("cuda.rdc", false)
 
     -- 海光DCU使用DTK中的CUDA库
-    add_links("cudart", "cublas", "curand", "cublasLt", "cudnn")
+    add_links("cudart", "cublas", "curand", "cublasLt", "cudnn", "amdhip64")
     
     add_hygon_dtk_paths()
 
@@ -146,6 +175,17 @@ target("infiniop-hygon")
     -- 复用NVIDIA的CUDA实现，通过HIP兼容层
     add_files("../src/infiniop/devices/nvidia/*.cu", "../src/infiniop/ops/*/nvidia/*.cu")
     add_files("../src/infiniop/ops/quant/per_channel_quant_int8/nvidia/*.cu")
+
+    -- Use AITER's hand-tuned W4A8 MoE kernels on Hygon. The portable NVIDIA
+    -- descriptor remains the fallback on CUDA builds.
+    remove_files("../src/infiniop/ops/fused_moe_w4a8/nvidia/*.cu")
+    add_files("../src/infiniop/ops/fused_moe_w4a8/hygon/fused_moe_w4a8_hygon.cu", {
+        defines = {"DTK_ENV"},
+        cuflags = {
+            "-Wno-unused-command-line-argument",
+        },
+    })
+    add_files("../src/infiniop/ops/fused_moe_w4a8/hygon/*.hip", {rule = "hygon.hip"})
 
     -- Keep platform-specific or currently unregistered NVIDIA sources out of the Hygon target.
     remove_files("../src/infiniop/ops/avg_pool3d/nvidia/*.cu")

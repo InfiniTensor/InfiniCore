@@ -59,6 +59,7 @@
 #include "ops/fused_gated_delta_net_gating.hpp"
 #include "ops/fused_moe.hpp"
 #include "ops/fused_moe_mxfp4.hpp"
+#include "ops/fused_moe_w4a8.hpp"
 #include "ops/gaussian_nll_loss.hpp"
 #include "ops/hardswish.hpp"
 #include "ops/hardtanh.hpp"
@@ -78,6 +79,7 @@
 #include "ops/lerp.hpp"
 #include "ops/linear.hpp"
 #include "ops/linear_mxfp4.hpp"
+#include "ops/linear_w4a8.hpp"
 #include "ops/linear_w8a8i8.hpp"
 #include "ops/log_softmax.hpp"
 #include "ops/logaddexp.hpp"
@@ -146,6 +148,7 @@
 #include "ops/var.hpp"
 #include "ops/var_mean.hpp"
 #include "ops/vocab_parallel_embedding.hpp"
+#include "ops/w4a8_moe_shuffle.hpp"
 
 #ifdef ENABLE_VENDOR_OPS
 #include "ops/concat_and_cache_mla.hpp"
@@ -237,6 +240,7 @@ inline void bind(py::module &m) {
     bind_fused_gated_delta_net_gating(m);
     bind_fused_moe(m);
     bind_fused_moe_mxfp4(m);
+    bind_fused_moe_w4a8(m);
     bind_fmin(m);
     bind_cast(m);
     bind_cat(m);
@@ -249,6 +253,7 @@ inline void bind(py::module &m) {
     bind_logaddexp2(m);
     bind_linear(m);
     bind_linear_mxfp4(m);
+    bind_linear_w4a8(m);
     bind_logdet(m);
     bind_matmul(m);
     bind_mamba_selective_scan(m);
@@ -342,6 +347,7 @@ inline void bind(py::module &m) {
     bind_sinh(m);
     bind_layer_norm(m);
     bind_topksoftmax(m);
+    bind_w4a8_moe_shuffle(m);
 }
 
 } // namespace infinicore::ops
