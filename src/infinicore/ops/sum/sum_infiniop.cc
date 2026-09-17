@@ -1,47 +1,44 @@
-#include "../../utils.hpp"
-#include "infinicore/common/hash.hpp"
-#include "infinicore/ops/common/cache.hpp"
+#include "../infiniop_impl.hpp"
+#include "infinicore/graph/graph.hpp"
 #include "infinicore/ops/sum.hpp"
-#include <infiniop.h>
 
 namespace infinicore::op::sum_impl::infiniop {
 
-thread_local common::OpCache<size_t, infiniopSumDescriptor_t> caches(
-    100, // capacity
-    [](infiniopSumDescriptor_t &desc) {
-        if (desc != nullptr) {
-            INFINICORE_CHECK_ERROR(infiniopDestroySumDescriptor(desc));
-            desc = nullptr;
+INFINIOP_CACHABLE_DESCRIPTOR(Descriptor, Sum, 100);
+
+class RecordedSum final : public graph::GraphOperator {
+public:
+    RecordedSum(Tensor output, Tensor input, std::vector<size_t> dim, bool keepdim)
+        : output_(output), input_(input), dim_(std::move(dim)), keepdim_(keepdim) {
+        size_t seed = hash_combine(output, input, dim_.size(), keepdim_);
+        for (auto axis : dim_) {
+            hash_combine(seed, axis);
         }
-    });
-
-void calculate(Tensor output, Tensor input, std::vector<size_t> dim, bool keepdim) {
-    size_t seed = hash_combine(output, input, dim.size(), keepdim);
-
-    auto device_type = context::getDevice().getType();
-    auto device_index = context::getDevice().getIndex();
-
-    auto &cache = caches.getCache(device_type, device_index);
-
-    auto desc_opt = cache.get(seed);
-    infiniopSumDescriptor_t desc = nullptr;
-
-    if (!desc_opt) {
-        INFINICORE_CHECK_ERROR(infiniopCreateSumDescriptor(
-            context::getInfiniopHandle(output->device()), &desc,
-            output->desc(), input->desc(), dim.data(), dim.size(), keepdim));
-        cache.put(seed, desc);
-    } else {
-        desc = *desc_opt;
+        INFINIOP_CACHABLE_DESCRIPTOR_GET_OR_CREATE(
+            Descriptor, descriptor, Sum, seed,
+            output->desc(), input->desc(), dim_.data(), dim_.size(), keepdim_);
+        INFINIOP_WORKSPACE_TENSOR(workspace, Sum, descriptor);
+        descriptor_ = std::move(descriptor);
+        workspace_ = std::make_unique<graph::GraphTensor>(workspace);
     }
 
-    size_t workspace_size = 0;
-    INFINICORE_CHECK_ERROR(infiniopGetSumWorkspaceSize(desc, &workspace_size));
-    std::shared_ptr<Memory> workspace = context::allocateMemory(workspace_size);
+    void run() const override {
+        auto output = output_;
+        INFINICORE_CHECK_ERROR(infiniopSum(
+            descriptor_->desc, (*workspace_)->data(), (*workspace_)->numel(),
+            output->data(), input_->data(), dim_.data(), dim_.size(), keepdim_, context::getStream()));
+    }
 
-    INFINICORE_CHECK_ERROR(infiniopSum(
-        desc, workspace->data(), workspace_size,
-        output->data(), input->data(), dim.data(), dim.size(), keepdim, context::getStream()));
+private:
+    graph::GraphTensor output_, input_;
+    mutable std::vector<size_t> dim_;
+    bool keepdim_;
+    std::shared_ptr<Descriptor> descriptor_;
+    std::unique_ptr<graph::GraphTensor> workspace_;
+};
+
+void calculate(Tensor output, Tensor input, std::vector<size_t> dim, bool keepdim) {
+    INFINICORE_GRAPH_OP_RECORD_OR_RUN(RecordedSum, output, input, std::move(dim), keepdim);
 }
 
 static bool registered = []() {

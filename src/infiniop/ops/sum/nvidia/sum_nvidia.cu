@@ -59,8 +59,7 @@ infiniStatus_t launchKernel(
     CHECK_CUDA(cudaMemcpyAsync(output_strides_cuda, info.output_strides.data(), output_ndim * sizeof(ptrdiff_t), cudaMemcpyHostToDevice, stream));
 
     if (info.reduce_num == input_size) {
-        T zero = static_cast<T>(0.0f);
-        CHECK_CUDA(cudaMemcpyAsync(output, &zero, sizeof(T), cudaMemcpyHostToDevice, stream));
+        CHECK_CUDA(cudaMemsetAsync(output, 0, sizeof(T), stream));
         size_t grid_size = (input_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
         sumAllKernel<BLOCK_SIZE, T, T><<<grid_size, BLOCK_SIZE, BLOCK_SIZE * sizeof(T), stream>>>(
             output, input, input_size, input_ndim, permuted_input_shape_cuda, permuted_input_strides_cuda);
