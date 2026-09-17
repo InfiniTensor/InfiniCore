@@ -50,6 +50,7 @@
 #include "ops/linear.hpp"
 #include "ops/linear_allreduce.hpp"
 #include "ops/linear_mxfp4.hpp"
+#include "ops/mamba2_scan.hpp"
 #include "ops/mamba_selective_scan.hpp"
 #include "ops/matmul.hpp"
 #include "ops/moe_align.hpp"
