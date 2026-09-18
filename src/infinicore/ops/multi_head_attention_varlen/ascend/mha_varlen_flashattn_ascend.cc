@@ -10,6 +10,9 @@
 
 #include <algorithm>
 #include <cstring>
+#include <cstdio>
+#include <cstdlib>
+#include <memory>
 #include <mutex>
 #include <stdexcept>
 #include <unordered_map>
@@ -49,6 +52,7 @@ struct PlannedMeta {
     // Each layer owns only its aclTensor descriptor. The immutable device
     // buffer is shared by every prefill layer on the same Ascend device.
     aclTensor *mask_acl = nullptr;
+    bool graph_planned = context::isGraphRecording();
 };
 
 static constexpr int64_t kCausalMaskSide = 2048;
@@ -170,6 +174,109 @@ void *plan(Tensor out, const Tensor &q, const Tensor &k, const Tensor &v,
         scale};
 }
 
+namespace {
+
+// Eager prefill only. A worker owns at most eight entries; no shared mutable
+// executor, hot-path eviction, or extra device workspace allocator is needed.
+struct FiaExecutorEntry {
+    std::vector<int64_t> signature;
+    aclrtContext context = nullptr;
+    aclrtStream stream = nullptr;
+    aclOpExecutor *executor = nullptr;
+    uint64_t workspace_size = 0;
+    aclTensor *query = nullptr, *block_table = nullptr, *out = nullptr;
+    aclTensor *mask = nullptr;
+    aclTensorList *key = nullptr, *value = nullptr;
+    aclIntArray *seq_q = nullptr, *seq_k = nullptr;
+    bool repeatable = false;
+
+    ~FiaExecutorEntry() {
+        if (repeatable) {
+            aclrtContext previous = nullptr;
+            // Thread-local entries normally die before the Core runtime. Do
+            // not call ACL destructors after runtime/context teardown.
+            if (aclrtGetCurrentContext(&previous) != ACL_SUCCESS
+                || aclrtSetCurrentContext(context) != ACL_SUCCESS) {
+                return;
+            }
+            if (aclrtSynchronizeStream(stream) != ACL_SUCCESS) {
+                aclrtSetCurrentContext(previous);
+                return;
+            }
+            aclDestroyAclOpExecutor(executor);
+            aclrtSetCurrentContext(previous);
+        }
+        if (query) aclDestroyTensor(query);
+        // Tensor lists own their constituent tensor descriptors.
+        if (key) aclDestroyTensorList(key);
+        if (value) aclDestroyTensorList(value);
+        if (block_table) aclDestroyTensor(block_table);
+        if (out) aclDestroyTensor(out);
+        if (mask) aclDestroyTensor(mask);
+        if (seq_q) aclDestroyIntArray(seq_q);
+        if (seq_k) aclDestroyIntArray(seq_k);
+    }
+
+    aclnnStatus bind(const Tensor &q, const Tensor &k, const Tensor &v,
+                     const Tensor &bt, Tensor output) {
+        // FIA IR input indices: query=0, key=1, value=2, block_table=14.
+        // Verified with CANN 9.1 FIA V4, including the dynamic tensor lists.
+        auto ret = aclSetInputTensorAddr(executor, 0, query, const_cast<std::byte *>(q->data()));
+        if (ret == 0) {
+            ret = aclSetDynamicInputTensorAddr(executor, 1, 0, key, const_cast<std::byte *>(k->data()));
+        }
+        if (ret == 0) {
+            ret = aclSetDynamicInputTensorAddr(executor, 2, 0, value, const_cast<std::byte *>(v->data()));
+        }
+        if (ret == 0) {
+            ret = aclSetInputTensorAddr(executor, 14, block_table, const_cast<std::byte *>(bt->data()));
+        }
+        if (ret == 0) {
+            ret = aclSetOutputTensorAddr(executor, 0, out, output->data());
+        }
+        return ret;
+    }
+
+    aclnnStatus launch() {
+        void *workspace = workspace_size == 0 ? nullptr
+            : infini::ops::ascend::GetWorkspacePool()
+                  .Ensure(stream, workspace_size, "fia").buf;
+        return aclnnFusedInferAttentionScoreV4(workspace, workspace_size, executor, stream);
+    }
+};
+
+struct FiaExecutorCache {
+    std::vector<std::unique_ptr<FiaExecutorEntry>> entries;
+    bool supported = true;
+    size_t hits = 0, misses = 0;
+
+    ~FiaExecutorCache() {
+        const char *stats = std::getenv("INFINICORE_ASCEND_FIA_EXECUTOR_CACHE_STATS");
+        if (stats && std::strcmp(stats, "1") == 0) {
+            std::fprintf(stderr, "[mha_varlen/ascend] executor cache: hits=%zu misses=%zu entries=%zu\n",
+                         hits, misses, entries.size());
+        }
+    }
+};
+
+static void check_fia(aclnnStatus ret, const char *operation) {
+    if (ret != 0) {
+        const char *message = aclGetRecentErrMsg();
+        throw std::runtime_error(std::string("[mha_varlen/ascend] ") + operation
+                                 + " failed: " + std::to_string(ret)
+                                 + ", msg: " + (message ? message : "(null)"));
+    }
+}
+
+static void append_tensor_signature(std::vector<int64_t> &key, const Tensor &tensor) {
+    key.push_back(static_cast<int64_t>(tensor->dtype()));
+    key.push_back(static_cast<int64_t>(tensor->shape().size()));
+    key.insert(key.end(), tensor->shape().begin(), tensor->shape().end());
+    key.insert(key.end(), tensor->strides().begin(), tensor->strides().end());
+}
+
+} // namespace
+
 void run(void *planned_meta) {
     auto *p = reinterpret_cast<PlannedMeta *>(planned_meta);
     infinicore::context::setDevice(p->q->device());
@@ -189,12 +296,12 @@ void run(void *planned_meta) {
 
     std::vector<int32_t> cu_q_host(cu_q_len);
     std::vector<int32_t> cu_k_host(cu_k_len);
-    aclrtMemcpy(cu_q_host.data(), cu_q_len * sizeof(int32_t),
+    check_fia(aclrtMemcpy(cu_q_host.data(), cu_q_len * sizeof(int32_t),
                 reinterpret_cast<const void *>(cu_q_tensor->data()),
-                cu_q_len * sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
-    aclrtMemcpy(cu_k_host.data(), cu_k_len * sizeof(int32_t),
+                cu_q_len * sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST), "copy sequence Q");
+    check_fia(aclrtMemcpy(cu_k_host.data(), cu_k_len * sizeof(int32_t),
                 reinterpret_cast<const void *>(cu_k_tensor->data()),
-                cu_k_len * sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST);
+                cu_k_len * sizeof(int32_t), ACL_MEMCPY_DEVICE_TO_HOST), "copy sequence K");
 
     std::vector<int64_t> actual_seq_q_vec;
     std::vector<int64_t> actual_seq_k_vec;
@@ -219,13 +326,66 @@ void run(void *planned_meta) {
     Tensor v_work = p->v->is_contiguous() ? Tensor(p->v) : p->v->contiguous();
     Tensor out_work = p->out->is_contiguous() ? Tensor(p->out) : p->out->contiguous();
 
+    aclrtStream stream = static_cast<aclrtStream>(infinicore::context::getStream());
+    // Keep a possible contiguous block-table copy alive until enqueue completes.
+    std::optional<Tensor> bt_work;
+    if (p->block_table) {
+        auto &bt = *p->block_table;
+        bt_work = bt->is_contiguous() ? Tensor(bt) : bt->contiguous();
+    }
+
+    static const bool enabled = [] {
+        const char *value = std::getenv("INFINICORE_ASCEND_FIA_EXECUTOR_CACHE");
+        return value && std::strcmp(value, "1") == 0;
+    }();
+    thread_local FiaExecutorCache cache;
+    const bool eligible = enabled && cache.supported && !p->graph_planned
+        && bt_work && (*bt_work)->dtype() == DataType::I32
+        && p->q->is_contiguous() && p->k->is_contiguous()
+        && p->v->is_contiguous() && p->out->is_contiguous()
+        && (*p->block_table)->is_contiguous()
+        && q_work->dtype() == k_work->dtype() && q_work->dtype() == v_work->dtype()
+        && q_work->dtype() == out_work->dtype();
+    std::vector<int64_t> signature;
+    aclrtContext acl_context = nullptr;
+    if (eligible) {
+        check_fia(aclrtGetCurrentContext(&acl_context), "get context");
+        uint32_t scale_bits = 0;
+        std::memcpy(&scale_bits, &p->scale, sizeof(scale_bits));
+        // Remaining FIA attributes (TND, sparse=3, precision=0, no quant/LSE
+        // or optional tensors, one K/V list member) are fixed by this backend.
+        signature = {static_cast<int64_t>(p->q->device().getIndex()), scale_bits,
+                     p->max_seqlen_q, p->max_seqlen_k, batch_size};
+        for (const auto &tensor : {q_work, k_work, v_work, out_work, *bt_work}) {
+            append_tensor_signature(signature, tensor);
+        }
+        signature.insert(signature.end(), actual_seq_q_vec.begin(), actual_seq_q_vec.end());
+        signature.insert(signature.end(), actual_seq_k_vec.begin(), actual_seq_k_vec.end());
+        for (auto &entry : cache.entries) {
+            if (entry->context == acl_context && entry->stream == stream
+                && entry->signature == signature) {
+                auto ret = entry->bind(q_work, k_work, v_work, *bt_work, out_work);
+                if (ret == 0) ret = entry->launch();
+                if (ret != 0) cache.supported = false;
+                // Never blindly retry after a potentially partially enqueued launch.
+                check_fia(ret, "cached FIA");
+                ++cache.hits;
+                return;
+            }
+        }
+        ++cache.misses;
+    }
+    auto resources = std::make_unique<FiaExecutorEntry>();
+    resources->context = acl_context;
+    resources->stream = stream;
     aclDataType q_dtype = to_acl_dtype(q_work->dtype());
 
     // Query is already contiguous TND [total_q, num_heads, head_size].
     std::vector<int64_t> q_dims = {static_cast<int64_t>(q_shape[0]), num_heads,
                                    head_size};
     std::vector<int64_t> q_strides = {num_heads * head_size, head_size, 1};
-    aclTensor *query_acl = aclCreateTensor(
+    auto &query_acl = resources->query;
+    query_acl = aclCreateTensor(
         q_dims.data(), q_dims.size(), q_dtype, q_strides.data(), 0, ACL_FORMAT_ND,
         q_dims.data(), q_dims.size(),
         const_cast<void *>(reinterpret_cast<const void *>(q_work->data())));
@@ -240,7 +400,8 @@ void run(void *planned_meta) {
         k_dims.data(), k_dims.size(), q_dtype, k_strides.data(), 0, ACL_FORMAT_ND,
         k_dims.data(), k_dims.size(),
         const_cast<void *>(reinterpret_cast<const void *>(k_work->data())));
-    aclTensorList *key_acl = aclCreateTensorList(&k_acl_tensor, 1);
+    auto &key_acl = resources->key;
+    key_acl = aclCreateTensorList(&k_acl_tensor, 1);
 
     // Value uses the same contiguous BnBsH representation.
     std::vector<int64_t> v_dims = {num_blocks, block_size_val,
@@ -251,20 +412,19 @@ void run(void *planned_meta) {
         v_dims.data(), v_dims.size(), q_dtype, v_strides.data(), 0, ACL_FORMAT_ND,
         v_dims.data(), v_dims.size(),
         const_cast<void *>(reinterpret_cast<const void *>(v_work->data())));
-    aclTensorList *value_acl = aclCreateTensorList(&v_acl_tensor, 1);
+    auto &value_acl = resources->value;
+    value_acl = aclCreateTensorList(&v_acl_tensor, 1);
 
     // Block table: [batch, max_blocks_per_seq] INT32 on device
-    aclTensor *block_table_acl = nullptr;
-    if (p->block_table.has_value()) {
-        auto &bt = p->block_table.value();
-        Tensor bt_work = bt->is_contiguous() ? Tensor(bt) : bt->contiguous();
-        auto bt_shape = bt_work->shape();
+    auto &block_table_acl = resources->block_table;
+    if (bt_work) {
+        auto bt_shape = (*bt_work)->shape();
         std::vector<int64_t> bt_dims = {bt_shape[0], bt_shape[1]};
         std::vector<int64_t> bt_strides = {bt_shape[1], 1};
         block_table_acl = aclCreateTensor(
             bt_dims.data(), bt_dims.size(), ACL_INT32, bt_strides.data(), 0,
             ACL_FORMAT_ND, bt_dims.data(), bt_dims.size(),
-            const_cast<void *>(reinterpret_cast<const void *>(bt_work->data())));
+            const_cast<void *>(reinterpret_cast<const void *>((*bt_work)->data())));
     }
 
     // FIA writes directly to contiguous TND output.
@@ -273,21 +433,23 @@ void run(void *planned_meta) {
                                      num_heads, head_size};
     std::vector<int64_t> out_strides = {num_heads * head_size, head_size, 1};
     aclDataType out_dtype = to_acl_dtype(out_work->dtype());
-    aclTensor *out_acl = aclCreateTensor(
+    auto &out_acl = resources->out;
+    out_acl = aclCreateTensor(
         out_dims.data(), out_dims.size(), out_dtype, out_strides.data(), 0,
         ACL_FORMAT_ND, out_dims.data(), out_dims.size(),
         const_cast<void *>(reinterpret_cast<const void *>(out_work->data())));
 
-    aclIntArray *actual_seq_q_acl = host_vector_to_acl_int_array(actual_seq_q_vec);
-    aclIntArray *actual_seq_k_acl = host_vector_to_acl_int_array(actual_seq_k_vec);
+    auto &actual_seq_q_acl = resources->seq_q;
+    auto &actual_seq_k_acl = resources->seq_k;
+    actual_seq_q_acl = host_vector_to_acl_int_array(actual_seq_q_vec);
+    actual_seq_k_acl = host_vector_to_acl_int_array(actual_seq_k_vec);
 
     int64_t sparse_mode = 3; // rightDownCausal
     aclTensor *atten_mask_acl = create_causal_mask(p);
 
-    uint64_t workspace_size = 0;
-    aclOpExecutor *executor = nullptr;
-
-    aclnnStatus ret = aclnnFusedInferAttentionScoreV4GetWorkspaceSize(
+    auto &workspace_size = resources->workspace_size;
+    auto &executor = resources->executor;
+    auto prepare = [&] { return aclnnFusedInferAttentionScoreV4GetWorkspaceSize(
         query_acl, key_acl, value_acl,
         nullptr, // pseShift
         atten_mask_acl, actual_seq_q_acl, actual_seq_k_acl, nullptr, nullptr,
@@ -316,54 +478,30 @@ void run(void *planned_meta) {
         0, // keyAntiquantMode
         0, // valueAntiquantMode
         0, // queryQuantMode
-        out_acl, nullptr, &workspace_size, &executor);
-
-    if (ret != 0) {
-        aclDestroyTensor(query_acl);
-        aclDestroyTensorList(key_acl);
-        aclDestroyTensorList(value_acl);
-        if (block_table_acl) {
-            aclDestroyTensor(block_table_acl);
+        out_acl, nullptr, &workspace_size, &executor); };
+    check_fia(prepare(), "aclnnFusedInferAttentionScoreV4GetWorkspaceSize");
+    if (eligible && cache.entries.size() < 8) {
+        auto ret = aclSetAclOpExecutorRepeatable(executor);
+        if (ret == 0) {
+            resources->repeatable = true;
+            resources->signature = std::move(signature);
+            // The mask descriptor must outlive this layer's PlannedMeta.
+            resources->mask = p->mask_acl;
+            p->mask_acl = nullptr;
+        } else {
+            cache.supported = false;
+            std::fprintf(stderr, "[mha_varlen/ascend] repeatable unavailable (%d); using one-shot FIA\n",
+                         static_cast<int>(ret));
+            // Nothing was enqueued: build a fresh one-shot executor rather
+            // than relying on the state left by the failed repeatable call.
+            check_fia(aclDestroyAclOpExecutor(executor), "destroy unused executor");
+            executor = nullptr;
+            check_fia(prepare(), "prepare one-shot FIA");
         }
-        aclDestroyTensor(out_acl);
-        aclDestroyIntArray(actual_seq_q_acl);
-        aclDestroyIntArray(actual_seq_k_acl);
-        const char *err_msg = aclGetRecentErrMsg();
-        throw std::runtime_error(
-            std::string(
-                "[mha_varlen/ascend] "
-                "aclnnFusedInferAttentionScoreV4GetWorkspaceSize failed: ")
-            + std::to_string(ret) + ", msg: " + (err_msg ? err_msg : "(null)"));
     }
-
-    aclrtStream stream = static_cast<aclrtStream>(infinicore::context::getStream());
-    void *workspace = nullptr;
-    if (workspace_size > 0) {
-        workspace = infini::ops::ascend::GetWorkspacePool()
-                        .Ensure(stream, workspace_size, "fia")
-                        .buf;
-    }
-
-    ret = aclnnFusedInferAttentionScoreV4(workspace, workspace_size, executor,
-                                          stream);
-
-    // Release aclTensor/aclTensorList/aclIntArray resources
-    aclDestroyTensor(query_acl);
-    aclDestroyTensorList(key_acl);
-    aclDestroyTensorList(value_acl);
-    if (block_table_acl) {
-        aclDestroyTensor(block_table_acl);
-    }
-    aclDestroyTensor(out_acl);
-    aclDestroyIntArray(actual_seq_q_acl);
-    aclDestroyIntArray(actual_seq_k_acl);
-
-    if (ret != 0) {
-        const char *err_msg = aclGetRecentErrMsg();
-        throw std::runtime_error(
-            std::string(
-                "[mha_varlen/ascend] aclnnFusedInferAttentionScoreV4 failed: ")
-            + std::to_string(ret) + ", msg: " + (err_msg ? err_msg : "(null)"));
+    check_fia(resources->launch(), "aclnnFusedInferAttentionScoreV4");
+    if (resources->repeatable) {
+        cache.entries.push_back(std::move(resources));
     }
 
     // Copy back if out was not contiguous
