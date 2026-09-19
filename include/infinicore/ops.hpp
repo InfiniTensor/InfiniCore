@@ -45,6 +45,7 @@
 #include "ops/hardswish.hpp"
 #include "ops/hardtanh.hpp"
 #include "ops/kimi_delta_attention.hpp"
+#include "ops/lightning_attention.hpp"
 #include "ops/kv_caching.hpp"
 #include "ops/layer_norm.hpp"
 #include "ops/linear.hpp"
@@ -114,3 +115,4 @@
 #include "ops/w4a8_group_gemm.hpp"
 #include "ops/w8a8_group_gemm.hpp"
 #endif
+

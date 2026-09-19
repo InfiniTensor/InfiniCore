@@ -121,6 +121,7 @@ from infinicore.ops.kthvalue import kthvalue
 from infinicore.ops.kv_caching import kv_caching
 from infinicore.ops.ldexp import ldexp
 from infinicore.ops.lerp import lerp
+from infinicore.ops.lightning_attention import lightning_attention
 from infinicore.ops.logaddexp import logaddexp
 from infinicore.ops.logaddexp2 import logaddexp2
 from infinicore.ops.logcumsumexp import logcumsumexp
@@ -388,3 +389,5 @@ __all__ += [
     "w4a8_group_gemm_",
     "w8a8_group_gemm_",
 ]
+
+
