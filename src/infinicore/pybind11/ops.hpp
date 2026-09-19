@@ -77,6 +77,7 @@
 #include "ops/ldexp.hpp"
 #include "ops/lerp.hpp"
 #include "ops/linear.hpp"
+#include "ops/lightning_attention.hpp"
 #include "ops/linear_mxfp4.hpp"
 #include "ops/linear_w8a8i8.hpp"
 #include "ops/log_softmax.hpp"
@@ -229,6 +230,7 @@ inline void bind(py::module &m) {
     bind_hinge_embedding_loss(m);
     bind_kv_caching(m);
     bind_kimi_delta_attention(m);
+    bind_lightning_attention(m);
     bind_fmod(m);
     bind_fp8_indexer_logits(m);
     bind_fp8_indexer_quant(m);
@@ -345,3 +347,5 @@ inline void bind(py::module &m) {
 }
 
 } // namespace infinicore::ops
+
+
