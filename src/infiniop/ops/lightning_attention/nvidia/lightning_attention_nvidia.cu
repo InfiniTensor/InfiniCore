@@ -6,6 +6,8 @@
 #include <cstddef>
 #include <cstdint>
 #include <cuda_runtime.h>
+#include <cuda_bf16.h>
+#include <cuda_fp16.h>
 
 namespace op::lightning_attention::nvidia {
 
@@ -26,10 +28,55 @@ Descriptor::~Descriptor() {
 // place on the final row. This keeps the initial row untouched, matching the
 // CPU implementation when `initial_state_indices != final_state_indices`.
 //
-// NOTE: fp32 only for now; fp16/bf16 kernels are a follow-up.
+// One block per (batch, head); one thread per state/output column. The block is
+// launched with exactly `D` threads (`D <= maxThreadsPerBlock()`, validated in
+// `Descriptor::calculate`), so every thread reaches each `__syncthreads()`.
+//
+// The recurrence is staged into the destination row of the state pool: the
+// initial row is copied to the final row first and the accumulation happens in
+// place on the final row. This keeps the initial row untouched, matching the
+// CPU implementation when `initial_state_indices != final_state_indices`.
+
+template <typename Tdata>
+__device__ float lightningToFloat(Tdata value);
+
+template <>
+__device__ float lightningToFloat<float>(float value) {
+    return value;
+}
+
+template <>
+__device__ float lightningToFloat<half>(half value) {
+    return __half2float(value);
+}
+
+template <>
+__device__ float lightningToFloat<__nv_bfloat16>(__nv_bfloat16 value) {
+    return __bfloat162float(value);
+}
+
+template <typename Tdata>
+__device__ Tdata lightningFromFloat(float value);
+
+template <>
+__device__ float lightningFromFloat<float>(float value) {
+    return value;
+}
+
+template <>
+__device__ half lightningFromFloat<half>(float value) {
+    return __float2half(value);
+}
+
+template <>
+__device__ __nv_bfloat16 lightningFromFloat<__nv_bfloat16>(float value) {
+    return __float2bfloat16(value);
+}
+
+template <typename Tdata>
 INFINIOP_CUDA_KERNEL lightningAttentionKernel(
-    const float *__restrict__ q, const float *__restrict__ k, const float *__restrict__ v,
-    float *__restrict__ out, float *__restrict__ state_pool,
+    const Tdata *__restrict__ q, const Tdata *__restrict__ k, const Tdata *__restrict__ v,
+    Tdata *__restrict__ out, Tdata *__restrict__ state_pool,
     const float *__restrict__ slope,
     const int32_t *__restrict__ init_idx, const int32_t *__restrict__ final_idx,
     size_t T, size_t D,
@@ -51,8 +98,8 @@ INFINIOP_CUDA_KERNEL lightningAttentionKernel(
     const size_t final_row = static_cast<size_t>(final_idx[b]);
     const float ratio = __expf(-slope[h * slope_stride]);
 
-    float *S = state_pool + final_row * s_s0 + h * s_s1;
-    const float *S_init = state_pool + init_row * s_s0 + h * s_s1;
+    Tdata *S = state_pool + final_row * s_s0 + h * s_s1;
+    const Tdata *S_init = state_pool + init_row * s_s0 + h * s_s1;
     if (init_row != final_row) {
         for (size_t idx = tid; idx < D * D; idx += D) {
             const size_t i = idx / D;
@@ -63,28 +110,27 @@ INFINIOP_CUDA_KERNEL lightningAttentionKernel(
     __syncthreads();
 
     for (size_t t = 0; t < T; ++t) {
-        s_k[tid] = k[b * k_sb + t * k_st + h * k_sh + tid * k_sd];
-        s_q[tid] = q[b * q_sb + t * q_st + h * q_sh + tid * q_sd];
+        s_k[tid] = lightningToFloat(k[b * k_sb + t * k_st + h * k_sh + tid * k_sd]);
+        s_q[tid] = lightningToFloat(q[b * q_sb + t * q_st + h * q_sh + tid * q_sd]);
         __syncthreads();
 
         // S[i][j] = ratio * S[i][j] + k[i] * v[j]   (thread j owns column j)
-        const float v_j = v[b * v_sb + t * v_st + h * v_sh + tid * v_sd];
+        const float v_j = lightningToFloat(v[b * v_sb + t * v_st + h * v_sh + tid * v_sd]);
         for (size_t i = 0; i < D; ++i) {
-            float *s_ij = S + i * s_s2 + tid * s_s3;
-            *s_ij = ratio * (*s_ij) + s_k[i] * v_j;
+            Tdata *s_ij = S + i * s_s2 + tid * s_s3;
+            *s_ij = lightningFromFloat<Tdata>(ratio * lightningToFloat(*s_ij) + s_k[i] * v_j);
         }
 
         // o[j] = sum_i q[i] * S[i][j]
         float acc = 0.0f;
         for (size_t i = 0; i < D; ++i) {
-            acc += s_q[i] * S[i * s_s2 + tid * s_s3];
+            acc += s_q[i] * lightningToFloat(S[i * s_s2 + tid * s_s3]);
         }
-        out[b * o_sb + t * o_st + h * o_sh + tid * o_sd] = acc;
+        out[b * o_sb + t * o_st + h * o_sh + tid * o_sd] = lightningFromFloat<Tdata>(acc);
 
         __syncthreads(); // All threads must finish reading s_k/s_q before reloading.
     }
 }
-
 infiniStatus_t Descriptor::create(
     infiniopHandle_t handle,
     Descriptor **desc_ptr,
@@ -118,9 +164,6 @@ infiniStatus_t Descriptor::calculate(
     (void)workspace;
     (void)workspace_size;
 
-    if (_info.data_dtype != INFINI_DTYPE_F32) {
-        return INFINI_STATUS_BAD_TENSOR_DTYPE;
-    }
     if (_info.index_dtype != INFINI_DTYPE_I32) {
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
@@ -135,21 +178,36 @@ infiniStatus_t Descriptor::calculate(
     const auto &info = _info;
     dim3 grid(static_cast<unsigned int>(info.H), static_cast<unsigned int>(info.B));
     const size_t smem_bytes = 2 * info.D * sizeof(float);
-    lightningAttentionKernel<<<grid, static_cast<unsigned int>(info.D), smem_bytes, stream>>>(
-        static_cast<const float *>(q), static_cast<const float *>(k), static_cast<const float *>(v),
-        static_cast<float *>(out), static_cast<float *>(initial_state),
-        static_cast<const float *>(slope),
-        static_cast<const int32_t *>(initial_state_indices),
-        static_cast<const int32_t *>(final_state_indices),
-        info.T, info.D,
-        info.q_strides[0], info.q_strides[1], info.q_strides[2], info.q_strides[3],
-        info.k_strides[0], info.k_strides[1], info.k_strides[2], info.k_strides[3],
-        info.v_strides[0], info.v_strides[1], info.v_strides[2], info.v_strides[3],
-        info.out_strides[0], info.out_strides[1], info.out_strides[2], info.out_strides[3],
-        info.initial_state_strides[0], info.initial_state_strides[1],
-        info.initial_state_strides[2], info.initial_state_strides[3],
-        static_cast<size_t>(info.slope_strides[0]));
+    #define LAUNCH_LIGHTNING_ATTENTION(Tdata) \
+        lightningAttentionKernel<Tdata><<<grid, static_cast<unsigned int>(info.D), smem_bytes, stream>>>( \
+            static_cast<const Tdata *>(q), static_cast<const Tdata *>(k), static_cast<const Tdata *>(v), \
+            static_cast<Tdata *>(out), static_cast<Tdata *>(initial_state), \
+            static_cast<const float *>(slope), \
+            static_cast<const int32_t *>(initial_state_indices), \
+            static_cast<const int32_t *>(final_state_indices), \
+            info.T, info.D, \
+            info.q_strides[0], info.q_strides[1], info.q_strides[2], info.q_strides[3], \
+            info.k_strides[0], info.k_strides[1], info.k_strides[2], info.k_strides[3], \
+            info.v_strides[0], info.v_strides[1], info.v_strides[2], info.v_strides[3], \
+            info.out_strides[0], info.out_strides[1], info.out_strides[2], info.out_strides[3], \
+            info.initial_state_strides[0], info.initial_state_strides[1], \
+            info.initial_state_strides[2], info.initial_state_strides[3], \
+            static_cast<size_t>(info.slope_strides[0]));
 
+    switch (info.data_dtype) {
+    case INFINI_DTYPE_F32:
+        LAUNCH_LIGHTNING_ATTENTION(float);
+        break;
+    case INFINI_DTYPE_F16:
+        LAUNCH_LIGHTNING_ATTENTION(half);
+        break;
+    case INFINI_DTYPE_BF16:
+        LAUNCH_LIGHTNING_ATTENTION(__nv_bfloat16);
+        break;
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+    #undef LAUNCH_LIGHTNING_ATTENTION
     if (cudaGetLastError() != cudaSuccess) {
         return INFINI_STATUS_INTERNAL_ERROR;
     }
