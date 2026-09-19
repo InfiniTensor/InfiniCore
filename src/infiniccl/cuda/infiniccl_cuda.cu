@@ -119,7 +119,13 @@ infiniStatus_t commInitRank(
 }
 
 infiniStatus_t commDestroy(infinicclComm_t comm) {
-    CHECK_NCCL(ncclCommDestroy(getNcclComm(comm)));
+    // NCCL teardown may activate the communicator's device. Preserve the
+    // caller's device so its existing stream and runtime context stay valid.
+    int previous_device;
+    CHECK_INTERNAL(cudaGetDevice(&previous_device), cudaSuccess);
+    const auto status = ncclCommDestroy(getNcclComm(comm));
+    CHECK_INTERNAL(cudaSetDevice(previous_device), cudaSuccess);
+    CHECK_NCCL(status);
     delete comm;
     return INFINI_STATUS_SUCCESS;
 }

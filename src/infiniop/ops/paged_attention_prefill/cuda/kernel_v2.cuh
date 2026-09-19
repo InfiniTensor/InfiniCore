@@ -280,7 +280,7 @@ __global__ void PagedAttentionPrefillWarpGlobalKernel(
     ptrdiff_t o_head_stride) {
 
     constexpr int kWarpSize = 32;
-    static_assert(HEAD_SIZE == 64 || HEAD_SIZE == 128 || HEAD_SIZE == 192, "Only head_size 64/128/192 supported in v0.4.");
+    static_assert(HEAD_SIZE == 64 || HEAD_SIZE == 128 || HEAD_SIZE == 192 || HEAD_SIZE == 256, "Unsupported head_size.");
     static_assert(HEAD_SIZE % kWarpSize == 0, "HEAD_SIZE must be divisible by 32.");
     constexpr int DIMS_PER_THREAD = HEAD_SIZE / kWarpSize;
 

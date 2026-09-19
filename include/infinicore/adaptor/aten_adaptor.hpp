@@ -45,6 +45,8 @@ inline at::ScalarType to_at_dtype(DataType dtype) {
         return at::kHalf;
     case DataType::BF16:
         return at::kBFloat16;
+    case DataType::F8:
+        return at::kFloat8_e4m3fn;
     case DataType::I8:
         return at::kChar;
     case DataType::U8:
@@ -53,6 +55,8 @@ inline at::ScalarType to_at_dtype(DataType dtype) {
         return at::kInt;
     case DataType::I64:
         return at::kLong;
+    case DataType::BOOL:
+        return at::kBool;
     default:
         throw std::runtime_error("Unsupported dtype for ATen");
     }

@@ -26,6 +26,8 @@ _TEST_CASES_DATA = [
     (1, 24, 4, 256, 8, 8, 1),
     (1, 12, 2, 256, 8, 8, 1),
     (1, 6, 1, 256, 8, 8, 1),
+    (2, 12, 2, 256, 64, 128, 2),
+    (1, 24, 4, 256, 64, 1024, 1),
     # New DeepSeek MLA wrapper case: verifies prefill supports q/k head
     # size 576 with value head size 512.
     (1, 16, 1, 576, 8, 8, 1, 512),
@@ -94,7 +96,9 @@ def parse_test_cases():
                 value_size,
             ) = case
         scale = head_size**-0.5
-        num_blocks = 8192
+        num_blocks = num_seqs * (
+            (max_step_len * num_rounds + block_size - 1) // block_size
+        )
         manager = SimpleCacheManager(num_blocks, block_size)
         kv_lens = torch.zeros(num_seqs, dtype=torch.int32)
 
