@@ -26,21 +26,20 @@
 #ifndef __LINEAR_GGUF_NVIDIA_DEQUANT_CUH__
 #define __LINEAR_GGUF_NVIDIA_DEQUANT_CUH__
 
+#include <cublas_v2.h>
 #include <cuda_bf16.h>
 #include <cuda_runtime.h>
-#include <cublas_v2.h>
 
 #include <algorithm>
 #include <cstddef>
 
 #include "linear_gguf_gemv.cuh"
+#include "linear_gguf_q6_dequant.cuh"
 
 namespace op::linear_gguf::nvidia {
 
-// Weight rows decoded per scratch tile.  64 keeps the scratch at
-// 64 * K * 2 bytes (1.25 MiB at K = 10240) and hands cublas a [K, 64] operand
-// whose leading dimension is still a multiple of 8 elements, as bf16 gemms want.
-constexpr int kPrefillTileN = 64;
+// Larger tiles amortize kernel submission while retaining bounded scratch storage.
+constexpr int kPrefillTileN = 512;
 constexpr int kDequantThreads = 256;
 
 // Bytes of BF16 scratch that Descriptor::calculate needs for one tile.  `k` is in
@@ -59,7 +58,9 @@ __global__ void dequant_tile_kernel(const uint8_t *__restrict__ w,
     const int blocks_per_row = k / kElems;
     const int64_t idx = static_cast<int64_t>(blockIdx.x) * blockDim.x + threadIdx.x;
     const int r = static_cast<int>(idx / blocks_per_row);
-    if (r >= rows) return;
+    if (r >= rows) {
+        return;
+    }
     const int b = static_cast<int>(idx - static_cast<int64_t>(r) * blocks_per_row);
 
     float wk[kElems];
@@ -87,10 +88,18 @@ inline bool launch_dequant_tile(int32_t type, const uint8_t *w, __nv_bfloat16 *t
                                 cudaStream_t stream) {
     const int32_t elems = ggml_blocks::block_elems(type);
     const int32_t bytes = ggml_blocks::block_bytes(type);
-    if (rows <= 0 || k <= 0 || elems <= 0 || bytes <= 0) return false;
-    if (n_start < 0) return false;
-    if (k % elems != 0) return false;
-    if (row_bytes < static_cast<int64_t>(k / elems) * bytes) return false;
+    if (rows <= 0 || k <= 0 || elems <= 0 || bytes <= 0) {
+        return false;
+    }
+    if (n_start < 0) {
+        return false;
+    }
+    if (k % elems != 0) {
+        return false;
+    }
+    if (row_bytes < static_cast<int64_t>(k / elems) * bytes) {
+        return false;
+    }
 
     const int64_t total = static_cast<int64_t>(rows) * (k / elems);
     const unsigned grid = static_cast<unsigned>(
@@ -109,8 +118,8 @@ inline bool launch_dequant_tile(int32_t type, const uint8_t *w, __nv_bfloat16 *t
             w, tile, n_start, rows, k, row_bytes);
         break;
     case ggml_blocks::GGML_TYPE_Q6_K:
-        dequant_tile_kernel<ggml_blocks::GGML_TYPE_Q6_K><<<grid, kDequantThreads, 0, stream>>>(
-            w, tile, n_start, rows, k, row_bytes);
+        launch_dequant_q6_warp(
+            w, tile, n_start, rows, k, row_bytes, stream);
         break;
     default:
         return false;
@@ -139,38 +148,61 @@ inline bool launch_prefill(cublasHandle_t blas, int32_t type,
                            const __nv_bfloat16 *a, const uint8_t *w, __nv_bfloat16 *c,
                            int m, int n, int k, int64_t row_bytes,
                            void *scratch, size_t scratch_bytes, cudaStream_t stream) {
-    if (blas == nullptr || scratch == nullptr) return false;
+    if (blas == nullptr || scratch == nullptr) {
+        return false;
+    }
     // The regular route uses this composition only for prefill.  Strict
     // compatibility experiments may deliberately route small-M decode here as
     // well, so validate only the actual matrix geometry.
-    if (m <= 0 || n <= 0 || k <= 0) return false;
-    if (scratch_bytes < prefill_scratch_bytes(k)) return false;
+    if (m <= 0 || n <= 0 || k <= 0) {
+        return false;
+    }
+    if (scratch_bytes < prefill_scratch_bytes(k)) {
+        return false;
+    }
 
     auto *tile = reinterpret_cast<__nv_bfloat16 *>(scratch);
     const float alpha = 1.0f;
     const float beta = 0.0f;
-    if (cublasSetStream(blas, stream) != CUBLAS_STATUS_SUCCESS) return false;
-
-    for (int n0 = 0; n0 < n; n0 += kPrefillTileN) {
-        const int rows = std::min(kPrefillTileN, n - n0);
-        if (!launch_dequant_tile(type, w, tile, n0, rows, k, row_bytes, stream)) return false;
-        if (cublasGemmEx(blas,
-                         CUBLAS_OP_T,   // A = tile^T : [rows, k]
-                         CUBLAS_OP_N,   // B = a viewed column-major : [k, m]
-                         rows, m, k,
-                         &alpha,
-                         tile, CUDA_R_16BF, k,
-                         a, CUDA_R_16BF, k,
-                         &beta,
-                         c + n0, CUDA_R_16BF, n,
-                         CUBLAS_COMPUTE_32F,
-                         CUBLAS_GEMM_DEFAULT) != CUBLAS_STATUS_SUCCESS) {
-            return false;
-        }
+    if (cublasSetStream(blas, stream) != CUBLAS_STATUS_SUCCESS) {
+        return false;
     }
-    return cudaGetLastError() == cudaSuccess;
+
+    cublasMath_t previous_math;
+    if (cublasGetMathMode(blas, &previous_math) != CUBLAS_STATUS_SUCCESS) {
+        return false;
+    }
+    const auto math = static_cast<cublasMath_t>(previous_math | CUBLAS_MATH_DISALLOW_REDUCED_PRECISION_REDUCTION);
+    if (cublasSetMathMode(blas, math) != CUBLAS_STATUS_SUCCESS) {
+        return false;
+    }
+    const bool success = [&]() {
+        for (int n0 = 0; n0 < n; n0 += kPrefillTileN) {
+            const int rows = std::min(kPrefillTileN, n - n0);
+            if (!launch_dequant_tile(type, w, tile, n0, rows, k, row_bytes, stream)) {
+                return false;
+            }
+            if (cublasGemmEx(blas,
+                             CUBLAS_OP_T, // A = tile^T : [rows, k]
+                             CUBLAS_OP_N, // B = a viewed column-major : [k, m]
+                             rows, m, k,
+                             &alpha,
+                             tile, CUDA_R_16BF, k,
+                             a, CUDA_R_16BF, k,
+                             &beta,
+                             c + n0, CUDA_R_16BF, n,
+                             CUBLAS_COMPUTE_32F,
+                             CUBLAS_GEMM_DEFAULT)
+                != CUBLAS_STATUS_SUCCESS) {
+                return false;
+            }
+        }
+        return cudaGetLastError() == cudaSuccess;
+    }();
+    const bool restored = cublasSetMathMode(blas, previous_math) == CUBLAS_STATUS_SUCCESS;
+    return success && restored;
 }
 
-}  // namespace op::linear_gguf::nvidia
+} // namespace op::linear_gguf::nvidia
 
-#endif  // __LINEAR_GGUF_NVIDIA_DEQUANT_CUH__
+#endif // __LINEAR_GGUF_NVIDIA_DEQUANT_CUH__
