@@ -1,11 +1,14 @@
 #include "gemm_metax.h"
 #include "../../../devices/metax/metax_common.h"
 #include "../../../devices/metax/metax_handle.h"
+#include <cstdlib>
+#include <cstring>
 
 namespace op::gemm::metax {
 
 struct Descriptor::Opaque {
     std::shared_ptr<device::metax::Handle::Internal> internal;
+    bool allow_tf32;
 };
 
 Descriptor::~Descriptor() {
@@ -26,9 +29,12 @@ infiniStatus_t Descriptor::create(
     auto result = MatmulInfo::create(c_desc, a_desc, b_desc, MatrixLayout::COL_MAJOR);
     CHECK_RESULT(result);
 
+    // Capture the precision policy with the descriptor, including graph replay.
+    const char *allow_tf32 = std::getenv("INFINIOP_METAX_ALLOW_TF32");
+    const bool use_tf32 = allow_tf32 == nullptr || std::strcmp(allow_tf32, "0") != 0;
     *desc_ptr = new Descriptor(
         dtype, result.take(), 0,
-        new Opaque{handle->internal()},
+        new Opaque{handle->internal(), use_tf32},
         handle->device, handle->device_id);
     return INFINI_STATUS_SUCCESS;
 }
@@ -57,7 +63,7 @@ infiniStatus_t Descriptor::calculate(
         break;
     case INFINI_DTYPE_F32:
         a_type = b_type = c_type = HPCC_R_32F;
-        compute_type = HCBLAS_COMPUTE_32F_FAST_TF32;
+        compute_type = _opaque->allow_tf32 ? HCBLAS_COMPUTE_32F_FAST_TF32 : HCBLAS_COMPUTE_32F;
         break;
 
     default:
