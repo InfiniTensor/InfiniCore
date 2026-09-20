@@ -1,7 +1,25 @@
 #include "infinicore/ops/float_power.hpp"
+#include "infinicore/graph/graph.hpp"
 #include "infinicore/tensor.hpp"
 
 namespace infinicore::op {
+namespace {
+
+class RecordedScalarPower final : public graph::GraphOperator {
+public:
+    RecordedScalarPower(Tensor output, Tensor input, double exponent)
+        : output_(output), input_(input), exponent_(exponent) {}
+
+    void run() const override {
+        FloatPower::dispatcher_scalar().lookup(input_->device().getType())(output_, input_, exponent_);
+    }
+
+private:
+    graph::GraphTensor output_, input_;
+    double exponent_;
+};
+
+} // namespace
 
 // =======================================================================
 // 1. Dispatcher 单例
@@ -22,6 +40,10 @@ common::OpDispatcher<FloatPower::schema_tensor> &FloatPower::dispatcher_tensor()
 // =======================================================================
 
 void FloatPower::execute(Tensor output, Tensor input, double exponent) {
+    if (context::isGraphRecording()) {
+        context::addGraphOperator(std::make_shared<RecordedScalarPower>(output, input, exponent));
+        return;
+    }
     dispatcher_scalar()
         .lookup(context::getDevice().getType())(output, input, exponent);
 }
