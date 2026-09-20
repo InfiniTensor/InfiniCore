@@ -85,6 +85,8 @@
 #include "infiniop/ops/layer_norm.h"
 #include "infiniop/ops/ldexp.h"
 #include "infiniop/ops/lerp.h"
+#include "infiniop/ops/block_fp8_linear.h"
+#include "infiniop/ops/linear_gguf.h"
 #include "infiniop/ops/linear_mxfp4.h"
 #include "infiniop/ops/log10.h"
 #include "infiniop/ops/log1p.h"

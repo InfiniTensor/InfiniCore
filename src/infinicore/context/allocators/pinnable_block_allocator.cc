@@ -47,37 +47,41 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
 
     std::shared_ptr<Block> block;
 
-    // 1. Try size-class allocation for small/medium
-    for (auto &cls : size_classes_) {
-        if (size <= cls.block_size) {
-            if (!cls.free_blocks.empty()) {
-                block = cls.free_blocks.back();
-                while (block != nullptr && block->in_use) {
-                    cls.free_blocks.pop_back();
-                    if (cls.free_blocks.empty()) {
-                        block = nullptr;
-                        break;
-                    }
+    // 1. Try size-class allocation for small only (<=1MB)
+    // For larger allocations, skip size-class to avoid massive internal fragmentation
+    // (e.g. 85MB tensor in 128MB block wastes 34% memory)
+    if (size <= 1 * 1024 * 1024) {
+        for (auto &cls : size_classes_) {
+            if (size <= cls.block_size) {
+                if (!cls.free_blocks.empty()) {
                     block = cls.free_blocks.back();
+                    while (block != nullptr && block->in_use) {
+                        cls.free_blocks.pop_back();
+                        if (cls.free_blocks.empty()) {
+                            block = nullptr;
+                            break;
+                        }
+                        block = cls.free_blocks.back();
+                    }
+                    if (block != nullptr) {
+                        cls.free_blocks.pop_back();
+                        block->in_use = true;
+                        block->use_count = 1;
+                        return reinterpret_cast<std::byte *>(block->ptr);
+                    }
                 }
-                if (block != nullptr) {
-                    cls.free_blocks.pop_back();
-                    block->in_use = true;
-                    block->use_count = 1;
-                    return reinterpret_cast<std::byte *>(block->ptr);
-                }
+                // Allocate a new block for this class.
+                block = std::make_shared<Block>();
+                block->size = cls.block_size;
+                block->frozen = pinned_mode_;
+                block->in_use = true;
+                block->use_count = 1;
+
+                INFINICORE_CHECK_ERROR(infinirtMalloc(&block->ptr, block->size));
+
+                all_blocks_[block->ptr] = block;
+                return reinterpret_cast<std::byte *>(block->ptr);
             }
-            // Allocate a new block for this class
-            block = std::make_shared<Block>();
-            block->size = cls.block_size;
-            block->frozen = pinned_mode_;
-            block->in_use = true;
-            block->use_count = 1;
-
-            INFINICORE_CHECK_ERROR(infinirtMalloc(&block->ptr, block->size));
-
-            all_blocks_[block->ptr] = block;
-            return reinterpret_cast<std::byte *>(block->ptr);
         }
     }
 
