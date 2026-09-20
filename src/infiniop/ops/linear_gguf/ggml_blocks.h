@@ -1,3 +1,8 @@
+// GGML block layouts and numerical formulas in this file are derived from
+// llama.cpp/ggml at commit 3737e41370da1830a44c663f9929a0f27591ffa6,
+// Copyright (c) 2023-2026 The ggml authors, licensed under the MIT License.
+// See third_party/llama.cpp/LICENSE.
+//
 // Device-independent GGUF block decoders for the linear_gguf op.
 //
 // Scope: the four GGML block types route B stores verbatim, i.e. Q8_0 (8),
