@@ -94,6 +94,7 @@
 #include "infiniop/ops/logcumsumexp.h"
 #include "infiniop/ops/logdet.h"
 #include "infiniop/ops/lp_norm.h"
+#include "infiniop/ops/mamba2_scan.h"
 #include "infiniop/ops/mamba_selective_scan.h"
 #include "infiniop/ops/masked_select.h"
 #include "infiniop/ops/matmul_all_reduce.h"

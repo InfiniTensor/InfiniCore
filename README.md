@@ -109,6 +109,12 @@ python scripts/install.py [XMAKE_CONFIG_FLAGS]
 | `--ccl=[y\|n]`           | 是否编译 InfiniCCL 通信库接口实现 | n
 | `--graph=[y\|n]`         | 是否编译 cuda graph 接口实现      | n
 
+MetaX FP32 GEMM permits TF32 by default. Set `INFINIOP_METAX_ALLOW_TF32=0`
+before starting the process to request `MCBLAS_COMPUTE_32F` instead of
+`MCBLAS_COMPUTE_32F_FAST_TF32`. The policy is captured when each descriptor
+is created and remains fixed during graph replay; restart the process when
+changing it. FP16 and BF16 GEMM retain their existing FP32 accumulation.
+
 ##### 手动安装底层库
 
 0. 生成九齿算子（可选）
