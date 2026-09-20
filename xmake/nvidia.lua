@@ -1,6 +1,7 @@
 local CUDNN_ROOT = os.getenv("CUDNN_ROOT") or os.getenv("CUDNN_HOME") or os.getenv("CUDNN_PATH")
 if CUDNN_ROOT ~= nil then
     add_includedirs(CUDNN_ROOT .. "/include")
+    add_linkdirs(CUDNN_ROOT .. "/lib")
 end
 
 local CUTLASS_ROOT = os.getenv("CUTLASS_ROOT") or os.getenv("CUTLASS_HOME") or os.getenv("CUTLASS_PATH")
@@ -23,6 +24,8 @@ local function apply_cuda_arch_flags(add_fn)
     for _, arch in ipairs(arch_opt:split(",")) do
         arch = arch:trim()
         if arch ~= "" then
+            if arch == "sm_90" then arch = "sm_90a" end
+            if arch == "sm_120" then arch = "sm_120a" end
             local compute = arch:gsub("sm_", "compute_")
             add_fn("-gencode=arch=" .. compute .. ",code=" .. arch)
         end
@@ -118,7 +121,30 @@ target("infiniop-nvidia")
         end
 
         -- CUDA arch: explicit --cuda_arch > nvidia-smi auto-detect > native
-        if not apply_cuda_arch_flags(function(flag) target:add("cuflags", flag) end) then
+        -- Use cugencodes for devlink support + cuflags for compilation
+        local function add_arch_flags(add_fn, add_gencode_fn)
+            local arch_opt_inner = get_config("cuda_arch")
+            if not arch_opt_inner or type(arch_opt_inner) ~= "string" or arch_opt_inner == "" then
+                return false
+            end
+            for _, arch in ipairs(arch_opt_inner:split(",")) do
+                arch = arch:trim()
+                if arch ~= "" then
+                    -- Use 'a' suffix for architectures that need it (sm_90, sm_120)
+                    if arch == "sm_90" then arch = "sm_90a" end
+                    if arch == "sm_120" then arch = "sm_120a" end
+                    local compute = arch:gsub("sm_", "compute_")
+                    add_fn("-gencode=arch=" .. compute .. ",code=" .. arch)
+                    add_gencode_fn(arch)
+                end
+            end
+            return true
+        end
+
+        if not add_arch_flags(
+            function(flag) target:add("cuflags", flag) end,
+            function(arch) target:add("cugencodes", arch) end
+        ) then
             local ok, sm_str = os.iorunv("nvidia-smi", {"--query-gpu=compute_cap", "--format=csv,noheader,nounits"})
             if ok and sm_str then
                 local major, minor = sm_str:match("(%d+)%.(%d+)")
@@ -129,9 +155,12 @@ target("infiniop-nvidia")
                     if sm >= 80 then table.insert(archs, "sm_80") end
                     if sm >= 86 then table.insert(archs, "sm_86") end
                     if sm >= 89 then table.insert(archs, "sm_89") end
-                    -- H100 (sm_90a): use sm_90a for cutlass 3.x
                     if sm == 90 then
                         target:add("cuflags", "-gencode=arch=compute_90a,code=sm_90a")
+                        target:add("cugencodes", "sm_90a")
+                    elseif sm >= 120 then
+                        target:add("cuflags", "-gencode=arch=compute_120a,code=sm_120a")
+                        target:add("cugencodes", "sm_120a")
                     elseif sm > 90 then
                         table.insert(archs, "sm_90")
                     end
@@ -141,6 +170,7 @@ target("infiniop-nvidia")
                     for _, arch in ipairs(archs) do
                         local compute = arch:gsub("sm_", "compute_")
                         target:add("cuflags", "-gencode=arch=" .. compute .. ",code=" .. arch)
+                        target:add("cugencodes", arch)
                     end
                 else
                     target:add("cugencodes", "native")
@@ -172,7 +202,7 @@ target("infiniop-nvidia")
         end
     end
 
-    add_cuflags("-Xcompiler=-Wno-error=deprecated-declarations", "-Xcompiler=-Wno-error=unused-function")
+    add_cuflags("-Xcompiler=-Wno-error=deprecated-declarations", "-Xcompiler=-Wno-error=unused-function", "-Xcompiler=-Wno-error=sign-compare")
 
     -- Cutlass: enable I8 Gemm when CUTLASS_ROOT is set
     if CUTLASS_ROOT ~= nil then
@@ -208,8 +238,11 @@ target("infiniop-nvidia")
     if arch_opt and type(arch_opt) == "string" then
         for _, arch in ipairs(arch_opt:split(",")) do
             arch = arch:trim()
+            if arch == "sm_90" then arch = "sm_90a" end
+            if arch == "sm_120" then arch = "sm_120a" end
             local compute = arch:gsub("sm_", "compute_")
             add_cuflags("-gencode=arch=" .. compute .. ",code=" .. arch)
+            add_cugencodes(arch)
         end
     end
 
