@@ -12,6 +12,7 @@ bool use_slice_copy_cat(Device::Type device_type, int dim, int ndim) {
     // correct through copy_from, but their performance impact is unverified.
     return dim == ndim - 1
         && (device_type == Device::Type::NVIDIA
+            || device_type == Device::Type::METAX
             || device_type == Device::Type::HYGON
             || device_type == Device::Type::ILUVATAR
             || device_type == Device::Type::ALI);
@@ -172,7 +173,8 @@ void cat_(Tensor out, std::vector<Tensor> tensors, int dim) {
         // index. Concatenating MLA tensors on the last dimension can therefore
         // enqueue hundreds of tiny D2D copy calls per layer. A strided output
         // slice is semantically identical and copy_from lowers it to a single
-        // rearrange kernel per input tensor on CUDA-like backends.
+        // rearrange kernel per input tensor on CUDA-like backends. Unlike
+        // direct memcpy calls, these copies are also recorded for graph replay.
         size_t offset = 0;
         for (auto &tensor : tensors) {
             if (tensor->ndim() == 1) {

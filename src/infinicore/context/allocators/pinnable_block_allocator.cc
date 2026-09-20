@@ -64,6 +64,7 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
                     cls.free_blocks.pop_back();
                     block->in_use = true;
                     block->use_count = 1;
+                    block->frozen = block->frozen || pinned_mode_;
                     return reinterpret_cast<std::byte *>(block->ptr);
                 }
             }
@@ -151,6 +152,16 @@ size_t PinnableBlockAllocator::mark_in_use_(void *ptr, bool in_use) {
 
     auto block = it->second;
     if (in_use) {
+        if (!block->in_use) {
+            // Reinstantiated graph storage is no longer available for trimming.
+            for (auto &cls : size_classes_) {
+                if (block->size == cls.block_size) {
+                    auto &free = cls.free_blocks;
+                    free.erase(std::remove(free.begin(), free.end(), block), free.end());
+                    break;
+                }
+            }
+        }
         block->in_use = true;
         ++block->use_count;
     } else if (block->use_count > 0) {
@@ -166,7 +177,7 @@ void PinnableBlockAllocator::trim() {
     // Free non-frozen size-class blocks
     for (auto &cls : size_classes_) {
         for (auto it = cls.free_blocks.begin(); it != cls.free_blocks.end();) {
-            if (!(*it)->frozen) {
+            if (!(*it)->frozen && !(*it)->in_use) {
                 INFINICORE_CHECK_ERROR(infinirtFree((*it)->ptr));
                 all_blocks_.erase((*it)->ptr);
                 it = cls.free_blocks.erase(it);

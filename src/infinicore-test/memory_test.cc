@@ -1,4 +1,5 @@
 #include "memory_test.h"
+#include "../infinicore/context/allocators/pinnable_block_allocator.hpp"
 #include <algorithm>
 #include <cstring>
 #include <random>
@@ -77,6 +78,27 @@ TestResult BasicMemoryTest::run() {
                 return false;
             }
             spdlog::debug("BasicMemoryTest: Pinned memory test completed");
+
+            PinnableBlockAllocator allocator(current_device);
+            auto reinstantiated = allocator.allocate(1024);
+            allocator.deallocate(reinstantiated);
+            allocator.mark_in_use_(reinstantiated, true);
+            allocator.trim();
+            allocator.deallocate(reinstantiated);
+            allocator.trim();
+
+            auto captured = allocator.allocate(1024);
+            allocator.deallocate(captured);
+            allocator.set_pin_mode(true);
+            if (allocator.allocate(1024) != captured) {
+                return false;
+            }
+            allocator.deallocate(captured);
+            allocator.set_pin_mode(false);
+            allocator.trim();
+            // A graph may reinstantiate storage after its temporary owner expires.
+            allocator.mark_in_use_(captured, true);
+            allocator.deallocate(captured);
 
             return true;
         } catch (const std::exception &e) {
