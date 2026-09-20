@@ -49,7 +49,7 @@ struct GemmConfig {
 
     using ScaleConfig = cutlass::detail::Sm120BlockwiseScaleConfig<
         1, 128, 128,
-        cute::UMMA::Major::MN,
+        cute::UMMA::Major::K,
         cute::UMMA::Major::K>;
 
     using LayoutSFA = decltype(ScaleConfig::deduce_layoutSFA());

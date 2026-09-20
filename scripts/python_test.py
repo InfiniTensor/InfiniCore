@@ -21,6 +21,8 @@ def run_tests(args):
         # "dequantize_gptq.py",
         "gelu.py",
         "gemm.py",
+        "linear_gguf.py",
+        "block_fp8_linear.py",
         # "layer_norm.py",
         "logsoftmax.py",
         # "lp_norm.py",

@@ -136,6 +136,13 @@ infiniStatus_t Descriptor::calculate(
     const void *weight,
     const void *weight_scale,
     void *stream) const {
+    if (workspace_size < _opaque->workspace_size) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+    if (_opaque->workspace_size > 0 && workspace == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+
     auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
 
     const size_t M = _info.M;
