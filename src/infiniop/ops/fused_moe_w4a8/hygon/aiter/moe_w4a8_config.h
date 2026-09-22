@@ -7,6 +7,9 @@
 #include <functional>
 #include <hip/hip_runtime.h>
 #include <unordered_map>
+
+#include "numeric_types.h"
+
 // MOE prefill和decode的分界线
 #define MOE_THRESHOLD 1024
 
