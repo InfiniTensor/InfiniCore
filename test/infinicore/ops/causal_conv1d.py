@@ -3,7 +3,6 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import infinicore
 import torch
 from framework import (
     BaseOperatorTest,
@@ -13,6 +12,7 @@ from framework import (
     TestCase,
 )
 
+import infinicore
 
 # Test cases:
 # (qkv_shape, qkv_strides, state_shape, weight_shape, bias_shape,
@@ -20,7 +20,9 @@ from framework import (
 _TEST_CASES_DATA = [
     ((2, 5, 4), None, (2, 4, 3), (4, 1, 4), None, None, None, None),
     ((2, 4, 12), (72, 18, 1), (2, 12, 3), (12, 1, 4), (12,), None, None, None),
+    ((2, 1, 8), None, (4, 8, 3), (8, 1, 4), (8,), None, (1, 3), (0, 2)),
     ((1, 7, 8), None, (2, 8, 3), (8, 1, 4), (8,), (0, 3, 7), None, None),
+    ((1, 2, 8), None, (4, 8, 3), (8, 1, 4), (8,), (0, 1, 2), (1, 3), (0, 2)),
     ((1, 7, 10), None, (4, 10, 3), (10, 1, 4), (10,), (0, 2, 7), (1, 3), (0, 2)),
 ]
 
@@ -155,9 +157,13 @@ def _unpack_args(args):
 
     if len(args) >= 4:
         bias = args[3]
-    if len(args) >= 5:
+    if len(args) == 5:
         cu_seqlens = args[4]
-    if len(args) >= 7:
+    elif len(args) == 6:
+        initial_state_indices = args[4]
+        final_state_indices = args[5]
+    elif len(args) >= 7:
+        cu_seqlens = args[4]
         initial_state_indices = args[5]
         final_state_indices = args[6]
 

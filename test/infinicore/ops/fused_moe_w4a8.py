@@ -129,6 +129,7 @@ def make_cases():
     generator = torch.Generator(device="cpu").manual_seed(20260911)
     configs = [
         (1, 64, 64, 8, 3, 2, "decode SiTU"),
+        (1, 64, 64, 896, 16, 2, "Kimi decode route packing"),
         (5, 64, 96, 6, 2, 1, "prefill SwiGLU"),
     ]
     cases = []

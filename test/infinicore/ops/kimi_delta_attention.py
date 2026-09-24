@@ -4,15 +4,15 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import torch
-import infinicore
 from framework import (
     BaseOperatorTest,
     GenericTestRunner,
+    TensorInitializer,
     TensorSpec,
     TestCase,
-    TensorInitializer,
 )
 
+import infinicore
 
 _TENSOR_DTYPES = [infinicore.float16, infinicore.bfloat16, infinicore.float32]
 _TOLERANCE_MAP = {
@@ -100,7 +100,7 @@ def torch_kimi_delta_attention_ref(
     return out.to(initial_dtype)
 
 
-def k3_shape_test_case(seq_len, num_heads, description):
+def k3_shape_test_case(seq_len, num_heads, description, zero_state=True):
     shape = (1, seq_len, num_heads, 128)
     dtype = infinicore.bfloat16
     H, D = shape[2], shape[3]
@@ -120,7 +120,9 @@ def k3_shape_test_case(seq_len, num_heads, description):
                 (2, H, D, D),
                 None,
                 dtype,
-                init_mode=TensorInitializer.ZEROS,
+                init_mode=(
+                    TensorInitializer.ZEROS if zero_state else TensorInitializer.RANDOM
+                ),
             ),
         ],
         kwargs={
@@ -146,6 +148,68 @@ def k3_shape_test_case(seq_len, num_heads, description):
                 set_tensor=final_indices,
             ),
             "scale": D**-0.5,
+            "lower_bound": -5.0,
+            "use_qk_l2norm": True,
+        },
+        output_spec=None,
+        comparison_target=None,
+        tolerance={"atol": 1e-3, "rtol": 1e-2},
+        description=description,
+    )
+
+
+def k3_varlen_test_case(description, invalid_initial_index=False, strided_qkv=False):
+    total_tokens = 50
+    num_heads = 1
+    dim = 128
+    shape = (1, total_tokens, num_heads, dim)
+    cu = torch.tensor([0, 17, total_tokens], dtype=torch.int32)
+    initial_indices = torch.tensor(
+        [-1 if invalid_initial_index else 0, 2], dtype=torch.int32
+    )
+    final_indices = torch.tensor([1, 3], dtype=torch.int32)
+    qkv_strides = None
+    if strided_qkv:
+        qkv_strides = (
+            total_tokens * 3 * num_heads * dim,
+            3 * num_heads * dim,
+            dim,
+            1,
+        )
+    return TestCase(
+        inputs=[
+            TensorSpec.from_tensor(shape, qkv_strides, infinicore.bfloat16),
+            TensorSpec.from_tensor(shape, qkv_strides, infinicore.bfloat16),
+            TensorSpec.from_tensor(shape, qkv_strides, infinicore.bfloat16),
+            TensorSpec.from_tensor(shape, None, infinicore.bfloat16),
+            TensorSpec.from_tensor(shape[:3], None, infinicore.bfloat16),
+            TensorSpec.from_tensor((num_heads,), None, infinicore.float32),
+            TensorSpec.from_tensor((num_heads, dim), None, infinicore.float32),
+            TensorSpec.from_tensor((4, num_heads, dim, dim), None, infinicore.bfloat16),
+        ],
+        kwargs={
+            "cu_seqlens": TensorSpec.from_tensor(
+                tuple(cu.shape),
+                None,
+                infinicore.int32,
+                init_mode=TensorInitializer.MANUAL,
+                set_tensor=cu,
+            ),
+            "initial_state_indices": TensorSpec.from_tensor(
+                tuple(initial_indices.shape),
+                None,
+                infinicore.int32,
+                init_mode=TensorInitializer.MANUAL,
+                set_tensor=initial_indices,
+            ),
+            "final_state_indices": TensorSpec.from_tensor(
+                tuple(final_indices.shape),
+                None,
+                infinicore.int32,
+                init_mode=TensorInitializer.MANUAL,
+                set_tensor=final_indices,
+            ),
+            "scale": dim**-0.5,
             "lower_bound": -5.0,
             "use_qk_l2norm": True,
         },
@@ -237,6 +301,20 @@ def parse_test_cases():
                 91,
                 1,
                 "KimiDeltaAttention D=128 long-sequence wavefront regression",
+            ),
+            k3_shape_test_case(
+                1,
+                4,
+                "KimiDeltaAttention D=128 row-streaming decode",
+                zero_state=False,
+            ),
+            k3_varlen_test_case(
+                "KimiDeltaAttention FlashKDA strided-QKV multi-request varlen",
+                strided_qkv=True,
+            ),
+            k3_varlen_test_case(
+                "KimiDeltaAttention FlashKDA invalid state index",
+                invalid_initial_index=True,
             ),
         ]
     )

@@ -105,21 +105,43 @@ __global__ void buildRouteOffsets(
     const int32_t *counts,
     size_t num_experts,
     size_t block_size_m) {
-    if (blockIdx.x != 0 || threadIdx.x != 0) {
-        return;
+    extern __shared__ int32_t scan[];
+    const size_t tid = threadIdx.x;
+    const int32_t padded = tid < num_experts
+                             ? (counts[tid] + block_size_m - 1)
+                                   / block_size_m * block_size_m
+                             : 0;
+    scan[tid] = padded;
+    __syncthreads();
+
+    for (size_t delta = 1; delta < blockDim.x; delta <<= 1) {
+        const int32_t addend = tid >= delta ? scan[tid - delta] : 0;
+        __syncthreads();
+        scan[tid] += addend;
+        __syncthreads();
     }
-    int32_t offset = 0;
-    offsets[0] = 0;
-    for (size_t expert = 0; expert < num_experts; ++expert) {
-        const int32_t padded = (counts[expert] + block_size_m - 1)
-                             / block_size_m * block_size_m;
-        for (int32_t row = 0; row < padded; row += block_size_m) {
-            expert_ids[(offset + row) / block_size_m] = static_cast<int32_t>(expert);
+
+    if (tid < num_experts) {
+        const int32_t begin = tid == 0 ? 0 : scan[tid - 1];
+        const int32_t end = scan[tid];
+        offsets[tid] = begin;
+        for (int32_t row = begin; row < end; row += block_size_m) {
+            expert_ids[row / block_size_m] = static_cast<int32_t>(tid);
         }
-        offset += padded;
-        offsets[expert + 1] = offset;
     }
-    *num_tokens_post_padded = offset;
+    if (tid == 0) {
+        const int32_t total = scan[num_experts - 1];
+        offsets[num_experts] = total;
+        *num_tokens_post_padded = total;
+    }
+}
+
+size_t nextPowerOfTwo(size_t value) {
+    size_t result = 1;
+    while (result < value) {
+        result <<= 1;
+    }
+    return result;
 }
 
 __global__ void fillSortedTokenIds(
@@ -148,6 +170,73 @@ __global__ void scatterRoutes(
         const int32_t local = atomicAdd(cursors + expert, 1);
         sorted_token_ids[offsets[expert] + local] = static_cast<int32_t>(route);
     }
+}
+
+__global__ void buildSmallRouteMetadata(
+    int32_t *sorted_token_ids,
+    int32_t *expert_ids,
+    int32_t *num_tokens_post_padded,
+    const int32_t *selected_experts,
+    size_t route_count,
+    size_t num_experts,
+    size_t block_size_m) {
+    extern __shared__ int32_t shared[];
+    int32_t *experts = shared;
+    int32_t *routes = experts + blockDim.x;
+    const size_t tid = threadIdx.x;
+    const int32_t expert = tid < route_count ? selected_experts[tid] : -1;
+    experts[tid] = expert >= 0 && static_cast<size_t>(expert) < num_experts
+                     ? expert
+                     : INT32_MAX;
+    routes[tid] = static_cast<int32_t>(tid);
+    __syncthreads();
+
+    for (size_t width = 2; width <= blockDim.x; width <<= 1) {
+        for (size_t stride = width >> 1; stride > 0; stride >>= 1) {
+            const size_t other = tid ^ stride;
+            if (other > tid) {
+                const bool ascending = (tid & width) == 0;
+                const bool swap = ascending
+                                    ? experts[tid] > experts[other]
+                                    : experts[tid] < experts[other];
+                if (swap) {
+                    const int32_t other_expert = experts[other];
+                    const int32_t other_route = routes[other];
+                    experts[other] = experts[tid];
+                    routes[other] = routes[tid];
+                    experts[tid] = other_expert;
+                    routes[tid] = other_route;
+                }
+            }
+            __syncthreads();
+        }
+    }
+
+    if (tid != 0) {
+        return;
+    }
+    int32_t output_offset = 0;
+    size_t begin = 0;
+    while (begin < route_count && experts[begin] != INT32_MAX) {
+        size_t end = begin + 1;
+        while (end < route_count && experts[end] == experts[begin]) {
+            ++end;
+        }
+        const size_t count = end - begin;
+        const size_t padded = (count + block_size_m - 1) / block_size_m
+                            * block_size_m;
+        for (size_t row = 0; row < padded; ++row) {
+            sorted_token_ids[output_offset + row]
+                = row < count ? routes[begin + row]
+                              : static_cast<int32_t>(route_count);
+        }
+        for (size_t row = 0; row < padded; row += block_size_m) {
+            expert_ids[(output_offset + row) / block_size_m] = experts[begin];
+        }
+        output_offset += static_cast<int32_t>(padded);
+        begin = end;
+    }
+    *num_tokens_post_padded = output_offset;
 }
 
 template <typename T, bool Expanded>
@@ -284,24 +373,41 @@ infiniStatus_t launch(
     const size_t sorted_capacity = info.aiterSortedTokenCapacity();
 
     CHECK_OR_RETURN(
-        hipMemsetAsync(buffers.counts, 0, info.aiterRoutingMetadataBytes(), stream) == hipSuccess,
-        INFINI_STATUS_INTERNAL_ERROR);
-    CHECK_OR_RETURN(
         hipMemsetAsync(buffers.gemm1_output, 0, info.aiterGemm1Bytes(), stream) == hipSuccess,
         INFINI_STATUS_INTERNAL_ERROR);
     CHECK_OR_RETURN(
         hipMemsetAsync(buffers.gemm2_output, 0, info.aiterGemm2Bytes(), stream) == hipSuccess,
         INFINI_STATUS_INTERNAL_ERROR);
-    countRoutes<<<(route_count + threads - 1) / threads, threads, 0, stream>>>(
-        buffers.counts, selected_experts, route_count, info.num_experts);
-    buildRouteOffsets<<<1, 1, 0, stream>>>(
-        buffers.offsets, buffers.expert_ids, buffers.num_tokens_post_padded,
-        buffers.counts, info.num_experts, info.aiterBlockSizeM());
-    fillSortedTokenIds<<<(sorted_capacity + threads - 1) / threads, threads, 0, stream>>>(
-        buffers.sorted_token_ids, sorted_capacity, static_cast<int32_t>(route_count));
-    scatterRoutes<<<(route_count + threads - 1) / threads, threads, 0, stream>>>(
-        buffers.sorted_token_ids, buffers.cursors, buffers.offsets,
-        selected_experts, route_count, info.num_experts);
+    if (route_count <= 256) {
+        const size_t sort_threads = nextPowerOfTwo(route_count);
+        buildSmallRouteMetadata<<<1, sort_threads,
+                                  2 * sort_threads * sizeof(int32_t), stream>>>(
+            buffers.sorted_token_ids,
+            buffers.expert_ids,
+            buffers.num_tokens_post_padded,
+            selected_experts,
+            route_count,
+            info.num_experts,
+            info.aiterBlockSizeM());
+    } else {
+        CHECK_OR_RETURN(
+            hipMemsetAsync(buffers.counts, 0, info.aiterRoutingMetadataBytes(), stream)
+                == hipSuccess,
+            INFINI_STATUS_INTERNAL_ERROR);
+        countRoutes<<<(route_count + threads - 1) / threads, threads, 0, stream>>>(
+            buffers.counts, selected_experts, route_count, info.num_experts);
+        const size_t route_scan_threads = nextPowerOfTwo(info.num_experts);
+        CHECK_OR_RETURN(route_scan_threads <= 1024, INFINI_STATUS_BAD_PARAM);
+        buildRouteOffsets<<<1, route_scan_threads,
+                            route_scan_threads * sizeof(int32_t), stream>>>(
+            buffers.offsets, buffers.expert_ids, buffers.num_tokens_post_padded,
+            buffers.counts, info.num_experts, info.aiterBlockSizeM());
+        fillSortedTokenIds<<<(sorted_capacity + threads - 1) / threads, threads, 0, stream>>>(
+            buffers.sorted_token_ids, sorted_capacity, static_cast<int32_t>(route_count));
+        scatterRoutes<<<(route_count + threads - 1) / threads, threads, 0, stream>>>(
+            buffers.sorted_token_ids, buffers.cursors, buffers.offsets,
+            selected_experts, route_count, info.num_experts);
+    }
 
     const bool prefill = info.num_tokens > 512;
     if (prefill) {

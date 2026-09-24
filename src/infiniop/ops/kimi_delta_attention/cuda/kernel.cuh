@@ -225,6 +225,217 @@ __global__ void kimiDeltaAttentionWarpCudaKernel(
         reinterpret_cast<Tcompute *>(shared_memory));
 }
 
+template <typename Tdata, typename Tgate, size_t D, size_t WARPS_PER_BLOCK>
+__global__ void kimiDeltaAttentionRowStreamingDecodeCudaKernel(
+    Tdata *out,
+    Tdata *initial_state,
+    Tdata *final_state,
+    const Tdata *q,
+    const Tdata *k,
+    const Tdata *v,
+    const Tgate *g,
+    const Tgate *beta,
+    const float *A_log,
+    const float *dt_bias,
+    const void *cu_seqlens,
+    const void *initial_state_indices,
+    const void *final_state_indices,
+    bool cu_seqlens_i64,
+    bool initial_state_indices_i64,
+    bool final_state_indices_i64,
+    bool use_qk_l2norm,
+    bool has_cu_seqlens,
+    bool indexed_state_pool,
+    size_t num_heads,
+    size_t row_blocks_per_head,
+    size_t pool_size,
+    float scale,
+    float lower_bound,
+    ptrdiff_t out_s0,
+    ptrdiff_t out_s1,
+    ptrdiff_t out_s2,
+    ptrdiff_t initial_s0,
+    ptrdiff_t initial_s1,
+    ptrdiff_t initial_s2,
+    ptrdiff_t initial_s3,
+    ptrdiff_t final_s0,
+    ptrdiff_t final_s1,
+    ptrdiff_t final_s2,
+    ptrdiff_t final_s3,
+    ptrdiff_t q_s0,
+    ptrdiff_t q_s1,
+    ptrdiff_t q_s2,
+    ptrdiff_t k_s0,
+    ptrdiff_t k_s1,
+    ptrdiff_t k_s2,
+    ptrdiff_t v_s0,
+    ptrdiff_t v_s1,
+    ptrdiff_t v_s2,
+    ptrdiff_t g_s0,
+    ptrdiff_t g_s1,
+    ptrdiff_t g_s2,
+    ptrdiff_t beta_s0,
+    ptrdiff_t beta_s1,
+    ptrdiff_t beta_s2,
+    ptrdiff_t A_log_s0,
+    ptrdiff_t dt_bias_s0) {
+    constexpr int WARP_SIZE = INFINIOP_RECURRENT_DELTA_RULE_WARP_SIZE;
+    constexpr int ELEMS_PER_LANE = D / WARP_SIZE;
+    static_assert(D % WARP_SIZE == 0);
+    static_assert(D % WARPS_PER_BLOCK == 0);
+
+    const size_t head_block = blockIdx.x / row_blocks_per_head;
+    const size_t row_block = blockIdx.x % row_blocks_per_head;
+    const size_t batch_idx = head_block / num_heads;
+    const size_t head_idx = head_block % num_heads;
+    const int warp_idx = threadIdx.x / WARP_SIZE;
+    const int lane_idx = threadIdx.x & (WARP_SIZE - 1);
+
+    int64_t token_idx = 0;
+    if (has_cu_seqlens) {
+        token_idx = kdaLoadOptionalIndex(
+            cu_seqlens, cu_seqlens_i64, static_cast<int>(batch_idx), 0);
+    }
+    const int token_batch = has_cu_seqlens ? 0 : static_cast<int>(batch_idx);
+
+    int64_t read_slot = static_cast<int64_t>(batch_idx);
+    int64_t write_slot = static_cast<int64_t>(batch_idx);
+    if (indexed_state_pool) {
+        read_slot = kdaLoadOptionalIndex(
+            initial_state_indices,
+            initial_state_indices_i64,
+            static_cast<int>(batch_idx),
+            static_cast<int>(batch_idx));
+        write_slot = final_state_indices == nullptr
+                       ? static_cast<int64_t>(batch_idx)
+                       : kdaLoadOptionalIndex(
+                           final_state_indices,
+                           final_state_indices_i64,
+                           static_cast<int>(batch_idx),
+                           static_cast<int>(batch_idx));
+        if (read_slot < 0 || write_slot < 0
+            || read_slot >= static_cast<int64_t>(pool_size)
+            || write_slot >= static_cast<int64_t>(pool_size)) {
+            const ptrdiff_t out_base = static_cast<ptrdiff_t>(token_batch) * out_s0
+                                     + token_idx * out_s1
+                                     + static_cast<ptrdiff_t>(head_idx) * out_s2;
+            for (size_t value_idx = threadIdx.x; value_idx < D;
+                 value_idx += blockDim.x) {
+                out[out_base + value_idx] = static_cast<Tdata>(0.0f);
+            }
+            return;
+        }
+    }
+
+    const ptrdiff_t q_base = static_cast<ptrdiff_t>(token_batch) * q_s0
+                           + token_idx * q_s1
+                           + static_cast<ptrdiff_t>(head_idx) * q_s2;
+    const ptrdiff_t k_base = static_cast<ptrdiff_t>(token_batch) * k_s0
+                           + token_idx * k_s1
+                           + static_cast<ptrdiff_t>(head_idx) * k_s2;
+    const ptrdiff_t g_base = static_cast<ptrdiff_t>(token_batch) * g_s0
+                           + token_idx * g_s1
+                           + static_cast<ptrdiff_t>(head_idx) * g_s2;
+
+    float q_values[ELEMS_PER_LANE];
+    float k_values[ELEMS_PER_LANE];
+    float q_square_sum = 0.0f;
+    float k_square_sum = 0.0f;
+#pragma unroll
+    for (int elem = 0; elem < ELEMS_PER_LANE; ++elem) {
+        const int key_idx = lane_idx * ELEMS_PER_LANE + elem;
+        q_values[elem] = kdaLoadAsFloat(q, q_base + key_idx);
+        k_values[elem] = kdaLoadAsFloat(k, k_base + key_idx);
+        q_square_sum += q_values[elem] * q_values[elem];
+        k_square_sum += k_values[elem] * k_values[elem];
+    }
+    q_square_sum = op::recurrent_gated_delta_rule::cuda::warpReduceSum(q_square_sum);
+    k_square_sum = op::recurrent_gated_delta_rule::cuda::warpReduceSum(k_square_sum);
+    const float q_scale = use_qk_l2norm
+                            ? rsqrtf(q_square_sum + 1.0e-6f) * scale
+                            : scale;
+    const float k_scale = use_qk_l2norm
+                            ? rsqrtf(k_square_sum + 1.0e-6f)
+                            : 1.0f;
+    const float exp_a = expf(A_log[static_cast<ptrdiff_t>(head_idx) * A_log_s0]);
+    float decay[ELEMS_PER_LANE];
+#pragma unroll
+    for (int elem = 0; elem < ELEMS_PER_LANE; ++elem) {
+        const int key_idx = lane_idx * ELEMS_PER_LANE + elem;
+        q_values[elem] *= q_scale;
+        k_values[elem] *= k_scale;
+        const float raw_gate = kdaLoadAsFloat(g, g_base + key_idx)
+                             + dt_bias[static_cast<ptrdiff_t>(head_idx) * dt_bias_s0
+                                       + key_idx];
+        decay[elem] = expf(lower_bound * kdaSigmoid(exp_a * raw_gate));
+    }
+    const ptrdiff_t beta_offset = static_cast<ptrdiff_t>(token_batch) * beta_s0
+                                + token_idx * beta_s1
+                                + static_cast<ptrdiff_t>(head_idx) * beta_s2;
+    const float beta_value = kdaSigmoid(kdaLoadAsFloat(beta, beta_offset));
+
+    const ptrdiff_t initial_head_base = static_cast<ptrdiff_t>(read_slot) * initial_s0
+                                      + static_cast<ptrdiff_t>(head_idx) * initial_s1;
+    Tdata *final_state_target = final_state_indices == nullptr
+                                  ? final_state
+                                  : initial_state;
+    const ptrdiff_t final_head_base = final_state_indices == nullptr
+                                        ? static_cast<ptrdiff_t>(batch_idx) * final_s0
+                                              + static_cast<ptrdiff_t>(head_idx) * final_s1
+                                        : static_cast<ptrdiff_t>(write_slot) * initial_s0
+                                              + static_cast<ptrdiff_t>(head_idx) * initial_s1;
+    const ptrdiff_t final_value_stride = final_state_indices == nullptr
+                                           ? final_s2
+                                           : initial_s2;
+    const ptrdiff_t final_key_stride = final_state_indices == nullptr
+                                         ? final_s3
+                                         : initial_s3;
+    const ptrdiff_t v_base = static_cast<ptrdiff_t>(token_batch) * v_s0
+                           + token_idx * v_s1
+                           + static_cast<ptrdiff_t>(head_idx) * v_s2;
+    const ptrdiff_t out_base = static_cast<ptrdiff_t>(token_batch) * out_s0
+                             + token_idx * out_s1
+                             + static_cast<ptrdiff_t>(head_idx) * out_s2;
+
+    const int row_begin = static_cast<int>(row_block) * WARPS_PER_BLOCK + warp_idx;
+    const int row_stride = static_cast<int>(row_blocks_per_head) * WARPS_PER_BLOCK;
+#pragma unroll 4
+    for (int value_idx = row_begin; value_idx < D; value_idx += row_stride) {
+        const ptrdiff_t initial_row = initial_head_base
+                                    + static_cast<ptrdiff_t>(value_idx) * initial_s2;
+        float state_values[ELEMS_PER_LANE];
+        float kv_memory = 0.0f;
+#pragma unroll
+        for (int elem = 0; elem < ELEMS_PER_LANE; ++elem) {
+            const int key_idx = lane_idx * ELEMS_PER_LANE + elem;
+            state_values[elem] = kdaLoadAsFloat(
+                                     initial_state,
+                                     initial_row + static_cast<ptrdiff_t>(key_idx) * initial_s3)
+                               * decay[elem];
+            kv_memory += state_values[elem] * k_values[elem];
+        }
+        kv_memory = op::recurrent_gated_delta_rule::cuda::warpReduceSum(kv_memory);
+        const float delta = (kdaLoadAsFloat(v, v_base + value_idx) - kv_memory)
+                          * beta_value;
+        float output_value = 0.0f;
+        const ptrdiff_t final_row = final_head_base
+                                  + static_cast<ptrdiff_t>(value_idx) * final_value_stride;
+#pragma unroll
+        for (int elem = 0; elem < ELEMS_PER_LANE; ++elem) {
+            const int key_idx = lane_idx * ELEMS_PER_LANE + elem;
+            state_values[elem] += delta * k_values[elem];
+            output_value += state_values[elem] * q_values[elem];
+            final_state_target[final_row
+                               + static_cast<ptrdiff_t>(key_idx) * final_key_stride]
+                = static_cast<Tdata>(state_values[elem]);
+        }
+        output_value = op::recurrent_gated_delta_rule::cuda::warpReduceSum(output_value);
+        if (lane_idx == 0) {
+            out[out_base + value_idx] = static_cast<Tdata>(output_value);
+        }
+    }
+}
+
 template <typename Tdata, typename Tgate>
 __global__ void kimiDeltaAttentionDecodeCudaKernel(
     Tdata *out,

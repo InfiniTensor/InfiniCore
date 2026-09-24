@@ -116,7 +116,7 @@ __device__ __forceinline__ float load_history_k4(
 }
 
 template <typename T>
-__global__ void causal_conv1d_k4_kernel(
+__global__ void causal_conv1d_k4_prefill_kernel(
     T *out,
     T *conv_state,
     T *final_conv_state,
@@ -135,6 +135,7 @@ __global__ void causal_conv1d_k4_kernel(
     size_t T_tokens,
     size_t C,
     size_t total_tokens,
+    size_t request_count,
     size_t pool_size,
     ptrdiff_t out_s0,
     ptrdiff_t out_s1,
@@ -153,24 +154,40 @@ __global__ void causal_conv1d_k4_kernel(
     ptrdiff_t weight_s2,
     ptrdiff_t bias_s0) {
 
-    const int request = blockIdx.x;
-    const int channel = blockIdx.y;
-    if (channel >= C || threadIdx.x != 0) {
+    const size_t flat_token = blockIdx.x;
+    const size_t channel = blockIdx.y * blockDim.x + threadIdx.x;
+    if (flat_token >= total_tokens || channel >= C) {
         return;
     }
 
+    int request = static_cast<int>(flat_token / T_tokens);
+    int token_batch = request;
     int64_t token_begin = 0;
     int64_t token_end = static_cast<int64_t>(T_tokens);
-    int token_batch = request;
+    int64_t token_idx = static_cast<int64_t>(flat_token % T_tokens);
     if (has_cu_seqlens) {
+        int left = 0;
+        int right = static_cast<int>(request_count);
+        while (left + 1 < right) {
+            const int mid = (left + right) / 2;
+            const int64_t offset = load_optional_index(cu_seqlens, cu_seqlens_i64, mid, 0);
+            if (offset <= static_cast<int64_t>(flat_token)) {
+                left = mid;
+            } else {
+                right = mid;
+            }
+        }
+        request = left;
         token_begin = load_optional_index(cu_seqlens, cu_seqlens_i64, request, 0);
         token_end = load_optional_index(cu_seqlens, cu_seqlens_i64, request + 1, 0);
         token_batch = 0;
-        if (token_begin < 0 || token_end < token_begin || token_end > static_cast<int64_t>(total_tokens)) {
+        token_idx = static_cast<int64_t>(flat_token);
+        if (token_begin < 0 || token_idx < token_begin || token_idx >= token_end
+            || token_end > static_cast<int64_t>(total_tokens)) {
             return;
         }
     }
-    const int64_t request_len = token_end - token_begin;
+    const int64_t local_token = token_idx - token_begin;
 
     int64_t read_slot = indexed_state_pool
                           ? load_optional_index(initial_state_indices, initial_state_indices_i64, request, request)
@@ -182,18 +199,101 @@ __global__ void causal_conv1d_k4_kernel(
         return;
     }
 
-    const ptrdiff_t state_base = static_cast<ptrdiff_t>(read_slot) * state_s0 + static_cast<ptrdiff_t>(channel) * state_s1;
+    const ptrdiff_t state_base = static_cast<ptrdiff_t>(read_slot) * state_s0
+                               + static_cast<ptrdiff_t>(channel) * state_s1;
     const ptrdiff_t weight_base = static_cast<ptrdiff_t>(channel) * weight_s0;
     (void)weight_s1;
 
-    for (int64_t t = 0; t < request_len; ++t) {
-        float acc = load_as_float(weight, weight_base) * load_history_k4(conv_state, qkv, t, token_begin, token_batch, channel, state_base, state_s2, qkv_s0, qkv_s1, qkv_s2) + load_as_float(weight, weight_base + weight_s2) * load_history_k4(conv_state, qkv, t + 1, token_begin, token_batch, channel, state_base, state_s2, qkv_s0, qkv_s1, qkv_s2) + load_as_float(weight, weight_base + 2 * weight_s2) * load_history_k4(conv_state, qkv, t + 2, token_begin, token_batch, channel, state_base, state_s2, qkv_s0, qkv_s1, qkv_s2) + load_as_float(weight, weight_base + 3 * weight_s2) * load_history_k4(conv_state, qkv, t + 3, token_begin, token_batch, channel, state_base, state_s2, qkv_s0, qkv_s1, qkv_s2);
-        if (has_bias) {
-            acc += load_as_float(bias, static_cast<ptrdiff_t>(channel) * bias_s0);
-        }
-        const ptrdiff_t out_off = static_cast<ptrdiff_t>(token_batch) * out_s0 + static_cast<ptrdiff_t>(token_begin + t) * out_s1 + static_cast<ptrdiff_t>(channel) * out_s2;
-        out[out_off] = cast_from_float<T>(acc);
+    float acc = load_as_float(weight, weight_base)
+                  * load_history_k4(conv_state, qkv, local_token, token_begin,
+                                    token_batch, channel, state_base, state_s2,
+                                    qkv_s0, qkv_s1, qkv_s2)
+              + load_as_float(weight, weight_base + weight_s2)
+                    * load_history_k4(conv_state, qkv, local_token + 1, token_begin,
+                                      token_batch, channel, state_base, state_s2,
+                                      qkv_s0, qkv_s1, qkv_s2)
+              + load_as_float(weight, weight_base + 2 * weight_s2)
+                    * load_history_k4(conv_state, qkv, local_token + 2, token_begin,
+                                      token_batch, channel, state_base, state_s2,
+                                      qkv_s0, qkv_s1, qkv_s2)
+              + load_as_float(weight, weight_base + 3 * weight_s2)
+                    * load_history_k4(conv_state, qkv, local_token + 3, token_begin,
+                                      token_batch, channel, state_base, state_s2,
+                                      qkv_s0, qkv_s1, qkv_s2);
+    if (has_bias) {
+        acc += load_as_float(bias, static_cast<ptrdiff_t>(channel) * bias_s0);
     }
+    const ptrdiff_t out_off = static_cast<ptrdiff_t>(token_batch) * out_s0
+                            + token_idx * out_s1
+                            + static_cast<ptrdiff_t>(channel) * out_s2;
+    out[out_off] = cast_from_float<T>(acc);
+}
+
+template <typename T>
+__global__ void causal_conv1d_k4_state_kernel(
+    T *conv_state,
+    T *final_conv_state,
+    const T *qkv,
+    const void *cu_seqlens,
+    const void *initial_state_indices,
+    const void *final_state_indices,
+    bool has_cu_seqlens,
+    bool cu_seqlens_i64,
+    bool initial_state_indices_i64,
+    bool final_state_indices_i64,
+    bool indexed_state_pool,
+    size_t T_tokens,
+    size_t C,
+    size_t total_tokens,
+    size_t pool_size,
+    ptrdiff_t state_s0,
+    ptrdiff_t state_s1,
+    ptrdiff_t state_s2,
+    ptrdiff_t final_s0,
+    ptrdiff_t final_s1,
+    ptrdiff_t final_s2,
+    ptrdiff_t qkv_s0,
+    ptrdiff_t qkv_s1,
+    ptrdiff_t qkv_s2) {
+    const int request = blockIdx.x;
+    const size_t channel = blockIdx.y * blockDim.x + threadIdx.x;
+    if (channel >= C) {
+        return;
+    }
+
+    int64_t token_begin = 0;
+    int64_t token_end = static_cast<int64_t>(T_tokens);
+    int token_batch = request;
+    if (has_cu_seqlens) {
+        token_begin = load_optional_index(cu_seqlens, cu_seqlens_i64, request, 0);
+        token_end = load_optional_index(cu_seqlens, cu_seqlens_i64, request + 1, 0);
+        token_batch = 0;
+        if (token_begin < 0 || token_end < token_begin
+            || token_end > static_cast<int64_t>(total_tokens)) {
+            return;
+        }
+    }
+    const int64_t request_len = token_end - token_begin;
+
+    const int64_t read_slot = indexed_state_pool
+                                ? load_optional_index(initial_state_indices,
+                                                      initial_state_indices_i64,
+                                                      request, request)
+                                : static_cast<int64_t>(request);
+    const int64_t write_slot = indexed_state_pool && final_state_indices != nullptr
+                                 ? load_optional_index(final_state_indices,
+                                                       final_state_indices_i64,
+                                                       request, request)
+                                 : static_cast<int64_t>(request);
+    if (read_slot < 0 || write_slot < 0
+        || read_slot >= static_cast<int64_t>(pool_size)
+        || (final_state_indices != nullptr
+            && write_slot >= static_cast<int64_t>(pool_size))) {
+        return;
+    }
+
+    const ptrdiff_t state_base = static_cast<ptrdiff_t>(read_slot) * state_s0
+                               + static_cast<ptrdiff_t>(channel) * state_s1;
 
     T *final_target = final_state_indices != nullptr ? conv_state : final_conv_state;
     ptrdiff_t final_base;
@@ -223,6 +323,99 @@ __global__ void causal_conv1d_k4_kernel(
 }
 
 template <typename T>
+__global__ void causal_conv1d_k4_decode_kernel(
+    T *out,
+    T *conv_state,
+    T *final_conv_state,
+    const T *qkv,
+    const T *weight,
+    const T *bias,
+    const void *initial_state_indices,
+    const void *final_state_indices,
+    bool initial_state_indices_i64,
+    bool final_state_indices_i64,
+    bool indexed_state_pool,
+    bool has_cu_seqlens,
+    bool has_bias,
+    size_t C,
+    size_t pool_size,
+    ptrdiff_t out_s0,
+    ptrdiff_t out_s1,
+    ptrdiff_t out_s2,
+    ptrdiff_t state_s0,
+    ptrdiff_t state_s1,
+    ptrdiff_t state_s2,
+    ptrdiff_t final_s0,
+    ptrdiff_t final_s1,
+    ptrdiff_t final_s2,
+    ptrdiff_t qkv_s0,
+    ptrdiff_t qkv_s1,
+    ptrdiff_t qkv_s2,
+    ptrdiff_t weight_s0,
+    ptrdiff_t weight_s2,
+    ptrdiff_t bias_s0) {
+    const size_t request = blockIdx.x;
+    const size_t channel = blockIdx.y * blockDim.x + threadIdx.x;
+    if (channel >= C) {
+        return;
+    }
+
+    const int64_t read_slot = indexed_state_pool
+                                ? load_optional_index(initial_state_indices,
+                                                      initial_state_indices_i64,
+                                                      request, request)
+                                : static_cast<int64_t>(request);
+    const int64_t write_slot = indexed_state_pool && final_state_indices != nullptr
+                                 ? load_optional_index(final_state_indices,
+                                                       final_state_indices_i64,
+                                                       request, request)
+                                 : static_cast<int64_t>(request);
+    if (read_slot < 0 || write_slot < 0
+        || read_slot >= static_cast<int64_t>(pool_size)
+        || (final_state_indices != nullptr
+            && write_slot >= static_cast<int64_t>(pool_size))) {
+        return;
+    }
+
+    const ptrdiff_t state_base = static_cast<ptrdiff_t>(read_slot) * state_s0
+                               + static_cast<ptrdiff_t>(channel) * state_s1;
+    const int token_batch = has_cu_seqlens ? 0 : static_cast<int>(request);
+    const int64_t token_index = has_cu_seqlens
+                                  ? static_cast<int64_t>(request)
+                                  : 0;
+    const ptrdiff_t qkv_offset = static_cast<ptrdiff_t>(token_batch) * qkv_s0
+                               + token_index * qkv_s1
+                               + static_cast<ptrdiff_t>(channel) * qkv_s2;
+    const float s0 = load_as_float(conv_state, state_base);
+    const float s1 = load_as_float(conv_state, state_base + state_s2);
+    const float s2 = load_as_float(conv_state, state_base + 2 * state_s2);
+    const float token = load_as_float(qkv, qkv_offset);
+    const ptrdiff_t weight_base = static_cast<ptrdiff_t>(channel) * weight_s0;
+    float value = load_as_float(weight, weight_base) * s0
+                + load_as_float(weight, weight_base + weight_s2) * s1
+                + load_as_float(weight, weight_base + 2 * weight_s2) * s2
+                + load_as_float(weight, weight_base + 3 * weight_s2) * token;
+    if (has_bias) {
+        value += load_as_float(bias, static_cast<ptrdiff_t>(channel) * bias_s0);
+    }
+    const ptrdiff_t out_offset = static_cast<ptrdiff_t>(token_batch) * out_s0
+                               + token_index * out_s1
+                               + static_cast<ptrdiff_t>(channel) * out_s2;
+    out[out_offset] = cast_from_float<T>(value);
+
+    T *final_target = final_state_indices != nullptr ? conv_state : final_conv_state;
+    const ptrdiff_t final_base = final_state_indices != nullptr
+                                   ? static_cast<ptrdiff_t>(write_slot) * state_s0
+                                         + static_cast<ptrdiff_t>(channel) * state_s1
+                                   : static_cast<ptrdiff_t>(request) * final_s0
+                                         + static_cast<ptrdiff_t>(channel) * final_s1;
+    const ptrdiff_t final_stride = final_state_indices != nullptr ? state_s2 : final_s2;
+    final_target[final_base] = cast_from_float<T>(s1);
+    final_target[final_base + final_stride] = cast_from_float<T>(s2);
+    final_target[final_base + 2 * final_stride] = cast_from_float<T>(token);
+}
+
+template <typename T>
 infiniStatus_t launch_k4(
     const CausalConv1dInfo &info,
     void *out,
@@ -236,8 +429,51 @@ infiniStatus_t launch_k4(
     const void *final_state_indices,
     cudaStream_t stream) {
 
-    dim3 grid(static_cast<unsigned int>(info.request_count), static_cast<unsigned int>(info.C), 1);
-    causal_conv1d_k4_kernel<T><<<grid, 1, 0, stream>>>(
+    constexpr unsigned int threads = 256;
+    const bool decode = info.total_tokens == info.request_count;
+    if (decode) {
+        const dim3 decode_grid(
+            static_cast<unsigned int>(info.request_count),
+            static_cast<unsigned int>((info.C + threads - 1) / threads));
+        causal_conv1d_k4_decode_kernel<T><<<decode_grid, threads, 0, stream>>>(
+            static_cast<T *>(out),
+            static_cast<T *>(conv_state),
+            static_cast<T *>(final_conv_state),
+            static_cast<const T *>(qkv),
+            static_cast<const T *>(weight),
+            static_cast<const T *>(bias),
+            initial_state_indices,
+            final_state_indices,
+            info.initial_state_indices_dtype == INFINI_DTYPE_I64,
+            info.final_state_indices_dtype == INFINI_DTYPE_I64,
+            info.indexed_state_pool,
+            info.has_cu_seqlens,
+            info.has_bias,
+            info.C,
+            info.pool_size,
+            info.out_strides[0],
+            info.out_strides[1],
+            info.out_strides[2],
+            info.conv_state_strides[0],
+            info.conv_state_strides[1],
+            info.conv_state_strides[2],
+            info.final_conv_state_strides.empty() ? 0 : info.final_conv_state_strides[0],
+            info.final_conv_state_strides.empty() ? 0 : info.final_conv_state_strides[1],
+            info.final_conv_state_strides.empty() ? 0 : info.final_conv_state_strides[2],
+            info.qkv_strides[0],
+            info.qkv_strides[1],
+            info.qkv_strides[2],
+            info.weight_strides[0],
+            info.weight_strides[2],
+            info.bias_strides.empty() ? 0 : info.bias_strides[0]);
+        CHECK_CUDA(cudaGetLastError());
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    const dim3 output_grid(
+        static_cast<unsigned int>(info.total_tokens),
+        static_cast<unsigned int>((info.C + threads - 1) / threads));
+    causal_conv1d_k4_prefill_kernel<T><<<output_grid, threads, 0, stream>>>(
         static_cast<T *>(out),
         static_cast<T *>(conv_state),
         static_cast<T *>(final_conv_state),
@@ -256,6 +492,7 @@ infiniStatus_t launch_k4(
         info.T,
         info.C,
         info.total_tokens,
+        info.request_count,
         info.pool_size,
         info.out_strides[0],
         info.out_strides[1],
@@ -273,6 +510,36 @@ infiniStatus_t launch_k4(
         info.weight_strides[1],
         info.weight_strides[2],
         info.bias_strides.empty() ? 0 : info.bias_strides[0]);
+    CHECK_CUDA(cudaGetLastError());
+
+    const dim3 state_grid(
+        static_cast<unsigned int>(info.request_count),
+        static_cast<unsigned int>((info.C + threads - 1) / threads));
+    causal_conv1d_k4_state_kernel<T><<<state_grid, threads, 0, stream>>>(
+        static_cast<T *>(conv_state),
+        static_cast<T *>(final_conv_state),
+        static_cast<const T *>(qkv),
+        cu_seqlens,
+        initial_state_indices,
+        final_state_indices,
+        info.has_cu_seqlens,
+        info.cu_seqlens_dtype == INFINI_DTYPE_I64,
+        info.initial_state_indices_dtype == INFINI_DTYPE_I64,
+        info.final_state_indices_dtype == INFINI_DTYPE_I64,
+        info.indexed_state_pool,
+        info.T,
+        info.C,
+        info.total_tokens,
+        info.pool_size,
+        info.conv_state_strides[0],
+        info.conv_state_strides[1],
+        info.conv_state_strides[2],
+        info.final_conv_state_strides.empty() ? 0 : info.final_conv_state_strides[0],
+        info.final_conv_state_strides.empty() ? 0 : info.final_conv_state_strides[1],
+        info.final_conv_state_strides.empty() ? 0 : info.final_conv_state_strides[2],
+        info.qkv_strides[0],
+        info.qkv_strides[1],
+        info.qkv_strides[2]);
     CHECK_CUDA(cudaGetLastError());
     return INFINI_STATUS_SUCCESS;
 }
