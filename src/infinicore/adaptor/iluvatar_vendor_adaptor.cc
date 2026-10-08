@@ -183,6 +183,11 @@ Symbols &symbols() {
                 dlsym(handle, "_ZN7pyinfer4perf25indexer_k_quant_and_cacheERN2at6TensorES3_S3_lRKSs"));
             auto block_sparse_logits_fn_ptr = reinterpret_cast<block_sparse_logits_fn>(
                 dlsym(handle, "_ZN7pyinfer4perf31compute_block_sparse_mqa_logitsERKN2at6TensorES4_S4_S4_S4_S4_RS2_lll"));
+            if (!block_sparse_logits_fn_ptr) {
+                // vllm-iluvatar 0.26 exports this operator from pyinfer::cuinfer.
+                block_sparse_logits_fn_ptr = reinterpret_cast<block_sparse_logits_fn>(
+                    dlsym(handle, "_ZN7pyinfer7cuinfer31compute_block_sparse_mqa_logitsERKN2at6TensorES4_S4_S4_S4_S4_RS2_lll"));
+            }
             auto select_prefill_topk_fn_ptr = reinterpret_cast<select_prefill_topk_fn>(
                 dlsym(handle, "_ZN7pyinfer4perf33select_prefill_topk_block_indicesERKN2at6TensorES4_S4_RS2_"));
             auto select_decode_topk_fn_ptr = reinterpret_cast<select_decode_topk_fn>(
@@ -268,7 +273,7 @@ Symbols &symbols() {
             syms.ix_error = "ixtriturbo ops extension not found";
         }
 #else
-            syms.error = "InfiniCore was not built with ENABLE_ILUVATAR_API";
+        syms.error = "InfiniCore was not built with ENABLE_ILUVATAR_API";
 #endif
     });
     return syms;

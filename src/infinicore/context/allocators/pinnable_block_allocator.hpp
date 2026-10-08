@@ -2,6 +2,7 @@
 
 #include "memory_allocator.hpp"
 
+#include <cstdint>
 #include <mutex>
 #include <unordered_map>
 #include <vector>
@@ -10,9 +11,10 @@ namespace infinicore {
 class PinnableBlockAllocator : public MemoryAllocator {
     // Represents a single memory block
     struct Block {
-        void *ptr = nullptr;  // Device pointer
-        size_t size = 0;      // Block size in bytes
-        bool frozen = false;  // True if used in pinned/graph mode
+        void *ptr = nullptr; // Device pointer
+        size_t size = 0;     // Block size in bytes
+        bool frozen = false; // True if used in pinned/graph mode
+        uint64_t pin_generation = 0;
         bool in_use = false;  // Wether the block is currently in use
         size_t use_count = 0; // Number of Memory owners for this block
     };
@@ -31,7 +33,12 @@ public:
     void deallocate(std::byte *ptr) override;
 
     // Switch pinned/graph mode
-    void set_pin_mode(bool pinned) { pinned_mode_ = pinned; }
+    void set_pin_mode(bool pinned) {
+        if (pinned && !pinned_mode_) {
+            ++pin_generation_;
+        }
+        pinned_mode_ = pinned;
+    }
 
     // internal use only, force set in_use flag for a mem block
     // return the size of the block
@@ -44,6 +51,7 @@ private:
     Device device_;
 
     bool pinned_mode_ = false;
+    uint64_t pin_generation_ = 0;
 
     std::vector<SizeClass> size_classes_;
     std::vector<std::shared_ptr<Block>> large_blocks_;

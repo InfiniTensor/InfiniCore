@@ -5,6 +5,7 @@
 #include "../../utils.hpp"
 
 #include <algorithm>
+#include <cstdlib>
 #include <infinirt.h>
 #include <stdexcept>
 
@@ -46,31 +47,41 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
     size = align_up(size, 256);
 
     std::shared_ptr<Block> block;
+    const bool isolate_graph_blocks = std::getenv("INFINICORE_EXPERIMENTAL_GRAPH_ALLOCATOR_ISOLATION") != nullptr;
+    auto reusable = [&](const std::shared_ptr<Block> &candidate) {
+        return !candidate->in_use
+            && (!isolate_graph_blocks || !candidate->frozen
+                || (pinned_mode_ && candidate->pin_generation == pin_generation_));
+    };
 
     // 1. Try size-class allocation for small/medium
     for (auto &cls : size_classes_) {
         if (size <= cls.block_size) {
-            if (!cls.free_blocks.empty()) {
-                block = cls.free_blocks.back();
-                while (block != nullptr && block->in_use) {
-                    cls.free_blocks.pop_back();
-                    if (cls.free_blocks.empty()) {
-                        block = nullptr;
-                        break;
-                    }
-                    block = cls.free_blocks.back();
+            for (size_t i = cls.free_blocks.size(); i > 0; --i) {
+                if (!isolate_graph_blocks && cls.free_blocks[i - 1]->in_use) {
+                    cls.free_blocks.erase(cls.free_blocks.begin() + i - 1);
+                    continue;
                 }
-                if (block != nullptr) {
-                    cls.free_blocks.pop_back();
-                    block->in_use = true;
-                    block->use_count = 1;
-                    return reinterpret_cast<std::byte *>(block->ptr);
+                if (reusable(cls.free_blocks[i - 1])) {
+                    block = cls.free_blocks[i - 1];
+                    cls.free_blocks.erase(cls.free_blocks.begin() + i - 1);
+                    break;
                 }
+            }
+            if (block != nullptr) {
+                block->in_use = true;
+                block->use_count = 1;
+                if (pinned_mode_ && isolate_graph_blocks) {
+                    block->frozen = true;
+                    block->pin_generation = pin_generation_;
+                }
+                return reinterpret_cast<std::byte *>(block->ptr);
             }
             // Allocate a new block for this class
             block = std::make_shared<Block>();
             block->size = cls.block_size;
             block->frozen = pinned_mode_;
+            block->pin_generation = pinned_mode_ ? pin_generation_ : 0;
             block->in_use = true;
             block->use_count = 1;
 
@@ -84,13 +95,20 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
     // 2. Large block allocation
     // Try to reuse a frozen or free large block
     auto it = std::find_if(large_blocks_.begin(), large_blocks_.end(),
-                           [size](const std::shared_ptr<Block> &b) { return b->size >= size && !b->in_use; });
+                           [&](const std::shared_ptr<Block> &b) {
+                               return b->size >= size && reusable(b);
+                           });
 
     if (it != large_blocks_.end()) {
         block = *it;
         block->in_use = true;
         block->use_count = 1;
-        block->frozen = block->frozen || pinned_mode_;
+        if (pinned_mode_) {
+            block->frozen = true;
+            if (isolate_graph_blocks) {
+                block->pin_generation = pin_generation_;
+            }
+        }
         return reinterpret_cast<std::byte *>(block->ptr);
     }
 
@@ -98,6 +116,7 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
     block = std::make_shared<Block>();
     block->size = size;
     block->frozen = pinned_mode_;
+    block->pin_generation = pinned_mode_ ? pin_generation_ : 0;
     block->in_use = true;
     block->use_count = 1;
 
