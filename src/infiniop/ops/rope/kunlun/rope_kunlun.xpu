@@ -13,7 +13,7 @@ __global__ void RoPEKernel(T *destination, const T *source,
                            uint32_t batch, uint32_t seqlen, uint32_t nhead, uint32_t dhead,
                            int32_t x_stride_batch, int32_t x_stride_seqlen, int32_t x_stride_nhead,
                            int32_t y_stride_batch, int32_t y_stride_seqlen, int32_t y_stride_nhead,
-                           bool pos_has_batch, bool IsGPTJ,
+                           bool pos_has_batch, bool IsGPTJ, uint32_t table_len,
                            XPUStream stream) {
     uint32_t other_size = batch * seqlen * nhead;
 
@@ -22,7 +22,7 @@ __global__ void RoPEKernel(T *destination, const T *source,
     if (cid >= ncores) {
         return;
     }
-    int thread_id = ncores * cluster_id() + cid;
+    int thread_id = cid * cluster_num() + cluster_id();
     int nthreads = ncores * cluster_num();
 
     int remain = other_size % nthreads;
@@ -58,7 +58,14 @@ __global__ void RoPEKernel(T *destination, const T *source,
         ind_s += batch_idx * x_stride_batch + seq_idx * x_stride_seqlen + head_idx * x_stride_nhead;
         int pos_offset = pos_has_batch ? batch_idx * seqlen + seq_idx : seq_idx;
         GM2LM(pos_ids + pos_offset, pos_local, 1 * sizeof(Tindex));
-        int index = static_cast<int>(pos_local[0]) * table_dim;
+        Tindex position = pos_local[0];
+        if constexpr (xpu_std::is_same<Tindex, int32_t>::value || xpu_std::is_same<Tindex, int64_t>::value) {
+            if (position < 0) { position = 0; }
+        }
+        if (static_cast<uint64_t>(position) >= table_len) {
+            position = static_cast<Tindex>(table_len - 1);
+        }
+        int index = static_cast<int>(position) * table_dim;
         if (IsGPTJ){
             for (int r = 0; r < repeat + (remain_dhead > 0 ? 1 : 0); r++) {
                 int read_len = (r < repeat ? buf_size : remain_dhead);
@@ -130,26 +137,27 @@ void RoPE(void *destination, const void *source,
           uint32_t batch, uint32_t seqlen, uint32_t nhead, uint32_t dhead,
           int32_t x_stride_batch, int32_t x_stride_seqlen, int32_t x_stride_nhead,
           int32_t y_stride_batch, int32_t y_stride_seqlen, int32_t y_stride_nhead,
-          bool pos_has_batch, bool IsGPTJ,
+          bool pos_has_batch, bool IsGPTJ, uint32_t table_len, uint32_t nclusters,
           XPUStream stream) {
-    RoPEKernel<T, Tindex><<<8, 64, stream>>>((T *)destination, (T *)source,
+    RoPEKernel<T, Tindex><<<nclusters, 64, stream>>>((T *)destination, (T *)source,
                                              (Tindex *)pos_ids, (T *)sin_table, (T *)cos_table,
                                              batch, seqlen, nhead, dhead,
                                              x_stride_batch, x_stride_seqlen, x_stride_nhead,
                                              y_stride_batch, y_stride_seqlen, y_stride_nhead,
-                                             pos_has_batch, IsGPTJ, stream);
+                                             pos_has_batch, IsGPTJ, table_len, stream);
 }
 #define LAUNCH_KERNEL(T, Tindex)                         \
     RoPE<T, Tindex>(y, x, pos_ids, sin_table, cos_table, \
                     batch, seqlen, nhead, dhead,         \
                     x_stride_batch, x_stride_seqlen, x_stride_nhead, \
                     y_stride_batch, y_stride_seqlen, y_stride_nhead, \
-                    pos_has_batch, IsGPTJ, reinterpret_cast<kunlunStream_t>(stream));
+                    pos_has_batch, IsGPTJ, table_len, nclusters, reinterpret_cast<kunlunStream_t>(stream));
 
 namespace op::rope::kunlun {
 
 struct Descriptor::Opaque {
     std::shared_ptr<device::kunlun::Handle::Internal> internal;
+    uint32_t nclusters;
 };
 
 Descriptor::~Descriptor() {
@@ -168,12 +176,19 @@ infiniStatus_t Descriptor::create(
 
     auto result = RoPEInfo::createRoPEInfo(y_desc, x_desc, pos_desc, sin_desc, cos_desc, algo);
     CHECK_RESULT(result);
+    auto info = result.take();
+    CHECK_OR_RETURN(info.table_len > 0, INFINI_STATUS_BAD_TENSOR_SHAPE);
+    uint64_t available = 8;
+    if (xpu_device_get_attr(&available, XPUATTR_NUM_CLUSTER, handle->device_id) != 0 || available == 0) {
+        available = 8;
+    }
+    uint32_t nclusters = static_cast<uint32_t>(available > 12 ? 12 : available);
 
     // Create descriptor
     *desc_ptr = new Descriptor(
-        result.take(),
+        info,
         0,
-        new Descriptor::Opaque{static_cast<device::kunlun::Handle *>(handle)->internal()},
+        new Descriptor::Opaque{static_cast<device::kunlun::Handle *>(handle)->internal(), nclusters},
         handle->device,
         handle->device_id);
 
@@ -193,6 +208,8 @@ infiniStatus_t Descriptor::calculate(
     uint32_t seqlen = (uint32_t)_info.seqlen;
     uint32_t nhead = (uint32_t)_info.nhead;
     uint32_t dhead = (uint32_t)_info.dhead;
+    uint32_t table_len = (uint32_t)_info.table_len;
+    uint32_t nclusters = _opaque->nclusters;
     int32_t x_stride_batch = (int32_t)_info.x_stride_batch;
     int32_t x_stride_seqlen = (int32_t)_info.x_stride_seqlen;
     int32_t x_stride_nhead = (int32_t)_info.x_stride_nhead;
@@ -264,5 +281,10 @@ infiniStatus_t Descriptor::calculate(
 }
 
 } // namespace op::rope::kunlun
+
+// Bit 0: native I32/I64 positions, bounded inside the device kernel.
+extern "C" __attribute__((visibility("default"))) uint32_t infinicoreKunlunRoPECapabilities() {
+    return 1;
+}
 
 #endif
