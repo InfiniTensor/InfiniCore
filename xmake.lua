@@ -1,4 +1,6 @@
 add_rules("mode.debug", "mode.release")
+-- MetaX HPCC: use conda/system Python instead of building CPython via xmake-repo.
+add_requireconfs("pybind11.python", {system = true})
 add_requires("boost", {configs = {stacktrace = true}})
 add_requires("pybind11")
 

@@ -6,6 +6,10 @@
 #include "nvidia/moe_align_nvidia.cuh"
 #endif
 
+#ifdef ENABLE_METAX_API
+#include "metax/moe_align_metax.h"
+#endif
+
 __INFINI_C infiniStatus_t infiniopCreateMoeAlignDescriptor(
     infiniopHandle_t handle,
     infiniopMoeAlignDescriptor_t *desc_ptr,
@@ -35,6 +39,9 @@ __INFINI_C infiniStatus_t infiniopCreateMoeAlignDescriptor(
 #ifdef ENABLE_ALI_API
         CREATE(INFINI_DEVICE_ALI, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -57,6 +64,9 @@ __INFINI_C infiniStatus_t infiniopGetMoeAlignWorkspaceSize(
 #endif
 #ifdef ENABLE_ALI_API
         GET(INFINI_DEVICE_ALI, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -90,6 +100,9 @@ __INFINI_C infiniStatus_t infiniopMoeAlign(
 #ifdef ENABLE_ALI_API
         CALCULATE(INFINI_DEVICE_ALI, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -111,6 +124,9 @@ __INFINI_C infiniStatus_t infiniopDestroyMoeAlignDescriptor(
 #endif
 #ifdef ENABLE_ALI_API
         DESTROY(INFINI_DEVICE_ALI, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        DESTROY(INFINI_DEVICE_METAX, metax);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;

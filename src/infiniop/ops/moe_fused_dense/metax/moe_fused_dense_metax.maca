@@ -1,0 +1,213 @@
+/*
+ * MetaX reference implementation of moe_fused_dense.
+ * Reuses fused_moe gather/GEMV/scatter kernels (no CUTLASS). Sufficient for
+ * G9v3 bring-up; sorted_token_ids metadata from moe_align is unused here.
+ */
+
+#ifdef ENABLE_METAX_MC_API
+#include <mc_runtime.h>
+#else
+#include <hc_runtime.h>
+#endif
+
+#include "moe_fused_dense_metax.h"
+
+#include "../../../devices/metax/metax_common.h"
+#include "../../../devices/metax/metax_kernel_common.h"
+#include "infiniop/ops/fused_moe.h"
+#include "../../fused_moe/cuda/kernel.cuh"
+
+#include <algorithm>
+#include <cstdint>
+#include <memory>
+#include <utility>
+
+namespace op::moe_fused_dense::metax {
+
+namespace {
+
+constexpr size_t ALIGN_BYTES = 256;
+
+size_t alignUp(size_t x, size_t align = ALIGN_BYTES) {
+    return (x + align - 1) / align * align;
+}
+
+size_t dtypeSize(infiniDtype_t dtype) {
+    switch (dtype) {
+    case INFINI_DTYPE_F16:
+    case INFINI_DTYPE_BF16:
+        return 2;
+    case INFINI_DTYPE_F32:
+        return 4;
+    default:
+        return 0;
+    }
+}
+
+size_t workspaceBytes(const MoeFusedDenseInfo &info) {
+    const size_t elem_size = dtypeSize(info.dtype);
+    const size_t route_count = info.num_tokens * info.topk;
+    const size_t w1_cols = info.intermediate_size * 2;
+    size_t size = 0;
+    size += alignUp(route_count * w1_cols * elem_size);
+    size += alignUp(route_count * info.intermediate_size * elem_size);
+    size += alignUp(info.num_tokens * info.hidden_size * sizeof(float));
+    return size;
+}
+
+template <typename T>
+infiniStatus_t launch(
+    const MoeFusedDenseInfo &info,
+    void *workspace,
+    size_t workspace_size,
+    void *output,
+    const void *hidden_states,
+    const void *w13,
+    const void *w2,
+    const void *topk_weights,
+    const void *topk_ids,
+    hcStream_t stream) {
+    const size_t needed = workspaceBytes(info);
+    if (workspace == nullptr || workspace_size < needed) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+
+    const size_t elem_size = dtypeSize(info.dtype);
+    const size_t route_count = info.num_tokens * info.topk;
+    const size_t w1_cols = info.intermediate_size * 2;
+    const size_t out_count = info.num_tokens * info.hidden_size;
+
+    auto *ptr = static_cast<uint8_t *>(workspace);
+    T *w1_out = reinterpret_cast<T *>(ptr);
+    ptr += alignUp(route_count * w1_cols * elem_size);
+    T *activated = reinterpret_cast<T *>(ptr);
+    ptr += alignUp(route_count * info.intermediate_size * elem_size);
+    float *out_accum = reinterpret_cast<float *>(ptr);
+
+    CHECK_METAX(hcMemsetAsync(out_accum, 0, out_count * sizeof(float), stream));
+
+    constexpr int threads = 256;
+    size_t w1_total = route_count * w1_cols;
+    int w1_blocks = static_cast<int>((w1_total + threads - 1) / threads);
+    fusedMoeW1Kernel<T><<<w1_blocks, threads, 0, stream>>>(
+        w1_out,
+        static_cast<const T *>(hidden_states),
+        static_cast<const int32_t *>(topk_ids),
+        static_cast<const T *>(w13),
+        nullptr,
+        route_count,
+        info.hidden_size,
+        info.topk,
+        w1_cols,
+        info.num_experts);
+    CHECK_METAX(hcGetLastError());
+
+    size_t act_total = route_count * info.intermediate_size;
+    int act_blocks = static_cast<int>((act_total + threads - 1) / threads);
+    fusedMoeActivationKernel<T><<<act_blocks, threads, 0, stream>>>(
+        activated,
+        w1_out,
+        route_count,
+        info.intermediate_size,
+        w1_cols,
+        INFINIOP_FUSED_MOE_ACT_SWIGLU);
+    CHECK_METAX(hcGetLastError());
+
+    size_t w2_total = route_count * info.hidden_size;
+    int w2_blocks = static_cast<int>((w2_total + threads - 1) / threads);
+    fusedMoeW2ScatterKernel<T><<<w2_blocks, threads, 0, stream>>>(
+        out_accum,
+        activated,
+        static_cast<const int32_t *>(topk_ids),
+        static_cast<const float *>(topk_weights),
+        static_cast<const T *>(w2),
+        nullptr,
+        route_count,
+        info.hidden_size,
+        info.intermediate_size,
+        info.topk,
+        info.num_experts);
+    CHECK_METAX(hcGetLastError());
+
+    int cast_blocks = static_cast<int>((out_count + threads - 1) / threads);
+    fusedMoeCastKernel<T><<<cast_blocks, threads, 0, stream>>>(
+        static_cast<T *>(output), out_accum, out_count);
+    CHECK_METAX(hcGetLastError());
+
+    return INFINI_STATUS_SUCCESS;
+}
+
+} // namespace
+
+struct Descriptor::Opaque {
+    std::shared_ptr<device::metax::Handle::Internal> internal;
+};
+
+Descriptor::~Descriptor() {
+    delete _opaque;
+}
+
+infiniStatus_t Descriptor::create(
+    infiniopHandle_t handle,
+    Descriptor **desc_ptr,
+    infiniopTensorDescriptor_t output_desc,
+    infiniopTensorDescriptor_t hidden_states_desc,
+    infiniopTensorDescriptor_t w13_desc,
+    infiniopTensorDescriptor_t w2_desc,
+    infiniopTensorDescriptor_t topk_weights_desc,
+    infiniopTensorDescriptor_t topk_ids_desc,
+    infiniopTensorDescriptor_t sorted_token_ids_desc,
+    infiniopTensorDescriptor_t expert_ids_desc,
+    infiniopTensorDescriptor_t num_tokens_post_padded_desc) {
+    auto result = MoeFusedDenseInfo::create(
+        output_desc,
+        hidden_states_desc,
+        w13_desc,
+        w2_desc,
+        topk_weights_desc,
+        topk_ids_desc,
+        sorted_token_ids_desc,
+        expert_ids_desc,
+        num_tokens_post_padded_desc);
+    CHECK_RESULT(result);
+    auto info = result.take();
+    *desc_ptr = new Descriptor(
+        new Opaque{reinterpret_cast<device::metax::Handle *>(handle)->internal()},
+        std::move(info),
+        workspaceBytes(info),
+        handle->device,
+        handle->device_id);
+    return INFINI_STATUS_SUCCESS;
+}
+
+infiniStatus_t Descriptor::calculate(
+    void *workspace,
+    size_t workspace_size,
+    void *output,
+    const void *hidden_states,
+    const void *w13,
+    const void *w2,
+    const void *topk_weights,
+    const void *topk_ids,
+    const void *sorted_token_ids,
+    const void *expert_ids,
+    const void *num_tokens_post_padded,
+    void *stream) const {
+    (void)sorted_token_ids;
+    (void)expert_ids;
+    (void)num_tokens_post_padded;
+    if (output == nullptr || hidden_states == nullptr || w13 == nullptr || w2 == nullptr || topk_weights == nullptr || topk_ids == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+    auto hc_stream = reinterpret_cast<hcStream_t>(stream);
+    switch (_info.dtype) {
+    case INFINI_DTYPE_F16:
+        return launch<half>(_info, workspace, workspace_size, output, hidden_states, w13, w2, topk_weights, topk_ids, hc_stream);
+    case INFINI_DTYPE_BF16:
+        return launch<__nv_bfloat16>(_info, workspace, workspace_size, output, hidden_states, w13, w2, topk_weights, topk_ids, hc_stream);
+    default:
+        return INFINI_STATUS_BAD_TENSOR_DTYPE;
+    }
+}
+
+} // namespace op::moe_fused_dense::metax

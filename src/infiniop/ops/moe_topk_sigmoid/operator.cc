@@ -6,6 +6,10 @@
 #include "nvidia/moe_topk_sigmoid_nvidia.cuh"
 #endif
 
+#ifdef ENABLE_METAX_API
+#include "metax/moe_topk_sigmoid_metax.h"
+#endif
+
 __INFINI_C infiniStatus_t infiniopCreateMoeTopkSigmoidDescriptor(
     infiniopHandle_t handle,
     infiniopMoeTopkSigmoidDescriptor_t *desc_ptr,
@@ -29,6 +33,9 @@ __INFINI_C infiniStatus_t infiniopCreateMoeTopkSigmoidDescriptor(
 #ifdef ENABLE_HYGON_API
         CREATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CREATE(INFINI_DEVICE_METAX, metax);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -51,6 +58,9 @@ __INFINI_C infiniStatus_t infiniopGetMoeTopkSigmoidWorkspaceSize(
 #endif
 #ifdef ENABLE_HYGON_API
         GET(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        GET(INFINI_DEVICE_METAX, metax);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
@@ -81,6 +91,9 @@ __INFINI_C infiniStatus_t infiniopMoeTopkSigmoid(
 #ifdef ENABLE_HYGON_API
         CALCULATE(INFINI_DEVICE_HYGON, nvidia);
 #endif
+#ifdef ENABLE_METAX_API
+        CALCULATE(INFINI_DEVICE_METAX, metax);
+#endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
     }
@@ -102,6 +115,9 @@ __INFINI_C infiniStatus_t infiniopDestroyMoeTopkSigmoidDescriptor(
 #endif
 #ifdef ENABLE_HYGON_API
         DESTROY(INFINI_DEVICE_HYGON, nvidia);
+#endif
+#ifdef ENABLE_METAX_API
+        DESTROY(INFINI_DEVICE_METAX, metax);
 #endif
     default:
         return INFINI_STATUS_DEVICE_TYPE_NOT_SUPPORTED;
