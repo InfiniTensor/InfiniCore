@@ -28,12 +28,10 @@ public:
     size_t routeCount() const { return num_tokens * topk; }
     size_t dtypeSize() const { return dtype == INFINI_DTYPE_F32 ? 4 : 2; }
     size_t quantizedInputBytes() const {
-        const size_t rows = weights_are_aiter_shuffled ? routeCount() : num_tokens;
-        return alignWorkspace(rows * hidden_size);
+        return alignWorkspace(num_tokens * hidden_size);
     }
     size_t inputScaleBytes() const {
-        const size_t rows = weights_are_aiter_shuffled ? routeCount() : num_tokens;
-        return alignWorkspace(rows * sizeof(float));
+        return alignWorkspace(num_tokens * sizeof(float));
     }
     size_t activatedBytes() const {
         return alignWorkspace(routeCount() * intermediate_size * dtypeSize());

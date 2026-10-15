@@ -130,7 +130,8 @@ def make_cases():
     configs = [
         (1, 64, 64, 8, 3, 2, "decode SiTU"),
         (1, 64, 64, 896, 16, 2, "Kimi decode route packing"),
-        (5, 64, 96, 6, 2, 1, "prefill SwiGLU"),
+        (5, 64, 96, 6, 2, 1, "unaligned prefill SwiGLU"),
+        (513, 64, 64, 6, 2, 1, "long prefill SwiGLU"),
     ]
     cases = []
     for tokens, hidden, intermediate, experts, topk, activation, description in configs:

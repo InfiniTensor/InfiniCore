@@ -302,7 +302,7 @@ INFINIOP_CUDA_KERNEL convert_cu_seqlens_i32_to_i64(
     }
 }
 
-INFINIOP_CUDA_KERNEL pack_flash_kda_qkv(
+INFINIOP_CUDA_KERNEL pack_flash_kda_qkv_scalar(
     __nv_bfloat16 *packed_q,
     __nv_bfloat16 *packed_k,
     __nv_bfloat16 *packed_v,
@@ -326,6 +326,38 @@ INFINIOP_CUDA_KERNEL pack_flash_kda_qkv(
         packed_q[i] = q[token * q_token_stride + head * q_head_stride + dim];
         packed_k[i] = k[token * k_token_stride + head * k_head_stride + dim];
         packed_v[i] = v[token * v_token_stride + head * v_head_stride + dim];
+    }
+}
+
+INFINIOP_CUDA_KERNEL pack_flash_kda_qkv_bf16x8(
+    uint4 *packed_q,
+    uint4 *packed_k,
+    uint4 *packed_v,
+    const __nv_bfloat16 *q,
+    const __nv_bfloat16 *k,
+    const __nv_bfloat16 *v,
+    size_t total_tokens,
+    size_t num_heads,
+    ptrdiff_t q_token_stride,
+    ptrdiff_t q_head_stride,
+    ptrdiff_t k_token_stride,
+    ptrdiff_t k_head_stride,
+    ptrdiff_t v_token_stride,
+    ptrdiff_t v_head_stride) {
+    constexpr size_t elements_per_vector = sizeof(uint4) / sizeof(__nv_bfloat16);
+    constexpr size_t vectors_per_head = FLASH_KDA_DIM / elements_per_vector;
+    const size_t total = total_tokens * num_heads * vectors_per_head;
+    for (size_t i = blockIdx.x * blockDim.x + threadIdx.x; i < total;
+         i += blockDim.x * gridDim.x) {
+        const size_t dim = (i % vectors_per_head) * elements_per_vector;
+        const size_t head = (i / vectors_per_head) % num_heads;
+        const size_t token = i / (num_heads * vectors_per_head);
+        packed_q[i] = *reinterpret_cast<const uint4 *>(
+            q + token * q_token_stride + head * q_head_stride + dim);
+        packed_k[i] = *reinterpret_cast<const uint4 *>(
+            k + token * k_token_stride + head * k_head_stride + dim);
+        packed_v[i] = *reinterpret_cast<const uint4 *>(
+            v + token * v_token_stride + head * v_head_stride + dim);
     }
 }
 
@@ -440,26 +472,58 @@ infiniStatus_t launch_flash_kda(
             workspace_bytes + layout.k_offset);
         auto *packed_v = reinterpret_cast<__nv_bfloat16 *>(
             workspace_bytes + layout.v_offset);
-        const size_t qkv_elements = info.total_tokens * info.H * info.D;
-        pack_flash_kda_qkv<<<
-            (qkv_elements + threads - 1) / threads,
-            threads,
-            0,
-            stream>>>(
-            packed_q,
-            packed_k,
-            packed_v,
-            static_cast<const __nv_bfloat16 *>(q),
-            static_cast<const __nv_bfloat16 *>(k),
-            static_cast<const __nv_bfloat16 *>(v),
-            info.total_tokens,
-            info.H,
-            info.q_strides[1],
-            info.q_strides[2],
-            info.k_strides[1],
-            info.k_strides[2],
-            info.v_strides[1],
-            info.v_strides[2]);
+        constexpr size_t elements_per_vector = sizeof(uint4) / sizeof(__nv_bfloat16);
+        const uintptr_t pointer_bits = reinterpret_cast<uintptr_t>(q)
+                                     | reinterpret_cast<uintptr_t>(k)
+                                     | reinterpret_cast<uintptr_t>(v);
+        const bool vector_aligned = pointer_bits % alignof(uint4) == 0
+                                 && info.q_strides[1] % elements_per_vector == 0
+                                 && info.k_strides[1] % elements_per_vector == 0
+                                 && info.v_strides[1] % elements_per_vector == 0;
+        if (vector_aligned) {
+            const size_t qkv_vectors = info.total_tokens * info.H * info.D
+                                     / elements_per_vector;
+            pack_flash_kda_qkv_bf16x8<<<
+                (qkv_vectors + threads - 1) / threads,
+                threads,
+                0,
+                stream>>>(
+                reinterpret_cast<uint4 *>(packed_q),
+                reinterpret_cast<uint4 *>(packed_k),
+                reinterpret_cast<uint4 *>(packed_v),
+                static_cast<const __nv_bfloat16 *>(q),
+                static_cast<const __nv_bfloat16 *>(k),
+                static_cast<const __nv_bfloat16 *>(v),
+                info.total_tokens,
+                info.H,
+                info.q_strides[1],
+                info.q_strides[2],
+                info.k_strides[1],
+                info.k_strides[2],
+                info.v_strides[1],
+                info.v_strides[2]);
+        } else {
+            const size_t qkv_elements = info.total_tokens * info.H * info.D;
+            pack_flash_kda_qkv_scalar<<<
+                (qkv_elements + threads - 1) / threads,
+                threads,
+                0,
+                stream>>>(
+                packed_q,
+                packed_k,
+                packed_v,
+                static_cast<const __nv_bfloat16 *>(q),
+                static_cast<const __nv_bfloat16 *>(k),
+                static_cast<const __nv_bfloat16 *>(v),
+                info.total_tokens,
+                info.H,
+                info.q_strides[1],
+                info.q_strides[2],
+                info.k_strides[1],
+                info.k_strides[2],
+                info.v_strides[1],
+                info.v_strides[2]);
+        }
         flash_q = packed_q;
         flash_k = packed_k;
         flash_v = packed_v;
@@ -484,7 +548,7 @@ infiniStatus_t launch_flash_kda(
         static_cast<const float *>(A_log),
         static_cast<const float *>(dt_bias),
         info.lower_bound * LOG2_E,
-        32,
+        64,
         nullptr,
         nullptr,
         stream);

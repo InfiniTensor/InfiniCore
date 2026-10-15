@@ -38,10 +38,13 @@ infiniStatus_t Descriptor::create(
         bias_desc, cu_seqlens_desc, initial_state_indices_desc, final_state_indices_desc);
     CHECK_RESULT(result);
 
+    const size_t workspace_size = result->has_cu_seqlens
+                                    ? result->total_tokens * sizeof(int32_t)
+                                    : 0;
     *desc_ptr = new Descriptor(
         new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
         result.take(),
-        0,
+        workspace_size,
         handle->device,
         handle->device_id);
     return INFINI_STATUS_SUCCESS;
@@ -115,22 +118,47 @@ __device__ __forceinline__ float load_history_k4(
     return load_as_float(qkv, qkv_off);
 }
 
-template <typename T>
-__global__ void causal_conv1d_k4_prefill_kernel(
+__global__ void fill_token_request_ids_kernel(
+    int32_t *token_request_ids,
+    const void *cu_seqlens,
+    bool cu_seqlens_i64,
+    size_t request_count,
+    size_t total_tokens) {
+    const size_t request = blockIdx.x;
+    if (request >= request_count) {
+        return;
+    }
+
+    const int64_t token_begin = load_optional_index(
+        cu_seqlens, cu_seqlens_i64, static_cast<int>(request), 0);
+    const int64_t token_end = load_optional_index(
+        cu_seqlens, cu_seqlens_i64, static_cast<int>(request + 1), 0);
+    if (token_begin < 0 || token_end < token_begin
+        || token_end > static_cast<int64_t>(total_tokens)) {
+        return;
+    }
+
+    for (int64_t token = token_begin + threadIdx.x;
+         token < token_end;
+         token += blockDim.x) {
+        token_request_ids[token] = static_cast<int32_t>(request);
+    }
+}
+
+template <typename T, int TOKENS_PER_TILE>
+__global__ void causal_conv1d_k4_prefill_tiled_kernel(
     T *out,
     T *conv_state,
-    T *final_conv_state,
     const T *qkv,
     const T *weight,
     const T *bias,
     const void *cu_seqlens,
     const void *initial_state_indices,
-    const void *final_state_indices,
+    const int32_t *token_request_ids,
     bool has_bias,
     bool has_cu_seqlens,
     bool cu_seqlens_i64,
     bool initial_state_indices_i64,
-    bool final_state_indices_i64,
     bool indexed_state_pool,
     size_t T_tokens,
     size_t C,
@@ -143,9 +171,6 @@ __global__ void causal_conv1d_k4_prefill_kernel(
     ptrdiff_t state_s0,
     ptrdiff_t state_s1,
     ptrdiff_t state_s2,
-    ptrdiff_t final_s0,
-    ptrdiff_t final_s1,
-    ptrdiff_t final_s2,
     ptrdiff_t qkv_s0,
     ptrdiff_t qkv_s1,
     ptrdiff_t qkv_s2,
@@ -153,80 +178,100 @@ __global__ void causal_conv1d_k4_prefill_kernel(
     ptrdiff_t weight_s1,
     ptrdiff_t weight_s2,
     ptrdiff_t bias_s0) {
+    __shared__ int32_t tile_request_ids[TOKENS_PER_TILE];
 
-    const size_t flat_token = blockIdx.x;
+    const size_t tile_begin = blockIdx.x * TOKENS_PER_TILE;
     const size_t channel = blockIdx.y * blockDim.x + threadIdx.x;
-    if (flat_token >= total_tokens || channel >= C) {
+    if (threadIdx.x < TOKENS_PER_TILE) {
+        const size_t flat_token = tile_begin + threadIdx.x;
+        tile_request_ids[threadIdx.x] = flat_token < total_tokens
+                                          ? (has_cu_seqlens
+                                                 ? token_request_ids[flat_token]
+                                                 : static_cast<int32_t>(flat_token / T_tokens))
+                                          : -1;
+    }
+    __syncthreads();
+
+    if (channel >= C) {
         return;
     }
 
-    int request = static_cast<int>(flat_token / T_tokens);
-    int token_batch = request;
-    int64_t token_begin = 0;
-    int64_t token_end = static_cast<int64_t>(T_tokens);
-    int64_t token_idx = static_cast<int64_t>(flat_token % T_tokens);
-    if (has_cu_seqlens) {
-        int left = 0;
-        int right = static_cast<int>(request_count);
-        while (left + 1 < right) {
-            const int mid = (left + right) / 2;
-            const int64_t offset = load_optional_index(cu_seqlens, cu_seqlens_i64, mid, 0);
-            if (offset <= static_cast<int64_t>(flat_token)) {
-                left = mid;
-            } else {
-                right = mid;
-            }
-        }
-        request = left;
-        token_begin = load_optional_index(cu_seqlens, cu_seqlens_i64, request, 0);
-        token_end = load_optional_index(cu_seqlens, cu_seqlens_i64, request + 1, 0);
-        token_batch = 0;
-        token_idx = static_cast<int64_t>(flat_token);
-        if (token_begin < 0 || token_idx < token_begin || token_idx >= token_end
-            || token_end > static_cast<int64_t>(total_tokens)) {
-            return;
-        }
-    }
-    const int64_t local_token = token_idx - token_begin;
-
-    int64_t read_slot = indexed_state_pool
-                          ? load_optional_index(initial_state_indices, initial_state_indices_i64, request, request)
-                          : static_cast<int64_t>(request);
-    int64_t write_slot = indexed_state_pool && final_state_indices != nullptr
-                           ? load_optional_index(final_state_indices, final_state_indices_i64, request, request)
-                           : static_cast<int64_t>(request);
-    if (read_slot < 0 || write_slot < 0 || read_slot >= static_cast<int64_t>(pool_size) || (final_state_indices != nullptr && write_slot >= static_cast<int64_t>(pool_size))) {
-        return;
-    }
-
-    const ptrdiff_t state_base = static_cast<ptrdiff_t>(read_slot) * state_s0
-                               + static_cast<ptrdiff_t>(channel) * state_s1;
     const ptrdiff_t weight_base = static_cast<ptrdiff_t>(channel) * weight_s0;
     (void)weight_s1;
+    const float w0 = load_as_float(weight, weight_base);
+    const float w1 = load_as_float(weight, weight_base + weight_s2);
+    const float w2 = load_as_float(weight, weight_base + 2 * weight_s2);
+    const float w3 = load_as_float(weight, weight_base + 3 * weight_s2);
+    const float bias_value = has_bias
+                               ? load_as_float(bias, static_cast<ptrdiff_t>(channel) * bias_s0)
+                               : 0.0f;
 
-    float acc = load_as_float(weight, weight_base)
-                  * load_history_k4(conv_state, qkv, local_token, token_begin,
-                                    token_batch, channel, state_base, state_s2,
-                                    qkv_s0, qkv_s1, qkv_s2)
-              + load_as_float(weight, weight_base + weight_s2)
-                    * load_history_k4(conv_state, qkv, local_token + 1, token_begin,
-                                      token_batch, channel, state_base, state_s2,
-                                      qkv_s0, qkv_s1, qkv_s2)
-              + load_as_float(weight, weight_base + 2 * weight_s2)
-                    * load_history_k4(conv_state, qkv, local_token + 2, token_begin,
-                                      token_batch, channel, state_base, state_s2,
-                                      qkv_s0, qkv_s1, qkv_s2)
-              + load_as_float(weight, weight_base + 3 * weight_s2)
-                    * load_history_k4(conv_state, qkv, local_token + 3, token_begin,
-                                      token_batch, channel, state_base, state_s2,
-                                      qkv_s0, qkv_s1, qkv_s2);
-    if (has_bias) {
-        acc += load_as_float(bias, static_cast<ptrdiff_t>(channel) * bias_s0);
+    int previous_request = -1;
+    int64_t previous_local_token = -2;
+    float history0 = 0.0f;
+    float history1 = 0.0f;
+    float history2 = 0.0f;
+
+    for (int tile_token = 0; tile_token < TOKENS_PER_TILE; ++tile_token) {
+        const size_t flat_token = tile_begin + tile_token;
+        if (flat_token >= total_tokens) {
+            break;
+        }
+
+        const int request = tile_request_ids[tile_token];
+        if (request < 0 || static_cast<size_t>(request) >= request_count) {
+            continue;
+        }
+        const int64_t token_begin = has_cu_seqlens
+                                      ? load_optional_index(cu_seqlens, cu_seqlens_i64, request, 0)
+                                      : 0;
+        const int token_batch = has_cu_seqlens ? 0 : request;
+        const int64_t token_idx = has_cu_seqlens
+                                    ? static_cast<int64_t>(flat_token)
+                                    : static_cast<int64_t>(flat_token % T_tokens);
+        const int64_t local_token = token_idx - token_begin;
+        const int64_t read_slot = indexed_state_pool
+                                    ? load_optional_index(initial_state_indices,
+                                                          initial_state_indices_i64,
+                                                          request,
+                                                          request)
+                                    : static_cast<int64_t>(request);
+        if (read_slot < 0 || read_slot >= static_cast<int64_t>(pool_size)) {
+            continue;
+        }
+
+        const ptrdiff_t state_base = static_cast<ptrdiff_t>(read_slot) * state_s0
+                                   + static_cast<ptrdiff_t>(channel) * state_s1;
+        if (request != previous_request
+            || local_token != previous_local_token + 1) {
+            history0 = load_history_k4(conv_state, qkv, local_token, token_begin,
+                                       token_batch, channel, state_base, state_s2,
+                                       qkv_s0, qkv_s1, qkv_s2);
+            history1 = load_history_k4(conv_state, qkv, local_token + 1, token_begin,
+                                       token_batch, channel, state_base, state_s2,
+                                       qkv_s0, qkv_s1, qkv_s2);
+            history2 = load_history_k4(conv_state, qkv, local_token + 2, token_begin,
+                                       token_batch, channel, state_base, state_s2,
+                                       qkv_s0, qkv_s1, qkv_s2);
+        }
+
+        const ptrdiff_t qkv_offset = static_cast<ptrdiff_t>(token_batch) * qkv_s0
+                                   + token_idx * qkv_s1
+                                   + static_cast<ptrdiff_t>(channel) * qkv_s2;
+        const float token = load_as_float(qkv, qkv_offset);
+        const float value = w0 * history0 + w1 * history1
+                          + w2 * history2 + w3 * token + bias_value;
+        const ptrdiff_t out_offset = static_cast<ptrdiff_t>(token_batch) * out_s0
+                                   + token_idx * out_s1
+                                   + static_cast<ptrdiff_t>(channel) * out_s2;
+        out[out_offset] = cast_from_float<T>(value);
+
+        history0 = history1;
+        history1 = history2;
+        history2 = token;
+        previous_request = request;
+        previous_local_token = local_token;
     }
-    const ptrdiff_t out_off = static_cast<ptrdiff_t>(token_batch) * out_s0
-                            + token_idx * out_s1
-                            + static_cast<ptrdiff_t>(channel) * out_s2;
-    out[out_off] = cast_from_float<T>(acc);
 }
 
 template <typename T>
@@ -418,6 +463,7 @@ __global__ void causal_conv1d_k4_decode_kernel(
 template <typename T>
 infiniStatus_t launch_k4(
     const CausalConv1dInfo &info,
+    void *workspace,
     void *out,
     void *conv_state,
     void *final_conv_state,
@@ -470,24 +516,36 @@ infiniStatus_t launch_k4(
         return INFINI_STATUS_SUCCESS;
     }
 
+    int32_t *token_request_ids = nullptr;
+    if (info.has_cu_seqlens) {
+        token_request_ids = static_cast<int32_t *>(workspace);
+        fill_token_request_ids_kernel<<<static_cast<unsigned int>(info.request_count), threads, 0, stream>>>(
+            token_request_ids,
+            cu_seqlens,
+            info.cu_seqlens_dtype == INFINI_DTYPE_I64,
+            info.request_count,
+            info.total_tokens);
+        CHECK_CUDA(cudaGetLastError());
+    }
+
+    constexpr int tokens_per_tile = 64;
+    constexpr unsigned int prefill_threads = 256;
     const dim3 output_grid(
-        static_cast<unsigned int>(info.total_tokens),
-        static_cast<unsigned int>((info.C + threads - 1) / threads));
-    causal_conv1d_k4_prefill_kernel<T><<<output_grid, threads, 0, stream>>>(
+        static_cast<unsigned int>((info.total_tokens + tokens_per_tile - 1) / tokens_per_tile),
+        static_cast<unsigned int>((info.C + prefill_threads - 1) / prefill_threads));
+    causal_conv1d_k4_prefill_tiled_kernel<T, tokens_per_tile><<<output_grid, prefill_threads, 0, stream>>>(
         static_cast<T *>(out),
         static_cast<T *>(conv_state),
-        static_cast<T *>(final_conv_state),
         static_cast<const T *>(qkv),
         static_cast<const T *>(weight),
         static_cast<const T *>(bias),
         cu_seqlens,
         initial_state_indices,
-        final_state_indices,
+        token_request_ids,
         info.has_bias,
         info.has_cu_seqlens,
         info.cu_seqlens_dtype == INFINI_DTYPE_I64,
         info.initial_state_indices_dtype == INFINI_DTYPE_I64,
-        info.final_state_indices_dtype == INFINI_DTYPE_I64,
         info.indexed_state_pool,
         info.T,
         info.C,
@@ -500,9 +558,6 @@ infiniStatus_t launch_k4(
         info.conv_state_strides[0],
         info.conv_state_strides[1],
         info.conv_state_strides[2],
-        info.final_conv_state_strides.empty() ? 0 : info.final_conv_state_strides[0],
-        info.final_conv_state_strides.empty() ? 0 : info.final_conv_state_strides[1],
-        info.final_conv_state_strides.empty() ? 0 : info.final_conv_state_strides[2],
         info.qkv_strides[0],
         info.qkv_strides[1],
         info.qkv_strides[2],
@@ -546,6 +601,7 @@ infiniStatus_t launch_k4(
 
 infiniStatus_t launch_by_kernel_size(
     const CausalConv1dInfo &info,
+    void *workspace,
     void *out,
     void *conv_state,
     void *final_conv_state,
@@ -563,11 +619,11 @@ infiniStatus_t launch_by_kernel_size(
 
     switch (info.data_dtype) {
     case INFINI_DTYPE_F32:
-        return launch_k4<float>(info, out, conv_state, final_conv_state, qkv, weight, bias, cu_seqlens, initial_state_indices, final_state_indices, stream);
+        return launch_k4<float>(info, workspace, out, conv_state, final_conv_state, qkv, weight, bias, cu_seqlens, initial_state_indices, final_state_indices, stream);
     case INFINI_DTYPE_F16:
-        return launch_k4<half>(info, out, conv_state, final_conv_state, qkv, weight, bias, cu_seqlens, initial_state_indices, final_state_indices, stream);
+        return launch_k4<half>(info, workspace, out, conv_state, final_conv_state, qkv, weight, bias, cu_seqlens, initial_state_indices, final_state_indices, stream);
     case INFINI_DTYPE_BF16:
-        return launch_k4<__nv_bfloat16>(info, out, conv_state, final_conv_state, qkv, weight, bias, cu_seqlens, initial_state_indices, final_state_indices, stream);
+        return launch_k4<__nv_bfloat16>(info, workspace, out, conv_state, final_conv_state, qkv, weight, bias, cu_seqlens, initial_state_indices, final_state_indices, stream);
     default:
         return INFINI_STATUS_BAD_TENSOR_DTYPE;
     }
@@ -593,7 +649,7 @@ infiniStatus_t Descriptor::calculate(
         return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
     }
     cudaStream_t cuda_stream = reinterpret_cast<cudaStream_t>(stream);
-    return launch_by_kernel_size(_info, out, conv_state, final_conv_state, qkv, weight, bias, cu_seqlens, initial_state_indices, final_state_indices, cuda_stream);
+    return launch_by_kernel_size(_info, workspace, out, conv_state, final_conv_state, qkv, weight, bias, cu_seqlens, initial_state_indices, final_state_indices, cuda_stream);
 }
 
 } // namespace nvidia

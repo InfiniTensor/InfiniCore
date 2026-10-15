@@ -158,7 +158,12 @@ def k3_shape_test_case(seq_len, num_heads, description, zero_state=True):
     )
 
 
-def k3_varlen_test_case(description, invalid_initial_index=False, strided_qkv=False):
+def k3_varlen_test_case(
+    description,
+    invalid_initial_index=False,
+    strided_qkv=False,
+    unaligned_qkv=False,
+):
     total_tokens = 50
     num_heads = 1
     dim = 128
@@ -170,9 +175,10 @@ def k3_varlen_test_case(description, invalid_initial_index=False, strided_qkv=Fa
     final_indices = torch.tensor([1, 3], dtype=torch.int32)
     qkv_strides = None
     if strided_qkv:
+        token_stride = 3 * num_heads * dim + int(unaligned_qkv)
         qkv_strides = (
-            total_tokens * 3 * num_heads * dim,
-            3 * num_heads * dim,
+            total_tokens * token_stride,
+            token_stride,
             dim,
             1,
         )
@@ -311,6 +317,11 @@ def parse_test_cases():
             k3_varlen_test_case(
                 "KimiDeltaAttention FlashKDA strided-QKV multi-request varlen",
                 strided_qkv=True,
+            ),
+            k3_varlen_test_case(
+                "KimiDeltaAttention FlashKDA unaligned-QKV scalar pack fallback",
+                strided_qkv=True,
+                unaligned_qkv=True,
             ),
             k3_varlen_test_case(
                 "KimiDeltaAttention FlashKDA invalid state index",

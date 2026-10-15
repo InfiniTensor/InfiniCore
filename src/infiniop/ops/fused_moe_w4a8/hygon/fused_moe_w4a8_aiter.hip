@@ -239,20 +239,45 @@ __global__ void buildSmallRouteMetadata(
     *num_tokens_post_padded = output_offset;
 }
 
-template <typename T, bool Expanded>
+__global__ void buildDirectRouteMetadata(
+    int32_t *sorted_token_ids,
+    int32_t *expert_ids,
+    int32_t *num_tokens_post_padded,
+    const int32_t *selected_experts,
+    size_t route_count,
+    size_t num_experts,
+    size_t block_size_m) {
+    const size_t route = blockIdx.x * blockDim.x + threadIdx.x;
+    if (route >= route_count) {
+        return;
+    }
+
+    const int32_t expert = selected_experts[route];
+    const bool valid = expert >= 0 && static_cast<size_t>(expert) < num_experts;
+    const size_t offset = route * block_size_m;
+    expert_ids[route] = valid ? expert : 0;
+    sorted_token_ids[offset] = valid ? static_cast<int32_t>(route)
+                                     : static_cast<int32_t>(route_count);
+    for (size_t row = 1; row < block_size_m; ++row) {
+        sorted_token_ids[offset + row] = static_cast<int32_t>(route_count);
+    }
+    if (route == 0) {
+        *num_tokens_post_padded = static_cast<int32_t>(route_count * block_size_m);
+    }
+}
+
+template <typename T>
 __global__ void quantizeRows(
     int8_t *output,
     float *scales,
     const T *input,
     size_t rows,
-    size_t topk,
     size_t cols) {
     const size_t row = blockIdx.x;
     if (row >= rows) {
         return;
     }
-    const size_t input_row_index = Expanded ? row / topk : row;
-    const T *input_row = input + input_row_index * cols;
+    const T *input_row = input + row * cols;
     int8_t *output_row = output + row * cols;
     float max_abs = 0.0f;
     for (size_t col = threadIdx.x; col < cols; col += blockDim.x) {
@@ -281,23 +306,57 @@ __global__ void quantizeRows(
 }
 
 template <typename T>
-__global__ void activateRoutes(
-    T *output,
+__global__ void activateAndQuantizeRoutes(
+    T *activated,
+    int8_t *quantized,
+    float *scales,
     const T *gate_up,
     size_t route_count,
     size_t intermediate_size,
     infiniopFusedMoeActivation_t activation_type) {
-    const size_t index = blockIdx.x * blockDim.x + threadIdx.x;
-    if (index >= route_count * intermediate_size) {
+    const size_t route = blockIdx.x;
+    if (route >= route_count) {
         return;
     }
-    const size_t route = index / intermediate_size;
-    const size_t inner = index % intermediate_size;
     const T *row = gate_up + route * 2 * intermediate_size;
-    output[index] = storeValue<T>(activate(
-        loadValue(row[inner]),
-        loadValue(row[intermediate_size + inner]),
-        activation_type));
+    T *activated_row = activated + route * intermediate_size;
+    int8_t *quantized_row = quantized + route * intermediate_size;
+
+    float max_abs = 0.0f;
+    for (size_t inner = threadIdx.x; inner < intermediate_size;
+         inner += blockDim.x) {
+        const T value = storeValue<T>(activate(
+            loadValue(row[inner]),
+            loadValue(row[intermediate_size + inner]),
+            activation_type));
+        activated_row[inner] = value;
+        max_abs = fmaxf(max_abs, fabsf(loadValue(value)));
+    }
+
+    extern __shared__ float scratch[];
+    scratch[threadIdx.x] = max_abs;
+    __syncthreads();
+    for (size_t stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+        if (threadIdx.x < stride) {
+            scratch[threadIdx.x]
+                = fmaxf(scratch[threadIdx.x], scratch[threadIdx.x + stride]);
+        }
+        __syncthreads();
+    }
+
+    const float scale = fmaxf(scratch[0] / 127.0f, 1.0e-8f);
+    if (threadIdx.x == 0) {
+        scales[route] = scale;
+    }
+    const float inv_scale = 1.0f / scale;
+    for (size_t inner = threadIdx.x; inner < intermediate_size;
+         inner += blockDim.x) {
+        int value = static_cast<int>(
+            roundf(loadValue(activated_row[inner]) * inv_scale));
+        value = value > 127 ? 127 : value;
+        value = value < -127 ? -127 : value;
+        quantized_row[inner] = static_cast<int8_t>(value);
+    }
 }
 
 template <typename T>
@@ -325,7 +384,7 @@ struct KernelModes {
     int gemm2;
 };
 
-KernelModes selectKernelModes(size_t num_tokens) {
+KernelModes selectKernelModes(size_t num_tokens, size_t intermediate_size) {
     if (num_tokens <= 128) {
         return {374116, 384116};
     }
@@ -338,7 +397,11 @@ KernelModes selectKernelModes(size_t num_tokens) {
     if (num_tokens <= 2048) {
         return {374348, 384248};
     }
-    return {374364, 41364};
+    const int gemm1_mode
+        = num_tokens > 4096 || intermediate_size >= 768 ? 374464 : 374364;
+    const int gemm2_mode
+        = intermediate_size == 768 && num_tokens == 4096 ? 166 : 41364;
+    return {gemm1_mode, gemm2_mode};
 }
 
 template <typename T>
@@ -378,7 +441,17 @@ infiniStatus_t launch(
     CHECK_OR_RETURN(
         hipMemsetAsync(buffers.gemm2_output, 0, info.aiterGemm2Bytes(), stream) == hipSuccess,
         INFINI_STATUS_INTERNAL_ERROR);
-    if (route_count <= 256) {
+    if (route_count * info.aiterBlockSizeM() <= sorted_capacity) {
+        buildDirectRouteMetadata<<<
+            (route_count + threads - 1) / threads, threads, 0, stream>>>(
+            buffers.sorted_token_ids,
+            buffers.expert_ids,
+            buffers.num_tokens_post_padded,
+            selected_experts,
+            route_count,
+            info.num_experts,
+            info.aiterBlockSizeM());
+    } else if (route_count <= 256) {
         const size_t sort_threads = nextPowerOfTwo(route_count);
         buildSmallRouteMetadata<<<1, sort_threads,
                                   2 * sort_threads * sizeof(int32_t), stream>>>(
@@ -410,25 +483,20 @@ infiniStatus_t launch(
     }
 
     const bool prefill = info.num_tokens > 512;
-    if (prefill) {
-        quantizeRows<T, true><<<route_count, threads, threads * sizeof(float), stream>>>(
-            buffers.quantized_input, buffers.input_scale, input,
-            route_count, info.topk, info.hidden_size);
-    } else {
-        quantizeRows<T, false><<<info.num_tokens, threads, threads * sizeof(float), stream>>>(
-            buffers.quantized_input, buffers.input_scale, input,
-            info.num_tokens, 1, info.hidden_size);
-    }
+    quantizeRows<T><<<info.num_tokens, threads,
+                      threads * sizeof(float), stream>>>(
+        buffers.quantized_input, buffers.input_scale, input,
+        info.num_tokens, info.hidden_size);
 
-    const auto modes = selectKernelModes(info.num_tokens);
-    const uint32_t stage1_m = prefill ? route_count : info.num_tokens;
+    const auto modes = selectKernelModes(
+        info.num_tokens, info.intermediate_size);
     GemmParams_w4a8<char, T> stage1(
         reinterpret_cast<const char *>(buffers.quantized_input),
         reinterpret_cast<const char *>(w13_packed),
         reinterpret_cast<T *>(buffers.gemm1_output), buffers.input_scale,
         const_cast<float *>(w13_scale), nullptr, buffers.sorted_token_ids,
         buffers.expert_ids, 0, buffers.num_tokens_post_padded,
-        stage1_m, 2 * info.intermediate_size, info.hidden_size,
+        info.num_tokens, 2 * info.intermediate_size, info.hidden_size,
         1, 1, 2 * info.intermediate_size, 1, 1,
         sorted_capacity, info.topk, info.topk, true, stream);
     const bool stage1_launched = prefill
@@ -436,15 +504,13 @@ infiniStatus_t launch(
                                    : dispatchKernel(kernel_maps_gemm1_decode_w4a8<T>, modes.gemm1, stage1);
     CHECK_OR_RETURN(stage1_launched, INFINI_STATUS_BAD_PARAM);
 
-    activateRoutes<<<(route_count * info.intermediate_size + threads - 1) / threads,
-                     threads, 0, stream>>>(
+    activateAndQuantizeRoutes<<<route_count, threads,
+                                threads * sizeof(float), stream>>>(
         reinterpret_cast<T *>(buffers.activated),
+        buffers.quantized_activated,
+        buffers.activated_scale,
         reinterpret_cast<const T *>(buffers.gemm1_output), route_count,
         info.intermediate_size, info.activation);
-    quantizeRows<T, false><<<route_count, threads, threads * sizeof(float), stream>>>(
-        buffers.quantized_activated, buffers.activated_scale,
-        reinterpret_cast<const T *>(buffers.activated), route_count,
-        1, info.intermediate_size);
 
     GemmParams_w4a8<char, T> stage2(
         reinterpret_cast<const char *>(buffers.quantized_activated),
