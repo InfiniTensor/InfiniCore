@@ -23,6 +23,62 @@ INFINIOP_CUDA_KERNEL rmsnormKernel(
     rmsnormBlock<BLOCK_SIZE, Tcompute>(y, stride_y_batch, stride_y_nhead, x, stride_x_batch, stride_x_nhead, w, nhead, dim, epsilon);
 }
 
+template <typename T>
+struct alignas(16) Vector8 {
+    T values[8];
+};
+
+template <unsigned int BLOCK_SIZE, typename Tdata>
+INFINIOP_CUDA_KERNEL rmsnormContiguousVectorKernel(
+    Tdata *__restrict__ y,
+    ptrdiff_t stride_y_batch,
+    ptrdiff_t stride_y_nhead,
+    const Tdata *__restrict__ x,
+    ptrdiff_t stride_x_batch,
+    ptrdiff_t stride_x_nhead,
+    const Tdata *__restrict__ w,
+    size_t nhead,
+    size_t dim,
+    float epsilon) {
+    const size_t batch_idx = blockIdx.x / nhead;
+    const size_t head_idx = blockIdx.x % nhead;
+    auto *y_row = y + batch_idx * stride_y_batch + head_idx * stride_y_nhead;
+    const auto *x_row = x + batch_idx * stride_x_batch + head_idx * stride_x_nhead;
+    const size_t vector_count = dim / 8;
+
+    float sum_squared = 0.0f;
+    for (size_t vector_idx = threadIdx.x; vector_idx < vector_count; vector_idx += BLOCK_SIZE) {
+        const auto value = reinterpret_cast<const Vector8<Tdata> *>(x_row)[vector_idx];
+#pragma unroll
+        for (size_t i = 0; i < 8; ++i) {
+            const float x_value = static_cast<float>(value.values[i]);
+            sum_squared += x_value * x_value;
+        }
+    }
+
+    using BlockReduce = cub::BlockReduce<float, BLOCK_SIZE>;
+    __shared__ typename BlockReduce::TempStorage reduce_storage;
+    sum_squared = BlockReduce(reduce_storage).Sum(sum_squared);
+    __shared__ float inverse_rms;
+    if (threadIdx.x == 0) {
+        inverse_rms = rsqrtf(sum_squared / static_cast<float>(dim) + epsilon);
+    }
+    __syncthreads();
+
+    for (size_t vector_idx = threadIdx.x; vector_idx < vector_count; vector_idx += BLOCK_SIZE) {
+        const auto value = reinterpret_cast<const Vector8<Tdata> *>(x_row)[vector_idx];
+        const auto weight = reinterpret_cast<const Vector8<Tdata> *>(w)[vector_idx];
+        Vector8<Tdata> output;
+#pragma unroll
+        for (size_t i = 0; i < 8; ++i) {
+            output.values[i] = static_cast<Tdata>(
+                static_cast<float>(value.values[i])
+                * static_cast<float>(weight.values[i]) * inverse_rms);
+        }
+        reinterpret_cast<Vector8<Tdata> *>(y_row)[vector_idx] = output;
+    }
+}
+
 namespace op::rms_norm::nvidia {
 
 struct Descriptor::Opaque {
@@ -115,6 +171,33 @@ infiniStatus_t Descriptor::calculate(
     uint32_t batch_size = static_cast<uint32_t>(_info.shape[0]);
     size_t nhead = _info.shape.size() > 2 ? _info.shape[1] : 1;
     auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
+
+#ifdef ENABLE_HYGON_API
+    const bool vectorized = device_type == INFINI_DEVICE_HYGON
+                         && _info.atype == _info.wtype
+                         && dim % 8 == 0
+                         && stride_x_batch % 8 == 0
+                         && stride_y_batch % 8 == 0
+                         && (nhead == 1 || (stride_x_nhead % 8 == 0 && stride_y_nhead % 8 == 0));
+    if (vectorized) {
+        constexpr unsigned int BLOCK_SIZE = 1024;
+        const auto grid_size = batch_size * nhead;
+        if (_info.atype == INFINI_DTYPE_F16) {
+            rmsnormContiguousVectorKernel<BLOCK_SIZE, half><<<grid_size, BLOCK_SIZE, 0, cuda_stream>>>(
+                static_cast<half *>(y), stride_y_batch, stride_y_nhead,
+                static_cast<const half *>(x), stride_x_batch, stride_x_nhead,
+                static_cast<const half *>(w), nhead, dim, _info.epsilon);
+            return INFINI_STATUS_SUCCESS;
+        }
+        if (_info.atype == INFINI_DTYPE_BF16) {
+            rmsnormContiguousVectorKernel<BLOCK_SIZE, __nv_bfloat16><<<grid_size, BLOCK_SIZE, 0, cuda_stream>>>(
+                static_cast<__nv_bfloat16 *>(y), stride_y_batch, stride_y_nhead,
+                static_cast<const __nv_bfloat16 *>(x), stride_x_batch, stride_x_nhead,
+                static_cast<const __nv_bfloat16 *>(w), nhead, dim, _info.epsilon);
+            return INFINI_STATUS_SUCCESS;
+        }
+    }
+#endif
 
     // launch kernel with different block sizes
     if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_4096) {

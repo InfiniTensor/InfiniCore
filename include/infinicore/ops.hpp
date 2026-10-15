@@ -45,6 +45,7 @@
 #include "ops/gelutanh.hpp"
 #include "ops/hardswish.hpp"
 #include "ops/hardtanh.hpp"
+#include "ops/kimi_attention_residual.hpp"
 #include "ops/kimi_delta_attention.hpp"
 #include "ops/kv_caching.hpp"
 #include "ops/layer_norm.hpp"

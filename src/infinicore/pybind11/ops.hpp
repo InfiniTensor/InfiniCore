@@ -70,6 +70,7 @@
 #include "ops/index_copy.hpp"
 #include "ops/inner.hpp"
 #include "ops/interpolate.hpp"
+#include "ops/kimi_attention_residual.hpp"
 #include "ops/kimi_delta_attention.hpp"
 #include "ops/kron.hpp"
 #include "ops/kthvalue.hpp"
@@ -231,6 +232,7 @@ inline void bind(py::module &m) {
     bind_flash_attention(m);
     bind_hinge_embedding_loss(m);
     bind_kv_caching(m);
+    bind_kimi_attention_residual(m);
     bind_kimi_delta_attention(m);
     bind_fmod(m);
     bind_fp8_indexer_logits(m);

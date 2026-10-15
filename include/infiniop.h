@@ -79,6 +79,7 @@
 #include "infiniop/ops/index_copy.h"
 #include "infiniop/ops/inner.h"
 #include "infiniop/ops/int8_gemm.h"
+#include "infiniop/ops/kimi_attention_residual.h"
 #include "infiniop/ops/kimi_delta_attention.h"
 #include "infiniop/ops/kron.h"
 #include "infiniop/ops/kthvalue.h"

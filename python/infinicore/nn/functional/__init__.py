@@ -21,6 +21,7 @@ from .hardtanh import hardtanh
 from .hinge_embedding_loss import hinge_embedding_loss
 from .huber_loss import huber_loss
 from .interpolate import interpolate
+from .kimi_attention_residual import kimi_attention_residual
 from .kimi_delta_attention import kimi_delta_attention
 from .layer_norm import layer_norm
 from .linear import linear
@@ -70,6 +71,7 @@ __all__ = [
     "ACT_SWIGLU",
     "gaussian_nll_loss",
     "interpolate",
+    "kimi_attention_residual",
     "kimi_delta_attention",
     "linear",
     "linear_mxfp4",

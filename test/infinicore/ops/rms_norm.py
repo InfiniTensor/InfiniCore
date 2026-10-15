@@ -28,6 +28,7 @@ _TEST_CASES_DATA = [
     # Large tensors
     ((16, 2048), (16, 2048), (2048,), None, None),
     ((16, 2048), (16, 2048), (2048,), (4096, 1), (4096, 1)),
+    ((1, 8, 7168), (1, 8, 7168), (7168,), None, None),
 ]
 
 # Tolerance configuration
