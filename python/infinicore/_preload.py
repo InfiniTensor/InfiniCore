@@ -158,6 +158,18 @@ def preload_flash_attn() -> None:
             continue
 
 
+def preload_aiter() -> None:
+    """Best-effort registration of AITER operators used by Hygon backends."""
+    try:
+        import aiter.ops.pos_encoding  # noqa: F401
+    except Exception:
+        pass
+    try:
+        import aiter.fused_moe_c  # noqa: F401
+    except Exception:
+        pass
+
+
 def preload_cambricon() -> None:
     """Import torch and torch_mlu for shared-library and backend setup."""
     preload_torch()
@@ -212,6 +224,7 @@ def preload_device(device_type: str) -> None:
         preload_torch()
         preload_torch_hip()
         preload_flash_attn()
+        preload_aiter()
     elif device_type == "ASCEND":
         preload_torch()
     # Add other device preload functions here as needed:

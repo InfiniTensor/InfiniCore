@@ -93,16 +93,14 @@ INFINIOP_CUDA_KERNEL addRmsnormContiguousVectorKernel(
     __syncthreads();
 
     for (size_t vector_idx = threadIdx.x; vector_idx < vector_count; vector_idx += BLOCK_SIZE) {
-        const auto a_value = reinterpret_cast<const Vector8<Tdata> *>(a_row)[vector_idx];
-        const auto b_value = reinterpret_cast<const Vector8<Tdata> *>(b_row)[vector_idx];
+        const auto residual_value = reinterpret_cast<const Vector8<Tdata> *>(residual_row)[vector_idx];
         const auto weight = reinterpret_cast<const Vector8<Tdata> *>(w)[vector_idx];
         Vector8<Tdata> output;
 #pragma unroll
         for (size_t i = 0; i < 8; ++i) {
-            const float sum = static_cast<float>(a_value.values[i])
-                            + static_cast<float>(b_value.values[i]);
             output.values[i] = static_cast<Tdata>(
-                sum * static_cast<float>(weight.values[i]) * inverse_rms);
+                static_cast<float>(residual_value.values[i])
+                * static_cast<float>(weight.values[i]) * inverse_rms);
         }
         reinterpret_cast<Vector8<Tdata> *>(y_row)[vector_idx] = output;
     }

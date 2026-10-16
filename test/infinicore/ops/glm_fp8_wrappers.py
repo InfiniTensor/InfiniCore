@@ -174,6 +174,70 @@ def test_indexer_logits():
     )
 
 
+def test_dsa_topk_clears_unused_entries():
+    logits = torch.tensor(
+        [[0.1, 0.4, -0.2, 0.3, -1.0, -2.0]],
+        device="cuda",
+        dtype=torch.float32,
+    )
+    output = torch.full((1, 8), 12345, device="cuda", dtype=torch.int32)
+    seq_lens = torch.tensor([4], device="cuda", dtype=torch.int32)
+    tensors = [wrap(x) for x in (output, logits, seq_lens)]
+    _infinicore.select_decode_topk_block_indices_(
+        *(x._underlying for x in tensors)
+    )
+    sync()
+
+    valid = output[0, :4]
+    assert torch.equal(valid.sort().values, torch.arange(4, device="cuda"))
+    assert torch.equal(output[0, 4:], torch.full_like(output[0, 4:], -1))
+
+
+def test_dsa_mapping_preserves_unused_entries():
+    request_ids = torch.tensor([0], device="cuda", dtype=torch.int32)
+    block_table = torch.tensor([[2, 5]], device="cuda", dtype=torch.int32)
+    token_indices = torch.tensor(
+        [[0, 1, 63, 64, 65, 127, 128, 32768]],
+        device="cuda",
+        dtype=torch.int32,
+    )
+    output = torch.full_like(token_indices, 12345)
+    tensors = [wrap(x) for x in (output, request_ids, block_table, token_indices)]
+    _infinicore.map_decode_request_block_indices_(
+        *(x._underlying for x in tensors), 64
+    )
+    sync()
+
+    expected = torch.tensor(
+        [[128, 129, 191, 320, 321, 383, -1, -1]],
+        device="cuda",
+        dtype=torch.int32,
+    )
+    assert torch.equal(output, expected)
+
+
+def test_dsa_mapping_production_width():
+    torch.manual_seed(27)
+    request_ids = torch.tensor([0], device="cuda", dtype=torch.int32)
+    block_table = torch.arange(65, device="cuda", dtype=torch.int32).view(1, 65)
+    token_indices = torch.randperm(4097, device="cuda", dtype=torch.int32)[
+        :2048
+    ].view(1, 2048)
+    token_indices[0, -2:] = torch.tensor(
+        [-1, 32768], device="cuda", dtype=torch.int32
+    )
+    output = torch.empty_like(token_indices)
+    tensors = [wrap(x) for x in (output, request_ids, block_table, token_indices)]
+    _infinicore.map_decode_request_block_indices_(
+        *(x._underlying for x in tensors), 64
+    )
+    sync()
+
+    expected = token_indices.clone()
+    expected[0, -2:] = -1
+    assert torch.equal(output, expected)
+
+
 def test_select_last_token_hidden():
     torch.manual_seed(24)
     hidden = torch.randn(1, 9, 16, device="cuda", dtype=torch.bfloat16)
@@ -185,10 +249,162 @@ def test_select_last_token_hidden():
     torch.testing.assert_close(output, hidden[:, [1, 4, 8]], rtol=0, atol=0)
 
 
+def test_hygon_flash_mla_sparse():
+    torch.manual_seed(25)
+    tokens, heads, topk = 96, 8, 128
+    compressed = torch.randn(tokens, 512, device="cuda", dtype=torch.bfloat16)
+    norm_weight = torch.randn(512, device="cuda", dtype=torch.bfloat16)
+    rope = torch.randn(tokens, 64, device="cuda", dtype=torch.bfloat16)
+    slots = torch.arange(tokens, device="cuda", dtype=torch.int64)
+    cache = torch.zeros(2, 64, 656, device="cuda", dtype=torch.uint8)
+    vendor = torch.zeros(2, 64, 576, device="cuda", dtype=torch.bfloat16)
+    cache_tensors = [
+        wrap(x) for x in (cache, vendor, compressed, norm_weight, rope, slots)
+    ]
+    _infinicore.fp8_mla_rmsnorm_dual_cache_(
+        *(x._underlying for x in cache_tensors), 1.0e-5
+    )
+    sync()
+
+    scale = float(576**-0.5)
+    kv = vendor.view(-1, 576)
+
+    prefill_tokens = 7
+    prefill_query = torch.randn(
+        prefill_tokens, heads, 576, device="cuda", dtype=torch.bfloat16
+    )
+    prefill_indices = torch.full(
+        (prefill_tokens, 1, topk), -1, device="cuda", dtype=torch.int32
+    )
+    prefill_indices[:, :, :tokens] = torch.arange(
+        tokens, device="cuda", dtype=torch.int32
+    )
+    prefill_lens = torch.full(
+        (prefill_tokens,), tokens, device="cuda", dtype=torch.int32
+    )
+    prefill_output = torch.empty(
+        prefill_tokens, heads, 512, device="cuda", dtype=torch.bfloat16
+    )
+    prefill_tensors = [
+        wrap(x)
+        for x in (
+            prefill_output,
+            prefill_query,
+            kv.view(-1, 1, 576),
+            prefill_indices,
+            prefill_lens,
+        )
+    ]
+    _infinicore.flash_mla_sparse_prefill_(
+        *(x._underlying for x in prefill_tensors), scale
+    )
+    sync()
+    logits = torch.einsum(
+        "thd,kd->thk", prefill_query.float(), kv[:tokens].float()
+    ) * scale
+    expected_prefill = torch.einsum(
+        "thk,kv->thv", torch.softmax(logits, dim=-1), kv[:tokens, :512].float()
+    )
+    torch.testing.assert_close(
+        prefill_output.float(), expected_prefill, rtol=0.03, atol=0.04
+    )
+
+    decode_query = torch.randn(2, heads, 576, device="cuda", dtype=torch.bfloat16)
+    decode_indices = torch.full(
+        (2, 1, topk), -1, device="cuda", dtype=torch.int32
+    )
+    decode_lens = torch.tensor([64, tokens], device="cuda", dtype=torch.int32)
+    for batch, length in enumerate(decode_lens.tolist()):
+        decode_indices[batch, :, :length] = torch.arange(
+            length, device="cuda", dtype=torch.int32
+        )
+    decode_output = torch.empty(2, heads, 512, device="cuda", dtype=torch.bfloat16)
+    decode_tensors = [
+        wrap(x)
+        for x in (
+            decode_output,
+            decode_query,
+            cache.view(2, 64, 1, 656),
+            decode_indices,
+            decode_lens,
+        )
+    ]
+    _infinicore.flash_mla_sparse_decode_(
+        *(x._underlying for x in decode_tensors), scale
+    )
+    sync()
+    expected_decode = []
+    for batch, length in enumerate(decode_lens.tolist()):
+        scores = torch.einsum(
+            "hd,kd->hk", decode_query[batch].float(), kv[:length].float()
+        ) * scale
+        expected_decode.append(
+            torch.einsum(
+                "hk,kv->hv", torch.softmax(scores, dim=-1), kv[:length, :512].float()
+            )
+        )
+    torch.testing.assert_close(
+        decode_output.float(),
+        torch.stack(expected_decode),
+        rtol=0.03,
+        atol=0.04,
+    )
+
+
+def test_hygon_flash_mla_sparse_decode_production_shape():
+    torch.manual_seed(26)
+    tokens, heads, topk, blocks = 4096, 8, 2048, 65
+    compressed = torch.randn(tokens, 512, device="cuda", dtype=torch.bfloat16)
+    norm_weight = torch.randn(512, device="cuda", dtype=torch.bfloat16)
+    rope = torch.randn(tokens, 64, device="cuda", dtype=torch.bfloat16)
+    slots = torch.arange(tokens, device="cuda", dtype=torch.int64)
+    cache = torch.zeros(blocks, 64, 656, device="cuda", dtype=torch.uint8)
+    vendor = torch.zeros(blocks, 64, 576, device="cuda", dtype=torch.bfloat16)
+    cache_tensors = [
+        wrap(x) for x in (cache, vendor, compressed, norm_weight, rope, slots)
+    ]
+    _infinicore.fp8_mla_rmsnorm_dual_cache_(
+        *(x._underlying for x in cache_tensors), 1.0e-5
+    )
+    sync()
+
+    query = torch.randn(1, heads, 576, device="cuda", dtype=torch.bfloat16)
+    indices = torch.arange(topk, device="cuda", dtype=torch.int32).view(1, 1, topk)
+    lens = torch.tensor([topk], device="cuda", dtype=torch.int32)
+    output = torch.empty(1, heads, 512, device="cuda", dtype=torch.bfloat16)
+    tensors = [
+        wrap(x)
+        for x in (
+            output,
+            query,
+            cache.view(blocks, 64, 1, 656),
+            indices,
+            lens,
+        )
+    ]
+    scale = float(576**-0.5)
+    _infinicore.flash_mla_sparse_decode_(
+        *(x._underlying for x in tensors), scale
+    )
+    sync()
+
+    kv = vendor.view(-1, 576)[:topk].float()
+    scores = torch.einsum("bhd,kd->bhk", query.float(), kv) * scale
+    expected = torch.einsum(
+        "bhk,kv->bhv", torch.softmax(scores, dim=-1), kv[:, :512]
+    )
+    torch.testing.assert_close(output.float(), expected, rtol=0.03, atol=0.04)
+
+
 if __name__ == "__main__":
     test_indexer_quant()
     test_fused_indexer()
     test_mla_cache_and_sparse()
     test_indexer_logits()
+    test_dsa_topk_clears_unused_entries()
+    test_dsa_mapping_preserves_unused_entries()
+    test_dsa_mapping_production_width()
     test_select_last_token_hidden()
+    test_hygon_flash_mla_sparse()
+    test_hygon_flash_mla_sparse_decode_production_shape()
     print("GLM FP8 InfiniCore wrapper tests passed")

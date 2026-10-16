@@ -51,7 +51,9 @@ struct AtenTensorCacheKeyHash {
 } // namespace
 #endif
 
-at::Tensor to_aten_tensor(const infinicore::Tensor &t) {
+namespace {
+
+at::Tensor to_aten_tensor_impl(const infinicore::Tensor &t, at::ScalarType dtype) {
     void *data_ptr = (void *)(t->data());
 
     auto sizes = std::vector<int64_t>(
@@ -74,7 +76,7 @@ at::Tensor to_aten_tensor(const infinicore::Tensor &t) {
         data_ptr,
         sizes,
         strides,
-        static_cast<int>(t->dtype()),
+        static_cast<int>(dtype),
         static_cast<int>(t->device().getType()),
         static_cast<int>(t->device().getIndex()),
     };
@@ -88,7 +90,6 @@ at::Tensor to_aten_tensor(const infinicore::Tensor &t) {
     auto strides = t->strides();
 #endif
 
-    auto dtype = to_at_dtype(t->dtype());
     auto device = to_at_device(t->device());
 
     auto deleter_ = [](void * /*unused*/) mutable {
@@ -118,6 +119,16 @@ at::Tensor to_aten_tensor(const infinicore::Tensor &t) {
     }
 #endif
     return result;
+}
+
+} // namespace
+
+at::Tensor to_aten_tensor(const infinicore::Tensor &t) {
+    return to_aten_tensor_impl(t, to_at_dtype(t->dtype()));
+}
+
+at::Tensor to_aten_tensor(const infinicore::Tensor &t, at::ScalarType dtype) {
+    return to_aten_tensor_impl(t, dtype);
 }
 
 #if defined(ENABLE_HYGON_API)

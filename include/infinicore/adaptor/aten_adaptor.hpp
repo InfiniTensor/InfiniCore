@@ -92,6 +92,7 @@ inline at::Device to_at_device(const Device &device) {
 }
 
 at::Tensor to_aten_tensor(const infinicore::Tensor &t);
+at::Tensor to_aten_tensor(const infinicore::Tensor &t, at::ScalarType dtype);
 
 #if defined(ENABLE_HYGON_API)
 #if INFINICORE_TORCH_VERSION_GE_2_11
