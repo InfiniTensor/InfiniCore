@@ -116,18 +116,45 @@ infiniStatus_t Descriptor::calculate(
     size_t nhead = _info.shape.size() > 2 ? _info.shape[1] : 1;
     auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
 
-    // launch kernel with different block sizes
-    if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_4096) {
-        CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_4096>(batch_size, nhead, dim, y, _info.atype, stride_y_batch, stride_y_nhead, x, stride_x_batch, stride_x_nhead, w, _info.wtype, _info.epsilon, cuda_stream));
-    } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_2048) {
-        CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_2048>(batch_size, nhead, dim, y, _info.atype, stride_y_batch, stride_y_nhead, x, stride_x_batch, stride_x_nhead, w, _info.wtype, _info.epsilon, cuda_stream));
-    } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_1024) {
-        CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_1024>(batch_size, nhead, dim, y, _info.atype, stride_y_batch, stride_y_nhead, x, stride_x_batch, stride_x_nhead, w, _info.wtype, _info.epsilon, cuda_stream));
-    } else if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_512) {
-        CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_512>(batch_size, nhead, dim, y, _info.atype, stride_y_batch, stride_y_nhead, x, stride_x_batch, stride_x_nhead, w, _info.wtype, _info.epsilon, cuda_stream));
+#define LAUNCH_RMS_NORM(BLOCK_SIZE)                                         \
+    CHECK_STATUS(launchKernel<BLOCK_SIZE>(                                  \
+        batch_size, nhead, dim, y, _info.atype, stride_y_batch,             \
+        stride_y_nhead, x, stride_x_batch, stride_x_nhead, w, _info.wtype,  \
+        _info.epsilon, cuda_stream))
+
+    uint32_t block_size = _opaque->internal->maxThreadsPerBlock();
+    if (dim <= CUDA_BLOCK_SIZE_128) {
+        block_size = CUDA_BLOCK_SIZE_128;
+    } else if (dim <= CUDA_BLOCK_SIZE_256) {
+        block_size = CUDA_BLOCK_SIZE_256;
+    } else if (dim <= CUDA_BLOCK_SIZE_512) {
+        block_size = CUDA_BLOCK_SIZE_512;
+    } else if (dim <= CUDA_BLOCK_SIZE_1024) {
+        block_size = CUDA_BLOCK_SIZE_1024;
+    } else if (dim <= CUDA_BLOCK_SIZE_2048) {
+        block_size = CUDA_BLOCK_SIZE_2048;
+    }
+    if (block_size > _opaque->internal->maxThreadsPerBlock()) {
+        block_size = _opaque->internal->maxThreadsPerBlock();
+    }
+
+    if (block_size == CUDA_BLOCK_SIZE_4096) {
+        LAUNCH_RMS_NORM(CUDA_BLOCK_SIZE_4096);
+    } else if (block_size == CUDA_BLOCK_SIZE_2048) {
+        LAUNCH_RMS_NORM(CUDA_BLOCK_SIZE_2048);
+    } else if (block_size == CUDA_BLOCK_SIZE_1024) {
+        LAUNCH_RMS_NORM(CUDA_BLOCK_SIZE_1024);
+    } else if (block_size == CUDA_BLOCK_SIZE_512) {
+        LAUNCH_RMS_NORM(CUDA_BLOCK_SIZE_512);
+    } else if (block_size == CUDA_BLOCK_SIZE_256) {
+        LAUNCH_RMS_NORM(CUDA_BLOCK_SIZE_256);
+    } else if (block_size == CUDA_BLOCK_SIZE_128) {
+        LAUNCH_RMS_NORM(CUDA_BLOCK_SIZE_128);
     } else {
         return INFINI_STATUS_DEVICE_ARCHITECTURE_NOT_SUPPORTED;
     }
+
+#undef LAUNCH_RMS_NORM
     return INFINI_STATUS_SUCCESS;
 }
 } // namespace op::rms_norm::nvidia

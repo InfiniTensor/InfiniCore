@@ -84,7 +84,9 @@ infiniStatus_t calculateRoPE(const RoPEInfo &info,
     // For 3D tensors, batch dimension is not in blockIdx
     auto dimz = info.has_batch_dim ? uint32_t(info.batch) : 1;
 
-    int nthreads = std::max(int(info.table_dim), block_size);
+    // The kernel loops over table_dim with blockDim.x stride. Launching the
+    // device maximum here wastes 32x threads for Qwen3 head_dim=128.
+    int nthreads = std::min(int(info.table_dim), block_size);
     bool is_gpt_j = info.algo == infiniopRoPEAlgo_t::INFINIOP_ROPE_ALGO_GPT_J;
 
     // Calculate position ID stride for batch dimension

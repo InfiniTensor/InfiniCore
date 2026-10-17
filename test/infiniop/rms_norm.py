@@ -25,6 +25,7 @@ from libinfiniop import (
 _TEST_CASES_ = [
     # y_shape, x_shape, w_shape, y_stride, x_stride
     ((1, 4), (1, 4), (4,), None, None),
+    ((16384, 32, 128), (16384, 32, 128), (128,), None, None),
     ((2, 4), (2, 4), (4,), None, None),
     ((2, 2, 4), (2, 2, 4), (4,), None, None),
     ((2, 2, 4), (2, 2, 4), (4,), (12, 8, 1), (12, 8, 1)),

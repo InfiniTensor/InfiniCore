@@ -49,4 +49,16 @@ void paged_attention_prefill_(Tensor out,
                               std::optional<Tensor> alibi_slopes,
                               float scale);
 
+void paged_attention_prefill_mtp_(Tensor out,
+                                  Tensor q,
+                                  Tensor k_cache,
+                                  Tensor v_cache,
+                                  Tensor block_tables,
+                                  Tensor total_kv_lens,
+                                  Tensor cum_seqlens_q,
+                                  std::optional<Tensor> alibi_slopes,
+                                  float scale,
+                                  size_t max_query_len,
+                                  Tensor cu_seqlens_k,
+                                  size_t max_kv_len);
 } // namespace infinicore::op
