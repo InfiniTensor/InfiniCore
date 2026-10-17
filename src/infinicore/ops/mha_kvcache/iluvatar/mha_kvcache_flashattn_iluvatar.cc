@@ -1,4 +1,4 @@
-#if defined(ENABLE_ILUVATAR_FLASH_ATTN)
+#if 0 // CoreX 4.5 wrapper is unavailable in the TY1100 CoreX 4.4 image
 #include "infinicore/ops/mha_kvcache.hpp"
 
 #include "infinicore/adaptor/iluvatar_flash_attention_adaptor.hpp"

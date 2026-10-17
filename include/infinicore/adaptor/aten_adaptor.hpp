@@ -9,7 +9,7 @@
 #if defined(ENABLE_HYGON_API)
 #include <c10/hip/HIPGuard.h>
 #include <c10/hip/HIPStream.h>
-#elif defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API) || defined(ENABLE_ALI_API)
+#elif defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API) || defined(ENABLE_ALI_API) || defined(ENABLE_ILUVATAR_API)
 #include <ATen/cuda/CUDAContext.h>
 #include <c10/cuda/CUDAGuard.h>
 #include <c10/cuda/CUDAStream.h>
@@ -99,7 +99,7 @@ c10::cuda::CUDAStream get_hip_stream();
 #else
 c10::hip::HIPStream get_hip_stream();
 #endif
-#elif defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API) || defined(ENABLE_ALI_API)
+#elif defined(ENABLE_NVIDIA_API) || defined(ENABLE_METAX_API) || defined(ENABLE_QY_API) || defined(ENABLE_ALI_API) || defined(ENABLE_ILUVATAR_API)
 c10::cuda::CUDAStream get_cuda_stream();
 #endif
 

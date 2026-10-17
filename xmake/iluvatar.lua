@@ -1,16 +1,19 @@
 local ILUVATAR_FLASH_ATTN_ROOT = get_config("flash-attn")
 
-local iluvatar_flash_attn_enabled = has_config("use-vendor-ops")
-    or (ILUVATAR_FLASH_ATTN_ROOT and ILUVATAR_FLASH_ATTN_ROOT ~= "")
+local iluvatar_flash_attn_enabled = type(ILUVATAR_FLASH_ATTN_ROOT) == "string"
+    and ILUVATAR_FLASH_ATTN_ROOT ~= ""
 
 local function iluvatar_attention_so_path(iorunv)
     if ILUVATAR_FLASH_ATTN_ROOT and ILUVATAR_FLASH_ATTN_ROOT ~= "" then
-        local candidates = os.files(path.join(
-            ILUVATAR_FLASH_ATTN_ROOT,
-            "_C.cpython-*.so"
-        ))
+        local candidates = os.files(path.join(ILUVATAR_FLASH_ATTN_ROOT, "libixformer.so"))
         if #candidates == 0 then
-            candidates = os.files(path.join(ILUVATAR_FLASH_ATTN_ROOT, "_C*.so"))
+            candidates = os.files(path.join(root, "_C.cpython-*.so"))
+        end
+        if #candidates == 0 then
+            candidates = os.files(path.join(root, "_C*.so"))
+        end
+        if #candidates == 0 then
+            candidates = os.files(path.join(root, "libcuinfer.so.7"))
         end
         if #candidates > 0 then
             return candidates[1]
@@ -39,6 +42,7 @@ end
 target("infinicore_cpp_api")
     if iluvatar_flash_attn_enabled then
         add_defines("ENABLE_ILUVATAR_FLASH_ATTN")
+        add_defines("ENABLE_ILUVATAR_COREX44_PAGE_ATTENTION")
     end
 
     if has_config("use-vendor-ops") then

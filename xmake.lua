@@ -1,6 +1,4 @@
 add_rules("mode.debug", "mode.release")
-add_requires("boost", {configs = {stacktrace = true}})
-add_requires("pybind11")
 
 -- Define color codes
 local GREEN = '\27[0;32m'
@@ -855,7 +853,6 @@ target("infinicore_cpp_api")
     -- pybind11/embed.h for mha_kvcache branch
     if has_config("moore-gpu") and has_config("aten") and has_config("flash-attn") then
         add_defines("ENABLE_MOORE_MATE_FLASH_ATTN")
-        add_packages("pybind11")
     end
 
     before_build(function (target)
@@ -1086,7 +1083,8 @@ target("_infinicore")
 
     set_default(false)
     add_rules("python.library", {soabi = true})
-    add_packages("pybind11")
+    add_includedirs("/usr/local/corex/lib64/python3/dist-packages/pybind11/include")
+    add_includedirs("/usr/local/include/python3.10")
     set_languages("cxx17")
 
     add_deps("infinicore_cpp_api")
