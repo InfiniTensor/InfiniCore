@@ -77,6 +77,7 @@
 #include "ops/ldexp.hpp"
 #include "ops/lerp.hpp"
 #include "ops/linear.hpp"
+#include "ops/linear_w8a16.hpp"
 #include "ops/linear_mxfp4.hpp"
 #include "ops/linear_w8a8i8.hpp"
 #include "ops/log_softmax.hpp"
@@ -248,6 +249,7 @@ inline void bind(py::module &m) {
     bind_logaddexp(m);
     bind_logaddexp2(m);
     bind_linear(m);
+    bind_linear_w8a16(m);
     bind_linear_mxfp4(m);
     bind_logdet(m);
     bind_matmul(m);

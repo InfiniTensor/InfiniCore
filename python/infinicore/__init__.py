@@ -69,6 +69,7 @@ from infinicore.ops.attention import attention
 from infinicore.ops.axpy import axpy
 from infinicore.ops.baddbmm import baddbmm
 from infinicore.ops.bilinear import bilinear
+from infinicore.ops.linear_w8a16 import linear_w8a16
 from infinicore.ops.binary_cross_entropy_with_logits import (
     binary_cross_entropy_with_logits,
 )
@@ -267,6 +268,7 @@ __all__ = [
     "asinh",
     "baddbmm",
     "bilinear",
+    "linear_w8a16",
     "fmod",
     "cast",
     "cat",
