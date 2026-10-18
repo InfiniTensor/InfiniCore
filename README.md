@@ -189,11 +189,17 @@ The NVIDIA native sampling selection belongs to Ops:
 with `WITH_CPU=ON`, `WITH_NVIDIA=ON`, `WITH_TORCH=OFF`, `WITH_LINKED=ON`,
 `BUILD_NVIDIA_FLASH_INFERENCE=ON`, an explicit `FLASH_ATTN_SOURCE_ARCHIVE`
 for flash_attn-2.8.3 and a fixed `FETCHCONTENT_SOURCE_DIR_CUTLASS`.
+The supplied LM profile also selects AWQ/GPTQ: enable
+`BUILD_NVIDIA_W4_MARLIN=ON` for it. Dense-only SDK consumers may leave Marlin
+off and select an operator list without `w4_marlin_*`.
 Prepare compatible `lib/sampling.so`, `lib/libtvm_ffi.so`,
 `python/flashinfer_jit_cache` and `python/tvm_ffi`, including their distribution
 metadata, in that prefix first; expose
 its `python` and `lib` directories through `PYTHONPATH` and `LD_LIBRARY_PATH`
 for the Ops build. Select the same CUDA architecture in each component.
+For the resolved CUDA 12.8 sampling wheel hashes, acquisition/install commands,
+third-party notices and complete Ops configuration, see
+[the Ops inference SDK recipe](submodules/InfiniOps/docs/build-nvidia-inference.md).
 
 Each InfiniCore component has its own build configuration because different hardware platforms require different SDKs, compilers, libraries, and build options.
 
