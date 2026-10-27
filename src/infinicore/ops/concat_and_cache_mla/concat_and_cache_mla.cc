@@ -43,6 +43,10 @@ void validate_concat_and_cache_mla(const Tensor &kv_c,
                || kv_cache->size(kv_cache->ndim() - 1) != head_dim) {
         throw std::runtime_error(
             "concat_and_cache_mla expects kv_cache last dim == kv_c.shape[-1] + k_pe.shape[-1]");
+    } else if (kv_cache_dtype == "auto"
+               && (kv_cache->dtype() != kv_c->dtype() || kv_cache->dtype() != k_pe->dtype())) {
+        throw std::runtime_error(
+            "concat_and_cache_mla expects matching kv_c, k_pe, and kv_cache dtypes for auto cache");
     }
     if (slot_mapping->dtype() != DataType::I64 && slot_mapping->dtype() != DataType::I32) {
         throw std::runtime_error("concat_and_cache_mla expects slot_mapping dtype int64 or int32");

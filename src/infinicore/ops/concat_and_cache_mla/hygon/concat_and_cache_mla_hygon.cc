@@ -16,6 +16,23 @@ void run(const Tensor &kv_c,
          const std::string &kv_cache_dtype,
          Tensor scale) {
     (void)scale;
+    if (kv_cache_dtype == "auto") {
+        auto kv_c_at = adaptor::to_aten_tensor(kv_c);
+        auto k_pe_at = adaptor::to_aten_tensor(k_pe);
+        auto kv_cache_at = adaptor::to_aten_tensor(kv_cache);
+        auto slot_mapping_at = adaptor::to_aten_tensor(slot_mapping);
+        if (slot_mapping_at.scalar_type() != at::ScalarType::Long) {
+            slot_mapping_at = slot_mapping_at.to(at::ScalarType::Long);
+        }
+
+        const auto kv_dim = kv_c_at.size(1);
+        const auto rope_dim = k_pe_at.size(1);
+        auto cache_rows = kv_cache_at.view({-1, kv_dim + rope_dim});
+        cache_rows.narrow(1, 0, kv_dim).index_copy_(0, slot_mapping_at, kv_c_at);
+        cache_rows.narrow(1, kv_dim, rope_dim).index_copy_(0, slot_mapping_at, k_pe_at);
+        return;
+    }
+
     if (!adaptor::hygon_lightop::fused_quantize_and_store_mla_kv_cache_available()) {
         throw std::runtime_error(
             "concat_and_cache_mla requires LightOp on Hygon");

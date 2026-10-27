@@ -38,6 +38,7 @@
 #include "ops/causal_softmax.hpp"
 #include "ops/cdist.hpp"
 #include "ops/chunk_gated_delta_rule.hpp"
+#include "ops/concat_and_cache_mla.hpp"
 #include "ops/conv2d.hpp"
 #include "ops/cross_entropy.hpp"
 #include "ops/diff.hpp"
@@ -158,7 +159,6 @@
 #include "ops/w4a8_moe_shuffle.hpp"
 
 #ifdef ENABLE_VENDOR_OPS
-#include "ops/concat_and_cache_mla.hpp"
 #include "ops/concat_and_cache_mla_int8.hpp"
 #include "ops/concat_mla_q.hpp"
 #include "ops/fused_rotary_embedding.hpp"
@@ -184,8 +184,8 @@ inline void bind(py::module &m) {
   bind_dsa(m);
   bind_fp8_e4m3_dequant(m);
   bind_scaled_mm_w8a8(m);
-#ifdef ENABLE_VENDOR_OPS
   bind_concat_and_cache_mla(m);
+#ifdef ENABLE_VENDOR_OPS
   bind_concat_and_cache_mla_int8(m);
   bind_concat_mla_q(m);
   bind_fused_rotary_embedding(m);
