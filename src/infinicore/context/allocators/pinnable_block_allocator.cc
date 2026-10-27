@@ -45,6 +45,17 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
     // Align size to 256 bytes for GPU
     size = align_up(size, 256);
 
+    // Different prefill batch sizes may leave free blocks in other size classes.
+    // Reclaim only unpinned, unused storage before retrying a failed allocation.
+    auto allocate_device = [&](Block &candidate) {
+        auto status = infinirtMalloc(&candidate.ptr, candidate.size);
+        if (status != INFINI_STATUS_SUCCESS && !pinned_mode_) {
+            trim_unlocked_();
+            status = infinirtMalloc(&candidate.ptr, candidate.size);
+        }
+        INFINICORE_CHECK_ERROR(status);
+    };
+
     std::shared_ptr<Block> block;
 
     // 1. Try size-class allocation for small/medium
@@ -64,6 +75,7 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
                     cls.free_blocks.pop_back();
                     block->in_use = true;
                     block->use_count = 1;
+                    block->frozen = block->frozen || pinned_mode_;
                     return reinterpret_cast<std::byte *>(block->ptr);
                 }
             }
@@ -74,7 +86,7 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
             block->in_use = true;
             block->use_count = 1;
 
-            INFINICORE_CHECK_ERROR(infinirtMalloc(&block->ptr, block->size));
+            allocate_device(*block);
 
             all_blocks_[block->ptr] = block;
             return reinterpret_cast<std::byte *>(block->ptr);
@@ -101,7 +113,7 @@ std::byte *PinnableBlockAllocator::allocate(size_t size) {
     block->in_use = true;
     block->use_count = 1;
 
-    INFINICORE_CHECK_ERROR(infinirtMalloc(&block->ptr, block->size));
+    allocate_device(*block);
 
     large_blocks_.push_back(block);
     all_blocks_[block->ptr] = block;
@@ -151,6 +163,17 @@ size_t PinnableBlockAllocator::mark_in_use_(void *ptr, bool in_use) {
 
     auto block = it->second;
     if (in_use) {
+        if (!block->in_use) {
+            // Graph replay can reactivate a cached block without allocate().
+            // Remove its free-list entry before the next deallocation adds it.
+            for (auto &cls : size_classes_) {
+                if (block->size == cls.block_size) {
+                    auto &free = cls.free_blocks;
+                    free.erase(std::remove(free.begin(), free.end(), block), free.end());
+                    break;
+                }
+            }
+        }
         block->in_use = true;
         ++block->use_count;
     } else if (block->use_count > 0) {
@@ -163,10 +186,14 @@ size_t PinnableBlockAllocator::mark_in_use_(void *ptr, bool in_use) {
 // ------------------- trim -------------------
 void PinnableBlockAllocator::trim() {
     std::lock_guard<std::mutex> lock(mutex_);
+    trim_unlocked_();
+}
+
+void PinnableBlockAllocator::trim_unlocked_() {
     // Free non-frozen size-class blocks
     for (auto &cls : size_classes_) {
         for (auto it = cls.free_blocks.begin(); it != cls.free_blocks.end();) {
-            if (!(*it)->frozen) {
+            if (!(*it)->frozen && !(*it)->in_use) {
                 INFINICORE_CHECK_ERROR(infinirtFree((*it)->ptr));
                 all_blocks_.erase((*it)->ptr);
                 it = cls.free_blocks.erase(it);

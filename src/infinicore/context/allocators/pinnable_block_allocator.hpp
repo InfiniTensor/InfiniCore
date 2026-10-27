@@ -41,6 +41,8 @@ public:
     void trim();
 
 private:
+    // Caller must hold mutex_.
+    void trim_unlocked_();
     Device device_;
 
     bool pinned_mode_ = false;
