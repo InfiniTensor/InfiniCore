@@ -2,6 +2,7 @@
 #include "../../../devices/nvidia/nvidia_kernel_common.cuh"
 #include "chunk_gated_delta_rule_nvidia.cuh"
 
+#include "../../recurrent_gated_delta_rule/cuda/kernel.cuh"
 #include "../cuda/kernel.cuh"
 #include <cuda_runtime.h>
 
@@ -127,6 +128,141 @@ INFINIOP_CUDA_KERNEL chunkGatedDeltaRuleChunked(
         k_s2, v_s0, v_s1, v_s2, g_s0, g_s1, g_s2, beta_s0, beta_s1, beta_s2);
 }
 
+template <typename Tdata, typename Tgate, typename Tcompute, size_t Dk, size_t Dv, size_t NUM_THREADS>
+INFINIOP_CUDA_KERNEL chunkGatedDeltaRuleWarp(
+    Tcompute *state_workspace,
+    Tdata *out,
+    Tdata *initial_state,
+    Tdata *final_state,
+    const Tdata *q,
+    const Tdata *k,
+    const Tdata *v,
+    const Tgate *g,
+    const Tgate *beta,
+    const void *cu_seqlens,
+    const void *initial_state_indices,
+    const void *final_state_indices,
+    bool cu_seqlens_i64,
+    bool initial_state_indices_i64,
+    bool final_state_indices_i64,
+    bool use_qk_l2norm,
+    bool has_cu_seqlens,
+    bool indexed_state_pool,
+    size_t T,
+    size_t chunk_size,
+    size_t pool_size,
+    size_t Hk,
+    size_t value_heads_per_key_head,
+    ptrdiff_t out_s0,
+    ptrdiff_t out_s1,
+    ptrdiff_t out_s2,
+    ptrdiff_t initial_s0,
+    ptrdiff_t initial_s1,
+    ptrdiff_t initial_s2,
+    ptrdiff_t initial_s3,
+    ptrdiff_t final_s0,
+    ptrdiff_t final_s1,
+    ptrdiff_t final_s2,
+    ptrdiff_t final_s3,
+    ptrdiff_t q_s0,
+    ptrdiff_t q_s1,
+    ptrdiff_t q_s2,
+    ptrdiff_t k_s0,
+    ptrdiff_t k_s1,
+    ptrdiff_t k_s2,
+    ptrdiff_t v_s0,
+    ptrdiff_t v_s1,
+    ptrdiff_t v_s2,
+    ptrdiff_t g_s0,
+    ptrdiff_t g_s1,
+    ptrdiff_t g_s2,
+    ptrdiff_t beta_s0,
+    ptrdiff_t beta_s1,
+    ptrdiff_t beta_s2) {
+    // Keep each value row in registers for the complete variable-length sequence.
+    // Warps are independent: no block barriers or global state scratch per token.
+    namespace rd = op::recurrent_gated_delta_rule::cuda;
+    constexpr int W = INFINIOP_RECURRENT_DELTA_RULE_WARP_SIZE;
+    constexpr int WARPS = NUM_THREADS / W;
+    const int batch = blockIdx.x, head = blockIdx.y;
+    const int kh = head / value_heads_per_key_head;
+    const int lane = threadIdx.x % W;
+    constexpr int ROWS = 8;
+    const int dv = (blockIdx.z * WARPS + threadIdx.x / W) * ROWS;
+    const int tb = has_cu_seqlens ? 0 : batch;
+    const int64_t begin = has_cu_seqlens ? rd::loadOptionalIndex(cu_seqlens, cu_seqlens_i64, batch, 0) : 0;
+    const int64_t end = has_cu_seqlens ? rd::loadOptionalIndex(cu_seqlens, cu_seqlens_i64, batch + 1, T) : T;
+    const int64_t read = indexed_state_pool ? rd::loadOptionalIndex(initial_state_indices, initial_state_indices_i64, batch, batch) : batch;
+    const int64_t write = final_state_indices ? rd::loadOptionalIndex(final_state_indices, final_state_indices_i64, batch, batch) : batch;
+    if (dv >= Dv || begin < 0 || end < begin || end > T || read < 0 || read >= pool_size || write < 0 || write >= pool_size) {
+        return;
+    }
+    float state[ROWS][Dk / W];
+    const ptrdiff_t sb = read * initial_s0 + head * initial_s1 + dv * initial_s2;
+#pragma unroll
+    for (int r = 0; r < ROWS; ++r) {
+#pragma unroll
+        for (int i = 0; i < Dk / W; ++i) {
+            state[r][i] = rd::loadAsFloat(initial_state, sb + r * initial_s2 + (lane + i * W) * initial_s3);
+        }
+    }
+    for (int64_t t = begin; t < end; ++t) {
+        float ql[Dk / W], kl[Dk / W];
+        float q2 = 0, k2 = 0;
+#pragma unroll
+        for (int i = 0; i < Dk / W; ++i) {
+            ql[i] = rd::loadAsFloat(q, tb * q_s0 + t * q_s1 + kh * q_s2 + lane + i * W);
+            kl[i] = rd::loadAsFloat(k, tb * k_s0 + t * k_s1 + kh * k_s2 + lane + i * W);
+            q2 += ql[i] * ql[i];
+            k2 += kl[i] * kl[i];
+        }
+        const float qs = rsqrtf(float(Dk)) * (use_qk_l2norm ? rsqrtf(rd::warpReduceSum(q2) + 1e-6f) : 1.0f);
+        const float ks = use_qk_l2norm ? rsqrtf(rd::warpReduceSum(k2) + 1e-6f) : 1.0f;
+        const float decay = expf(rd::loadAsFloat(g, tb * g_s0 + t * g_s1 + head * g_s2));
+        const float bt = rd::loadAsFloat(beta, tb * beta_s0 + t * beta_s1 + head * beta_s2);
+        float kq = 0;
+#pragma unroll
+        for (int i = 0; i < Dk / W; ++i) {
+            ql[i] *= qs;
+            kl[i] *= ks;
+            kq += kl[i] * ql[i];
+        }
+        kq = rd::warpReduceSum(kq);
+#pragma unroll
+        for (int r = 0; r < ROWS; ++r) {
+            float kv = 0, hq = 0;
+#pragma unroll
+            for (int i = 0; i < Dk / W; ++i) {
+                state[r][i] *= decay;
+                kv += state[r][i] * kl[i];
+                hq += state[r][i] * ql[i];
+            }
+            kv = rd::warpReduceSum(kv);
+            hq = rd::warpReduceSum(hq);
+            const float vv = rd::loadAsFloat(v, tb * v_s0 + t * v_s1 + head * v_s2 + dv + r);
+            const float delta = (vv - kv) * bt;
+            if (lane == 0) {
+                out[tb * out_s0 + t * out_s1 + head * out_s2 + dv + r] = static_cast<Tdata>(hq + delta * kq);
+            }
+#pragma unroll
+            for (int i = 0; i < Dk / W; ++i) {
+                state[r][i] += kl[i] * delta;
+            }
+        }
+    }
+
+    Tdata *target = final_state_indices ? initial_state : final_state;
+    const ptrdiff_t fb = final_state_indices ? write * initial_s0 + head * initial_s1 + dv * initial_s2 : batch * final_s0 + head * final_s1 + dv * final_s2;
+    const ptrdiff_t fs = final_state_indices ? initial_s3 : final_s3;
+#pragma unroll
+    for (int r = 0; r < ROWS; ++r) {
+#pragma unroll
+        for (int i = 0; i < Dk / W; ++i) {
+            target[fb + r * (final_state_indices ? initial_s2 : final_s2) + (lane + i * W) * fs] = static_cast<Tdata>(state[r][i]);
+        }
+    }
+}
+
 namespace op {
 namespace chunk_gated_delta_rule {
 namespace nvidia {
@@ -209,17 +345,21 @@ infiniStatus_t launchKernelWithGateDtype(
         info.v_strides[1], info.v_strides[2], info.g_strides[0], info.g_strides[1], info.g_strides[2],                                          \
         info.beta_strides[0], info.beta_strides[1], info.beta_strides[2]
 
-#define LAUNCH_GATE(TYPE)                                                                 \
-    do {                                                                                  \
-        if (false) {                                                                      \
-            chunkGatedDeltaRuleChunked<Tdata, TYPE, float, Dk, Dv, NUM_THREADS>           \
-                <<<dim3(uint32_t(info.B), uint32_t(info.Hv), 1), dim3(NUM_THREADS),       \
-                   (Dk + Dk + NUM_THREADS) * sizeof(float), stream>>>(LAUNCH_ARGS(TYPE)); \
-        } else {                                                                          \
-            chunkGatedDeltaRule<Tdata, TYPE, float, Dk, Dv, NUM_THREADS>                  \
-                <<<dim3(uint32_t(info.B), uint32_t(info.Hv), 1), dim3(NUM_THREADS),       \
-                   (Dk + Dk + NUM_THREADS) * sizeof(float), stream>>>(LAUNCH_ARGS(TYPE)); \
-        }                                                                                 \
+#define LAUNCH_GATE(TYPE)                                                                                       \
+    do {                                                                                                        \
+        if (info.Hk == 16 && info.Hv == 32 && Dk == 128 && Dv == 128) {                                         \
+            chunkGatedDeltaRuleWarp<Tdata, TYPE, float, Dk, Dv, NUM_THREADS>                                    \
+                <<<dim3(uint32_t(info.B), uint32_t(info.Hv), Dv / (8 * (NUM_THREADS / 32))), dim3(NUM_THREADS), \
+                   (3 * Dk + NUM_THREADS + 1) * sizeof(float), stream>>>(LAUNCH_ARGS(TYPE));                    \
+        } else if (false) {                                                                                     \
+            chunkGatedDeltaRuleChunked<Tdata, TYPE, float, Dk, Dv, NUM_THREADS>                                 \
+                <<<dim3(uint32_t(info.B), uint32_t(info.Hv), 1), dim3(NUM_THREADS),                             \
+                   (Dk + Dk + NUM_THREADS) * sizeof(float), stream>>>(LAUNCH_ARGS(TYPE));                       \
+        } else {                                                                                                \
+            chunkGatedDeltaRule<Tdata, TYPE, float, Dk, Dv, NUM_THREADS>                                        \
+                <<<dim3(uint32_t(info.B), uint32_t(info.Hv), 1), dim3(NUM_THREADS),                             \
+                   (Dk + Dk + NUM_THREADS) * sizeof(float), stream>>>(LAUNCH_ARGS(TYPE));                       \
+        }                                                                                                       \
     } while (0)
 
     if (info.gate_dtype == INFINI_DTYPE_F16) {

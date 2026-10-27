@@ -163,7 +163,7 @@ __device__ void recurrentDeltaRuleWarpSequence(
         write_slot = final_state_indices == nullptr
                        ? static_cast<int64_t>(batch_idx)
                        : loadOptionalIndex(
-                           final_state_indices, final_state_indices_i64, batch_idx, batch_idx);
+                             final_state_indices, final_state_indices_i64, batch_idx, batch_idx);
         if (read_slot < 0 || write_slot < 0 || read_slot >= static_cast<int64_t>(pool_size) || write_slot >= static_cast<int64_t>(pool_size)) {
             if (valid_value_dim && lane_idx == 0) {
                 const int token_batch = has_cu_seqlens ? 0 : batch_idx;
@@ -189,9 +189,9 @@ __device__ void recurrentDeltaRuleWarpSequence(
     for (int i = 0; i < STATE_VALUES_PER_LANE; ++i) {
         const int key_dim_idx = lane_idx + i * WARP_SIZE;
         state[i] = valid_value_dim && key_dim_idx < static_cast<int>(Dk)
-                     ? static_cast<Tcompute>(loadAsFloat(
-                         initial_state,
-                         initial_base + static_cast<ptrdiff_t>(key_dim_idx) * initial_s3))
+                     ? static_cast<Tcompute>(op::recurrent_gated_delta_rule::cuda::loadAsFloat(
+                           initial_state,
+                           initial_base + static_cast<ptrdiff_t>(key_dim_idx) * initial_s3))
                      : static_cast<Tcompute>(0);
     }
 
@@ -210,8 +210,8 @@ __device__ void recurrentDeltaRuleWarpSequence(
         Tcompute k_sum = 0;
         for (int key_dim_idx = threadIdx.x; key_dim_idx < static_cast<int>(Dk);
              key_dim_idx += NUM_THREADS) {
-            const Tcompute q_value = static_cast<Tcompute>(loadAsFloat(q, q_base + key_dim_idx));
-            const Tcompute k_value = static_cast<Tcompute>(loadAsFloat(k, k_base + key_dim_idx));
+            const Tcompute q_value = static_cast<Tcompute>(op::recurrent_gated_delta_rule::cuda::loadAsFloat(q, q_base + key_dim_idx));
+            const Tcompute k_value = static_cast<Tcompute>(op::recurrent_gated_delta_rule::cuda::loadAsFloat(k, k_base + key_dim_idx));
             q_local[key_dim_idx] = q_value;
             k_local[key_dim_idx] = k_value;
             q_sum += q_value * q_value;
@@ -263,7 +263,7 @@ __device__ void recurrentDeltaRuleWarpSequence(
         Tcompute delta = 0;
         if (valid_value_dim && lane_idx == 0) {
             const ptrdiff_t v_base = static_cast<ptrdiff_t>(token_batch) * v_s0 + static_cast<ptrdiff_t>(token_idx) * v_s1 + static_cast<ptrdiff_t>(value_head_idx) * v_s2;
-            const Tcompute v_value = static_cast<Tcompute>(loadAsFloat(v, v_base + value_dim_idx));
+            const Tcompute v_value = static_cast<Tcompute>(op::recurrent_gated_delta_rule::cuda::loadAsFloat(v, v_base + value_dim_idx));
             delta = (v_value - kv_memory) * beta_shared[0];
             const ptrdiff_t out_base = static_cast<ptrdiff_t>(token_batch) * out_s0 + static_cast<ptrdiff_t>(token_idx) * out_s1 + static_cast<ptrdiff_t>(value_head_idx) * out_s2;
             out[out_base + value_dim_idx] = static_cast<Tdata>(hq_memory + delta * kq_memory);

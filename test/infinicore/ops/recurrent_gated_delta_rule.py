@@ -18,6 +18,9 @@ import infinicore
 # Test cases:
 # (B, T, Hk, Hv, Dk, Dv, use_qk_l2norm, strided_qkv)
 _TEST_CASES = [
+    (1, 1, 16, 32, 128, 128, True, False),
+    (4, 1, 16, 32, 128, 128, False, True),
+    (16, 1, 16, 32, 128, 128, True, True),
     (7, 1, 40, 40, 128, 128, True, False),
     (5, 1, 64, 64, 128, 128, False, False),
     (1, 1, 8, 8, 64, 64, True, False),

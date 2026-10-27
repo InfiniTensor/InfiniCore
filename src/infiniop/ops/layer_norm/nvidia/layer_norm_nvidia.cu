@@ -155,7 +155,11 @@ infiniStatus_t calculate_layer_norm(
                                                     info.bias_exist);
     } else {
         constexpr unsigned int BLOCK_SIZE_x = 32;
+#if defined(ENABLE_ILUVATAR_API)
+        constexpr unsigned int BLOCK_SIZE_y = 8;
+#else
         constexpr unsigned int BLOCK_SIZE_y = 32;
+#endif
 
         int num_block_x = (num_blocks + BLOCK_SIZE_y - 1) / BLOCK_SIZE_y;
         dim3 block_dim(BLOCK_SIZE_x, BLOCK_SIZE_y, 1);
@@ -249,6 +253,10 @@ infiniStatus_t Descriptor::calculate(
         else                                                        \
             return INFINI_STATUS_BAD_TENSOR_DTYPE;                  \
     }
+
+#if defined(ENABLE_ILUVATAR_API)
+    CALCULATE_LAYER_NORM_WITH_BLOCK_SIZE(256)
+#endif
 
     if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_1024) {
         CALCULATE_LAYER_NORM_WITH_BLOCK_SIZE(CUDA_BLOCK_SIZE_1024)

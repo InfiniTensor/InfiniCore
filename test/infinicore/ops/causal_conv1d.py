@@ -13,11 +13,11 @@ from framework import (
     TestCase,
 )
 
-
 # Test cases:
 # (qkv_shape, qkv_strides, state_shape, weight_shape, bias_shape,
 #  cu_seqlens, initial_state_indices, final_state_indices)
 _TEST_CASES_DATA = [
+    ((1, 4, 129), None, (3, 129, 3), (129, 1, 4), (129,), (0, 1, 4), (1, 2), (1, 2)),
     ((2, 5, 4), None, (2, 4, 3), (4, 1, 4), None, None, None, None),
     ((2, 4, 12), (72, 18, 1), (2, 12, 3), (12, 1, 4), (12,), None, None, None),
     ((1, 7, 8), None, (2, 8, 3), (8, 1, 4), (8,), (0, 3, 7), None, None),

@@ -154,8 +154,8 @@ __global__ void causal_conv1d_k4_kernel(
     ptrdiff_t bias_s0) {
 
     const int request = blockIdx.x;
-    const int channel = blockIdx.y;
-    if (channel >= C || threadIdx.x != 0) {
+    const int channel = blockIdx.y * blockDim.x + threadIdx.x;
+    if (channel >= C) {
         return;
     }
 
@@ -236,8 +236,9 @@ infiniStatus_t launch_k4(
     const void *final_state_indices,
     cudaStream_t stream) {
 
-    dim3 grid(static_cast<unsigned int>(info.request_count), static_cast<unsigned int>(info.C), 1);
-    causal_conv1d_k4_kernel<T><<<grid, 1, 0, stream>>>(
+    constexpr unsigned int THREADS = 128;
+    dim3 grid(static_cast<unsigned int>(info.request_count), static_cast<unsigned int>((info.C + THREADS - 1) / THREADS), 1);
+    causal_conv1d_k4_kernel<T><<<grid, THREADS, 0, stream>>>(
         static_cast<T *>(out),
         static_cast<T *>(conv_state),
         static_cast<T *>(final_conv_state),

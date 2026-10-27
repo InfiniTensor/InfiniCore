@@ -16,6 +16,8 @@ from framework import (
 # Test cases:
 # (n_khead, kdim, n_vhead, vdim, seqlens, init_state_indices, final_state_indices, state_pool_size)
 _VARLEN_TEST_CASES_DATA = [
+    (16, 128, 32, 128, (33,), (0,), (1,), 2),
+    (16, 128, 32, 128, (13, 65), (0, 0), (1, 2), 3),
     (16, 128, 48, 128, (13,), (0,), (0,), 1),
     (16, 128, 48, 128, (13,), (1,), (0,), 2),
     (16, 128, 48, 128, (13, 20), (1, 1), (0, 0), 4),

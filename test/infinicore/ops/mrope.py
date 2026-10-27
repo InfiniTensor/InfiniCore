@@ -15,6 +15,7 @@ from framework import (
 import infinicore
 
 _TEST_CASES_DATA = [
+    (128, 16, 16, 72, 72, (9, 9, 18), False),
     # num_tokens, num_q_heads, num_kv_heads, head_size, rotary_dim, sections, interleaved
     (5, 2, 1, 32, 32, (4, 6, 6), False),
     (7, 3, 1, 32, 24, (2, 4, 6), False),

@@ -68,6 +68,12 @@ infiniStatus_t launchMRoPE(
     cudaStream_t stream) {
     dim3 grid_dim(uint32_t(info.num_tokens), uint32_t(std::max(info.num_q_heads, info.num_kv_heads)));
     int nthreads = std::max(int(info.half_rotary_dim), std::min(block_size, 256));
+#if defined(ENABLE_ILUVATAR_API)
+    nthreads = 32;
+    while (nthreads < info.half_rotary_dim && nthreads < 256) {
+        nthreads *= 2;
+    }
+#endif
     mropeKernel<Tdata, Tpos><<<grid_dim, nthreads, 0, stream>>>(
         q_out, k_out, q, k, cos, sin, positions,
         info.num_q_heads, info.num_kv_heads, info.head_size, info.rotary_dim, info.half_rotary_dim,
