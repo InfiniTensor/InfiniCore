@@ -2,9 +2,13 @@
 #include "infinicore/ops/mha.hpp"
 
 #include "infinicore/adaptor/aten_adaptor.hpp"
+#include <ATen/ops/constant_pad_nd.h>
 #include <ATen/ops/scaled_dot_product_attention.h>
 
+#include <cstdlib>
+
 #include <stdexcept>
+#include <string>
 
 namespace infinicore::op::mha_impl::flashattn {
 
@@ -58,6 +62,17 @@ void run(void *planned_meta) {
         throw std::runtime_error("Iluvatar MHA expects rank-4 q, k and v tensors");
     }
 
+    // CoreX's BF16 vision kernel is substantially faster with aligned heads.
+    // Padding changes neither the dot product nor the original softmax scale.
+    // Keep this exact-shape policy local to the verified Qwen3.5 vision path.
+    const char *disable_padding = std::getenv("INFINICORE_DISABLE_VISION_HEAD_PADDING");
+    const bool pad_vision_heads = !(disable_padding && std::string(disable_padding) == "1") && q.scalar_type() == at::kBFloat16 && q.size(3) == 72 && q.size(2) == 16 && k.size(2) == 16 && v.size(2) == 16 && k.size(3) == 72 && v.size(3) == 72 && !is_causal;
+    if (pad_vision_heads) {
+        q = at::constant_pad_nd(q, {0, 56}, 0);
+        k = at::constant_pad_nd(k, {0, 56}, 0);
+        v = at::constant_pad_nd(v, {0, 56}, 0);
+    }
+
     const int64_t num_heads = q.size(2);
     const int64_t num_kv_heads = k.size(2);
     auto q_sdpa = q.permute({0, 2, 1, 3});
@@ -80,7 +95,11 @@ void run(void *planned_meta) {
         0.0,
         is_causal,
         std::optional<double>(static_cast<double>(scale)));
-    out_work.copy_(result.permute({0, 2, 1, 3}));
+    auto result_bshd = result.permute({0, 2, 1, 3});
+    if (pad_vision_heads) {
+        result_bshd = result_bshd.narrow(3, 0, 72);
+    }
+    out_work.copy_(result_bshd);
 
     if (out_need_copy_back) {
         p->out->copy_from(out_work_ic);

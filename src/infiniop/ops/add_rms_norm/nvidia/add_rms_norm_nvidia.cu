@@ -142,6 +142,20 @@ infiniStatus_t Descriptor::calculate(
     size_t nhead = _info.shape.size() > 2 ? _info.shape[1] : 1;
     auto cuda_stream = reinterpret_cast<cudaStream_t>(stream);
 
+#if defined(ENABLE_ILUVATAR_API)
+    // 4096-thread CTAs waste occupancy for large packed prefills. Keep the
+    // established decode reduction and use 512 threads for the measured BF16 shape.
+    if (device_type == INFINI_DEVICE_ILUVATAR && dim == 4096 && batch_size * nhead >= 32
+        && _info.atype == INFINI_DTYPE_BF16 && _info.wtype == INFINI_DTYPE_BF16) {
+        return launchKernel<512>(
+            batch_size, nhead, dim,
+            y, _info.atype, stride_y_batch, stride_y_nhead,
+            residual_out, stride_residual_out_batch, stride_residual_out_nhead,
+            a, stride_a_batch, stride_a_nhead, b, stride_b_batch, stride_b_nhead,
+            weight, _info.wtype, _info.epsilon, cuda_stream);
+    }
+#endif
+
     // launch kernel with different block sizes
     if (_opaque->internal->maxThreadsPerBlock() == CUDA_BLOCK_SIZE_512) {
         CHECK_STATUS(launchKernel<CUDA_BLOCK_SIZE_512>(

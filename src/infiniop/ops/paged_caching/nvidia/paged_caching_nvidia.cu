@@ -21,6 +21,38 @@ INFINIOP_CUDA_KERNEL pagedCaching(
         k_cache_block_stride, v_cache_block_stride, k_cache_head_stride, v_cache_head_stride, k_cache_slot_stride, v_cache_slot_stride);
 }
 
+#if defined(ENABLE_ILUVATAR_API)
+// Flatten token/head vectors into a small CTA. One CTA per head left most
+// threads idle for the 128-wide KV heads used by dense Qwen models.
+template <typename T>
+INFINIOP_CUDA_KERNEL pagedCachingVector(
+    T *k_cache, T *v_cache, const T *k, const T *v, const int64_t *slots,
+    size_t num_tokens, size_t heads, size_t dim, size_t block_size,
+    ptrdiff_t ks, ptrdiff_t vs, ptrdiff_t kh, ptrdiff_t vh,
+    ptrdiff_t kcb, ptrdiff_t vcb, ptrdiff_t kch, ptrdiff_t vch,
+    ptrdiff_t kcs, ptrdiff_t vcs) {
+    constexpr size_t width = sizeof(uint4) / sizeof(T);
+    const size_t vectors = dim / width;
+    const size_t i = size_t(blockIdx.x) * blockDim.x + threadIdx.x;
+    if (i >= num_tokens * heads * vectors) {
+        return;
+    }
+    const size_t token = i / (heads * vectors);
+    const size_t head = i / vectors % heads;
+    const size_t col = i % vectors * width;
+    const int64_t slot = slots[token];
+    if (slot < 0) {
+        return;
+    }
+    const auto block = slot / block_size;
+    const auto offset = slot % block_size;
+    *reinterpret_cast<uint4 *>(k_cache + block * kcb + head * kch + offset * kcs + col)
+        = *reinterpret_cast<const uint4 *>(k + token * ks + head * kh + col);
+    *reinterpret_cast<uint4 *>(v_cache + block * vcb + head * vch + offset * vcs + col)
+        = *reinterpret_cast<const uint4 *>(v + token * vs + head * vh + col);
+}
+#endif
+
 namespace op::paged_caching::nvidia {
 // PIMPL struct definition
 struct Descriptor::Opaque {
@@ -156,6 +188,49 @@ infiniStatus_t Descriptor::calculate(
     void *stream_) const {
 
     cudaStream_t stream = (cudaStream_t)stream_;
+
+#if defined(ENABLE_ILUVATAR_API)
+    if (device_type == INFINI_DEVICE_ILUVATAR) {
+        const auto aligned = [](const void *p) { return reinterpret_cast<uintptr_t>(p) % 16 == 0; };
+        const size_t width = _info.dtype == INFINI_DTYPE_F32 ? 4 : 8;
+        bool vectorized = _info.num_tokens >= 128 && _info.head_size > 0 && _info.head_size <= 128
+                       && _info.head_size == _info.v_head_size && _info.head_size % width == 0
+                       && aligned(k_cache) && aligned(v_cache) && aligned(k) && aligned(v);
+        for (auto stride : {_info.k_src_stride, _info.v_src_stride,
+                            _info.k_src_head_stride, _info.v_src_head_stride,
+                            _info.k_cache_block_stride, _info.v_cache_block_stride,
+                            _info.k_cache_head_stride, _info.v_cache_head_stride,
+                            _info.k_cache_slot_stride, _info.v_cache_slot_stride}) {
+            vectorized = vectorized && stride % ptrdiff_t(width) == 0;
+        }
+        if (vectorized) {
+            const auto blocks = (_info.num_tokens * _info.num_kv_heads * (_info.head_size / width) + 255) / 256;
+#define LAUNCH_VECTOR(T)                                                                                              \
+    pagedCachingVector<T><<<blocks, 256, 0, stream>>>(                                                                \
+        static_cast<T *>(k_cache), static_cast<T *>(v_cache), static_cast<const T *>(k), static_cast<const T *>(v),   \
+        static_cast<const int64_t *>(slot_mapping), _info.num_tokens, _info.num_kv_heads, _info.head_size,            \
+        _info.block_size, _info.k_src_stride, _info.v_src_stride, _info.k_src_head_stride, _info.v_src_head_stride,   \
+        _info.k_cache_block_stride, _info.v_cache_block_stride, _info.k_cache_head_stride, _info.v_cache_head_stride, \
+        _info.k_cache_slot_stride, _info.v_cache_slot_stride)
+            if (_info.dtype == INFINI_DTYPE_BF16) {
+                LAUNCH_VECTOR(__nv_bfloat16);
+            } else if (_info.dtype == INFINI_DTYPE_F16) {
+                LAUNCH_VECTOR(half);
+            } else {
+                LAUNCH_VECTOR(float);
+            }
+#undef LAUNCH_VECTOR
+            return INFINI_STATUS_SUCCESS;
+        }
+        return launchKernel<128>(
+            _info, k_cache, v_cache, _info.dtype, k, v, slot_mapping,
+            _info.num_tokens, _info.num_kv_heads, _info.head_size, _info.v_head_size, _info.block_size,
+            _info.k_src_stride, _info.v_src_stride, _info.k_src_head_stride, _info.v_src_head_stride,
+            _info.k_cache_block_stride, _info.v_cache_block_stride,
+            _info.k_cache_head_stride, _info.v_cache_head_stride,
+            _info.k_cache_slot_stride, _info.v_cache_slot_stride, stream);
+    }
+#endif
 
     // Dispatch logic based on the GPU's maximum threads per block.
     // This allows selecting the largest, most efficient block size the hardware supports.

@@ -19,6 +19,36 @@ INFINIOP_CUDA_KERNEL SwiGLUCuda(
                                     b_strides_0, b_strides_1, b_strides_2);
 }
 
+#if defined(ENABLE_ILUVATAR_API)
+struct alignas(16) SwiGLUBFloat8 {
+    __nv_bfloat16 values[8];
+};
+INFINIOP_CUDA_KERNEL swigluBFloatVector(
+    __nv_bfloat16 *c, const __nv_bfloat16 *a, const __nv_bfloat16 *b,
+    size_t dim, size_t seq_len, size_t tiles,
+    ptrdiff_t c0, ptrdiff_t c1, ptrdiff_t a0, ptrdiff_t a1, ptrdiff_t b0, ptrdiff_t b1) {
+    const size_t row = blockIdx.x / tiles;
+    const size_t col = (blockIdx.x % tiles * blockDim.x + threadIdx.x) * 8;
+    if (col >= dim) {
+        return;
+    }
+    const auto ai = row / seq_len * a0 + row % seq_len * a1 + col;
+    const auto bi = row / seq_len * b0 + row % seq_len * b1 + col;
+    const auto ci = row / seq_len * c0 + row % seq_len * c1 + col;
+    SwiGLUBFloat8 up, gate, out;
+    *reinterpret_cast<uint4 *>(&up) = *reinterpret_cast<const uint4 *>(a + ai);
+    *reinterpret_cast<uint4 *>(&gate) = *reinterpret_cast<const uint4 *>(b + bi);
+#pragma unroll
+    for (int i = 0; i < 8; ++i) {
+        const float g = __bfloat162float(gate.values[i]);
+        // Preserve the existing BF16 sigmoid rounding and multiplication order.
+        const float sig = __bfloat162float(sigmoid(gate.values[i]));
+        out.values[i] = __float2bfloat16_rn(__fmul_rn(__fmul_rn(g, sig), __bfloat162float(up.values[i])));
+    }
+    *reinterpret_cast<uint4 *>(c + ci) = *reinterpret_cast<uint4 *>(&out);
+}
+#endif
+
 namespace op::swiglu_cuda::nvidia {
 
 struct Descriptor::Opaque {
@@ -91,6 +121,24 @@ infiniStatus_t Descriptor::calculate(
     }
 
     cudaStream_t stream = (cudaStream_t)stream_;
+
+#if defined(ENABLE_ILUVATAR_API)
+    const auto aligned = [](const void *p) { return reinterpret_cast<uintptr_t>(p) % 16 == 0; };
+    if (device_type == INFINI_DEVICE_ILUVATAR && _info.dtype == INFINI_DTYPE_BF16
+        && _info.length >= 16384 && _info.hidden_dim >= 256 && _info.hidden_dim % 8 == 0
+        && _info.a_strides_2 == 1 && _info.b_strides_2 == 1 && _info.c_strides_2 == 1
+        && _info.a_strides_0 % 8 == 0 && _info.a_strides_1 % 8 == 0
+        && _info.b_strides_0 % 8 == 0 && _info.b_strides_1 % 8 == 0
+        && _info.c_strides_0 % 8 == 0 && _info.c_strides_1 % 8 == 0
+        && aligned(a) && aligned(b) && aligned(c)) {
+        const size_t tiles = (_info.hidden_dim + 2047) / 2048;
+        swigluBFloatVector<<<_info.batch * _info.seq_len * tiles, 256, 0, stream>>>(
+            static_cast<__nv_bfloat16 *>(c), static_cast<const __nv_bfloat16 *>(a), static_cast<const __nv_bfloat16 *>(b),
+            _info.hidden_dim, _info.seq_len, tiles,
+            _info.c_strides_0, _info.c_strides_1, _info.a_strides_0, _info.a_strides_1, _info.b_strides_0, _info.b_strides_1);
+        return INFINI_STATUS_SUCCESS;
+    }
+#endif
 
 #define CALCULATE_SWIGLU_CUDA(BLOCK_SIZE, TDATA) \
     calculate_swiglu_cuda<BLOCK_SIZE, TDATA>(_info, (TDATA *)c, (const TDATA *)a, (const TDATA *)b, stream, workspace)

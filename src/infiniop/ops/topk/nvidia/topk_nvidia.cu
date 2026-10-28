@@ -3,12 +3,14 @@
 #include "../cuda/kernel.cuh"
 #include "topk_nvidia.cuh"
 
+#include <climits>
 #include <cub/block/block_radix_sort.cuh>
 #include <cub/cub.cuh>
 
 namespace op::topk::nvidia {
 struct Descriptor::Opaque {
     std::shared_ptr<device::nvidia::Handle::Internal> internal;
+    bool batched_argmax;
 };
 
 Descriptor::~Descriptor() {
@@ -29,6 +31,18 @@ infiniStatus_t Descriptor::create(
     CHECK_RESULT(result);
     auto info = result.take();
     size_t workspace_size = 0;
+    // Greedy sampling needs one maximum per row, not radix sorting the full
+    // vocabulary. Keep this path narrow and leave other top-k contracts intact.
+    const bool batched_argmax = handle->device == INFINI_DEVICE_ILUVATAR
+                             && k == 1 && largest && info.ndim == 2 && dim == 1
+                             && info.n_iteration >= 1 && info.n_iteration <= 512
+                             && info.dim_elements >= 1 && info.dim_elements <= INT_MAX
+                             && info.input_strides[1] == 1 && info.input_strides[0] >= ptrdiff_t(info.dim_elements)
+                             && values_output_desc->shape() == std::vector<size_t>{info.n_iteration, 1}
+                             && indices_output_desc->shape() == values_output_desc->shape()
+                             && values_output_desc->dtype() == info.dtype && indices_output_desc->dtype() == INFINI_DTYPE_I32
+                             && values_output_desc->strides()[0] == 1 && indices_output_desc->strides()[0] == 1
+                             && (info.dtype == INFINI_DTYPE_BF16 || info.dtype == INFINI_DTYPE_F16 || info.dtype == INFINI_DTYPE_F32);
 
     workspace_size += (input_desc->ndim() + values_output_desc->ndim()) * (sizeof(size_t) + sizeof(ptrdiff_t));
     // 计算临时变量空间
@@ -49,13 +63,74 @@ infiniStatus_t Descriptor::create(
     }
     workspace_size += 5 * n_iteration * sizeof(int32_t);
 
+    if (batched_argmax) {
+        workspace_size = info.n_iteration * ((info.dim_elements + 4095) / 4096) * sizeof(cub::KeyValuePair<int, float>);
+    }
     *desc_ptr = new Descriptor(
-        new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal()},
+        new Opaque{reinterpret_cast<device::nvidia::Handle *>(handle)->internal(), batched_argmax},
         info, workspace_size, handle->device, handle->device_id);
     return INFINI_STATUS_SUCCESS;
 }
 
 namespace {
+
+using ArgMaxPair = cub::KeyValuePair<int, float>;
+constexpr unsigned ARGMAX_THREADS = 256;
+constexpr size_t ARGMAX_TILE = 4096;
+
+template <typename T>
+__global__ void batchedArgMaxPartials(const T *input, ptrdiff_t row_stride,
+                                      size_t columns, size_t parts, ArgMaxPair *workspace) {
+    const size_t row = blockIdx.y;
+    const size_t start = size_t(blockIdx.x) * ARGMAX_TILE;
+    ArgMaxPair best{INT_MAX, -CUDART_INF_F};
+    cub::ArgMax better;
+    for (size_t j = threadIdx.x; j < ARGMAX_TILE && start + j < columns; j += blockDim.x) {
+        const int index = static_cast<int>(start + j);
+        best = better(best, ArgMaxPair{index, static_cast<float>(input[row * row_stride + index])});
+    }
+    using Reduce = cub::BlockReduce<ArgMaxPair, ARGMAX_THREADS>;
+    __shared__ typename Reduce::TempStorage scratch;
+    auto winner = Reduce(scratch).Reduce(best, better);
+    if (threadIdx.x == 0) {
+        workspace[row * parts + blockIdx.x] = winner;
+    }
+}
+
+template <typename T>
+__global__ void batchedArgMaxFinish(const ArgMaxPair *workspace, size_t parts,
+                                    T *values, int32_t *indices) {
+    const size_t row = blockIdx.x;
+    ArgMaxPair best{INT_MAX, -CUDART_INF_F};
+    cub::ArgMax better;
+    for (size_t j = threadIdx.x; j < parts; j += blockDim.x) {
+        best = better(best, workspace[row * parts + j]);
+    }
+    using Reduce = cub::BlockReduce<ArgMaxPair, ARGMAX_THREADS>;
+    __shared__ typename Reduce::TempStorage scratch;
+    auto winner = Reduce(scratch).Reduce(best, better);
+    if (threadIdx.x == 0) {
+        values[row] = static_cast<T>(winner.value);
+        indices[row] = winner.key;
+    }
+}
+
+template <typename T>
+infiniStatus_t launchBatchedArgMax(const TopKInfo &info, void *values, void *indices,
+                                   const void *input, void *workspace, size_t workspace_size,
+                                   cudaStream_t stream) {
+    const size_t parts = (info.dim_elements + ARGMAX_TILE - 1) / ARGMAX_TILE;
+    if (workspace_size < info.n_iteration * parts * sizeof(ArgMaxPair)) {
+        return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+    }
+    auto partials = static_cast<ArgMaxPair *>(workspace);
+    batchedArgMaxPartials<T><<<dim3(parts, info.n_iteration), ARGMAX_THREADS, 0, stream>>>(
+        static_cast<const T *>(input), info.input_strides[0], info.dim_elements, parts, partials);
+    batchedArgMaxFinish<T><<<info.n_iteration, ARGMAX_THREADS, 0, stream>>>(
+        partials, parts, static_cast<T *>(values), static_cast<int32_t *>(indices));
+    CHECK_CUDA(cudaGetLastError());
+    return INFINI_STATUS_SUCCESS;
+}
 
 template <size_t BLOCK_SIZE, int32_t SORT_ITEMS_PER_THREAD, typename Tdata>
 infiniStatus_t launchKernel(
@@ -257,6 +332,15 @@ infiniStatus_t Descriptor::calculate(
     void *stream_) const {
 
     cudaStream_t stream = (cudaStream_t)stream_;
+    if (_opaque->batched_argmax && k == 1 && dim == 1 && largest) {
+        if (_info.dtype == INFINI_DTYPE_BF16) {
+            return launchBatchedArgMax<__nv_bfloat16>(_info, values_output, indices_output, input, workspace, workspace_size, stream);
+        } else if (_info.dtype == INFINI_DTYPE_F16) {
+            return launchBatchedArgMax<half>(_info, values_output, indices_output, input, workspace, workspace_size, stream);
+        } else {
+            return launchBatchedArgMax<float>(_info, values_output, indices_output, input, workspace, workspace_size, stream);
+        }
+    }
     constexpr int ITEMS = 4;
 #define CALCULATE_TOPK(BLOCK_SIZE, Tdata)                                        \
     launchKernel<BLOCK_SIZE, ITEMS, Tdata>(                                      \
