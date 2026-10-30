@@ -9,6 +9,14 @@ struct Descriptor::Opaque {
     aclnnTensorDescriptor_t src;
     void *workspace; // aclnnInplaceCopy workspace
     uint64_t workspace_size;
+    // Layout metadata for calculate(): descriptors rebuilt per call with the
+    // CURRENT data pointers (the create-time aclTensors carry no address).
+    bool trivial = false; // src and dst are both row-major contiguous
+    size_t nbytes = 0;
+    aclDataType acl_dtype = ACL_FLOAT;
+    std::vector<int64_t> shape;
+    std::vector<int64_t> dst_strides;
+    std::vector<int64_t> src_strides;
     ~Opaque() {
         delete dst;
         delete src;
@@ -55,13 +63,33 @@ infiniStatus_t Descriptor::create(
         CHECK_ACL(aclrtMalloc(&workspace, workspace_size, ACL_MEM_MALLOC_HUGE_FIRST));
     }
 
+    auto opaque = new Opaque{
+        dst,
+        src,
+        workspace,
+        workspace_size};
+
+    // Detect the trivial contiguous case: both strides row-major.
+    {
+        int64_t acc = 1;
+        opaque->trivial = true;
+        for (size_t i = ndim; i-- > 0;) {
+            if (static_cast<int64_t>(dst_strides[i]) != acc ||
+                static_cast<int64_t>(src_strides[i]) != acc) {
+                opaque->trivial = false;
+            }
+            acc *= static_cast<int64_t>(shape[i]);
+        }
+        opaque->nbytes = static_cast<size_t>(acc) * element_size;
+        opaque->acl_dtype = toAclDataType(dtype);
+        opaque->shape.assign(shape.begin(), shape.end());
+        opaque->dst_strides.assign(dst_strides.begin(), dst_strides.end());
+        opaque->src_strides.assign(src_strides.begin(), src_strides.end());
+    }
+
     *desc_ptr = new Descriptor(
         result.take(),
-        new Opaque{
-            dst,
-            src,
-            workspace,
-            workspace_size},
+        opaque,
         handle->device,
         handle->device_id);
 
@@ -75,18 +103,30 @@ infiniStatus_t Descriptor::calculate(
     void *y,
     const void *x,
     void *stream) const {
-    auto tdst = _opaque->dst->tensor;
-    auto tsrc = _opaque->src->tensor;
+    // Fast path: identical contiguous layouts -> plain D2D memcpy.
+    if (_opaque->trivial) {
+        CHECK_ACL(aclrtMemcpyAsync(y, _opaque->nbytes, x, _opaque->nbytes,
+                                   ACL_MEMCPY_DEVICE_TO_DEVICE,
+                                   static_cast<aclrtStream>(stream)));
+        return INFINI_STATUS_SUCCESS;
+    }
+
+    // General path: fresh descriptors carrying the CURRENT addresses
+    // (same pattern as the working rotary-embedding copy kernel).
+    aclnnTensorDescriptor tdst(_opaque->acl_dtype, _opaque->shape,
+                               _opaque->dst_strides, y);
+    aclnnTensorDescriptor tsrc(_opaque->acl_dtype, _opaque->shape,
+                               _opaque->src_strides, const_cast<void *>(x));
 
     uint64_t workspace_size = 0;
     aclOpExecutor *executor = nullptr;
-
-    AclSetTensorAddr(executor, 0, tdst, y);
-    AclSetTensorAddr(executor, 1, tsrc, (void *)x);
-    CHECK_ACL(aclnnInplaceCopyGetWorkspaceSize(tdst, tsrc, &workspace_size, &executor));
-    // Execute InplaceCopy
-    CHECK_ACL(aclnnInplaceCopy(_opaque->workspace, _opaque->workspace_size,
-                               executor, stream));
+    CHECK_ACL(aclnnInplaceCopyGetWorkspaceSize(tdst.tensor, tsrc.tensor,
+                                               &workspace_size, &executor));
+    void *workspace = _opaque->workspace;
+    if (workspace_size > _opaque->workspace_size) {
+        CHECK_ACL(aclrtMalloc(&workspace, workspace_size, ACL_MEM_MALLOC_HUGE_FIRST));
+    }
+    CHECK_ACL(aclnnInplaceCopy(workspace, workspace_size, executor, stream));
 
     return INFINI_STATUS_SUCCESS;
 }

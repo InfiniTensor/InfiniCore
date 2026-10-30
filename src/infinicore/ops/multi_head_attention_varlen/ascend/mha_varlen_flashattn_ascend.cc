@@ -7,7 +7,7 @@
 
 #include <acl/acl.h>
 #include <aclnnop/aclnn_fused_infer_attention_score.h>
-#include <aclnnop/aclnn_fused_infer_attention_score_v4.h>
+#include <aclnnop/aclnn_fused_infer_attention_score_v5.h>
 
 #include <algorithm>
 #include <cstring>
@@ -307,7 +307,7 @@ void run(void *planned_meta) {
     uint64_t workspace_size = 0;
     aclOpExecutor *executor = nullptr;
 
-    aclnnStatus ret = aclnnFusedInferAttentionScoreV4GetWorkspaceSize(
+    aclnnStatus ret = aclnnFusedInferAttentionScoreV5GetWorkspaceSize(
         query_acl, key_acl, value_acl,
         nullptr, // pseShift
         atten_mask_acl, actual_seq_q_acl, actual_seq_k_acl, nullptr, nullptr,
@@ -327,6 +327,8 @@ void run(void *planned_meta) {
         nullptr,         // keyRopeAntiquantScale
         nullptr,         // dequantScaleQuery
         nullptr,         // learnableSink
+        nullptr,         // qStartIdx
+        nullptr,         // kvStartIdx
         num_heads, static_cast<double>(p->scale), 2147483647, 2147483647,
         const_cast<char *>("TND"), num_kv_heads, sparse_mode,
         0,              // innerPrecise: high precision TND path
@@ -336,6 +338,7 @@ void run(void *planned_meta) {
         0, // keyAntiquantMode
         0, // valueAntiquantMode
         0, // queryQuantMode
+        0, // pseType
         out_acl, nullptr, &workspace_size, &executor);
 
     if (ret != 0) {
@@ -352,7 +355,7 @@ void run(void *planned_meta) {
         throw std::runtime_error(
             std::string(
                 "[mha_varlen/ascend] "
-                "aclnnFusedInferAttentionScoreV4GetWorkspaceSize failed: ")
+                "aclnnFusedInferAttentionScoreV5GetWorkspaceSize failed: ")
             + std::to_string(ret) + ", msg: " + (err_msg ? err_msg : "(null)"));
     }
 
@@ -364,7 +367,7 @@ void run(void *planned_meta) {
                         .buf;
     }
 
-    ret = aclnnFusedInferAttentionScoreV4(workspace, workspace_size, executor,
+    ret = aclnnFusedInferAttentionScoreV5(workspace, workspace_size, executor,
                                           stream);
 
     // Release aclTensor/aclTensorList/aclIntArray resources
@@ -382,7 +385,7 @@ void run(void *planned_meta) {
         const char *err_msg = aclGetRecentErrMsg();
         throw std::runtime_error(
             std::string(
-                "[mha_varlen/ascend] aclnnFusedInferAttentionScoreV4 failed: ")
+                "[mha_varlen/ascend] aclnnFusedInferAttentionScoreV5 failed: ")
             + std::to_string(ret) + ", msg: " + (err_msg ? err_msg : "(null)"));
     }
 

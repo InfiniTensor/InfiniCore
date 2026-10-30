@@ -1,12 +1,15 @@
 #if defined(ENABLE_ASCEND_FLASH_ATTN)
 
+#include <mutex>
+#include <unordered_map>
+#include <algorithm>
 #include "infinicore/context/context.hpp"
 #include "infinicore/ops/mha_kvcache.hpp"
 #include "native/ascend/workspace_pool_.h"
 
 #include <acl/acl.h>
 #include <aclnnop/aclnn_fused_infer_attention_score.h>
-#include <aclnnop/aclnn_fused_infer_attention_score_v4.h>
+#include <aclnnop/aclnn_fused_infer_attention_score_v5.h>
 
 #include <algorithm>
 #include <cstring>
@@ -153,6 +156,7 @@ void *plan(Tensor out, const Tensor &q, const Tensor &k_cache,
     return p;
 }
 
+
 void run(void *planned_meta) {
     auto *p = reinterpret_cast<PlannedMeta *>(planned_meta);
     infinicore::context::setDevice(p->q->device());
@@ -276,7 +280,7 @@ void run(void *planned_meta) {
     uint64_t workspace_size = 0;
     aclOpExecutor *executor = nullptr;
 
-    aclnnStatus ret = aclnnFusedInferAttentionScoreV4GetWorkspaceSize(
+    aclnnStatus ret = aclnnFusedInferAttentionScoreV5GetWorkspaceSize(
         query_acl, key_acl, value_acl,
         nullptr, // pseShift
         nullptr, // atten_mask (not needed for decode)
@@ -297,6 +301,8 @@ void run(void *planned_meta) {
         nullptr,         // keyRopeAntiquantScale
         nullptr,         // dequantScaleQuery
         nullptr,         // learnableSink
+        nullptr,         // qStartIdx
+        nullptr,         // kvStartIdx
         num_heads, static_cast<double>(p->scale), 2147483647, 2147483647,
         const_cast<char *>("BNSD"), num_kv_heads,
         0,              // sparse_mode=0 (no mask for decode)
@@ -307,6 +313,7 @@ void run(void *planned_meta) {
         0, // keyAntiquantMode
         0, // valueAntiquantMode
         0, // queryQuantMode
+        0, // pseType
         out_acl, nullptr, &workspace_size, &executor);
 
     if (ret != 0) {
@@ -321,7 +328,7 @@ void run(void *planned_meta) {
         throw std::runtime_error(
             std::string(
                 "[mha_kvcache/ascend] "
-                "aclnnFusedInferAttentionScoreV4GetWorkspaceSize failed: ")
+                "aclnnFusedInferAttentionScoreV5GetWorkspaceSize failed: ")
             + std::to_string(ret) + ", msg: " + (err_msg ? err_msg : "(null)"));
     }
 
@@ -329,15 +336,20 @@ void run(void *planned_meta) {
     void *workspace = nullptr;
     if (workspace_size > 0) {
         if (p->graph_planned) {
+            // Process-wide per-device FIA workspace. Allocated/replaced only
+            // on EAGER calls (warmup); capture/update reuse the same buffer,
+            // so no allocation ever happens inside graph recording. The 16MB
+            // headroom covers workspace growth as decode seqlens extend.
             if (!p->workspace || p->workspace->numel() < workspace_size) {
                 if (p->capturing_task_group || task_updating) {
                     throw std::runtime_error(
                         "[mha_kvcache/ascend] FIA workspace was not prepared "
                         "before graph capture");
                 }
-                p->workspace = Tensor::empty(
-                    {static_cast<size_t>(workspace_size)}, DataType::U8,
-                    p->q->device());
+                size_t alloc_size = std::max<size_t>(
+                    workspace_size, 128u * 1024u * 1024u);
+                p->workspace = Tensor::empty({alloc_size}, DataType::U8,
+                                             p->q->device());
             }
             workspace = p->workspace->data();
         } else {
@@ -355,7 +367,7 @@ void run(void *planned_meta) {
         check_task_api(aclmdlRICaptureTaskUpdateBegin(stream, p->task_group),
                        "aclmdlRICaptureTaskUpdateBegin");
     }
-    ret = aclnnFusedInferAttentionScoreV4(workspace, workspace_size, executor,
+    ret = aclnnFusedInferAttentionScoreV5(workspace, workspace_size, executor,
                                           stream);
     if (task_updating) {
         check_task_api(aclmdlRICaptureTaskUpdateEnd(stream),
@@ -379,7 +391,7 @@ void run(void *planned_meta) {
         const char *err_msg = aclGetRecentErrMsg();
         throw std::runtime_error(
             std::string(
-                "[mha_kvcache/ascend] aclnnFusedInferAttentionScoreV4 failed: ")
+                "[mha_kvcache/ascend] aclnnFusedInferAttentionScoreV5 failed: ")
             + std::to_string(ret) + ", msg: " + (err_msg ? err_msg : "(null)"));
     }
 

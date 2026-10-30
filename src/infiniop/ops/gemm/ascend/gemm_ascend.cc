@@ -1,7 +1,7 @@
 #include "gemm_ascend.h"
 #include "../../../devices/ascend/common_ascend.h"
 #include <aclnnop/aclnn_matmul.h>
-#include <aclnnop/level2/aclnn_gemm.h>
+#include <aclnnop/aclnn_gemm.h>
 
 #include <algorithm>
 #include <cstring>
