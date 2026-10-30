@@ -1,92 +1,11 @@
 #include "infinicore/ops/linear.hpp"
+#include "infinicore/ops/add.hpp"
 #include "infinicore/ops/gemm.hpp"
 #include "infinicore/ops/rearrange.hpp"
 
 #include <stdexcept>
 
-#ifdef ENABLE_ASCEND_API
-#include "infinicore/context/context.hpp"
-#include "../../../infiniop/devices/ascend/common_ascend.h"
-#include <aclnnop/aclnn_add.h>
-#include <memory>
-#include <string>
-#endif
-
 namespace infinicore::op {
-
-#ifdef ENABLE_ASCEND_API
-namespace {
-
-void check_acl_linear_bias_add(aclnnStatus status, const char *api) {
-    if (status == ACL_SUCCESS) {
-        return;
-    }
-    const char *detail = aclGetRecentErrMsg();
-    throw std::runtime_error(
-        std::string(api) + " failed with status " + std::to_string(status)
-        + (detail == nullptr ? "" : std::string(": ") + detail));
-}
-
-void add_bias_inplace_ascend(Tensor out_matrix, Tensor bias_matrix) {
-    aclnnTensorDescriptor self_desc(out_matrix->desc(), out_matrix->data());
-    aclnnTensorDescriptor other_desc(
-        bias_matrix->desc(), const_cast<std::byte *>(bias_matrix->data()));
-
-    const float alpha_value = 1.0f;
-    aclnnScalarDescriptor alpha_desc(
-        ACL_FLOAT, &alpha_value, sizeof(alpha_value));
-
-    uint64_t workspace_size = 0;
-    aclOpExecutor *executor = nullptr;
-    check_acl_linear_bias_add(
-        aclnnInplaceAddGetWorkspaceSize(
-            self_desc.tensor, other_desc.tensor, alpha_desc.scalar,
-            &workspace_size, &executor),
-        "aclnnInplaceAddGetWorkspaceSize");
-
-    std::shared_ptr<Memory> workspace;
-    void *workspace_ptr = nullptr;
-    if (workspace_size != 0) {
-        workspace = context::allocateMemory(workspace_size);
-        workspace_ptr = workspace->data();
-    }
-
-    check_acl_linear_bias_add(
-        aclnnInplaceAdd(
-            workspace_ptr, workspace_size, executor,
-            reinterpret_cast<aclrtStream>(context::getStream())),
-        "aclnnInplaceAdd");
-}
-
-class AscendBiasAddInplaceOp : public graph::GraphOperator {
-public:
-    AscendBiasAddInplaceOp(Tensor out_matrix, Tensor bias_matrix)
-        : out_matrix_(out_matrix), bias_matrix_(bias_matrix) {}
-
-    void run() const override {
-        add_bias_inplace_ascend(out_matrix_, bias_matrix_);
-    }
-
-    bool is_device_graph_capture_safe() const override {
-        return false;
-    }
-
-private:
-    graph::GraphTensor out_matrix_;
-    graph::GraphTensor bias_matrix_;
-};
-
-void execute_bias_add_inplace_ascend(Tensor out_matrix, Tensor bias_matrix) {
-    auto op = std::make_shared<AscendBiasAddInplaceOp>(out_matrix, bias_matrix);
-    if (context::isGraphRecording()) {
-        context::addGraphOperator(op);
-    } else {
-        op->run();
-    }
-}
-
-} // namespace
-#endif
 
 Tensor linear(Tensor input,
               Tensor weight,
@@ -231,19 +150,19 @@ void linear_packed_nz_(Tensor out,
 
     // aclnnMatmulWeightNz has pure MatMul semantics and does not accept the
     // beta=1 accumulation pattern used by the ND GEMM bias path. Keep the NZ
-    // GEMM itself bias-free, then add the broadcast bias in-place on Ascend.
+    // GEMM itself bias-free, then use the regular graph-aware add chain for
+    // the broadcast bias. The Ascend add backend uses aclnnAdd and supports
+    // output aliasing input, so this remains in-place without breaking graph
+    // capture between the MatMul and the following attention operators.
     gemm_nz_(out_view,
              input->view({rows, in_features}),
              nz_weight, alpha, 0.0f);
 
     if (bias.has_value()) {
-#ifdef ENABLE_ASCEND_API
         if (out->device().getType() == Device::Type::ASCEND) {
-            execute_bias_add_inplace_ascend(
-                out_view,
-                bias.value()->as_strided({rows, out_features}, {0, 1}));
+            add_(out_view, out_view,
+                 bias.value()->as_strided({rows, out_features}, {0, 1}));
         } else
-#endif
         {
             throw std::runtime_error(
                 "linear_packed_nz with bias is only implemented on Ascend");
