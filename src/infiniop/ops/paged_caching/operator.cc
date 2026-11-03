@@ -67,6 +67,29 @@ __INFINI_C infiniStatus_t infiniopCreatePagedCachingDescriptor(
     }
 }
 
+__INFINI_C infiniStatus_t infiniopCreatePagedCachingWithValidSlotsDescriptor(
+    infiniopHandle_t handle,
+    infiniopPagedCachingDescriptor_t *desc_ptr,
+    infiniopTensorDescriptor_t k_cache_desc,
+    infiniopTensorDescriptor_t v_cache_desc,
+    infiniopTensorDescriptor_t k_desc,
+    infiniopTensorDescriptor_t v_desc,
+    infiniopTensorDescriptor_t slot_mapping_desc) {
+    if (handle == nullptr || desc_ptr == nullptr) {
+        return INFINI_STATUS_NULL_POINTER;
+    }
+#ifdef ENABLE_ASCEND_API
+    if (handle->device == INFINI_DEVICE_ASCEND) {
+        return op::paged_caching::ascend::Descriptor::createWithValidSlots(
+            handle,
+            reinterpret_cast<op::paged_caching::ascend::Descriptor **>(desc_ptr),
+            k_cache_desc, v_cache_desc, k_desc, v_desc, slot_mapping_desc);
+    }
+#endif
+    return infiniopCreatePagedCachingDescriptor(
+        handle, desc_ptr, k_cache_desc, v_cache_desc, k_desc, v_desc, slot_mapping_desc);
+}
+
 __INFINI_C infiniStatus_t infiniopGetPagedCachingWorkspaceSize(
     infiniopPagedCachingDescriptor_t desc,
     size_t *size) {

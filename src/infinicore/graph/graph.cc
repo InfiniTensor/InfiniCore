@@ -2,7 +2,9 @@
 
 #include "../utils.hpp"
 #include "infinicore/context/context.hpp"
+#include <algorithm>
 #include <cstdlib>
+#include <cstring>
 #include <infinirt.h>
 
 namespace infinicore::graph {
@@ -98,10 +100,40 @@ struct Graph::Segment {
 
     void run() const {
         if (device_graph) {
-            for (const auto &op : device_graph->updatable_ops) {
-                op->graph_replay(GraphReplayStage::UPDATE);
+            const auto &updates = device_graph->updatable_ops;
+            const bool launch_first = !updates.empty()
+                                   && std::all_of(updates.begin(), updates.end(), [](const auto &op) {
+                                          return op->can_update_after_launch();
+                                      });
+            if (launch_first) {
+                // Reusing update handles requires the preceding replay to have
+                // finished. In token generation this stream is already drained
+                // by sampling; standalone asynchronous callers remain safe too.
+                context::syncStream();
+                for (const auto &op : updates) {
+                    op->graph_replay(GraphReplayStage::PREPARE_UPDATE);
+                }
+                device_graph->launch();
+                try {
+                    for (const auto &op : updates) {
+                        op->graph_replay(GraphReplayStage::UPDATE);
+                    }
+                } catch (...) {
+                    // Release captured waits before propagating a failed update.
+                    // No output from this replay may be consumed by the caller.
+                    for (const auto &op : updates) {
+                        try {
+                            op->graph_replay(GraphReplayStage::ABORT_UPDATE);
+                        } catch (...) {}
+                    }
+                    throw;
+                }
+            } else {
+                for (const auto &op : updates) {
+                    op->graph_replay(GraphReplayStage::UPDATE);
+                }
+                device_graph->launch();
             }
-            device_graph->launch();
             return;
         }
         for (const auto &op : ops) {
@@ -128,6 +160,20 @@ void Graph::run() const {
 
 void Graph::bind_host_int_array(const Tensor &device_tensor,
                                 const int32_t *values,
+                                size_t size) {
+    INFINICORE_ASSERT(device_tensor);
+    INFINICORE_ASSERT(values != nullptr || size == 0);
+
+    auto &bound = host_int_arrays_[device_tensor->data()];
+    bound.clear();
+    bound.reserve(size);
+    for (size_t i = 0; i < size; ++i) {
+        bound.push_back(values[i]);
+    }
+}
+
+void Graph::bind_host_int_array(const Tensor &device_tensor,
+                                const int64_t *values,
                                 size_t size) {
     INFINICORE_ASSERT(device_tensor);
     INFINICORE_ASSERT(values != nullptr || size == 0);
@@ -174,6 +220,18 @@ void bind_eager_host_int_array(const Tensor &device_tensor,
     }
 }
 
+void bind_eager_host_int_array(const Tensor &device_tensor,
+                               const int64_t *values,
+                               size_t size) {
+    INFINICORE_ASSERT(device_tensor);
+    INFINICORE_ASSERT(values != nullptr || size == 0);
+    auto &bound = eager_host_int_arrays[device_tensor->data()];
+    bound.clear();
+    if (size != 0) {
+        bound.assign(values, values + size);
+    }
+}
+
 void Graph::add_operator(std::shared_ptr<GraphOperator> op) {
     op_list_.push_back(op);
 }
@@ -182,8 +240,14 @@ void Graph::instantiate() {
     segments_.clear();
 
     // Warm the complete op list before splitting it into replay segments.
+    const char *sync_warmup = std::getenv("INFINICORE_GRAPH_SYNC_WARMUP");
     for (size_t iter = 0; iter < 5; ++iter) {
         this->run();
+        // Optional bounded submission for communication backends with a
+        // process-wide launch cache lock. Runtime graph replay is unchanged.
+        if (sync_warmup && std::strcmp(sync_warmup, "1") == 0) {
+            context::syncStream();
+        }
     }
     infinicore::context::syncStream();
 

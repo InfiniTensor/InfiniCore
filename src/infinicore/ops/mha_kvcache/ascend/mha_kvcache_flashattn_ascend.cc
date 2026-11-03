@@ -1,6 +1,10 @@
 #if defined(ENABLE_ASCEND_FLASH_ATTN)
 
 #include <mutex>
+#include <cstdlib>
+#include <deque>
+#include <map>
+#include <memory>
 #include <unordered_map>
 #include <algorithm>
 #include "infinicore/context/context.hpp"
@@ -56,17 +60,136 @@ host_vector_to_acl_int_array(const std::vector<int64_t> &vec) {
     return aclCreateIntArray(vec.data(), vec.size());
 }
 
+
+// A replay shares shape/length-dependent ACLNN preparation across decoder
+// layers on one stream. Each launch explicitly rebinds all layer addresses.
+// Keep retired executors alive until the previous graph completes on that
+// stream, because their tiling/launch state can still be referenced by it.
+struct ReplayExecutor {
+    aclOpExecutor *executor = nullptr;
+    aclTensor *query = nullptr, *block_table = nullptr, *output = nullptr;
+    aclTensorList *key = nullptr, *value = nullptr;
+    aclIntArray *seq_q = nullptr, *seq_k = nullptr;
+    uint64_t workspace_size = 0;
+    std::vector<int64_t> signature;
+    ~ReplayExecutor() {
+        if (executor) aclDestroyAclOpExecutor(executor);
+        if (query) aclDestroyTensor(query);
+        if (key) aclDestroyTensorList(key);
+        if (value) aclDestroyTensorList(value);
+        if (block_table) aclDestroyTensor(block_table);
+        if (output) aclDestroyTensor(output);
+        if (seq_q) aclDestroyIntArray(seq_q);
+        if (seq_k) aclDestroyIntArray(seq_k);
+    }
+};
+struct ReplayExecutorCache {
+    int32_t device;
+    aclrtStream stream;
+    std::unique_ptr<ReplayExecutor> current;
+    struct Retired { aclrtEvent event; std::unique_ptr<ReplayExecutor> executor; };
+    std::deque<Retired> retired;
+    ReplayExecutorCache(int32_t d, aclrtStream s) : device(d), stream(s) {}
+    void retire_current() {
+        if (current) {
+            aclrtEvent event = nullptr;
+            check_task_api(aclrtCreateEventWithFlag(&event, ACL_EVENT_CAPTURE_STREAM_PROGRESS), "create executor retirement event");
+            auto status = aclrtRecordEvent(event, stream);
+            if (status != ACL_SUCCESS) { aclrtDestroyEvent(event); check_task_api(status, "record executor retirement event"); }
+            retired.push_back({event, std::move(current)});
+        }
+        while (!retired.empty()) {
+            aclrtEventRecordedStatus status;
+            check_task_api(aclrtQueryEventStatus(retired.front().event, &status), "query executor retirement event");
+            if (status != ACL_EVENT_RECORDED_STATUS_COMPLETE) break;
+            aclrtDestroyEvent(retired.front().event);
+            retired.pop_front();
+        }
+        if (retired.size() > 16) {
+            check_task_api(aclrtSynchronizeStream(stream), "drain retired executors");
+            for (auto &x : retired) aclrtDestroyEvent(x.event);
+            retired.clear();
+        }
+    }
+    ~ReplayExecutorCache() {
+        int32_t previous = -1;
+        if (aclrtGetDevice(&previous) != ACL_SUCCESS) return;
+        if (aclrtSetDevice(device) != ACL_SUCCESS) return;
+        aclrtSynchronizeStream(stream);
+        current.reset();
+        for (auto &x : retired) aclrtDestroyEvent(x.event);
+        retired.clear();
+        if (previous != device) aclrtSetDevice(previous);
+    }
+};
+static std::shared_ptr<ReplayExecutorCache> replay_executor_cache() {
+    const char *flag = std::getenv("INFINICORE_FIA_REUSE_EXECUTOR");
+    if (!flag || std::strcmp(flag, "1") != 0) return nullptr;
+    int32_t device = -1;
+    check_task_api(aclrtGetDevice(&device), "get replay executor device");
+    auto stream = static_cast<aclrtStream>(context::getStream());
+    using Key = std::pair<int32_t, uintptr_t>;
+    static thread_local std::map<Key, std::weak_ptr<ReplayExecutorCache>> caches;
+    auto &weak = caches[{device, reinterpret_cast<uintptr_t>(stream)}];
+    auto cache = weak.lock();
+    if (!cache) { cache = std::make_shared<ReplayExecutorCache>(device, stream); weak = cache; }
+    return cache;
+}
+
+// One update stream per device/main stream; only ACL graph task updates and
+// their completion records are submitted here. Model kernels stay on the
+// original stream and consume each layer only after its captured event wait.
+struct AsyncUpdateStream {
+    aclrtStream stream = nullptr;
+    int32_t device = -1;
+    AsyncUpdateStream() {
+        check_task_api(aclrtGetDevice(&device), "get async update device");
+        check_task_api(aclrtCreateStream(&stream), "create async update stream");
+    }
+    ~AsyncUpdateStream() {
+        int32_t previous = -1;
+        if (aclrtGetDevice(&previous) != ACL_SUCCESS) return;
+        if (aclrtSetDevice(device) != ACL_SUCCESS) return;
+        aclrtSynchronizeStream(stream);
+        aclrtDestroyStream(stream);
+        if (previous != device) aclrtSetDevice(previous);
+    }
+};
+static std::shared_ptr<AsyncUpdateStream> async_update_stream() {
+    const char *flag = std::getenv("INFINICORE_ASCEND_ASYNC_GRAPH_UPDATE");
+    if (!flag || std::strcmp(flag, "1") != 0 || !context::isGraphRecording()) return nullptr;
+    int32_t device = -1;
+    check_task_api(aclrtGetDevice(&device), "get async update device");
+    using Key = std::pair<int32_t, uintptr_t>;
+    static thread_local std::map<Key, std::weak_ptr<AsyncUpdateStream>> streams;
+    auto &weak = streams[{device, reinterpret_cast<uintptr_t>(context::getStream())}];
+    auto stream = weak.lock();
+    if (!stream) { stream = std::make_shared<AsyncUpdateStream>(); weak = stream; }
+    return stream;
+}
+
 struct PlannedMeta {
     graph::GraphTensor out, q, k_cache, v_cache, seqlens_k, block_table;
     std::optional<graph::GraphTensor> alibi_slopes;
     float scale;
     Tensor out_work, q_work, k_work, v_work, block_table_work;
-    Tensor workspace;
+    void *workspace;
     bool graph_planned;
     std::vector<int64_t> initial_seq_lengths_k;
     aclrtTaskGrp task_group = nullptr;
     bool capturing_task_group = false;
     bool updating_task_group = false;
+    std::shared_ptr<ReplayExecutorCache> replay_cache;
+    std::shared_ptr<AsyncUpdateStream> update_stream;
+    aclrtEvent update_ready = nullptr;
+    ~PlannedMeta() {
+        if (update_ready) {
+            // Destructors cannot throw while unwinding a failed device call.
+            aclrtSynchronizeStream(static_cast<aclrtStream>(context::getStream()));
+            aclrtSynchronizeStream(update_stream->stream);
+            aclrtDestroyEvent(update_ready);
+        }
+    }
 };
 
 static Tensor persistent_contiguous_work_tensor(const Tensor &tensor) {
@@ -146,6 +269,8 @@ void *plan(Tensor out, const Tensor &q, const Tensor &k_cache,
                               persistent_contiguous_work_tensor(block_table),
                               {},
                               context::isGraphRecording()};
+    p->replay_cache = replay_executor_cache();
+    p->update_stream = async_update_stream();
     try {
         p->initial_seq_lengths_k = get_actual_seq_lengths_k(
             p, static_cast<int64_t>(q->shape().at(0)));
@@ -220,6 +345,43 @@ void run(void *planned_meta) {
                                           1); // decode: always 1 query token
     auto actual_seq_k_vec = get_actual_seq_lengths_k(p, batch_size);
 
+    // Reuse the retained ACLNN metadata too: no temporary tensor/list/array
+    // allocation is needed when only layer buffer addresses change.
+    const char *fast_hit = std::getenv("INFINICORE_FIA_REUSE_FAST_PATH");
+    if (task_updating && p->replay_cache && fast_hit
+        && std::strcmp(fast_hit, "1") == 0) {
+        const auto bt_shape_fast = bt_work->shape();
+        std::vector<int64_t> signature_fast{
+            batch_size, num_heads, head_size, num_blocks, block_size_val,
+            num_kv_heads, v_head_size, static_cast<int64_t>(q_dtype),
+            static_cast<int64_t>(bt_shape_fast[0]), static_cast<int64_t>(bt_shape_fast[1]),
+            static_cast<int64_t>(reinterpret_cast<uintptr_t>(bt_work->data()))};
+        uint32_t scale_bits_fast;
+        std::memcpy(&scale_bits_fast, &p->scale, sizeof(scale_bits_fast));
+        signature_fast.push_back(scale_bits_fast);
+        signature_fast.insert(signature_fast.end(), actual_seq_k_vec.begin(), actual_seq_k_vec.end());
+        const auto &entry = p->replay_cache->current;
+        if (entry && entry->signature == signature_fast) {
+            auto *executor = entry->executor;
+            check_task_api(aclSetInputTensorAddr(executor, 0, entry->query, q_work->data()), "refresh FIA query");
+            check_task_api(aclSetDynamicInputTensorAddr(executor, 1, 0, entry->key, k_work->data()), "refresh FIA key");
+            check_task_api(aclSetDynamicInputTensorAddr(executor, 2, 0, entry->value, v_work->data()), "refresh FIA value");
+            check_task_api(aclSetOutputTensorAddr(executor, 0, entry->output, out_work->data()), "refresh FIA output");
+            constexpr uint64_t capacity = 128u * 1024u * 1024u;
+            if (entry->workspace_size > capacity || (entry->workspace_size != 0 && !p->workspace)) {
+                throw std::runtime_error("[mha_kvcache/ascend] retained FIA workspace was not prepared");
+            }
+            auto stream = p->update_stream ? p->update_stream->stream
+                : static_cast<aclrtStream>(context::getStream());
+            check_task_api(aclmdlRICaptureTaskUpdateBegin(stream, p->task_group), "aclmdlRICaptureTaskUpdateBegin");
+            const auto ret_fast = aclnnFusedInferAttentionScoreV5(
+                p->workspace, entry->workspace_size, executor, stream);
+            check_task_api(aclmdlRICaptureTaskUpdateEnd(stream), "aclmdlRICaptureTaskUpdateEnd");
+            check_task_api(ret_fast, "retained FIA task update");
+            return;
+        }
+    }
+
     // BNSD [batch, num_heads, 1, head_size], viewed from BSND memory.
     std::vector<int64_t> q_dims = {batch_size, num_heads, 1, head_size};
     std::vector<int64_t> q_strides = {num_heads * head_size, head_size, head_size,
@@ -280,7 +442,34 @@ void run(void *planned_meta) {
     uint64_t workspace_size = 0;
     aclOpExecutor *executor = nullptr;
 
-    aclnnStatus ret = aclnnFusedInferAttentionScoreV5GetWorkspaceSize(
+
+    aclnnStatus ret = 0;
+    bool retained_descriptors = false;
+    ReplayExecutor *reusable = nullptr;
+    std::vector<int64_t> signature;
+    if (task_updating && p->replay_cache) {
+        signature = {batch_size, num_heads, head_size, num_blocks,
+                     block_size_val, num_kv_heads, v_head_size,
+                     static_cast<int64_t>(q_dtype), bt_dims[0], bt_dims[1],
+                     static_cast<int64_t>(reinterpret_cast<uintptr_t>(bt_work->data()))};
+        uint32_t scale_bits;
+        std::memcpy(&scale_bits, &p->scale, sizeof(scale_bits));
+        signature.push_back(scale_bits);
+        signature.insert(signature.end(), actual_seq_k_vec.begin(), actual_seq_k_vec.end());
+        if (p->replay_cache->current && p->replay_cache->current->signature == signature) {
+            reusable = p->replay_cache->current.get();
+            executor = reusable->executor;
+            workspace_size = reusable->workspace_size;
+            check_task_api(aclSetInputTensorAddr(executor, 0, reusable->query, q_work->data()), "refresh FIA query");
+            check_task_api(aclSetDynamicInputTensorAddr(executor, 1, 0, reusable->key, k_work->data()), "refresh FIA key");
+            check_task_api(aclSetDynamicInputTensorAddr(executor, 2, 0, reusable->value, v_work->data()), "refresh FIA value");
+            check_task_api(aclSetOutputTensorAddr(executor, 0, reusable->output, out_work->data()), "refresh FIA output");
+        } else {
+            p->replay_cache->retire_current();
+        }
+    }
+    if (!reusable) {
+        ret = aclnnFusedInferAttentionScoreV5GetWorkspaceSize(
         query_acl, key_acl, value_acl,
         nullptr, // pseShift
         nullptr, // atten_mask (not needed for decode)
@@ -316,6 +505,20 @@ void run(void *planned_meta) {
         0, // pseType
         out_acl, nullptr, &workspace_size, &executor);
 
+        if (ret == 0 && task_updating && p->replay_cache) {
+            auto entry = std::make_unique<ReplayExecutor>();
+            entry->executor = executor;
+            entry->query = query_acl; entry->key = key_acl; entry->value = value_acl;
+            entry->block_table = block_table_acl; entry->output = out_acl;
+            entry->seq_q = seqlens_q_acl; entry->seq_k = seqlens_k_acl;
+            entry->workspace_size = workspace_size;
+            entry->signature = std::move(signature);
+            retained_descriptors = true;
+            check_task_api(aclSetAclOpExecutorRepeatable(executor), "enable repeatable FIA executor");
+            p->replay_cache->current = std::move(entry);
+        }
+    }
+
     if (ret != 0) {
         aclDestroyTensor(query_acl);
         aclDestroyTensorList(key_acl);
@@ -332,26 +535,29 @@ void run(void *planned_meta) {
             + std::to_string(ret) + ", msg: " + (err_msg ? err_msg : "(null)"));
     }
 
-    aclrtStream stream = static_cast<aclrtStream>(infinicore::context::getStream());
+    aclrtStream stream = task_updating && p->update_stream
+        ? p->update_stream->stream
+        : static_cast<aclrtStream>(infinicore::context::getStream());
     void *workspace = nullptr;
     if (workspace_size > 0) {
         if (p->graph_planned) {
-            // Process-wide per-device FIA workspace. Allocated/replaced only
-            // on EAGER calls (warmup); capture/update reuse the same buffer,
-            // so no allocation ever happens inside graph recording. The 16MB
-            // headroom covers workspace growth as decode seqlens extend.
-            if (!p->workspace || p->workspace->numel() < workspace_size) {
+            // Layers and batch graphs execute serially on this stream. Keep
+            // one stable arena instead of retaining 128 MiB for every plan.
+            constexpr size_t capacity = 128u * 1024u * 1024u;
+            if (workspace_size > capacity) {
+                throw std::runtime_error(
+                    "[mha_kvcache/ascend] FIA graph workspace exceeds 128 MiB");
+            }
+            if (!p->workspace) {
                 if (p->capturing_task_group || task_updating) {
                     throw std::runtime_error(
                         "[mha_kvcache/ascend] FIA workspace was not prepared "
                         "before graph capture");
                 }
-                size_t alloc_size = std::max<size_t>(
-                    workspace_size, 128u * 1024u * 1024u);
-                p->workspace = Tensor::empty({alloc_size}, DataType::U8,
-                                             p->q->device());
+                p->workspace = infini::ops::ascend::GetWorkspacePool()
+                                   .Ensure(stream, capacity, "fia_graph").buf;
             }
-            workspace = p->workspace->data();
+            workspace = p->workspace;
         } else {
             workspace = infini::ops::ascend::GetWorkspacePool()
                             .Ensure(stream, workspace_size, "fia")
@@ -378,6 +584,7 @@ void run(void *planned_meta) {
                        "aclmdlRICaptureTaskGrpEnd");
     }
 
+    if (!retained_descriptors) {
     // Release aclTensor/aclTensorList/aclIntArray resources
     aclDestroyTensor(query_acl);
     aclDestroyTensorList(key_acl);
@@ -386,6 +593,8 @@ void run(void *planned_meta) {
     aclDestroyTensor(out_acl);
     aclDestroyIntArray(seqlens_q_acl);
     aclDestroyIntArray(seqlens_k_acl);
+
+    }
 
     if (ret != 0) {
         const char *err_msg = aclGetRecentErrMsg();
@@ -405,6 +614,12 @@ void graph_replay(void *planned_meta, graph::GraphReplayStage stage) {
     auto *p = reinterpret_cast<PlannedMeta *>(planned_meta);
     switch (stage) {
     case graph::GraphReplayStage::CAPTURE_BEGIN:
+        if (p->update_stream) {
+            check_task_api(aclrtCreateEventWithFlag(&p->update_ready, ACL_EVENT_EXTERNAL), "create graph update event");
+            auto stream = static_cast<aclrtStream>(context::getStream());
+            check_task_api(aclrtStreamWaitEvent(stream, p->update_ready), "capture graph update wait");
+            check_task_api(aclrtResetEvent(p->update_ready, stream), "capture graph update reset");
+        }
         p->capturing_task_group = true;
         return;
     case graph::GraphReplayStage::CAPTURE_END:
@@ -427,6 +642,19 @@ void graph_replay(void *planned_meta, graph::GraphReplayStage stage) {
             throw;
         }
         p->updating_task_group = false;
+        if (p->update_stream) {
+            check_task_api(aclrtRecordEvent(p->update_ready, p->update_stream->stream), "signal graph update ready");
+        }
+        return;
+    case graph::GraphReplayStage::PREPARE_UPDATE:
+        // Retire before launch: recording/draining a retirement event on a
+        // graph stream already waiting for this update would create a cycle.
+        if (p->replay_cache) p->replay_cache->retire_current();
+        return;
+    case graph::GraphReplayStage::ABORT_UPDATE:
+        if (p->update_stream) {
+            check_task_api(aclrtRecordEvent(p->update_ready, p->update_stream->stream), "release failed graph update wait");
+        }
         return;
     }
 }

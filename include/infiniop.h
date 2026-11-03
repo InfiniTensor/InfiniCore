@@ -7,6 +7,7 @@
 #include "infiniop/ops/adaptive_avg_pool3d.h"
 #include "infiniop/ops/adaptive_max_pool1d.h"
 #include "infiniop/ops/add.h"
+#include "infiniop/ops/apply_rope.h"
 #include "infiniop/ops/add_rms_norm.h"
 #include "infiniop/ops/addbmm.h"
 #include "infiniop/ops/addcmul.h"

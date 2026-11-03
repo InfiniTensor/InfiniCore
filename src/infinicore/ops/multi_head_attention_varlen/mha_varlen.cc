@@ -69,6 +69,23 @@ void mha_varlen_(Tensor out,
                  int max_seqlen_k,
                  std::optional<Tensor> alibi_slopes,
                  float scale) {
+    if (q->device().getType() == Device::Type::ASCEND) {
+        // Record layout conversions alongside attention. Allocating/copying
+        // strided Q/K/V inside the deferred runner bypasses the graph memory
+        // schedule and lets temporary storage alias live activations.
+        auto q_work = q->contiguous();
+        auto k_work = k->contiguous();
+        auto v_work = v->contiguous();
+        auto out_work = out->is_contiguous() ? out
+                                             : Tensor::empty(out->shape(), out->dtype(), out->device());
+        MultiheadAttentionVarlen::execute(out_work, q_work, k_work, v_work,
+                                          cum_seqlens_q, cum_seqlens_kv, block_table, max_seqlen_q,
+                                          max_seqlen_k, alibi_slopes, scale);
+        if (!out->is_contiguous()) {
+            out->copy_from(out_work);
+        }
+        return;
+    }
     MultiheadAttentionVarlen::execute(out, q, k, v, cum_seqlens_q, cum_seqlens_kv, block_table, max_seqlen_q, max_seqlen_k, alibi_slopes, scale);
 }
 

@@ -1,5 +1,7 @@
 #include "infinicore/ops/mha_kvcache.hpp"
 #include "../../utils.hpp"
+#include <cstdlib>
+#include <cstring>
 
 namespace infinicore::op {
 
@@ -22,8 +24,12 @@ MhaKVCache::MhaKVCache(Tensor out,
     INFINICORE_ASSERT_TENSORS_SAME_DEVICE(out, q, k_cache, v_cache, seqlens_k, block_table);
     INFINICORE_GRAPH_OP_DISPATCH(out->device().getType(),
                                  out, q, k_cache, v_cache, seqlens_k, block_table, alibi_slopes, scale);
+    const char *async_flag = std::getenv("INFINICORE_ASCEND_ASYNC_GRAPH_UPDATE");
+    const bool launch_first = out->device().getType() == Device::Type::ASCEND
+        && async_flag && std::strcmp(async_flag, "1") == 0;
     set_graph_replay_handler(
-        mha_kvcache_graph_replay_dispatcher().lookup(out->device().getType()));
+        mha_kvcache_graph_replay_dispatcher().lookup(out->device().getType()),
+        launch_first);
 }
 
 void MhaKVCache::execute(Tensor out,

@@ -5,6 +5,9 @@
 
 #include <algorithm>
 #include <cstring>
+#include <cstdlib>
+#include <mutex>
+#include <memory>
 #include <unordered_map>
 
 // Custom hash function for alpha beta pair<float, float>
@@ -38,7 +41,22 @@ struct Descriptor::Opaque {
     // aclnnGemm accepts ND only. NZ weights use aclnnMatmulWeightNz and its
     // one-shot executor, which is consumed by the matching call API.
     int8_t weightNz;
+    aclOpExecutor *retained_executor = nullptr;
+    void *executor_stream = nullptr;
+    bool executor_stream_set = false;
+    int32_t device_id = -1;
+    std::mutex executor_mutex;
     ~Opaque() {
+        if (retained_executor) {
+            int32_t previous = -1;
+            if (executor_stream_set && aclrtGetDevice(&previous) == ACL_SUCCESS
+                && aclrtSetDevice(device_id) == ACL_SUCCESS) {
+                // Retained tiling metadata may still be referenced by queued work.
+                aclrtSynchronizeStream(executor_stream);
+                aclrtSetDevice(previous);
+            }
+            aclDestroyAclOpExecutor(retained_executor);
+        }
         delete c;
         delete a;
         delete b;
@@ -135,16 +153,17 @@ infiniStatus_t Descriptor::createWithFormat(
         workspace_size = std::max(workspace_size, beta_one_workspace_size);
     }
 
-    *desc_ptr = new Descriptor(
-        dtype, info, workspace_size,
-        new Opaque{
-            c,
-            a,
-            b,
-            mt,
-            static_cast<int8_t>(trans_b ? 1 : 0),
-            static_cast<int8_t>(b_is_fractal_nz ? 1 : 0)},
-        handle->device, handle->device_id);
+    std::unique_ptr<Opaque> opaque(new Opaque{
+        c, a, b, mt, static_cast<int8_t>(trans_b ? 1 : 0),
+        static_cast<int8_t>(b_is_fractal_nz ? 1 : 0)});
+    const char *reuse_nz = std::getenv("INFINICORE_ASCEND_REUSE_NZ_EXECUTOR");
+    if (b_is_fractal_nz && reuse_nz && std::strcmp(reuse_nz, "1") == 0) {
+        CHECK_ACL(aclSetAclOpExecutorRepeatable(executor));
+        opaque->retained_executor = executor;
+        opaque->device_id = handle->device_id;
+    }
+    *desc_ptr = new Descriptor(dtype, info, workspace_size, opaque.release(),
+                               handle->device, handle->device_id);
 
     return INFINI_STATUS_SUCCESS;
 }
@@ -165,6 +184,30 @@ infiniStatus_t Descriptor::calculate(
         // keep bias/scaling on the ND path unless these values are identity.
         if (alpha != 1.0f || beta != 0.0f || _info.batch != 1) {
             return INFINI_STATUS_NOT_IMPLEMENTED;
+        }
+
+        if (_opaque->retained_executor) {
+            std::lock_guard<std::mutex> lock(_opaque->executor_mutex);
+            if (!_opaque->executor_stream_set) {
+                _opaque->executor_stream = stream;
+                _opaque->executor_stream_set = true;
+            }
+            // An executor is reused only on its first stream. Other streams
+            // keep the independent one-shot path below.
+            if (_opaque->executor_stream == stream) {
+                if (workspaceSize_ < _workspace_size) {
+                    return INFINI_STATUS_INSUFFICIENT_WORKSPACE;
+                }
+                auto *executor = _opaque->retained_executor;
+                CHECK_ACL(aclSetInputTensorAddr(executor, 0, _opaque->a->tensor,
+                                               const_cast<void *>(a)));
+                CHECK_ACL(aclSetInputTensorAddr(executor, 1, _opaque->b->tensor,
+                                               const_cast<void *>(b)));
+                CHECK_ACL(aclSetOutputTensorAddr(executor, 0, _opaque->c->tensor, c));
+                CHECK_ACL(aclnnMatmulWeightNz(workspace, _workspace_size, executor,
+                                             reinterpret_cast<aclrtStream>(stream)));
+                return INFINI_STATUS_SUCCESS;
+            }
         }
 
         aclnnTensorDescriptor call_a(

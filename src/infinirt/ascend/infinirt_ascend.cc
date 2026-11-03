@@ -99,7 +99,11 @@ infiniStatus_t eventElapsedTime(float *ms_ptr, infinirtEvent_t start, infinirtEv
 }
 
 infiniStatus_t mallocDevice(void **p_ptr, size_t size) {
-    CHECK_ACLRT(aclrtMallocAlign32(p_ptr, size, ACL_MEM_MALLOC_HUGE_FIRST));
+    if (aclrtMallocAlign32(p_ptr, size, ACL_MEM_MALLOC_HUGE_FIRST) != ACL_SUCCESS) {
+        // 950 hugepage pool rejects small aligned allocs after a few blocks
+        // (207001 during graph-plan weight repack); fall back to normal memory.
+        CHECK_ACLRT(aclrtMallocAlign32(p_ptr, size, ACL_MEM_MALLOC_NORMAL_ONLY));
+    }
     return INFINI_STATUS_SUCCESS;
 }
 

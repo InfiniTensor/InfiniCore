@@ -1,12 +1,16 @@
 #include "infinicore/nn/rope.hpp"
 #include "../../utils.h"
 #include "../utils.hpp"
+#include "infinicore/ops/apply_rope.hpp"
+#include "infinicore/ops/embedding.hpp"
 #include "infinicore/ops/mrope.hpp"
 #include "infinicore/ops/rope.hpp"
 #include "infinicore/ops/rotary_embedding.hpp"
 #include <algorithm>
 #include <cassert>
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <stdexcept>
 #include <utility>
@@ -178,6 +182,20 @@ void RoPE::initialize_cache() {
             "RoPE cache dtype conversion not yet supported for dtype: "
             + std::to_string(static_cast<int>(dtype_)));
     }
+    const char *apply_rope = std::getenv("INFINICORE_ASCEND_APPLY_ROPE");
+    if (device_.getType() == Device::Type::ASCEND && !mrope_section_
+        && algo_ == Algo::GPT_NEOX && rotary_dim_ == head_dim_
+        && (head_dim_ == 64 || head_dim_ == 128)
+        && apply_rope && std::strcmp(apply_rope, "1") == 0) {
+        // Prepare full-width NeoX cos/sin once. Each half repeats the same
+        // frequencies; use strided copies, never per-row D2D submissions.
+        auto full = Tensor::empty({max_seq_len_, rotary_dim_ * 2}, dtype_, device_);
+        for (size_t offset : {size_t{0}, cache_dim}) {
+            full->narrow({{1, offset, cache_dim}})->copy_from(cos_cache_);
+            full->narrow({{1, rotary_dim_ + offset, cache_dim}})->copy_from(sin_cache_);
+        }
+        register_buffer("aclnn_apply_cos_sin_cache", full);
+    }
 }
 
 Tensor RoPE::forward(const Tensor &x, const Tensor &pos, bool in_place) const {
@@ -279,6 +297,35 @@ std::pair<Tensor, Tensor> RoPE::forward(const Tensor &q_out,
                                         const Tensor &k,
                                         const Tensor &positions) const {
     if (!mrope_section_.has_value()) {
+        auto compatible = [this](const Tensor &t) {
+            const size_t rank = t->ndim();
+            return (rank == 3 || (rank == 4 && t->size(0) == 1))
+                && t->size(rank - 1) == head_dim_
+                && t->stride(rank - 1) == 1
+                && t->stride(rank - 2) == static_cast<ptrdiff_t>(head_dim_);
+        };
+
+        const char *apply_flag = std::getenv("INFINICORE_ASCEND_APPLY_ROPE");
+        const auto full_cache = buffers_.find("aclnn_apply_cos_sin_cache");
+        if (device_.getType() == Device::Type::ASCEND && apply_flag
+            && std::strcmp(apply_flag, "1") == 0 && full_cache != buffers_.end()
+            && positions->ndim() == 1 && positions->dtype() == DataType::I64
+            && positions->is_contiguous() && compatible(q) && compatible(k)
+            && q_out->is_contiguous() && k_out->is_contiguous()) {
+            const auto tokens = positions->size(0);
+            auto rows = op::embedding(positions, full_cache->second);
+            auto cos = rows->narrow({{1, 0, rotary_dim_}})->contiguous()->view({tokens, 1, rotary_dim_});
+            auto sin = rows->narrow({{1, rotary_dim_, rotary_dim_}})->contiguous()->view({tokens, 1, rotary_dim_});
+            auto mutable_q_out = q_out;
+            auto mutable_k_out = k_out;
+            mutable_q_out->copy_from(q);
+            mutable_k_out->copy_from(k);
+            const auto q_rank = q_out->ndim(), k_rank = k_out->ndim();
+            auto qo = q_out->view({tokens, q_out->size(q_rank - 2), head_dim_});
+            auto ko = k_out->view({tokens, k_out->size(k_rank - 2), head_dim_});
+            op::apply_rope_(qo, ko, cos, sin);
+            return {q_out, k_out};
+        }
 #ifdef ENABLE_INFINIOPS_API
         if (cos_sin_cache_) {
             auto mutable_q_out = q_out;

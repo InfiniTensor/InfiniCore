@@ -15,6 +15,8 @@ enum class GraphReplayStage {
     CAPTURE_BEGIN,
     CAPTURE_END,
     UPDATE,
+    PREPARE_UPDATE,
+    ABORT_UPDATE,
 };
 using graph_replay_schema = void (*)(void *, GraphReplayStage);
 
@@ -35,6 +37,9 @@ public:
     virtual void graph_replay(GraphReplayStage) const {
     }
     virtual ~GraphOperator() = default;
+    virtual bool can_update_after_launch() const {
+        return false;
+    }
 };
 
 class DispatchableGraphOperator : public GraphOperator {
@@ -43,10 +48,14 @@ public:
     bool needs_graph_replay_update() const override;
     void graph_replay(GraphReplayStage stage) const override;
     ~DispatchableGraphOperator() override;
+    bool can_update_after_launch() const override {
+        return graph_replay_launch_first_;
+    }
 
 protected:
-    void set_graph_replay_handler(graph_replay_schema handler) {
+    void set_graph_replay_handler(graph_replay_schema handler, bool launch_first = false) {
         graph_replay_ = handler;
+        graph_replay_launch_first_ = launch_first;
     }
     using run_schema = void (*)(void *);
     using cleanup_schema = void (*)(void **);
@@ -54,6 +63,7 @@ protected:
     run_schema runner_;
     cleanup_schema deleter_;
     graph_replay_schema graph_replay_ = nullptr;
+    bool graph_replay_launch_first_ = false;
 };
 
 class Graph {
@@ -64,6 +74,9 @@ public:
     void run() const;
     void bind_host_int_array(const Tensor &device_tensor,
                              const int32_t *values,
+                             size_t size);
+    void bind_host_int_array(const Tensor &device_tensor,
+                             const int64_t *values,
                              size_t size);
 
 protected:
@@ -84,6 +97,9 @@ const std::vector<int64_t> *lookup_bound_host_int_array(const Tensor &tensor);
 void clear_eager_host_int_arrays();
 void bind_eager_host_int_array(const Tensor &device_tensor,
                                const int32_t *values,
+                               size_t size);
+void bind_eager_host_int_array(const Tensor &device_tensor,
+                               const int64_t *values,
                                size_t size);
 } // namespace infinicore::graph
 

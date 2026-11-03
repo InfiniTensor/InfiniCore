@@ -38,6 +38,15 @@
             infiniopTensorDescriptor_t v_desc,                   \
             infiniopTensorDescriptor_t slot_mapping_desc);       \
                                                                  \
+        static infiniStatus_t createWithValidSlots(                              \
+            infiniopHandle_t handle,                                             \
+            Descriptor **desc_ptr,                                               \
+            infiniopTensorDescriptor_t k_cache_desc,                             \
+            infiniopTensorDescriptor_t v_cache_desc,                             \
+            infiniopTensorDescriptor_t k_desc,                                   \
+            infiniopTensorDescriptor_t v_desc,                                   \
+            infiniopTensorDescriptor_t slot_mapping_desc);                       \
+                                                                                 \
         infiniStatus_t calculate(                                \
             void *workspace, size_t workspace_size,              \
             void *k_cache, void *v_cache,                        \

@@ -31,6 +31,23 @@ __INFINI_C __export infiniStatus_t infiniopCreatePagedCachingDescriptor(
     infiniopTensorDescriptor_t slot_mapping_desc);
 
 /**
+ * @brief Create a cache descriptor for caller-validated slot mappings.
+ *
+ * The caller must verify all slots are nonnegative, below cache capacity,
+ * and unique on every invocation. Ascend may use ACLNN for contiguous ND
+ * layouts. Use the ordinary descriptor for padding slots or device graphs
+ * whose slot values can change without being revalidated.
+ */
+__INFINI_C __export infiniStatus_t infiniopCreatePagedCachingWithValidSlotsDescriptor(
+    infiniopHandle_t handle,
+    infiniopPagedCachingDescriptor_t *desc_ptr,
+    infiniopTensorDescriptor_t k_cache_desc,
+    infiniopTensorDescriptor_t v_cache_desc,
+    infiniopTensorDescriptor_t k_desc,
+    infiniopTensorDescriptor_t v_desc,
+    infiniopTensorDescriptor_t slot_mapping_desc);
+
+/**
  * @brief Retrieves the workspace size required for the Paged Caching operation.
  *
  * @param desc The Paged Caching descriptor.

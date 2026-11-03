@@ -9,6 +9,12 @@
 #include <stdexcept>
 
 namespace infinicore::op {
+#ifdef ENABLE_ASCEND_API
+namespace linear_allreduce_impl::ascend {
+bool try_record_pipelined_nz(Tensor output, const Tensor &input,
+                             const Tensor &weight, infinicclComm_t communicator);
+}
+#endif
 
 INFINICORE_GRAPH_OP_DISPATCHERS_IMPL(LinearAllReduce);
 
@@ -42,7 +48,7 @@ enum class PackedLayout {
     ASCEND_NZ,
 };
 
-static Tensor linear_allreduce_impl(
+static Tensor linear_allreduce_dispatch(
     Tensor input,
     Tensor weight,
     std::optional<Tensor> bias,
@@ -70,9 +76,17 @@ static Tensor linear_allreduce_impl(
         for (Size i = 0; i + 1 < input->ndim(); ++i) {
             rows *= input->size(i);
         }
-        op::gemm_nz_(output->view({rows, out_features}),
-                     input->view({rows, in_features}), weight, 1.0f, 0.0f);
-        distributed::allreduce_(output, output, INFINICCL_SUM, communicator);
+        bool pipelined = false;
+#ifdef ENABLE_ASCEND_API
+        pipelined = linear_allreduce_impl::ascend::try_record_pipelined_nz(
+            output->view({rows, out_features}),
+            input->view({rows, in_features}), weight, communicator);
+#endif
+        if (!pipelined) {
+            op::gemm_nz_(output->view({rows, out_features}),
+                         input->view({rows, in_features}), weight, 1.0f, 0.0f);
+            distributed::allreduce_(output, output, INFINICCL_SUM, communicator);
+        }
         if (bias) {
             return add(output, *bias);
         }
@@ -95,7 +109,7 @@ Tensor linear_allreduce(
     Tensor weight,
     std::optional<Tensor> bias,
     infinicclComm_t communicator) {
-    return linear_allreduce_impl(
+    return linear_allreduce_dispatch(
         input, weight, bias, communicator, PackedLayout::NONE);
 }
 
@@ -104,7 +118,7 @@ Tensor linear_allreduce_packed(
     Tensor packed_weight,
     std::optional<Tensor> bias,
     infinicclComm_t communicator) {
-    return linear_allreduce_impl(
+    return linear_allreduce_dispatch(
         input, packed_weight, bias, communicator, PackedLayout::ND);
 }
 
@@ -113,7 +127,7 @@ Tensor linear_allreduce_packed_nz(
     Tensor nz_weight,
     std::optional<Tensor> bias,
     infinicclComm_t communicator) {
-    return linear_allreduce_impl(
+    return linear_allreduce_dispatch(
         input, nz_weight, bias, communicator, PackedLayout::ASCEND_NZ);
 }
 

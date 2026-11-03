@@ -67,7 +67,10 @@ infiniStatus_t Descriptor::create(
 
     void *workspace = nullptr;
     if (workspace_size != 0) {
-        CHECK_ACL(aclrtMalloc(&workspace, workspace_size, ACL_MEM_MALLOC_HUGE_FIRST));
+        if (aclrtMalloc(&workspace, workspace_size, ACL_MEM_MALLOC_HUGE_FIRST)
+            != ACL_SUCCESS) {
+            CHECK_ACL(aclrtMalloc(&workspace, workspace_size, ACL_MEM_MALLOC_NORMAL_ONLY));
+        }
     }
 
     *desc_ptr = new Descriptor(
