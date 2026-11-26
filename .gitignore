@@ -32,3 +32,10 @@ cache/
 *.gz
 *.zip
 *.tar
+
+.venv-nvidia/
+.venv/
+build-nvidia/
+install/
+install-nvidia/
+build-infinicore-recontrust.sh
